@@ -1,0 +1,95 @@
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+
+type SearchParams = Promise<{ sent?: string; error?: string; next?: string }>;
+
+async function sendMagicLink(formData: FormData) {
+  "use server";
+
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const next = String(formData.get("next") ?? "/scanner");
+
+  if (!email) redirect(`/login?error=${encodeURIComponent("Enter your email.")}`);
+
+  const hdrs = await headers();
+  const origin =
+    hdrs.get("origin") ??
+    (hdrs.get("host") ? `https://${hdrs.get("host")}` : "http://localhost:3000");
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      shouldCreateUser: true,
+    },
+  });
+
+  if (error) {
+    redirect(`/login?error=${encodeURIComponent(error.message)}`);
+  }
+  redirect(`/login?sent=${encodeURIComponent(email)}`);
+}
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const { sent, error, next } = await searchParams;
+
+  return (
+    <main className="flex min-h-screen items-center justify-center px-lg">
+      <div className="w-full max-w-[420px]">
+        <div className="mb-xl text-center">
+          <div
+            className="mb-sm font-serif text-[22px] tracking-tight text-accent"
+            style={{ fontWeight: 500 }}
+          >
+            Terroir
+          </div>
+          <h1 className="font-serif text-[28px] leading-tight text-ink">
+            Sign in
+          </h1>
+          <p className="mt-xs text-[14px] text-ink-muted">
+            We&rsquo;ll email you a magic link.
+          </p>
+        </div>
+
+        {sent ? (
+          <div className="rounded-md border border-success/30 bg-success-soft p-lg text-[14px] text-success">
+            Check <span className="font-medium">{sent}</span> for a sign-in link.
+            You can close this tab.
+          </div>
+        ) : (
+          <form action={sendMagicLink} className="flex flex-col gap-md">
+            <input type="hidden" name="next" value={next ?? "/scanner"} />
+            <label className="flex flex-col gap-xs">
+              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+                Work email
+              </span>
+              <input
+                type="email"
+                name="email"
+                autoComplete="email"
+                required
+                placeholder="you@restaurant.com"
+                className="h-[38px] rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus:border-accent focus:ring-[3px] focus:ring-accent-soft"
+              />
+            </label>
+            {error && (
+              <div className="text-[13px] text-danger">{error}</div>
+            )}
+            <button
+              type="submit"
+              className="h-[38px] rounded-sm bg-accent px-md text-[14px] font-medium text-white transition-colors hover:bg-accent-hover"
+            >
+              Send magic link
+            </button>
+          </form>
+        )}
+      </div>
+    </main>
+  );
+}
