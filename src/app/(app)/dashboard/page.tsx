@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth-context";
 import {
   ArrowDown,
   ArrowUp,
@@ -73,25 +73,10 @@ function Sparkline({ data }: { data: number[] }) {
 }
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await getAuthContext();
+  if (!auth) return null;
 
-  if (!user) return null;
-
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("restaurant_id, restaurants(name)")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership) return null;
-
-  const rid = membership.restaurant_id;
-  const restaurantName =
-    (membership.restaurants as { name: string } | null)?.name ?? "My Restaurant";
+  const { supabase, restaurantId: rid, restaurantName } = auth;
 
   // Get this month's aggregates
   const startOfMonth = new Date();

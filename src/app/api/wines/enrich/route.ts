@@ -23,9 +23,7 @@ export async function POST() {
     );
   }
 
-  let enriched = 0;
-
-  for (const wine of wines ?? []) {
+  const updates = (wines ?? []).map(async (wine) => {
     const result = enrichWine({
       varietal: wine.varietal,
       region: wine.region,
@@ -33,7 +31,6 @@ export async function POST() {
       vintage: wine.vintage,
     });
 
-    // Only update if we got meaningful data
     if (result.servingTempMin != null || result.drinkWindowStart != null) {
       const { error: updateError } = await supabase
         .from("wines")
@@ -46,9 +43,13 @@ export async function POST() {
         })
         .eq("id", wine.id);
 
-      if (!updateError) enriched++;
+      return updateError ? 0 : 1 as number;
     }
-  }
+    return 0 as number;
+  });
+
+  const results = await Promise.all(updates);
+  const enriched = results.reduce((s, v) => s + v, 0);
 
   return NextResponse.json({
     total: wines?.length ?? 0,

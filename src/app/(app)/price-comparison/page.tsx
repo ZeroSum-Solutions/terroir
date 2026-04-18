@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth-context";
 import { ArrowDown, ArrowUp, DollarSign, ScanLine } from "lucide-react";
 import Link from "next/link";
 
@@ -29,23 +29,10 @@ type WineComparison = {
 };
 
 export default async function PriceComparisonPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await getAuthContext();
+  if (!auth) return null;
 
-  if (!user) return null;
-
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("restaurant_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership) return null;
-
-  const rid = membership.restaurant_id;
+  const { supabase, restaurantId: rid } = auth;
 
   // Fetch inventory items with wine + invoice scan details
   const { data: items } = await supabase

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth-context";
 import { RestaurantProvider } from "@/lib/context/restaurant";
 import { OnboardingModal } from "./onboarding-modal";
 import { SettingsDropdown } from "./settings-dropdown";
@@ -10,26 +10,13 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await getAuthContext();
 
-  // Fetch the user's restaurant membership
-  const { data: membership } = user
-    ? await supabase
-        .from("memberships")
-        .select("restaurant_id, role, restaurants(name)")
-        .eq("user_id", user.id)
-        .limit(1)
-        .single()
-    : { data: null };
-
-  const restaurantId = membership?.restaurant_id ?? "";
-  const restaurantName =
-    (membership?.restaurants as { name: string } | null)?.name ?? "My Restaurant";
-  const userRole = (membership?.role ?? "staff") as "owner" | "manager" | "staff";
+  const restaurantId = auth?.restaurantId ?? "";
+  const restaurantName = auth?.restaurantName ?? "My Restaurant";
+  const userRole = auth?.userRole ?? "staff";
   const needsOnboarding = restaurantName === "My Restaurant";
+  const user = auth?.user ?? null;
 
   return (
     <RestaurantProvider restaurantId={restaurantId} restaurantName={restaurantName} userRole={userRole}>

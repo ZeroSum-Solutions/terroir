@@ -115,54 +115,43 @@ export async function POST(request: NextRequest) {
   const scanId = invoiceScan.id;
 
   // ── Create wines + inventory items ───────────────────────────────
-  const wineIds = new Set<string>();
-  const inventoryInserts: Array<{
-    wine_id: string;
-    restaurant_id: string;
-    invoice_scan_id: string;
-    quantity: number;
-    unit_cost: number;
-    added_via: "invoice_scan";
-  }> = [];
+  const winesPayload = scan.items.map((item) => ({
+    name: item.name,
+    producer: item.producer,
+    vintage: item.vintage ?? null,
+    varietal: item.varietal || null,
+    region: item.region || null,
+    country: null,
+    size_ml: 750,
+  }));
 
-  for (const item of scan.items) {
-    // find_or_create_wine returns the wine UUID
-    const { data: wineId, error: rpcError } = await supabase.rpc(
-      "find_or_create_wine",
-      {
-        p_restaurant_id: restaurantId,
-        p_name: item.name,
-        p_producer: item.producer,
-        p_vintage: item.vintage ?? undefined,
-        p_varietal: item.varietal || undefined,
-        p_region: item.region || undefined,
-      },
+  const { data: wineIdArray, error: batchError } = await supabase.rpc(
+    "find_or_create_wines_batch",
+    {
+      p_restaurant_id: restaurantId,
+      p_wines: winesPayload,
+    },
+  );
+
+  if (batchError || !wineIdArray) {
+    console.error("find_or_create_wines_batch failed:", batchError);
+    await supabase.from("invoice_scans").delete().eq("id", scanId);
+    return NextResponse.json(
+      { error: "Failed to save wines." },
+      { status: 500 },
     );
-
-    if (rpcError || !wineId) {
-      console.error(
-        `find_or_create_wine failed for "${item.name}":`,
-        rpcError,
-      );
-      // Roll back: delete the invoice_scans row so the user can retry
-      await supabase.from("invoice_scans").delete().eq("id", scanId);
-      return NextResponse.json(
-        { error: `Failed to save wine "${item.name}".` },
-        { status: 500 },
-      );
-    }
-
-    wineIds.add(wineId);
-
-    inventoryInserts.push({
-      wine_id: wineId,
-      restaurant_id: restaurantId,
-      invoice_scan_id: scanId,
-      quantity: item.qty,
-      unit_cost: item.unitCost,
-      added_via: "invoice_scan",
-    });
   }
+
+  const wineIds = new Set<string>(wineIdArray as string[]);
+
+  const inventoryInserts = scan.items.map((item, idx) => ({
+    wine_id: (wineIdArray as string[])[idx],
+    restaurant_id: restaurantId,
+    invoice_scan_id: scanId,
+    quantity: item.qty,
+    unit_cost: item.unitCost,
+    added_via: "invoice_scan" as const,
+  }));
 
   // Batch insert all inventory items
   const { error: inventoryError } = await supabase

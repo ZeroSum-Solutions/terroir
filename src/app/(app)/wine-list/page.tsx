@@ -1,29 +1,18 @@
-import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth-context";
 import { WineListLanding } from "./wine-list-landing";
 
 export default async function WineListPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await getAuthContext();
+  if (!auth) return null;
 
-  if (!user) return null;
-
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("restaurant_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership) return null;
+  const { supabase, restaurantId } = auth;
 
   const { data: lists } = await supabase
     .from("wine_lists")
     .select(
       "*, wine_list_sections(wine_list_items(id))",
     )
-    .eq("restaurant_id", membership.restaurant_id)
+    .eq("restaurant_id", restaurantId)
     .order("updated_at", { ascending: false });
 
   // Compute wine counts from the nested join

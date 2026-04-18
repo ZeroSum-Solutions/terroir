@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Cormorant_Garamond, Inter, JetBrains_Mono, Caveat } from "next/font/google";
+import { Cormorant_Garamond, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
@@ -24,13 +24,6 @@ const jetbrains = JetBrains_Mono({
   display: "swap",
 });
 
-const caveat = Caveat({
-  variable: "--font-caveat",
-  subsets: ["latin"],
-  weight: ["500"],
-  display: "swap",
-});
-
 export const metadata: Metadata = {
   title: "Terroir",
   description: "Wine management for upscale restaurants.",
@@ -51,7 +44,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${cormorant.variable} ${jetbrains.variable} ${caveat.variable} h-full`}
+      className={`${inter.variable} ${cormorant.variable} ${jetbrains.variable} h-full`}
     >
       <body className="min-h-full">{children}</body>
     </html>

@@ -1,30 +1,21 @@
-import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth-context";
 import { Scanner } from "./scanner";
 import type { RecentScan } from "@/lib/scanner/types";
 
 export default async function ScannerPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await getAuthContext();
 
   let recentScans: RecentScan[] = [];
 
-  if (user) {
-    const { data: membership } = await supabase
-      .from("memberships")
-      .select("restaurant_id")
-      .eq("user_id", user.id)
-      .limit(1)
-      .single();
+  if (auth) {
+    const { supabase, restaurantId } = auth;
 
-    if (membership) {
-      const { data: scans } = await supabase
-        .from("invoice_scans")
-        .select("id, distributor_name, item_count, accuracy_score, created_at, final_line_items")
-        .eq("restaurant_id", membership.restaurant_id)
-        .order("created_at", { ascending: false })
-        .limit(5);
+    const { data: scans } = await supabase
+      .from("invoice_scans")
+      .select("id, distributor_name, item_count, accuracy_score, created_at, final_line_items")
+      .eq("restaurant_id", restaurantId)
+      .order("created_at", { ascending: false })
+      .limit(5);
 
       recentScans = (scans ?? []).map((s) => {
         // Compute total from final_line_items
@@ -45,7 +36,6 @@ export default async function ScannerPage() {
           accuracy: Math.round((s.accuracy_score ?? 0) * 100),
         };
       });
-    }
   }
 
   return <Scanner recentScans={recentScans} />;

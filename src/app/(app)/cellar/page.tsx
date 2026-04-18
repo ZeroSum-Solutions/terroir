@@ -1,15 +1,5 @@
-"use client";
-
-import { useCallback, useEffect, useState } from "react";
-import { Grid2x2, Loader2, X, Wine } from "lucide-react";
-import { useRestaurant } from "@/lib/context/restaurant";
-
-type CellarConfig = {
-  id: string;
-  rows: number;
-  columns: number;
-  name: string;
-};
+import { getAuthContext } from "@/lib/auth-context";
+import { CellarSetup, CellarGridView } from "./cellar-grid";
 
 type BinData = {
   wines: Array<{
@@ -24,352 +14,77 @@ type BinData = {
 
 type GridData = Record<string, BinData>;
 
-const CELL_SIZE = 48;
-const GAP = 4;
-const LABEL_OFFSET = 28;
+export default async function CellarPage() {
+  const auth = await getAuthContext();
+  if (!auth) return null;
 
-export default function CellarPage() {
-  const { restaurantName } = useRestaurant();
-  const [config, setConfig] = useState<CellarConfig | null | undefined>(
-    undefined,
-  );
-  const [gridData, setGridData] = useState<GridData>({});
-  const [loading, setLoading] = useState(true);
-  const [selectedBin, setSelectedBin] = useState<string | null>(null);
+  const { supabase, restaurantId, restaurantName } = auth;
 
-  // Setup form state
-  const [setupRows, setSetupRows] = useState(10);
-  const [setupCols, setSetupCols] = useState(10);
-  const [creating, setCreating] = useState(false);
+  const [{ data: config }, { data: inventoryItems }] = await Promise.all([
+    supabase
+      .from("cellar_config")
+      .select("*")
+      .eq("restaurant_id", restaurantId)
+      .limit(1)
+      .single(),
+    supabase
+      .from("inventory_items")
+      .select("bin_location, quantity, wines(id, name, producer, vintage)")
+      .eq("restaurant_id", restaurantId)
+      .not("bin_location", "is", null),
+  ]);
 
-  const fetchData = useCallback(async () => {
-    const [configRes, gridRes] = await Promise.all([
-      fetch("/api/cellar/config"),
-      fetch("/api/cellar/grid"),
-    ]);
+  // Build grid data from inventory items
+  const gridData: GridData = {};
+  for (const item of inventoryItems ?? []) {
+    if (!item.bin_location) continue;
+    const bin = item.bin_location.toUpperCase().trim();
+    const wine = item.wines as {
+      id: string;
+      name: string;
+      producer: string;
+      vintage: number | null;
+    } | null;
+    if (!wine) continue;
 
-    if (configRes.ok) {
-      const c = await configRes.json();
-      setConfig(c);
-    } else {
-      setConfig(null);
+    if (!gridData[bin]) {
+      gridData[bin] = { wines: [], totalBottles: 0 };
     }
-
-    if (gridRes.ok) {
-      setGridData(await gridRes.json());
-    }
-
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  const createCellar = async () => {
-    setCreating(true);
-    const res = await fetch("/api/cellar/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows: setupRows, columns: setupCols }),
+    gridData[bin].wines.push({
+      wineId: wine.id,
+      name: wine.name,
+      producer: wine.producer,
+      vintage: wine.vintage,
+      quantity: item.quantity,
     });
-    if (res.ok) {
-      setConfig(await res.json());
-    }
-    setCreating(false);
-  };
-
-  if (loading) {
-    return (
-      <section>
-        <header className="mb-xl">
-          <h1 className="font-serif text-[28px] text-ink">Cellar</h1>
-        </header>
-        <div className="flex items-center justify-center py-3xl">
-          <Loader2 className="h-6 w-6 animate-spin text-ink-subtle" />
-        </div>
-      </section>
-    );
+    gridData[bin].totalBottles += item.quantity;
   }
-
-  // Setup flow — no cellar config exists
-  if (!config) {
-    return (
-      <section>
-        <header className="mb-xl">
-          <h1 className="font-serif text-[28px] text-ink">Cellar</h1>
-          <p className="mt-xs text-[15px] text-ink-muted">{restaurantName}</p>
-        </header>
-
-        <div className="mx-auto w-full max-w-[420px] rounded-md border border-border bg-surface p-lg">
-          <div className="mb-lg text-center">
-            <Grid2x2
-              className="mx-auto mb-md h-10 w-10 text-ink-subtle"
-              strokeWidth={1.5}
-            />
-            <h2 className="text-[18px] font-serif font-medium text-ink">
-              Set up your cellar grid
-            </h2>
-            <p className="mt-xs text-[13px] text-ink-muted">
-              Choose a grid size that matches your storage layout. You can change
-              this later.
-            </p>
-          </div>
-
-          <div className="mb-lg grid grid-cols-2 gap-md">
-            <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-                Rows
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={26}
-                value={setupRows}
-                onChange={(e) =>
-                  setSetupRows(Math.max(1, Math.min(26, +e.target.value)))
-                }
-                className="mt-xs w-full rounded-sm border border-border bg-white px-md py-sm text-center font-mono text-[16px] text-ink"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-                Columns
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={30}
-                value={setupCols}
-                onChange={(e) =>
-                  setSetupCols(Math.max(1, Math.min(30, +e.target.value)))
-                }
-                className="mt-xs w-full rounded-sm border border-border bg-white px-md py-sm text-center font-mono text-[16px] text-ink"
-              />
-            </div>
-          </div>
-
-          {/* Quick presets */}
-          <div className="mb-lg flex gap-sm">
-            {[
-              { label: "5 x 5", r: 5, c: 5 },
-              { label: "8 x 10", r: 8, c: 10 },
-              { label: "10 x 10", r: 10, c: 10 },
-            ].map((preset) => (
-              <button
-                key={preset.label}
-                type="button"
-                onClick={() => {
-                  setSetupRows(preset.r);
-                  setSetupCols(preset.c);
-                }}
-                className={`flex-1 rounded-sm border px-sm py-xs text-[13px] font-medium transition-colors ${
-                  setupRows === preset.r && setupCols === preset.c
-                    ? "border-accent bg-accent-soft text-accent"
-                    : "border-border bg-white text-ink-muted hover:border-border-strong"
-                }`}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={createCellar}
-            disabled={creating}
-            className="flex h-[38px] w-full items-center justify-center gap-xs rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
-          >
-            {creating && (
-              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
-            )}
-            Create cellar
-          </button>
-        </div>
-      </section>
-    );
-  }
-
-  // Grid view
-  const svgWidth = LABEL_OFFSET + config.columns * (CELL_SIZE + GAP);
-  const svgHeight = LABEL_OFFSET + config.rows * (CELL_SIZE + GAP);
-  const selectedData = selectedBin ? gridData[selectedBin] : null;
 
   return (
     <section>
       <header className="mb-lg md:mb-xl">
         <h1 className="font-serif text-[28px] text-ink">Cellar</h1>
         <p className="mt-xs text-[15px] text-ink-muted">
-          {restaurantName} &middot; {config.rows} &times; {config.columns} grid
+          {restaurantName}
+          {config && (
+            <> &middot; {config.rows} &times; {config.columns} grid</>
+          )}
         </p>
       </header>
 
-      <div className="flex flex-col gap-lg md:flex-row">
-        {/* SVG Grid */}
-        <div className="flex-1 overflow-x-auto rounded-md border border-border bg-surface p-md">
-          <svg
-            width={svgWidth}
-            height={svgHeight}
-            viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-            className="block"
-          >
-            {/* Column labels */}
-            {Array.from({ length: config.columns }, (_, c) => (
-              <text
-                key={`col-${c}`}
-                x={LABEL_OFFSET + c * (CELL_SIZE + GAP) + CELL_SIZE / 2}
-                y={LABEL_OFFSET - 8}
-                textAnchor="middle"
-                className="fill-ink-subtle"
-                style={{ fontSize: 11, fontFamily: "var(--font-mono)" }}
-              >
-                {c + 1}
-              </text>
-            ))}
-
-            {/* Row labels + cells */}
-            {Array.from({ length: config.rows }, (_, r) => (
-              <g key={`row-${r}`}>
-                <text
-                  x={LABEL_OFFSET - 8}
-                  y={LABEL_OFFSET + r * (CELL_SIZE + GAP) + CELL_SIZE / 2 + 4}
-                  textAnchor="end"
-                  className="fill-ink-subtle"
-                  style={{ fontSize: 11, fontFamily: "var(--font-mono)" }}
-                >
-                  {String.fromCharCode(65 + r)}
-                </text>
-                {Array.from({ length: config.columns }, (_, c) => {
-                  const binId = `${String.fromCharCode(65 + r)}${c + 1}`;
-                  const data = gridData[binId];
-                  const total = data?.totalBottles ?? 0;
-
-                  let fill = "#EFEBE3"; // empty — bg-tertiary
-                  if (total > 0 && total <= 2) fill = "#D4A843"; // low — warning
-                  else if (total > 2) fill = "#2D6A4F"; // in stock — success
-
-                  const isSelected = selectedBin === binId;
-
-                  return (
-                    <g key={binId}>
-                      <rect
-                        x={LABEL_OFFSET + c * (CELL_SIZE + GAP)}
-                        y={LABEL_OFFSET + r * (CELL_SIZE + GAP)}
-                        width={CELL_SIZE}
-                        height={CELL_SIZE}
-                        rx={4}
-                        fill={fill}
-                        stroke={isSelected ? "#722F37" : "transparent"}
-                        strokeWidth={isSelected ? 2 : 0}
-                        className="cursor-pointer transition-opacity hover:opacity-80"
-                        onClick={() =>
-                          setSelectedBin(isSelected ? null : binId)
-                        }
-                      />
-                      {total > 0 && (
-                        <text
-                          x={
-                            LABEL_OFFSET +
-                            c * (CELL_SIZE + GAP) +
-                            CELL_SIZE / 2
-                          }
-                          y={
-                            LABEL_OFFSET +
-                            r * (CELL_SIZE + GAP) +
-                            CELL_SIZE / 2 +
-                            4
-                          }
-                          textAnchor="middle"
-                          fill="white"
-                          style={{
-                            fontSize: 12,
-                            fontFamily: "var(--font-mono)",
-                            fontWeight: 500,
-                          }}
-                        >
-                          {total}
-                        </text>
-                      )}
-                    </g>
-                  );
-                })}
-              </g>
-            ))}
-          </svg>
-        </div>
-
-        {/* Bin detail drawer */}
-        {selectedBin && (
-          <div className="w-full shrink-0 rounded-md border border-border bg-surface p-lg md:w-[280px]">
-            <div className="mb-md flex items-center justify-between">
-              <h3 className="font-mono text-[18px] font-medium text-ink">
-                Bin {selectedBin}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setSelectedBin(null)}
-                className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-subtle hover:bg-surface-muted"
-              >
-                <X className="h-4 w-4" strokeWidth={2} />
-              </button>
-            </div>
-
-            {selectedData ? (
-              <>
-                <div className="mb-md text-[12px] text-ink-muted">
-                  {selectedData.totalBottles} bottle
-                  {selectedData.totalBottles !== 1 ? "s" : ""}
-                </div>
-                <div className="flex flex-col gap-sm">
-                  {selectedData.wines.map((w, i) => (
-                    <div
-                      key={`${w.wineId}-${i}`}
-                      className="rounded-sm border border-border/50 px-sm py-sm"
-                    >
-                      <div className="font-serif text-[14px] text-ink">
-                        {w.producer}, {w.name}
-                      </div>
-                      <div className="mt-2xs flex items-center gap-sm text-[12px] text-ink-muted">
-                        <span className="font-mono text-ink-subtle">
-                          {w.vintage ?? "NV"}
-                        </span>
-                        <span>&middot;</span>
-                        <span className="font-mono">Qty {w.quantity}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center py-lg text-center">
-                <Wine
-                  className="mb-sm h-8 w-8 text-ink-subtle"
-                  strokeWidth={1.5}
-                />
-                <p className="text-[13px] text-ink-muted">
-                  This bin is empty
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Legend */}
-      <div className="mt-lg flex items-center gap-lg text-[12px] text-ink-muted">
-        <div className="flex items-center gap-xs">
-          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#2D6A4F" }} />
-          In stock (3+)
-        </div>
-        <div className="flex items-center gap-xs">
-          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#D4A843" }} />
-          Low (1–2)
-        </div>
-        <div className="flex items-center gap-xs">
-          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#EFEBE3" }} />
-          Empty
-        </div>
-      </div>
+      {config ? (
+        <CellarGridView
+          config={{
+            id: config.id,
+            rows: config.rows,
+            columns: config.columns,
+            name: config.name,
+          }}
+          gridData={gridData}
+        />
+      ) : (
+        <CellarSetup restaurantName={restaurantName} />
+      )}
     </section>
   );
 }
