@@ -16,9 +16,11 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
 import { MOCK_RECENT_SCANS } from "@/lib/scanner/mock-data";
+import { useRestaurant } from "@/lib/context/restaurant";
 import type {
   LineItem,
   LineItemField,
@@ -72,10 +74,13 @@ async function postScan(file: File, signal: AbortSignal): Promise<Scan> {
 }
 
 export function Scanner() {
+  const { restaurantId } = useRestaurant();
   const [status, setStatus] = useState<Status>("ready");
   const [progress, setProgress] = useState(0);
   const [stepIndex, setStepIndex] = useState(0);
   const [scan, setScan] = useState<Scan | null>(null);
+  const [originalItems, setOriginalItems] = useState<LineItem[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -126,6 +131,7 @@ export function Scanner() {
       if (ac.signal.aborted) return;
       setProgress(100);
       setScan(fresh);
+      setOriginalItems([...fresh.items]);
       saveScan(fresh);
       setStatus("results");
     } catch (err) {
@@ -218,6 +224,41 @@ export function Scanner() {
     setToast("Exported accuracy report");
   }, [scan]);
 
+  const saveToInventory = useCallback(async () => {
+    if (!scan || isSaving) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/inventory/save-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scan, originalItems }),
+      });
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(payload?.error ?? `Save failed (${res.status})`);
+      }
+      const result = (await res.json()) as {
+        scanId: string;
+        itemCount: number;
+        wineCount: number;
+      };
+      saveScan(null);
+      setScan(null);
+      setOriginalItems([]);
+      setStatus("ready");
+      setToast(
+        `Saved ${result.itemCount} items (${result.wineCount} wines) to inventory`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Save failed.";
+      setToast(message);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [scan, originalItems, isSaving]);
+
   const enterManualEntry = useCallback(() => {
     const parsedAt = new Date().toISOString();
     const fresh: Scan = {
@@ -271,6 +312,8 @@ export function Scanner() {
           onScanAnother={startOver}
           onExportCsv={exportCsv}
           onExportAccuracy={exportAccuracyJson}
+          onSaveToInventory={saveToInventory}
+          isSaving={isSaving}
         />
       )}
       {toast && (
@@ -515,6 +558,8 @@ function ResultsView({
   onScanAnother,
   onExportCsv,
   onExportAccuracy,
+  onSaveToInventory,
+  isSaving,
 }: {
   scan: Scan;
   onUpdate: (id: string, field: LineItemField, value: string | number | null) => void;
@@ -522,6 +567,8 @@ function ResultsView({
   onScanAnother: () => void;
   onExportCsv: () => void;
   onExportAccuracy: () => void;
+  onSaveToInventory: () => void;
+  isSaving: boolean;
 }) {
   const { items, edits, source } = scan;
 
@@ -706,7 +753,7 @@ function ResultsView({
           <span className="mx-xs text-ink-subtle">·</span>
           <span>{Object.keys(edits).length} corrections</span>
         </div>
-        <div className="grid grid-cols-3 gap-sm md:flex md:gap-md">
+        <div className="grid grid-cols-2 gap-sm md:flex md:gap-md">
           <button
             type="button"
             onClick={onScanAnother}
@@ -716,24 +763,38 @@ function ResultsView({
             <span className="hidden sm:inline">Scan another</span>
             <span className="sm:hidden">Scan</span>
           </button>
+          <div className="flex gap-sm">
+            <button
+              type="button"
+              onClick={onExportCsv}
+              className="flex h-11 flex-1 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted md:h-[38px] md:flex-none md:px-md"
+              title="Export as CSV"
+            >
+              <Download className="h-4 w-4" strokeWidth={2} />
+              <span className="hidden md:inline">CSV</span>
+            </button>
+            <button
+              type="button"
+              onClick={onExportAccuracy}
+              className="flex h-11 flex-1 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted md:h-[38px] md:flex-none md:px-md"
+              title="Export accuracy JSON (source + items + per-field edits)"
+            >
+              <FileJson className="h-4 w-4" strokeWidth={2} />
+              <span className="hidden md:inline">JSON</span>
+            </button>
+          </div>
           <button
             type="button"
-            onClick={onExportAccuracy}
-            className="flex h-11 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted md:h-[38px] md:px-md"
-            title="Export accuracy JSON (source + items + per-field edits)"
+            onClick={onSaveToInventory}
+            disabled={isSaving}
+            className="col-span-2 flex h-11 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60 md:h-[38px] md:px-md"
           >
-            <FileJson className="h-4 w-4" strokeWidth={2} />
-            <span className="hidden sm:inline">Accuracy JSON</span>
-            <span className="sm:hidden">JSON</span>
-          </button>
-          <button
-            type="button"
-            onClick={onExportCsv}
-            className="flex h-11 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover md:h-[38px] md:px-md"
-          >
-            <Download className="h-4 w-4" strokeWidth={2} />
-            <span className="hidden sm:inline">Export CSV</span>
-            <span className="sm:hidden">CSV</span>
+            {isSaving ? (
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
+            ) : (
+              <Save className="h-4 w-4" strokeWidth={2} />
+            )}
+            <span>{isSaving ? "Saving..." : "Save to Inventory"}</span>
           </button>
         </div>
       </div>

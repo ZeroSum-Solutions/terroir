@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { BarChart3, ListOrdered, LogOut, ScanLine } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { RestaurantProvider } from "@/lib/context/restaurant";
+import { OnboardingModal } from "./onboarding-modal";
 
 const TABS = [
   { href: "/scanner", label: "Scanner", Icon: ScanLine },
@@ -18,7 +20,26 @@ export default async function AppLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Fetch the user's restaurant membership
+  const { data: membership } = user
+    ? await supabase
+        .from("memberships")
+        .select("restaurant_id, restaurants(name)")
+        .eq("user_id", user.id)
+        .limit(1)
+        .single()
+    : { data: null };
+
+  const restaurantId = membership?.restaurant_id ?? "";
+  const restaurantName =
+    (membership?.restaurants as { name: string } | null)?.name ?? "My Restaurant";
+  const needsOnboarding = restaurantName === "My Restaurant";
+
   return (
+    <RestaurantProvider restaurantId={restaurantId} restaurantName={restaurantName}>
+    {needsOnboarding && restaurantId && (
+      <OnboardingModal restaurantId={restaurantId} />
+    )}
     <div className="flex min-h-screen flex-col bg-surface">
       {/* Top bar — minimal on mobile, full nav on md+ */}
       <header className="sticky top-0 z-10 flex h-14 items-center border-b border-border bg-surface/95 px-md backdrop-blur-sm md:h-16 md:px-lg">
@@ -83,5 +104,6 @@ export default async function AppLayout({
         ))}
       </nav>
     </div>
+    </RestaurantProvider>
   );
 }

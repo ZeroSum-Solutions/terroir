@@ -15,6 +15,120 @@ export type Database = {
   }
   public: {
     Tables: {
+      inventory_items: {
+        Row: {
+          added_at: string
+          added_via: Database["public"]["Enums"]["added_via"]
+          bin_location: string | null
+          id: string
+          invoice_scan_id: string | null
+          quantity: number
+          restaurant_id: string
+          unit_cost: number
+          updated_at: string
+          wine_id: string
+        }
+        Insert: {
+          added_at?: string
+          added_via?: Database["public"]["Enums"]["added_via"]
+          bin_location?: string | null
+          id?: string
+          invoice_scan_id?: string | null
+          quantity: number
+          restaurant_id: string
+          unit_cost: number
+          updated_at?: string
+          wine_id: string
+        }
+        Update: {
+          added_at?: string
+          added_via?: Database["public"]["Enums"]["added_via"]
+          bin_location?: string | null
+          id?: string
+          invoice_scan_id?: string | null
+          quantity?: number
+          restaurant_id?: string
+          unit_cost?: number
+          updated_at?: string
+          wine_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_items_invoice_scan_id_fkey"
+            columns: ["invoice_scan_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_scans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_wine_id_fkey"
+            columns: ["wine_id"]
+            isOneToOne: false
+            referencedRelation: "wines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_scans: {
+        Row: {
+          accuracy_score: number | null
+          created_at: string
+          distributor_name: string
+          edits: Json
+          final_line_items: Json
+          id: string
+          invoice_date: string | null
+          invoice_number: string | null
+          item_count: number
+          parsed_line_items: Json
+          raw_image_path: string | null
+          restaurant_id: string
+        }
+        Insert: {
+          accuracy_score?: number | null
+          created_at?: string
+          distributor_name: string
+          edits?: Json
+          final_line_items: Json
+          id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
+          item_count?: number
+          parsed_line_items: Json
+          raw_image_path?: string | null
+          restaurant_id: string
+        }
+        Update: {
+          accuracy_score?: number | null
+          created_at?: string
+          distributor_name?: string
+          edits?: Json
+          final_line_items?: Json
+          id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
+          item_count?: number
+          parsed_line_items?: Json
+          raw_image_path?: string | null
+          restaurant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_scans_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           created_at: string
@@ -68,11 +182,208 @@ export type Database = {
         }
         Relationships: []
       }
+      wine_list_items: {
+        Row: {
+          bottle_price: number | null
+          created_at: string
+          glass_price: number | null
+          id: string
+          is_available: boolean
+          position: number
+          section_id: string
+          tasting_note: string | null
+          updated_at: string
+          wine_id: string
+        }
+        Insert: {
+          bottle_price?: number | null
+          created_at?: string
+          glass_price?: number | null
+          id?: string
+          is_available?: boolean
+          position?: number
+          section_id: string
+          tasting_note?: string | null
+          updated_at?: string
+          wine_id: string
+        }
+        Update: {
+          bottle_price?: number | null
+          created_at?: string
+          glass_price?: number | null
+          id?: string
+          is_available?: boolean
+          position?: number
+          section_id?: string
+          tasting_note?: string | null
+          updated_at?: string
+          wine_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wine_list_items_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "wine_list_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wine_list_items_wine_id_fkey"
+            columns: ["wine_id"]
+            isOneToOne: false
+            referencedRelation: "wines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wine_list_sections: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          position: number
+          wine_list_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+          wine_list_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          wine_list_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wine_list_sections_wine_list_id_fkey"
+            columns: ["wine_list_id"]
+            isOneToOne: false
+            referencedRelation: "wine_lists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wine_lists: {
+        Row: {
+          created_at: string
+          id: string
+          is_published: boolean
+          last_published_at: string | null
+          name: string
+          restaurant_id: string
+          slug: string | null
+          template: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          last_published_at?: string | null
+          name: string
+          restaurant_id: string
+          slug?: string | null
+          template?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          last_published_at?: string | null
+          name?: string
+          restaurant_id?: string
+          slug?: string | null
+          template?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wine_lists_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wines: {
+        Row: {
+          country: string | null
+          created_at: string
+          id: string
+          lwin_id: string | null
+          name: string
+          producer: string
+          region: string | null
+          restaurant_id: string
+          size_ml: number
+          updated_at: string
+          varietal: string | null
+          vintage: number | null
+        }
+        Insert: {
+          country?: string | null
+          created_at?: string
+          id?: string
+          lwin_id?: string | null
+          name: string
+          producer: string
+          region?: string | null
+          restaurant_id: string
+          size_ml?: number
+          updated_at?: string
+          varietal?: string | null
+          vintage?: number | null
+        }
+        Update: {
+          country?: string | null
+          created_at?: string
+          id?: string
+          lwin_id?: string | null
+          name?: string
+          producer?: string
+          region?: string | null
+          restaurant_id?: string
+          size_ml?: number
+          updated_at?: string
+          varietal?: string | null
+          vintage?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wines_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      find_or_create_wine: {
+        Args: {
+          p_country?: string
+          p_name: string
+          p_producer: string
+          p_region?: string
+          p_restaurant_id: string
+          p_size_ml?: number
+          p_varietal?: string
+          p_vintage?: number
+        }
+        Returns: string
+      }
+      generate_slug: { Args: { input: string }; Returns: string }
       is_member: { Args: { r_id: string }; Returns: boolean }
       is_member_with_role: {
         Args: {
@@ -83,6 +394,7 @@ export type Database = {
       }
     }
     Enums: {
+      added_via: "manual" | "invoice_scan"
       membership_role: "owner" | "manager" | "staff"
     }
     CompositeTypes: {
@@ -211,6 +523,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      added_via: ["manual", "invoice_scan"],
       membership_role: ["owner", "manager", "staff"],
     },
   },

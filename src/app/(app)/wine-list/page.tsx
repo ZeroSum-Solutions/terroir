@@ -1,17 +1,49 @@
-export default function WineListPage() {
+import { createClient } from "@/lib/supabase/server";
+import { WineListLanding } from "./wine-list-landing";
+
+export default async function WineListPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return null;
+
+  const { data: membership } = await supabase
+    .from("memberships")
+    .select("restaurant_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .single();
+
+  if (!membership) return null;
+
+  const { data: lists } = await supabase
+    .from("wine_lists")
+    .select(
+      "*, wine_list_sections(wine_list_items(id))",
+    )
+    .eq("restaurant_id", membership.restaurant_id)
+    .order("updated_at", { ascending: false });
+
+  // Compute wine counts from the nested join
+  const listsWithCounts = (lists ?? []).map((list) => {
+    const sections = (list.wine_list_sections ?? []) as Array<{
+      wine_list_items: Array<{ id: string }>;
+    }>;
+    const wine_count = sections.reduce(
+      (sum, s) => sum + (s.wine_list_items?.length ?? 0),
+      0,
+    );
+    // Strip the nested join data — client doesn't need it
+    const { wine_list_sections: _, ...rest } = list;
+    return { ...rest, wine_count };
+  });
+
   return (
-    <section>
-      <header className="mb-xl">
-        <h1 className="font-serif text-[28px] text-ink">Wine Lists</h1>
-        <p className="mt-xs text-[15px] text-ink-muted">
-          Build, publish, and print. Digital lists carry a QR code.
-        </p>
-      </header>
-      <div className="rounded-md border border-dashed border-border-strong bg-surface-muted p-3xl text-center">
-        <p className="text-[13px] uppercase tracking-[0.08em] text-ink-subtle">
-          Stub — list builder + PDF templates ship here
-        </p>
-      </div>
-    </section>
+    <WineListLanding
+      lists={listsWithCounts}
+      restaurantId={membership.restaurant_id}
+    />
   );
 }
