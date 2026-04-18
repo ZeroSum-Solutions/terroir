@@ -5,10 +5,12 @@ import {
   Camera,
   Check,
   Download,
+  FileJson,
   FileUp,
   Loader2,
   Minus,
   Plus,
+  RotateCw,
   ScanLine,
   Sparkles,
   Trash2,
@@ -16,30 +18,21 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
-import {
-  MOCK_LINE_ITEMS,
-  MOCK_RECENT_SCANS,
-  MOCK_SOURCE,
-} from "@/lib/scanner/mock-data";
+import { MOCK_RECENT_SCANS } from "@/lib/scanner/mock-data";
 import type {
   LineItem,
   LineItemField,
   RecentScan,
   Scan,
-  ScanSource,
 } from "@/lib/scanner/types";
 
-type Status = "ready" | "processing" | "results";
+type Status = "ready" | "processing" | "results" | "error";
 const STORAGE_KEY = "terroir:current-scan";
 const STEPS = [
   "Reading invoice",
   "Identifying wines",
   "Structuring line items",
 ] as const;
-
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
 
 function formatMoney(n: number) {
   return n.toLocaleString("en-US", {
@@ -61,11 +54,21 @@ function loadScan(): Scan | null {
 
 function saveScan(scan: Scan | null) {
   if (typeof window === "undefined") return;
-  if (scan) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(scan));
-  } else {
-    localStorage.removeItem(STORAGE_KEY);
+  if (scan) localStorage.setItem(STORAGE_KEY, JSON.stringify(scan));
+  else localStorage.removeItem(STORAGE_KEY);
+}
+
+async function postScan(file: File, signal: AbortSignal): Promise<Scan> {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch("/api/scan", { method: "POST", body, signal });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => null)) as
+      | { error?: string }
+      | null;
+    throw new Error(payload?.error ?? `Scan failed (${res.status})`);
   }
+  return (await res.json()) as Scan;
 }
 
 export function Scanner() {
@@ -75,8 +78,9 @@ export function Scanner() {
   const [scan, setScan] = useState<Scan | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  // Restore saved scan on mount
   useEffect(() => {
     setHydrated(true);
     const saved = loadScan();
@@ -86,41 +90,51 @@ export function Scanner() {
     }
   }, []);
 
-  // Simulated processing timer
-  useEffect(() => {
-    if (status !== "processing") return;
-    setProgress(0);
-    setStepIndex(0);
-    const start = performance.now();
-    const DURATION_MS = 6000;
-    const id = window.setInterval(() => {
-      const elapsed = performance.now() - start;
-      const pct = Math.min(100, Math.round((elapsed / DURATION_MS) * 100));
-      setProgress(pct);
-      setStepIndex(pct < 34 ? 0 : pct < 68 ? 1 : 2);
-      if (pct >= 100) {
-        window.clearInterval(id);
-        const fresh: Scan = {
-          source: { ...MOCK_SOURCE, parsedAt: new Date().toISOString() },
-          items: clone(MOCK_LINE_ITEMS),
-          edits: {},
-        };
-        setScan(fresh);
-        saveScan(fresh);
-        setStatus("results");
-      }
-    }, 80);
-    return () => window.clearInterval(id);
-  }, [status]);
-
-  // Toast auto-dismiss
   useEffect(() => {
     if (!toast) return;
     const id = window.setTimeout(() => setToast(null), 2600);
     return () => window.clearTimeout(id);
   }, [toast]);
 
-  const startProcessing = useCallback(() => setStatus("processing"), []);
+  /* Progress animation — advances independent of fetch, clamps at 90% until
+     the response arrives, then jumps to 100%. */
+  useEffect(() => {
+    if (status !== "processing") return;
+    setProgress(0);
+    setStepIndex(0);
+    const start = performance.now();
+    const SOFT_DURATION = 18000;
+    const id = window.setInterval(() => {
+      const elapsed = performance.now() - start;
+      const pct = Math.min(90, Math.round((elapsed / SOFT_DURATION) * 90));
+      setProgress(pct);
+      setStepIndex(pct < 30 ? 0 : pct < 60 ? 1 : 2);
+    }, 120);
+    return () => window.clearInterval(id);
+  }, [status]);
+
+  const startScan = useCallback(async (file: File) => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    setStatus("processing");
+    setError(null);
+
+    try {
+      const fresh = await postScan(file, ac.signal);
+      if (ac.signal.aborted) return;
+      setProgress(100);
+      setScan(fresh);
+      saveScan(fresh);
+      setStatus("results");
+    } catch (err) {
+      if (ac.signal.aborted) return;
+      const message = err instanceof Error ? err.message : "Scan failed.";
+      setError(message);
+      setStatus("error");
+    }
+  }, []);
 
   const updateField = useCallback(
     (id: string, field: LineItemField, value: string | number | null) => {
@@ -143,15 +157,20 @@ export function Scanner() {
   const removeItem = useCallback((id: string) => {
     setScan((prev) => {
       if (!prev) return prev;
-      const next: Scan = { ...prev, items: prev.items.filter((it) => it.id !== id) };
+      const next: Scan = {
+        ...prev,
+        items: prev.items.filter((it) => it.id !== id),
+      };
       saveScan(next);
       return next;
     });
   }, []);
 
   const startOver = useCallback(() => {
+    abortRef.current?.abort();
     saveScan(null);
     setScan(null);
+    setError(null);
     setStatus("ready");
   }, []);
 
@@ -161,13 +180,88 @@ export function Scanner() {
     setToast(`Exported ${scan.items.length} wines to CSV`);
   }, [scan]);
 
-  if (!hydrated) return <ReadyView onStart={startProcessing} />;
+  const exportAccuracyJson = useCallback(() => {
+    if (!scan) return;
+    const totalFields = scan.items.length * 6;
+    const editedFields = Object.keys(scan.edits).length;
+    const accuracy =
+      totalFields === 0
+        ? 1
+        : Math.max(0, (totalFields - editedFields) / totalFields);
+    const report = {
+      exportedAt: new Date().toISOString(),
+      source: scan.source,
+      items: scan.items,
+      edits: scan.edits,
+      accuracy: {
+        percentage: Math.round(accuracy * 1000) / 10,
+        editedFields,
+        totalFields,
+      },
+    };
+    const json = JSON.stringify(report, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const date = scan.source.parsedAt.slice(0, 10);
+    const slug = scan.source.distributor
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `terroir-accuracy-${date}-${slug}.json`;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setToast("Exported accuracy report");
+  }, [scan]);
+
+  const enterManualEntry = useCallback(() => {
+    const parsedAt = new Date().toISOString();
+    const fresh: Scan = {
+      source: {
+        distributor: "Manual entry",
+        invoiceNo: "—",
+        invoiceDate: parsedAt.slice(0, 10),
+        parsedAt,
+      },
+      items: [
+        {
+          id: `${parsedAt}-0`,
+          name: "",
+          producer: "",
+          vintage: null,
+          varietal: "",
+          region: "",
+          qty: 1,
+          unitCost: 0,
+          confidence: 1,
+        },
+      ],
+      edits: {},
+    };
+    setScan(fresh);
+    saveScan(fresh);
+    setError(null);
+    setStatus("results");
+  }, []);
+
+  if (!hydrated) return <ReadyView onStart={startScan} />;
 
   return (
     <>
-      {status === "ready" && <ReadyView onStart={startProcessing} />}
+      {status === "ready" && <ReadyView onStart={startScan} />}
       {status === "processing" && (
         <ProcessingView progress={progress} stepIndex={stepIndex} />
+      )}
+      {status === "error" && (
+        <ErrorView
+          message={error ?? "Unknown error."}
+          onRetry={startOver}
+          onManual={enterManualEntry}
+        />
       )}
       {status === "results" && scan && (
         <ResultsView
@@ -175,7 +269,8 @@ export function Scanner() {
           onUpdate={updateField}
           onRemove={removeItem}
           onScanAnother={startOver}
-          onExport={exportCsv}
+          onExportCsv={exportCsv}
+          onExportAccuracy={exportAccuracyJson}
         />
       )}
       {toast && (
@@ -193,14 +288,14 @@ export function Scanner() {
 /* -------------------------------------------------------------------------- */
 /* Ready view                                                                 */
 /* -------------------------------------------------------------------------- */
-function ReadyView({ onStart }: { onStart: () => void }) {
+function ReadyView({ onStart }: { onStart: (file: File) => void }) {
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    // Phase 1 is mock-only; real upload wires to Azure DI in a later pass.
-    onStart();
+    const file = files?.[0];
+    if (!file) return;
+    onStart(file);
   };
 
   return (
@@ -312,7 +407,7 @@ function ProcessingView({
   progress: number;
   stepIndex: number;
 }) {
-  const remaining = Math.max(0, Math.round((100 - progress) * 0.06));
+  const capped = progress >= 90;
   return (
     <section className="flex min-h-[60vh] items-center justify-center">
       <div className="w-full max-w-[420px] rounded-md border border-border bg-white p-xl text-center">
@@ -321,7 +416,9 @@ function ProcessingView({
         </div>
         <h2 className="font-serif text-[22px] text-ink">Reading your invoice</h2>
         <p className="mt-xs text-[14px] text-ink-muted">
-          Estimated <span className="tabular">{remaining}s</span> remaining
+          {capped
+            ? "Finishing up — messy invoices can take a bit longer."
+            : "Usually 20-30 seconds."}
         </p>
 
         <div className="relative mt-md h-1.5 overflow-hidden rounded-pill bg-surface-sunken">
@@ -332,7 +429,7 @@ function ProcessingView({
         </div>
         <div className="mt-xs flex items-center justify-between text-[11px] tabular text-ink-subtle">
           <span>{progress}%</span>
-          <span>10 pages</span>
+          <span>Claude Opus 4.7</span>
         </div>
 
         <ul className="mt-lg flex flex-col gap-sm text-left">
@@ -367,6 +464,48 @@ function ProcessingView({
 }
 
 /* -------------------------------------------------------------------------- */
+/* Error view                                                                 */
+/* -------------------------------------------------------------------------- */
+function ErrorView({
+  message,
+  onRetry,
+  onManual,
+}: {
+  message: string;
+  onRetry: () => void;
+  onManual: () => void;
+}) {
+  return (
+    <section className="flex min-h-[60vh] items-center justify-center">
+      <div className="w-full max-w-[480px] rounded-md border border-border bg-white p-xl text-center">
+        <div className="mx-auto mb-md flex h-14 w-14 items-center justify-center rounded-full bg-warning-soft text-warning">
+          <AlertTriangle className="h-6 w-6" strokeWidth={1.75} />
+        </div>
+        <h2 className="font-serif text-[22px] text-ink">Couldn&rsquo;t read the invoice</h2>
+        <p className="mt-sm text-[14px] text-ink-muted">{message}</p>
+        <div className="mt-lg grid grid-cols-1 gap-sm md:grid-cols-2 md:gap-md">
+          <button
+            type="button"
+            onClick={onRetry}
+            className="flex h-11 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover md:h-[38px]"
+          >
+            <RotateCw className="h-4 w-4" strokeWidth={2} />
+            Try again
+          </button>
+          <button
+            type="button"
+            onClick={onManual}
+            className="flex h-11 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted md:h-[38px]"
+          >
+            Enter manually
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Results view                                                               */
 /* -------------------------------------------------------------------------- */
 function ResultsView({
@@ -374,13 +513,15 @@ function ResultsView({
   onUpdate,
   onRemove,
   onScanAnother,
-  onExport,
+  onExportCsv,
+  onExportAccuracy,
 }: {
   scan: Scan;
   onUpdate: (id: string, field: LineItemField, value: string | number | null) => void;
   onRemove: (id: string) => void;
   onScanAnother: () => void;
-  onExport: () => void;
+  onExportCsv: () => void;
+  onExportAccuracy: () => void;
 }) {
   const { items, edits, source } = scan;
 
@@ -390,8 +531,17 @@ function ResultsView({
     return {
       total: items.reduce((s, it) => s + it.qty * it.unitCost, 0),
       bottles: items.reduce((s, it) => s + it.qty, 0),
-      lowCount: items.reduce((n, it) => n + (it.lowFields?.length ?? 0), 0),
-      accuracy: totalFields === 0 ? 100 : Math.max(0, Math.round(((totalFields - edited) / totalFields) * 100)),
+      lowCount: items.reduce(
+        (n, it) => n + (it.lowFields?.length ?? 0),
+        0,
+      ),
+      accuracy:
+        totalFields === 0
+          ? 100
+          : Math.max(
+              0,
+              Math.round(((totalFields - edited) / totalFields) * 100),
+            ),
     };
   }, [items, edits]);
 
@@ -546,30 +696,44 @@ function ResultsView({
         ))}
       </div>
 
-      {/* Action bar — sticky bottom on mobile, inline on desktop */}
-      <div className="sticky bottom-[64px] z-10 mt-md flex flex-col gap-sm rounded-md border border-border bg-white p-md shadow-sm md:static md:bottom-auto md:mt-lg md:flex-row md:items-center md:justify-between md:shadow-none"
-           style={{ marginBottom: "calc(env(safe-area-inset-bottom) + 8px)" }}>
+      {/* Action bar */}
+      <div
+        className="sticky bottom-[64px] z-10 mt-md flex flex-col gap-sm rounded-md border border-border bg-white p-md shadow-sm md:static md:bottom-auto md:mt-lg md:flex-row md:items-center md:justify-between md:shadow-none"
+        style={{ marginBottom: "calc(env(safe-area-inset-bottom) + 8px)" }}
+      >
         <div className="text-[13px] text-ink-muted md:text-[14px]">
           <span className="font-medium text-ink">{items.length} wines</span>
           <span className="mx-xs text-ink-subtle">·</span>
           <span>{Object.keys(edits).length} corrections</span>
         </div>
-        <div className="grid grid-cols-2 gap-sm md:flex md:gap-md">
+        <div className="grid grid-cols-3 gap-sm md:flex md:gap-md">
           <button
             type="button"
             onClick={onScanAnother}
             className="flex h-11 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted md:h-[38px] md:px-md"
           >
             <ScanLine className="h-4 w-4" strokeWidth={2} />
-            Scan another
+            <span className="hidden sm:inline">Scan another</span>
+            <span className="sm:hidden">Scan</span>
           </button>
           <button
             type="button"
-            onClick={onExport}
+            onClick={onExportAccuracy}
+            className="flex h-11 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted md:h-[38px] md:px-md"
+            title="Export accuracy JSON (source + items + per-field edits)"
+          >
+            <FileJson className="h-4 w-4" strokeWidth={2} />
+            <span className="hidden sm:inline">Accuracy JSON</span>
+            <span className="sm:hidden">JSON</span>
+          </button>
+          <button
+            type="button"
+            onClick={onExportCsv}
             className="flex h-11 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover md:h-[38px] md:px-md"
           >
             <Download className="h-4 w-4" strokeWidth={2} />
-            Export CSV
+            <span className="hidden sm:inline">Export CSV</span>
+            <span className="sm:hidden">CSV</span>
           </button>
         </div>
       </div>
@@ -588,9 +752,13 @@ function SummaryRow({
   total: number;
   lowCount: number;
 }) {
-  const stats: Array<{ label: string; value: React.ReactNode; tone?: "warning" | "success" }> = [
+  const stats: Array<{
+    label: string;
+    value: React.ReactNode;
+    tone?: "warning" | "success";
+  }> = [
     { label: "Line items", value: items },
-    { label: "Bottles",    value: bottles },
+    { label: "Bottles", value: bottles },
     { label: "Invoice total", value: <span className="tabular">${formatMoney(total)}</span> },
     {
       label: "Need review",
@@ -791,7 +959,13 @@ function QtyStepper({
   );
 }
 
-function Th({ children, className }: { children?: React.ReactNode; className?: string }) {
+function Th({
+  children,
+  className,
+}: {
+  children?: React.ReactNode;
+  className?: string;
+}) {
   return (
     <th
       className={cn(
