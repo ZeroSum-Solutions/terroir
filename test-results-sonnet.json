@@ -1,0 +1,375 @@
+{
+  "testedAt": "2026-04-18T09:52:14.311Z",
+  "results": [
+    {
+      "file": "01-printed-napa-distributor.png",
+      "parseTimeMs": 6514,
+      "distributor": "—",
+      "invoiceNo": null,
+      "itemCount": 0,
+      "totalBottles": 0,
+      "totalValue": 0,
+      "avgConfidence": 0,
+      "lowConfidenceItems": 0,
+      "lowFields": [],
+      "error": "No tool_use block in response"
+    },
+    {
+      "file": "02-handwritten-yellow-notepad.png",
+      "parseTimeMs": 29599,
+      "distributor": "ISOV",
+      "invoiceNo": null,
+      "itemCount": 9,
+      "totalBottles": 54,
+      "totalValue": 212.09999999999997,
+      "avgConfidence": 0.206,
+      "lowConfidenceItems": 9,
+      "lowFields": [
+        "name",
+        "producer",
+        "unitCost",
+        "region",
+        "varietal",
+        "vintage",
+        "qty"
+      ]
+    },
+    {
+      "file": "03-european-bordeaux-formal.png",
+      "parseTimeMs": 13459,
+      "distributor": "Maison du Vin – Bordeaux",
+      "invoiceNo": "15",
+      "itemCount": 5,
+      "totalBottles": 5,
+      "totalValue": 3287.1,
+      "avgConfidence": 0.34,
+      "lowConfidenceItems": 5,
+      "lowFields": [
+        "name",
+        "vintage",
+        "qty",
+        "unitCost",
+        "producer",
+        "varietal",
+        "region"
+      ]
+    },
+    {
+      "file": "04-thermal-receipt-crinkled.png",
+      "parseTimeMs": 22865,
+      "distributor": "Wine Watts and Spirits (name partially illegible)",
+      "invoiceNo": null,
+      "itemCount": 8,
+      "totalBottles": 12,
+      "totalValue": 157.79,
+      "avgConfidence": 0.409,
+      "lowConfidenceItems": 8,
+      "lowFields": [
+        "name",
+        "vintage",
+        "producer",
+        "varietal",
+        "region",
+        "unitCost",
+        "qty"
+      ]
+    },
+    {
+      "file": "05-handwritten-postit-wine-order.png",
+      "parseTimeMs": 19446,
+      "distributor": "Unknown",
+      "invoiceNo": null,
+      "itemCount": 6,
+      "totalBottles": 33,
+      "totalValue": 6234,
+      "avgConfidence": 0.64,
+      "lowConfidenceItems": 4,
+      "lowFields": [
+        "unitCost",
+        "name",
+        "vintage"
+      ]
+    },
+    {
+      "file": "06-printed-italian-wine-invoice.png",
+      "parseTimeMs": 14948,
+      "distributor": "Vini Italiani Milani",
+      "invoiceNo": null,
+      "itemCount": 4,
+      "totalBottles": 1591,
+      "totalValue": 4596450,
+      "avgConfidence": 0.358,
+      "lowConfidenceItems": 4,
+      "lowFields": [
+        "name",
+        "producer",
+        "vintage",
+        "varietal",
+        "region",
+        "unitCost",
+        "qty"
+      ]
+    },
+    {
+      "file": "07-handwritten-wine-list-clipboard.png",
+      "parseTimeMs": 18123,
+      "distributor": "Unknown — not printed on invoice",
+      "invoiceNo": null,
+      "itemCount": 8,
+      "totalBottles": 8,
+      "totalValue": 0,
+      "avgConfidence": 0.481,
+      "lowConfidenceItems": 8,
+      "lowFields": [
+        "name",
+        "producer",
+        "vintage",
+        "varietal",
+        "region",
+        "qty",
+        "unitCost"
+      ]
+    },
+    {
+      "file": "08-printed-wine-delivery-slip.png",
+      "parseTimeMs": 15120,
+      "distributor": "Kelivale Wine Logistics",
+      "invoiceNo": "PO-41492",
+      "itemCount": 7,
+      "totalBottles": 0,
+      "totalValue": 0,
+      "avgConfidence": 0.189,
+      "lowConfidenceItems": 7,
+      "lowFields": [
+        "name",
+        "producer",
+        "vintage",
+        "varietal",
+        "region",
+        "qty",
+        "unitCost"
+      ]
+    },
+    {
+      "file": "09-handwritten-wine-tasting-notes-invoice.png",
+      "parseTimeMs": 11398,
+      "distributor": "—",
+      "invoiceNo": null,
+      "itemCount": 0,
+      "totalBottles": 0,
+      "totalValue": 0,
+      "avgConfidence": 0,
+      "lowConfidenceItems": 0,
+      "lowFields": [],
+      "error": "No tool_use block in response"
+    },
+    {
+      "file": "10-printed-wine-wholesale-california.png",
+      "parseTimeMs": 8266,
+      "distributor": "Pacific Coast Wine Wholesalers",
+      "invoiceNo": null,
+      "itemCount": 5,
+      "totalBottles": 5,
+      "totalValue": 32.05,
+      "avgConfidence": 0.31,
+      "lowConfidenceItems": 5,
+      "lowFields": [
+        "name",
+        "producer",
+        "vintage",
+        "varietal",
+        "region",
+        "qty",
+        "unitCost"
+      ]
+    },
+    {
+      "file": "11-handwritten-wine-bar-tab.png",
+      "parseTimeMs": 15940,
+      "distributor": "Unknown — restaurant check, no distributor listed",
+      "invoiceNo": null,
+      "itemCount": 6,
+      "totalBottles": 8,
+      "totalValue": 40,
+      "avgConfidence": 0.417,
+      "lowConfidenceItems": 6,
+      "lowFields": [
+        "producer",
+        "region",
+        "unitCost",
+        "vintage",
+        "qty",
+        "name",
+        "varietal"
+      ]
+    },
+    {
+      "file": "12-printed-spanish-wine-export.png",
+      "parseTimeMs": 21908,
+      "distributor": "Bodegas Riojanas S.A.",
+      "invoiceNo": null,
+      "itemCount": 12,
+      "totalBottles": 16,
+      "totalValue": 5160,
+      "avgConfidence": 0.437,
+      "lowConfidenceItems": 12,
+      "lowFields": [
+        "name",
+        "qty",
+        "unitCost",
+        "vintage",
+        "producer",
+        "varietal",
+        "region"
+      ]
+    },
+    {
+      "file": "13-handwritten-restaurant-wine-order.png",
+      "parseTimeMs": 20316,
+      "distributor": "Unknown (handwritten restaurant/service ticket — \"LGIE PONTEH\")",
+      "invoiceNo": null,
+      "itemCount": 5,
+      "totalBottles": 9,
+      "totalValue": 235,
+      "avgConfidence": 0.454,
+      "lowConfidenceItems": 5,
+      "lowFields": [
+        "unitCost",
+        "qty",
+        "name",
+        "vintage"
+      ]
+    },
+    {
+      "file": "14-printed-wine-club-shipment.png",
+      "parseTimeMs": 12428,
+      "distributor": "Terroir Wine Club",
+      "invoiceNo": null,
+      "itemCount": 4,
+      "totalBottles": 4,
+      "totalValue": 335,
+      "avgConfidence": 0.363,
+      "lowConfidenceItems": 4,
+      "lowFields": [
+        "name",
+        "producer",
+        "varietal",
+        "region",
+        "qty",
+        "unitCost"
+      ]
+    },
+    {
+      "file": "15-handwritten-wine-auction-bid.png",
+      "parseTimeMs": 25366,
+      "distributor": "Parish Putentos (handwritten auction house — name uncertain)",
+      "invoiceNo": "Lot 47",
+      "itemCount": 7,
+      "totalBottles": 7,
+      "totalValue": 4109,
+      "avgConfidence": 0.427,
+      "lowConfidenceItems": 7,
+      "lowFields": [
+        "name",
+        "vintage",
+        "qty",
+        "region",
+        "producer",
+        "varietal",
+        "unitCost"
+      ]
+    },
+    {
+      "file": "16-printed-liquor-store-purchase.png",
+      "parseTimeMs": 21852,
+      "distributor": "Unknown — header illegible due to image blur",
+      "invoiceNo": null,
+      "itemCount": 9,
+      "totalBottles": 0,
+      "totalValue": 0,
+      "avgConfidence": 0.227,
+      "lowConfidenceItems": 9,
+      "lowFields": [
+        "name",
+        "producer",
+        "vintage",
+        "varietal",
+        "region",
+        "qty",
+        "unitCost"
+      ]
+    },
+    {
+      "file": "17-handwritten-old-wine-cellar-list.png",
+      "parseTimeMs": 26725,
+      "distributor": "Wine Cellar (distributor/source name illegible)",
+      "invoiceNo": null,
+      "itemCount": 8,
+      "totalBottles": 64,
+      "totalValue": 11472,
+      "avgConfidence": 0.294,
+      "lowConfidenceItems": 8,
+      "lowFields": [
+        "name",
+        "producer",
+        "varietal",
+        "region",
+        "qty",
+        "unitCost",
+        "vintage"
+      ]
+    },
+    {
+      "file": "18-printed-wine-event-catering.png",
+      "parseTimeMs": 10644,
+      "distributor": "—",
+      "invoiceNo": null,
+      "itemCount": 0,
+      "totalBottles": 0,
+      "totalValue": 0,
+      "avgConfidence": 0,
+      "lowConfidenceItems": 0,
+      "lowFields": [],
+      "error": "No tool_use block in response"
+    },
+    {
+      "file": "19-handwritten-wine-notes-restaurant.png",
+      "parseTimeMs": 19639,
+      "distributor": "Unknown (header blurred/illegible)",
+      "invoiceNo": null,
+      "itemCount": 7,
+      "totalBottles": 78,
+      "totalValue": 0,
+      "avgConfidence": 0.57,
+      "lowConfidenceItems": 7,
+      "lowFields": [
+        "producer",
+        "vintage",
+        "unitCost",
+        "qty",
+        "name",
+        "region"
+      ]
+    },
+    {
+      "file": "20-printed-wine-return-credit.png",
+      "parseTimeMs": 15455,
+      "distributor": "Pacific Wine",
+      "invoiceNo": "2023-6880",
+      "itemCount": 4,
+      "totalBottles": 4,
+      "totalValue": 65,
+      "avgConfidence": 0.288,
+      "lowConfidenceItems": 4,
+      "lowFields": [
+        "name",
+        "producer",
+        "region",
+        "unitCost",
+        "vintage",
+        "qty",
+        "varietal"
+      ]
+    }
+  ]
+}

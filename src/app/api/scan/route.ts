@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const response = await client.messages.parse({
-      model: "claude-opus-4-7",
+      model: "claude-sonnet-4-6",
       max_tokens: 16000,
       thinking: { type: "adaptive" },
       output_config: {
