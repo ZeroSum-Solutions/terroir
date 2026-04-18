@@ -101,7 +101,7 @@ export default function CellarPage() {
           <p className="mt-xs text-[15px] text-ink-muted">{restaurantName}</p>
         </header>
 
-        <div className="mx-auto w-full max-w-md rounded-md border border-border bg-surface p-lg">
+        <div className="mx-auto w-full max-w-[420px] rounded-md border border-border bg-surface p-lg">
           <div className="mb-lg text-center">
             <Grid2x2
               className="mx-auto mb-md h-10 w-10 text-ink-subtle"

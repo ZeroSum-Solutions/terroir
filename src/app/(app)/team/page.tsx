@@ -236,7 +236,7 @@ export default function TeamPage() {
       {/* Invite modal */}
       {showInvite && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/20 backdrop-blur-sm">
-          <div className="mx-md w-full max-w-md rounded-md border border-border bg-surface p-lg shadow-lg">
+          <div className="mx-md w-full max-w-[420px] rounded-md border border-border bg-surface p-lg shadow-lg">
             <h3 className="text-[18px] font-serif font-medium text-ink">
               Invite team member
             </h3>
