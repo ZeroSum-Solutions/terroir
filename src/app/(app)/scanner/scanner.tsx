@@ -16,10 +16,10 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Save } from "lucide-react";
+import { ListOrdered, Save } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
-import { MOCK_RECENT_SCANS } from "@/lib/scanner/mock-data";
 import { useRestaurant } from "@/lib/context/restaurant";
 import type {
   LineItem,
@@ -28,7 +28,7 @@ import type {
   Scan,
 } from "@/lib/scanner/types";
 
-type Status = "ready" | "processing" | "results" | "error";
+type Status = "ready" | "processing" | "review" | "results" | "error";
 const STORAGE_KEY = "terroir:current-scan";
 const STEPS = [
   "Reading invoice",
@@ -73,7 +73,7 @@ async function postScan(file: File, signal: AbortSignal): Promise<Scan> {
   return (await res.json()) as Scan;
 }
 
-export function Scanner() {
+export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const { restaurantId } = useRestaurant();
   const [status, setStatus] = useState<Status>("ready");
   const [progress, setProgress] = useState(0);
@@ -81,6 +81,10 @@ export function Scanner() {
   const [scan, setScan] = useState<Scan | null>(null);
   const [originalItems, setOriginalItems] = useState<LineItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [savedResult, setSavedResult] = useState<{
+    itemCount: number;
+    wineCount: number;
+  } | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -133,7 +137,7 @@ export function Scanner() {
       setScan(fresh);
       setOriginalItems([...fresh.items]);
       saveScan(fresh);
-      setStatus("results");
+      setStatus(fresh.quality?.manualFallbackTriggered ? "review" : "results");
     } catch (err) {
       if (ac.signal.aborted) return;
       const message = err instanceof Error ? err.message : "Scan failed.";
@@ -247,10 +251,8 @@ export function Scanner() {
       saveScan(null);
       setScan(null);
       setOriginalItems([]);
+      setSavedResult(result);
       setStatus("ready");
-      setToast(
-        `Saved ${result.itemCount} items (${result.wineCount} wines) to inventory`,
-      );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Save failed.";
       setToast(message);
@@ -289,11 +291,11 @@ export function Scanner() {
     setStatus("results");
   }, []);
 
-  if (!hydrated) return <ReadyView onStart={startScan} />;
+  if (!hydrated) return <ReadyView onStart={startScan} recentScans={recentScans} savedResult={null} onDismissSaved={() => {}} />;
 
   return (
     <>
-      {status === "ready" && <ReadyView onStart={startScan} />}
+      {status === "ready" && <ReadyView onStart={startScan} recentScans={recentScans} savedResult={savedResult} onDismissSaved={() => setSavedResult(null)} />}
       {status === "processing" && (
         <ProcessingView progress={progress} stepIndex={stepIndex} />
       )}
@@ -302,6 +304,13 @@ export function Scanner() {
           message={error ?? "Unknown error."}
           onRetry={startOver}
           onManual={enterManualEntry}
+        />
+      )}
+      {status === "review" && scan && (
+        <ConfidenceGateView
+          quality={scan.quality!}
+          onReviewResults={() => setStatus("results")}
+          onManualEntry={enterManualEntry}
         />
       )}
       {status === "results" && scan && (
@@ -331,7 +340,17 @@ export function Scanner() {
 /* -------------------------------------------------------------------------- */
 /* Ready view                                                                 */
 /* -------------------------------------------------------------------------- */
-function ReadyView({ onStart }: { onStart: (file: File) => void }) {
+function ReadyView({
+  onStart,
+  recentScans,
+  savedResult,
+  onDismissSaved,
+}: {
+  onStart: (file: File) => void;
+  recentScans: RecentScan[];
+  savedResult: { itemCount: number; wineCount: number } | null;
+  onDismissSaved: () => void;
+}) {
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -351,6 +370,34 @@ function ReadyView({ onStart }: { onStart: (file: File) => void }) {
           Photograph a wine invoice with your phone. Parsed in about 20 seconds.
         </p>
       </header>
+
+      {savedResult && (
+        <div className="mb-lg flex items-center justify-between rounded-md border border-success/30 bg-success-soft px-md py-sm">
+          <div className="flex items-center gap-sm">
+            <Check className="h-4 w-4 text-success" strokeWidth={2.5} />
+            <span className="text-[14px] text-ink">
+              Saved {savedResult.itemCount} items ({savedResult.wineCount} wines) to inventory
+            </span>
+          </div>
+          <div className="flex items-center gap-sm">
+            <Link
+              href="/wine-list"
+              onClick={onDismissSaved}
+              className="flex items-center gap-xs rounded-sm px-sm py-xs text-[13px] font-medium text-accent hover:bg-accent-soft"
+            >
+              <ListOrdered className="h-3.5 w-3.5" strokeWidth={2} />
+              Add to wine list
+            </Link>
+            <button
+              type="button"
+              onClick={onDismissSaved}
+              className="text-[13px] text-ink-muted hover:text-ink"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       <button
         type="button"
@@ -403,7 +450,7 @@ function ReadyView({ onStart }: { onStart: (file: File) => void }) {
         onChange={(e) => handleFiles(e.target.files)}
       />
 
-      <RecentScansList scans={MOCK_RECENT_SCANS} />
+      <RecentScansList scans={recentScans} />
     </section>
   );
 }
@@ -538,6 +585,56 @@ function ErrorView({
           <button
             type="button"
             onClick={onManual}
+            className="flex h-11 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted md:h-[38px]"
+          >
+            Enter manually
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Confidence gate interstitial                                               */
+/* -------------------------------------------------------------------------- */
+function ConfidenceGateView({
+  quality,
+  onReviewResults,
+  onManualEntry,
+}: {
+  quality: import("@/lib/scanner/types").ScanQuality;
+  onReviewResults: () => void;
+  onManualEntry: () => void;
+}) {
+  const message =
+    quality.reason === "too_few_items"
+      ? `Only ${quality.totalItems} wine${quality.totalItems === 1 ? "" : "s"} found. The invoice may not have been fully captured.`
+      : quality.reason === "both"
+        ? `Only ${quality.totalItems} wine${quality.totalItems === 1 ? "" : "s"} found with ${Math.round(quality.avgConfidence * 100)}% average confidence. Many fields may need correction.`
+        : `${quality.lowConfidenceItems} of ${quality.totalItems} wines have low confidence (${Math.round(quality.avgConfidence * 100)}% average). Several fields may need correction.`;
+
+  return (
+    <section className="flex min-h-[60vh] items-center justify-center">
+      <div className="w-full max-w-[480px] rounded-md border border-border bg-white p-xl text-center">
+        <div className="mx-auto mb-md flex h-14 w-14 items-center justify-center rounded-full bg-warning-soft text-warning">
+          <AlertTriangle className="h-6 w-6" strokeWidth={1.75} />
+        </div>
+        <h2 className="font-serif text-[22px] text-ink">
+          This invoice was harder to read
+        </h2>
+        <p className="mt-sm text-[14px] text-ink-muted">{message}</p>
+        <div className="mt-lg grid grid-cols-1 gap-sm md:grid-cols-2 md:gap-md">
+          <button
+            type="button"
+            onClick={onReviewResults}
+            className="flex h-11 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover md:h-[38px]"
+          >
+            Review AI results
+          </button>
+          <button
+            type="button"
+            onClick={onManualEntry}
             className="flex h-11 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted md:h-[38px]"
           >
             Enter manually

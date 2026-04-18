@@ -3,7 +3,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ParsedInvoiceSchema } from "@/lib/scanner/schema";
-import type { LineItem, Scan } from "@/lib/scanner/types";
+import type { LineItem, Scan, ScanQuality } from "@/lib/scanner/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -153,6 +153,22 @@ export async function POST(request: NextRequest) {
       lowFields: item.lowFields.length > 0 ? item.lowFields : undefined,
     }));
 
+    // Confidence gate: flag scans that need extra review
+    const avgConfidence =
+      items.length > 0
+        ? items.reduce((s, i) => s + i.confidence, 0) / items.length
+        : 0;
+    const lowConfidenceItems = items.filter((i) => i.confidence < 0.75).length;
+    const lowConf = avgConfidence < 0.9;
+    const tooFew = items.length < 3;
+    const quality: ScanQuality = {
+      avgConfidence: Math.round(avgConfidence * 1000) / 1000,
+      lowConfidenceItems,
+      totalItems: items.length,
+      manualFallbackTriggered: lowConf || tooFew,
+      reason: lowConf && tooFew ? "both" : lowConf ? "low_confidence" : tooFew ? "too_few_items" : undefined,
+    };
+
     const scan: Scan = {
       source: {
         distributor: parsed.distributor,
@@ -162,6 +178,7 @@ export async function POST(request: NextRequest) {
       },
       items,
       edits: {},
+      quality,
     };
 
     return NextResponse.json(scan);

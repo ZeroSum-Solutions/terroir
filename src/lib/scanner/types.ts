@@ -27,10 +27,19 @@ export type ScanSource = {
   parsedAt: string;
 };
 
+export type ScanQuality = {
+  avgConfidence: number;
+  lowConfidenceItems: number;
+  totalItems: number;
+  manualFallbackTriggered: boolean;
+  reason?: "low_confidence" | "too_few_items" | "both";
+};
+
 export type Scan = {
   source: ScanSource;
   items: LineItem[];
   edits: Record<string, true>;
+  quality?: ScanQuality;
 };
 
 export type RecentScan = {
