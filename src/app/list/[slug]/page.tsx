@@ -18,7 +18,7 @@ export default async function PublicWineListPage({
   const { data: list, error } = await supabase
     .from("wine_lists")
     .select(
-      "name, template, restaurant_id, restaurants(name), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, wines(name, producer, vintage, varietal, region)))",
+      "name, template, restaurant_id, restaurants(name), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, wines(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label)))",
     )
     .eq("slug", slug)
     .eq("is_published", true)
@@ -47,6 +47,9 @@ export default async function PublicWineListPage({
           vintage: number | null;
           varietal: string | null;
           region: string | null;
+          serving_temp_min: number | null;
+          serving_temp_max: number | null;
+          serving_temp_label: string | null;
         };
       }>;
     }>
@@ -104,10 +107,15 @@ export default async function PublicWineListPage({
                         )}
                       </div>
                     </div>
-                    {wine.region && (
+                    {(wine.region || wine.serving_temp_label) && (
                       <p className="mt-2xs text-[12px] text-ink-muted">
                         {wine.region}
                         {wine.varietal && ` · ${wine.varietal}`}
+                        {wine.serving_temp_label && (
+                          <span className="text-ink-subtle">
+                            {wine.region ? " · " : ""}{wine.serving_temp_min}–{wine.serving_temp_max}°F
+                          </span>
+                        )}
                       </p>
                     )}
                     {item.tasting_note && (

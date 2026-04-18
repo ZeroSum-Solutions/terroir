@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Download,
   Eye,
+  FileSpreadsheet,
   GripVertical,
   Loader2,
   MoreHorizontal,
@@ -44,6 +45,11 @@ type Wine = {
   vintage: number | null;
   varietal: string | null;
   region: string | null;
+  drink_window_start?: number | null;
+  drink_window_end?: number | null;
+  serving_temp_min?: number | null;
+  serving_temp_max?: number | null;
+  serving_temp_label?: string | null;
 };
 
 type ListItem = {
@@ -282,6 +288,14 @@ export function WineListEditor({
               )}
               <span className="hidden md:inline">{generatingPdf ? "Generating..." : "Download PDF"}</span>
             </button>
+            <a
+              href="/api/export/toast-csv"
+              download="toast-import.csv"
+              className="flex h-[34px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[13px] font-medium text-ink hover:bg-surface-muted md:px-md"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" strokeWidth={2} />
+              <span className="hidden md:inline">Toast Export</span>
+            </a>
             <button
               type="button"
               onClick={() => setShowPublish(true)}
@@ -643,6 +657,18 @@ function WineRow({
                 <span>{wine.region}</span>
               </>
             )}
+            {wine.serving_temp_label && (
+              <>
+                <span className="text-ink-subtle">·</span>
+                <span className="text-ink-subtle">{wine.serving_temp_min}–{wine.serving_temp_max}°F</span>
+              </>
+            )}
+            {wine.drink_window_start && wine.drink_window_end && (
+              <>
+                <span className="text-ink-subtle">·</span>
+                <span className="text-ink-subtle">Drink {wine.drink_window_start}–{wine.drink_window_end}</span>
+              </>
+            )}
           </div>
         </div>
         <PriceInput
@@ -670,12 +696,22 @@ function WineRow({
             <div className="font-serif text-[15px] font-medium text-ink">
               {wine.producer}, {wine.name}
             </div>
-            <div className="mt-2xs flex items-center gap-xs text-[12px] text-ink-muted">
+            <div className="mt-2xs flex flex-wrap items-center gap-xs text-[12px] text-ink-muted">
               <span className="rounded-sm bg-surface-muted px-xs py-2xs font-mono text-[11px] text-ink-subtle">
                 {wine.vintage ?? "NV"}
               </span>
               {wine.region && <span>{wine.region}</span>}
             </div>
+            {(wine.serving_temp_label || wine.drink_window_start) && (
+              <div className="mt-xs flex items-center gap-sm text-[11px] text-ink-subtle">
+                {wine.serving_temp_label && (
+                  <span>{wine.serving_temp_min}–{wine.serving_temp_max}°F</span>
+                )}
+                {wine.drink_window_start && wine.drink_window_end && (
+                  <span>Drink {wine.drink_window_start}–{wine.drink_window_end}</span>
+                )}
+              </div>
+            )}
           </div>
           <button
             type="button"

@@ -51,6 +51,11 @@ export default async function WineListEditorPage({
         size_ml: number;
         country: string | null;
         lwin_id: string | null;
+        drink_window_start: number | null;
+        drink_window_end: number | null;
+        serving_temp_min: number | null;
+        serving_temp_max: number | null;
+        serving_temp_label: string | null;
         created_at: string;
         updated_at: string;
       };

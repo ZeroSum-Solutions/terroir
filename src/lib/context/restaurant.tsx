@@ -5,6 +5,7 @@ import { createContext, useContext } from "react";
 type RestaurantContext = {
   restaurantId: string;
   restaurantName: string;
+  userRole: "owner" | "manager" | "staff";
 };
 
 const Ctx = createContext<RestaurantContext | null>(null);
@@ -12,10 +13,11 @@ const Ctx = createContext<RestaurantContext | null>(null);
 export function RestaurantProvider({
   restaurantId,
   restaurantName,
+  userRole,
   children,
 }: RestaurantContext & { children: React.ReactNode }) {
   return (
-    <Ctx value={{ restaurantId, restaurantName }}>
+    <Ctx value={{ restaurantId, restaurantName, userRole }}>
       {children}
     </Ctx>
   );

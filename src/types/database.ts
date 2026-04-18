@@ -15,6 +15,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      cellar_config: {
+        Row: {
+          id: string
+          restaurant_id: string
+          name: string
+          rows: number
+          columns: number
+          labels: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          restaurant_id: string
+          name?: string
+          rows?: number
+          columns?: number
+          labels?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          restaurant_id?: string
+          name?: string
+          rows?: number
+          columns?: number
+          labels?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cellar_config_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_items: {
         Row: {
           added_at: string
@@ -76,6 +117,50 @@ export type Database = {
           },
         ]
       }
+      invitations: {
+        Row: {
+          id: string
+          restaurant_id: string
+          email: string | null
+          role: Database["public"]["Enums"]["membership_role"]
+          invited_by: string
+          token: string
+          expires_at: string
+          accepted_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          restaurant_id: string
+          email?: string | null
+          role?: Database["public"]["Enums"]["membership_role"]
+          invited_by: string
+          token?: string
+          expires_at?: string
+          accepted_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          restaurant_id?: string
+          email?: string | null
+          role?: Database["public"]["Enums"]["membership_role"]
+          invited_by?: string
+          token?: string
+          expires_at?: string
+          accepted_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invitations_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_scans: {
         Row: {
           accuracy_score: number | null
@@ -128,6 +213,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      lwin_catalog: {
+        Row: {
+          lwin_id: string
+          display_name: string
+          producer: string | null
+          varietal: string | null
+          region: string | null
+          country: string | null
+          colour: string | null
+          type: string | null
+        }
+        Insert: {
+          lwin_id: string
+          display_name: string
+          producer?: string | null
+          varietal?: string | null
+          region?: string | null
+          country?: string | null
+          colour?: string | null
+          type?: string | null
+        }
+        Update: {
+          lwin_id?: string
+          display_name?: string
+          producer?: string | null
+          varietal?: string | null
+          region?: string | null
+          country?: string | null
+          colour?: string | null
+          type?: string | null
+        }
+        Relationships: []
       }
       memberships: {
         Row: {
@@ -316,12 +434,17 @@ export type Database = {
         Row: {
           country: string | null
           created_at: string
+          drink_window_start: number | null
+          drink_window_end: number | null
           id: string
           lwin_id: string | null
           name: string
           producer: string
           region: string | null
           restaurant_id: string
+          serving_temp_min: number | null
+          serving_temp_max: number | null
+          serving_temp_label: string | null
           size_ml: number
           updated_at: string
           varietal: string | null
@@ -330,12 +453,17 @@ export type Database = {
         Insert: {
           country?: string | null
           created_at?: string
+          drink_window_start?: number | null
+          drink_window_end?: number | null
           id?: string
           lwin_id?: string | null
           name: string
           producer: string
           region?: string | null
           restaurant_id: string
+          serving_temp_min?: number | null
+          serving_temp_max?: number | null
+          serving_temp_label?: string | null
           size_ml?: number
           updated_at?: string
           varietal?: string | null
@@ -344,12 +472,17 @@ export type Database = {
         Update: {
           country?: string | null
           created_at?: string
+          drink_window_start?: number | null
+          drink_window_end?: number | null
           id?: string
           lwin_id?: string | null
           name?: string
           producer?: string
           region?: string | null
           restaurant_id?: string
+          serving_temp_min?: number | null
+          serving_temp_max?: number | null
+          serving_temp_label?: string | null
           size_ml?: number
           updated_at?: string
           varietal?: string | null

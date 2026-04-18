@@ -1,13 +1,15 @@
 import Link from "next/link";
-import { BarChart3, ListOrdered, LogOut, ScanLine } from "lucide-react";
+import { BarChart3, DollarSign, Grid2x2, ListOrdered, LogOut, ScanLine, Settings } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { RestaurantProvider } from "@/lib/context/restaurant";
 import { OnboardingModal } from "./onboarding-modal";
+import { SettingsDropdown } from "./settings-dropdown";
 
 const TABS = [
   { href: "/scanner", label: "Scanner", Icon: ScanLine },
   { href: "/wine-list", label: "Wine Lists", Icon: ListOrdered },
   { href: "/dashboard", label: "Dashboard", Icon: BarChart3 },
+  { href: "/cellar", label: "Cellar", Icon: Grid2x2 },
 ] as const;
 
 export default async function AppLayout({
@@ -24,7 +26,7 @@ export default async function AppLayout({
   const { data: membership } = user
     ? await supabase
         .from("memberships")
-        .select("restaurant_id, restaurants(name)")
+        .select("restaurant_id, role, restaurants(name)")
         .eq("user_id", user.id)
         .limit(1)
         .single()
@@ -33,10 +35,11 @@ export default async function AppLayout({
   const restaurantId = membership?.restaurant_id ?? "";
   const restaurantName =
     (membership?.restaurants as { name: string } | null)?.name ?? "My Restaurant";
+  const userRole = (membership?.role ?? "staff") as "owner" | "manager" | "staff";
   const needsOnboarding = restaurantName === "My Restaurant";
 
   return (
-    <RestaurantProvider restaurantId={restaurantId} restaurantName={restaurantName}>
+    <RestaurantProvider restaurantId={restaurantId} restaurantName={restaurantName} userRole={userRole}>
     {needsOnboarding && restaurantId && (
       <OnboardingModal restaurantId={restaurantId} />
     )}
@@ -68,16 +71,7 @@ export default async function AppLayout({
           <span className="hidden text-[12px] tabular text-ink-muted md:inline">
             {user?.email}
           </span>
-          <form action="/auth/signout" method="post">
-            <button
-              type="submit"
-              aria-label="Sign out"
-              className="flex h-10 w-10 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted hover:text-ink md:h-auto md:w-auto md:border md:border-border-strong md:bg-white md:px-md md:py-sm md:text-[13px] md:font-medium"
-            >
-              <LogOut className="h-5 w-5 md:hidden" strokeWidth={1.75} />
-              <span className="hidden md:inline">Sign out</span>
-            </button>
-          </form>
+          <SettingsDropdown />
         </div>
       </header>
 
@@ -88,7 +82,7 @@ export default async function AppLayout({
 
       {/* Bottom tab bar — mobile only, thumb-friendly */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-border bg-surface/95 backdrop-blur-sm md:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-border bg-surface/95 backdrop-blur-sm md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Primary"
       >
