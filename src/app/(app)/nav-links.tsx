@@ -2,14 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { LucideIcon } from "lucide-react";
+import { BarChart3, Grid2x2, ListOrdered, ScanLine } from "lucide-react";
 
-interface NavLinksProps {
-  tabs: ReadonlyArray<{ href: string; label: string; Icon: LucideIcon }>;
-}
+const TABS = [
+  { href: "/scanner", label: "Scanner", Icon: ScanLine },
+  { href: "/wine-list", label: "Wine Lists", Icon: ListOrdered },
+  { href: "/dashboard", label: "Dashboard", Icon: BarChart3 },
+  { href: "/cellar", label: "Cellar", Icon: Grid2x2 },
+] as const;
 
 /** Desktop top nav links with aria-current for the active route. */
-export function DesktopNavLinks({ tabs }: NavLinksProps) {
+export function DesktopNavLinks() {
+  const tabs = TABS;
   const pathname = usePathname();
   return (
     <>
@@ -31,7 +35,8 @@ export function DesktopNavLinks({ tabs }: NavLinksProps) {
 }
 
 /** Mobile bottom tab bar with aria-current for the active route. */
-export function MobileNavLinks({ tabs }: NavLinksProps) {
+export function MobileNavLinks() {
+  const tabs = TABS;
   const pathname = usePathname();
   return (
     <>

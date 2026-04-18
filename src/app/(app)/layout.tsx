@@ -1,17 +1,9 @@
 import Link from "next/link";
-import { BarChart3, Grid2x2, ListOrdered, ScanLine } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { RestaurantProvider } from "@/lib/context/restaurant";
 import { OnboardingModal } from "./onboarding-modal";
 import { SettingsDropdown } from "./settings-dropdown";
 import { DesktopNavLinks, MobileNavLinks } from "./nav-links";
-
-const TABS = [
-  { href: "/scanner", label: "Scanner", Icon: ScanLine },
-  { href: "/wine-list", label: "Wine Lists", Icon: ListOrdered },
-  { href: "/dashboard", label: "Dashboard", Icon: BarChart3 },
-  { href: "/cellar", label: "Cellar", Icon: Grid2x2 },
-] as const;
 
 export default async function AppLayout({
   children,
@@ -57,7 +49,7 @@ export default async function AppLayout({
 
         {/* Desktop nav */}
         <nav className="ml-xl hidden items-center gap-2xs md:flex" aria-label="Primary">
-          <DesktopNavLinks tabs={TABS} />
+          <DesktopNavLinks />
         </nav>
 
         <div className="ml-auto flex items-center gap-sm md:gap-md">
@@ -79,7 +71,7 @@ export default async function AppLayout({
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Primary mobile"
       >
-        <MobileNavLinks tabs={TABS} />
+        <MobileNavLinks />
       </nav>
     </div>
     </RestaurantProvider>
