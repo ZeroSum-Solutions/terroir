@@ -38,6 +38,7 @@ export default async function LoginPage({
   searchParams: SearchParams;
 }) {
   const { sent, error, next } = await searchParams;
+  const devBypassEmail = process.env.NEXT_PUBLIC_DEV_BYPASS_EMAIL;
 
   return (
     <main className="flex min-h-screen items-center justify-center px-lg">
@@ -88,6 +89,23 @@ export default async function LoginPage({
               Send magic link
             </button>
           </form>
+        )}
+
+        {devBypassEmail && !sent && (
+          <div className="mt-lg border-t border-dashed border-border pt-lg">
+            <p className="mb-sm text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+              Dev only
+            </p>
+            <a
+              href="/api/dev-login"
+              className="flex h-[38px] items-center justify-center rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted"
+            >
+              Sign in as {devBypassEmail}
+            </a>
+            <p className="mt-xs text-[11px] text-ink-subtle">
+              Skips email. Disabled in production (no NEXT_PUBLIC_DEV_BYPASS_EMAIL set).
+            </p>
+          </div>
         )}
       </div>
     </main>
