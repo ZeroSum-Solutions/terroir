@@ -19,8 +19,13 @@ export async function GET(request: NextRequest) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  const origin = new URL(request.url).origin;
-  const redirectTo = `${origin}/auth/complete`;
+  // Use the Host header rather than request.url — Next resolves request.url
+  // against the server's listening address (localhost) even when the client
+  // hit the box via a LAN IP, which would send Supabase back to localhost.
+  const hdrs = request.headers;
+  const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "localhost:3000";
+  const proto = hdrs.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "http");
+  const redirectTo = `${proto}://${host}/auth/complete`;
 
   const res = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
     method: "POST",
