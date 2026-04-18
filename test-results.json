@@ -1,0 +1,337 @@
+{
+  "testedAt": "2026-04-18T03:27:56.414Z",
+  "results": [
+    {
+      "file": "01-printed-napa-distributor.png",
+      "parseTimeMs": 10410,
+      "distributor": "—",
+      "invoiceNo": null,
+      "itemCount": 0,
+      "totalBottles": 0,
+      "totalValue": 0,
+      "avgConfidence": 0,
+      "lowConfidenceItems": 0,
+      "lowFields": [],
+      "error": "No tool_use block in response"
+    },
+    {
+      "file": "02-handwritten-yellow-notepad.png",
+      "parseTimeMs": 16119,
+      "distributor": "Unknown (handwritten note, not a distributor invoice)",
+      "invoiceNo": null,
+      "itemCount": 7,
+      "totalBottles": 162,
+      "totalValue": 0,
+      "avgConfidence": 0.286,
+      "lowConfidenceItems": 7,
+      "lowFields": [
+        "name",
+        "producer",
+        "varietal",
+        "region",
+        "qty",
+        "unitCost",
+        "vintage"
+      ]
+    },
+    {
+      "file": "03-european-bordeaux-formal.png",
+      "parseTimeMs": 10818,
+      "distributor": "Maison du Vin - Bordeaux",
+      "invoiceNo": null,
+      "itemCount": 5,
+      "totalBottles": 5,
+      "totalValue": 3086.7,
+      "avgConfidence": 0.27,
+      "lowConfidenceItems": 5,
+      "lowFields": [
+        "name",
+        "producer",
+        "vintage",
+        "qty",
+        "unitCost",
+        "varietal"
+      ]
+    },
+    {
+      "file": "04-thermal-receipt-crinkled.png",
+      "parseTimeMs": 12721,
+      "itemCount": 0,
+      "totalBottles": 0,
+      "totalValue": 0,
+      "avgConfidence": 0,
+      "lowConfidenceItems": 0,
+      "lowFields": []
+    },
+    {
+      "file": "05-handwritten-postit-wine-order.png",
+      "parseTimeMs": 15975,
+      "distributor": "Unknown (handwritten note)",
+      "invoiceNo": null,
+      "itemCount": 6,
+      "totalBottles": 33,
+      "totalValue": 6234,
+      "avgConfidence": 0.572,
+      "lowConfidenceItems": 4,
+      "lowFields": [
+        "name",
+        "vintage",
+        "unitCost"
+      ]
+    },
+    {
+      "file": "06-printed-italian-wine-invoice.png",
+      "parseTimeMs": 9992,
+      "distributor": "Vini Italiani Milani",
+      "invoiceNo": null,
+      "itemCount": 5,
+      "totalBottles": 1591,
+      "totalValue": 4458200,
+      "avgConfidence": 0.3,
+      "lowConfidenceItems": 5,
+      "lowFields": [
+        "name",
+        "producer",
+        "vintage",
+        "unitCost",
+        "qty"
+      ]
+    },
+    {
+      "file": "07-handwritten-wine-list-clipboard.png",
+      "parseTimeMs": 12888,
+      "distributor": "Unknown (handwritten list)",
+      "invoiceNo": null,
+      "itemCount": 6,
+      "totalBottles": 0,
+      "totalValue": 0,
+      "avgConfidence": 0.492,
+      "lowConfidenceItems": 6,
+      "lowFields": [
+        "vintage",
+        "region",
+        "qty",
+        "unitCost"
+      ]
+    },
+    {
+      "file": "08-printed-wine-delivery-slip.png",
+      "parseTimeMs": 11048,
+      "distributor": "Kelivale Wine Logistics (illegible)",
+      "invoiceNo": null,
+      "itemCount": 3,
+      "totalBottles": 0,
+      "totalValue": 0,
+      "avgConfidence": 0.2,
+      "lowConfidenceItems": 3,
+      "lowFields": [
+        "name",
+        "producer",
+        "vintage",
+        "region",
+        "qty",
+        "unitCost"
+      ]
+    },
+    {
+      "file": "09-handwritten-wine-tasting-notes-invoice.png",
+      "parseTimeMs": 8712,
+      "distributor": "Wine Fast Tastings (Private Events)",
+      "invoiceNo": null,
+      "itemCount": 0,
+      "totalBottles": 0,
+      "totalValue": 0,
+      "avgConfidence": 0,
+      "lowConfidenceItems": 0,
+      "lowFields": []
+    },
+    {
+      "file": "10-printed-wine-wholesale-california.png",
+      "parseTimeMs": 7773,
+      "distributor": "—",
+      "invoiceNo": null,
+      "itemCount": 0,
+      "totalBottles": 0,
+      "totalValue": 0,
+      "avgConfidence": 0,
+      "lowConfidenceItems": 0,
+      "lowFields": [],
+      "error": "No tool_use block in response"
+    },
+    {
+      "file": "11-handwritten-wine-bar-tab.png",
+      "parseTimeMs": 14979,
+      "distributor": "Unknown (appears to be a handwritten restaurant check, not a distributor invoice)",
+      "invoiceNo": null,
+      "itemCount": 6,
+      "totalBottles": 8,
+      "totalValue": 12,
+      "avgConfidence": 0.342,
+      "lowConfidenceItems": 6,
+      "lowFields": [
+        "producer",
+        "vintage",
+        "region",
+        "unitCost",
+        "name",
+        "qty",
+        "varietal"
+      ]
+    },
+    {
+      "file": "12-printed-spanish-wine-export.png",
+      "parseTimeMs": 19235,
+      "distributor": "Bodegas Riojanas S.A.",
+      "invoiceNo": null,
+      "itemCount": 12,
+      "totalBottles": 1653,
+      "totalValue": 650096,
+      "avgConfidence": 0.321,
+      "lowConfidenceItems": 12,
+      "lowFields": [
+        "qty",
+        "unitCost",
+        "vintage",
+        "name",
+        "varietal"
+      ]
+    },
+    {
+      "file": "13-handwritten-restaurant-wine-order.png",
+      "parseTimeMs": 11317,
+      "distributor": "Unknown (handwritten note)",
+      "invoiceNo": null,
+      "itemCount": 5,
+      "totalBottles": 6,
+      "totalValue": 65,
+      "avgConfidence": 0.52,
+      "lowConfidenceItems": 5,
+      "lowFields": [
+        "unitCost",
+        "qty",
+        "vintage"
+      ]
+    },
+    {
+      "file": "14-printed-wine-club-shipment.png",
+      "parseTimeMs": 10863,
+      "distributor": "Terroir Wine Club",
+      "invoiceNo": null,
+      "itemCount": 4,
+      "totalBottles": 4,
+      "totalValue": 335,
+      "avgConfidence": 0.213,
+      "lowConfidenceItems": 4,
+      "lowFields": [
+        "name",
+        "producer",
+        "varietal",
+        "region",
+        "qty",
+        "unitCost",
+        "vintage"
+      ]
+    },
+    {
+      "file": "15-handwritten-wine-auction-bid.png",
+      "parseTimeMs": 12628,
+      "distributor": "Fine Wine Auction - Lot 47",
+      "invoiceNo": "Lot 47",
+      "itemCount": 7,
+      "totalBottles": 7,
+      "totalValue": 3626,
+      "avgConfidence": 0.207,
+      "lowConfidenceItems": 7,
+      "lowFields": [
+        "name",
+        "producer",
+        "vintage",
+        "varietal",
+        "region",
+        "unitCost"
+      ]
+    },
+    {
+      "file": "16-printed-liquor-store-purchase.png",
+      "parseTimeMs": 10287,
+      "distributor": "Unknown (illegible)",
+      "invoiceNo": null,
+      "itemCount": 0,
+      "totalBottles": 0,
+      "totalValue": 0,
+      "avgConfidence": 0,
+      "lowConfidenceItems": 0,
+      "lowFields": []
+    },
+    {
+      "file": "17-handwritten-old-wine-cellar-list.png",
+      "parseTimeMs": 19443,
+      "distributor": "UNKNOWN — illegible handwritten document, not a standard distributor invoice",
+      "invoiceNo": null,
+      "itemCount": 8,
+      "totalBottles": 62,
+      "totalValue": 0,
+      "avgConfidence": 0.125,
+      "lowConfidenceItems": 8,
+      "lowFields": [
+        "name",
+        "producer",
+        "vintage",
+        "varietal",
+        "region",
+        "unitCost",
+        "qty"
+      ]
+    },
+    {
+      "file": "18-printed-wine-event-catering.png",
+      "parseTimeMs": 10604,
+      "distributor": "Vintage Events Co. (illegible — possibly not a wine distributor invoice)",
+      "invoiceNo": null,
+      "itemCount": 0,
+      "totalBottles": 0,
+      "totalValue": 0,
+      "avgConfidence": 0,
+      "lowConfidenceItems": 0,
+      "lowFields": []
+    },
+    {
+      "file": "19-handwritten-wine-notes-restaurant.png",
+      "parseTimeMs": 9229,
+      "distributor": "Unknown (handwritten order sheet)",
+      "invoiceNo": null,
+      "itemCount": 4,
+      "totalBottles": 85,
+      "totalValue": 0,
+      "avgConfidence": 0.487,
+      "lowConfidenceItems": 4,
+      "lowFields": [
+        "name",
+        "producer",
+        "vintage",
+        "qty",
+        "unitCost"
+      ]
+    },
+    {
+      "file": "20-printed-wine-return-credit.png",
+      "parseTimeMs": 8764,
+      "distributor": "Pacific Wine",
+      "invoiceNo": "2022-089",
+      "itemCount": 4,
+      "totalBottles": 4,
+      "totalValue": 64,
+      "avgConfidence": 0.188,
+      "lowConfidenceItems": 4,
+      "lowFields": [
+        "name",
+        "producer",
+        "vintage",
+        "region",
+        "qty",
+        "unitCost",
+        "varietal"
+      ]
+    }
+  ]
+}
