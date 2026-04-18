@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { BarChart3, DollarSign, Grid2x2, ListOrdered, LogOut, ScanLine, Settings } from "lucide-react";
+import { BarChart3, Grid2x2, ListOrdered, ScanLine } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { RestaurantProvider } from "@/lib/context/restaurant";
 import { OnboardingModal } from "./onboarding-modal";
 import { SettingsDropdown } from "./settings-dropdown";
+import { DesktopNavLinks, MobileNavLinks } from "./nav-links";
 
 const TABS = [
   { href: "/scanner", label: "Scanner", Icon: ScanLine },
@@ -55,16 +56,8 @@ export default async function AppLayout({
         </Link>
 
         {/* Desktop nav */}
-        <nav className="ml-xl hidden items-center gap-2xs md:flex">
-          {TABS.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              className="rounded-sm px-md py-sm text-[14px] font-medium text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
-            >
-              {label}
-            </Link>
-          ))}
+        <nav className="ml-xl hidden items-center gap-2xs md:flex" aria-label="Primary">
+          <DesktopNavLinks tabs={TABS} />
         </nav>
 
         <div className="ml-auto flex items-center gap-sm md:gap-md">
@@ -84,18 +77,9 @@ export default async function AppLayout({
       <nav
         className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-border bg-surface/95 backdrop-blur-sm md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-        aria-label="Primary"
+        aria-label="Primary mobile"
       >
-        {TABS.map(({ href, label, Icon }) => (
-          <Link
-            key={href}
-            href={href}
-            className="flex min-h-[64px] flex-col items-center justify-center gap-xs px-sm py-sm text-[11px] font-medium text-ink-muted active:bg-surface-muted"
-          >
-            <Icon className="h-6 w-6" strokeWidth={1.75} />
-            <span>{label}</span>
-          </Link>
-        ))}
+        <MobileNavLinks tabs={TABS} />
       </nav>
     </div>
     </RestaurantProvider>

@@ -199,11 +199,11 @@ export default async function PriceComparisonPage() {
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-                  <th className="pb-sm text-left font-semibold">Wine</th>
-                  <th className="pb-sm text-left font-semibold">Distributor</th>
-                  <th className="pb-sm text-right font-semibold">Unit cost</th>
-                  <th className="pb-sm text-right font-semibold">Qty</th>
-                  <th className="pb-sm text-right font-semibold">Spread</th>
+                  <th scope="col" className="pb-sm text-left font-semibold">Wine</th>
+                  <th scope="col" className="pb-sm text-left font-semibold">Distributor</th>
+                  <th scope="col" className="pb-sm text-right font-semibold">Unit cost</th>
+                  <th scope="col" className="pb-sm text-right font-semibold">Qty</th>
+                  <th scope="col" className="pb-sm text-right font-semibold">Spread</th>
                 </tr>
               </thead>
               <tbody>
@@ -375,11 +375,11 @@ export default async function PriceComparisonPage() {
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-                  <th className="px-md py-sm text-left font-semibold">Wine</th>
-                  <th className="px-md py-sm text-left font-semibold">
+                  <th scope="col" className="px-md py-sm text-left font-semibold">Wine</th>
+                  <th scope="col" className="px-md py-sm text-left font-semibold">
                     Distributor
                   </th>
-                  <th className="px-md py-sm text-right font-semibold">
+                  <th scope="col" className="px-md py-sm text-right font-semibold">
                     Unit cost
                   </th>
                 </tr>

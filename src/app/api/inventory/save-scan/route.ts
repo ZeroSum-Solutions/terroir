@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireMembership } from "@/lib/api/auth";
 import type { LineItem, Scan } from "@/lib/scanner/types";
 import type { Json } from "@/types/database";
 
@@ -53,31 +53,9 @@ function parseInvoiceDate(raw: string): string | null {
 
 export async function POST(request: NextRequest) {
   // ── Auth ──────────────────────────────────────────────────────────
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // ── Resolve restaurant membership ────────────────────────────────
-  const { data: membership, error: membershipError } = await supabase
-    .from("memberships")
-    .select("restaurant_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (membershipError || !membership) {
-    return NextResponse.json(
-      { error: "No restaurant membership found for this user." },
-      { status: 403 },
-    );
-  }
-
-  const restaurantId = membership.restaurant_id;
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, restaurantId } = auth;
 
   // ── Parse & validate body ────────────────────────────────────────
   let body: SaveScanBody;
@@ -119,7 +97,7 @@ export async function POST(request: NextRequest) {
       invoice_date: parseInvoiceDate(scan.source.invoiceDate),
       parsed_line_items: JSON.parse(JSON.stringify(originalItems)) as Json,
       final_line_items: JSON.parse(JSON.stringify(scan.items)) as Json,
-      edits: scan.edits as unknown as Json,
+      edits: JSON.parse(JSON.stringify(scan.edits)) as Json,
       accuracy_score: accuracyScore,
       item_count: scan.items.length,
     })

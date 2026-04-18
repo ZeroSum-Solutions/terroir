@@ -1,46 +1,40 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { z } from "zod/v4";
+import { requireOwner } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
 
+const InviteSchema = z.object({
+  role: z.enum(["manager", "staff"]).optional().default("staff"),
+});
+
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireOwner();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, user, restaurantId } = auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("restaurant_id, role")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership || membership.role !== "owner") {
-    return NextResponse.json(
-      { error: "Only owners can invite team members." },
-      { status: 403 },
-    );
-  }
-
-  let body: { role?: string };
+  let raw: unknown;
   try {
-    body = await request.json();
+    raw = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  const role = body.role === "manager" ? "manager" : "staff";
+  const parsed = InviteSchema.safeParse(raw);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input." },
+      { status: 400 },
+    );
+  }
+
+  const role = parsed.data.role;
 
   const { data: invitation, error } = await supabase
     .from("invitations")
     .insert({
-      restaurant_id: membership.restaurant_id,
-      role: role as "manager" | "staff",
+      restaurant_id: restaurantId,
+      role,
       invited_by: user.id,
     })
     .select("id, token, role, expires_at, created_at")

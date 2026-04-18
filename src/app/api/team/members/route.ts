@@ -1,33 +1,12 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("restaurant_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership) {
-    return NextResponse.json(
-      { error: "No restaurant membership found." },
-      { status: 403 },
-    );
-  }
-
-  const rid = membership.restaurant_id;
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, restaurantId, user } = auth;
 
   // Fetch members — we can't directly join auth.users from the client,
   // so we fetch memberships and the user_id. The email comes from the
@@ -36,7 +15,7 @@ export async function GET() {
   const { data: members, error: membersError } = await supabase
     .from("memberships")
     .select("id, user_id, role, created_at")
-    .eq("restaurant_id", rid)
+    .eq("restaurant_id", restaurantId)
     .order("created_at");
 
   if (membersError) {
@@ -50,7 +29,7 @@ export async function GET() {
   const { data: invitations, error: invitationsError } = await supabase
     .from("invitations")
     .select("id, token, role, email, expires_at, accepted_at, created_at")
-    .eq("restaurant_id", rid)
+    .eq("restaurant_id", restaurantId)
     .is("accepted_at", null)
     .order("created_at", { ascending: false });
 

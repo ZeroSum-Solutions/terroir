@@ -1,33 +1,35 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { z } from "zod/v4";
+import { requireMembership } from "@/lib/api/auth";
 import { DEFAULT_SECTIONS } from "@/lib/wine-list/types";
 
 export const runtime = "nodejs";
 
+const CreateListSchema = z.object({
+  name: z.string().min(1),
+});
+
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, restaurantId } = auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let body: { name: string; restaurantId: string };
+  let raw: unknown;
   try {
-    body = await request.json();
+    raw = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  const { name, restaurantId } = body;
-  if (!name || !restaurantId) {
+  const parsed = CreateListSchema.safeParse(raw);
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: "name and restaurantId are required." },
+      { error: parsed.error.issues[0]?.message ?? "Invalid input." },
       { status: 400 },
     );
   }
+
+  const { name } = parsed.data;
 
   // Create the wine list
   const { data: list, error: listError } = await supabase

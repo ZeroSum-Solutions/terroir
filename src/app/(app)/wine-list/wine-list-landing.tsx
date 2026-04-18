@@ -3,9 +3,7 @@
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ListOrdered, Plus } from "lucide-react";
-import { cn } from "@/lib/utils";
 import type { WineListWithCount } from "@/lib/wine-list/types";
-import { DEFAULT_SECTIONS } from "@/lib/wine-list/types";
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -21,10 +19,8 @@ function timeAgo(iso: string): string {
 
 export function WineListLanding({
   lists,
-  restaurantId,
 }: {
   lists: WineListWithCount[];
-  restaurantId: string;
 }) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
@@ -38,7 +34,7 @@ export function WineListLanding({
       const res = await fetch("/api/wine-lists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, restaurantId }),
+        body: JSON.stringify({ name }),
       });
       if (!res.ok) throw new Error("Failed to create wine list");
       const { id } = (await res.json()) as { id: string };
@@ -46,7 +42,7 @@ export function WineListLanding({
     } catch {
       setCreating(false);
     }
-  }, [newName, restaurantId, router]);
+  }, [newName, router]);
 
   return (
     <section>

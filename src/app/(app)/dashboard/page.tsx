@@ -324,8 +324,8 @@ export default async function DashboardPage() {
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-                  <th className="pb-sm text-left font-semibold">Distributor</th>
-                  <th className="pb-sm text-right font-semibold">Scans</th>
+                  <th scope="col" className="pb-sm text-left font-semibold">Distributor</th>
+                  <th scope="col" className="pb-sm text-right font-semibold">Scans</th>
                 </tr>
               </thead>
               <tbody>

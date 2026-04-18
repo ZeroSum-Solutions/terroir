@@ -1,20 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import puppeteer from "puppeteer";
-import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/api/auth";
 import { renderTemplate } from "@/lib/wine-list/templates";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase } = auth;
 
   let body: { listId: string; template?: string };
   try {

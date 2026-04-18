@@ -1,36 +1,37 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { z } from "zod/v4";
+import { requireAuth } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
 
+const AddItemSchema = z.object({
+  section_id: z.string().uuid(),
+  wine_id: z.string().uuid(),
+  glass_price: z.number().nonnegative().nullable().optional(),
+  bottle_price: z.number().nonnegative().nullable().optional(),
+});
+
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase } = auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let body: {
-    section_id: string;
-    wine_id: string;
-    glass_price?: number | null;
-    bottle_price?: number | null;
-  };
+  let raw: unknown;
   try {
-    body = await request.json();
+    raw = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  if (!body.section_id || !body.wine_id) {
+  const parsed = AddItemSchema.safeParse(raw);
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: "section_id and wine_id are required." },
+      { error: parsed.error.issues[0]?.message ?? "Invalid input." },
       { status: 400 },
     );
   }
+
+  const body = parsed.data;
 
   // Get the max position in this section
   const { data: existing } = await supabase

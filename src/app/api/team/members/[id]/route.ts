@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireOwner } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
 
@@ -10,29 +10,9 @@ export async function PATCH(
   { params }: { params: Params },
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Verify caller is an owner
-  const { data: callerMembership } = await supabase
-    .from("memberships")
-    .select("restaurant_id, role")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!callerMembership || callerMembership.role !== "owner") {
-    return NextResponse.json(
-      { error: "Only owners can change roles." },
-      { status: 403 },
-    );
-  }
+  const auth = await requireOwner();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, restaurantId } = auth;
 
   let body: { role?: string };
   try {
@@ -54,7 +34,7 @@ export async function PATCH(
     .from("memberships")
     .select("id, user_id, role, restaurant_id")
     .eq("id", id)
-    .eq("restaurant_id", callerMembership.restaurant_id)
+    .eq("restaurant_id", restaurantId)
     .single();
 
   if (!target) {
@@ -100,35 +80,16 @@ export async function DELETE(
   { params }: { params: Params },
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { data: callerMembership } = await supabase
-    .from("memberships")
-    .select("restaurant_id, role")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!callerMembership || callerMembership.role !== "owner") {
-    return NextResponse.json(
-      { error: "Only owners can remove members." },
-      { status: 403 },
-    );
-  }
+  const auth = await requireOwner();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, user, restaurantId } = auth;
 
   // Fetch target
   const { data: target } = await supabase
     .from("memberships")
     .select("id, user_id, restaurant_id")
     .eq("id", id)
-    .eq("restaurant_id", callerMembership.restaurant_id)
+    .eq("restaurant_id", restaurantId)
     .single();
 
   if (!target) {

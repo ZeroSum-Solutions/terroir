@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireOwner } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
 
@@ -10,13 +10,12 @@ export async function PATCH(
   { params }: { params: Params },
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireOwner();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, restaurantId } = auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (id !== restaurantId) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
   let body: { name?: string };

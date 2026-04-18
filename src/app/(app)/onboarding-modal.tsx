@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useFocusTrap } from "@/lib/use-focus-trap";
 
 export function OnboardingModal({
   restaurantId,
@@ -11,6 +12,7 @@ export function OnboardingModal({
   const router = useRouter();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
+  const trapRef = useFocusTrap<HTMLDivElement>();
 
   const submit = useCallback(async () => {
     const trimmed = name.trim();
@@ -31,9 +33,14 @@ export function OnboardingModal({
   }, [name, restaurantId, router]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-md">
-      <div className="w-full max-w-[400px] rounded-md border border-border bg-surface p-lg shadow-lg">
-        <h2 className="font-serif text-[22px] text-ink">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-md"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="onboarding-title"
+    >
+      <div ref={trapRef} className="w-full max-w-[400px] rounded-md border border-border bg-surface p-lg shadow-lg">
+        <h2 id="onboarding-title" className="font-serif text-[22px] text-ink">
           Name your restaurant
         </h2>
         <p className="mt-xs text-[13px] text-ink-muted">

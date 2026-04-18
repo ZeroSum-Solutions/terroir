@@ -41,9 +41,6 @@ export default async function WineListPage() {
   });
 
   return (
-    <WineListLanding
-      lists={listsWithCounts}
-      restaurantId={membership.restaurant_id}
-    />
+    <WineListLanding lists={listsWithCounts} />
   );
 }

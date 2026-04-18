@@ -1,17 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
 
 export async function PATCH(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase } = auth;
 
   let body: { orderedIds: string[] };
   try {

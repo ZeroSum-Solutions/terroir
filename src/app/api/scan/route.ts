@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/api/auth";
 import { ParsedInvoiceSchema } from "@/lib/scanner/schema";
 import type { LineItem, Scan, ScanQuality } from "@/lib/scanner/types";
 
@@ -38,14 +38,8 @@ Confidence scoring:
 Return every wine line on the invoice, in the order it appears.`;
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

@@ -1,40 +1,19 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireMembership } from "@/lib/api/auth";
 import { enrichWine } from "@/lib/wine-intelligence/enrich";
 
 export const runtime = "nodejs";
 
 export async function POST() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("restaurant_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership) {
-    return NextResponse.json(
-      { error: "No restaurant membership found." },
-      { status: 403 },
-    );
-  }
-
-  const rid = membership.restaurant_id;
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, restaurantId } = auth;
 
   // Fetch all wines for this restaurant
   const { data: wines, error } = await supabase
     .from("wines")
     .select("id, varietal, region, country, vintage")
-    .eq("restaurant_id", rid);
+    .eq("restaurant_id", restaurantId);
 
   if (error) {
     console.error("wines fetch failed:", error);

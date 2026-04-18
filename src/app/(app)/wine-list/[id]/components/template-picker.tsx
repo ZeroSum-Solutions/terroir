@@ -1,0 +1,48 @@
+"use client";
+
+import { Check } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { TEMPLATES, type Template } from "@/lib/wine-list/types";
+
+interface TemplatePickerProps {
+  current: string;
+  onChange: (template: Template) => void;
+  disabled?: boolean;
+}
+
+export function TemplatePicker({ current, onChange, disabled }: TemplatePickerProps) {
+  return (
+    <div className="flex flex-col gap-2xs">
+      {TEMPLATES.map((t) => (
+        <button
+          key={t}
+          type="button"
+          onClick={() => onChange(t)}
+          disabled={disabled}
+          className={cn(
+            "flex items-center justify-between rounded-sm px-sm py-xs text-[14px] transition-colors disabled:pointer-events-none",
+            current === t
+              ? "bg-surface-muted font-medium text-ink shadow-sm"
+              : "text-ink-muted hover:bg-surface-muted hover:text-ink",
+          )}
+        >
+          <span
+            className={
+              t === "classic" || t === "minimal"
+                ? "font-serif"
+                : "font-sans"
+            }
+          >
+            {t.charAt(0).toUpperCase() + t.slice(1)}
+          </span>
+          {current === t && (
+            <Check
+              className="h-3.5 w-3.5 text-accent"
+              strokeWidth={2.5}
+            />
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
