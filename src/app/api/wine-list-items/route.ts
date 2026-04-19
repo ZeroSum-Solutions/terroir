@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod/v4";
-import { requireAuth } from "@/lib/api/auth";
+import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
 
@@ -12,7 +12,7 @@ const AddItemSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase } = auth;
 

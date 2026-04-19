@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireAuth } from "@/lib/api/auth";
+import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
 
@@ -10,7 +10,7 @@ export async function PATCH(
   { params }: { params: Params },
 ) {
   const { id } = await params;
-  const auth = await requireAuth();
+  const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase } = auth;
 
@@ -48,7 +48,7 @@ export async function DELETE(
   { params }: { params: Params },
 ) {
   const { id } = await params;
-  const auth = await requireAuth();
+  const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase } = auth;
 

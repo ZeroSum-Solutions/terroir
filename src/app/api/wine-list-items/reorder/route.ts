@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireAuth } from "@/lib/api/auth";
+import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
 
 export async function PATCH(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase } = auth;
 
