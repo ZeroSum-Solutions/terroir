@@ -54,8 +54,8 @@ export function OnboardingModal({
           onKeyDown={(e) => {
             if (e.key === "Enter") submit();
           }}
-          placeholder="Tartine Cellar"
-          className="mt-lg h-[38px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
+          placeholder="Tartine Cellar…"
+          className="mt-lg h-[38px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
         />
         <div className="mt-lg flex justify-end">
           <button

@@ -55,7 +55,8 @@ export function TextInput({
   edited,
   onCommit,
   className,
-}: TextInputProps) {
+  label,
+}: TextInputProps & { label?: string }) {
   const [val, setVal] = useState(value);
   useEffect(() => setVal(value), [value]);
   return (
@@ -64,6 +65,7 @@ export function TextInput({
         value={val}
         onChange={(e) => setVal(e.target.value)}
         onBlur={() => val !== value && onCommit(val)}
+        aria-label={label}
         className={cn(
           "w-full bg-transparent text-[14px] text-ink outline-none",
           className,
@@ -102,6 +104,7 @@ export function VintageInput({
         onChange={(e) => setVal(e.target.value)}
         onBlur={commit}
         inputMode="numeric"
+        aria-label="Vintage"
         className="w-full bg-transparent font-mono text-[13px] text-ink outline-none"
       />
     </FieldWrap>
@@ -136,6 +139,7 @@ export function MoneyInput({
         onChange={(e) => setVal(e.target.value)}
         onBlur={commit}
         inputMode="decimal"
+        aria-label="Unit cost"
         className="w-full bg-transparent text-right font-mono text-[13px] font-medium text-ink outline-none"
       />
     </FieldWrap>

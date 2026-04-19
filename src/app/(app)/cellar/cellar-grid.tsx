@@ -208,10 +208,19 @@ export function CellarGridView({
                         fill={fill}
                         stroke={isSelected ? "#722F37" : "transparent"}
                         strokeWidth={isSelected ? 2 : 0}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Bin ${binId}${total > 0 ? `, ${total} bottles` : ", empty"}`}
                         className="cursor-pointer transition-opacity hover:opacity-80"
                         onClick={() =>
                           setSelectedBin(isSelected ? null : binId)
                         }
+                        onKeyDown={(e: React.KeyboardEvent) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSelectedBin(isSelected ? null : binId);
+                          }
+                        }}
                       />
                       {total > 0 && (
                         <text
@@ -255,9 +264,10 @@ export function CellarGridView({
               <button
                 type="button"
                 onClick={() => setSelectedBin(null)}
+                aria-label="Close bin detail"
                 className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-subtle hover:bg-surface-muted"
               >
-                <X className="h-4 w-4" strokeWidth={2} />
+                <X className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
               </button>
             </div>
 

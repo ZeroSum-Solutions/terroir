@@ -118,10 +118,11 @@ export function WineRow({ item, onDelete, onPriceChange, dragHandleProps }: Wine
       {/* Desktop row */}
       <div className="group hidden items-center border-b border-border px-lg py-sm transition-colors last:border-b-0 hover:bg-[#FBFAF6] md:grid md:grid-cols-[28px_1fr_80px_80px_36px]">
         <div
+          aria-label="Drag to reorder"
           className="cursor-grab text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100"
           {...dragHandleProps}
         >
-          <GripVertical className="h-4 w-4" strokeWidth={1.5} />
+          <GripVertical className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
         </div>
         <div>
           <div className="text-[14px] font-medium text-ink">
@@ -164,10 +165,11 @@ export function WineRow({ item, onDelete, onPriceChange, dragHandleProps }: Wine
         />
         <button
           type="button"
+          aria-label={`Remove ${item.wines.name}`}
           onClick={() => onDelete(item.id)}
           className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-subtle opacity-0 transition-opacity hover:bg-surface-muted hover:text-danger group-hover:opacity-100"
         >
-          <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+          <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
 
@@ -197,10 +199,11 @@ export function WineRow({ item, onDelete, onPriceChange, dragHandleProps }: Wine
           </div>
           <button
             type="button"
+            aria-label={`Options for ${item.wines.name}`}
             onClick={() => onDelete(item.id)}
             className="ml-sm flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-ink-subtle hover:text-danger"
           >
-            <MoreHorizontal className="h-4 w-4" strokeWidth={2} />
+            <MoreHorizontal className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           </button>
         </div>
         <div className="mt-sm flex gap-lg">

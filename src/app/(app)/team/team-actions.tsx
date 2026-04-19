@@ -141,17 +141,22 @@ export function TeamActions({
                     )}
                   </td>
                   <td className="px-md py-sm text-right font-mono text-[12px] text-ink-subtle">
-                    {new Date(member.created_at).toLocaleDateString()}
+                    {new Intl.DateTimeFormat().format(new Date(member.created_at))}
                   </td>
                   {isOwner && (
                     <td className="px-sm py-sm text-right">
                       {member.user_id !== currentUserId && (
                         <button
                           type="button"
-                          onClick={() => removeMember(member.id)}
+                          aria-label="Remove team member"
+                          onClick={() => {
+                            if (window.confirm("Remove this team member?")) {
+                              removeMember(member.id);
+                            }
+                          }}
                           className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-subtle hover:bg-surface-muted hover:text-danger"
                         >
-                          <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                          <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
                         </button>
                       )}
                     </td>
@@ -192,10 +197,10 @@ export function TeamActions({
                       {inv.role}
                     </td>
                     <td className="px-md py-sm font-mono text-[12px] text-ink-muted">
-                      {new Date(inv.created_at).toLocaleDateString()}
+                      {new Intl.DateTimeFormat().format(new Date(inv.created_at))}
                     </td>
                     <td className="px-md py-sm text-right font-mono text-[12px] text-ink-subtle">
-                      {new Date(inv.expires_at).toLocaleDateString()}
+                      {new Intl.DateTimeFormat().format(new Date(inv.expires_at))}
                     </td>
                   </tr>
                 ))}

@@ -27,7 +27,7 @@ function QrCode({ url }: QrCodeProps) {
     });
   }, [url]);
 
-  return <div ref={containerRef} className="mx-auto w-[200px]" />;
+  return <div ref={containerRef} className="mx-auto w-[200px]" role="img" aria-label={`QR code linking to ${url}`} />;
 }
 
 interface PublishModalProps {

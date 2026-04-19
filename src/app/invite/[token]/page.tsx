@@ -46,14 +46,14 @@ export default function AcceptInvitePage() {
       <div className="w-full max-w-sm rounded-md border border-border bg-surface p-lg text-center">
         {status === "loading" && (
           <>
-            <Loader2 className="mx-auto h-8 w-8 animate-spin text-accent" />
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-accent" aria-hidden="true" />
             <p className="mt-md text-[15px] text-ink">Joining restaurant...</p>
           </>
         )}
         {status === "success" && (
           <>
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success-soft">
-              <Check className="h-6 w-6 text-success" strokeWidth={2.5} />
+              <Check className="h-6 w-6 text-success" strokeWidth={2.5} aria-hidden="true" />
             </div>
             <p className="mt-md text-[15px] font-medium text-ink">{message}</p>
             <p className="mt-xs text-[13px] text-ink-muted">
@@ -64,7 +64,7 @@ export default function AcceptInvitePage() {
         {status === "error" && (
           <>
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-error/10">
-              <X className="h-6 w-6 text-error" strokeWidth={2.5} />
+              <X className="h-6 w-6 text-error" strokeWidth={2.5} aria-hidden="true" />
             </div>
             <p className="mt-md text-[15px] font-medium text-ink">{message}</p>
             <button

@@ -135,7 +135,7 @@ export function ResultsView({
           <button
             type="button"
             onClick={() => setRawTextOpen(!rawTextOpen)}
-            className="flex w-full items-center justify-between rounded-md border border-border bg-white p-md text-[13px] font-medium text-ink"
+            className="flex w-full items-center justify-between rounded-md border border-border bg-white p-md text-[13px] font-medium text-ink focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2"
           >
             <span className="flex items-center gap-sm">
               <FileText className="h-4 w-4 text-ink-subtle" strokeWidth={1.75} />
@@ -225,6 +225,7 @@ export function ResultsView({
                     edited={isEdited(it, "name")}
                     onCommit={(v) => onUpdate(it.id, "name", v)}
                     className="font-medium"
+                    label="Wine name"
                   />
                   <div className="mt-2xs pl-sm text-[12px] text-ink-muted">
                     {it.producer}
@@ -236,6 +237,7 @@ export function ResultsView({
                     low={isLow(it, "varietal")}
                     edited={isEdited(it, "varietal")}
                     onCommit={(v) => onUpdate(it.id, "varietal", v)}
+                    label="Varietal"
                   />
                 </td>
                 <td className="p-sm">
@@ -252,6 +254,7 @@ export function ResultsView({
                     low={isLow(it, "region")}
                     edited={isEdited(it, "region")}
                     onCommit={(v) => onUpdate(it.id, "region", v)}
+                    label="Region"
                   />
                 </td>
                 <td className="p-sm">
@@ -314,7 +317,7 @@ export function ResultsView({
           <button
             type="button"
             onClick={onScanAnother}
-            className="flex h-11 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted md:h-[38px] md:px-md"
+            className="flex h-11 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px] md:px-md"
           >
             <ScanLine className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
             <span className="hidden sm:inline">Scan another</span>
@@ -324,7 +327,7 @@ export function ResultsView({
             <button
               type="button"
               onClick={onExportCsv}
-              className="flex h-11 flex-1 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted md:h-[38px] md:flex-none md:px-md"
+              className="flex h-11 flex-1 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px] md:flex-none md:px-md"
               title="Export as CSV"
             >
               <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -333,7 +336,7 @@ export function ResultsView({
             <button
               type="button"
               onClick={onExportAccuracy}
-              className="flex h-11 flex-1 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted md:h-[38px] md:flex-none md:px-md"
+              className="flex h-11 flex-1 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px] md:flex-none md:px-md"
               title="Export accuracy JSON (source + items + per-field edits)"
             >
               <FileJson className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -344,7 +347,7 @@ export function ResultsView({
             type="button"
             onClick={onSaveToInventory}
             disabled={isSaving}
-            className="col-span-2 flex h-11 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60 md:h-[38px] md:px-md"
+            className="col-span-2 flex h-11 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 disabled:opacity-60 md:h-[38px] md:px-md"
           >
             {isSaving ? (
               <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" />

@@ -155,8 +155,8 @@ export function WineListLanding({
               onKeyDown={(e) => {
                 if (e.key === "Enter") createList();
               }}
-              placeholder="Spring 2026 Wine List"
-              className="mt-lg h-[38px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
+              placeholder="Spring 2026 Wine List…"
+              className="mt-lg h-[38px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
             />
             <div className="mt-lg flex justify-end gap-sm">
               <button

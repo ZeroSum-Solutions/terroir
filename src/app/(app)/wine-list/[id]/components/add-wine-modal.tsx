@@ -156,14 +156,15 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
             </div>
             <div className="border-b border-border px-lg py-sm">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-sm top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" aria-hidden="true" />
+                <Search className="pointer-events-none absolute left-sm top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" strokeWidth={2} aria-hidden="true" />
                 <input
                   autoFocus
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search by producer or wine name..."
-                  className="h-[38px] w-full rounded-sm border border-border bg-white pl-xl pr-sm text-[14px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
+                  placeholder="Search by producer or wine name…"
+                  aria-label="Search wines"
+                  className="h-[38px] w-full rounded-sm border border-border bg-white pl-xl pr-sm text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
                 />
               </div>
             </div>

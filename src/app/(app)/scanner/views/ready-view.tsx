@@ -108,7 +108,7 @@ export function ReadyView({
       <button
         type="button"
         onClick={() => cameraRef.current?.click()}
-        className="flex w-full flex-col items-center justify-center rounded-md border-2 border-dashed border-border-strong bg-surface-muted px-lg py-2xl text-center transition-colors hover:border-accent hover:bg-accent-soft/40 md:py-3xl"
+        className="flex w-full flex-col items-center justify-center rounded-md border-2 border-dashed border-border-strong bg-surface-muted px-lg py-2xl text-center transition-colors hover:border-accent hover:bg-accent-soft/40 focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:py-3xl"
       >
         <span className="mb-md flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white md:h-16 md:w-16">
           <Camera className="h-6 w-6 md:h-7 md:w-7" strokeWidth={1.75} aria-hidden="true" />
@@ -125,7 +125,7 @@ export function ReadyView({
         <button
           type="button"
           onClick={() => cameraRef.current?.click()}
-          className="flex h-12 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover md:h-[38px]"
+          className="flex h-12 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px]"
         >
           <Camera className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           Take photo
@@ -133,7 +133,7 @@ export function ReadyView({
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
-          className="flex h-12 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted md:h-[38px]"
+          className="flex h-12 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px]"
         >
           <FileUp className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           Upload file

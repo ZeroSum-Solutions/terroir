@@ -21,15 +21,15 @@ export function ErrorView({ message, onRetry, onManual }: ErrorViewProps) {
           <button
             type="button"
             onClick={onRetry}
-            className="flex h-11 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover md:h-[38px]"
+            className="flex h-11 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px]"
           >
-            <RotateCw className="h-4 w-4" strokeWidth={2} />
+            <RotateCw className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
             Try again
           </button>
           <button
             type="button"
             onClick={onManual}
-            className="flex h-11 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted md:h-[38px]"
+            className="flex h-11 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px]"
           >
             Enter manually
           </button>

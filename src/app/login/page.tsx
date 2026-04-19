@@ -75,8 +75,8 @@ export default async function LoginPage({
                 name="email"
                 autoComplete="email"
                 required
-                placeholder="you@restaurant.com"
-                className="h-[38px] rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus:border-accent focus:ring-[3px] focus:ring-accent-soft"
+                placeholder="you@restaurant.com…"
+                className="h-[38px] rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
               />
             </label>
             {error && (
