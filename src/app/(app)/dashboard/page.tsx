@@ -121,17 +121,30 @@ export default async function DashboardPage() {
     .slice(0, 6);
   const varietalTotal = varietalBreakdown.reduce((s, [, v]) => s + v, 0) || 1;
 
-  // Distributor breakdown
+  // Distributor breakdown — spend from inventory items linked via invoice scans
   const distMap = new Map<string, { scans: number; spend: number }>();
   for (const scan of allScans) {
     const existing = distMap.get(scan.distributor_name) ?? { scans: 0, spend: 0 };
     existing.scans += 1;
     distMap.set(scan.distributor_name, existing);
   }
-  // Add spend per distributor from inventory
-  // For now, just show scan counts
+
+  // Aggregate spend per distributor from inventory items
+  const { data: scanItems } = await supabase
+    .from("inventory_items")
+    .select("quantity, unit_cost, invoice_scan_id, invoice_scans!inner(distributor_name)")
+    .eq("restaurant_id", rid);
+
+  for (const item of scanItems ?? []) {
+    const distName = (item.invoice_scans as { distributor_name: string })?.distributor_name;
+    if (!distName) continue;
+    const existing = distMap.get(distName) ?? { scans: 0, spend: 0 };
+    existing.spend += item.quantity * item.unit_cost;
+    distMap.set(distName, existing);
+  }
+
   const distributors = [...distMap.entries()]
-    .sort((a, b) => b[1].scans - a[1].scans)
+    .sort((a, b) => b[1].spend - a[1].spend)
     .slice(0, 5);
 
   // Recent activity from scans
@@ -236,7 +249,7 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          {/* Sparkline — monthly spend over time (placeholder with scan-count data) */}
+          {/* Sparkline — items per scan (recent 12 scans) */}
           <div className="mt-lg md:mt-0">
             <div className="mb-sm flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
               <span>Scan activity</span>
@@ -310,6 +323,7 @@ export default async function DashboardPage() {
               <thead>
                 <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
                   <th scope="col" className="pb-sm text-left font-semibold">Distributor</th>
+                  <th scope="col" className="pb-sm text-right font-semibold">Spend</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Scans</th>
                 </tr>
               </thead>
@@ -320,6 +334,9 @@ export default async function DashboardPage() {
                     className="border-t border-dashed border-border"
                   >
                     <td className="py-sm font-medium text-ink">{name}</td>
+                    <td className="py-sm text-right font-mono text-ink">
+                      {formatMoney(data.spend)}
+                    </td>
                     <td className="py-sm text-right font-mono text-ink-muted">
                       {data.scans}
                     </td>
