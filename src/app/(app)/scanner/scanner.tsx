@@ -117,7 +117,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
           : Math.min(95, 90 + Math.round(((elapsed - SOFT_DURATION) / 60000) * 5));
       setProgress(pct);
       setStepIndex(pct < 30 ? 0 : pct < 60 ? 1 : 2);
-    }, 120);
+    }, 250);
     return () => window.clearInterval(id);
   }, [status]);
 

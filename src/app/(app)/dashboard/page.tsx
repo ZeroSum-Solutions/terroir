@@ -81,26 +81,31 @@ export default async function DashboardPage() {
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
-  const { data: scans } = await supabase
-    .from("invoice_scans")
-    .select("id, distributor_name, item_count, accuracy_score, created_at")
-    .eq("restaurant_id", rid)
-    .order("created_at", { ascending: false });
+  // Fetch all data in parallel instead of sequentially
+  const [{ data: scans }, { data: inventoryItems }, { data: scanItems }] =
+    await Promise.all([
+      supabase
+        .from("invoice_scans")
+        .select("id, distributor_name, item_count, accuracy_score, created_at")
+        .eq("restaurant_id", rid)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("inventory_items")
+        .select("quantity, unit_cost, wine_id, wines(varietal)")
+        .eq("restaurant_id", rid),
+      supabase
+        .from("inventory_items")
+        .select("quantity, unit_cost, invoice_scan_id, invoice_scans!inner(distributor_name)")
+        .eq("restaurant_id", rid),
+    ]);
 
   const allScans = scans ?? [];
+  const items = inventoryItems ?? [];
 
   // This month's scans
   const monthScans = allScans.filter(
     (s) => new Date(s.created_at) >= startOfMonth,
   );
-
-  // Get inventory items for aggregation
-  const { data: inventoryItems } = await supabase
-    .from("inventory_items")
-    .select("quantity, unit_cost, wine_id, wines(varietal)")
-    .eq("restaurant_id", rid);
-
-  const items = inventoryItems ?? [];
 
   // Compute metrics
   const monthlySpend = items.reduce((s, i) => s + i.quantity * i.unit_cost, 0);
@@ -126,12 +131,6 @@ export default async function DashboardPage() {
     existing.scans += 1;
     distMap.set(scan.distributor_name, existing);
   }
-
-  // Aggregate spend per distributor from inventory items
-  const { data: scanItems } = await supabase
-    .from("inventory_items")
-    .select("quantity, unit_cost, invoice_scan_id, invoice_scans!inner(distributor_name)")
-    .eq("restaurant_id", rid);
 
   for (const item of scanItems ?? []) {
     const distName = (item.invoice_scans as { distributor_name: string })?.distributor_name;
