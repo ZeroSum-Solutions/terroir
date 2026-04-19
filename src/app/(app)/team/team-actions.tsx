@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Check, Copy, Link2, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -24,7 +24,7 @@ export function TeamActions({
   members,
   invitations,
   currentUserId,
-  restaurantName,
+  restaurantName: _restaurantName,
 }: {
   members: Member[];
   invitations: Invitation[];

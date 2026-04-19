@@ -4,7 +4,6 @@ import { Camera, FileUp } from "lucide-react";
 import { Check, ListOrdered } from "lucide-react";
 import { useRef } from "react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
 import type { RecentScan } from "@/lib/scanner/types";
 import { formatMoney } from "../components/field-inputs";
 

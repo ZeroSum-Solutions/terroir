@@ -68,7 +68,7 @@ async function postScan(file: File, signal: AbortSignal): Promise<Scan> {
 }
 
 export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
-  const { restaurantId } = useRestaurant();
+  const { restaurantId: _restaurantId } = useRestaurant();
   const [status, setStatus] = useState<Status>("ready");
   const [progress, setProgress] = useState(0);
   const [stepIndex, setStepIndex] = useState(0);

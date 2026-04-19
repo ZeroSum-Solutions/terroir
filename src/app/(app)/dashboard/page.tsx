@@ -1,9 +1,7 @@
 import { getAuthContext } from "@/lib/auth-context";
 import {
   ArrowDown,
-  ArrowUp,
   BarChart3,
-  ListOrdered,
   ScanLine,
 } from "lucide-react";
 import Link from "next/link";

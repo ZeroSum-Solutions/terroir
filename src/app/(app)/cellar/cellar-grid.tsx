@@ -28,7 +28,7 @@ const CELL_SIZE = 48;
 const GAP = 4;
 const LABEL_OFFSET = 28;
 
-export function CellarSetup({ restaurantName }: { restaurantName: string }) {
+export function CellarSetup({ restaurantName: _restaurantName }: { restaurantName: string }) {
   const router = useRouter();
   const [setupRows, setSetupRows] = useState(10);
   const [setupCols, setSetupCols] = useState(10);
