@@ -1,16 +1,17 @@
 "use client";
 
 import {
-  Check,
+  ChevronDown,
   Download,
   FileJson,
+  FileText,
   Loader2,
   Save,
   ScanLine,
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { LineItem, LineItemField, Scan } from "@/lib/scanner/types";
 import {
@@ -97,7 +98,8 @@ export function ResultsView({
   onSaveToInventory,
   isSaving,
 }: ResultsViewProps) {
-  const { items, edits, source } = scan;
+  const { items, edits, source, rawText } = scan;
+  const [rawTextOpen, setRawTextOpen] = useState(false);
 
   const { total, bottles, lowCount, accuracy } = useMemo(() => {
     const totalFields = items.length * 6;
@@ -126,7 +128,35 @@ export function ResultsView({
     edits[`${item.id}:${field}`] === true;
 
   return (
-    <section>
+    <section className={rawText ? "md:flex md:gap-lg" : ""}>
+      {/* Mobile: raw text accordion */}
+      {rawText && (
+        <div className="mb-md md:hidden">
+          <button
+            type="button"
+            onClick={() => setRawTextOpen(!rawTextOpen)}
+            className="flex w-full items-center justify-between rounded-md border border-border bg-white p-md text-[13px] font-medium text-ink"
+          >
+            <span className="flex items-center gap-sm">
+              <FileText className="h-4 w-4 text-ink-subtle" strokeWidth={1.75} />
+              Raw invoice text
+            </span>
+            <ChevronDown
+              className={cn("h-4 w-4 text-ink-subtle transition-transform", rawTextOpen && "rotate-180")}
+              strokeWidth={2}
+            />
+          </button>
+          {rawTextOpen && (
+            <div className="mt-xs rounded-md border border-border bg-surface-muted p-md">
+              <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-ink-muted">
+                {rawText}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className={rawText ? "md:min-w-0 md:flex-1" : ""}>
       <header className="mb-lg flex flex-col gap-sm md:mb-xl md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
@@ -325,6 +355,26 @@ export function ResultsView({
           </button>
         </div>
       </div>
+      </div>
+
+      {/* Desktop: raw text sidebar */}
+      {rawText && (
+        <aside className="hidden shrink-0 md:block md:w-[320px]">
+          <div className="sticky top-[72px] rounded-md border border-border bg-white">
+            <div className="flex items-center gap-sm border-b border-border p-md">
+              <FileText className="h-4 w-4 text-ink-subtle" strokeWidth={1.75} />
+              <span className="text-[13px] font-medium text-ink">
+                Raw invoice text
+              </span>
+            </div>
+            <div className="p-md">
+              <pre className="max-h-[calc(100vh-200px)] overflow-auto whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-ink-muted">
+                {rawText}
+              </pre>
+            </div>
+          </div>
+        </aside>
+      )}
     </section>
   );
 }

@@ -38,15 +38,26 @@ function saveScan(scan: Scan | null) {
   else localStorage.removeItem(STORAGE_KEY);
 }
 
+class ScanError extends Error {
+  rawText?: string;
+  constructor(message: string, rawText?: string) {
+    super(message);
+    this.rawText = rawText;
+  }
+}
+
 async function postScan(file: File, signal: AbortSignal): Promise<Scan> {
   const body = new FormData();
   body.append("file", file);
   const res = await fetch("/api/scan", { method: "POST", body, signal });
   if (!res.ok) {
     const payload = (await res.json().catch(() => null)) as
-      | { error?: string }
+      | { error?: string; rawText?: string }
       | null;
-    throw new Error(payload?.error ?? `Scan failed (${res.status})`);
+    throw new ScanError(
+      payload?.error ?? `Scan failed (${res.status})`,
+      payload?.rawText,
+    );
   }
   return (await res.json()) as Scan;
 }
@@ -66,6 +77,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const [hydrated, setHydrated] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rawText, setRawText] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -120,6 +132,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       if (ac.signal.aborted) return;
       const message = err instanceof Error ? err.message : "Scan failed.";
       setError(message);
+      setRawText(err instanceof ScanError ? err.rawText ?? null : null);
       setStatus("error");
     }
   }, []);
@@ -159,6 +172,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     saveScan(null);
     setScan(null);
     setError(null);
+    setRawText(null);
     setStatus("ready");
   }, []);
 
@@ -262,12 +276,13 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         },
       ],
       edits: {},
+      rawText: rawText ?? undefined,
     };
     setScan(fresh);
     saveScan(fresh);
     setError(null);
     setStatus("results");
-  }, []);
+  }, [rawText]);
 
   if (!hydrated) return <ReadyView onStart={startScan} recentScans={recentScans} savedResult={null} onDismissSaved={() => {}} />;
 

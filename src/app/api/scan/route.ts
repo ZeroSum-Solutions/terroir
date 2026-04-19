@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAuth } from "@/lib/api/auth";
+import { analyzeInvoice } from "@/lib/scanner/azure";
 import { ParsedInvoiceSchema } from "@/lib/scanner/schema";
 import type { LineItem, Scan, ScanQuality } from "@/lib/scanner/types";
 
@@ -17,15 +18,15 @@ const ALLOWED_MIME = new Set([
   "application/pdf",
 ]);
 
-const SYSTEM_PROMPT = `You are an expert at parsing wine invoices from US and European distributors. Wine directors photograph these invoices with their phones and expect every bottle captured correctly.
+const SYSTEM_PROMPT = `You are an expert at parsing wine invoices from US and European distributors. You will receive OCR-extracted text from an invoice. Wine directors photograph these invoices with their phones and expect every bottle captured correctly.
 
 Parsing guidelines:
+- The text was extracted by Azure Document Intelligence from an invoice image. It may contain OCR artifacts, misread characters, or scrambled table layouts.
 - Skip non-wine lines: shipping, tax, subtotals, totals, gift cards, delivery fees.
 - For non-vintage wines (most Champagnes marked "NV"), set vintage to null.
 - Preserve accents and diacritics in producer names (Château, Müller, d'Oliveira).
 - Common French/Italian/German producer names use European comma decimals (e.g., "445,00") — convert to US decimal.
-- When OCR leaves a digit ambiguous, make your best guess but set confidence <0.75 and list that field in lowFields.
-- Handwritten annotations often correct or clarify the printed line — trust handwriting when it's legible and clearly meant as a correction.
+- When the OCR text leaves a digit ambiguous, make your best guess but set confidence <0.75 and list that field in lowFields.
 - "Varietal" means the grape, not the country. Infer it from the wine name + region if not explicitly printed (e.g., a wine from Pauillac is Cabernet Sauvignon-based / "Bordeaux Blend").
 - "Region" is the wine region, not the country or continent (Burgundy, not France; Piedmont, not Italy).
 
@@ -40,6 +41,20 @@ Return every wine line on the invoice, in the order it appears.`;
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
+
+  // Require Azure configuration
+  if (
+    !process.env.AZURE_DOC_INTELLIGENCE_ENDPOINT ||
+    !process.env.AZURE_DOC_INTELLIGENCE_KEY
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Server not configured: AZURE_DOC_INTELLIGENCE_ENDPOINT and AZURE_DOC_INTELLIGENCE_KEY are required.",
+      },
+      { status: 500 },
+    );
+  }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -80,26 +95,52 @@ export async function POST(request: NextRequest) {
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const b64 = Buffer.from(bytes).toString("base64");
-  const mediaType = file.type as
-    | "image/jpeg"
-    | "image/png"
-    | "image/webp"
-    | "image/gif"
-    | "application/pdf";
+  const fileBuffer = Buffer.from(bytes);
+
+  // ── Stage 1: Azure Document Intelligence OCR ──
+  let ocrResult;
+  try {
+    ocrResult = await analyzeInvoice(fileBuffer, file.type);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Azure OCR failed.";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
+
+  if (!ocrResult.rawText.trim()) {
+    return NextResponse.json(
+      {
+        error:
+          "Could not extract text from the invoice. The image may be blank or unreadable — try a sharper photo.",
+      },
+      { status: 422 },
+    );
+  }
+
+  // ── Stage 2: Claude structuring ──
+  // Build context from Azure OCR output
+  let ocrContext = `=== INVOICE OCR TEXT ===\n${ocrResult.rawText}`;
+  if (ocrResult.vendorName) {
+    ocrContext += `\n\n=== DETECTED VENDOR ===\n${ocrResult.vendorName}`;
+  }
+  if (ocrResult.invoiceNumber) {
+    ocrContext += `\n\n=== DETECTED INVOICE NUMBER ===\n${ocrResult.invoiceNumber}`;
+  }
+  if (ocrResult.invoiceDate) {
+    ocrContext += `\n\n=== DETECTED INVOICE DATE ===\n${ocrResult.invoiceDate}`;
+  }
+  if (ocrResult.tables.length > 0) {
+    ocrContext += "\n\n=== DETECTED LINE ITEMS ===";
+    for (const row of ocrResult.tables) {
+      const parts = [row.description];
+      if (row.quantity != null) parts.push(`qty: ${row.quantity}`);
+      if (row.unitPrice != null) parts.push(`unit: $${row.unitPrice}`);
+      if (row.amount != null) parts.push(`total: $${row.amount}`);
+      ocrContext += `\n- ${parts.join(" | ")}`;
+    }
+  }
 
   const client = new Anthropic({ apiKey });
-
-  const invoiceContent: Anthropic.ContentBlockParam =
-    mediaType === "application/pdf"
-      ? {
-          type: "document",
-          source: { type: "base64", media_type: "application/pdf", data: b64 },
-        }
-      : {
-          type: "image",
-          source: { type: "base64", media_type: mediaType, data: b64 },
-        };
 
   try {
     const response = await client.messages.parse({
@@ -112,21 +153,20 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: "user",
-          content: [
-            invoiceContent,
-            {
-              type: "text",
-              text: "Parse every wine line on this invoice into the structured output.",
-            },
-          ],
+          content: ocrContext + "\n\nParse every wine line from this invoice text into the structured output.",
         },
       ],
     });
 
     const parsed = response.parsed_output;
     if (!parsed) {
+      // Claude couldn't structure it — return raw OCR text for manual entry
       return NextResponse.json(
-        { error: "Could not parse the invoice. The image may be unreadable — try a sharper photo or higher resolution." },
+        {
+          error:
+            "Could not structure the invoice. Use the raw text below to enter wines manually.",
+          rawText: ocrResult.rawText,
+        },
         { status: 422 },
       );
     }
@@ -145,7 +185,6 @@ export async function POST(request: NextRequest) {
       lowFields: item.lowFields.length > 0 ? item.lowFields : undefined,
     }));
 
-    // Confidence gate: flag scans that need extra review
     const avgConfidence =
       items.length > 0
         ? items.reduce((s, i) => s + i.confidence, 0) / items.length
@@ -158,42 +197,70 @@ export async function POST(request: NextRequest) {
       lowConfidenceItems,
       totalItems: items.length,
       manualFallbackTriggered: lowConf || tooFew,
-      reason: lowConf && tooFew ? "both" : lowConf ? "low_confidence" : tooFew ? "too_few_items" : undefined,
+      reason:
+        lowConf && tooFew
+          ? "both"
+          : lowConf
+            ? "low_confidence"
+            : tooFew
+              ? "too_few_items"
+              : undefined,
     };
+
+    // Use Azure-detected distributor as fallback
+    const distributor =
+      parsed.distributor || ocrResult.vendorName || "Unknown";
 
     const scan: Scan = {
       source: {
-        distributor: parsed.distributor,
-        invoiceNo: parsed.invoiceNumber ?? "—",
-        invoiceDate: parsed.invoiceDate ?? parsedAt.slice(0, 10),
+        distributor,
+        invoiceNo: parsed.invoiceNumber ?? ocrResult.invoiceNumber ?? "—",
+        invoiceDate:
+          parsed.invoiceDate ??
+          ocrResult.invoiceDate ??
+          parsedAt.slice(0, 10),
         parsedAt,
       },
       items,
       edits: {},
       quality,
+      rawText: ocrResult.rawText,
     };
 
     return NextResponse.json(scan);
   } catch (error) {
+    // Claude failed but Azure OCR succeeded — return raw text for manual entry
     if (error instanceof Anthropic.RateLimitError) {
       return NextResponse.json(
-        { error: "Rate limited. Wait a minute and try again." },
+        {
+          error: "Rate limited. Wait a minute and try again.",
+          rawText: ocrResult.rawText,
+        },
         { status: 429 },
       );
     }
     if (error instanceof Anthropic.BadRequestError) {
       return NextResponse.json(
-        { error: `Claude rejected the request: ${error.message}` },
+        {
+          error: `Claude rejected the request: ${error.message}`,
+          rawText: ocrResult.rawText,
+        },
         { status: 400 },
       );
     }
     if (error instanceof Anthropic.APIError) {
       return NextResponse.json(
-        { error: `Claude API error (${error.status}): ${error.message}` },
+        {
+          error: `Claude API error (${error.status}): ${error.message}`,
+          rawText: ocrResult.rawText,
+        },
         { status: 502 },
       );
     }
     const message = error instanceof Error ? error.message : "Unknown error.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: message, rawText: ocrResult.rawText },
+      { status: 500 },
+    );
   }
 }

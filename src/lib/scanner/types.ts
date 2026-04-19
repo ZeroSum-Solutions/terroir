@@ -40,6 +40,7 @@ export type Scan = {
   items: LineItem[];
   edits: Record<string, true>;
   quality?: ScanQuality;
+  rawText?: string;
 };
 
 export type RecentScan = {

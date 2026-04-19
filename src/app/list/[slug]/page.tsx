@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database";
 
 export const revalidate = 3600; // ISR: revalidate every hour
 
@@ -13,7 +14,10 @@ export default async function PublicWineListPage({
   const { slug } = await params;
   if (!slug || slug.length < 3) notFound();
 
-  const supabase = await createClient();
+  const supabase = createSupabaseClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
 
   const { data: list, error } = await supabase
     .from("wine_lists")
@@ -50,7 +54,7 @@ export default async function PublicWineListPage({
           serving_temp_min: number | null;
           serving_temp_max: number | null;
           serving_temp_label: string | null;
-        };
+        } | null;
       }>;
     }>
   )
@@ -76,8 +80,9 @@ export default async function PublicWineListPage({
           <div className="flex flex-col">
             {[...section.wine_list_items]
               .sort((a, b) => a.position - b.position)
+              .filter((item) => item.wines != null)
               .map((item) => {
-                const wine = item.wines;
+                const wine = item.wines!;
                 return (
                   <div
                     key={item.id}
