@@ -46,9 +46,7 @@ export async function analyzeInvoice(
       ? "application/pdf"
       : mimeType === "image/png"
         ? "image/png"
-        : mimeType === "image/webp"
-          ? "image/png" // Azure doesn't support webp; caller should convert
-          : "image/jpeg";
+        : "image/jpeg";
 
   const initialResponse = await client
     .path("/documentModels/{modelId}:analyze", "prebuilt-invoice")

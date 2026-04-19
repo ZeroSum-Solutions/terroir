@@ -2,6 +2,14 @@ import { notFound } from "next/navigation";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 
+/** Anon client for public pages — respects RLS, no auth session needed. */
+function createAnonClient() {
+  return createSupabaseClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+  );
+}
+
 export const revalidate = 3600; // ISR: revalidate every hour
 
 type Params = Promise<{ slug: string }>;
@@ -14,10 +22,7 @@ export default async function PublicWineListPage({
   const { slug } = await params;
   if (!slug || slug.length < 3) notFound();
 
-  const supabase = createSupabaseClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
+  const supabase = createAnonClient();
 
   const { data: list, error } = await supabase
     .from("wine_lists")

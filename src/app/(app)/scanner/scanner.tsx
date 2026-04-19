@@ -34,8 +34,13 @@ function loadScan(): Scan | null {
 
 function saveScan(scan: Scan | null) {
   if (typeof window === "undefined") return;
-  if (scan) localStorage.setItem(STORAGE_KEY, JSON.stringify(scan));
-  else localStorage.removeItem(STORAGE_KEY);
+  if (scan) {
+    // Strip rawText to avoid bloating localStorage with OCR dumps
+    const { rawText: _, ...rest } = scan;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
+  } else {
+    localStorage.removeItem(STORAGE_KEY);
+  }
 }
 
 class ScanError extends Error {
