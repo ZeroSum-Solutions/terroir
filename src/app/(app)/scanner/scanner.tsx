@@ -189,7 +189,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
 
   const exportAccuracyJson = useCallback(() => {
     if (!scan) return;
-    const totalFields = scan.items.length * 6;
+    const totalFields = scan.items.length * 7;
     const editedFields = Object.keys(scan.edits).length;
     const accuracy =
       totalFields === 0

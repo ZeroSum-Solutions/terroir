@@ -8,7 +8,19 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
-  const body = await request.json();
+  let body: {
+    lwin_id?: string;
+    display_name?: string;
+    producer?: string | null;
+    varietal?: string | null;
+    region?: string | null;
+    country?: string | null;
+  };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+  }
   const { lwin_id, display_name, producer, varietal, region, country } = body;
 
   if (!display_name || !lwin_id) {
@@ -47,7 +59,10 @@ export async function POST(request: NextRequest) {
   const wineId = (wineIds as string[])[0];
 
   // Set lwin_id on the wine
-  await supabase.from("wines").update({ lwin_id }).eq("id", wineId);
+  const { error: lwinError } = await supabase.from("wines").update({ lwin_id: lwin_id as string }).eq("id", wineId);
+  if (lwinError) {
+    console.error("Failed to set lwin_id on wine:", lwinError);
+  }
 
   return NextResponse.json({ id: wineId });
 }

@@ -121,7 +121,7 @@ export default async function PublicWineListPage({
                       <p className="mt-2xs text-[12px] text-ink-muted">
                         {wine.region}
                         {wine.varietal && ` · ${wine.varietal}`}
-                        {wine.serving_temp_label && (
+                        {wine.serving_temp_label && wine.serving_temp_min != null && wine.serving_temp_max != null && (
                           <span className="text-ink-subtle">
                             {wine.region ? " · " : ""}{wine.serving_temp_min}–{wine.serving_temp_max}°F
                           </span>

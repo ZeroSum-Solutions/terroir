@@ -8,6 +8,7 @@ const PUBLIC_PATHS = [
   "/auth/complete",
   "/api/dev-login",
   "/list",
+  "/invite",
 ];
 
 function isPublic(pathname: string) {

@@ -64,7 +64,19 @@ export async function analyzeInvoice(
   }
 
   const poller = getLongRunningPoller(client, initialResponse);
-  const result = await poller.pollUntilDone();
+  const pollAbort = new AbortController();
+  const pollTimeout = setTimeout(() => pollAbort.abort(), 90_000);
+  let result;
+  try {
+    result = await poller.pollUntilDone({ abortSignal: pollAbort.signal });
+  } catch (err) {
+    clearTimeout(pollTimeout);
+    if (pollAbort.signal.aborted) {
+      throw new Error("Azure Document Intelligence timed out after 90 seconds.");
+    }
+    throw err;
+  }
+  clearTimeout(pollTimeout);
 
   const analyzeResult = (result.body as { analyzeResult?: Record<string, unknown> })
     .analyzeResult;

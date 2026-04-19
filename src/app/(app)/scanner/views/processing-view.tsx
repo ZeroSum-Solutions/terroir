@@ -37,7 +37,7 @@ export function ProcessingView({ progress, stepIndex }: ProcessingViewProps) {
         </div>
         <div className="mt-xs flex items-center justify-between text-[11px] tabular text-ink-subtle">
           <span>{progress}%</span>
-          <span>Claude Opus 4.7</span>
+          <span>Claude Sonnet 4.6</span>
         </div>
 
         <ul className="mt-lg flex flex-col gap-sm text-left">

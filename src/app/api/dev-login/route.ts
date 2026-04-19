@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   // hit the box via a LAN IP, which would send Supabase back to localhost.
   const hdrs = request.headers;
   const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "localhost:3000";
-  const proto = hdrs.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "http");
+  const proto = hdrs.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const redirectTo = `${proto}://${host}/auth/complete`;
 
   const res = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
