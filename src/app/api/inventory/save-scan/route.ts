@@ -57,18 +57,49 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
-  // ── Parse & validate body ────────────────────────────────────────
-  let body: SaveScanBody;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON body." },
-      { status: 400 },
-    );
-  }
+  // ── Parse & validate body (FormData with optional file) ──────────
+  let scan: Scan;
+  let originalItems: LineItem[];
+  let file: File | null = null;
 
-  const { scan, originalItems } = body;
+  const contentType = request.headers.get("content-type") ?? "";
+  if (contentType.includes("multipart/form-data")) {
+    let formData: FormData;
+    try {
+      formData = await request.formData();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid form data." },
+        { status: 400 },
+      );
+    }
+    try {
+      const raw = formData.get("data");
+      if (typeof raw !== "string") throw new Error("missing data field");
+      const body = JSON.parse(raw) as SaveScanBody;
+      scan = body.scan;
+      originalItems = body.originalItems;
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON in data field." },
+        { status: 400 },
+      );
+    }
+    const f = formData.get("file");
+    if (f instanceof File && f.size > 0) file = f;
+  } else {
+    let body: SaveScanBody;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON body." },
+        { status: 400 },
+      );
+    }
+    scan = body.scan;
+    originalItems = body.originalItems;
+  }
 
   if (!scan?.source || !Array.isArray(scan.items) || scan.items.length === 0) {
     return NextResponse.json(
@@ -113,6 +144,33 @@ export async function POST(request: NextRequest) {
   }
 
   const scanId = invoiceScan.id;
+
+  // ── Upload invoice image to storage (non-blocking) ──────────────
+  if (file) {
+    try {
+      const ext = file.type === "application/pdf" ? "pdf"
+        : file.type === "image/png" ? "png"
+        : "jpg";
+      const storagePath = `${restaurantId}/${scanId}.${ext}`;
+      const fileBuffer = Buffer.from(await file.arrayBuffer());
+      const { error: uploadError } = await supabase.storage
+        .from("invoice-images")
+        .upload(storagePath, fileBuffer, {
+          contentType: file.type,
+          upsert: false,
+        });
+      if (uploadError) {
+        console.error("Invoice image upload failed:", uploadError);
+      } else {
+        await supabase
+          .from("invoice_scans")
+          .update({ raw_image_path: storagePath })
+          .eq("id", scanId);
+      }
+    } catch (err) {
+      console.error("Invoice image upload error:", err);
+    }
+  }
 
   // ── Create wines + inventory items ───────────────────────────────
   const winesPayload = scan.items.map((item) => ({

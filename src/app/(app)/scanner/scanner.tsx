@@ -5,18 +5,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
 import { useRestaurant } from "@/lib/context/restaurant";
 import type {
+  BottleScanResult,
   LineItem,
   LineItemField,
   RecentScan,
   Scan,
+  ScanMode,
 } from "@/lib/scanner/types";
 import { ReadyView } from "./views/ready-view";
 import { ProcessingView } from "./views/processing-view";
 import { ErrorView } from "./views/error-view";
 import { ConfidenceGateView } from "./views/confidence-gate";
 import { ResultsView } from "./views/results-view";
+import { BottleResultsView } from "./views/bottle-results-view";
 
-type Status = "ready" | "processing" | "review" | "results" | "error";
+type Status = "ready" | "processing" | "review" | "results" | "bottle-results" | "error";
 const STORAGE_KEY = "terroir:current-scan";
 
 export { formatMoney } from "./components/field-inputs";
@@ -84,6 +87,8 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const [error, setError] = useState<string | null>(null);
   const [rawText, setRawText] = useState<string | null>(null);
   const [lastFile, setLastFile] = useState<File | null>(null);
+  const [mode, setMode] = useState<ScanMode>("invoice");
+  const [bottleResult, setBottleResult] = useState<BottleScanResult | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -181,6 +186,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     abortRef.current?.abort();
     saveScan(null);
     setScan(null);
+    setBottleResult(null);
     setError(null);
     setRawText(null);
     setStatus("ready");
@@ -234,10 +240,12 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     if (!scan || isSaving) return;
     setIsSaving(true);
     try {
+      const body = new FormData();
+      body.append("data", JSON.stringify({ scan, originalItems }));
+      if (lastFile) body.append("file", lastFile);
       const res = await fetch("/api/inventory/save-scan", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scan, originalItems }),
+        body,
       });
       if (!res.ok) {
         const payload = (await res.json().catch(() => null)) as
@@ -261,7 +269,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     } finally {
       setIsSaving(false);
     }
-  }, [scan, originalItems, isSaving]);
+  }, [scan, originalItems, isSaving, lastFile]);
 
   const retryScan = useCallback(() => {
     if (lastFile) startScan(lastFile);
@@ -298,13 +306,98 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     setStatus("results");
   }, [rawText]);
 
-  if (!hydrated) return <ReadyView onStart={startScan} recentScans={recentScans} savedResult={null} onDismissSaved={() => {}} />;
+  const startBottleScan = useCallback(async (file: File) => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    setLastFile(file);
+    setStatus("processing");
+    setError(null);
+
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/scan-bottle", {
+        method: "POST",
+        body,
+        signal: ac.signal,
+      });
+      if (ac.signal.aborted) return;
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(payload?.error ?? `Scan failed (${res.status})`);
+      }
+      const result = (await res.json()) as BottleScanResult;
+      setProgress(100);
+      setBottleResult(result);
+      setStatus("bottle-results");
+    } catch (err) {
+      if (ac.signal.aborted) return;
+      const message = err instanceof Error ? err.message : "Scan failed.";
+      setError(message);
+      setStatus("error");
+    }
+  }, []);
+
+  const saveBottleToInventory = useCallback(
+    async (wine: {
+      name: string;
+      producer: string;
+      vintage: number | null;
+      varietal: string;
+      region: string;
+      country: string | null;
+      qty: number;
+      unitCost: number;
+    }) => {
+      if (isSaving) return;
+      setIsSaving(true);
+      try {
+        const res = await fetch("/api/inventory/save-bottle-scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wine }),
+        });
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          throw new Error(payload?.error ?? `Save failed (${res.status})`);
+        }
+        setBottleResult(null);
+        setSavedResult({ itemCount: 1, wineCount: 1 });
+        setStatus("ready");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Save failed.";
+        setToast(message);
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [isSaving],
+  );
+
+  const handleStart = useCallback(
+    (file: File) => {
+      if (mode === "bottle") {
+        startBottleScan(file);
+      } else {
+        startScan(file);
+      }
+    },
+    [mode, startBottleScan, startScan],
+  );
+
+  if (!hydrated) return <ReadyView onStart={handleStart} mode={mode} onModeChange={setMode} recentScans={recentScans} savedResult={null} onDismissSaved={() => {}} />;
 
   return (
     <>
-      {status === "ready" && <ReadyView onStart={startScan} recentScans={recentScans} savedResult={savedResult} onDismissSaved={() => setSavedResult(null)} />}
+      {status === "ready" && <ReadyView onStart={handleStart} mode={mode} onModeChange={setMode} recentScans={recentScans} savedResult={savedResult} onDismissSaved={() => setSavedResult(null)} />}
       {status === "processing" && (
-        <ProcessingView progress={progress} stepIndex={stepIndex} />
+        <ProcessingView progress={progress} stepIndex={stepIndex} mode={mode} />
       )}
       {status === "error" && (
         <ErrorView
@@ -331,6 +424,14 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
           onExportCsv={exportCsv}
           onExportAccuracy={exportAccuracyJson}
           onSaveToInventory={saveToInventory}
+          isSaving={isSaving}
+        />
+      )}
+      {status === "bottle-results" && bottleResult && (
+        <BottleResultsView
+          result={bottleResult}
+          onSave={saveBottleToInventory}
+          onScanAnother={startOver}
           isSaving={isSaving}
         />
       )}

@@ -50,4 +50,19 @@ export type RecentScan = {
   items: number;
   total: number;
   accuracy: number;
+  hasImage: boolean;
+};
+
+export type ScanMode = "invoice" | "bottle";
+
+export type BottleScanResult = {
+  name: string;
+  producer: string;
+  vintage: number | null;
+  varietal: string;
+  region: string;
+  country: string | null;
+  confidence: number;
+  notes: string | null;
+  parsedAt: string;
 };

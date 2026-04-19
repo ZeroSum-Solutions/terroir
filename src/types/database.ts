@@ -575,7 +575,7 @@ export type Database = {
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
-      added_via: "manual" | "invoice_scan"
+      added_via: "manual" | "invoice_scan" | "bottle_scan"
       membership_role: "owner" | "manager" | "staff"
     }
     CompositeTypes: {
@@ -704,7 +704,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      added_via: ["manual", "invoice_scan"],
+      added_via: ["manual", "invoice_scan", "bottle_scan"],
       membership_role: ["owner", "manager", "staff"],
     },
   },

@@ -1,0 +1,40 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { requireMembership } from "@/lib/api/auth";
+
+export const runtime = "nodejs";
+
+type Params = Promise<{ id: string }>;
+
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Params },
+) {
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, restaurantId } = auth;
+  const { id } = await params;
+
+  const { data: scan } = await supabase
+    .from("invoice_scans")
+    .select("raw_image_path")
+    .eq("id", id)
+    .eq("restaurant_id", restaurantId)
+    .single();
+
+  if (!scan?.raw_image_path) {
+    return NextResponse.json({ error: "No image found." }, { status: 404 });
+  }
+
+  const { data: signed, error } = await supabase.storage
+    .from("invoice-images")
+    .createSignedUrl(scan.raw_image_path, 3600);
+
+  if (error || !signed?.signedUrl) {
+    return NextResponse.json(
+      { error: "Failed to generate image URL." },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ url: signed.signedUrl });
+}

@@ -12,7 +12,7 @@ export default async function ScannerPage() {
 
     const { data: scans } = await supabase
       .from("invoice_scans")
-      .select("id, distributor_name, item_count, accuracy_score, created_at, final_line_items")
+      .select("id, distributor_name, item_count, accuracy_score, created_at, final_line_items, raw_image_path")
       .eq("restaurant_id", restaurantId)
       .order("created_at", { ascending: false })
       .limit(5);
@@ -34,6 +34,7 @@ export default async function ScannerPage() {
           items: s.item_count,
           total,
           accuracy: Math.round((s.accuracy_score ?? 0) * 100),
+          hasImage: !!s.raw_image_path,
         };
       });
   }
