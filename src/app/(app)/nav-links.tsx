@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BarChart3, Grid2x2, ListOrdered, ScanLine } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/scanner", label: "Scanner", Icon: ScanLine },
@@ -24,7 +25,12 @@ export function DesktopNavLinks() {
             key={href}
             href={href}
             aria-current={active ? "page" : undefined}
-            className="rounded-sm px-md py-sm text-[14px] font-medium text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
+            className={cn(
+              "rounded-sm px-md py-sm text-[14px] font-medium transition-colors",
+              active
+                ? "bg-surface-muted text-ink"
+                : "text-ink-muted hover:bg-surface-muted hover:text-ink",
+            )}
           >
             {label}
           </Link>
@@ -47,9 +53,14 @@ export function MobileNavLinks() {
             key={href}
             href={href}
             aria-current={active ? "page" : undefined}
-            className="flex min-h-[64px] flex-col items-center justify-center gap-xs px-sm py-sm text-[11px] font-medium text-ink-muted active:bg-surface-muted"
+            className={cn(
+              "flex min-h-[64px] flex-col items-center justify-center gap-xs px-sm py-sm text-[11px] font-medium transition-colors",
+              active
+                ? "border-t-2 border-accent bg-surface-muted text-accent"
+                : "border-t-2 border-transparent text-ink-muted active:bg-surface-muted",
+            )}
           >
-            <Icon className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
+            <Icon className={cn("h-6 w-6", active && "text-accent")} strokeWidth={active ? 2 : 1.75} aria-hidden="true" />
             <span>{label}</span>
           </Link>
         );

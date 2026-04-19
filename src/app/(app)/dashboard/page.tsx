@@ -210,7 +210,7 @@ export default async function DashboardPage() {
               </span>
             </div>
 
-            <div className="mt-lg grid grid-cols-3 gap-md">
+            <div className="mt-lg grid grid-cols-3 gap-sm md:gap-md">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
                   Bottles in

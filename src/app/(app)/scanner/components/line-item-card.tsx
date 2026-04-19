@@ -54,8 +54,15 @@ export function LineItemCard({
             onCommit={(v) => onUpdate(item.id, "name", v)}
             className="font-serif text-[18px] font-medium"
           />
-          <div className="mt-2xs px-sm text-[13px] text-ink-muted">
-            {item.producer}
+          <div className="mt-2xs">
+            <TextInput
+              value={item.producer}
+              low={isLow(item, "producer")}
+              edited={isEdited(item, "producer")}
+              onCommit={(v) => onUpdate(item.id, "producer", v)}
+              className="text-[13px] text-ink-muted"
+              label="Producer"
+            />
           </div>
         </div>
         <button

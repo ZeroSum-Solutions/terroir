@@ -25,7 +25,7 @@ export function ProcessingView({ progress, stepIndex }: ProcessingViewProps) {
         <h2 className="font-serif text-[22px] text-ink">Reading your invoice</h2>
         <p className="mt-xs text-[14px] text-ink-muted">
           {capped
-            ? "Finishing up — messy invoices can take a bit longer."
+            ? "Still working — large invoices can take up to 90 seconds."
             : "Usually 20-30 seconds."}
         </p>
 

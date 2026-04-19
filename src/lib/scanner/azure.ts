@@ -46,7 +46,9 @@ export async function analyzeInvoice(
       ? "application/pdf"
       : mimeType === "image/png"
         ? "image/png"
-        : "image/jpeg";
+        : mimeType === "image/heic" || mimeType === "image/heif"
+          ? "image/heif"
+          : "image/jpeg";
 
   const initialResponse = await client
     .path("/documentModels/{modelId}:analyze", "prebuilt-invoice")
