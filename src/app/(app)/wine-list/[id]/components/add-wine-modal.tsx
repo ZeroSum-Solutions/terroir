@@ -13,6 +13,15 @@ type SearchWine = {
   region: string | null;
 };
 
+type LwinWine = {
+  lwin_id: string;
+  display_name: string;
+  producer: string | null;
+  varietal: string | null;
+  region: string | null;
+  country: string | null;
+};
+
 interface AddWineModalProps {
   sectionName: string;
   onAdd: (wineId: string, glassPrice: number | null, bottlePrice: number | null) => void;
@@ -21,7 +30,9 @@ interface AddWineModalProps {
 
 export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps) {
   const [query, setQuery] = useState("");
+  const [searchMode, setSearchMode] = useState<"inventory" | "catalog">("inventory");
   const [results, setResults] = useState<SearchWine[]>([]);
+  const [catalogResults, setCatalogResults] = useState<LwinWine[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<SearchWine | null>(null);
   const [bottlePrice, setBottlePrice] = useState("");
@@ -41,13 +52,20 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
+      if (searchMode === "catalog" && query.trim().length < 2) {
+        setCatalogResults([]);
+        return;
+      }
       setLoading(true);
       try {
         const params = new URLSearchParams();
         if (query.trim()) params.set("q", query.trim());
-        const res = await fetch(`/api/wines/search?${params}`);
-        if (res.ok) {
-          setResults(await res.json());
+        if (searchMode === "inventory") {
+          const res = await fetch(`/api/wines/search?${params}`);
+          if (res.ok) setResults(await res.json());
+        } else {
+          const res = await fetch(`/api/wines/lwin-search?${params}`);
+          if (res.ok) setCatalogResults(await res.json());
         }
       } finally {
         setLoading(false);
@@ -56,7 +74,7 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query]);
+  }, [query, searchMode]);
 
   const handleAdd = async () => {
     if (!selected || adding) return;
@@ -65,6 +83,29 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
     const bottle = bottlePrice ? parseFloat(bottlePrice) : null;
     await onAdd(selected.id, glass, bottle);
     setAdding(false);
+  };
+
+  const handleSelectCatalog = async (lwin: LwinWine) => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/wines/create-from-lwin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(lwin),
+      });
+      if (!res.ok) return;
+      const { id } = await res.json();
+      setSelected({
+        id,
+        name: lwin.display_name,
+        producer: lwin.producer ?? "",
+        vintage: null,
+        varietal: lwin.varietal,
+        region: lwin.region,
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -83,12 +124,36 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
             Add wine to {sectionName}
           </h2>
           <p className="mt-xs text-[13px] text-ink-muted">
-            Search your inventory or browse all wines.
+            Search your inventory or the LWIN catalog.
           </p>
         </div>
 
         {!selected ? (
           <>
+            <div className="flex gap-xs border-b border-border px-lg">
+              <button
+                type="button"
+                onClick={() => { setSearchMode("inventory"); setQuery(""); }}
+                className={`px-sm py-xs text-[13px] font-medium border-b-2 transition-colors ${
+                  searchMode === "inventory"
+                    ? "border-accent text-accent"
+                    : "border-transparent text-ink-muted hover:text-ink"
+                }`}
+              >
+                My inventory
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSearchMode("catalog"); setQuery(""); }}
+                className={`px-sm py-xs text-[13px] font-medium border-b-2 transition-colors ${
+                  searchMode === "catalog"
+                    ? "border-accent text-accent"
+                    : "border-transparent text-ink-muted hover:text-ink"
+                }`}
+              >
+                LWIN catalog
+              </button>
+            </div>
             <div className="border-b border-border px-lg py-sm">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-sm top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" aria-hidden="true" />
@@ -107,30 +172,69 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
                 <div className="flex items-center justify-center py-xl">
                   <Loader2 className="h-5 w-5 animate-spin text-ink-subtle" />
                 </div>
-              ) : results.length === 0 ? (
+              ) : searchMode === "inventory" ? (
+                results.length === 0 ? (
+                  <div className="px-lg py-xl text-center text-[13px] text-ink-muted">
+                    {query ? "No wines found." : "No wines in inventory yet. Scan an invoice first."}
+                  </div>
+                ) : (
+                  results.map((wine) => (
+                    <button
+                      key={wine.id}
+                      type="button"
+                      onClick={() => setSelected(wine)}
+                      className="flex w-full items-center gap-md border-b border-border/50 px-lg py-sm text-left transition-colors hover:bg-surface-muted"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="font-serif text-[14px] text-ink">
+                          {wine.producer}, {wine.name}
+                        </div>
+                        <div className="mt-2xs flex items-center gap-xs text-[12px] text-ink-muted">
+                          <span className="font-mono text-ink-subtle">
+                            {wine.vintage ?? "NV"}
+                          </span>
+                          {wine.region && (
+                            <>
+                              <span className="text-ink-subtle">·</span>
+                              <span>{wine.region}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <Plus className="h-4 w-4 shrink-0 text-ink-subtle" aria-hidden="true" />
+                    </button>
+                  ))
+                )
+              ) : catalogResults.length === 0 ? (
                 <div className="px-lg py-xl text-center text-[13px] text-ink-muted">
-                  {query ? "No wines found." : "No wines in inventory yet. Scan an invoice first."}
+                  {query.length < 2
+                    ? "Type at least 2 characters to search the LWIN catalog."
+                    : "No matches in LWIN catalog."}
                 </div>
               ) : (
-                results.map((wine) => (
+                catalogResults.map((wine) => (
                   <button
-                    key={wine.id}
+                    key={wine.lwin_id}
                     type="button"
-                    onClick={() => setSelected(wine)}
+                    onClick={() => handleSelectCatalog(wine)}
                     className="flex w-full items-center gap-md border-b border-border/50 px-lg py-sm text-left transition-colors hover:bg-surface-muted"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="font-serif text-[14px] text-ink">
-                        {wine.producer}, {wine.name}
+                        {wine.display_name}
                       </div>
                       <div className="mt-2xs flex items-center gap-xs text-[12px] text-ink-muted">
-                        <span className="font-mono text-ink-subtle">
-                          {wine.vintage ?? "NV"}
-                        </span>
+                        {wine.producer && <span>{wine.producer}</span>}
                         {wine.region && (
                           <>
                             <span className="text-ink-subtle">·</span>
                             <span>{wine.region}</span>
+                          </>
+                        )}
+                        {wine.country && (
+                          <>
+                            <span className="text-ink-subtle">·</span>
+                            <span>{wine.country}</span>
                           </>
                         )}
                       </div>

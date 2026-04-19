@@ -168,6 +168,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // LWIN matching — fire-and-forget, non-blocking on the response
+  const wineIdStrings = wineIdArray as string[];
+  supabase
+    .rpc("match_lwin_batch", { p_wine_ids: wineIdStrings })
+    .then(({ data, error: lwinError }) => {
+      if (lwinError) console.error("LWIN batch match failed:", lwinError);
+      else if (data) console.log(`LWIN matched ${data.length} of ${wineIdStrings.length} wines`);
+    });
+
   return NextResponse.json({
     scanId,
     itemCount: scan.items.length,

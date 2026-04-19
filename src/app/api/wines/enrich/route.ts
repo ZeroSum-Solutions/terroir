@@ -51,8 +51,25 @@ export async function POST() {
   const results = await Promise.all(updates);
   const enriched = results.reduce((s, v) => s + v, 0);
 
+  // LWIN backfill for wines without lwin_id
+  const { data: unmatched } = await supabase
+    .from("wines")
+    .select("id")
+    .eq("restaurant_id", restaurantId)
+    .is("lwin_id", null);
+
+  let lwinMatched = 0;
+  if (unmatched && unmatched.length > 0) {
+    const unmatchedIds = unmatched.map((w) => w.id);
+    const { data: matches } = await supabase.rpc("match_lwin_batch", {
+      p_wine_ids: unmatchedIds,
+    });
+    lwinMatched = matches?.length ?? 0;
+  }
+
   return NextResponse.json({
     total: wines?.length ?? 0,
     enriched,
+    lwinMatched,
   });
 }

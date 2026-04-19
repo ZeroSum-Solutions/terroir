@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .gstack/
+
+# LWIN data (large CSV, not committed)
+scripts/lwin.csv

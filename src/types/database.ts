@@ -531,6 +531,46 @@ export type Database = {
         }
         Returns: boolean
       }
+      lwin_search: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: {
+          colour: string | null
+          country: string | null
+          display_name: string
+          lwin_id: string
+          producer: string | null
+          region: string | null
+          type: string | null
+          varietal: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "lwin_catalog"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      match_lwin: {
+        Args: { p_name: string; p_producer: string; p_threshold?: number }
+        Returns: {
+          colour: string
+          country: string
+          display_name: string
+          lwin_id: string
+          producer: string
+          region: string
+          score: number
+          varietal: string
+        }[]
+      }
+      match_lwin_batch: {
+        Args: { p_wine_ids: string[] }
+        Returns: {
+          lwin_id: string
+          score: number
+          wine_id: string
+        }[]
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
