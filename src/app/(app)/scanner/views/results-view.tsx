@@ -166,10 +166,24 @@ export function ResultsView({
             Review, correct, and export. Yellow fields need a second look.
           </p>
         </div>
-        <div className="flex items-center gap-xs self-start rounded-pill bg-success-soft px-sm py-xs text-[12px] font-medium text-success md:self-auto">
-          <Sparkles className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-          <span>Parsed accuracy</span>
-          <span className="tabular">{accuracy}%</span>
+        <div className="flex items-center gap-sm self-start md:self-auto">
+          <div className="flex items-center gap-xs rounded-pill bg-success-soft px-sm py-xs text-[12px] font-medium text-success">
+            <Sparkles className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+            <span>Parsed accuracy</span>
+            <span className="tabular">{accuracy}%</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm("Clear this scan and all edits?")) {
+                onScanAnother();
+              }
+            }}
+            className="flex h-8 items-center gap-xs rounded-sm border border-border-strong px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted hover:text-danger focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2"
+          >
+            <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+            Clear
+          </button>
         </div>
       </header>
 
