@@ -102,7 +102,7 @@ export function ResultsView({
   const [rawTextOpen, setRawTextOpen] = useState(false);
 
   const { total, bottles, lowCount, accuracy } = useMemo(() => {
-    const totalFields = items.length * 6;
+    const totalFields = items.length * 7;
     const edited = Object.keys(edits).length;
     return {
       total: items.reduce((s, it) => s + it.qty * it.unitCost, 0),
@@ -241,8 +241,15 @@ export function ResultsView({
                     className="font-medium"
                     label="Wine name"
                   />
-                  <div className="mt-2xs pl-sm text-[12px] text-ink-muted">
-                    {it.producer}
+                  <div className="mt-2xs">
+                    <TextInput
+                      value={it.producer}
+                      low={isLow(it, "producer")}
+                      edited={isEdited(it, "producer")}
+                      onCommit={(v) => onUpdate(it.id, "producer", v)}
+                      className="text-[12px] text-ink-muted"
+                      label="Producer"
+                    />
                   </div>
                 </td>
                 <td className="p-sm">

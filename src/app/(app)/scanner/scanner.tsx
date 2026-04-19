@@ -83,6 +83,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rawText, setRawText] = useState<string | null>(null);
+  const [lastFile, setLastFile] = useState<File | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -110,7 +111,10 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     const SOFT_DURATION = 18000;
     const id = window.setInterval(() => {
       const elapsed = performance.now() - start;
-      const pct = Math.min(90, Math.round((elapsed / SOFT_DURATION) * 90));
+      const pct =
+        elapsed <= SOFT_DURATION
+          ? Math.min(90, Math.round((elapsed / SOFT_DURATION) * 90))
+          : Math.min(95, 90 + Math.round(((elapsed - SOFT_DURATION) / 60000) * 5));
       setProgress(pct);
       setStepIndex(pct < 30 ? 0 : pct < 60 ? 1 : 2);
     }, 120);
@@ -122,6 +126,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     const ac = new AbortController();
     abortRef.current = ac;
 
+    setLastFile(file);
     setStatus("processing");
     setError(null);
 
@@ -258,6 +263,10 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     }
   }, [scan, originalItems, isSaving]);
 
+  const retryScan = useCallback(() => {
+    if (lastFile) startScan(lastFile);
+  }, [lastFile, startScan]);
+
   const enterManualEntry = useCallback(() => {
     const parsedAt = new Date().toISOString();
     const fresh: Scan = {
@@ -300,7 +309,9 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       {status === "error" && (
         <ErrorView
           message={error ?? "Unknown error."}
-          onRetry={startOver}
+          onRetry={lastFile ? retryScan : startOver}
+          onNewPhoto={startOver}
+          hasFile={!!lastFile}
           onManual={enterManualEntry}
         />
       )}
