@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { NextResponse, type NextRequest } from "next/server";
+import { getAnthropicClient } from "@/lib/ai/anthropic-client";
 import { requireMembership } from "@/lib/api/auth";
 import { ParsedBottleLabelSchema } from "@/lib/scanner/bottle-schema";
 import type { BottleScanResult } from "@/lib/scanner/types";
@@ -37,8 +38,13 @@ export async function POST(request: NextRequest) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  // BND-007: Anthropic client is a module-scoped singleton with
+  // maxRetries: 2 and timeout: 100_000 pinned, keeping total latency under
+  // Vercel's route budget (maxDuration = 60 for this route).
+  let anthropic: Anthropic;
+  try {
+    anthropic = getAnthropicClient();
+  } catch {
     return NextResponse.json(
       { error: "Server not configured: ANTHROPIC_API_KEY missing." },
       { status: 500 },
@@ -80,10 +86,8 @@ export async function POST(request: NextRequest) {
 
   const mediaType = file.type as "image/jpeg" | "image/png" | "image/webp";
 
-  const client = new Anthropic({ apiKey });
-
   try {
-    const response = await client.messages.parse({
+    const response = await anthropic.messages.parse({
       model: "claude-sonnet-4-6",
       max_tokens: 2000,
       output_config: {

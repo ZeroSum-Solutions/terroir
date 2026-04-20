@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { NextResponse, type NextRequest } from "next/server";
+import { getAnthropicClient } from "@/lib/ai/anthropic-client";
 import { requireMembership } from "@/lib/api/auth";
 import { analyzeInvoice } from "@/lib/scanner/azure";
 import { ParsedInvoiceSchema } from "@/lib/scanner/schema";
@@ -61,8 +62,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  // BND-007: the Anthropic client is a module-scoped singleton with
+  // maxRetries: 2 and timeout: 100_000 pinned, so total latency stays under
+  // Vercel's 120s route budget. getAnthropicClient() throws if
+  // ANTHROPIC_API_KEY is missing — catch once, return a clean 500.
+  let anthropic: Anthropic;
+  try {
+    anthropic = getAnthropicClient();
+  } catch {
     return NextResponse.json(
       { error: "Server not configured: ANTHROPIC_API_KEY missing." },
       { status: 500 },
@@ -146,10 +153,8 @@ export async function POST(request: NextRequest) {
     ocrContext += "\n</detected_line_items>";
   }
 
-  const client = new Anthropic({ apiKey });
-
   try {
-    const response = await client.messages.parse({
+    const response = await anthropic.messages.parse({
       model: "claude-sonnet-4-6",
       max_tokens: 16000,
       output_config: {
