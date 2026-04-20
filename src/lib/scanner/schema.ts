@@ -78,3 +78,54 @@ export const ParsedInvoiceSchema = z.object({
 
 export type ParsedInvoice = z.infer<typeof ParsedInvoiceSchema>;
 export type ParsedLineItem = z.infer<typeof ParsedLineItemSchema>;
+
+/**
+ * Persisted-scan envelope (BND-024 / ARCH-010).
+ *
+ * In-flight Scan state is kept in localStorage so users who navigate
+ * away mid-review don't lose their work. The raw shape of Scan is
+ * subject to change, so we wrap it in a version envelope and validate
+ * on load. Anything that fails the version match OR the Zod shape check
+ * is dropped (and cleared from localStorage) rather than returned as-is.
+ *
+ * Bump PERSISTED_SCAN_VERSION whenever the inner `data` shape changes
+ * incompatibly. The next load will detect the mismatch and drop the
+ * stale state — acceptable because in-flight scans are ephemeral.
+ */
+export const PERSISTED_SCAN_VERSION = 1;
+
+const PersistedLineItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  producer: z.string(),
+  vintage: z.number().int().nullable(),
+  varietal: z.string(),
+  region: z.string(),
+  qty: z.number(),
+  unitCost: z.number(),
+  confidence: z.number(),
+  lowFields: z.array(LineItemFieldSchema).optional(),
+});
+
+const PersistedScanQualitySchema = z.object({
+  avgConfidence: z.number(),
+  lowConfidenceItems: z.number(),
+  totalItems: z.number(),
+  manualFallbackTriggered: z.boolean(),
+  reason: z.enum(["low_confidence", "too_few_items", "both"]).optional(),
+});
+
+export const PersistedScanSchema = z.object({
+  version: z.literal(PERSISTED_SCAN_VERSION),
+  data: z.object({
+    source: z.object({
+      distributor: z.string(),
+      invoiceNo: z.string(),
+      invoiceDate: z.string(),
+      parsedAt: z.string(),
+    }),
+    items: z.array(PersistedLineItemSchema),
+    edits: z.record(z.string(), z.literal(true)),
+    quality: PersistedScanQualitySchema.optional(),
+  }),
+});

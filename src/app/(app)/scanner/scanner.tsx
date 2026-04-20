@@ -3,6 +3,10 @@
 import { Check } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
+import {
+  PERSISTED_SCAN_VERSION,
+  PersistedScanSchema,
+} from "@/lib/scanner/schema";
 import { SCORED_FIELDS_COUNT } from "@/lib/scanner/scored-fields";
 import { useRestaurant } from "@/lib/context/restaurant";
 import type {
@@ -25,23 +29,41 @@ const STORAGE_KEY = "terroir:current-scan";
 
 export { formatMoney } from "./components/field-inputs";
 
+/**
+ * BND-024 / ARCH-010 — the persisted scan is wrapped in a version
+ * envelope: `{ version: N, data: Scan-without-rawText }`. Anything
+ * that doesn't round-trip through PersistedScanSchema is dropped AND
+ * removed from localStorage so a stale blob can't trigger the drop
+ * path on every subsequent mount.
+ */
 function loadScan(): Scan | null {
   if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+
+  let parsed: unknown;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as Scan;
+    parsed = JSON.parse(raw);
   } catch {
+    localStorage.removeItem(STORAGE_KEY);
     return null;
   }
+
+  const result = PersistedScanSchema.safeParse(parsed);
+  if (!result.success) {
+    localStorage.removeItem(STORAGE_KEY);
+    return null;
+  }
+  return result.data.data as Scan;
 }
 
 function saveScan(scan: Scan | null) {
   if (typeof window === "undefined") return;
   if (scan) {
     // Strip rawText to avoid bloating localStorage with OCR dumps
-    const { rawText: _, ...rest } = scan;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
+    const { rawText: _, ...data } = scan;
+    const envelope = { version: PERSISTED_SCAN_VERSION, data };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(envelope));
   } else {
     localStorage.removeItem(STORAGE_KEY);
   }
