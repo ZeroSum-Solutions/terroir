@@ -23,33 +23,50 @@ export async function POST() {
     );
   }
 
-  const updates = (wines ?? []).map(async (wine) => {
-    const result = enrichWine({
-      varietal: wine.varietal,
-      region: wine.region,
-      country: wine.country,
-      vintage: wine.vintage,
-    });
+  // BND-031 / DEBT-008: compute enrichments in Node via the deterministic
+  // rule engine, then ship the whole batch to enrich_wines_batch in one
+  // round-trip. Rows where the rule engine returns all-nulls are filtered
+  // out — no point paying for an empty UPDATE.
+  const payload = (wines ?? [])
+    .map((wine) => {
+      const result = enrichWine({
+        varietal: wine.varietal,
+        region: wine.region,
+        country: wine.country,
+        vintage: wine.vintage,
+      });
+      if (result.servingTempMin == null && result.drinkWindowStart == null) {
+        return null;
+      }
+      return {
+        id: wine.id,
+        drink_window_start: result.drinkWindowStart,
+        drink_window_end: result.drinkWindowEnd,
+        serving_temp_min: result.servingTempMin,
+        serving_temp_max: result.servingTempMax,
+        serving_temp_label: result.servingTempLabel,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
 
-    if (result.servingTempMin != null || result.drinkWindowStart != null) {
-      const { error: updateError } = await supabase
-        .from("wines")
-        .update({
-          drink_window_start: result.drinkWindowStart,
-          drink_window_end: result.drinkWindowEnd,
-          serving_temp_min: result.servingTempMin,
-          serving_temp_max: result.servingTempMax,
-          serving_temp_label: result.servingTempLabel,
-        })
-        .eq("id", wine.id);
-
-      return updateError ? 0 : 1 as number;
+  let enriched = 0;
+  if (payload.length > 0) {
+    const { data: count, error: rpcError } = await (supabase.rpc as unknown as (
+      fn: string,
+      args: { p_restaurant_id: string; p_enrichments: typeof payload },
+    ) => Promise<{ data: number | null; error: unknown }>)(
+      "enrich_wines_batch",
+      { p_restaurant_id: restaurantId, p_enrichments: payload },
+    );
+    if (rpcError) {
+      console.error("enrich_wines_batch failed:", rpcError);
+      return NextResponse.json(
+        { error: "Failed to enrich wines." },
+        { status: 500 },
+      );
     }
-    return 0 as number;
-  });
-
-  const results = await Promise.all(updates);
-  const enriched = results.reduce((s, v) => s + v, 0);
+    enriched = count ?? 0;
+  }
 
   // LWIN backfill for wines without lwin_id
   const { data: unmatched } = await supabase
