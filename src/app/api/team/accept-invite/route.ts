@@ -1,7 +1,25 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { rateLimit } from "@/lib/api/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
+
+/** Max accept-invite attempts per authed user per IP per hour. */
+const ACCEPT_INVITE_LIMIT = 10;
+/** Rate-limit window in ms (one hour). */
+const ACCEPT_INVITE_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Best-effort client-IP extraction. Vercel sets `x-forwarded-for`; fallback to
+ * `x-real-ip` for other reverse proxies. Only the leftmost IP in the list is
+ * used. `unknown` is never a realistic value in production, but is a sane
+ * fallback for local/test so the key is still stable.
+ */
+function clientIp(request: NextRequest): string {
+  const fwd = request.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
+  return request.headers.get("x-real-ip")?.trim() || "unknown";
+}
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -11,6 +29,24 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // BND-013: rate-limit authed users before we touch the DB. The key is
+  // `${ip}:${user.id}` so a single user can't brute-force tokens from one
+  // IP, and a single IP can't brute-force across many throwaway accounts.
+  const limit = rateLimit(
+    `accept-invite:${clientIp(request)}:${user.id}`,
+    ACCEPT_INVITE_LIMIT,
+    ACCEPT_INVITE_WINDOW_MS,
+  );
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: "Too many invitation attempts. Try again later." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(limit.retryAfterSeconds) },
+      },
+    );
   }
 
   let body: { token?: string };

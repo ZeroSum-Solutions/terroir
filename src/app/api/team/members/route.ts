@@ -25,10 +25,16 @@ export async function GET() {
     );
   }
 
-  // Fetch pending invitations
-  const { data: invitations, error: invitationsError } = await supabase
+  // Fetch pending invitations.
+  // BND-013: the `token` column used to be returned verbatim, which meant any
+  // team member with read access to this endpoint could see every pending
+  // invite token. Token is intentionally dropped from the select list here;
+  // the owner-only `/api/team/invite` endpoint is the only way to obtain a
+  // token (it's also the endpoint used to re-send invites, since each POST
+  // creates a fresh row with a fresh token).
+  const { data: rawInvitations, error: invitationsError } = await supabase
     .from("invitations")
-    .select("id, token, role, email, expires_at, accepted_at, created_at")
+    .select("id, role, email, expires_at, accepted_at, created_at")
     .eq("restaurant_id", restaurantId)
     .is("accepted_at", null)
     .order("created_at", { ascending: false });
@@ -40,9 +46,14 @@ export async function GET() {
     );
   }
 
+  const invitations = (rawInvitations ?? []).map((inv) => ({
+    ...inv,
+    has_pending_invite: true,
+  }));
+
   return NextResponse.json({
     members: members ?? [],
-    invitations: invitations ?? [],
+    invitations,
     currentUserId: user.id,
   });
 }
