@@ -2,13 +2,23 @@
  * Seed the lwin_catalog table from a LWIN CSV file.
  *
  * Usage:
- *   npx tsx scripts/seed-lwin.ts path/to/lwin.csv
+ *   npx tsx scripts/seed-lwin.ts path/to/lwin.csv              # dry run (default)
+ *   npx tsx scripts/seed-lwin.ts path/to/lwin.csv --confirm    # actually upsert
  *
  * Expects a CSV with columns (order may vary):
  *   LWIN, Display Name, Producer/Négociant, Varietal, Region, Country, Colour, Type
  *
- * The script reads the CSV, parses it, and inserts rows in batches of 1000
- * using the Supabase service role key (from .env.local).
+ * Safeguards (BND-021 / INT-011):
+ *   1. Dry run is the default. The script parses the CSV, prints a preview
+ *      (row count + first 3 rows + target URL), and exits without touching
+ *      the DB. Pass --confirm to actually upsert.
+ *   2. Prod host block. Set `PROD_SUPABASE_URL_PATTERN` in env (or
+ *      .env.local) to a substring that appears in your production
+ *      Supabase URL (e.g. the project subdomain). If the active
+ *      SUPABASE_URL contains that substring, the script refuses to run
+ *      — even with --confirm — unless you also set ALLOW_PROD_SEED=yes.
+ *   3. Startup banner shows the target URL and that the service role
+ *      key is in use, so the operator can eyeball before confirming.
  */
 
 import { createReadStream } from "fs";
@@ -20,9 +30,27 @@ config({ path: ".env.local" });
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const PROD_URL_PATTERN = process.env.PROD_SUPABASE_URL_PATTERN ?? "";
+const ALLOW_PROD_SEED = process.env.ALLOW_PROD_SEED === "yes";
 
 if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
   console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local");
+  process.exit(1);
+}
+
+const args = process.argv.slice(2);
+const CONFIRM = args.includes("--confirm");
+const csvPath = args.find((a) => !a.startsWith("--"));
+
+const isProdTarget =
+  PROD_URL_PATTERN !== "" && SUPABASE_URL.includes(PROD_URL_PATTERN);
+
+if (isProdTarget && !ALLOW_PROD_SEED) {
+  console.error(
+    `\nRefusing to run: SUPABASE_URL matches PROD_SUPABASE_URL_PATTERN (${PROD_URL_PATTERN}).`,
+  );
+  console.error(`Target URL: ${SUPABASE_URL}`);
+  console.error("Set ALLOW_PROD_SEED=yes in your env to override.\n");
   process.exit(1);
 }
 
@@ -86,13 +114,17 @@ function parseCsvLine(line: string): string[] {
 }
 
 async function main() {
-  const csvPath = process.argv[2];
   if (!csvPath) {
-    console.error("Usage: npx tsx scripts/seed-lwin.ts path/to/lwin.csv");
+    console.error("Usage: npx tsx scripts/seed-lwin.ts path/to/lwin.csv [--confirm]");
     process.exit(1);
   }
 
-  console.log(`Reading LWIN CSV from: ${csvPath}`);
+  console.log("");
+  console.log(`  Target:     ${SUPABASE_URL}`);
+  console.log(`  Auth:       service_role key`);
+  console.log(`  Mode:       ${CONFIRM ? "LIVE (--confirm)" : "DRY RUN (default)"}`);
+  console.log(`  CSV:        ${csvPath}`);
+  console.log("");
 
   const rl = createInterface({
     input: createReadStream(csvPath, "utf8"),
@@ -102,6 +134,7 @@ async function main() {
   let headerParsed = false;
   let indices: Record<string, number> = {};
   let batch: LwinRow[] = [];
+  const sample: LwinRow[] = [];
   let total = 0;
   let inserted = 0;
 
@@ -125,7 +158,7 @@ async function main() {
     if (!lwinId || !displayName) continue;
 
     total++;
-    batch.push({
+    const row: LwinRow = {
       lwin_id: lwinId,
       display_name: displayName,
       producer: fields[indices.producer] || null,
@@ -134,9 +167,11 @@ async function main() {
       country: fields[indices.country] || null,
       colour: fields[indices.colour] || null,
       type: fields[indices.type] || null,
-    });
+    };
+    if (sample.length < 3) sample.push(row);
+    batch.push(row);
 
-    if (batch.length >= BATCH_SIZE) {
+    if (CONFIRM && batch.length >= BATCH_SIZE) {
       const { error } = await supabase
         .from("lwin_catalog")
         .upsert(batch, { onConflict: "lwin_id" });
@@ -148,11 +183,13 @@ async function main() {
         process.stdout.write(`\r  Inserted ${inserted} / ${total} rows...`);
       }
       batch = [];
+    } else if (!CONFIRM && batch.length >= BATCH_SIZE) {
+      // Dry run — drop the batch without writing. We still want to count.
+      batch = [];
     }
   }
 
-  // Flush remaining
-  if (batch.length > 0) {
+  if (CONFIRM && batch.length > 0) {
     const { error } = await supabase
       .from("lwin_catalog")
       .upsert(batch, { onConflict: "lwin_id" });
@@ -164,7 +201,13 @@ async function main() {
     }
   }
 
-  console.log(`\nDone. Inserted ${inserted} of ${total} rows into lwin_catalog.`);
+  if (!CONFIRM) {
+    console.log(`Parsed ${total} rows. First 3:`);
+    for (const r of sample) console.log("  ", r);
+    console.log(`\nDRY RUN — no writes. Pass --confirm to execute.`);
+  } else {
+    console.log(`\nDone. Inserted ${inserted} of ${total} rows into lwin_catalog.`);
+  }
 }
 
 main().catch(console.error);
