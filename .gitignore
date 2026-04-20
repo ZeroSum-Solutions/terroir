@@ -13,6 +13,8 @@
 # testing
 /coverage
 /test-results/
+# BND-030: scoring sweep output from scripts/test-invoices.ts
+test-results*.json
 
 # next.js
 /.next/

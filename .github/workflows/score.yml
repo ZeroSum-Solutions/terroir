@@ -1,0 +1,115 @@
+# BND-030 / DEBT-007
+#
+# Manually-triggered scoring sweep. Runs scripts/test-invoices.ts
+# against the committed test-invoices/ fixture set and publishes the
+# resulting JSON as a workflow artifact.
+#
+# *** NOT TRIGGERED ON PUSH OR PR ***
+# This workflow fires real Azure Document Intelligence + Anthropic
+# API calls. Each run costs money. Trigger manually via the GitHub
+# Actions "Run workflow" button when you want to measure scanner
+# accuracy — e.g. after a prompt or model change.
+#
+# Required secrets (add under Settings → Secrets and variables →
+# Actions) before the workflow can complete successfully:
+#   - AZURE_DOC_INTEL_ENDPOINT
+#   - AZURE_DOC_INTEL_KEY
+#   - ANTHROPIC_API_KEY
+#
+# Optional: commit a baseline at the repo root named
+# test-results-baseline.json. When present, the workflow compares
+# the new avgConfidence against the baseline and FAILS the run if
+# the new score dropped by more than 0.02 — a cheap regression gate
+# that you can opt into by committing a known-good baseline.
+#
+# Security note: the `model` input is constrained to opus|sonnet via
+# the choice type, so injection is structurally impossible — but we
+# still pass it to run: via env: to model the safe pattern.
+
+name: Score scanner accuracy
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Claude model to sweep with"
+        required: true
+        default: "opus"
+        type: choice
+        options:
+          - opus
+          - sonnet
+
+jobs:
+  score:
+    name: Run test-invoices sweep
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AZURE_DOC_INTEL_ENDPOINT: ${{ secrets.AZURE_DOC_INTEL_ENDPOINT }}
+      AZURE_DOC_INTEL_KEY: ${{ secrets.AZURE_DOC_INTEL_KEY }}
+      MODEL: ${{ inputs.model }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run scoring sweep
+        run: npx tsx scripts/test-invoices.ts --model "$MODEL"
+
+      - name: Resolve output filename
+        id: out
+        run: |
+          if [ "$MODEL" = "opus" ]; then
+            echo "file=test-results.json" >> "$GITHUB_OUTPUT"
+          else
+            echo "file=test-results-$MODEL.json" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload result artifact
+        uses: actions/upload-artifact@v4
+        env:
+          ARTIFACT_FILE: ${{ steps.out.outputs.file }}
+        with:
+          name: scoring-${{ env.MODEL }}-${{ github.sha }}
+          path: ${{ steps.out.outputs.file }}
+          if-no-files-found: error
+
+      - name: Compare against baseline (if present)
+        env:
+          CURRENT_FILE: ${{ steps.out.outputs.file }}
+        run: |
+          if [ ! -f test-results-baseline.json ]; then
+            echo "No test-results-baseline.json committed — skipping regression check."
+            exit 0
+          fi
+          CURRENT_FILE="$CURRENT_FILE" node -e '
+            const current = require("./" + process.env.CURRENT_FILE);
+            const baseline = require("./test-results-baseline.json");
+            const avg = (x) => {
+              const ok = x.results.filter(r => !r.error);
+              return ok.length ? ok.reduce((s, r) => s + r.avgConfidence, 0) / ok.length : 0;
+            };
+            const c = avg(current), b = avg(baseline);
+            console.log("avgConfidence now=" + c.toFixed(3) + " baseline=" + b.toFixed(3));
+            if (c < b - 0.02) {
+              console.error("REGRESSION: scoring dropped >0.02 vs baseline");
+              process.exit(1);
+            }
+          '
