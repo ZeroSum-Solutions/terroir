@@ -3,6 +3,11 @@ import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
 
+/**
+ * BND-026 / ARCH-007 — atomic reorder via reorder_wine_list_items RPC.
+ * All positions land in one transaction or none do; no more half-reordered
+ * lists on a mid-batch failure.
+ */
 export async function PATCH(request: NextRequest) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
@@ -22,19 +27,18 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  // Update each item's position
-  const updates = body.orderedIds.map((id, idx) =>
-    supabase
-      .from("wine_list_items")
-      .update({ position: idx })
-      .eq("id", id),
-  );
+  // Cast: the regenerated Database type doesn't yet include the new RPC
+  // (tracked under the BND-006 `supabase gen types` followup). The call
+  // shape is pinned by the migration and by the tests below.
+  const { error } = await (supabase.rpc as unknown as (
+    fn: string,
+    args: { p_ordered_ids: string[] },
+  ) => Promise<{ error: unknown }>)("reorder_wine_list_items", {
+    p_ordered_ids: body.orderedIds,
+  });
 
-  const results = await Promise.all(updates);
-  const failed = results.find((r) => r.error);
-
-  if (failed?.error) {
-    console.error("reorder failed:", failed.error);
+  if (error) {
+    console.error("reorder failed:", error);
     return NextResponse.json({ error: "Reorder failed." }, { status: 500 });
   }
 
