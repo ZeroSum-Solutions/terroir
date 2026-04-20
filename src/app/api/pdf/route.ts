@@ -1,15 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 import puppeteer from "puppeteer";
-import { requireAuth } from "@/lib/api/auth";
+import { requireMembership } from "@/lib/api/auth";
 import { renderTemplate } from "@/lib/wine-list/templates";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
+  // Gate on membership and scope every query by restaurant_id. RLS should
+  // already enforce this, but belt-and-suspenders: a wine list belonging to a
+  // restaurant the caller is not a member of must return 404, not 403 — a 403
+  // would confirm the list exists. (ARCH-002)
+  const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
-  const { supabase } = auth;
+  const { supabase, restaurantId } = auth;
 
   let body: { listId: string; template?: string };
   try {
@@ -29,6 +33,7 @@ export async function POST(request: NextRequest) {
       "name, template, restaurant_id, restaurants(name), wine_list_sections(name, position, wine_list_items(position, glass_price, bottle_price, tasting_note, wines(name, producer, vintage, varietal, region)))",
     )
     .eq("id", body.listId)
+    .eq("restaurant_id", restaurantId)
     .single();
 
   if (fetchError || !list) {

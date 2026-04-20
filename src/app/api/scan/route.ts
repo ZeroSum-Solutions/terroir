@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { NextResponse, type NextRequest } from "next/server";
-import { requireAuth } from "@/lib/api/auth";
+import { requireMembership } from "@/lib/api/auth";
 import { analyzeInvoice } from "@/lib/scanner/azure";
 import { ParsedInvoiceSchema } from "@/lib/scanner/schema";
 import type { LineItem, Scan, ScanQuality } from "@/lib/scanner/types";
@@ -43,7 +43,11 @@ Confidence scoring:
 Return every wine line on the invoice, in the order it appears.`;
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
+  // Gate on membership, not just auth — /api/scan triggers paid Azure OCR +
+  // Anthropic calls. Requiring an active restaurant membership means an authed
+  // user who has been removed from every restaurant cannot keep spending our
+  // money. (ARCH-001)
+  const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
 
   // Require Azure configuration
