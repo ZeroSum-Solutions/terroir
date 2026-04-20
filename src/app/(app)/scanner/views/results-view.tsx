@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { SCORED_FIELDS_COUNT } from "@/lib/scanner/scored-fields";
 import { cn } from "@/lib/utils";
 import type { LineItem, LineItemField, Scan } from "@/lib/scanner/types";
 import {
@@ -102,7 +103,7 @@ export function ResultsView({
   const [rawTextOpen, setRawTextOpen] = useState(false);
 
   const { total, bottles, lowCount, accuracy } = useMemo(() => {
-    const totalFields = items.length * 7;
+    const totalFields = items.length * SCORED_FIELDS_COUNT;
     const edited = Object.keys(edits).length;
     return {
       total: items.reduce((s, it) => s + it.qty * it.unitCost, 0),

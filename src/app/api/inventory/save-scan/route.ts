@@ -5,21 +5,11 @@ import {
   isValidIdempotencyKey,
   withIdempotency,
 } from "@/lib/api/idempotency";
+import { SCORED_FIELDS } from "@/lib/scanner/scored-fields";
 import type { LineItem, Scan } from "@/lib/scanner/types";
 import type { Database, Json } from "@/types/database";
 
 export const runtime = "nodejs";
-
-/** Fields on a LineItem that count toward the accuracy score. */
-const SCORED_FIELDS: (keyof LineItem)[] = [
-  "name",
-  "producer",
-  "vintage",
-  "varietal",
-  "region",
-  "qty",
-  "unitCost",
-];
 
 type SaveScanBody = {
   scan: Scan;

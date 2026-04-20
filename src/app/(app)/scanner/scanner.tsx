@@ -3,6 +3,7 @@
 import { Check } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
+import { SCORED_FIELDS_COUNT } from "@/lib/scanner/scored-fields";
 import { useRestaurant } from "@/lib/context/restaurant";
 import type {
   BottleScanResult,
@@ -216,7 +217,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
 
   const exportAccuracyJson = useCallback(() => {
     if (!scan) return;
-    const totalFields = scan.items.length * 7;
+    const totalFields = scan.items.length * SCORED_FIELDS_COUNT;
     const editedFields = Object.keys(scan.edits).length;
     const accuracy =
       totalFields === 0
