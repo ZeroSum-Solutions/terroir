@@ -1,7 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireMembership } from "@/lib/api/auth";
+import {
+  isValidIdempotencyKey,
+  withIdempotency,
+} from "@/lib/api/idempotency";
 import type { LineItem, Scan } from "@/lib/scanner/types";
-import type { Json } from "@/types/database";
+import type { Database, Json } from "@/types/database";
 
 export const runtime = "nodejs";
 
@@ -115,6 +120,40 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // ── Idempotency (BND-006) ────────────────────────────────────────
+  // The scanner client sends an Idempotency-Key UUID on every save
+  // attempt and reuses it across network retries. A successful save
+  // followed by a retry must return the original response WITHOUT
+  // re-inserting inventory rows.
+  const rawKey = request.headers.get("Idempotency-Key");
+  const key = isValidIdempotencyKey(rawKey) ? rawKey : null;
+
+  const result = await withIdempotency({
+    supabase,
+    restaurantId,
+    key,
+    handler: async () => saveScanOnce({
+      supabase,
+      restaurantId,
+      scan,
+      originalItems,
+      file,
+    }),
+  });
+
+  return NextResponse.json(result.body, { status: result.status });
+}
+
+/** The real save work. Extracted so `withIdempotency` can wrap it. */
+async function saveScanOnce(opts: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  scan: Scan;
+  originalItems: LineItem[];
+  file: File | null;
+}): Promise<{ status: number; body: unknown }> {
+  const { supabase, restaurantId, scan, originalItems, file } = opts;
+
   // ── Accuracy score ───────────────────────────────────────────────
   const accuracyScore = computeAccuracy(scan);
 
@@ -137,10 +176,7 @@ export async function POST(request: NextRequest) {
 
   if (scanInsertError || !invoiceScan) {
     console.error("invoice_scans insert failed:", scanInsertError);
-    return NextResponse.json(
-      { error: "Failed to save invoice scan." },
-      { status: 500 },
-    );
+    return { status: 500, body: { error: "Failed to save invoice scan." } };
   }
 
   const scanId = invoiceScan.id;
@@ -194,10 +230,7 @@ export async function POST(request: NextRequest) {
   if (batchError || !wineIdArray) {
     console.error("find_or_create_wines_batch failed:", batchError);
     await supabase.from("invoice_scans").delete().eq("id", scanId);
-    return NextResponse.json(
-      { error: "Failed to save wines." },
-      { status: 500 },
-    );
+    return { status: 500, body: { error: "Failed to save wines." } };
   }
 
   const wineIds = new Set<string>(wineIdArray as string[]);
@@ -220,10 +253,7 @@ export async function POST(request: NextRequest) {
     console.error("inventory_items insert failed:", inventoryError);
     // Roll back: delete the invoice_scans row so the user can retry
     await supabase.from("invoice_scans").delete().eq("id", scanId);
-    return NextResponse.json(
-      { error: "Failed to save inventory items." },
-      { status: 500 },
-    );
+    return { status: 500, body: { error: "Failed to save inventory items." } };
   }
 
   // LWIN matching — fire-and-forget, non-blocking on the response
@@ -235,9 +265,12 @@ export async function POST(request: NextRequest) {
       else if (data) console.log(`LWIN matched ${data.length} of ${wineIdStrings.length} wines`);
     });
 
-  return NextResponse.json({
-    scanId,
-    itemCount: scan.items.length,
-    wineCount: wineIds.size,
-  });
+  return {
+    status: 200,
+    body: {
+      scanId,
+      itemCount: scan.items.length,
+      wineCount: wineIds.size,
+    },
+  };
 }

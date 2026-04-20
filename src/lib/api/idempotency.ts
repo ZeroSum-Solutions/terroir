@@ -1,0 +1,216 @@
+/**
+ * BND-006 / INT-005 — Request-level idempotency for mutating endpoints.
+ *
+ * Used by the two inventory-save routes so that a client retrying after a
+ * network hiccup gets the same response back instead of double-inserting
+ * rows. The client generates a UUIDv4 once per "logical save attempt" and
+ * sends it in the `Idempotency-Key` header; the same key is reused across
+ * network retries but NOT across a successful save (the scanner clears it
+ * after the 2xx lands).
+ *
+ * Storage model (see migration 0011_scan_idempotency.sql):
+ *   table scan_idempotency(
+ *     key uuid, restaurant_id uuid,
+ *     response_status int, response_body jsonb,
+ *     created_at timestamptz
+ *   )
+ *   primary key (key, restaurant_id)
+ *
+ * Two-phase write so concurrent retries don't collide:
+ *   1. INSERT a sentinel row (status/body null). PK = (key, restaurant).
+ *      - No conflict → we own the key; run the handler.
+ *      - Conflict    → another call already claimed it; look it up.
+ *   2. After the handler returns, UPDATE the row with (status, body).
+ *      If the handler throws, DELETE the row so the user can retry
+ *      cleanly — we never want a server-side exception to permanently
+ *      "lock" a key for 24 hours.
+ *
+ * Scope: the key is scoped to a (key, restaurant_id) pair so a stolen
+ * UUID from another tenant cannot replay a response across the boundary.
+ * RLS also enforces this server-side — belt and suspenders.
+ *
+ * NOTE ON TYPING: `scan_idempotency` is new in migration 0011 but the
+ * generated `Database` type in src/types/database.ts was last regenerated
+ * before that migration. We intentionally cast the query builder to
+ * `unknown` at the boundary so this file compiles today; the next run of
+ * `supabase gen types typescript` will fold the table into Database and
+ * the cast becomes a no-op.
+ */
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/types/database";
+
+/** Default TTL for cached responses. Matches the server-side cleanup window. */
+export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Result returned to the route handler. */
+export type IdempotencyResult<T> = {
+  status: number;
+  body: T;
+  /** True when the response came from the cache rather than a fresh handler run. */
+  replayed: boolean;
+};
+
+/**
+ * Validate a client-supplied Idempotency-Key header. We accept any
+ * opaque string between 8 and 128 chars so clients can evolve their
+ * key generation scheme; UUIDv4 (36 chars) is the recommended form.
+ */
+export function isValidIdempotencyKey(raw: string | null): raw is string {
+  if (typeof raw !== "string") return false;
+  if (raw.length < 8 || raw.length > 128) return false;
+  // Allow hex, dashes, and URL-safe base64 characters.
+  return /^[A-Za-z0-9_\-]+$/.test(raw);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type LooseChain = any;
+
+type LooseQueryBuilder = {
+  insert: (row: unknown) => Promise<{ error: { code?: string } | null }>;
+  select: (cols: string) => LooseChain;
+  update: (row: unknown) => LooseChain;
+  delete: () => LooseChain;
+};
+
+function idempTable(supabase: SupabaseClient<Database>): LooseQueryBuilder {
+  // See NOTE ON TYPING above.
+  return (supabase as unknown as {
+    from: (t: string) => LooseQueryBuilder;
+  }).from("scan_idempotency");
+}
+
+/**
+ * Run `handler` under idempotency protection.
+ *
+ * Behaviour by input:
+ *   - `key === null`        → handler runs, no caching (caller opted out).
+ *   - first time for a key  → handler runs, response is cached, replayed=false.
+ *   - retry of a completed  → cached (status,body) returned, replayed=true.
+ *   - retry while in-flight → 409 "request in progress".
+ *   - retry after TTL       → 409 "key expired; generate a new one".
+ *
+ * If the handler THROWS, the claim row is deleted and the error propagates.
+ * This keeps genuine server errors retryable.
+ */
+export async function withIdempotency<T>(opts: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  key: string | null;
+  /** TTL for a cached response. Defaults to 24h — must match the SQL cleanup. */
+  ttlMs?: number;
+  handler: () => Promise<{ status: number; body: T }>;
+  /** Injected clock for tests. */
+  now?: () => number;
+}): Promise<IdempotencyResult<T>> {
+  const {
+    supabase,
+    restaurantId,
+    key,
+    ttlMs = IDEMPOTENCY_TTL_MS,
+    handler,
+    now = Date.now,
+  } = opts;
+
+  if (!key) {
+    const fresh = await handler();
+    return { ...fresh, replayed: false };
+  }
+
+  const tbl = idempTable(supabase);
+
+  // ── 1. Claim ────────────────────────────────────────────────────────
+  const { error: insertError } = await tbl.insert({
+    key,
+    restaurant_id: restaurantId,
+    response_status: null,
+    response_body: null,
+  });
+
+  if (insertError) {
+    // 23505 = unique_violation → key already claimed.
+    if (insertError.code !== "23505") {
+      // Any other error: log and fall through to handler without caching,
+      // so the endpoint doesn't become unavailable if idempotency is broken.
+      console.error("scan_idempotency claim failed:", insertError);
+      const fresh = await handler();
+      return { ...fresh, replayed: false };
+    }
+
+    // Look up the existing row.
+    const { data: existing } = await tbl
+      .select("response_status, response_body, created_at")
+      .eq("key", key)
+      .eq("restaurant_id", restaurantId)
+      .maybeSingle();
+
+    if (!existing) {
+      // Race: row was deleted between our failed insert and this select.
+      // Re-run the handler without caching — worst case the client retries.
+      const fresh = await handler();
+      return { ...fresh, replayed: false };
+    }
+
+    const row = existing as {
+      response_status: number | null;
+      response_body: Json | null;
+      created_at: string;
+    };
+
+    const age = now() - Date.parse(row.created_at);
+    if (age > ttlMs) {
+      return {
+        status: 409,
+        body: {
+          error: "Idempotency key expired; please generate a new one.",
+        } as unknown as T,
+        replayed: false,
+      };
+    }
+
+    if (row.response_status === null) {
+      return {
+        status: 409,
+        body: {
+          error: "A request with this Idempotency-Key is already in progress.",
+        } as unknown as T,
+        replayed: false,
+      };
+    }
+
+    return {
+      status: row.response_status,
+      body: row.response_body as T,
+      replayed: true,
+    };
+  }
+
+  // ── 2. We own the key. Run the handler. ────────────────────────────
+  let result: { status: number; body: T };
+  try {
+    result = await handler();
+  } catch (err) {
+    // Unclaim so the user can retry without hitting a stale "in progress".
+    await tbl
+      .delete()
+      .eq("key", key)
+      .eq("restaurant_id", restaurantId);
+    throw err;
+  }
+
+  // ── 3. Cache the response ──────────────────────────────────────────
+  const { error: updateError } = await tbl
+    .update({
+      response_status: result.status,
+      response_body: result.body as unknown as Json,
+    })
+    .eq("key", key)
+    .eq("restaurant_id", restaurantId);
+
+  if (updateError) {
+    // Non-fatal: the response is still correct, just won't be replayed.
+    console.error("scan_idempotency cache update failed:", updateError);
+  }
+
+  return { ...result, replayed: false };
+}

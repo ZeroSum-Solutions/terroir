@@ -78,6 +78,13 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const [scan, setScan] = useState<Scan | null>(null);
   const [originalItems, setOriginalItems] = useState<LineItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  // BND-006: UUIDv4 generated on the first save attempt and reused across
+  // retries of the SAME logical save. Cleared on a successful 2xx (or on a
+  // 4xx validation error) so the next save starts with a fresh key; held
+  // across 5xx / network failures so a retry hits the idempotency cache
+  // instead of double-inserting inventory rows.
+  const saveKeyRef = useRef<string | null>(null);
+  const bottleSaveKeyRef = useRef<string | null>(null);
   const [savedResult, setSavedResult] = useState<{
     itemCount: number;
     wineCount: number;
@@ -239,15 +246,29 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const saveToInventory = useCallback(async () => {
     if (!scan || isSaving) return;
     setIsSaving(true);
+    // Reuse an existing key on retry, or mint a new one on first attempt.
+    if (!saveKeyRef.current) {
+      saveKeyRef.current =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
     try {
       const body = new FormData();
       body.append("data", JSON.stringify({ scan, originalItems }));
       if (lastFile) body.append("file", lastFile);
       const res = await fetch("/api/inventory/save-scan", {
         method: "POST",
+        headers: { "Idempotency-Key": saveKeyRef.current },
         body,
       });
       if (!res.ok) {
+        // Validation errors (4xx except 408/429) mean the request is
+        // structurally broken — a retry with the same key would just
+        // replay the same error. Reset so the user can fix and resend.
+        if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+          saveKeyRef.current = null;
+        }
         const payload = (await res.json().catch(() => null)) as
           | { error?: string }
           | null;
@@ -258,6 +279,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         itemCount: number;
         wineCount: number;
       };
+      saveKeyRef.current = null; // 2xx → clear so the next save mints a fresh key
       saveScan(null);
       setScan(null);
       setOriginalItems([]);
@@ -355,18 +377,31 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     }) => {
       if (isSaving) return;
       setIsSaving(true);
+      if (!bottleSaveKeyRef.current) {
+        bottleSaveKeyRef.current =
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      }
       try {
         const res = await fetch("/api/inventory/save-bottle-scan", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": bottleSaveKeyRef.current,
+          },
           body: JSON.stringify({ wine }),
         });
         if (!res.ok) {
+          if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+            bottleSaveKeyRef.current = null;
+          }
           const payload = (await res.json().catch(() => null)) as
             | { error?: string }
             | null;
           throw new Error(payload?.error ?? `Save failed (${res.status})`);
         }
+        bottleSaveKeyRef.current = null;
         setBottleResult(null);
         setSavedResult({ itemCount: 1, wineCount: 1 });
         setStatus("ready");

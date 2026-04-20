@@ -1,5 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireMembership } from "@/lib/api/auth";
+import {
+  isValidIdempotencyKey,
+  withIdempotency,
+} from "@/lib/api/idempotency";
+import type { Database } from "@/types/database";
 
 export const runtime = "nodejs";
 
@@ -59,6 +65,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // ── Idempotency (BND-006) ────────────────────────────────────────
+  const rawKey = request.headers.get("Idempotency-Key");
+  const key = isValidIdempotencyKey(rawKey) ? rawKey : null;
+
+  const result = await withIdempotency({
+    supabase,
+    restaurantId,
+    key,
+    handler: async () =>
+      saveBottleOnce({ supabase, restaurantId, wine: body.wine }),
+  });
+
+  return NextResponse.json(result.body, { status: result.status });
+}
+
+async function saveBottleOnce(opts: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  wine: SaveBottleBody["wine"];
+}): Promise<{ status: number; body: unknown }> {
+  const { supabase, restaurantId, wine } = opts;
+
   // Create or find the wine using the existing batch RPC (single-element array)
   const { data: wineIdArray, error: batchError } = await supabase.rpc(
     "find_or_create_wines_batch",
@@ -80,10 +108,7 @@ export async function POST(request: NextRequest) {
 
   if (batchError || !wineIdArray || (wineIdArray as string[]).length === 0) {
     console.error("find_or_create_wines_batch failed:", batchError);
-    return NextResponse.json(
-      { error: "Failed to save wine." },
-      { status: 500 },
-    );
+    return { status: 500, body: { error: "Failed to save wine." } };
   }
 
   const wineId = (wineIdArray as string[])[0];
@@ -102,10 +127,10 @@ export async function POST(request: NextRequest) {
 
   if (inventoryError) {
     console.error("inventory_items insert failed:", inventoryError);
-    return NextResponse.json(
-      { error: "Failed to save inventory item." },
-      { status: 500 },
-    );
+    return {
+      status: 500,
+      body: { error: "Failed to save inventory item." },
+    };
   }
 
   // LWIN matching — fire-and-forget
@@ -115,5 +140,5 @@ export async function POST(request: NextRequest) {
       if (lwinError) console.error("LWIN match failed:", lwinError);
     });
 
-  return NextResponse.json({ wineId });
+  return { status: 200, body: { wineId } };
 }
