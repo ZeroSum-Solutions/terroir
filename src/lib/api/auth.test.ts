@@ -1,12 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
 
-// Mock the supabase server client
+// Mock the supabase server client. The membership query now uses
+// .select().eq().order().order() → thenable, so the builder returns a
+// promise-like at the end of the chain.
 const mockGetUser = vi.fn();
 const mockSelect = vi.fn();
 const mockEq = vi.fn();
-const mockLimit = vi.fn();
-const mockSingle = vi.fn();
+const mockOrderFinal = vi.fn();
+
+type MembershipsPayload = {
+  data: Array<{ restaurant_id: string; role: string }> | null;
+  error?: unknown;
+};
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () => ({
@@ -17,12 +23,9 @@ vi.mock("@/lib/supabase/server", () => ({
         return {
           eq: (...eqArgs: unknown[]) => {
             mockEq(...eqArgs);
-            return {
-              limit: (...lArgs: unknown[]) => {
-                mockLimit(...lArgs);
-                return { single: mockSingle };
-              },
-            };
+            // order() resolves via mockOrderFinal; the chain shape is built
+            // fresh on every requireMembership call to keep tests isolated.
+            return mockOrderFinal();
           },
         };
       },
@@ -30,13 +33,38 @@ vi.mock("@/lib/supabase/server", () => ({
   })),
 }));
 
+// next/headers cookies() mock — active-restaurant.readActiveRestaurantFromCookie calls this.
+const mockCookieGet = vi.fn();
+vi.mock("next/headers", () => ({
+  cookies: vi.fn(async () => ({
+    get: (name: string) => mockCookieGet(name),
+  })),
+}));
+
 // Import AFTER mocks
 const { requireAuth, requireMembership, requireOwner } = await import(
   "./auth"
 );
+const { signActiveRestaurantCookie } = await import("./active-restaurant");
+
+function withMemberships(memberships: Array<{ restaurant_id: string; role: string }>) {
+  mockOrderFinal.mockImplementation(() => {
+    const payload: MembershipsPayload = { data: memberships };
+    // Shape matches supabase's PostgrestFilterBuilder:
+    //   .eq(...).order(...).order(...) → thenable
+    return {
+      order: () => ({
+        order: () => Promise.resolve(payload),
+      }),
+    };
+  });
+}
 
 describe("requireAuth", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCookieGet.mockReturnValue(undefined);
+  });
 
   it("returns 401 when no user", async () => {
     mockGetUser.mockResolvedValue({ data: { user: null } });
@@ -56,55 +84,97 @@ describe("requireAuth", () => {
 });
 
 describe("requireMembership", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCookieGet.mockReturnValue(undefined);
+  });
 
-  it("returns 403 when user has no membership", async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: "u1" } },
-    });
-    mockSingle.mockResolvedValue({ data: null });
+  it("returns 403 when user has no memberships", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    withMemberships([]);
     const result = await requireMembership();
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(403);
   });
 
-  it("returns membership with role when valid", async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: "u1" } },
-    });
-    mockSingle.mockResolvedValue({
-      data: { restaurant_id: "r1", role: "manager" },
-    });
+  it("returns the sole membership when the user belongs to one restaurant", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    withMemberships([{ restaurant_id: "r1", role: "manager" }]);
     const result = await requireMembership();
     expect(result).not.toBeInstanceOf(NextResponse);
-    const membership = result as { restaurantId: string; role: string };
-    expect(membership.restaurantId).toBe("r1");
-    expect(membership.role).toBe("manager");
+    expect((result as { restaurantId: string }).restaurantId).toBe("r1");
+  });
+
+  it("falls back to most-recently-joined when no cookie is present (multi-restaurant user)", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    // The supabase query is ordered created_at DESC, id DESC — the mock
+    // returns already in that order.
+    withMemberships([
+      { restaurant_id: "r-newest", role: "manager" },
+      { restaurant_id: "r-older", role: "owner" },
+    ]);
+    const result = await requireMembership();
+    expect((result as { restaurantId: string }).restaurantId).toBe("r-newest");
+  });
+
+  it("honours the active_restaurant_id cookie when it points to a real membership", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    withMemberships([
+      { restaurant_id: "r-newest", role: "manager" },
+      { restaurant_id: "r-older", role: "owner" },
+    ]);
+    mockCookieGet.mockReturnValue({
+      value: signActiveRestaurantCookie("r-older"),
+    });
+    const result = await requireMembership();
+    expect((result as { restaurantId: string }).restaurantId).toBe("r-older");
+    expect((result as { role: string }).role).toBe("owner");
+  });
+
+  it("ignores a cookie for a restaurant the user no longer belongs to", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    withMemberships([
+      { restaurant_id: "r-newest", role: "manager" },
+      { restaurant_id: "r-older", role: "owner" },
+    ]);
+    mockCookieGet.mockReturnValue({
+      value: signActiveRestaurantCookie("r-removed"),
+    });
+    const result = await requireMembership();
+    // Falls back to the first ordered membership, never r-removed.
+    expect((result as { restaurantId: string }).restaurantId).toBe("r-newest");
+  });
+
+  it("ignores a cookie whose signature does not verify", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    withMemberships([
+      { restaurant_id: "r-newest", role: "manager" },
+      { restaurant_id: "r-older", role: "owner" },
+    ]);
+    // A hand-crafted cookie with a wrong MAC.
+    mockCookieGet.mockReturnValue({ value: "r-older.not-a-real-signature" });
+    const result = await requireMembership();
+    expect((result as { restaurantId: string }).restaurantId).toBe("r-newest");
   });
 });
 
 describe("requireOwner", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCookieGet.mockReturnValue(undefined);
+  });
 
   it("returns 403 for non-owner role", async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: "u1" } },
-    });
-    mockSingle.mockResolvedValue({
-      data: { restaurant_id: "r1", role: "staff" },
-    });
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    withMemberships([{ restaurant_id: "r1", role: "staff" }]);
     const result = await requireOwner();
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(403);
   });
 
   it("returns membership for owner", async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: "u1" } },
-    });
-    mockSingle.mockResolvedValue({
-      data: { restaurant_id: "r1", role: "owner" },
-    });
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    withMemberships([{ restaurant_id: "r1", role: "owner" }]);
     const result = await requireOwner();
     expect(result).not.toBeInstanceOf(NextResponse);
     expect((result as { role: string }).role).toBe("owner");

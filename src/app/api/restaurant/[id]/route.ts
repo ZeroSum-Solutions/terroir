@@ -1,9 +1,31 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireOwner } from "@/lib/api/auth";
+import { requireAuth, requireOwner } from "@/lib/api/auth";
+import { setActiveRestaurant } from "@/lib/api/active-restaurant";
 
 export const runtime = "nodejs";
 
 type Params = Promise<{ id: string }>;
+
+/**
+ * PUT /api/restaurant/[id] — switch the caller's active restaurant to :id.
+ * The membership check happens inside setActiveRestaurant; users who aren't
+ * members of :id get a 403 and no cookie change.
+ */
+export async function PUT(
+  _request: NextRequest,
+  { params }: { params: Params },
+) {
+  const { id } = await params;
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, user } = auth;
+
+  const result = await setActiveRestaurant(supabase, user.id, id);
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: 403 });
+  }
+  return NextResponse.json({ ok: true, restaurantId: id });
+}
 
 export async function PATCH(
   request: NextRequest,
