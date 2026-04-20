@@ -11,6 +11,7 @@
  * decision this file owns — everything else is request lifecycle.
  */
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { getAnthropicClient } from "@/lib/ai/anthropic-client";
 import { requireMembership } from "@/lib/api/auth";
 import { AiExtractError, extractFromOcr } from "@/lib/scanner/ai-extract";
@@ -59,7 +60,17 @@ export async function POST(request: NextRequest) {
   let ocr;
   try { ocr = await extractOcr(fileBuffer, file.type); }
   catch (e) {
-    if (e instanceof OcrError) return json({ error: e.message }, OCR_STATUS[e.code]);
+    if (e instanceof OcrError) {
+      // BND-032 smoke: capture upstream Azure failures (not user-facing
+      // misconfig) so they land in Sentry Issues with request context.
+      if (e.code === "upstream_error") {
+        Sentry.captureException(e, {
+          tags: { stage: "ocr", code: e.code },
+          extra: { fileType: file.type, fileSize: file.size },
+        });
+      }
+      return json({ error: e.message }, OCR_STATUS[e.code]);
+    }
     throw e;
   }
 
@@ -68,6 +79,15 @@ export async function POST(request: NextRequest) {
   try { parsed = await extractFromOcr(ocr); }
   catch (e) {
     if (e instanceof AiExtractError) {
+      // Same pattern: only capture failures that indicate an external
+      // problem worth paging on (upstream / parse_failed). Skip rate
+      // limits and bad_input — those are expected operational signals.
+      if (e.code === "upstream_error" || e.code === "parse_failed") {
+        Sentry.captureException(e, {
+          tags: { stage: "ai-extract", code: e.code },
+          extra: { rawTextLen: ocr.rawText.length },
+        });
+      }
       const body: { error: string; rawText?: string } = { error: e.message };
       // Surface rawText for every failure except "not configured" so the UI
       // can offer manual entry on the OCR output we already paid for.

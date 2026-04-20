@@ -10,10 +10,11 @@ export const config = {
     /*
      * Match all paths except:
      * - api routes (own auth)
+     * - monitoring (BND-032: Sentry tunnelRoute — bypass Supabase session refresh)
      * - _next/static, _next/image (build output)
      * - favicon, manifest, robots, sitemap
      * - static files with extensions
      */
-    "/((?!api|_next/static|_next/image|favicon.ico|manifest.json|robots.txt|sitemap.xml|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js|woff2?)$).*)",
+    "/((?!api|monitoring|_next/static|_next/image|favicon.ico|manifest.json|robots.txt|sitemap.xml|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js|woff2?)$).*)",
   ],
 };
