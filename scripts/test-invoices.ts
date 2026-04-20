@@ -4,14 +4,26 @@
  *
  * Usage:
  *   cd terroir
- *   npx tsx scripts/test-invoices.ts
+ *   npx tsx scripts/test-invoices.ts                 # default: claude-opus-4-7
+ *   npx tsx scripts/test-invoices.ts --model sonnet  # claude-sonnet-4-6
  *
- * Requires ANTHROPIC_API_KEY in .env.local
+ * Output filename mirrors the model:
+ *   opus    → test-results.json
+ *   sonnet  → test-results-sonnet.json
+ *
+ * Requires ANTHROPIC_API_KEY in .env.local.
+ *
+ * BND-027: consolidated from test-invoices.ts + test-invoices-sonnet.ts.
+ * SYSTEM_PROMPT now imported from src/lib/scanner/system-prompt.ts so the
+ * harness measures the same prompt prod uses (resolves DEBT-010).
  */
 
 import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync, readdirSync, writeFileSync, existsSync } from "fs";
 import { join, basename, extname } from "path";
+// scripts/ is excluded from tsconfig, so use the runtime-correct .ts
+// extension here (required by `node --experimental-strip-types` ESM).
+import { SYSTEM_PROMPT } from "../src/lib/scanner/system-prompt.ts";
 
 // Load .env.local manually (no dotenv dependency)
 const envPath = join(__dirname, "..", ".env.local");
@@ -30,25 +42,22 @@ if (existsSync(envPath)) {
   }
 }
 
-const SYSTEM_PROMPT = `You are an expert at parsing wine invoices from US and European distributors. Wine directors photograph these invoices with their phones and expect every bottle captured correctly.
-
-Parsing guidelines:
-- Skip non-wine lines: shipping, tax, subtotals, totals, gift cards, delivery fees.
-- For non-vintage wines (most Champagnes marked "NV"), set vintage to null.
-- Preserve accents and diacritics in producer names (Château, Müller, d'Oliveira).
-- Common French/Italian/German producer names use European comma decimals (e.g., "445,00") — convert to US decimal.
-- When OCR leaves a digit ambiguous, make your best guess but set confidence <0.75 and list that field in lowFields.
-- Handwritten annotations often correct or clarify the printed line — trust handwriting when it's legible and clearly meant as a correction.
-- "Varietal" means the grape, not the country. Infer it from the wine name + region if not explicitly printed (e.g., a wine from Pauillac is Cabernet Sauvignon-based / "Bordeaux Blend").
-- "Region" is the wine region, not the country or continent (Burgundy, not France; Piedmont, not Italy).
-
-Confidence scoring:
-- 0.95-1.0: clean typed print, all fields unambiguous
-- 0.75-0.94: slight ambiguity but reasonable to proceed without review
-- 0.50-0.74: needs human review; list ambiguous fields in lowFields
-- Below 0.50: guessed significant fields
-
-Return every wine line on the invoice, in the order it appears.`;
+// ── Model selection (--model opus|sonnet, default opus) ─────────────────
+const MODELS: Record<string, string> = {
+  opus: "claude-opus-4-7",
+  sonnet: "claude-sonnet-4-6",
+};
+const args = process.argv.slice(2);
+const modelFlagIdx = args.indexOf("--model");
+const MODEL_NAME = modelFlagIdx >= 0 ? args[modelFlagIdx + 1] : "opus";
+const MODEL_ID = MODELS[MODEL_NAME];
+if (!MODEL_ID) {
+  console.error(
+    `Unknown model '${MODEL_NAME}'. Valid: ${Object.keys(MODELS).join(", ")}`,
+  );
+  process.exit(1);
+}
+const OUT_FILENAME = MODEL_NAME === "opus" ? "test-results.json" : `test-results-${MODEL_NAME}.json`;
 
 const SCHEMA = {
   type: "object" as const,
@@ -120,7 +129,7 @@ async function testInvoice(
 
   try {
     const response = await client.messages.create({
-      model: "claude-opus-4-7",
+      model: MODEL_ID,
       max_tokens: 16000,
       system: SYSTEM_PROMPT,
       messages: [
@@ -205,6 +214,7 @@ async function main() {
     .sort();
 
   console.log(`\n🍷 Terroir Invoice Scanner — Batch Test`);
+  console.log(`   Model: ${MODEL_ID} (${MODEL_NAME})`);
   console.log(`   ${files.length} invoices to process\n`);
 
   const client = new Anthropic({ apiKey });
@@ -293,8 +303,15 @@ async function main() {
   console.log("═".repeat(120));
 
   // Write detailed results to JSON
-  const outPath = join(invoiceDir, "..", "test-results.json");
-  writeFileSync(outPath, JSON.stringify({ testedAt: new Date().toISOString(), results }, null, 2));
+  const outPath = join(invoiceDir, "..", OUT_FILENAME);
+  writeFileSync(
+    outPath,
+    JSON.stringify(
+      { testedAt: new Date().toISOString(), model: MODEL_ID, results },
+      null,
+      2,
+    ),
+  );
   console.log(`\nDetailed results saved to: ${outPath}\n`);
 }
 
