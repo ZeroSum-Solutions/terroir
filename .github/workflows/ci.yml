@@ -1,0 +1,64 @@
+# BND-012 / INT-003
+#
+# Minimum-viable CI for Terroir. Gates every PR on four checks:
+#   1. typecheck    (tsc --noEmit)
+#   2. lint         (next lint / eslint)
+#   3. unit tests   (vitest run)
+#   4. schema drift (supabase/schema.snapshot.sql must equal a fresh
+#                    concatenation of supabase/migrations/*.sql)
+#
+# The schema-drift step turns "someone added a migration but forgot to
+# update the snapshot" into a hard failure. To regenerate the snapshot
+# locally: `pnpm run snapshot` (defined in package.json) then commit the
+# regenerated file.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck / Lint / Test / Schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Test
+        run: pnpm run test
+
+      - name: Schema drift check
+        # Regenerate the snapshot and diff against the committed one.
+        # Any change means a migration was added without running
+        # `pnpm run snapshot` locally — fail loudly.
+        run: pnpm run snapshot:check

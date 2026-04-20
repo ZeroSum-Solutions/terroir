@@ -9,7 +9,9 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "snapshot": "node scripts/build-schema-snapshot.mjs",
+    "snapshot:check": "node scripts/build-schema-snapshot.mjs && git diff --exit-code supabase/schema.snapshot.sql"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
