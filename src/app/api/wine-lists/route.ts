@@ -59,8 +59,14 @@ export async function POST(request: NextRequest) {
 
   if (sectionsError) {
     console.error("wine_list_sections insert failed:", sectionsError);
-    // Clean up the list
-    await supabase.from("wine_lists").delete().eq("id", list.id);
+    // Clean up the list. BND-008: scope the cleanup by restaurant_id too —
+    // if RLS is ever misconfigured on wine_lists this defense-in-depth filter
+    // still prevents a cross-tenant delete.
+    await supabase
+      .from("wine_lists")
+      .delete()
+      .eq("id", list.id)
+      .eq("restaurant_id", restaurantId);
     return NextResponse.json(
       { error: "Failed to create sections." },
       { status: 500 },
