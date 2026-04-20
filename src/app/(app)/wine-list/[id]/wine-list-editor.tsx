@@ -117,6 +117,31 @@ export function WineListEditor({
     [activeSection, router],
   );
 
+  // BND-025: wire 'Add section' button. window.prompt() is the minimal
+  // viable UX; an inline-rename input is a polish follow-up.
+  const addSection = useCallback(async () => {
+    const raw = window.prompt("New section name");
+    if (raw === null) return;
+    const name = raw.trim();
+    if (!name) return;
+
+    const res = await fetch("/api/wine-list-sections", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wine_list_id: list.id, name }),
+    });
+
+    if (!res.ok) {
+      const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+      window.alert(payload?.error ?? `Failed to add section (${res.status}).`);
+      return;
+    }
+
+    const created = (await res.json()) as { id: string };
+    setActiveSection(created.id);
+    startTransition(() => router.refresh());
+  }, [list.id, router]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
@@ -348,6 +373,7 @@ export function WineListEditor({
             ))}
             <button
               type="button"
+              onClick={addSection}
               className="flex items-center gap-xs px-sm py-xs text-[13px] text-ink-subtle hover:text-ink"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2} />
