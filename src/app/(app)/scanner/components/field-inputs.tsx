@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, Minus, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 export function formatMoney(n: number) {
@@ -58,7 +58,11 @@ export function TextInput({
   label,
 }: TextInputProps & { label?: string }) {
   const [val, setVal] = useState(value);
-  useEffect(() => setVal(value), [value]);
+  const [prevProp, setPrevProp] = useState(value);
+  if (value !== prevProp) {
+    setPrevProp(value);
+    setVal(value);
+  }
   return (
     <FieldWrap low={low} edited={edited}>
       <input
@@ -89,7 +93,11 @@ export function VintageInput({
   onCommit,
 }: VintageInputProps) {
   const [val, setVal] = useState(value === null ? "NV" : String(value));
-  useEffect(() => setVal(value === null ? "NV" : String(value)), [value]);
+  const [prevProp, setPrevProp] = useState(value);
+  if (value !== prevProp) {
+    setPrevProp(value);
+    setVal(value === null ? "NV" : String(value));
+  }
   const commit = () => {
     const trimmed = val.trim().toUpperCase();
     if (!trimmed || trimmed === "NV") return onCommit(null);
@@ -125,7 +133,11 @@ export function MoneyInput({
   onCommit,
 }: MoneyInputProps) {
   const [val, setVal] = useState(value.toFixed(2));
-  useEffect(() => setVal(value.toFixed(2)), [value]);
+  const [prevProp, setPrevProp] = useState(value);
+  if (value !== prevProp) {
+    setPrevProp(value);
+    setVal(value.toFixed(2));
+  }
   const commit = () => {
     const n = parseFloat(val.replace(/,/g, ""));
     if (!Number.isFinite(n)) return;

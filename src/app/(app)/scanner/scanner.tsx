@@ -1,7 +1,7 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
 import { useRestaurant } from "@/lib/context/restaurant";
 import type {
@@ -89,7 +89,13 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     itemCount: number;
     wineCount: number;
   } | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+  // SSR-safe hydration flag: returns false during SSR, true after mount.
+  // Avoids the setState-in-effect pattern for a one-shot client-only boolean.
+  const hydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rawText, setRawText] = useState<string | null>(null);
@@ -99,12 +105,13 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    setHydrated(true);
-    const saved = loadScan();
-    if (saved) {
-      setScan(saved);
-      setStatus("results");
-    }
+    queueMicrotask(() => {
+      const saved = loadScan();
+      if (saved) {
+        setScan(saved);
+        setStatus("results");
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -114,11 +121,11 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   }, [toast]);
 
   /* Progress animation — advances independent of fetch, clamps at 90% until
-     the response arrives, then jumps to 100%. */
+     the response arrives, then jumps to 100%. Reset to 0 happens in startScan
+     (when status transitions to "processing") so this effect has no
+     synchronous setState on entry. */
   useEffect(() => {
     if (status !== "processing") return;
-    setProgress(0);
-    setStepIndex(0);
     const start = performance.now();
     const SOFT_DURATION = 18000;
     const id = window.setInterval(() => {
@@ -139,6 +146,8 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     abortRef.current = ac;
 
     setLastFile(file);
+    setProgress(0);
+    setStepIndex(0);
     setStatus("processing");
     setError(null);
 

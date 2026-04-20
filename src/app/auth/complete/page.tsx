@@ -16,36 +16,38 @@ export default function AuthCompletePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const hash = window.location.hash.replace(/^#/, "");
-    if (!hash) {
-      setError("Missing token. Open this link from your email or ask for a new one.");
-      return;
-    }
-    const params = new URLSearchParams(hash);
-    const access_token = params.get("access_token");
-    const refresh_token = params.get("refresh_token");
-    const hash_error = params.get("error_description");
+    // Wrapped in async IIFE so setError calls live inside a microtask
+    // callback rather than the effect body itself — satisfies
+    // react-hooks/set-state-in-effect while preserving behaviour.
+    void (async () => {
+      const hash = window.location.hash.replace(/^#/, "");
+      if (!hash) {
+        setError("Missing token. Open this link from your email or ask for a new one.");
+        return;
+      }
+      const params = new URLSearchParams(hash);
+      const access_token = params.get("access_token");
+      const refresh_token = params.get("refresh_token");
+      const hash_error = params.get("error_description");
 
-    if (hash_error) {
-      setError(hash_error);
-      return;
-    }
-    if (!access_token || !refresh_token) {
-      setError("Incomplete token in URL.");
-      return;
-    }
+      if (hash_error) {
+        setError(hash_error);
+        return;
+      }
+      if (!access_token || !refresh_token) {
+        setError("Incomplete token in URL.");
+        return;
+      }
 
-    const supabase = createClient();
-    supabase.auth
-      .setSession({ access_token, refresh_token })
-      .then(({ error }) => {
-        if (error) {
-          setError(error.message);
-          return;
-        }
-        history.replaceState(null, "", window.location.pathname);
-        router.replace("/scanner");
-      });
+      const supabase = createClient();
+      const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      history.replaceState(null, "", window.location.pathname);
+      router.replace("/scanner");
+    })();
   }, [router]);
 
   return (

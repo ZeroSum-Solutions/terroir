@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { LineItem } from "@/lib/scanner/types";
@@ -116,11 +117,14 @@ export function ScanDetailView({
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
               </div>
             ) : imageUrl ? (
-              <img
+              <Image
                 src={imageUrl}
                 alt={`Invoice from ${distributor}`}
+                width={0}
+                height={0}
+                unoptimized
                 className="max-h-[60vh] w-full rounded object-contain md:max-h-[70vh]"
-                style={{ touchAction: "pinch-zoom" }}
+                style={{ width: "100%", height: "auto", touchAction: "pinch-zoom" }}
               />
             ) : (
               <div className="flex h-[200px] items-center justify-center rounded bg-surface-muted text-[13px] text-ink-muted">
