@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { z } from "zod/v4";
+import { z } from "zod";
 import { requireOwner } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
