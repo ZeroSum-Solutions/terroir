@@ -265,6 +265,19 @@ async function saveScanOnce(opts: {
       else if (data) console.log(`LWIN matched ${data.length} of ${wineIdStrings.length} wines`);
     });
 
+  /**
+   * Response count semantics (DEBT-004 / BND-028):
+   * - `itemCount` = number of inventory rows inserted, which equals the
+   *   number of line items on the invoice (scan.items.length). One line
+   *   item → one inventory_items row, regardless of qty.
+   * - `wineCount` = number of DISTINCT wines referenced by those rows,
+   *   i.e. the cardinality of the set of wine_ids returned by
+   *   find_or_create_wines_batch. This count does NOT distinguish
+   *   newly-created wines from wines already in the catalog — it's
+   *   "how many unique SKUs are on this invoice", not "how many new
+   *   wines were added". The UI copy in ready-view.tsx is phrased
+   *   accordingly ("N items to inventory (M distinct wines)").
+   */
   return {
     status: 200,
     body: {

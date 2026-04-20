@@ -127,7 +127,7 @@ export function ReadyView({
           <div className="flex items-center gap-sm">
             <Check className="h-4 w-4 text-success" strokeWidth={2.5} aria-hidden="true" />
             <span className="text-[14px] text-ink">
-              Saved {savedResult.itemCount} items ({savedResult.wineCount} wines) to inventory
+              Saved {savedResult.itemCount} {savedResult.itemCount === 1 ? "item" : "items"} to inventory ({savedResult.wineCount} distinct {savedResult.wineCount === 1 ? "wine" : "wines"})
             </span>
           </div>
           <div className="flex items-center gap-sm">
