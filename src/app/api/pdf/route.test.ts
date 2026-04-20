@@ -45,8 +45,9 @@ function buildSupabaseStub() {
 
 // Puppeteer would otherwise try to launch a real browser in the test runner.
 const mockPdf = vi.fn();
+const mockSetContent = vi.fn(async () => undefined);
 const mockNewPage = vi.fn(async () => ({
-  setContent: vi.fn(async () => undefined),
+  setContent: mockSetContent,
   pdf: mockPdf,
 }));
 const mockClose = vi.fn(async () => undefined);
@@ -130,6 +131,67 @@ describe("POST /api/pdf restaurant scoping", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("application/pdf");
     expect(mockEq).toHaveBeenCalledWith("restaurant_id", "restaurant-A");
+  });
+
+  it("calls puppeteer with domcontentloaded + explicit timeouts (BND-004)", async () => {
+    mockRequireMembership.mockResolvedValue({
+      supabase: buildSupabaseStub(),
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+    mockSingle.mockResolvedValue({
+      data: {
+        name: "House List",
+        template: "classic",
+        restaurant_id: "restaurant-A",
+        restaurants: { name: "Le Test" },
+        wine_list_sections: [],
+      },
+      error: null,
+    });
+
+    await POST(makeRequest({ listId: "list-a" }));
+
+    // setContent must wait on 'domcontentloaded' (not networkidle0) with a
+    // bounded timeout — otherwise a network stall wedges the worker.
+    expect(mockSetContent).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        waitUntil: "domcontentloaded",
+        timeout: 20_000,
+      }),
+    );
+    expect(mockPdf).toHaveBeenCalledWith(
+      expect.objectContaining({ timeout: 30_000 }),
+    );
+  });
+
+  it("renders without ever reaching out to Google Fonts (BND-004)", async () => {
+    mockRequireMembership.mockResolvedValue({
+      supabase: buildSupabaseStub(),
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+    mockSingle.mockResolvedValue({
+      data: {
+        name: "House List",
+        template: "classic",
+        restaurant_id: "restaurant-A",
+        restaurants: { name: "Le Test" },
+        wine_list_sections: [],
+      },
+      error: null,
+    });
+
+    await POST(makeRequest({ listId: "list-a" }));
+
+    const call = mockSetContent.mock.calls[0] as unknown as [string, unknown];
+    const html = call[0];
+    expect(typeof html).toBe("string");
+    expect(html).not.toContain("fonts.googleapis.com");
+    expect(html).not.toContain("fonts.gstatic.com");
   });
 
   it("propagates the 403 from requireMembership when the user has no memberships", async () => {

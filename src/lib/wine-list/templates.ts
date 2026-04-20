@@ -78,17 +78,19 @@ function renderItem(item: ItemData, template: "classic" | "modern" | "minimal"):
     </div>`;
 }
 
+// Font policy (BND-004): PDF templates MUST NOT reach out to any remote
+// font CDN. An external font fetch inside puppeteer's networkidle0 wait
+// could wedge a worker indefinitely. We use system font stacks so
+// rendering is deterministic and offline.
+
 export function renderClassic(data: ListData): string {
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
 <style>
   @page { margin: 1.25in; size: letter; }
-  body { font-family: 'Cormorant Garamond', Georgia, serif; color: #1A1A1A; background: #F9F6F0; margin: 0; padding: 40px; line-height: 1.5; }
+  body { font-family: Georgia, 'Times New Roman', Cambria, serif; color: #1A1A1A; background: #F9F6F0; margin: 0; padding: 40px; line-height: 1.5; }
   h1 { font-size: 28pt; font-weight: 500; margin: 0 0 4px; }
   .restaurant { font-size: 11pt; color: #6B6B6B; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 32px; }
   .section-title { font-size: 24pt; font-weight: 500; margin: 32px 0 16px; padding-bottom: 8px; border-bottom: 1px solid #E5E2DB; }
@@ -119,12 +121,9 @@ export function renderModern(data: ListData): string {
 <html>
 <head>
 <meta charset="utf-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   @page { margin: 0.75in; size: letter; }
-  body { font-family: 'Inter', system-ui, sans-serif; color: #1A1A1A; background: #fff; margin: 0; padding: 32px; line-height: 1.4; }
+  body { font-family: system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; color: #1A1A1A; background: #fff; margin: 0; padding: 32px; line-height: 1.4; }
   h1 { font-size: 20pt; font-weight: 700; margin: 0 0 4px; }
   .restaurant { font-size: 9pt; color: #6B6B6B; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; margin-bottom: 24px; }
   .section-title { font-size: 12pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin: 28px 0 12px; color: #1A1A1A; }
@@ -153,12 +152,9 @@ export function renderMinimal(data: ListData): string {
 <html>
 <head>
 <meta charset="utf-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500&display=swap" rel="stylesheet">
 <style>
   @page { margin: 1.25in; size: letter; }
-  body { font-family: 'Cormorant Garamond', Georgia, serif; color: #1A1A1A; background: #FAFAF8; margin: 0; padding: 48px; line-height: 1.6; }
+  body { font-family: Georgia, 'Times New Roman', Cambria, serif; color: #1A1A1A; background: #FAFAF8; margin: 0; padding: 48px; line-height: 1.6; }
   h1 { font-size: 24pt; font-weight: 400; margin: 0 0 48px; text-align: center; }
   .section-spacer { height: 32px; }
   .wine-item { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; font-size: 11pt; }

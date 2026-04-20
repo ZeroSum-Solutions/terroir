@@ -76,7 +76,14 @@ export async function POST(request: NextRequest) {
     sections,
   });
 
-  // Render PDF with Puppeteer
+  // Render PDF with Puppeteer.
+  //
+  // BND-004: waitUntil was previously 'networkidle0' with no timeout, which
+  // waited indefinitely for external font fetches. Combined with templates
+  // that have since been switched to system font stacks (no external
+  // requests), 'domcontentloaded' is correct here — the HTML is passed via
+  // setContent so there is nothing to network-idle on — and the explicit
+  // timeouts bound the worst case.
   let browser;
   try {
     browser = await puppeteer.launch({
@@ -84,10 +91,14 @@ export async function POST(request: NextRequest) {
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.setContent(html, {
+      waitUntil: "domcontentloaded",
+      timeout: 20_000,
+    });
     const pdf = await page.pdf({
       format: "Letter",
       printBackground: true,
+      timeout: 30_000,
     });
 
     return new NextResponse(Buffer.from(pdf), {
