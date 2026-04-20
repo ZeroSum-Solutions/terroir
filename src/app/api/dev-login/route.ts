@@ -5,13 +5,20 @@ import { NextResponse, type NextRequest } from "next/server";
  * service-role admin API and redirects the browser to it, completing
  * sign-in without the email round trip.
  *
- * Gated by NEXT_PUBLIC_DEV_BYPASS_EMAIL — absent = endpoint returns 404.
- * Prod deployments never set this env var.
+ * Gated by DEV_BYPASS_EMAIL (server-only) — absent = endpoint returns 404.
+ * Also hard-gated off in production regardless of env vars. Never use the
+ * NEXT_PUBLIC_ prefix for this variable: Next.js inlines NEXT_PUBLIC_* into
+ * the client bundle, which would leak a valid login target to any browser.
  */
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
-  const email = process.env.NEXT_PUBLIC_DEV_BYPASS_EMAIL;
+  // Hard gate: this endpoint must never exist in production, even by mistake.
+  if (process.env.NODE_ENV === "production") {
+    return new NextResponse("Not found", { status: 404 });
+  }
+
+  const email = process.env.DEV_BYPASS_EMAIL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 

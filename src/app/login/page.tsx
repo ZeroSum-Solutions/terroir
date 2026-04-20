@@ -38,7 +38,14 @@ export default async function LoginPage({
   searchParams: SearchParams;
 }) {
   const { sent, error, next } = await searchParams;
-  const devBypassEmail = process.env.NEXT_PUBLIC_DEV_BYPASS_EMAIL;
+  // Server-only env var (no NEXT_PUBLIC_ prefix) — reading it here is fine
+  // because LoginPage is a Server Component and the value never reaches the
+  // client bundle. The value is only used to decide whether to render the
+  // dev-bypass button.
+  const devBypassEmail =
+    process.env.NODE_ENV !== "production"
+      ? process.env.DEV_BYPASS_EMAIL
+      : undefined;
 
   return (
     <main className="flex min-h-screen items-center justify-center px-lg">
@@ -103,7 +110,7 @@ export default async function LoginPage({
               Sign in as {devBypassEmail}
             </a>
             <p className="mt-xs text-[11px] text-ink-subtle">
-              Skips email. Disabled in production (no NEXT_PUBLIC_DEV_BYPASS_EMAIL set).
+              Skips email. Disabled in production (no DEV_BYPASS_EMAIL set).
             </p>
           </div>
         )}
