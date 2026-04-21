@@ -14,8 +14,8 @@ const nextConfig: NextConfig = {
  *
  * `authToken` drives source-map uploads at build time — missing token
  * means no upload (build still succeeds). Add SENTRY_AUTH_TOKEN to
- * Vercel env + local .env.local when you want de-minified stack traces
- * in Sentry Issues.
+ * Railway service variables + local .env.local when you want
+ * de-minified stack traces in Sentry Issues.
  *
  * `tunnelRoute` creates a proxy API route at /monitoring so ad-blockers
  * and tracking-protection extensions can't silently drop Sentry events.

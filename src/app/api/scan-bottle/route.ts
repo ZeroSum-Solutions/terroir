@@ -39,8 +39,10 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   // BND-007: Anthropic client is a module-scoped singleton with
-  // maxRetries: 2 and timeout: 100_000 pinned, keeping total latency under
-  // Vercel's route budget (maxDuration = 60 for this route).
+  // maxRetries: 2 and timeout: 100_000 pinned, keeping total latency
+  // under the `maxDuration = 60` ceiling declared on this route. That
+  // 60s is the bound on a single bottle-label Claude call; Railway
+  // itself has no hard request timeout so the ceiling is ours to set.
   let anthropic: Anthropic;
   try {
     anthropic = getAnthropicClient();

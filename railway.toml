@@ -1,0 +1,18 @@
+# BND-035 — Railway service config.
+#
+# Railway reads this at deploy time. Build + start commands are picked
+# up from package.json scripts; we specify them explicitly here so the
+# intent is documented in-repo and doesn't depend on Railway's UI state.
+#
+# Healthcheck points at the no-auth /api/health endpoint so Railway
+# can distinguish "process is alive and serving" from "zombie".
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "pnpm start"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

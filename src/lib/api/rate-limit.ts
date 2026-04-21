@@ -7,12 +7,14 @@
  * `${ip}:${user.id}` is enough to turn a 1-qps brute-force into a 10-per-hour
  * trickle — more than generous for a real user.
  *
- * The state is kept in a module-scoped Map. On Vercel this is per-lambda,
- * which means a sufficiently determined attacker can still exceed the limit
- * by hitting cold regions. That's acceptable for the brute-force threat
- * (the attack surface is still ~10 * N-warm-lambdas, which is small for a
- * secret token) but is explicitly called out in the rollback notes as the
- * point where a Redis backend would be needed.
+ * The state is kept in a module-scoped Map. On Railway's single
+ * long-lived container this is per-process, which means the nominal
+ * limit IS the real limit — one counter, one bucket, every request
+ * shares it. If we ever horizontally scale (multiple Railway replicas,
+ * or move the service to a fleet of serverless functions elsewhere),
+ * the counter becomes per-instance and the effective ceiling multiplies
+ * by N. At that point move the buckets to Redis — this is the natural
+ * hook, called out in the rollback notes for the follow-up bundle.
  *
  * The counter is a fixed window, not a sliding window — once a bucket hits
  * its reset time it zeroes out wholesale. For invite brute-force this is

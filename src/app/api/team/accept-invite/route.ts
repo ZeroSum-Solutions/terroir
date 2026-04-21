@@ -10,9 +10,10 @@ const ACCEPT_INVITE_LIMIT = 10;
 const ACCEPT_INVITE_WINDOW_MS = 60 * 60 * 1000;
 
 /**
- * Best-effort client-IP extraction. Vercel sets `x-forwarded-for`; fallback to
- * `x-real-ip` for other reverse proxies. Only the leftmost IP in the list is
- * used. `unknown` is never a realistic value in production, but is a sane
+ * Best-effort client-IP extraction. Any fronting proxy (Railway's envoy,
+ * Cloudflare, nginx, etc.) sets `x-forwarded-for`; fallback to
+ * `x-real-ip` for others. Only the leftmost IP in the list is used.
+ * `unknown` is never a realistic value in production, but is a sane
  * fallback for local/test so the key is still stable.
  */
 function clientIp(request: NextRequest): string {

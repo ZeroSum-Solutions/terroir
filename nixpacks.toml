@@ -1,0 +1,48 @@
+# BND-035 — Nixpacks build config for Railway.
+#
+# Pins Node 20 + pnpm 9 so the runtime matches local dev. The aptPkgs
+# list below is the set of shared libraries Puppeteer's bundled Chromium
+# needs at runtime — Nixpacks' default Node provider doesn't include
+# them, and missing them fails at `puppeteer.launch()` time with cryptic
+# "error while loading shared libraries" messages.
+#
+# Chrome itself is downloaded by puppeteer's postinstall script during
+# `pnpm install`. That postinstall is allow-listed in the repo's
+# pnpm-workspace.yaml via `onlyBuiltDependencies: [puppeteer]`.
+
+providers = ["node"]
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "pnpm"]
+aptPkgs = [
+  "ca-certificates",
+  "fonts-liberation",
+  "libappindicator3-1",
+  "libasound2",
+  "libatk-bridge2.0-0",
+  "libatk1.0-0",
+  "libcups2",
+  "libdbus-1-3",
+  "libdrm2",
+  "libgbm1",
+  "libgtk-3-0",
+  "libnspr4",
+  "libnss3",
+  "libu2f-udev",
+  "libvulkan1",
+  "libxcomposite1",
+  "libxdamage1",
+  "libxfixes3",
+  "libxkbcommon0",
+  "libxrandr2",
+  "xdg-utils",
+]
+
+[phases.install]
+cmds = ["pnpm install --frozen-lockfile"]
+
+[phases.build]
+cmds = ["pnpm build"]
+
+[start]
+cmd = "pnpm start"
