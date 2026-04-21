@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireMembership } from "@/lib/api/auth";
 import {
@@ -166,6 +167,10 @@ async function saveScanOnce(opts: {
 
   if (scanInsertError || !invoiceScan) {
     console.error("invoice_scans insert failed:", scanInsertError);
+    Sentry.captureException(scanInsertError ?? new Error("invoiceScan null without error"), {
+      tags: { surface: "save-scan", phase: "invoice_scans-insert" },
+      extra: { restaurantId, itemCount: scan.items.length },
+    });
     return { status: 500, body: { error: "Failed to save invoice scan." } };
   }
 
@@ -187,6 +192,10 @@ async function saveScanOnce(opts: {
         });
       if (uploadError) {
         console.error("Invoice image upload failed:", uploadError);
+        Sentry.captureException(uploadError, {
+          tags: { surface: "save-scan", phase: "storage-upload" },
+          extra: { scanId, contentType: file.type },
+        });
       } else {
         await supabase
           .from("invoice_scans")
@@ -219,6 +228,10 @@ async function saveScanOnce(opts: {
 
   if (batchError || !wineIdArray) {
     console.error("find_or_create_wines_batch failed:", batchError);
+    Sentry.captureException(batchError ?? new Error("wineIdArray null without error"), {
+      tags: { surface: "save-scan", phase: "find_or_create_wines_batch" },
+      extra: { restaurantId, wineCount: winesPayload.length, scanId },
+    });
     await supabase.from("invoice_scans").delete().eq("id", scanId);
     return { status: 500, body: { error: "Failed to save wines." } };
   }
@@ -241,6 +254,10 @@ async function saveScanOnce(opts: {
 
   if (inventoryError) {
     console.error("inventory_items insert failed:", inventoryError);
+    Sentry.captureException(inventoryError, {
+      tags: { surface: "save-scan", phase: "inventory_items-insert" },
+      extra: { restaurantId, scanId, rowCount: inventoryInserts.length },
+    });
     // Roll back: delete the invoice_scans row so the user can retry
     await supabase.from("invoice_scans").delete().eq("id", scanId);
     return { status: 500, body: { error: "Failed to save inventory items." } };

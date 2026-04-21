@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireMembership } from "@/lib/api/auth";
 import {
@@ -108,6 +109,10 @@ async function saveBottleOnce(opts: {
 
   if (batchError || !wineIdArray || (wineIdArray as string[]).length === 0) {
     console.error("find_or_create_wines_batch failed:", batchError);
+    Sentry.captureException(batchError ?? new Error("wineIdArray empty without error"), {
+      tags: { surface: "save-bottle-scan", phase: "find_or_create_wines_batch" },
+      extra: { restaurantId },
+    });
     return { status: 500, body: { error: "Failed to save wine." } };
   }
 
@@ -127,6 +132,10 @@ async function saveBottleOnce(opts: {
 
   if (inventoryError) {
     console.error("inventory_items insert failed:", inventoryError);
+    Sentry.captureException(inventoryError, {
+      tags: { surface: "save-bottle-scan", phase: "inventory_items-insert" },
+      extra: { restaurantId, wineId },
+    });
     return {
       status: 500,
       body: { error: "Failed to save inventory item." },

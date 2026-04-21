@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
 import { DEFAULT_SECTIONS } from "@/lib/wine-list/types";
@@ -40,6 +41,10 @@ export async function POST(request: NextRequest) {
 
   if (listError || !list) {
     console.error("wine_lists insert failed:", listError);
+    Sentry.captureException(listError ?? new Error("list null without error"), {
+      tags: { surface: "wine-lists", phase: "wine_lists-insert" },
+      extra: { restaurantId },
+    });
     return NextResponse.json(
       { error: "Failed to create wine list." },
       { status: 500 },
@@ -59,6 +64,10 @@ export async function POST(request: NextRequest) {
 
   if (sectionsError) {
     console.error("wine_list_sections insert failed:", sectionsError);
+    Sentry.captureException(sectionsError, {
+      tags: { surface: "wine-lists", phase: "wine_list_sections-insert" },
+      extra: { restaurantId, wineListId: list.id, sectionCount: DEFAULT_SECTIONS.length },
+    });
     // Clean up the list. BND-008: scope the cleanup by restaurant_id too —
     // if RLS is ever misconfigured on wine_lists this defense-in-depth filter
     // still prevents a cross-tenant delete.

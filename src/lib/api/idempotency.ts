@@ -37,6 +37,7 @@
  * the cast becomes a no-op.
  */
 
+import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/types/database";
 
@@ -133,6 +134,10 @@ export async function withIdempotency<T>(opts: {
       // Any other error: log and fall through to handler without caching,
       // so the endpoint doesn't become unavailable if idempotency is broken.
       console.error("scan_idempotency claim failed:", insertError);
+      Sentry.captureException(insertError, {
+        tags: { surface: "idempotency", phase: "claim" },
+        extra: { code: (insertError as { code?: string }).code },
+      });
       const fresh = await handler();
       return { ...fresh, replayed: false };
     }
@@ -210,6 +215,9 @@ export async function withIdempotency<T>(opts: {
   if (updateError) {
     // Non-fatal: the response is still correct, just won't be replayed.
     console.error("scan_idempotency cache update failed:", updateError);
+    Sentry.captureException(updateError, {
+      tags: { surface: "idempotency", phase: "cache-update" },
+    });
   }
 
   return { ...result, replayed: false };

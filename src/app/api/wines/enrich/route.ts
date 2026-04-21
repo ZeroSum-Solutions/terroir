@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 import { enrichWine } from "@/lib/wine-intelligence/enrich";
 
@@ -60,6 +61,10 @@ export async function POST() {
     );
     if (rpcError) {
       console.error("enrich_wines_batch failed:", rpcError);
+      Sentry.captureException(rpcError, {
+        tags: { surface: "wines-enrich", phase: "enrich_wines_batch-rpc" },
+        extra: { restaurantId, payloadSize: payload.length },
+      });
       return NextResponse.json(
         { error: "Failed to enrich wines." },
         { status: 500 },

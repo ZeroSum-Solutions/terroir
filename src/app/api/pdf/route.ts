@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import puppeteer from "puppeteer";
 import { requireMembership } from "@/lib/api/auth";
 import { renderTemplate } from "@/lib/wine-list/templates";
@@ -109,6 +110,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     console.error("PDF generation failed:", err);
+    Sentry.captureException(err, {
+      tags: { surface: "pdf", phase: "puppeteer-render" },
+    });
     return NextResponse.json(
       { error: "PDF generation failed." },
       { status: 500 },
