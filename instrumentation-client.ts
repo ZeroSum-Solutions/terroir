@@ -19,11 +19,16 @@ Sentry.init({
   tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
 
   // Session Replay — record sessions so we can see what users did
-  // right before an error. Sample rates per SKILL.md defaults.
+  // right before an error. 10% ambient + 100% on error is SKILL.md's
+  // recommended balance for a small-scale app. Tune DOWN toward
+  // ~0.01 ambient if the Sentry replay quota starts biting; tune UP
+  // only if sampled sessions aren't catching the errors you need to
+  // debug (unlikely — errorSampleRate is already 100%).
   replaysSessionSampleRate: 0.1,
   replaysOnErrorSampleRate: 1.0,
 
-  sendDefaultPii: true,
+  // See sentry.server.config.ts for the sendDefaultPii=false rationale.
+  sendDefaultPii: false,
   enableLogs: true,
 
   integrations: [Sentry.replayIntegration()],

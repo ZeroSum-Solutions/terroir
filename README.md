@@ -49,6 +49,8 @@ Before your first deploy, set these as Railway service variables:
 
 See `.env.example` for the full list with notes.
 
+**No staging environment yet** — every push to `main` auto-deploys directly to production. For a prototype this is fine; the moment you have paying customers, add a `staging` branch + a second Railway service (same Nixpacks config, different Supabase project or schema). 10-minute setup in Railway's UI: new service from GitHub, track the `staging` branch, duplicate the env vars pointing at a staging Supabase project.
+
 ## Repo layout
 
 - `src/app/` — App Router routes. `src/app/(app)/` is the authed shell; `src/app/api/` is the JSON API.

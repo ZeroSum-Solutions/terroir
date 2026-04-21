@@ -22,6 +22,14 @@
 # the new score dropped by more than 0.02 — a cheap regression gate
 # that you can opt into by committing a known-good baseline.
 #
+# To establish the baseline for the first time:
+#   1. Add the 3 required secrets under Settings → Secrets → Actions.
+#   2. Trigger this workflow manually (Actions tab → "Run workflow").
+#   3. Download the `scoring-opus-<sha>` artifact.
+#   4. Rename the JSON inside to test-results-baseline.json, commit to
+#      the repo root.
+#   5. Every subsequent manual run now compares against it.
+#
 # Security note: the `model` input is constrained to opus|sonnet via
 # the choice type, so injection is structurally impossible — but we
 # still pass it to run: via env: to model the safe pattern.

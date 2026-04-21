@@ -119,6 +119,10 @@ export function WineListEditor({
 
   // BND-025: wire 'Add section' button. window.prompt() is the minimal
   // viable UX; an inline-rename input is a polish follow-up.
+  // TODO (wine-list-editor UX polish): replace with an inline text
+  // input that takes the spot of the 'Add section' button — commits
+  // on Enter / blur, Esc cancels. Matches DESIGN.md 'no browser
+  // chrome in app UI' intent. ~50 LOC, deferred out of BND-025.
   const addSection = useCallback(async () => {
     const raw = window.prompt("New section name");
     if (raw === null) return;
