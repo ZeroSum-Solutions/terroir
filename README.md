@@ -38,7 +38,7 @@ pnpm run snapshot        # regenerate supabase/schema.snapshot.sql after a new m
 
 ## Deploy
 
-The target is [Railway](https://railway.app/). `railway.toml` + `nixpacks.toml` at the repo root describe the build (pnpm install → pnpm build → pnpm start) and the apt packages Puppeteer's bundled Chromium needs at runtime. Health check lives at `GET /api/health`.
+The target is [Railway](https://railway.app/). `railway.toml` at the repo root declares the start command and the healthcheck path; Railway's Railpack builder auto-detects Node, pnpm, and Puppeteer's Chromium deps. Health check lives at `GET /api/health`.
 
 Before your first deploy, set these as Railway service variables:
 
