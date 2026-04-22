@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Grid2x2, ListOrdered, ScanLine } from "lucide-react";
+import { BarChart3, Grid2x2, ListOrdered, PowerOff, ScanLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/scanner", label: "Scanner", Icon: ScanLine },
   { href: "/wine-list", label: "Wine Lists", Icon: ListOrdered },
+  { href: "/availability", label: "Availability", Icon: PowerOff },
   { href: "/dashboard", label: "Dashboard", Icon: BarChart3 },
   { href: "/cellar", label: "Cellar", Icon: Grid2x2 },
 ] as const;
