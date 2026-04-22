@@ -27,7 +27,7 @@ export default async function PublicWineListPage({
   const { data: list, error } = await supabase
     .from("wine_lists")
     .select(
-      "name, template, restaurant_id, restaurants(name), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, wines(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label)))",
+      "name, template, restaurant_id, restaurants(name), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, wines(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
     )
     .eq("slug", slug)
     .eq("is_published", true)
@@ -40,7 +40,7 @@ export default async function PublicWineListPage({
 
   // Sort sections and items by position
   const sections = (
-    (list.wine_list_sections ?? []) as Array<{
+    (list.wine_list_sections ?? []) as unknown as Array<{
       id: string;
       name: string;
       position: number;
@@ -59,6 +59,7 @@ export default async function PublicWineListPage({
           serving_temp_min: number | null;
           serving_temp_max: number | null;
           serving_temp_label: string | null;
+          is_eightysixed: boolean;
         } | null;
       }>;
     }>
@@ -85,7 +86,7 @@ export default async function PublicWineListPage({
           <div className="flex flex-col">
             {[...section.wine_list_items]
               .sort((a, b) => a.position - b.position)
-              .filter((item) => item.wines != null)
+              .filter((item) => item.wines != null && !item.wines.is_eightysixed)
               .map((item) => {
                 const wine = item.wines!;
                 return (
