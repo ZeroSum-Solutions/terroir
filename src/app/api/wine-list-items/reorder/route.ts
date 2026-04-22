@@ -27,13 +27,7 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  // Cast: the regenerated Database type doesn't yet include the new RPC
-  // (tracked under the BND-006 `supabase gen types` followup). The call
-  // shape is pinned by the migration and by the tests below.
-  const { error } = await (supabase.rpc as unknown as (
-    fn: string,
-    args: { p_ordered_ids: string[] },
-  ) => Promise<{ error: unknown }>)("reorder_wine_list_items", {
+  const { error } = await supabase.rpc("reorder_wine_list_items", {
     p_ordered_ids: body.orderedIds,
   });
 

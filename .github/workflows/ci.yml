@@ -1,16 +1,24 @@
 # BND-012 / INT-003
 #
-# Minimum-viable CI for Terroir. Gates every PR on four checks:
+# Minimum-viable CI for Terroir. Gates every PR on these checks:
 #   1. typecheck    (tsc --noEmit)
 #   2. lint         (next lint / eslint)
 #   3. unit tests   (vitest run)
 #   4. schema drift (supabase/schema.snapshot.sql must equal a fresh
 #                    concatenation of supabase/migrations/*.sql)
+#   5. types drift  (src/types/database.ts must equal the live schema's
+#                    current generated types) — skipped when
+#                    SUPABASE_ACCESS_TOKEN is not set (fork PRs etc.)
 #
 # The schema-drift step turns "someone added a migration but forgot to
 # update the snapshot" into a hard failure. To regenerate the snapshot
 # locally: `pnpm run snapshot` (defined in package.json) then commit the
 # regenerated file.
+#
+# Types-drift requires two repo secrets:
+#   SUPABASE_ACCESS_TOKEN  personal access token, scope `read:projects`
+#   SUPABASE_PROJECT_ID    project ref (~20-char id from project URL)
+# Regenerate locally with `pnpm run types:gen` and commit the diff.
 
 name: CI
 
@@ -29,6 +37,11 @@ jobs:
     name: Typecheck / Lint / Test / Schema
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # Surface secrets to env at job level so a later step's `if:` can
+      # test them. Empty string when the secret isn't configured.
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
 
     steps:
       - name: Checkout
@@ -62,3 +75,11 @@ jobs:
         # Any change means a migration was added without running
         # `pnpm run snapshot` locally — fail loudly.
         run: pnpm run snapshot:check
+
+      - name: Types drift check
+        # Regenerate database.ts from the live schema and fail if it
+        # differs from the committed file. Skipped silently when the
+        # secret isn't configured — the check still runs for members
+        # but doesn't block fork PRs that can't access secrets.
+        if: env.SUPABASE_ACCESS_TOKEN != ''
+        run: pnpm run types:check

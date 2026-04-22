@@ -29,12 +29,13 @@
  * UUID from another tenant cannot replay a response across the boundary.
  * RLS also enforces this server-side — belt and suspenders.
  *
- * NOTE ON TYPING: `scan_idempotency` is new in migration 0011 but the
- * generated `Database` type in src/types/database.ts was last regenerated
- * before that migration. We intentionally cast the query builder to
- * `unknown` at the boundary so this file compiles today; the next run of
- * `supabase gen types typescript` will fold the table into Database and
- * the cast becomes a no-op.
+ * NOTE ON TYPING: the `scan_idempotency` table is now in the generated
+ * Database type, so `from("scan_idempotency")` returns a fully typed
+ * builder. We still downcast the chain to the simplified
+ * `LooseQueryBuilder` shape below because Supabase's real
+ * `PostgrestQueryBuilder` is deeply generic and would bloat this file
+ * without adding meaningful safety — the call sites are all covered
+ * by tests in idempotency.test.ts.
  */
 
 import * as Sentry from "@sentry/nextjs";
@@ -75,10 +76,10 @@ type LooseQueryBuilder = {
 };
 
 function idempTable(supabase: SupabaseClient<Database>): LooseQueryBuilder {
-  // See NOTE ON TYPING above.
-  return (supabase as unknown as {
-    from: (t: string) => LooseQueryBuilder;
-  }).from("scan_idempotency");
+  // See NOTE ON TYPING above. Typed `from("scan_idempotency")` now
+  // resolves against the generated Database; only the chain shape is
+  // simplified via LooseQueryBuilder.
+  return supabase.from("scan_idempotency") as unknown as LooseQueryBuilder;
 }
 
 /**

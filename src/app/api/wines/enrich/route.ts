@@ -52,10 +52,7 @@ export async function POST() {
 
   let enriched = 0;
   if (payload.length > 0) {
-    const { data: count, error: rpcError } = await (supabase.rpc as unknown as (
-      fn: string,
-      args: { p_restaurant_id: string; p_enrichments: typeof payload },
-    ) => Promise<{ data: number | null; error: unknown }>)(
+    const { data: count, error: rpcError } = await supabase.rpc(
       "enrich_wines_batch",
       { p_restaurant_id: restaurantId, p_enrichments: payload },
     );

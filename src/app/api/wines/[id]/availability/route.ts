@@ -13,16 +13,6 @@ const BodySchema = z.object({
   note: z.string().trim().max(500).optional(),
 });
 
-type RpcEvent = {
-  id: string;
-  wine_id: string;
-  restaurant_id: string;
-  direction: "eightysixed" | "restored";
-  user_id: string | null;
-  note: string | null;
-  created_at: string;
-};
-
 /**
  * PATCH /api/wines/[id]/availability
  *
@@ -84,15 +74,16 @@ export async function PATCH(
     return NextResponse.json({ error: "Wine not found." }, { status: 404 });
   }
 
-  // The generated Database type doesn't yet include this RPC. Using
-  // the same explicit-cast pattern as BND-026 / BND-031. Drop when
-  // `supabase gen types` runs in CI (tracked carry-forward).
-  const { data: events, error: rpcError } = await (supabase.rpc as unknown as (
-    fn: string,
-    args: { p_wine_id: string; p_direction: string; p_note: string | null },
-  ) => Promise<{ data: RpcEvent[] | null; error: unknown }>)(
+  // The generator emits `p_note: string` (not `string | null`) because it
+  // doesn't translate SQL DEFAULT NULL into nullability. Runtime Postgres
+  // accepts NULL here, so cast through `as unknown as string`.
+  const { data: events, error: rpcError } = await supabase.rpc(
     "set_wine_availability",
-    { p_wine_id: id, p_direction: direction, p_note: note ?? null },
+    {
+      p_wine_id: id,
+      p_direction: direction,
+      p_note: (note ?? null) as unknown as string,
+    },
   );
 
   if (rpcError) {

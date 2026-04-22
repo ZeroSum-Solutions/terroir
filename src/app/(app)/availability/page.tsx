@@ -35,9 +35,7 @@ export default async function AvailabilityPage() {
     .eq("restaurant_id", restaurantId)
     .order("name", { ascending: true });
 
-  // Cast via unknown: the generated types lag behind migration 0015 until
-  // `supabase gen types` runs against prod in CI (see architecture_index.md).
-  const rows: WineAvailabilityRow[] = (data ?? []) as unknown as WineAvailabilityRow[];
+  const rows: WineAvailabilityRow[] = data ?? [];
 
   const canToggle = role === "owner" || role === "manager";
 
