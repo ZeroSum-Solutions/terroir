@@ -90,3 +90,25 @@ export async function requireOwner(): Promise<MembershipResult | NextResponse> {
 
   return result;
 }
+
+/**
+ * Returns membership iff the caller's role is in the allowed list,
+ * otherwise a 401/403 response. Shared helper for role-gated routes;
+ * BND-037's availability toggle is the first consumer. Reusable by
+ * any future endpoint that needs owner+manager or another subset.
+ */
+export async function requireRole(
+  roles: MembershipRole[],
+): Promise<MembershipResult | NextResponse> {
+  const result = await requireMembership();
+  if (result instanceof NextResponse) return result;
+
+  if (!roles.includes(result.role)) {
+    return NextResponse.json(
+      { error: `Role ${roles.join(" or ")} required.` },
+      { status: 403 },
+    );
+  }
+
+  return result;
+}

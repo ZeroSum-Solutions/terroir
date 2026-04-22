@@ -42,7 +42,7 @@ vi.mock("next/headers", () => ({
 }));
 
 // Import AFTER mocks
-const { requireAuth, requireMembership, requireOwner } = await import(
+const { requireAuth, requireMembership, requireOwner, requireRole } = await import(
   "./auth"
 );
 const { signActiveRestaurantCookie } = await import("./active-restaurant");
@@ -176,6 +176,45 @@ describe("requireOwner", () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
     withMemberships([{ restaurant_id: "r1", role: "owner" }]);
     const result = await requireOwner();
+    expect(result).not.toBeInstanceOf(NextResponse);
+    expect((result as { role: string }).role).toBe("owner");
+  });
+});
+
+describe("requireRole", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCookieGet.mockReturnValue(undefined);
+  });
+
+  it("returns 401 when no user (propagates from requireMembership → requireAuth)", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null } });
+    const result = await requireRole(["owner", "manager"]);
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(401);
+  });
+
+  it("returns 403 when the caller's role is not in the allowed list (staff vs owner/manager)", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    withMemberships([{ restaurant_id: "r1", role: "staff" }]);
+    const result = await requireRole(["owner", "manager"]);
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(403);
+  });
+
+  it("returns the membership when role is in the allowed list (manager)", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    withMemberships([{ restaurant_id: "r1", role: "manager" }]);
+    const result = await requireRole(["owner", "manager"]);
+    expect(result).not.toBeInstanceOf(NextResponse);
+    expect((result as { role: string }).role).toBe("manager");
+    expect((result as { restaurantId: string }).restaurantId).toBe("r1");
+  });
+
+  it("returns the membership when role is in the allowed list (owner)", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    withMemberships([{ restaurant_id: "r1", role: "owner" }]);
+    const result = await requireRole(["owner", "manager"]);
     expect(result).not.toBeInstanceOf(NextResponse);
     expect((result as { role: string }).role).toBe("owner");
   });
