@@ -1,9 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 
 /**
- * Dev-only auth bypass. Mints a Supabase magic link server-side via the
- * service-role admin API and redirects the browser to it, completing
- * sign-in without the email round trip.
+ * Dev-only auth bypass. Mints a Supabase magic-link token server-side via
+ * the admin API, then verifies it server-side against the caller's
+ * cookie-bound Supabase client — setting the auth session cookies
+ * directly. The browser never leaves localhost, so this works inside
+ * Claude Code's preview sandbox (which blocks external-origin redirects).
  *
  * Gated by DEV_BYPASS_EMAIL (server-only) — absent = endpoint returns 404.
  * Also hard-gated off in production regardless of env vars. Never use the
@@ -26,15 +29,10 @@ export async function GET(request: NextRequest) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  // Use the Host header rather than request.url — Next resolves request.url
-  // against the server's listening address (localhost) even when the client
-  // hit the box via a LAN IP, which would send Supabase back to localhost.
-  const hdrs = request.headers;
-  const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "localhost:3000";
-  const proto = hdrs.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const redirectTo = `${proto}://${host}/auth/complete`;
-
-  const res = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
+  // Step 1: ask Supabase admin to mint a magic-link token for the target
+  // user. We get back `hashed_token` — the same one-time proof of
+  // identity that the email link would carry.
+  const genRes = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -45,17 +43,15 @@ export async function GET(request: NextRequest) {
     cache: "no-store",
   });
 
-  if (!res.ok) {
-    const text = await res.text();
+  if (!genRes.ok) {
+    const text = await genRes.text();
     return NextResponse.json(
-      { error: `Admin generate_link failed (${res.status}): ${text}` },
+      { error: `Admin generate_link failed (${genRes.status}): ${text}` },
       { status: 502 },
     );
   }
 
-  const payload = (await res.json()) as {
-    hashed_token?: string;
-  };
+  const payload = (await genRes.json()) as { hashed_token?: string };
   if (!payload.hashed_token) {
     return NextResponse.json(
       { error: "Admin response missing hashed_token." },
@@ -63,10 +59,28 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const verifyUrl = new URL(`${supabaseUrl}/auth/v1/verify`);
-  verifyUrl.searchParams.set("token", payload.hashed_token);
-  verifyUrl.searchParams.set("type", "magiclink");
-  verifyUrl.searchParams.set("redirect_to", redirectTo);
+  // Step 2: verify the token against the caller's own cookie-bound
+  // Supabase client. verifyOtp succeeds → sb-access-token and
+  // sb-refresh-token cookies get set on the response, logging the
+  // browser in without ever leaving this origin (critical for
+  // Claude Code's preview sandbox, which blocks external redirects).
+  const supabase = await createClient();
+  const { error: verifyError } = await supabase.auth.verifyOtp({
+    token_hash: payload.hashed_token,
+    type: "magiclink",
+  });
 
-  return NextResponse.redirect(verifyUrl.toString(), { status: 303 });
+  if (verifyError) {
+    return NextResponse.json(
+      { error: `verifyOtp failed: ${verifyError.message}` },
+      { status: 502 },
+    );
+  }
+
+  // Step 3: redirect same-origin to /scanner. Session cookies are
+  // already attached to this response by the verifyOtp call above.
+  const hdrs = request.headers;
+  const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "localhost:3000";
+  const proto = hdrs.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return NextResponse.redirect(`${proto}://${host}/scanner`, { status: 303 });
 }
