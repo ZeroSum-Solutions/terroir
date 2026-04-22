@@ -58,6 +58,12 @@ export function AvailabilityList({
     const target = pending;
     setPending(null);
 
+    // Snapshot the pre-optimistic row. On error we revert JUST this row
+    // back to this snapshot, not the whole list. Reverting to initialRows
+    // clobbered concurrent successful toggles on other rows during
+    // rapid-fire 86/restore action.
+    const prevRow = rows.find((r) => r.id === target.wineId);
+
     // Optimistic: flip state locally while the request is in flight.
     setRows((prev) =>
       prev.map((r) =>
@@ -96,8 +102,13 @@ export function AvailabilityList({
       // on next render.
       startTransition(() => router.refresh());
     } catch (err) {
-      // Revert optimistic update.
-      setRows(initialRows);
+      // Surgical revert: only restore the row we touched. Leaves any
+      // other toggles that succeeded in the meantime untouched.
+      if (prevRow) {
+        setRows((prev) =>
+          prev.map((r) => (r.id === target.wineId ? prevRow : r)),
+        );
+      }
       setErrorMsg(err instanceof Error ? err.message : "Toggle failed.");
     }
   };
