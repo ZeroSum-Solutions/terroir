@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   const { data: list, error: fetchError } = await supabase
     .from("wine_lists")
     .select(
-      "name, template, restaurant_id, restaurants(name), wine_list_sections(name, position, wine_list_items(position, glass_price, bottle_price, tasting_note, wines(name, producer, vintage, varietal, region)))",
+      "name, template, restaurant_id, restaurants(name), wine_list_sections(name, position, wine_list_items(position, glass_price, bottle_price, tasting_note, wines(name, producer, vintage, varietal, region, is_eightysixed)))",
     )
     .eq("id", body.listId)
     .eq("restaurant_id", restaurantId)
@@ -44,30 +44,38 @@ export async function POST(request: NextRequest) {
   const restaurantName =
     (list.restaurants as { name: string } | null)?.name ?? "";
 
+  type PdfWineListItem = {
+    position: number;
+    glass_price: number | null;
+    bottle_price: number | null;
+    tasting_note: string | null;
+    wines: {
+      name: string;
+      producer: string;
+      vintage: number | null;
+      varietal: string | null;
+      region: string | null;
+      is_eightysixed: boolean;
+    } | null;
+  };
+
   const sections = (
-    (list.wine_list_sections ?? []) as Array<{
+    (list.wine_list_sections ?? []) as unknown as Array<{
       name: string;
       position: number;
-      wine_list_items: Array<{
-        position: number;
-        glass_price: number | null;
-        bottle_price: number | null;
-        tasting_note: string | null;
-        wines: {
-          name: string;
-          producer: string;
-          vintage: number | null;
-          varietal: string | null;
-          region: string | null;
-        };
-      }>;
+      wine_list_items: PdfWineListItem[];
     }>
   )
     .sort((a, b) => a.position - b.position)
     .filter((s) => s.wine_list_items.length > 0)
     .map((s) => ({
       name: s.name,
-      items: [...s.wine_list_items].sort((a, b) => a.position - b.position),
+      items: [...s.wine_list_items]
+        .filter(
+          (it): it is PdfWineListItem & { wines: NonNullable<PdfWineListItem["wines"]> } =>
+            it.wines != null && !it.wines.is_eightysixed,
+        )
+        .sort((a, b) => a.position - b.position),
     }));
 
   const template = body.template ?? list.template ?? "classic";
