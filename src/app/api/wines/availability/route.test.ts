@@ -17,7 +17,7 @@ type WineRow = {
   region: string | null;
   is_eightysixed: boolean;
   eightysixed_at: string | null;
-  eightysixed_by_user: { id: string; email: string } | null;
+  eightysixed_by: string | null;
 };
 
 function makeSupabase(rows: WineRow[], expectedRestaurantId?: string) {
@@ -74,7 +74,7 @@ describe("GET /api/wines/availability", () => {
         region: "Burgundy",
         is_eightysixed: false,
         eightysixed_at: null,
-        eightysixed_by_user: null,
+        eightysixed_by: null,
       },
       {
         id: "w-2",
@@ -85,7 +85,7 @@ describe("GET /api/wines/availability", () => {
         region: "Burgundy",
         is_eightysixed: true,
         eightysixed_at: "2026-04-21T18:45:00Z",
-        eightysixed_by_user: { id: "u-1", email: "manager@x.com" },
+        eightysixed_by: "u-1",
       },
     ];
     mockRequireMembership.mockResolvedValue({
@@ -99,11 +99,15 @@ describe("GET /api/wines/availability", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.wines).toHaveLength(2);
-    expect(body.wines[0]).toMatchObject({ id: "w-1", is_eightysixed: false });
-    expect(body.wines[1]).toMatchObject({ id: "w-2", is_eightysixed: true });
-    expect(body.wines[1].eightysixed_by).toEqual({
-      id: "u-1",
-      email: "manager@x.com",
+    expect(body.wines[0]).toMatchObject({
+      id: "w-1",
+      is_eightysixed: false,
+      eightysixed_by: null,
+    });
+    expect(body.wines[1]).toMatchObject({
+      id: "w-2",
+      is_eightysixed: true,
+      eightysixed_by: "u-1",
     });
   });
 
@@ -118,7 +122,7 @@ describe("GET /api/wines/availability", () => {
         region: "Burgundy",
         is_eightysixed: false,
         eightysixed_at: null,
-        eightysixed_by_user: null,
+        eightysixed_by: null,
       },
     ];
     mockRequireMembership.mockResolvedValue({

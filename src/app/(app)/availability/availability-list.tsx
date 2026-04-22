@@ -92,7 +92,7 @@ export function AvailabilityList({
       }
 
       // router.refresh() re-fetches the server component so the metadata
-      // (eightysixed_by email, precise timestamp from the RPC) is accurate
+      // (precise timestamp from the RPC, eightysixed_by uuid) is accurate
       // on next render.
       startTransition(() => router.refresh());
     } catch (err) {
@@ -154,11 +154,7 @@ export function AvailabilityList({
                 </div>
                 {row.is_eightysixed && row.eightysixed_at && (
                   <div className="mt-2xs text-[11px] text-ink-subtle">
-                    86&apos;d{" "}
-                    {row.eightysixed_by?.email
-                      ? `by ${row.eightysixed_by.email}`
-                      : ""}{" "}
-                    · {new Date(row.eightysixed_at).toLocaleString()}
+                    86&apos;d · {new Date(row.eightysixed_at).toLocaleString()}
                   </div>
                 )}
               </div>

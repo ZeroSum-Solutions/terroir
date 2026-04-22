@@ -4,18 +4,6 @@ import { requireMembership } from "@/lib/api/auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type JoinedWineRow = {
-  id: string;
-  name: string;
-  producer: string;
-  vintage: number | null;
-  varietal: string | null;
-  region: string | null;
-  is_eightysixed: boolean;
-  eightysixed_at: string | null;
-  eightysixed_by_user: { id: string; email: string } | null;
-};
-
 /**
  * GET /api/wines/availability
  *
@@ -27,6 +15,15 @@ type JoinedWineRow = {
  * Auth: requireMembership (all three roles). The PATCH sibling is
  * role-gated via requireRole(['owner','manager']); this endpoint is
  * intentionally readable by staff.
+ *
+ * Note: the `eightysixed_by` column holds a `uuid` referencing
+ * `auth.users(id)`. We intentionally do NOT embed the user's email
+ * here — PostgREST can't resolve embeds across schema boundaries
+ * (auth vs public) and exposing `auth` in the PostgREST schema
+ * config would be a security regression. If attributing 86's to
+ * named people matters later, add a public-schema view that
+ * joins memberships -> auth.users and scopes to the caller's
+ * restaurant via RLS, then embed through that.
  */
 export async function GET() {
   const auth = await requireMembership();
@@ -36,7 +33,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("wines")
     .select(
-      "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, eightysixed_by_user:eightysixed_by ( id, email )",
+      "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, eightysixed_by",
     )
     .eq("restaurant_id", restaurantId)
     .order("name", { ascending: true });
@@ -49,17 +46,5 @@ export async function GET() {
     );
   }
 
-  const wines = ((data ?? []) as unknown as JoinedWineRow[]).map((row) => ({
-    id: row.id,
-    name: row.name,
-    producer: row.producer,
-    vintage: row.vintage,
-    varietal: row.varietal,
-    region: row.region,
-    is_eightysixed: row.is_eightysixed,
-    eightysixed_at: row.eightysixed_at,
-    eightysixed_by: row.eightysixed_by_user,
-  }));
-
-  return NextResponse.json({ wines });
+  return NextResponse.json({ wines: data ?? [] });
 }

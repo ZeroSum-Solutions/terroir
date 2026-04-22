@@ -14,11 +14,7 @@ export type WineAvailabilityRow = {
   region: string | null;
   is_eightysixed: boolean;
   eightysixed_at: string | null;
-  eightysixed_by: { id: string; email: string } | null;
-};
-
-type RawRow = Omit<WineAvailabilityRow, "eightysixed_by"> & {
-  eightysixed_by_user: { id: string; email: string } | null;
+  eightysixed_by: string | null;
 };
 
 export default async function AvailabilityPage() {
@@ -30,27 +26,18 @@ export default async function AvailabilityPage() {
   // Narrow: the guard above eliminates the NextResponse branch.
   const { supabase, restaurantId, role } = auth as Exclude<typeof auth, Response>;
 
+  // See /api/wines/availability for why we don't embed auth.users here.
   const { data } = await supabase
     .from("wines")
     .select(
-      "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, eightysixed_by_user:eightysixed_by ( id, email )",
+      "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, eightysixed_by",
     )
     .eq("restaurant_id", restaurantId)
     .order("name", { ascending: true });
 
-  const rows: WineAvailabilityRow[] = ((data ?? []) as unknown as RawRow[]).map(
-    (r) => ({
-      id: r.id,
-      name: r.name,
-      producer: r.producer,
-      vintage: r.vintage,
-      varietal: r.varietal,
-      region: r.region,
-      is_eightysixed: r.is_eightysixed,
-      eightysixed_at: r.eightysixed_at,
-      eightysixed_by: r.eightysixed_by_user,
-    }),
-  );
+  // Cast via unknown: the generated types lag behind migration 0015 until
+  // `supabase gen types` runs against prod in CI (see architecture_index.md).
+  const rows: WineAvailabilityRow[] = (data ?? []) as unknown as WineAvailabilityRow[];
 
   const canToggle = role === "owner" || role === "manager";
 
