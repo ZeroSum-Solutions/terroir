@@ -40,39 +40,102 @@ test.describe("BND-038 pour → reconcile", () => {
     wine_list_item_id: string;
     name: string;
     producer: string;
+    size_ml: number;
     glass_pour_ml: number;
     pour_size_mode: "fixed" | "picker";
     open_remaining_ml: number | null;
     sealed_count: number;
   };
 
-  async function pickTrackedWine(page: Page): Promise<OpenBottleItem> {
+  async function fetchItems(page: Page): Promise<OpenBottleItem[]> {
     const res = await page.request.get("/api/open-bottles");
     expect(res.ok()).toBeTruthy();
     const body = (await res.json()) as { items: OpenBottleItem[] };
-    // Prefer wines whose CURRENT open bottle has >= glass_pour_ml
-    // remaining so the tap fires the simple-subtract branch (Case 2).
-    // Cascade pours (Cases 1 + 3) intentionally suppress the Undo
-    // banner, which this test asserts on.
-    const noCascade = body.items.filter(
-      (i) =>
-        i.glass_pour_ml > 0 &&
-        i.open_remaining_ml !== null &&
-        i.open_remaining_ml >= i.glass_pour_ml,
-    );
+    return body.items;
+  }
+
+  /**
+   * Bootstrap any DB state into "a pour-tracked wine has an open bottle
+   * with at least 2× glass_pour_ml remaining." Avoids the E2E failing
+   * because someone drained Savart in a previous session.
+   *
+   * Strategy:
+   *  1. If a pour-tracked wine already has open ≥ 2×pour → use it.
+   *  2. Otherwise find one with enough total inventory (open + sealed)
+   *     to support the test (≥ 3×pour so we can both pour and reconcile
+   *     to ½ without cascading unexpectedly).
+   *  3. If its open bottle is null, tap it once to open. This fires a
+   *     Case-1 cascade (banner suppressed — that's fine during setup).
+   *  4. Reconcile the open bottle to size_ml (full). Now the real test
+   *     pour is guaranteed cascade-safe.
+   */
+  async function ensureCascadeSafeWine(page: Page): Promise<OpenBottleItem> {
+    const items = await fetchItems(page);
+    const tracked = items.filter((i) => i.glass_pour_ml > 0);
+
+    // Best case: already safe with headroom for a reconcile to ½.
+    const alreadySafe = tracked
+      .filter(
+        (i) =>
+          i.open_remaining_ml !== null &&
+          i.open_remaining_ml >= 2 * i.glass_pour_ml,
+      )
+      .sort((a, b) => (b.open_remaining_ml ?? 0) - (a.open_remaining_ml ?? 0))[0];
+    if (alreadySafe) return alreadySafe;
+
+    // Find a bootstrappable candidate: needs total inventory ≥ 3×pour so
+    // we can open a bottle AND still pour AND still reconcile.
     const total = (i: OpenBottleItem) =>
-      (i.open_remaining_ml ?? 0) + i.sealed_count * 750;
-    const candidate = [...noCascade].sort((a, b) => total(b) - total(a))[0];
+      (i.open_remaining_ml ?? 0) + i.sealed_count * i.size_ml;
+    const bootstrappable = [...tracked]
+      .filter((i) => total(i) >= 3 * i.glass_pour_ml)
+      .sort((a, b) => total(b) - total(a))[0];
     expect(
-      candidate,
-      "no by-the-glass wine with enough in an open bottle for a non-cascade pour",
+      bootstrappable,
+      "no pour-tracked wine in the DB has enough inventory to run the E2E " +
+        "(need ≥ 3× glass_pour_ml between sealed + open) — seed one or run " +
+        "/api/pour + /api/reconcile manually first",
     ).toBeTruthy();
-    return candidate;
+
+    // If no bottle is open, tap once to open — this is a Case-1 cascade
+    // in setup, so the banner suppression is fine here.
+    if (bootstrappable.open_remaining_ml === null) {
+      const pourRes = await page.request.post("/api/pour", {
+        data: {
+          wine_id: bootstrappable.wine_id,
+          ml: bootstrappable.glass_pour_ml,
+        },
+      });
+      expect(pourRes.ok(), await pourRes.text()).toBeTruthy();
+    }
+
+    // Reconcile the open bottle up to full so the next pour is cascade-safe.
+    const reconcileRes = await page.request.post("/api/reconcile", {
+      data: {
+        entries: [
+          {
+            wine_id: bootstrappable.wine_id,
+            new_remaining_ml: bootstrappable.size_ml,
+            note: "e2e bootstrap",
+          },
+        ],
+      },
+    });
+    expect(reconcileRes.ok(), await reconcileRes.text()).toBeTruthy();
+
+    // Re-fetch — the row now reflects the reconciled state.
+    const after = await fetchItems(page);
+    const fresh = after.find((i) => i.wine_id === bootstrappable.wine_id);
+    expect(fresh).toBeTruthy();
+    expect(fresh!.open_remaining_ml).toBeGreaterThanOrEqual(
+      2 * fresh!.glass_pour_ml,
+    );
+    return fresh!;
   }
 
   test("configure → pour → reconcile cycle", async ({ page }) => {
     await login(page);
-    const wine = await pickTrackedWine(page);
+    const wine = await ensureCascadeSafeWine(page);
     const cardLabel = new RegExp(wine.producer.slice(0, 10), "i");
 
     // --- Step 1: land on /pour and read the starting glass count ----
