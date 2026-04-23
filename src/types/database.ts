@@ -806,6 +806,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      reconcile_open_bottles_batch: {
+        Args: { p_entries: Json }
+        Returns: number
+      }
       record_pour: {
         Args: {
           p_kind?: string

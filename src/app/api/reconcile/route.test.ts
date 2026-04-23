@@ -13,19 +13,17 @@ const { POST } = await import("./route");
 type RpcCall = { fn: string; args: Record<string, unknown> };
 
 function makeSupabase(
-  errors: Array<{ code?: string; message?: string } | null>,
+  result:
+    | { data: number; error: null }
+    | { data: null; error: { code?: string; message?: string } },
 ) {
   const calls: RpcCall[] = [];
-  let i = 0;
   return {
     _calls: calls,
     rpc: (fn: string, args: Record<string, unknown>) => {
       calls.push({ fn, args });
-      const err = errors[i++] ?? null;
       return {
-        then: (
-          resolve: (v: { data: unknown; error: typeof err }) => void,
-        ) => resolve({ data: null, error: err }),
+        then: (resolve: (v: typeof result) => void) => resolve(result),
       };
     },
   };
@@ -51,7 +49,7 @@ describe("POST /api/reconcile", () => {
 
   it("400s on empty entries", async () => {
     mockRequireMembership.mockResolvedValue({
-      supabase: makeSupabase([]),
+      supabase: makeSupabase({ data: 0, error: null }),
       restaurantId: "r-A",
       user: { id: "u-1" },
       role: "manager",
@@ -60,8 +58,8 @@ describe("POST /api/reconcile", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 200 with updated count on happy path", async () => {
-    const supabase = makeSupabase([null, null]);
+  it("returns 200 with updated count on happy path (single atomic RPC)", async () => {
+    const supabase = makeSupabase({ data: 2, error: null });
     mockRequireMembership.mockResolvedValue({
       supabase,
       restaurantId: "r-A",
@@ -79,14 +77,18 @@ describe("POST /api/reconcile", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.updated).toBe(2);
-    expect(supabase._calls).toHaveLength(2);
-    expect(supabase._calls[0].fn).toBe("reconcile_open_bottle");
+    // Exactly ONE RPC call — the atomic batch, not a per-entry loop.
+    expect(supabase._calls).toHaveLength(1);
+    expect(supabase._calls[0].fn).toBe("reconcile_open_bottles_batch");
     expect(mockRevalidate).toHaveBeenCalled();
   });
 
-  it("returns 403 when the RPC raises permission error", async () => {
+  it("returns 403 when the RPC raises permission error (42501)", async () => {
     mockRequireMembership.mockResolvedValue({
-      supabase: makeSupabase([{ code: "42501", message: "forbidden" }]),
+      supabase: makeSupabase({
+        data: null,
+        error: { code: "42501", message: "forbidden" },
+      }),
       restaurantId: "r-A",
       user: { id: "u-1" },
       role: "staff",
@@ -97,5 +99,28 @@ describe("POST /api/reconcile", () => {
       }),
     );
     expect(res.status).toBe(403);
+  });
+
+  it("returns 400 EXCEEDS_SIZE when RPC raises P0002", async () => {
+    mockRequireMembership.mockResolvedValue({
+      supabase: makeSupabase({
+        data: null,
+        error: {
+          code: "P0002",
+          message: "p_new_remaining_ml exceeds bottle size (750)",
+        },
+      }),
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "manager",
+    });
+    const res = await POST(
+      makeRequest({
+        entries: [{ wine_id: UUID_A, new_remaining_ml: 7500 }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe("EXCEEDS_SIZE");
   });
 });
