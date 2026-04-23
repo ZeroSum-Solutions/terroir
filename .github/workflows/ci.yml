@@ -1,4 +1,4 @@
-# BND-012 / INT-003
+# BND-012 / INT-003 / INT-006
 #
 # Minimum-viable CI for Terroir. Gates every PR on these checks:
 #   1. typecheck    (tsc --noEmit)
@@ -9,6 +9,9 @@
 #   5. types drift  (src/types/database.ts must equal the live schema's
 #                    current generated types) — skipped when
 #                    SUPABASE_ACCESS_TOKEN is not set (fork PRs etc.)
+#   6. downs check  (every forward migration from 0011 onward has a
+#                    paired supabase/migrations/down/*.down.sql file —
+#                    INT-006)
 #
 # The schema-drift step turns "someone added a migration but forgot to
 # update the snapshot" into a hard failure. To regenerate the snapshot
@@ -83,3 +86,9 @@ jobs:
         # but doesn't block fork PRs that can't access secrets.
         if: env.SUPABASE_ACCESS_TOKEN != ''
         run: pnpm run types:check
+
+      - name: Down migrations check
+        # INT-006 — every forward migration from 0011 onward must have a
+        # paired .down.sql sibling. Catches PRs that add a forward
+        # migration without writing its rollback.
+        run: pnpm run downs:check

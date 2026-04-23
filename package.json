@@ -17,7 +17,8 @@
     "snapshot": "node scripts/build-schema-snapshot.mjs",
     "snapshot:check": "node scripts/build-schema-snapshot.mjs && git diff --exit-code supabase/schema.snapshot.sql",
     "types:gen": "node scripts/generate-supabase-types.mjs",
-    "types:check": "node scripts/generate-supabase-types.mjs && git diff --exit-code src/types/database.ts"
+    "types:check": "node scripts/generate-supabase-types.mjs && git diff --exit-code src/types/database.ts",
+    "downs:check": "node scripts/check-down-migrations.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
