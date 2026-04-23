@@ -330,6 +330,106 @@ export type Database = {
           },
         ]
       }
+      open_bottles: {
+        Row: {
+          id: string
+          opened_at: string
+          opened_by: string | null
+          remaining_ml: number
+          restaurant_id: string
+          source_inventory_item_id: string | null
+          wine_id: string
+        }
+        Insert: {
+          id?: string
+          opened_at?: string
+          opened_by?: string | null
+          remaining_ml: number
+          restaurant_id: string
+          source_inventory_item_id?: string | null
+          wine_id: string
+        }
+        Update: {
+          id?: string
+          opened_at?: string
+          opened_by?: string | null
+          remaining_ml?: number
+          restaurant_id?: string
+          source_inventory_item_id?: string | null
+          wine_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "open_bottles_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_bottles_source_inventory_item_id_fkey"
+            columns: ["source_inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_bottles_wine_id_fkey"
+            columns: ["wine_id"]
+            isOneToOne: false
+            referencedRelation: "wines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pour_events: {
+        Row: {
+          actor_user_id: string | null
+          id: string
+          kind: string
+          ml_delta: number
+          note: string | null
+          occurred_at: string
+          restaurant_id: string
+          wine_id: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          id?: string
+          kind: string
+          ml_delta: number
+          note?: string | null
+          occurred_at?: string
+          restaurant_id: string
+          wine_id: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          id?: string
+          kind?: string
+          ml_delta?: number
+          note?: string | null
+          occurred_at?: string
+          restaurant_id?: string
+          wine_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pour_events_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pour_events_wine_id_fkey"
+            columns: ["wine_id"]
+            isOneToOne: false
+            referencedRelation: "wines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       restaurants: {
         Row: {
           created_at: string
@@ -387,10 +487,12 @@ export type Database = {
         Row: {
           bottle_price: number | null
           created_at: string
+          glass_pour_ml: number | null
           glass_price: number | null
           id: string
           is_available: boolean
           position: number
+          pour_size_mode: string
           section_id: string
           tasting_note: string | null
           updated_at: string
@@ -399,10 +501,12 @@ export type Database = {
         Insert: {
           bottle_price?: number | null
           created_at?: string
+          glass_pour_ml?: number | null
           glass_price?: number | null
           id?: string
           is_available?: boolean
           position?: number
+          pour_size_mode?: string
           section_id: string
           tasting_note?: string | null
           updated_at?: string
@@ -411,10 +515,12 @@ export type Database = {
         Update: {
           bottle_price?: number | null
           created_at?: string
+          glass_pour_ml?: number | null
           glass_price?: number | null
           id?: string
           is_available?: boolean
           position?: number
+          pour_size_mode?: string
           section_id?: string
           tasting_note?: string | null
           updated_at?: string
@@ -665,6 +771,47 @@ export type Database = {
           score: number
           wine_id: string
         }[]
+      }
+      reconcile_open_bottle: {
+        Args: { p_new_remaining_ml: number; p_note?: string; p_wine_id: string }
+        Returns: {
+          id: string
+          opened_at: string
+          opened_by: string | null
+          remaining_ml: number
+          restaurant_id: string
+          source_inventory_item_id: string | null
+          wine_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "open_bottles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      record_pour: {
+        Args: {
+          p_kind?: string
+          p_ml: number
+          p_note?: string
+          p_wine_id: string
+        }
+        Returns: {
+          id: string
+          opened_at: string
+          opened_by: string | null
+          remaining_ml: number
+          restaurant_id: string
+          source_inventory_item_id: string | null
+          wine_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "open_bottles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       reorder_wine_list_items: {
         Args: { p_ordered_ids: string[] }
