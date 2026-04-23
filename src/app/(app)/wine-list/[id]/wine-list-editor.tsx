@@ -55,6 +55,11 @@ type ListItem = {
   position: number;
   glass_price: number | null;
   bottle_price: number | null;
+  // BND-038: per-wine pour config. glass_pour_ml = null means the wine
+  // is not pour-tracked (bottle-only). pour_size_mode 'picker' opens the
+  // picker modal on /pour instead of immediate subtraction.
+  glass_pour_ml: number | null;
+  pour_size_mode: "fixed" | "picker";
   tasting_note: string | null;
   is_available: boolean;
   wines: Wine;
@@ -212,6 +217,36 @@ export function WineListEditor({
       value: number | null,
     ) => {
       // Optimistic update
+      setSections((prev) =>
+        prev.map((s) => ({
+          ...s,
+          wine_list_items: s.wine_list_items.map((i) =>
+            i.id === itemId ? { ...i, [field]: value } : i,
+          ),
+        })),
+      );
+
+      const res = await fetch(`/api/wine-list-items/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      if (!res.ok) {
+        startTransition(() => router.refresh());
+      }
+    },
+    [router],
+  );
+
+  // BND-038: per-item pour config (glass_pour_ml + pour_size_mode).
+  // Same optimistic + PATCH shape as price updates. Passing null for
+  // glass_pour_ml turns pour tracking off for the wine.
+  const updateItemPour = useCallback(
+    async (
+      itemId: string,
+      field: "glass_pour_ml" | "pour_size_mode",
+      value: number | "fixed" | "picker" | null,
+    ) => {
       setSections((prev) =>
         prev.map((s) => ({
           ...s,
@@ -471,6 +506,7 @@ export function WineListEditor({
                         item={item}
                         onDelete={deleteItem}
                         onPriceChange={updateItemPrice}
+                        onPourChange={updateItemPour}
                       />
                     ))}
                   </div>

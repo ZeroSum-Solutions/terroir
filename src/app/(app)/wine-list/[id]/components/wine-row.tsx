@@ -27,23 +27,33 @@ type ListItem = {
   position: number;
   glass_price: number | null;
   bottle_price: number | null;
+  // BND-038: pour tracking per wine-list-item.
+  glass_pour_ml: number | null;
+  pour_size_mode: "fixed" | "picker";
   tasting_note: string | null;
   is_available: boolean;
   wines: Wine;
 };
 
+type PourField = "glass_pour_ml" | "pour_size_mode";
+type PourValue = number | "fixed" | "picker" | null;
+
 interface SortableWineRowProps {
   item: ListItem;
   onDelete: (id: string) => void;
   onPriceChange: (id: string, field: "glass_price" | "bottle_price", value: number | null) => void;
+  onPourChange: (id: string, field: PourField, value: PourValue) => void;
 }
 
 interface WineRowProps {
   item: ListItem;
   onDelete: (id: string) => void;
   onPriceChange: (id: string, field: "glass_price" | "bottle_price", value: number | null) => void;
+  onPourChange: (id: string, field: PourField, value: PourValue) => void;
   dragHandleProps?: Record<string, unknown>;
 }
+
+const ML_PER_OZ = 29.5735;
 
 interface PriceInputProps {
   value: number | null;
@@ -110,13 +120,102 @@ export function PriceInput({ value, onChange, muted }: PriceInputProps) {
   );
 }
 
-export function WineRow({ item, onDelete, onPriceChange, dragHandleProps }: WineRowProps) {
+/**
+ * BND-038: compact per-wine pour config. An integer ml input with an
+ * "≈ X.X oz" hint + a Fixed/Picker radio toggle. The radios disable
+ * when ml is blank (pour tracking is off). Renders identically on
+ * desktop and mobile — the parent row places it in the right slot.
+ */
+function PourConfigRow({
+  item,
+  onPourChange,
+}: {
+  item: ListItem;
+  onPourChange: WineRowProps["onPourChange"];
+}) {
+  const pour = item.glass_pour_ml;
+  const ozHint = pour != null ? `≈ ${(pour / ML_PER_OZ).toFixed(1)} oz` : "";
+  const tracked = pour != null;
+  const nameRadio = `pour-mode-${item.id}`;
+
+  return (
+    <div className="flex flex-wrap items-center gap-sm text-[12px] text-ink-muted">
+      <label className="flex items-center gap-xs">
+        <span className="shrink-0">Pour</span>
+        <input
+          type="number"
+          min={1}
+          max={20000}
+          value={pour ?? ""}
+          onChange={(e) => {
+            const v = e.target.value.trim();
+            if (v === "") {
+              onPourChange(item.id, "glass_pour_ml", null);
+              return;
+            }
+            const n = Number(v);
+            if (!Number.isFinite(n) || n <= 0) return;
+            onPourChange(
+              item.id,
+              "glass_pour_ml",
+              Math.max(1, Math.min(20000, Math.round(n))),
+            );
+          }}
+          placeholder="148"
+          aria-label={`Pour size in ml for ${item.wines.name}`}
+          className="h-[28px] w-[64px] rounded-sm border border-border bg-white px-xs text-right font-mono text-[12px] text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
+        />
+        <span className="shrink-0 text-[11px] text-ink-subtle">ml</span>
+        {ozHint && (
+          <span className="shrink-0 text-[11px] text-ink-subtle">{ozHint}</span>
+        )}
+      </label>
+      <fieldset
+        className={cn(
+          "flex items-center gap-sm",
+          !tracked && "pointer-events-none opacity-40",
+        )}
+      >
+        <legend className="sr-only">Pour size mode</legend>
+        <label className="flex items-center gap-xs">
+          <input
+            type="radio"
+            name={nameRadio}
+            checked={item.pour_size_mode === "fixed"}
+            disabled={!tracked}
+            onChange={() => onPourChange(item.id, "pour_size_mode", "fixed")}
+          />
+          Fixed
+        </label>
+        <label className="flex items-center gap-xs">
+          <input
+            type="radio"
+            name={nameRadio}
+            checked={item.pour_size_mode === "picker"}
+            disabled={!tracked}
+            onChange={() => onPourChange(item.id, "pour_size_mode", "picker")}
+          />
+          Picker
+        </label>
+      </fieldset>
+    </div>
+  );
+}
+
+export function WineRow({
+  item,
+  onDelete,
+  onPriceChange,
+  onPourChange,
+  dragHandleProps,
+}: WineRowProps) {
   const wine = item.wines;
 
   return (
     <>
-      {/* Desktop row */}
-      <div className="group hidden items-center border-b border-border px-lg py-sm transition-colors last:border-b-0 hover:bg-[#FBFAF6] md:grid md:grid-cols-[28px_1fr_80px_80px_36px]">
+      {/* Desktop row — grid + compact pour-config sub-row stacked below. */}
+      <div className="group hidden border-b border-border transition-colors last:border-b-0 hover:bg-[#FBFAF6] md:block">
+      <div className="grid grid-cols-[28px_1fr_80px_80px_36px] items-center px-lg py-sm">
         <div
           aria-label="Drag to reorder"
           className="cursor-grab text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100"
@@ -172,6 +271,12 @@ export function WineRow({ item, onDelete, onPriceChange, dragHandleProps }: Wine
           <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
+      {/* Desktop pour-config sub-row (offset to match the wine-name column). */}
+      <div className="hidden border-t border-border/40 bg-surface-muted/30 px-lg pb-sm pt-xs md:grid md:grid-cols-[28px_1fr]">
+        <div />
+        <PourConfigRow item={item} onPourChange={onPourChange} />
+      </div>
+      </div>
 
       {/* Mobile card */}
       <div className="border-b border-border px-md py-md last:border-b-0 md:hidden">
@@ -224,12 +329,26 @@ export function WineRow({ item, onDelete, onPriceChange, dragHandleProps }: Wine
             </div>
           </div>
         </div>
+        {/* BND-038: mobile pour-config block. */}
+        <div className="mt-sm border-t border-border/50 pt-sm">
+          <div className="text-[11px] uppercase tracking-[0.06em] text-ink-subtle">
+            Pour
+          </div>
+          <div className="mt-xs">
+            <PourConfigRow item={item} onPourChange={onPourChange} />
+          </div>
+        </div>
       </div>
     </>
   );
 }
 
-export function SortableWineRow({ item, onDelete, onPriceChange }: SortableWineRowProps) {
+export function SortableWineRow({
+  item,
+  onDelete,
+  onPriceChange,
+  onPourChange,
+}: SortableWineRowProps) {
   const {
     attributes,
     listeners,
@@ -253,6 +372,7 @@ export function SortableWineRow({ item, onDelete, onPriceChange }: SortableWineR
         item={item}
         onDelete={onDelete}
         onPriceChange={onPriceChange}
+        onPourChange={onPourChange}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
     </div>

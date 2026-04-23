@@ -36,6 +36,8 @@ export default async function WineListEditorPage({
       position: number;
       glass_price: number | null;
       bottle_price: number | null;
+      glass_pour_ml: number | null;
+      pour_size_mode: "fixed" | "picker";
       tasting_note: string | null;
       is_available: boolean;
       created_at: string;
