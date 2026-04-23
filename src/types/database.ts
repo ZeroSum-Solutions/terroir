@@ -732,6 +732,22 @@ export type Database = {
         }
         Returns: boolean
       }
+      list_open_bottle_items: {
+        Args: { p_restaurant_id: string }
+        Returns: {
+          glass_pour_ml: number
+          name: string
+          open_remaining_ml: number
+          opened_at: string
+          pour_size_mode: string
+          producer: string
+          sealed_count: number
+          size_ml: number
+          vintage: number
+          wine_id: string
+          wine_list_item_id: string
+        }[]
+      }
       lwin_search: {
         Args: { p_limit?: number; p_query: string }
         Returns: {
