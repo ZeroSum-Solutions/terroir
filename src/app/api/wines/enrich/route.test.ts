@@ -59,21 +59,28 @@ function buildSupabase(opts: {
     return Promise.resolve({ data: null, error: null });
   });
 
+  // ARCH-021: enrich fetch is now
+  //   .select().eq().or(...).limit(...)
+  // and the LWIN fetch is
+  //   .select().eq().is(...).limit(...)
+  // so the mock chain mirrors both shapes with a terminal `.limit()`
+  // that thenables-through to the configured result.
   let winesFetchCount = 0;
+  const limitForWines = () => ({
+    then: (resolve: (v: FromResult) => void) => {
+      winesFetchCount += 1;
+      resolve(
+        winesFetchCount === 1
+          ? opts.winesResult
+          : (opts.unmatchedResult ?? { data: [], error: null }),
+      );
+    },
+  });
   const from = vi.fn(() => ({
     select: () => ({
       eq: () => ({
-        // first .eq returns a thenable for the wines fetch;
-        // a second chained .is() path is used for the lwin fetch
-        is: () => Promise.resolve(opts.unmatchedResult ?? { data: [], error: null }),
-        then: (resolve: (v: FromResult) => void) => {
-          winesFetchCount += 1;
-          resolve(
-            winesFetchCount === 1
-              ? opts.winesResult
-              : (opts.unmatchedResult ?? { data: [], error: null }),
-          );
-        },
+        or: () => ({ limit: () => limitForWines() }),
+        is: () => ({ limit: () => limitForWines() }),
       }),
     }),
   }));

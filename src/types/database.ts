@@ -857,6 +857,12 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      wine_published_list_slugs: {
+        Args: { p_restaurant_id: string; p_wine_id: string }
+        Returns: {
+          slug: string
+        }[]
+      }
     }
     Enums: {
       added_via: "manual" | "invoice_scan" | "bottle_scan"

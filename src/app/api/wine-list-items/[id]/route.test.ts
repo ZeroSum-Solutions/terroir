@@ -146,7 +146,7 @@ describe("PATCH /api/wine-list-items/[id] — pour-size extension", () => {
     expect(res.status).toBe(400);
   });
 
-  it("still accepts the pre-existing fields (glass_price, is_available)", async () => {
+  it("still accepts the pre-existing fields (glass_price)", async () => {
     const sup = makeSupabase({ ownedByRestaurant: "r-A" });
     mockRequireMembership.mockResolvedValue({
       supabase: sup,
@@ -155,14 +155,25 @@ describe("PATCH /api/wine-list-items/[id] — pour-size extension", () => {
       role: "owner",
     });
     const res = await PATCH(
-      makeReq({ glass_price: 14.5, is_available: true }),
+      makeReq({ glass_price: 14.5 }),
       { params },
     );
     expect(res.status).toBe(200);
-    expect(sup._updates[0]).toMatchObject({
-      glass_price: 14.5,
-      is_available: true,
+    expect(sup._updates[0]).toMatchObject({ glass_price: 14.5 });
+  });
+
+  // ARCH-017 / DEBT-011: deprecated is_available is rejected.
+  it("400s when the body writes deprecated is_available", async () => {
+    const sup = makeSupabase({ ownedByRestaurant: "r-A" });
+    mockRequireMembership.mockResolvedValue({
+      supabase: sup,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "owner",
     });
+    const res = await PATCH(makeReq({ is_available: false }), { params });
+    expect(res.status).toBe(400);
+    expect(sup._updates).toHaveLength(0);
   });
 
   // ARCH-014: ownership enforcement

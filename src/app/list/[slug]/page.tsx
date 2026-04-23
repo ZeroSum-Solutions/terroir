@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import { renderWineListSections } from "@/lib/wine-list/render";
 import type { WineListSectionEmbed } from "@/lib/wine-list/shapes";
 
 /** Anon client for public pages — respects RLS, no auth session needed. */
@@ -58,13 +59,13 @@ export default async function PublicWineListPage({
       is_eightysixed: boolean;
     } | null;
   };
-  // DEBT-013: shared WineListSectionEmbed<TItem> keeps this in sync
-  // with the PDF route's cast; both used to drift independently.
-  const sections = (
-    (list.wine_list_sections ?? []) as unknown as WineListSectionEmbed<PublicWineItem>[]
-  )
-    .sort((a, b) => a.position - b.position)
-    .filter((s) => s.wine_list_items.length > 0);
+  // DEBT-013: shared WineListSectionEmbed<TItem> generic.
+  // ARCH-020: shared renderWineListSections() filter + sort pipeline
+  // (same rules the PDF route applies). Sections come back already
+  // sorted, 86'd wines already filtered out, empty sections dropped.
+  const sections = renderWineListSections(
+    (list.wine_list_sections ?? []) as unknown as WineListSectionEmbed<PublicWineItem>[],
+  );
 
   return (
     <main className="mx-auto min-h-screen max-w-[720px] bg-surface px-lg py-3xl">
@@ -83,11 +84,8 @@ export default async function PublicWineListPage({
             {section.name}
           </h2>
           <div className="flex flex-col">
-            {[...section.wine_list_items]
-              .sort((a, b) => a.position - b.position)
-              .filter((item) => item.wines != null && !item.wines.is_eightysixed)
-              .map((item) => {
-                const wine = item.wines!;
+            {section.items.map((item) => {
+                const wine = item.wines;
                 return (
                   <div
                     key={item.id}

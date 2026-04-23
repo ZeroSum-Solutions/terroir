@@ -14,7 +14,6 @@ vi.mock("next/cache", () => ({
 const { PATCH } = await import("./route");
 
 type WineScopeRow = { id: string; restaurant_id: string };
-type PublishedListRow = { slug: string | null };
 type RpcEventRow = {
   id: string;
   wine_id: string;
@@ -27,14 +26,24 @@ type RpcEventRow = {
 
 function makeSupabase(opts: {
   wineRows: WineScopeRow[];
-  // RPC returns SETOF, so `data` is an array (or null on error).
+  // set_wine_availability RPC returns SETOF, so `data` is an array.
   rpcResult: { data: RpcEventRow[] | null; error: unknown };
-  publishedLists?: PublishedListRow[];
+  // ARCH-019: wine_published_list_slugs RPC returns the slugs of
+  // every published wine list referencing the target wine. Each row
+  // has a non-null slug by definition (filtered inside the RPC), so
+  // the shape is simpler than the previous embed-based response.
+  publishedLists?: Array<{ slug: string }>;
 }) {
   const calls = { rpc: [] as Array<{ fn: string; args: unknown }> };
   const rpc = vi.fn((fn: string, args: unknown) => {
     calls.rpc.push({ fn, args });
-    return Promise.resolve(opts.rpcResult);
+    if (fn === "set_wine_availability") {
+      return Promise.resolve(opts.rpcResult);
+    }
+    if (fn === "wine_published_list_slugs") {
+      return Promise.resolve({ data: opts.publishedLists ?? [], error: null });
+    }
+    return Promise.resolve({ data: null, error: null });
   });
   const from = vi.fn((table: string) => {
     const filters: Array<[string, string]> = [];
@@ -56,15 +65,6 @@ function makeSupabase(opts: {
           ),
         );
         return { data: match ?? null, error: null };
-      },
-      then: (
-        resolve: (v: { data: PublishedListRow[]; error: null }) => void,
-      ) => {
-        if (table === "wine_lists") {
-          resolve({ data: opts.publishedLists ?? [], error: null });
-        } else {
-          resolve({ data: [], error: null });
-        }
       },
     };
     return chain;
@@ -220,7 +220,9 @@ describe("PATCH /api/wines/[id]/availability", () => {
     const { supabase, calls } = makeSupabase({
       wineRows: [{ id: "w-1", restaurant_id: "r-A" }],
       rpcResult: { data: [event], error: null },
-      publishedLists: [{ slug: "dinner" }, { slug: "btg" }, { slug: null }],
+      // ARCH-019: RPC-backed revalidation returns only non-null slugs
+      // (filter lives in SQL now).
+      publishedLists: [{ slug: "dinner" }, { slug: "btg" }],
     });
     mockRequireRole.mockResolvedValue({
       supabase,
@@ -238,15 +240,28 @@ describe("PATCH /api/wines/[id]/availability", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.changed).toBe(true);
-    expect(body.event).toEqual(event);
+    // ARCH-018: response is narrowed — direction + occurred_at only.
+    // user_id / restaurant_id / id / note are intentionally absent.
+    expect(body.event).toEqual({
+      direction: "eightysixed",
+      occurred_at: "2026-04-21T19:00:00Z",
+    });
+    expect(body.event.user_id).toBeUndefined();
+    expect(body.event.restaurant_id).toBeUndefined();
 
+    expect(calls.rpc[0].fn).toBe("set_wine_availability");
     expect(calls.rpc[0].args).toEqual({
       p_wine_id: "w-1",
       p_direction: "eightysixed",
       p_note: "last bottle just poured",
     });
+    // Second RPC call is the revalidation query.
+    expect(calls.rpc[1].fn).toBe("wine_published_list_slugs");
+    expect(calls.rpc[1].args).toEqual({
+      p_wine_id: "w-1",
+      p_restaurant_id: "r-A",
+    });
 
-    // Both lists with non-null slugs revalidated. The slug=null list is skipped.
     expect(mockRevalidatePath).toHaveBeenCalledTimes(2);
     expect(mockRevalidatePath).toHaveBeenCalledWith("/list/dinner");
     expect(mockRevalidatePath).toHaveBeenCalledWith("/list/btg");

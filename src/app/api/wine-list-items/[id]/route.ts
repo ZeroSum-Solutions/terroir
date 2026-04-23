@@ -36,13 +36,20 @@ export async function DELETE(
   return NextResponse.json({ ok: true });
 }
 
-// BND-038: added glass_pour_ml + pour_size_mode to the allowed fields.
+// ARCH-017 / DEBT-011: `is_available` is NOT in the schema. The
+// column is deprecated by BND-037's wines.is_eightysixed availability
+// system; leaving the PATCH surface writable encouraged two parallel
+// availability models to live on. Z.strict() below rejects any body
+// that tries to write it (400). The column remains in the DB for
+// read compatibility; dropping it is a separate migration-cleanup
+// pass.
+//
+// BND-038 added glass_pour_ml + pour_size_mode.
 const PatchSchema = z
   .object({
     glass_price: z.number().nullable().optional(),
     bottle_price: z.number().nullable().optional(),
     tasting_note: z.string().optional(),
-    is_available: z.boolean().optional(),
     position: z.number().int().optional(),
     glass_pour_ml: z.number().int().positive().max(2000).nullable().optional(),
     pour_size_mode: z.enum(["fixed", "picker"]).optional(),

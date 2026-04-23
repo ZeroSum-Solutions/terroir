@@ -65,14 +65,40 @@ export function isValidIdempotencyKey(raw: string | null): raw is string {
   return /^[A-Za-z0-9_\-]+$/.test(raw);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type LooseChain = any;
+// DEBT-015: replaced `type LooseChain = any` with a precise structural
+// type covering exactly the chain methods this module uses. The real
+// @supabase/postgrest-js builder types are deeply generic and would
+// require propagating Database lookups through every helper; the
+// trade-off below is "just-enough" typing — eq() returns the same
+// builder so chained eq() calls still compose, maybeSingle() ends the
+// chain, and insert/update/delete produce a result promise. No `any`
+// escape hatches in the module.
+
+type IdempRow = {
+  response_status: number | null;
+  response_body: Json | null;
+  created_at: string;
+};
+
+type SupabaseError = { code?: string; message?: string } | null;
+
+interface ChainWithEq<TResult> {
+  eq(column: string, value: string): ChainWithEq<TResult>;
+  then<TOut>(
+    resolve: (v: { data: TResult | null; error: SupabaseError }) => TOut,
+  ): Promise<TOut>;
+  maybeSingle(): Promise<{ data: TResult | null; error: SupabaseError }>;
+}
 
 type LooseQueryBuilder = {
-  insert: (row: unknown) => Promise<{ error: { code?: string } | null }>;
-  select: (cols: string) => LooseChain;
-  update: (row: unknown) => LooseChain;
-  delete: () => LooseChain;
+  insert(
+    row: Partial<IdempRow> & { key: string; restaurant_id: string },
+  ): Promise<{ error: SupabaseError }>;
+  select(cols: string): ChainWithEq<IdempRow>;
+  update(
+    row: Partial<IdempRow>,
+  ): ChainWithEq<never>;
+  delete(): ChainWithEq<never>;
 };
 
 function idempTable(supabase: SupabaseClient<Database>): LooseQueryBuilder {

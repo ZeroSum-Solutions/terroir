@@ -101,24 +101,32 @@ export async function PATCH(
     return NextResponse.json({ changed: false });
   }
 
+  // ARCH-018: do NOT surface the full availability_events row on the
+  // HTTP response. It carries user_id + restaurant_id which have no
+  // client consumer and expand the attack surface of this endpoint.
+  // Narrow to the two fields the UI uses (direction + occurred_at).
+  // If a future UI needs the audit detail it should go through a
+  // scoped events endpoint that enforces its own RLS / restaurant
+  // filter.
   const event = events[0];
+  const narrowed = {
+    direction: event.direction,
+    occurred_at: event.created_at,
+  };
 
-  // Revalidate every published wine list that references this wine so
-  // the public /list/[slug] page reflects the new 86'd state ~instantly.
-  // Nested !inner filter keeps lists-with-no-matching-items out of the
-  // result set.
-  const { data: affected } = await supabase
-    .from("wine_lists")
-    .select(
-      "slug, wine_list_sections!inner(wine_list_items!inner(wine_id))",
-    )
-    .eq("is_published", true)
-    .eq("restaurant_id", restaurantId)
-    .eq("wine_list_sections.wine_list_items.wine_id", id);
+  // ARCH-019: revalidation target list comes from a stable SQL RPC
+  // (wine_published_list_slugs, migration 0019), not a PostgREST
+  // nested !inner filter. The embed-filter syntax is PostgREST-
+  // version-fragile and silently degrades if the operator semantics
+  // change; SQL is explicit and survives upgrades.
+  const { data: affected } = await supabase.rpc(
+    "wine_published_list_slugs",
+    { p_wine_id: id, p_restaurant_id: restaurantId },
+  );
 
-  for (const list of (affected ?? []) as Array<{ slug: string | null }>) {
-    if (list.slug) revalidatePath(`/list/${list.slug}`);
+  for (const row of (affected ?? []) as Array<{ slug: string }>) {
+    revalidatePath(`/list/${row.slug}`);
   }
 
-  return NextResponse.json({ changed: true, event });
+  return NextResponse.json({ changed: true, event: narrowed });
 }
