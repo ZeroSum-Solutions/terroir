@@ -1,16 +1,29 @@
-import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { NextResponse } from "next/server";
+import { notFound, redirect } from "next/navigation";
+import { requireMembership } from "@/lib/api/auth";
 import { WineListEditor } from "./wine-list-editor";
 
 type Params = Promise<{ id: string }>;
 
+// ARCH-015: this server component is the primary read path for the
+// wine-list editor. Before the fix it created its own supabase client
+// and queried wine_lists by id only — RLS was the single enforcement
+// point. Now we go through requireMembership (same pattern as
+// /availability) and also filter by restaurant_id for defense-in-depth.
+// A list UUID from another tenant 404s here even if RLS is ever relaxed.
 export default async function WineListEditorPage({
   params,
 }: {
   params: Params;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
+
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) {
+    // requireMembership returned a NextResponse (401/403). Send to login.
+    redirect(`/login?next=/wine-list/${id}`);
+  }
+  const { supabase, restaurantId } = auth;
 
   const { data: list, error } = await supabase
     .from("wine_lists")
@@ -18,6 +31,7 @@ export default async function WineListEditorPage({
       "*, wine_list_sections(*, wine_list_items(*, wines(*)))",
     )
     .eq("id", id)
+    .eq("restaurant_id", restaurantId)
     .single();
 
   if (error || !list) notFound();
