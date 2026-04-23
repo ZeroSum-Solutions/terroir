@@ -58,8 +58,16 @@ export async function POST(request: NextRequest) {
 
   const wineId = (wineIds as string[])[0];
 
-  // Set lwin_id on the wine
-  const { error: lwinError } = await supabase.from("wines").update({ lwin_id: lwin_id as string }).eq("id", wineId);
+  // ARCH-014: the wineId just came from find_or_create_wines_batch
+  // (which is restaurant-scoped internally), so the current flow is
+  // safe. The .eq('restaurant_id', …) is here so a future refactor
+  // that lets wineId come from user input doesn't silently become
+  // cross-tenant.
+  const { error: lwinError } = await supabase
+    .from("wines")
+    .update({ lwin_id: lwin_id as string })
+    .eq("id", wineId)
+    .eq("restaurant_id", restaurantId);
   if (lwinError) {
     console.error("Failed to set lwin_id on wine:", lwinError);
   }

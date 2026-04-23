@@ -2,12 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * PATCH /api/wine-list-items/reorder tests (BND-026).
+ * PATCH /api/wine-list-items/reorder tests (BND-026 + ARCH-014).
  *
  * The route is now a thin caller of the `reorder_wine_list_items` RPC
  * (migration 0013). All position updates happen inside plpgsql's
- * implicit transaction, so the route's only job is to validate the
- * payload and surface RPC errors.
+ * implicit transaction. ARCH-014 added an ownership pre-check: every
+ * orderedId must belong to a wine list owned by the caller's
+ * restaurant before the RPC is invoked.
  */
 
 const mockRequireMembership = vi.fn();
@@ -18,10 +19,49 @@ vi.mock("@/lib/api/auth", () => ({
 const { PATCH } = await import("./route");
 
 type RpcResult = { data: unknown; error: unknown };
+type OwnershipRow = {
+  id: string;
+  wine_list_sections: { wine_lists: { restaurant_id: string } };
+};
 
-function buildSupabase(rpcResult: RpcResult) {
-  const rpc = vi.fn(() => Promise.resolve(rpcResult));
-  return { supabase: { rpc }, rpc };
+/**
+ * Builds a supabase mock that serves:
+ *  1. The ownership pre-check —
+ *     from('wine_list_items').select(...).in('id', ids)
+ *     → returns one ownership row per id in `ownershipRows`.
+ *  2. The reorder RPC —
+ *     supabase.rpc('reorder_wine_list_items', { p_ordered_ids })
+ *     → returns `rpcResult`.
+ *
+ * If `ownershipRows` has FEWER rows than the request ids, the helper
+ * returns a short list — simulating "one of the ids doesn't exist
+ * or is cross-tenant", which the route should reject as 404.
+ */
+function buildSupabase(opts: {
+  rpcResult: RpcResult;
+  ownershipRows: OwnershipRow[];
+}) {
+  const rpc = vi.fn(() => Promise.resolve(opts.rpcResult));
+  const supabase = {
+    from: (_t: string) => ({
+      select: () => ({
+        in: () => ({
+          then: (
+            resolve: (v: { data: OwnershipRow[]; error: null }) => void,
+          ) => resolve({ data: opts.ownershipRows, error: null }),
+        }),
+      }),
+    }),
+    rpc,
+  };
+  return { supabase, rpc };
+}
+
+function ownedRow(id: string, restaurantId: string): OwnershipRow {
+  return {
+    id,
+    wine_list_sections: { wine_lists: { restaurant_id: restaurantId } },
+  };
 }
 
 function makeRequest(body: unknown): NextRequest {
@@ -46,7 +86,10 @@ describe("PATCH /api/wine-list-items/reorder", () => {
   });
 
   it("400s on invalid JSON", async () => {
-    const { supabase, rpc } = buildSupabase({ data: null, error: null });
+    const { supabase, rpc } = buildSupabase({
+      rpcResult: { data: null, error: null },
+      ownershipRows: [],
+    });
     mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
     const res = await PATCH(makeRequest("{not json"));
     expect(res.status).toBe(400);
@@ -54,7 +97,10 @@ describe("PATCH /api/wine-list-items/reorder", () => {
   });
 
   it("400s on empty orderedIds (no RPC call)", async () => {
-    const { supabase, rpc } = buildSupabase({ data: null, error: null });
+    const { supabase, rpc } = buildSupabase({
+      rpcResult: { data: null, error: null },
+      ownershipRows: [],
+    });
     mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
     const res = await PATCH(makeRequest({ orderedIds: [] }));
     expect(res.status).toBe(400);
@@ -62,9 +108,12 @@ describe("PATCH /api/wine-list-items/reorder", () => {
   });
 
   it("calls reorder_wine_list_items with exact payload on happy path", async () => {
-    const { supabase, rpc } = buildSupabase({ data: null, error: null });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
     const ids = ["item-a", "item-b", "item-c"];
+    const { supabase, rpc } = buildSupabase({
+      rpcResult: { data: null, error: null },
+      ownershipRows: ids.map((id) => ownedRow(id, "r-1")),
+    });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
     const res = await PATCH(makeRequest({ orderedIds: ids }));
     expect(res.status).toBe(200);
     expect(rpc).toHaveBeenCalledTimes(1);
@@ -74,15 +123,45 @@ describe("PATCH /api/wine-list-items/reorder", () => {
   });
 
   it("surfaces RPC errors as 500 without attempting partial writes", async () => {
+    const ids = ["item-a", "item-b"];
     const { supabase, rpc } = buildSupabase({
-      data: null,
-      error: { message: "mismatched section", code: "P0001" },
+      rpcResult: {
+        data: null,
+        error: { message: "mismatched section", code: "P0001" },
+      },
+      ownershipRows: ids.map((id) => ownedRow(id, "r-1")),
     });
     mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
-    const res = await PATCH(makeRequest({ orderedIds: ["item-a", "item-b"] }));
+    const res = await PATCH(makeRequest({ orderedIds: ids }));
     expect(res.status).toBe(500);
     expect(rpc).toHaveBeenCalledTimes(1);
     // No direct .from("wine_list_items").update() calls — the RPC is the
     // only write path. This is the key behavioural change from BND-026.
+  });
+
+  // ARCH-014: ownership pre-check
+  it("404s when any orderedId belongs to another restaurant (no RPC call)", async () => {
+    const ids = ["item-a", "item-b"];
+    const { supabase, rpc } = buildSupabase({
+      rpcResult: { data: null, error: null },
+      ownershipRows: [ownedRow("item-a", "r-1"), ownedRow("item-b", "r-2")],
+    });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    const res = await PATCH(makeRequest({ orderedIds: ids }));
+    expect(res.status).toBe(404);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("404s when a requested id doesn't exist (no RPC call)", async () => {
+    const ids = ["item-a", "item-b"];
+    const { supabase, rpc } = buildSupabase({
+      rpcResult: { data: null, error: null },
+      // Only one row returned for two ids → len mismatch → reject.
+      ownershipRows: [ownedRow("item-a", "r-1")],
+    });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    const res = await PATCH(makeRequest({ orderedIds: ids }));
+    expect(res.status).toBe(404);
+    expect(rpc).not.toHaveBeenCalled();
   });
 });

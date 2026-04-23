@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
+import { isOwnWineListItem } from "@/lib/api/wine-list-scope";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,14 @@ export async function DELETE(
   const { id } = await params;
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
-  const { supabase } = auth;
+  const { supabase, restaurantId } = auth;
+
+  // ARCH-014: verify the item's owning wine_list belongs to the
+  // caller's restaurant before mutating. RLS still gates at the DB
+  // level; this is application-layer defense-in-depth.
+  if (!(await isOwnWineListItem(supabase, id, restaurantId))) {
+    return NextResponse.json({ error: "Item not found." }, { status: 404 });
+  }
 
   const { error } = await supabase
     .from("wine_list_items")
@@ -48,7 +56,7 @@ export async function PATCH(
   const { id } = await params;
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
-  const { supabase } = auth;
+  const { supabase, restaurantId } = auth;
 
   let raw: unknown;
   try {
@@ -67,6 +75,11 @@ export async function PATCH(
 
   if (Object.keys(parsed.data).length === 0) {
     return NextResponse.json({ error: "No valid fields." }, { status: 400 });
+  }
+
+  // ARCH-014: verify ownership before update.
+  if (!(await isOwnWineListItem(supabase, id, restaurantId))) {
+    return NextResponse.json({ error: "Item not found." }, { status: 404 });
   }
 
   const { error } = await supabase

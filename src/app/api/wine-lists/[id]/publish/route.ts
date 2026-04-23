@@ -12,13 +12,18 @@ export async function POST(
   const { id } = await params;
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
-  const { supabase } = auth;
+  const { supabase, restaurantId } = auth;
 
-  // Get current list
+  // ARCH-014: scope BOTH the fetch and the update by restaurant_id.
+  // The sibling [id] PATCH/DELETE documents the invariant ("every
+  // write on wine_lists is scoped both by id and by restaurant_id");
+  // publish must honor it too so cross-tenant publish can't happen
+  // even if RLS is relaxed in a future migration.
   const { data: list, error: fetchError } = await supabase
     .from("wine_lists")
     .select("slug, restaurant_id")
     .eq("id", id)
+    .eq("restaurant_id", restaurantId)
     .single();
 
   if (fetchError || !list) {
@@ -48,7 +53,8 @@ export async function POST(
       last_published_at: new Date().toISOString(),
       slug,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("restaurant_id", restaurantId);
 
   if (updateError) {
     console.error("publish failed:", updateError);

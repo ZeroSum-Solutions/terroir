@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
+import { isOwnWineListSection } from "@/lib/api/wine-list-scope";
 
 export const runtime = "nodejs";
 
@@ -14,7 +15,7 @@ const AddItemSchema = z.object({
 export async function POST(request: NextRequest) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
-  const { supabase } = auth;
+  const { supabase, restaurantId } = auth;
 
   let raw: unknown;
   try {
@@ -32,6 +33,17 @@ export async function POST(request: NextRequest) {
   }
 
   const body = parsed.data;
+
+  // ARCH-014: before inserting, confirm section_id belongs to the
+  // caller's restaurant. Otherwise a user with another tenant's
+  // section_id could attempt to insert into it and rely on RLS
+  // alone to block.
+  if (!(await isOwnWineListSection(supabase, body.section_id, restaurantId))) {
+    return NextResponse.json(
+      { error: "Section not found." },
+      { status: 404 },
+    );
+  }
 
   // Get the max position in this section
   const { data: existing } = await supabase
