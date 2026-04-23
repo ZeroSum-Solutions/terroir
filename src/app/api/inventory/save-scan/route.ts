@@ -184,11 +184,19 @@ async function saveScanOnce(opts: {
         : "jpg";
       const storagePath = `${restaurantId}/${scanId}.${ext}`;
       const fileBuffer = Buffer.from(await file.arrayBuffer());
+      // INT-016: `upsert: true` so a legitimate retry after a
+      // mid-handler failure doesn't collide on the storage path.
+      // Scenario: handler uploaded, crashed before the inventory_items
+      // insert, sentinel was deleted on throw, client retries same
+      // key. With upsert:false the retry's upload failed with a
+      // duplicate-key error; the handler logged it and carried on,
+      // leaving an invoice_scans row without raw_image_path. upsert:
+      // true makes repeated uploads of the same bytes a no-op.
       const { error: uploadError } = await supabase.storage
         .from("invoice-images")
         .upload(storagePath, fileBuffer, {
           contentType: file.type,
-          upsert: false,
+          upsert: true,
         });
       if (uploadError) {
         console.error("Invoice image upload failed:", uploadError);
