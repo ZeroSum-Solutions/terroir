@@ -142,11 +142,21 @@ async function saveBottleOnce(opts: {
     };
   }
 
-  // LWIN matching — fire-and-forget
+  // LWIN matching — fire-and-forget. INT-017: failures were logged
+  // but dropped, so a systemic LWIN outage wouldn't surface in
+  // Sentry. Pipe through captureException with a non-route tag so
+  // the dashboards can separate "inventory save failed" (500 to
+  // user) from "LWIN sidecar degraded" (silent, background).
   supabase
     .rpc("match_lwin_batch", { p_wine_ids: [wineId] })
     .then(({ error: lwinError }) => {
-      if (lwinError) console.error("LWIN match failed:", lwinError);
+      if (lwinError) {
+        console.error("LWIN match failed:", lwinError);
+        Sentry.captureException(lwinError, {
+          tags: { surface: "lwin-match", phase: "match_lwin_batch-rpc", path: "save-bottle-scan" },
+          extra: { wineId },
+        });
+      }
     });
 
   return { status: 200, body: { wineId } };

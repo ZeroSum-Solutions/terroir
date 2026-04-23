@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { rateLimit } from "@/lib/api/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 
@@ -126,6 +127,14 @@ export async function POST(request: NextRequest) {
 
   if (membershipError) {
     console.error("membership insert failed:", membershipError);
+    Sentry.captureException(membershipError, {
+      tags: { surface: "team-accept-invite", phase: "membership-insert" },
+      extra: {
+        userId: user.id,
+        restaurantId: invitation.restaurant_id,
+        invitationId: invitation.id,
+      },
+    });
     return NextResponse.json(
       { error: "Failed to join restaurant." },
       { status: 500 },

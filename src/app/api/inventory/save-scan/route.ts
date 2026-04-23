@@ -263,13 +263,22 @@ async function saveScanOnce(opts: {
     return { status: 500, body: { error: "Failed to save inventory items." } };
   }
 
-  // LWIN matching — fire-and-forget, non-blocking on the response
+  // LWIN matching — fire-and-forget, non-blocking on the response.
+  // INT-017: failures now capture to Sentry so a systemic LWIN outage
+  // surfaces. Still fire-and-forget — the main save has succeeded.
   const wineIdStrings = wineIdArray as string[];
   supabase
     .rpc("match_lwin_batch", { p_wine_ids: wineIdStrings })
     .then(({ data, error: lwinError }) => {
-      if (lwinError) console.error("LWIN batch match failed:", lwinError);
-      else if (data) console.log(`LWIN matched ${data.length} of ${wineIdStrings.length} wines`);
+      if (lwinError) {
+        console.error("LWIN batch match failed:", lwinError);
+        Sentry.captureException(lwinError, {
+          tags: { surface: "lwin-match", phase: "match_lwin_batch-rpc", path: "save-scan" },
+          extra: { wineIdCount: wineIdStrings.length },
+        });
+      } else if (data) {
+        console.log(`LWIN matched ${data.length} of ${wineIdStrings.length} wines`);
+      }
     });
 
   /**

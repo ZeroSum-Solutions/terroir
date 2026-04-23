@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
 
@@ -62,6 +63,10 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     console.error("cellar_config insert failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "cellar-config", phase: "insert" },
+      extra: { restaurantId, rows, columns },
+    });
     return NextResponse.json(
       { error: "Failed to create cellar configuration." },
       { status: 500 },

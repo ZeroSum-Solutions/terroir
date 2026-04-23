@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
@@ -18,6 +19,10 @@ export async function GET() {
 
   if (error) {
     console.error("price-comparison query failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "wines-price-comparison", phase: "fetch" },
+      extra: { restaurantId },
+    });
     return NextResponse.json(
       { error: "Failed to fetch price data." },
       { status: 500 },

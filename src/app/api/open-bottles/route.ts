@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
@@ -29,6 +30,10 @@ export async function GET(_request: NextRequest) {
 
   if (error) {
     console.error("open-bottles fetch failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "pour", phase: "list_open_bottle_items-rpc" },
+      extra: { restaurantId },
+    });
     return NextResponse.json({ error: "Failed to load." }, { status: 500 });
   }
 

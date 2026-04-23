@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
@@ -20,6 +21,10 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.error("lwin_search failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "wines-lwin-search", phase: "lwin_search-rpc" },
+      extra: { q },
+    });
     return NextResponse.json([], { status: 500 });
   }
 

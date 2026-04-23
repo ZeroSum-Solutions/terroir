@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 import { areAllOwnWineListItems } from "@/lib/api/wine-list-scope";
 
@@ -47,6 +48,10 @@ export async function PATCH(request: NextRequest) {
 
   if (error) {
     console.error("reorder failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "wine-list-items", phase: "reorder-rpc" },
+      extra: { restaurantId, itemCount: body.orderedIds.length },
+    });
     return NextResponse.json({ error: "Reorder failed." }, { status: 500 });
   }
 

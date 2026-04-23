@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
@@ -50,6 +51,13 @@ export async function POST(request: NextRequest) {
 
   if (error || !wineIds?.[0]) {
     console.error("create-from-lwin failed:", error);
+    Sentry.captureException(
+      error ?? new Error("find_or_create_wines_batch returned empty"),
+      {
+        tags: { surface: "wines-create-from-lwin", phase: "batch-find-wines" },
+        extra: { restaurantId, lwin_id, display_name },
+      },
+    );
     return NextResponse.json(
       { error: "Failed to create wine." },
       { status: 500 },
@@ -70,6 +78,10 @@ export async function POST(request: NextRequest) {
     .eq("restaurant_id", restaurantId);
   if (lwinError) {
     console.error("Failed to set lwin_id on wine:", lwinError);
+    Sentry.captureException(lwinError, {
+      tags: { surface: "wines-create-from-lwin", phase: "update-lwin-id" },
+      extra: { restaurantId, wine_id: wineId, lwin_id },
+    });
   }
 
   return NextResponse.json({ id: wineId });

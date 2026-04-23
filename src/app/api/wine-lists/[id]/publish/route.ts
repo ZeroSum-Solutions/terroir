@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
@@ -58,6 +59,10 @@ export async function POST(
 
   if (updateError) {
     console.error("publish failed:", updateError);
+    Sentry.captureException(updateError, {
+      tags: { surface: "wine-list", phase: "publish" },
+      extra: { restaurantId, list_id: id },
+    });
     return NextResponse.json({ error: "Publish failed." }, { status: 500 });
   }
 

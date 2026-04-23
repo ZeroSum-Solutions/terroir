@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
 
@@ -52,6 +53,10 @@ export async function POST(request: NextRequest) {
 
   if (ownerError) {
     console.error("wine_lists owner check failed:", ownerError);
+    Sentry.captureException(ownerError, {
+      tags: { surface: "wine-list-sections", phase: "owner-check" },
+      extra: { restaurantId, wine_list_id },
+    });
     return NextResponse.json({ error: "Lookup failed." }, { status: 500 });
   }
   if (!ownerCheck) {
@@ -69,6 +74,10 @@ export async function POST(request: NextRequest) {
 
   if (countError) {
     console.error("wine_list_sections count failed:", countError);
+    Sentry.captureException(countError, {
+      tags: { surface: "wine-list-sections", phase: "count" },
+      extra: { restaurantId, wine_list_id },
+    });
     return NextResponse.json({ error: "Count failed." }, { status: 500 });
   }
 
@@ -82,6 +91,10 @@ export async function POST(request: NextRequest) {
 
   if (insertError) {
     console.error("wine_list_sections insert failed:", insertError);
+    Sentry.captureException(insertError, {
+      tags: { surface: "wine-list-sections", phase: "insert" },
+      extra: { restaurantId, wine_list_id, position },
+    });
     return NextResponse.json({ error: "Insert failed." }, { status: 500 });
   }
 

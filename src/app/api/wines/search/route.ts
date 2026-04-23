@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
@@ -26,6 +27,10 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.error("wines search failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "wines-search", phase: "query" },
+      extra: { restaurantId, q },
+    });
     return NextResponse.json({ error: "Search failed." }, { status: 500 });
   }
 

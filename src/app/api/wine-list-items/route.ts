@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
 import { isOwnWineListSection } from "@/lib/api/wine-list-scope";
@@ -69,6 +70,17 @@ export async function POST(request: NextRequest) {
 
   if (error || !item) {
     console.error("wine_list_items insert failed:", error);
+    Sentry.captureException(
+      error ?? new Error("wine_list_items insert returned null"),
+      {
+        tags: { surface: "wine-list-items", phase: "insert" },
+        extra: {
+          restaurantId,
+          section_id: body.section_id,
+          wine_id: body.wine_id,
+        },
+      },
+    );
     return NextResponse.json({ error: "Failed to add wine." }, { status: 500 });
   }
 

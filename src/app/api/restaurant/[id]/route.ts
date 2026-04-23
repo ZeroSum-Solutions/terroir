@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { requireAuth, requireOwner } from "@/lib/api/auth";
 import { setActiveRestaurant } from "@/lib/api/active-restaurant";
 
@@ -58,6 +59,10 @@ export async function PATCH(
 
   if (error) {
     console.error("restaurant update failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "restaurant", phase: "update" },
+      extra: { restaurantId, id },
+    });
     return NextResponse.json({ error: "Update failed." }, { status: 500 });
   }
 

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
 import { isOwnWineListItem } from "@/lib/api/wine-list-scope";
@@ -30,6 +31,10 @@ export async function DELETE(
 
   if (error) {
     console.error("wine_list_items delete failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "wine-list-items", phase: "delete" },
+      extra: { restaurantId, item_id: id },
+    });
     return NextResponse.json({ error: "Delete failed." }, { status: 500 });
   }
 
@@ -96,6 +101,10 @@ export async function PATCH(
 
   if (error) {
     console.error("wine_list_items update failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "wine-list-items", phase: "update" },
+      extra: { restaurantId, item_id: id },
+    });
     return NextResponse.json({ error: "Update failed." }, { status: 500 });
   }
 

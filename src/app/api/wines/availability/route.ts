@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
@@ -56,6 +57,10 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.error("wines availability fetch failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "availability", phase: "fetch" },
+      extra: { restaurantId, limit, offset },
+    });
     return NextResponse.json(
       { error: "Failed to load wines." },
       { status: 500 },

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
@@ -51,6 +52,10 @@ export async function PATCH(
 
   if (error) {
     console.error("wine_lists update failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "wine-list", phase: "update" },
+      extra: { restaurantId, list_id: id },
+    });
     return NextResponse.json({ error: "Update failed." }, { status: 500 });
   }
 
@@ -79,6 +84,10 @@ export async function DELETE(
 
   if (error) {
     console.error("wine_lists delete failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "wine-list", phase: "delete" },
+      extra: { restaurantId, list_id: id },
+    });
     return NextResponse.json({ error: "Delete failed." }, { status: 500 });
   }
 

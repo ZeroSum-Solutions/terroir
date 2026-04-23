@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireOwner } from "@/lib/api/auth";
 
@@ -42,6 +43,13 @@ export async function POST(request: NextRequest) {
 
   if (error || !invitation) {
     console.error("invitation insert failed:", error);
+    Sentry.captureException(
+      error ?? new Error("invitation insert returned null"),
+      {
+        tags: { surface: "team-invite", phase: "insert" },
+        extra: { restaurantId, role },
+      },
+    );
     return NextResponse.json(
       { error: "Failed to create invitation." },
       { status: 500 },
