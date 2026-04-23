@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
@@ -27,6 +28,19 @@ export async function DELETE(
   return NextResponse.json({ ok: true });
 }
 
+// BND-038: added glass_pour_ml + pour_size_mode to the allowed fields.
+const PatchSchema = z
+  .object({
+    glass_price: z.number().nullable().optional(),
+    bottle_price: z.number().nullable().optional(),
+    tasting_note: z.string().optional(),
+    is_available: z.boolean().optional(),
+    position: z.number().int().optional(),
+    glass_pour_ml: z.number().int().positive().max(2000).nullable().optional(),
+    pour_size_mode: z.enum(["fixed", "picker"]).optional(),
+  })
+  .strict();
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Params },
@@ -36,39 +50,28 @@ export async function PATCH(
   if (auth instanceof NextResponse) return auth;
   const { supabase } = auth;
 
-  let body: {
-    glass_price?: number | null;
-    bottle_price?: number | null;
-    tasting_note?: string;
-    is_available?: boolean;
-    position?: number;
-  };
+  let raw: unknown;
   try {
-    body = await request.json();
+    raw = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  const allowed: {
-    glass_price?: number | null;
-    bottle_price?: number | null;
-    tasting_note?: string;
-    is_available?: boolean;
-    position?: number;
-  } = {};
-  if (body.glass_price !== undefined) allowed.glass_price = body.glass_price;
-  if (body.bottle_price !== undefined) allowed.bottle_price = body.bottle_price;
-  if (body.tasting_note !== undefined) allowed.tasting_note = body.tasting_note;
-  if (body.is_available !== undefined) allowed.is_available = body.is_available;
-  if (body.position !== undefined) allowed.position = body.position;
+  const parsed = PatchSchema.safeParse(raw);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid body.", issues: parsed.error.issues },
+      { status: 400 },
+    );
+  }
 
-  if (Object.keys(allowed).length === 0) {
+  if (Object.keys(parsed.data).length === 0) {
     return NextResponse.json({ error: "No valid fields." }, { status: 400 });
   }
 
   const { error } = await supabase
     .from("wine_list_items")
-    .update(allowed)
+    .update(parsed.data)
     .eq("id", id);
 
   if (error) {
