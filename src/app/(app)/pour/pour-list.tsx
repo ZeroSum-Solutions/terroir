@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { PourItem } from "./page";
 import { PourPickerModal } from "./pour-picker-modal";
 
 const ML_PER_OZ = 29.5735;
+const UNDO_BANNER_MS = 6000;
 
 export function PourList({
   initialItems,
@@ -16,9 +17,14 @@ export function PourList({
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
   const [pickerFor, setPickerFor] = useState<PourItem | null>(null);
+  // Monotonic counter used as both a React key on the banner and the
+  // effect dependency that cancels a stale auto-hide timer when a
+  // fresh pour lands. Each setLastPour bumps the id so effect cleanup
+  // cancels the previous timer and the new pour gets its full window.
+  const pourIdRef = useRef(0);
   const [lastPour, setLastPour] = useState<
     | {
-        itemId: string;
+        pourId: number;
         wineId: string;
         ml: number;
         wineName: string;
@@ -27,6 +33,19 @@ export function PourList({
   >(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  // Auto-hide the undo banner after UNDO_BANNER_MS. The effect cleanup
+  // cancels any in-flight timer when lastPour changes or the component
+  // unmounts, so a rapid second pour for the SAME wine gets a fresh
+  // 6-second window rather than inheriting the previous timer.
+  useEffect(() => {
+    if (!lastPour) return;
+    const timerPourId = lastPour.pourId;
+    const handle = setTimeout(() => {
+      setLastPour((curr) => (curr && curr.pourId === timerPourId ? null : curr));
+    }, UNDO_BANNER_MS);
+    return () => clearTimeout(handle);
+  }, [lastPour]);
 
   const doPour = useCallback(
     async (item: PourItem, ml: number) => {
@@ -71,19 +90,15 @@ export function PourList({
           throw new Error(payload?.error ?? `Request failed (${res.status}).`);
         }
 
+        // Fresh pourId per tap — the auto-hide effect keys on this to
+        // cancel any in-flight timer from a prior pour.
+        pourIdRef.current += 1;
         setLastPour({
-          itemId: item.wine_list_item_id,
+          pourId: pourIdRef.current,
           wineId: item.wine_id,
           ml,
           wineName: `${item.producer} ${item.name}`,
         });
-        // Auto-hide the undo banner after 6s.
-        const timerWineId = item.wine_id;
-        setTimeout(() => {
-          setLastPour((curr) =>
-            curr && curr.wineId === timerWineId ? null : curr,
-          );
-        }, 6000);
 
         // Refresh the server component to reconcile with real numbers.
         startTransition(() => router.refresh());
@@ -171,6 +186,10 @@ export function PourList({
 
       {lastPour && (
         <div
+          // Key on pourId so a fresh pour mounts a fresh banner —
+          // keeps any mid-animation state from one pour leaking into
+          // the next.
+          key={lastPour.pourId}
           role="status"
           aria-live="polite"
           className="fixed bottom-[80px] left-1/2 z-40 w-[calc(100%-32px)] max-w-[480px] -translate-x-1/2 rounded-md border border-ink bg-ink px-md py-sm text-white shadow-lg md:bottom-lg"
