@@ -1,10 +1,17 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { resolveActiveMembership } from "@/lib/api/resolve-active-membership";
 
 /**
  * Request-scoped cached auth context. React cache() deduplicates within a
  * single server render tree, so layout + page share one set of DB calls
  * instead of each querying independently.
+ *
+ * ARCH-013: routes active-membership resolution through the shared
+ * resolveActiveMembership() helper — same cookie-first / created_at-DESC
+ * logic requireMembership() uses for API routes. Previously this helper
+ * did a raw .limit(1).single() with no ORDER BY, so a multi-membership
+ * user could see one restaurant in the shell and another in API calls.
  */
 export const getAuthContext = cache(async () => {
   const supabase = await createClient();
@@ -14,19 +21,14 @@ export const getAuthContext = cache(async () => {
 
   if (!user) return null;
 
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("restaurant_id, role, restaurants(name)")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
+  const membership = await resolveActiveMembership(supabase, user.id);
   if (!membership) return null;
 
-  const restaurantId = membership.restaurant_id;
-  const restaurantName =
-    (membership.restaurants as { name: string } | null)?.name ?? "My Restaurant";
-  const userRole = (membership.role ?? "staff") as "owner" | "manager" | "staff";
-
-  return { user, supabase, restaurantId, restaurantName, userRole };
+  return {
+    user,
+    supabase,
+    restaurantId: membership.restaurantId,
+    restaurantName: membership.restaurantName,
+    userRole: membership.role,
+  };
 });

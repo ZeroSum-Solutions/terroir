@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { readActiveRestaurantFromCookie } from "@/lib/api/active-restaurant";
+import { resolveActiveMembership } from "@/lib/api/resolve-active-membership";
 import type { Database } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -33,13 +33,12 @@ export async function requireAuth(): Promise<AuthResult | NextResponse> {
 /**
  * Returns auth + restaurant membership, or a 401/403 response.
  *
- * For users with multiple memberships, the active restaurant is chosen by:
- *   1. a signed `active_restaurant_id` cookie if present AND the user still
- *      belongs to that restaurant, OR
- *   2. the most recently created membership (deterministic tiebreaker: id DESC).
- *
- * The order is stable across requests, which matters for every downstream
- * route that scopes queries by restaurant_id.
+ * ARCH-013: delegates to resolveActiveMembership() — the SAME helper
+ * getAuthContext() uses for the server-component path. Previously the
+ * two helpers had independent resolution logic and could disagree on
+ * which restaurant was active for a multi-membership user. They now
+ * always pick the same one (cookie first, then created_at DESC /
+ * id DESC fallback).
  */
 export async function requireMembership(): Promise<
   MembershipResult | NextResponse
@@ -48,31 +47,20 @@ export async function requireMembership(): Promise<
   if (auth instanceof NextResponse) return auth;
 
   const { supabase, user } = auth;
-  const { data: memberships } = await supabase
-    .from("memberships")
-    .select("restaurant_id, role")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false });
+  const membership = await resolveActiveMembership(supabase, user.id);
 
-  if (!memberships || memberships.length === 0) {
+  if (!membership) {
     return NextResponse.json(
       { error: "No restaurant membership found." },
       { status: 403 },
     );
   }
 
-  const memberIds = memberships.map((m) => m.restaurant_id);
-  const activeId = await readActiveRestaurantFromCookie(memberIds);
-  const chosen =
-    (activeId && memberships.find((m) => m.restaurant_id === activeId)) ||
-    memberships[0];
-
   return {
     supabase,
     user,
-    restaurantId: chosen.restaurant_id,
-    role: chosen.role as MembershipRole,
+    restaurantId: membership.restaurantId,
+    role: membership.role,
   };
 }
 
