@@ -55,24 +55,51 @@ export function PourList({
       const prev = items.find((it) => it.wine_id === item.wine_id);
       if (!prev) return;
 
-      // Optimistic: subtract ml from local state. If there's no open
-      // bottle (remaining === null), simulate opening: remaining becomes
-      // size_ml - ml, sealed_count drops by 1.
+      // Optimistic update — mirrors the server-side record_pour RPC's
+      // three cases so the UI converges with the ledger even before
+      // router.refresh lands. Without this we clamp remaining to 0 on
+      // overage but leave sealed_count stale; glass count stays wrong.
       setItems((rows) =>
         rows.map((it) => {
           if (it.wine_id !== item.wine_id) return it;
-          if (it.open_remaining_ml === null) {
+
+          // Case 1 — no open bottle, sealed inventory available:
+          //   RPC inserts new_bottle, remaining becomes size_ml - ml.
+          if (it.open_remaining_ml === null && it.sealed_count > 0) {
             return {
               ...it,
               open_remaining_ml: Math.max(0, it.size_ml - ml),
-              sealed_count: Math.max(0, it.sealed_count - 1),
+              sealed_count: it.sealed_count - 1,
               opened_at: new Date().toISOString(),
             };
           }
-          return {
-            ...it,
-            open_remaining_ml: Math.max(0, it.open_remaining_ml - ml),
-          };
+
+          const currentRemaining = it.open_remaining_ml ?? 0;
+
+          // Case 2 — enough in open bottle: straight subtract.
+          if (currentRemaining >= ml) {
+            return {
+              ...it,
+              open_remaining_ml: currentRemaining - ml,
+            };
+          }
+
+          // Case 3 — overage, sealed inventory available:
+          //   RPC cascades finish_bottle + new_bottle + pour. Net
+          //   effect on state = open a fresh bottle and pour the
+          //   full ml from it.
+          if (it.sealed_count > 0) {
+            return {
+              ...it,
+              open_remaining_ml: Math.max(0, it.size_ml - ml),
+              sealed_count: it.sealed_count - 1,
+              opened_at: new Date().toISOString(),
+            };
+          }
+
+          // Case 4 — overage, no sealed left. The RPC will 409; we
+          // clamp to 0 locally and the catch branch will revert.
+          return { ...it, open_remaining_ml: 0 };
         }),
       );
 
