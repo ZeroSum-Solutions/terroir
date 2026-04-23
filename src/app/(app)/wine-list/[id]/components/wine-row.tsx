@@ -145,7 +145,10 @@ function PourConfigRow({
         <input
           type="number"
           min={1}
-          max={20000}
+          // Matches the API's Zod cap in /api/wine-list-items/[id].
+          // A 2L pour is already physically absurd; 20L would be a
+          // silent 400 from the server.
+          max={2000}
           value={pour ?? ""}
           onChange={(e) => {
             const v = e.target.value.trim();
@@ -158,7 +161,7 @@ function PourConfigRow({
             onPourChange(
               item.id,
               "glass_pour_ml",
-              Math.max(1, Math.min(20000, Math.round(n))),
+              Math.max(1, Math.min(2000, Math.round(n))),
             );
           }}
           placeholder="148"

@@ -50,16 +50,22 @@ test.describe("BND-038 pour → reconcile", () => {
     const res = await page.request.get("/api/open-bottles");
     expect(res.ok()).toBeTruthy();
     const body = (await res.json()) as { items: OpenBottleItem[] };
+    // Prefer wines whose CURRENT open bottle has >= glass_pour_ml
+    // remaining so the tap fires the simple-subtract branch (Case 2).
+    // Cascade pours (Cases 1 + 3) intentionally suppress the Undo
+    // banner, which this test asserts on.
+    const noCascade = body.items.filter(
+      (i) =>
+        i.glass_pour_ml > 0 &&
+        i.open_remaining_ml !== null &&
+        i.open_remaining_ml >= i.glass_pour_ml,
+    );
     const total = (i: OpenBottleItem) =>
       (i.open_remaining_ml ?? 0) + i.sealed_count * 750;
-    // Pick the one with the most headroom so a single pour doesn't push
-    // it into "out of stock" territory and break the UI selector.
-    const candidate = [...body.items]
-      .filter((i) => i.glass_pour_ml > 0)
-      .sort((a, b) => total(b) - total(a))[0];
+    const candidate = [...noCascade].sort((a, b) => total(b) - total(a))[0];
     expect(
       candidate,
-      "no by-the-glass wine available for pour flow test",
+      "no by-the-glass wine with enough in an open bottle for a non-cascade pour",
     ).toBeTruthy();
     return candidate;
   }

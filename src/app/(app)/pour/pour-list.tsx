@@ -55,6 +55,18 @@ export function PourList({
       const prev = items.find((it) => it.wine_id === item.wine_id);
       if (!prev) return;
 
+      // Detect whether the RPC will cascade (finish_bottle + new_bottle
+      // + pour) because the current open bottle doesn't have enough
+      // left OR there's no open bottle at all. When cascade fires,
+      // undoing the pour restores the visible glass count but doesn't
+      // un-open the fresh bottle — misleading semantics. We suppress
+      // the Undo banner in that case; the manager can correct via
+      // /reconcile if needed.
+      const currentRemaining = prev.open_remaining_ml ?? 0;
+      const willCascade =
+        (prev.open_remaining_ml === null || currentRemaining < ml) &&
+        prev.sealed_count > 0;
+
       // Optimistic update — mirrors the server-side record_pour RPC's
       // three cases so the UI converges with the ledger even before
       // router.refresh lands. Without this we clamp remaining to 0 on
@@ -118,14 +130,23 @@ export function PourList({
         }
 
         // Fresh pourId per tap — the auto-hide effect keys on this to
-        // cancel any in-flight timer from a prior pour.
-        pourIdRef.current += 1;
-        setLastPour({
-          pourId: pourIdRef.current,
-          wineId: item.wine_id,
-          ml,
-          wineName: `${item.producer} ${item.name}`,
-        });
+        // cancel any in-flight timer from a prior pour. Only show the
+        // Undo banner when no cascade fired; undoing a cascade would
+        // leave the new bottle open, which the word "Undo" doesn't
+        // communicate (see willCascade detection above).
+        if (!willCascade) {
+          pourIdRef.current += 1;
+          setLastPour({
+            pourId: pourIdRef.current,
+            wineId: item.wine_id,
+            ml,
+            wineName: `${item.producer} ${item.name}`,
+          });
+        } else {
+          // Cascade fired: clear any stale banner so we don't show a
+          // wrong-ml Undo pointing at a prior tap.
+          setLastPour(null);
+        }
 
         // Refresh the server component to reconcile with real numbers.
         startTransition(() => router.refresh());
