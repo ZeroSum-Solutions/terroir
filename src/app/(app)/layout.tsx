@@ -36,7 +36,7 @@ export default async function AppLayout({
 
         {/* Desktop nav */}
         <nav className="ml-xl hidden items-center gap-2xs md:flex" aria-label="Primary">
-          <DesktopNavLinks />
+          <DesktopNavLinks role={userRole} />
         </nav>
 
         <div className="ml-auto flex items-center gap-sm md:gap-md">
@@ -52,13 +52,15 @@ export default async function AppLayout({
         {children}
       </main>
 
-      {/* Bottom tab bar — mobile only, thumb-friendly */}
+      {/* Bottom tab bar — mobile only, thumb-friendly. Flex lets 6–7
+          tabs (post-BND-038) distribute evenly without pre-declaring
+          grid-cols-N classes. */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-border bg-surface/95 backdrop-blur-sm md:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 flex border-t border-border bg-surface/95 backdrop-blur-sm md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Primary mobile"
       >
-        <MobileNavLinks />
+        <MobileNavLinks role={userRole} />
       </nav>
     </div>
     </RestaurantProvider>
