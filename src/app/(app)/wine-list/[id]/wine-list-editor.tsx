@@ -10,7 +10,6 @@ import {
   FileSpreadsheet,
   Loader2,
   Plus,
-  ScanLine,
   Share2,
 } from "lucide-react";
 import {
@@ -446,13 +445,12 @@ export function WineListEditor({
                 </p>
               </div>
               <div className="flex gap-sm">
-                <button
-                  type="button"
-                  className="flex h-[30px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[13px] font-medium text-ink hover:bg-surface-muted"
-                >
-                  <ScanLine className="h-3.5 w-3.5" strokeWidth={2} />
-                  <span className="hidden sm:inline">From scan</span>
-                </button>
+                {/* DEBT-014: removed the dead "From scan" button.
+                    It had no onClick and the full flow (scan-picker +
+                    recent-scans endpoint + batch import) is tracked
+                    as BND-034. Rendering a visibly-unresponsive
+                    button was worse than omitting it; when BND-034
+                    ships it'll add the button back wired up. */}
                 <button
                   type="button"
                   onClick={() => setShowAddWine(true)}

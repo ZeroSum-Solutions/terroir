@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAnthropicClient } from "@/lib/ai/anthropic-client";
 import { requireMembership } from "@/lib/api/auth";
 import { ParsedBottleLabelSchema } from "@/lib/scanner/bottle-schema";
+import { BOTTLE_SYSTEM_PROMPT } from "@/lib/scanner/bottle-system-prompt";
 import type { BottleScanResult } from "@/lib/scanner/types";
 
 export const runtime = "nodejs";
@@ -16,23 +17,9 @@ const ALLOWED_MIME = new Set([
   "image/webp",
 ]);
 
-const SYSTEM_PROMPT = `You are a wine expert identifying a wine from a photograph of its bottle label. You will receive an image of a wine bottle label.
-
-Identification guidelines:
-- Extract the producer/domaine name exactly as printed, preserving accents and diacritics.
-- Extract the wine name including any cuvée, appellation, or vineyard designation.
-- Read the vintage year from the label. Use null if it is a non-vintage wine (NV).
-- Determine the grape varietal. If not printed on the label, infer it from the wine name, region, or appellation (e.g., a wine from Chablis is Chardonnay, Barolo is Nebbiolo).
-- Determine the wine region (not country): Burgundy, Napa Valley, Barossa Valley, etc.
-- Determine the country of origin if possible.
-
-Confidence scoring:
-- 0.95-1.0: label is clearly readable, all fields unambiguous
-- 0.75-0.94: slight ambiguity but reasonable identification
-- 0.50-0.74: partially obscured label, some guessing required
-- Below 0.50: heavily obscured, significant guessing
-
-In notes, mention any special designations (Grand Cru, Reserva, Single Vineyard), alcohol percentage if visible, or fields you could not read.`;
+// ARCH-016 / DEBT-016: prompt lives at src/lib/scanner/bottle-system-prompt.ts
+// so prompt engineering changes flow through one file (same pattern as
+// BND-027's invoice system-prompt extraction).
 
 export async function POST(request: NextRequest) {
   const auth = await requireMembership();
@@ -95,7 +82,7 @@ export async function POST(request: NextRequest) {
       output_config: {
         format: zodOutputFormat(ParsedBottleLabelSchema),
       },
-      system: SYSTEM_PROMPT,
+      system: BOTTLE_SYSTEM_PROMPT,
       messages: [
         {
           role: "user",

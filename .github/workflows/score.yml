@@ -12,9 +12,14 @@
 #
 # Required secrets (add under Settings → Secrets and variables →
 # Actions) before the workflow can complete successfully:
-#   - AZURE_DOC_INTEL_ENDPOINT
-#   - AZURE_DOC_INTEL_KEY
+#   - AZURE_DOC_INTELLIGENCE_ENDPOINT
+#   - AZURE_DOC_INTELLIGENCE_KEY
 #   - ANTHROPIC_API_KEY
+#
+# INT-015: the secret names match the environment variables
+# src/lib/scanner/ocr-service.ts reads. Earlier drafts shortened
+# them to AZURE_DOC_INTEL_* — the scanner never reads that form, so
+# the workflow would have silently run with empty Azure credentials.
 #
 # Optional: commit a baseline at the repo root named
 # test-results-baseline.json. When present, the workflow compares
@@ -56,8 +61,8 @@ jobs:
 
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      AZURE_DOC_INTEL_ENDPOINT: ${{ secrets.AZURE_DOC_INTEL_ENDPOINT }}
-      AZURE_DOC_INTEL_KEY: ${{ secrets.AZURE_DOC_INTEL_KEY }}
+      AZURE_DOC_INTELLIGENCE_ENDPOINT: ${{ secrets.AZURE_DOC_INTELLIGENCE_ENDPOINT }}
+      AZURE_DOC_INTELLIGENCE_KEY: ${{ secrets.AZURE_DOC_INTELLIGENCE_KEY }}
       MODEL: ${{ inputs.model }}
 
     steps:

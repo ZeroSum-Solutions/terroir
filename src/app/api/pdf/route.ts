@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import puppeteer from "puppeteer";
 import { requireMembership } from "@/lib/api/auth";
+import type { WineListSectionEmbed } from "@/lib/wine-list/shapes";
 import { renderTemplate } from "@/lib/wine-list/templates";
 
 export const runtime = "nodejs";
@@ -59,12 +60,11 @@ export async function POST(request: NextRequest) {
     } | null;
   };
 
+  // DEBT-013: use the shared WineListSectionEmbed<TItem> generic so
+  // PDF and public-list page don't drift on the outer shape. The
+  // inner item type stays consumer-specific.
   const sections = (
-    (list.wine_list_sections ?? []) as unknown as Array<{
-      name: string;
-      position: number;
-      wine_list_items: PdfWineListItem[];
-    }>
+    (list.wine_list_sections ?? []) as unknown as WineListSectionEmbed<PdfWineListItem>[]
   )
     .sort((a, b) => a.position - b.position)
     .filter((s) => s.wine_list_items.length > 0)

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import type { WineListSectionEmbed } from "@/lib/wine-list/shapes";
 
 /** Anon client for public pages — respects RLS, no auth session needed. */
 function createAnonClient() {
@@ -39,30 +40,28 @@ export default async function PublicWineListPage({
     (list.restaurants as { name: string } | null)?.name ?? "";
 
   // Sort sections and items by position
-  const sections = (
-    (list.wine_list_sections ?? []) as unknown as Array<{
-      id: string;
+  type PublicWineItem = {
+    id: string;
+    position: number;
+    glass_price: number | null;
+    bottle_price: number | null;
+    tasting_note: string | null;
+    wines: {
       name: string;
-      position: number;
-      wine_list_items: Array<{
-        id: string;
-        position: number;
-        glass_price: number | null;
-        bottle_price: number | null;
-        tasting_note: string | null;
-        wines: {
-          name: string;
-          producer: string;
-          vintage: number | null;
-          varietal: string | null;
-          region: string | null;
-          serving_temp_min: number | null;
-          serving_temp_max: number | null;
-          serving_temp_label: string | null;
-          is_eightysixed: boolean;
-        } | null;
-      }>;
-    }>
+      producer: string;
+      vintage: number | null;
+      varietal: string | null;
+      region: string | null;
+      serving_temp_min: number | null;
+      serving_temp_max: number | null;
+      serving_temp_label: string | null;
+      is_eightysixed: boolean;
+    } | null;
+  };
+  // DEBT-013: shared WineListSectionEmbed<TItem> keeps this in sync
+  // with the PDF route's cast; both used to drift independently.
+  const sections = (
+    (list.wine_list_sections ?? []) as unknown as WineListSectionEmbed<PublicWineItem>[]
   )
     .sort((a, b) => a.position - b.position)
     .filter((s) => s.wine_list_items.length > 0);
