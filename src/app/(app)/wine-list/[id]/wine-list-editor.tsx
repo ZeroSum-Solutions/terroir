@@ -60,7 +60,9 @@ type ListItem = {
   glass_pour_ml: number | null;
   pour_size_mode: "fixed" | "picker";
   tasting_note: string | null;
-  is_available: boolean;
+  // ARCH-017: is_available deprecated by BND-037's is_eightysixed.
+  // Not writable via PATCH; dropped from the editor state so it
+  // can't drift back into mutations.
   wines: Wine;
 };
 

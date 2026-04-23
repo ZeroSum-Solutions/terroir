@@ -53,7 +53,10 @@ export default async function WineListEditorPage({
       glass_pour_ml: number | null;
       pour_size_mode: "fixed" | "picker";
       tasting_note: string | null;
-      is_available: boolean;
+      // is_available — deprecated by BND-037's wines.is_eightysixed.
+      // Column still lives in the DB for read compat but isn't
+      // writable via PATCH (ARCH-017). Drop from this type once the
+      // read sites are migrated too.
       created_at: string;
       updated_at: string;
       wines: {

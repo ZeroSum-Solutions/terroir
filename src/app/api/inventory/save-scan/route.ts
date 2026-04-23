@@ -184,14 +184,19 @@ async function saveScanOnce(opts: {
         : "jpg";
       const storagePath = `${restaurantId}/${scanId}.${ext}`;
       const fileBuffer = Buffer.from(await file.arrayBuffer());
-      // INT-016: `upsert: true` so a legitimate retry after a
-      // mid-handler failure doesn't collide on the storage path.
-      // Scenario: handler uploaded, crashed before the inventory_items
-      // insert, sentinel was deleted on throw, client retries same
-      // key. With upsert:false the retry's upload failed with a
-      // duplicate-key error; the handler logged it and carried on,
-      // leaving an invoice_scans row without raw_image_path. upsert:
-      // true makes repeated uploads of the same bytes a no-op.
+      // INT-016: `upsert: true` as defense-in-depth. In the current
+      // retry flow a fresh scanId is generated per handler invocation
+      // (line 177 `const scanId = invoiceScan.id;`), so the storage
+      // path is unique per attempt and collision isn't possible in
+      // practice. This flip is insurance against:
+      //   - A future refactor that reuses scanId across retries
+      //     (e.g. an idempotency RPC that caches the invoice_scans
+      //     row and replays it).
+      //   - Supabase Storage edge cases where a stale object appears
+      //     to occupy a path (CDN / replication lag).
+      // Negligible downside — `storage.objects` INSERT RLS still
+      // gates the path prefix, so cross-tenant overwrite is blocked
+      // regardless of the upsert flag.
       const { error: uploadError } = await supabase.storage
         .from("invoice-images")
         .upload(storagePath, fileBuffer, {

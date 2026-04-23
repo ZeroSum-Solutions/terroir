@@ -37,6 +37,19 @@ psql $DATABASE_URL -f supabase/migrations/down/0018_reconcile_hardening.down.sql
 # history so the forward migration stays out of the applied state.
 ```
 
+## Caveat: `create or replace` downs can go stale
+
+If a forward migration uses `create or replace function` to replace an
+earlier function's body (e.g., 0018 replaces 0016's
+`reconcile_open_bottle`), its down migration has to restore the
+*earlier* function body verbatim. If a future forward migration amends
+the earlier body too (say, 0025 tweaks 0016's function), the 0018
+down will now restore a stale version on rollback.
+
+This isn't a bug, but it's a brittleness to watch for. When amending
+an earlier function, audit every down migration that references it and
+update their inline definitions to match.
+
 ## When adding a new migration
 
 1. Write `supabase/migrations/NNNN_<name>.sql` as usual.

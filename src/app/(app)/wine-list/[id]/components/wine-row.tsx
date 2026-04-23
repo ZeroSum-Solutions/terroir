@@ -31,7 +31,9 @@ type ListItem = {
   glass_pour_ml: number | null;
   pour_size_mode: "fixed" | "picker";
   tasting_note: string | null;
-  is_available: boolean;
+  // ARCH-017: is_available deprecated. Not written, not read
+  // by the editor. Omitted from the type to keep it from drifting
+  // back into the PATCH payload.
   wines: Wine;
 };
 
