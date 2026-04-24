@@ -14,9 +14,11 @@
 #
 # SECURITY: this workflow intentionally avoids interpolating any
 # untrusted PR-author-controlled strings (titles, bodies, branch
-# names). It reads the PR's merge-commit SHA from GITHUB_SHA (auto-
-# provided, always a hash) and uses the `gh` CLI for API calls —
-# no ${{ github.event.* }} user-input interpolation in run: blocks.
+# names) in run: blocks. The two values it does surface via env —
+# the PR number (set by GitHub, always an integer) and the PR HEAD
+# SHA (always a git hash) — are both structured, GitHub-authored
+# fields that aren't writable by the PR author. Everything else
+# goes through the `gh` CLI + GitHub API.
 
 name: Preview health
 
@@ -41,19 +43,21 @@ jobs:
       - name: Wait for Railway preview, then /api/health
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GitHub-authored structured fields (integer + hash), not
+          # writable by the PR author. `gh pr view` auto-detection
+          # doesn't work reliably in detached-HEAD Actions checkout,
+          # so we pass these explicitly.
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -e
           MAX_ATTEMPTS=20
           SLEEP_S=15
 
-          # Resolve the PR's HEAD SHA from gh CLI — avoids templated
-          # interpolation of PR metadata.
-          PR_NUMBER=$(gh pr view --json number --jq '.number' 2>/dev/null || echo "")
-          if [ -z "$PR_NUMBER" ]; then
-            echo "⚠️  Could not resolve PR number — exiting 0 (skip)."
+          if [ -z "$PR_NUMBER" ] || [ -z "$HEAD_SHA" ]; then
+            echo "⚠️  Missing PR_NUMBER / HEAD_SHA — exiting 0 (skip)."
             exit 0
           fi
-          HEAD_SHA=$(gh pr view "$PR_NUMBER" --json commits --jq '.commits[-1].oid')
           REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner')
 
           echo "Polling for Railway preview on $REPO @ $HEAD_SHA ..."
