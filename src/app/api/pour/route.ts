@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
+import { revalidateAutoEightysixedWines } from "@/lib/api/auto-eightysix-revalidation";
 
 export const runtime = "nodejs";
 
@@ -31,7 +32,7 @@ const BodySchema = z.object({
 export async function POST(request: NextRequest) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
-  const { supabase } = auth;
+  const { supabase, restaurantId } = auth;
 
   let raw: unknown;
   try {
@@ -48,6 +49,12 @@ export async function POST(request: NextRequest) {
     );
   }
   const { wine_id, ml, kind, note } = parsed.data;
+
+  // ARCH-023: capture timestamp BEFORE the write so we can detect
+  // an auto-86 event inserted by the pour_events trigger. The
+  // revalidation after the write queries availability_events for
+  // rows newer than this.
+  const sinceTs = new Date().toISOString();
 
   // The generator emits p_kind/p_note as `string` (not `string | null`)
   // because SQL DEFAULTs don't translate to TS nullability. Cast for
@@ -82,6 +89,15 @@ export async function POST(request: NextRequest) {
 
   // Revalidate /availability so the 86 UI sees fresh state.
   revalidatePath("/availability");
+
+  // ARCH-023: if the pour trigger auto-86'd this wine, revalidate
+  // every published /list/[slug] that references it. Best-effort.
+  await revalidateAutoEightysixedWines({
+    supabase,
+    restaurantId,
+    touchedWineIds: [wine_id],
+    sinceTs,
+  });
 
   return NextResponse.json({ open_bottle: data });
 }

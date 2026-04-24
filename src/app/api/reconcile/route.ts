@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
+import { revalidateAutoEightysixedWines } from "@/lib/api/auto-eightysix-revalidation";
 
 export const runtime = "nodejs";
 
@@ -40,7 +41,7 @@ const BodySchema = z.object({
 export async function POST(request: NextRequest) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
-  const { supabase } = auth;
+  const { supabase, restaurantId } = auth;
 
   let raw: unknown;
   try {
@@ -56,6 +57,12 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+
+  // ARCH-023: capture timestamp BEFORE the batch write so we can
+  // detect auto-86 events inserted by the pour_events trigger (each
+  // reconcile entry creates a pour_event that can cascade through
+  // the auto-86 trigger).
+  const sinceTs = new Date().toISOString();
 
   // Send entries as a JSON array to the batch RPC. The RPC iterates
   // inside one transaction and returns the count on success.
@@ -88,6 +95,19 @@ export async function POST(request: NextRequest) {
   }
 
   revalidatePath("/availability");
+
+  // ARCH-023: if any entry's pour_event cascaded into an auto-86
+  // via the migration-0021 trigger, revalidate every published
+  // /list/[slug] that references it.
+  const touchedWineIds = Array.from(
+    new Set(parsed.data.entries.map((e) => e.wine_id)),
+  );
+  await revalidateAutoEightysixedWines({
+    supabase,
+    restaurantId,
+    touchedWineIds,
+    sinceTs,
+  });
 
   return NextResponse.json({ updated: (data as number) ?? 0 });
 }

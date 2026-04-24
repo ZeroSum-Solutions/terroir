@@ -10,23 +10,61 @@ vi.mock("next/cache", () => ({ revalidatePath: mockRevalidate }));
 
 const { POST } = await import("./route");
 
-type RpcCall = { fn: string; args: Record<string, unknown> };
+type RpcCall = { fn: string; args: unknown };
 
-function makeSupabase(
-  result:
+/**
+ * Mock satisfies:
+ *   - supabase.rpc('reconcile_open_bottles_batch', ...)  →  count
+ *   - supabase.rpc('wine_published_list_slugs', ...)  →  slug rows
+ *   - supabase.from('availability_events').select(...)
+ *       .eq().eq().is().gte().in()  →  auto-86 event rows (ARCH-023)
+ */
+function makeSupabase(opts: {
+  reconcile:
     | { data: number; error: null }
-    | { data: null; error: { code?: string; message?: string } },
-) {
+    | { data: null; error: { code?: string; message?: string } };
+  autoEightysixedWineIds?: string[];
+  publishedSlugs?: Array<{ slug: string }>;
+}) {
   const calls: RpcCall[] = [];
-  return {
-    _calls: calls,
-    rpc: (fn: string, args: Record<string, unknown>) => {
-      calls.push({ fn, args });
-      return {
-        then: (resolve: (v: typeof result) => void) => resolve(result),
-      };
-    },
-  };
+  const rpc = vi.fn((fn: string, args: unknown) => {
+    calls.push({ fn, args });
+    if (fn === "reconcile_open_bottles_batch") {
+      return Promise.resolve(opts.reconcile);
+    }
+    if (fn === "wine_published_list_slugs") {
+      return Promise.resolve({
+        data: opts.publishedSlugs ?? [],
+        error: null,
+      });
+    }
+    return Promise.resolve({ data: null, error: null });
+  });
+  const from = vi.fn((table: string) => {
+    const chain: Record<string, unknown> = {};
+    const thenable = {
+      select: () => thenable,
+      eq: () => thenable,
+      is: () => thenable,
+      gte: () => thenable,
+      in: () => thenable,
+      then: (resolve: (v: unknown) => void) => {
+        if (table === "availability_events") {
+          resolve({
+            data: (opts.autoEightysixedWineIds ?? []).map((id) => ({
+              wine_id: id,
+            })),
+            error: null,
+          });
+        } else {
+          resolve({ data: null, error: null });
+        }
+      },
+    };
+    Object.assign(chain, thenable);
+    return chain;
+  });
+  return { supabase: { rpc, from }, calls };
 }
 
 function makeRequest(body: unknown): NextRequest {
@@ -48,8 +86,11 @@ describe("POST /api/reconcile", () => {
   });
 
   it("400s on empty entries", async () => {
+    const { supabase } = makeSupabase({
+      reconcile: { data: 0, error: null },
+    });
     mockRequireMembership.mockResolvedValue({
-      supabase: makeSupabase({ data: 0, error: null }),
+      supabase,
       restaurantId: "r-A",
       user: { id: "u-1" },
       role: "manager",
@@ -59,7 +100,9 @@ describe("POST /api/reconcile", () => {
   });
 
   it("returns 200 with updated count on happy path (single atomic RPC)", async () => {
-    const supabase = makeSupabase({ data: 2, error: null });
+    const { supabase, calls } = makeSupabase({
+      reconcile: { data: 2, error: null },
+    });
     mockRequireMembership.mockResolvedValue({
       supabase,
       restaurantId: "r-A",
@@ -77,18 +120,22 @@ describe("POST /api/reconcile", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.updated).toBe(2);
-    // Exactly ONE RPC call — the atomic batch, not a per-entry loop.
-    expect(supabase._calls).toHaveLength(1);
-    expect(supabase._calls[0].fn).toBe("reconcile_open_bottles_batch");
-    expect(mockRevalidate).toHaveBeenCalled();
+    // Exactly ONE reconcile RPC call — the atomic batch.
+    expect(
+      calls.filter((c) => c.fn === "reconcile_open_bottles_batch"),
+    ).toHaveLength(1);
+    expect(mockRevalidate).toHaveBeenCalledWith("/availability");
   });
 
   it("returns 403 when the RPC raises permission error (42501)", async () => {
-    mockRequireMembership.mockResolvedValue({
-      supabase: makeSupabase({
+    const { supabase } = makeSupabase({
+      reconcile: {
         data: null,
         error: { code: "42501", message: "forbidden" },
-      }),
+      },
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
       restaurantId: "r-A",
       user: { id: "u-1" },
       role: "staff",
@@ -102,14 +149,17 @@ describe("POST /api/reconcile", () => {
   });
 
   it("returns 400 EXCEEDS_SIZE when RPC raises P0002", async () => {
-    mockRequireMembership.mockResolvedValue({
-      supabase: makeSupabase({
+    const { supabase } = makeSupabase({
+      reconcile: {
         data: null,
         error: {
           code: "P0002",
           message: "p_new_remaining_ml exceeds bottle size (750)",
         },
-      }),
+      },
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
       restaurantId: "r-A",
       user: { id: "u-1" },
       role: "manager",
@@ -122,5 +172,67 @@ describe("POST /api/reconcile", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.code).toBe("EXCEEDS_SIZE");
+  });
+
+  // ARCH-023: auto-86 revalidation across a batch
+  it("does NOT revalidate /list/* paths when no auto-86 events were inserted", async () => {
+    const { supabase, calls } = makeSupabase({
+      reconcile: { data: 2, error: null },
+      autoEightysixedWineIds: [],
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "manager",
+    });
+    await POST(
+      makeRequest({
+        entries: [
+          { wine_id: UUID_A, new_remaining_ml: 375 },
+          { wine_id: UUID_B, new_remaining_ml: 0 },
+        ],
+      }),
+    );
+    expect(
+      mockRevalidate.mock.calls.some((c) =>
+        String(c[0] ?? "").startsWith("/list/"),
+      ),
+    ).toBe(false);
+    expect(calls.some((c) => c.fn === "wine_published_list_slugs")).toBe(
+      false,
+    );
+  });
+
+  it("revalidates /list/<slug> for every wine in the batch that got auto-86'd", async () => {
+    const { supabase, calls } = makeSupabase({
+      reconcile: { data: 2, error: null },
+      // Only UUID_B got auto-86'd (its entry set remaining to 0).
+      autoEightysixedWineIds: [UUID_B],
+      publishedSlugs: [{ slug: "dinner-menu" }],
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "manager",
+    });
+    await POST(
+      makeRequest({
+        entries: [
+          { wine_id: UUID_A, new_remaining_ml: 375 },
+          { wine_id: UUID_B, new_remaining_ml: 0 },
+        ],
+      }),
+    );
+    expect(mockRevalidate).toHaveBeenCalledWith("/list/dinner-menu");
+    const slugCalls = calls.filter(
+      (c) => c.fn === "wine_published_list_slugs",
+    );
+    expect(slugCalls).toHaveLength(1);
+    expect(slugCalls[0].args).toMatchObject({
+      p_wine_id: UUID_B,
+      p_restaurant_id: "r-A",
+    });
   });
 });
