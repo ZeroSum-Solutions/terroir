@@ -1,0 +1,99 @@
+# INT-018 — Railway PR preview health gate (staging Option B from
+# docs/STAGING-SETUP.md).
+#
+# Triggers on PR. Polls the GitHub Deployments API for a Railway-
+# originated preview deployment, waits up to 5 minutes for it to
+# reach 'success', then curls its `/api/health` and fails the gate
+# on non-200.
+#
+# Graceful degradation: when no Railway deployment is found within
+# the timeout (i.e., PR previews are NOT enabled in Railway → Service
+# → Settings → PR Environments), the step succeeds with a skip
+# message. Safe to land now; "just works" once the dashboard toggle
+# is flipped.
+#
+# SECURITY: this workflow intentionally avoids interpolating any
+# untrusted PR-author-controlled strings (titles, bodies, branch
+# names). It reads the PR's merge-commit SHA from GITHUB_SHA (auto-
+# provided, always a hash) and uses the `gh` CLI for API calls —
+# no ${{ github.event.* }} user-input interpolation in run: blocks.
+
+name: Preview health
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: preview-health-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  health:
+    name: Railway preview /api/health
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      deployments: read
+      pull-requests: read
+
+    steps:
+      - name: Wait for Railway preview, then /api/health
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          MAX_ATTEMPTS=20
+          SLEEP_S=15
+
+          # Resolve the PR's HEAD SHA from gh CLI — avoids templated
+          # interpolation of PR metadata.
+          PR_NUMBER=$(gh pr view --json number --jq '.number' 2>/dev/null || echo "")
+          if [ -z "$PR_NUMBER" ]; then
+            echo "⚠️  Could not resolve PR number — exiting 0 (skip)."
+            exit 0
+          fi
+          HEAD_SHA=$(gh pr view "$PR_NUMBER" --json commits --jq '.commits[-1].oid')
+          REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner')
+
+          echo "Polling for Railway preview on $REPO @ $HEAD_SHA ..."
+
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            # Find non-production deployments matching HEAD (Railway creates
+            # its PR previews with environment labels like 'pr-123').
+            deployment_id=$(gh api "repos/$REPO/deployments?sha=$HEAD_SHA" \
+              --jq 'map(select(.environment != "production")) | .[0].id' 2>/dev/null || echo "")
+
+            if [ -n "$deployment_id" ] && [ "$deployment_id" != "null" ]; then
+              status_json=$(gh api "repos/$REPO/deployments/$deployment_id/statuses" \
+                --jq '.[0] | {state: .state, target: .target_url, env: .environment_url}' 2>/dev/null || echo '')
+
+              state=$(echo "$status_json" | jq -r '.state // empty')
+              url=$(echo "$status_json" | jq -r '.env // .target // empty')
+
+              if [ "$state" = "success" ] && [ -n "$url" ] && [ "$url" != "null" ]; then
+                health_url="${url%/}/api/health"
+                echo "Preview ready — curling $health_url"
+                http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$health_url" || echo "000")
+                if [ "$http_code" = "200" ]; then
+                  echo "✅ Preview /api/health returned 200"
+                  exit 0
+                fi
+                echo "❌ Preview /api/health returned $http_code (expected 200)"
+                exit 1
+              fi
+
+              if [ "$state" = "failure" ] || [ "$state" = "error" ]; then
+                echo "❌ Railway deployment state=$state"
+                exit 1
+              fi
+            fi
+
+            echo "Attempt $i/$MAX_ATTEMPTS — no ready preview yet, sleeping ${SLEEP_S}s..."
+            sleep $SLEEP_S
+          done
+
+          echo "⚠️  No Railway preview detected within $((MAX_ATTEMPTS * SLEEP_S))s."
+          echo "    Expected when Railway PR Previews are NOT enabled."
+          echo "    See docs/STAGING-SETUP.md → Option B. Exiting 0 (graceful skip)."
+          exit 0

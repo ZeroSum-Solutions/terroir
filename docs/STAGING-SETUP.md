@@ -77,32 +77,34 @@ does.
    railway.app`. Add to `.council/progress.md` + this README so cold-
    start developers know where to smoke-test.
 
-## Option B — Cheaper half-step
+## Option B — Cheaper half-step (CI step landed; dashboard toggle pending)
 
 **What it gets us:** per-PR preview deploys with a health check.
 Doesn't replace prod staging, but catches Chromium / runtime shifts
 before merge.
 
-**Steps:**
+**Status:** The CI workflow is **already in place** as
+`.github/workflows/preview-health.yml`. It polls the GitHub
+Deployments API for a Railway-originated preview deployment on each
+PR, waits up to 5 minutes for it to reach `success`, then curls its
+`/api/health` and fails the gate on non-200.
+
+**Graceful degradation:** when no Railway deployment is found within
+the timeout (i.e., the Railway dashboard toggle below is NOT flipped),
+the step succeeds with a skip message. Safe to land PRs today; the
+gate activates automatically the moment the toggle flips.
+
+**Remaining steps to activate:**
 
 1. **Enable Railway PR previews** (Railway dashboard → Service →
-   Settings → PR Environments). Each PR gets a temporary service at
-   a generated URL.
+   Settings → PR Environments → toggle on). Each PR then gets a
+   temporary service at a generated URL, reported to GitHub via the
+   Deployments API. **No code change required** — the existing
+   workflow will start exercising preview URLs immediately.
 
-2. **Add preview-health CI step** to `.github/workflows/ci.yml`:
-   ```yaml
-   - name: Wait for Railway preview
-     if: github.event_name == 'pull_request'
-     run: |
-       # Railway posts the preview URL to the PR as a check;
-       # poll /api/health until it's 200 or 5 minutes elapse.
-       # ...
-   ```
-   (Actual implementation depends on Railway's preview-URL mechanism
-   and how they expose it to GitHub.)
-
-3. **Gate merge** on the preview-health check via a branch protection
-   rule.
+2. **Gate merge** on the `Preview health / Railway preview /api/health`
+   check via a branch-protection rule on `main` (Settings →
+   Branches → main → Require status checks to pass).
 
 Option B doesn't catch Supabase-side regressions (RLS changes,
 migration issues) since the preview still hits prod Supabase. But it
@@ -121,7 +123,11 @@ Once either path is chosen and executed, update:
 
 ## Why this is still open as a finding
 
-This doc scopes the work. Actually creating the Railway service and
-Supabase branch requires dashboard-level access and a call on
-Option A vs B. Pick one and execute; INT-018 closes when the
-staging URL is live.
+This doc scopes the work. Option B's **CI side is landed** — the
+preview-health workflow is in place and will start gating merges as
+soon as the Railway dashboard PR-Environments toggle is flipped.
+Option A still requires dashboard-level access + a call on Supabase
+branch vs. separate project.
+
+INT-018 moves from "open" to "half-scoped" once the workflow lands,
+and closes fully when either path is activated on the Railway side.
