@@ -58,7 +58,10 @@ jobs:
             echo "⚠️  Missing PR_NUMBER / HEAD_SHA — exiting 0 (skip)."
             exit 0
           fi
-          REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner')
+          # GITHUB_REPOSITORY is auto-provided by GitHub Actions.
+          # Used instead of `gh repo view` so this job doesn't need
+          # a checkout step (the workflow is a pure API poll).
+          REPO="$GITHUB_REPOSITORY"
 
           echo "Polling for Railway preview on $REPO @ $HEAD_SHA ..."
 
