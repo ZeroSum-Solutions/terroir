@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireMembership } from "@/lib/api/auth";
+import { AutoEightysixPanel } from "./auto-eightysix-panel";
 import { AvailabilityList } from "./availability-list";
 
 export const runtime = "nodejs";
@@ -26,18 +27,27 @@ export default async function AvailabilityPage() {
   // Narrow: the guard above eliminates the NextResponse branch.
   const { supabase, restaurantId, role } = auth as Exclude<typeof auth, Response>;
 
-  // See /api/wines/availability for why we don't embed auth.users here.
-  const { data } = await supabase
-    .from("wines")
-    .select(
-      "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, eightysixed_by",
-    )
-    .eq("restaurant_id", restaurantId)
-    .order("name", { ascending: true });
+  // BND-037b: fetch the wine list + the auto-86 restaurant config in
+  // parallel. Only owners see the config panel (PATCH is owner-gated).
+  const [{ data: wineRows }, { data: restaurantRow }] = await Promise.all([
+    supabase
+      .from("wines")
+      .select(
+        "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, eightysixed_by",
+      )
+      .eq("restaurant_id", restaurantId)
+      .order("name", { ascending: true }),
+    supabase
+      .from("restaurants")
+      .select("auto_eightysix_from_inventory, eightysix_ml_threshold")
+      .eq("id", restaurantId)
+      .single(),
+  ]);
 
-  const rows: WineAvailabilityRow[] = data ?? [];
+  const rows: WineAvailabilityRow[] = wineRows ?? [];
 
   const canToggle = role === "owner" || role === "manager";
+  const isOwner = role === "owner";
 
   return (
     <main className="mx-auto max-w-[960px] px-lg py-xl">
@@ -48,6 +58,15 @@ export default async function AvailabilityPage() {
           published lists within seconds.
         </p>
       </header>
+
+      {isOwner && restaurantRow && (
+        <AutoEightysixPanel
+          restaurantId={restaurantId}
+          enabled={restaurantRow.auto_eightysix_from_inventory ?? false}
+          thresholdMl={restaurantRow.eightysix_ml_threshold ?? 148}
+        />
+      )}
+
       <AvailabilityList initialRows={rows} canToggle={canToggle} />
     </main>
   );

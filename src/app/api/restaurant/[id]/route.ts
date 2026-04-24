@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
+import { z } from "zod";
 import { requireAuth, requireOwner } from "@/lib/api/auth";
 import { setActiveRestaurant } from "@/lib/api/active-restaurant";
 
@@ -28,6 +29,19 @@ export async function PUT(
   return NextResponse.json({ ok: true, restaurantId: id });
 }
 
+// BND-037b: PATCH now accepts the two auto-86 columns in addition to
+// name. Each field is independently optional — partial updates work.
+// Zod.strict() rejects unknown keys so the shape is defensible.
+const PatchSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200).optional(),
+    auto_eightysix_from_inventory: z.boolean().optional(),
+    // Upper bound is a sanity cap — no legitimate threshold exceeds
+    // a magnum (1500 ml). The DB also has a check (>= 0).
+    eightysix_ml_threshold: z.number().int().min(0).max(5000).optional(),
+  })
+  .strict();
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Params },
@@ -41,20 +55,28 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
-  let body: { name?: string };
+  let raw: unknown;
   try {
-    body = await request.json();
+    raw = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  if (!body.name?.trim()) {
-    return NextResponse.json({ error: "Name is required." }, { status: 400 });
+  const parsed = PatchSchema.safeParse(raw);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid body.", issues: parsed.error.issues },
+      { status: 400 },
+    );
+  }
+
+  if (Object.keys(parsed.data).length === 0) {
+    return NextResponse.json({ error: "No valid fields." }, { status: 400 });
   }
 
   const { error } = await supabase
     .from("restaurants")
-    .update({ name: body.name.trim() })
+    .update(parsed.data)
     .eq("id", id);
 
   if (error) {

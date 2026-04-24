@@ -432,19 +432,25 @@ export type Database = {
       }
       restaurants: {
         Row: {
+          auto_eightysix_from_inventory: boolean
           created_at: string
+          eightysix_ml_threshold: number
           id: string
           name: string
           updated_at: string
         }
         Insert: {
+          auto_eightysix_from_inventory?: boolean
           created_at?: string
+          eightysix_ml_threshold?: number
           id?: string
           name?: string
           updated_at?: string
         }
         Update: {
+          auto_eightysix_from_inventory?: boolean
           created_at?: string
+          eightysix_ml_threshold?: number
           id?: string
           name?: string
           updated_at?: string

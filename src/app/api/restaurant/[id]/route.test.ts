@@ -1,0 +1,172 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextResponse, type NextRequest } from "next/server";
+
+const mockRequireOwner = vi.fn();
+const mockRequireAuth = vi.fn();
+vi.mock("@/lib/api/auth", () => ({
+  requireOwner: (...args: unknown[]) => mockRequireOwner(...args),
+  requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
+}));
+vi.mock("@/lib/api/active-restaurant", () => ({
+  setActiveRestaurant: vi.fn(),
+}));
+
+const { PATCH } = await import("./route");
+
+/**
+ * Simple mock — tracks update payloads, returns null error.
+ */
+function makeSupabase() {
+  const updates: Array<Record<string, unknown>> = [];
+  return {
+    _updates: updates,
+    from: (_t: string) => ({
+      update: (row: Record<string, unknown>) => {
+        updates.push(row);
+        return {
+          eq: () => ({
+            then: (resolve: (v: { error: null }) => void) =>
+              resolve({ error: null }),
+          }),
+        };
+      },
+    }),
+  };
+}
+
+function makeReq(body: unknown): NextRequest {
+  return { json: async () => body } as NextRequest;
+}
+
+const R = "11111111-1111-4111-8111-111111111111";
+const params = Promise.resolve({ id: R });
+
+describe("PATCH /api/restaurant/[id]", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("accepts name update (pre-existing behavior)", async () => {
+    const sup = makeSupabase();
+    mockRequireOwner.mockResolvedValue({
+      supabase: sup,
+      restaurantId: R,
+      user: { id: "u-1" },
+      role: "owner",
+    });
+    const res = await PATCH(makeReq({ name: "New name" }), { params });
+    expect(res.status).toBe(200);
+    expect(sup._updates[0]).toMatchObject({ name: "New name" });
+  });
+
+  // BND-037b: the three new cases
+  it("accepts auto_eightysix_from_inventory toggle", async () => {
+    const sup = makeSupabase();
+    mockRequireOwner.mockResolvedValue({
+      supabase: sup,
+      restaurantId: R,
+      user: { id: "u-1" },
+      role: "owner",
+    });
+    const res = await PATCH(
+      makeReq({ auto_eightysix_from_inventory: true }),
+      { params },
+    );
+    expect(res.status).toBe(200);
+    expect(sup._updates[0]).toMatchObject({
+      auto_eightysix_from_inventory: true,
+    });
+  });
+
+  it("accepts eightysix_ml_threshold update", async () => {
+    const sup = makeSupabase();
+    mockRequireOwner.mockResolvedValue({
+      supabase: sup,
+      restaurantId: R,
+      user: { id: "u-1" },
+      role: "owner",
+    });
+    const res = await PATCH(
+      makeReq({ eightysix_ml_threshold: 250 }),
+      { params },
+    );
+    expect(res.status).toBe(200);
+    expect(sup._updates[0]).toMatchObject({ eightysix_ml_threshold: 250 });
+  });
+
+  it("accepts both auto-86 fields in one call", async () => {
+    const sup = makeSupabase();
+    mockRequireOwner.mockResolvedValue({
+      supabase: sup,
+      restaurantId: R,
+      user: { id: "u-1" },
+      role: "owner",
+    });
+    const res = await PATCH(
+      makeReq({
+        auto_eightysix_from_inventory: true,
+        eightysix_ml_threshold: 100,
+      }),
+      { params },
+    );
+    expect(res.status).toBe(200);
+    expect(sup._updates[0]).toEqual({
+      auto_eightysix_from_inventory: true,
+      eightysix_ml_threshold: 100,
+    });
+  });
+
+  it("rejects negative threshold", async () => {
+    const sup = makeSupabase();
+    mockRequireOwner.mockResolvedValue({
+      supabase: sup,
+      restaurantId: R,
+      user: { id: "u-1" },
+      role: "owner",
+    });
+    const res = await PATCH(
+      makeReq({ eightysix_ml_threshold: -10 }),
+      { params },
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects unknown fields (strict)", async () => {
+    const sup = makeSupabase();
+    mockRequireOwner.mockResolvedValue({
+      supabase: sup,
+      restaurantId: R,
+      user: { id: "u-1" },
+      role: "owner",
+    });
+    const res = await PATCH(
+      makeReq({ foo: "bar" }),
+      { params },
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("403s when targeting a different restaurant", async () => {
+    const sup = makeSupabase();
+    mockRequireOwner.mockResolvedValue({
+      supabase: sup,
+      restaurantId: "22222222-2222-4222-8222-222222222222",
+      user: { id: "u-1" },
+      role: "owner",
+    });
+    const res = await PATCH(
+      makeReq({ auto_eightysix_from_inventory: true }),
+      { params },
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("403s when caller is not owner (forwarded from requireOwner)", async () => {
+    mockRequireOwner.mockResolvedValue(
+      NextResponse.json({ error: "Owner access required." }, { status: 403 }),
+    );
+    const res = await PATCH(
+      makeReq({ auto_eightysix_from_inventory: true }),
+      { params },
+    );
+    expect(res.status).toBe(403);
+  });
+});
