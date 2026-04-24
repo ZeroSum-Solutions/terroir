@@ -111,6 +111,37 @@ migration issues) since the preview still hits prod Supabase. But it
 catches the most common class of "works on my laptop, breaks on
 Railway" surprises.
 
+### Verifying the gate end-to-end
+
+After flipping the Railway toggle + adding the branch-protection
+rule, verify both are wired correctly by opening a throwaway PR and
+watching for:
+
+1. **Railway posts a deployment.** Within ~30-90 s of the PR
+   opening, the PR timeline shows a `Deployment` event from Railway
+   with environment label `pr-N`. If it doesn't appear, the
+   dashboard toggle isn't on.
+
+2. **The `Preview health` workflow runs.** Check the Actions tab on
+   the PR — `Preview health / Railway preview /api/health` should
+   start polling. Logs show `Polling for Railway preview on
+   <repo> @ <sha> ...` for up to 5 min.
+
+3. **`/api/health` is curled on the preview URL.** Log shows
+   `Preview ready — curling <url>/api/health`. A 200 reply logs
+   `✅ Preview /api/health returned 200` and the check passes.
+
+4. **The status check is required in the PR UI.** The "Merge pull
+   request" button is disabled until the check reports success, and
+   the check appears in the required-checks list at the bottom of
+   the PR.
+
+If step 1 passes but step 2 doesn't, check the workflow file is
+present on the PR's base branch (`main`). If steps 1-3 pass but
+step 4 doesn't, the branch-protection rule didn't take — the check
+name to require is exactly `Preview health / Railway preview /api/health`
+(job name inside `preview-health.yml`, not the workflow name).
+
 ## Tracking
 
 Once either path is chosen and executed, update:
