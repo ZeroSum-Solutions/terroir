@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Plus, Search } from "lucide-react";
-import { useFocusTrap } from "@/lib/use-focus-trap";
+import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 
 type SearchWine = {
   id: string;
@@ -39,15 +39,9 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
   const [glassPrice, setGlassPrice] = useState("");
   const [adding, setAdding] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
-  const trapRef = useFocusTrap<HTMLDivElement>();
+  const trapRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    function handleEscape(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [onClose]);
+  useFocusTrap({ containerRef: trapRef, onEscape: onClose });
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);

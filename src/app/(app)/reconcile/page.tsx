@@ -1,30 +1,25 @@
+import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { requireMembership } from "@/lib/api/auth";
+import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import { ReconcileList } from "./reconcile-list";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export type ReconcileItem = {
-  wine_id: string;
-  name: string;
-  producer: string;
-  vintage: number | null;
-  size_ml: number;
-  open_remaining_ml: number;
-  glass_pour_ml: number;
-};
+// Re-exported for the client list component. DEBT-022: the shape
+// now lives in @/lib/wine-list/shapes.ts — see OpenBottleRow.
+export type ReconcileItem = OpenBottleRow;
 
 // BND-038. End-of-shift correction UI. Owner + manager only (staff
 // lands back on /pour). Lists every currently-open bottle and lets
 // the manager snap to a fraction or type an exact ml value.
 export default async function ReconcilePage() {
   const auth = await requireMembership();
-  if (auth && "status" in auth) {
+  if (auth instanceof NextResponse) {
     redirect("/login?next=/reconcile");
   }
-  const { supabase, restaurantId, role } =
-    auth as Exclude<typeof auth, Response>;
+  const { supabase, restaurantId, role } = auth;
 
   if (role !== "owner" && role !== "manager") {
     redirect("/pour");
@@ -34,21 +29,10 @@ export default async function ReconcilePage() {
     p_restaurant_id: restaurantId,
   });
 
-  type RawRow = Omit<ReconcileItem, "open_remaining_ml"> & {
-    open_remaining_ml: number | null;
-  };
-
-  const items: ReconcileItem[] = ((data ?? []) as unknown as RawRow[])
-    .filter((i): i is ReconcileItem => i.open_remaining_ml !== null)
-    .map((i) => ({
-      wine_id: i.wine_id,
-      name: i.name,
-      producer: i.producer,
-      vintage: i.vintage,
-      size_ml: i.size_ml,
-      open_remaining_ml: i.open_remaining_ml,
-      glass_pour_ml: i.glass_pour_ml,
-    }));
+  // Runtime filter: the RPC returns rows for every by-the-glass wine
+  // including those with no open bottle yet. Reconcile only shows
+  // rows with a currently-open bottle.
+  const items = (data ?? []).filter((i) => i.open_remaining_ml !== null);
 
   return (
     <main className="mx-auto max-w-[720px] px-lg py-xl">

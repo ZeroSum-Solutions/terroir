@@ -3,9 +3,9 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { ML_PER_OZ } from "@/lib/units";
 import type { ReconcileItem } from "./page";
 
-const ML_PER_OZ = 29.5735;
 const FRACTIONS: Array<{ label: string; value: number }> = [
   { label: "Empty", value: 0 },
   { label: "¼", value: 0.25 },

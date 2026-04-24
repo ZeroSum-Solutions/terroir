@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 
 interface NoteModalProps {
   open: boolean;
@@ -9,12 +10,6 @@ interface NoteModalProps {
   onCancel: () => void;
   onConfirm: (note: string | undefined) => void;
 }
-
-// Matches MDN's "tabbable" set well enough for a single-panel dialog.
-// We intentionally don't filter by offsetParent (visibility) — this dialog
-// has no hidden controls.
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function NoteModal({
   open,
@@ -39,44 +34,13 @@ export function NoteModal({
     onConfirm(trimmed.length > 0 ? trimmed : undefined);
   };
 
-  // Escape-to-close + focus-trap. Attached at the document level so a Tab
-  // from anywhere inside the dialog is caught — the dialog is the only
-  // interactive surface while open (aria-modal="true").
-  useEffect(() => {
-    if (!open) return;
+  // Escape also clears the draft note, mirroring handleCancel.
+  const onEscape = useCallback(() => {
+    setNote("");
+    onCancel();
+  }, [onCancel]);
 
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setNote("");
-        onCancel();
-        return;
-      }
-      if (e.key !== "Tab") return;
-
-      const root = dialogRef.current;
-      if (!root) return;
-      const focusable = Array.from(
-        root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-      );
-      if (focusable.length === 0) return;
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-
-      if (e.shiftKey && active === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [open, onCancel]);
+  useFocusTrap({ containerRef: dialogRef, onEscape, enabled: open });
 
   // Auto-focus the textarea when the dialog opens so keyboard users can
   // start typing immediately.

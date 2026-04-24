@@ -1,12 +1,13 @@
 import { test, expect, type Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
 
 /**
  * BND-038 E2E — full oz-native-inventory cycle.
  *
  * Path exercised:
  *   1. Authenticate via /api/dev-login (DEV_BYPASS_EMAIL in .env.local).
- *   2. Hit /api/open-bottles to find a by-the-glass wine (glass_pour_ml
- *      set + sealed inventory available OR an open bottle).
+ *   2. Call list_open_bottle_items RPC directly (service-role) to find
+ *      a by-the-glass wine with sealed inventory or an open bottle.
  *   3. Navigate to /pour, tap the primary pour button, verify the
  *      "~N glasses left" count decrements by exactly 1.
  *   4. Navigate to /reconcile, tap the "½" fraction for the same wine,
@@ -47,11 +48,51 @@ test.describe("BND-038 pour → reconcile", () => {
     sealed_count: number;
   };
 
-  async function fetchItems(page: Page): Promise<OpenBottleItem[]> {
-    const res = await page.request.get("/api/open-bottles");
-    expect(res.ok()).toBeTruthy();
-    const body = (await res.json()) as { items: OpenBottleItem[] };
-    return body.items;
+  // Service-role client for the setup/verification reads that used
+  // to go through /api/open-bottles. DEBT-018 deleted that route; the
+  // RPC (SECURITY DEFINER, restaurant-scoped) is the canonical path
+  // now. Local-only — service-role key is never present in CI.
+  function adminClient() {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) {
+      throw new Error(
+        "pour-flow E2E requires NEXT_PUBLIC_SUPABASE_URL + " +
+          "SUPABASE_SERVICE_ROLE_KEY (same as /api/dev-login).",
+      );
+    }
+    return createClient(url, key, { auth: { persistSession: false } });
+  }
+
+  async function resolveRestaurantId(): Promise<string> {
+    const email = process.env.DEV_BYPASS_EMAIL;
+    if (!email) throw new Error("DEV_BYPASS_EMAIL not set");
+    const admin = adminClient();
+    const { data: users, error: userErr } =
+      await admin.auth.admin.listUsers({ perPage: 200 });
+    if (userErr) throw userErr;
+    const user = users.users.find((u) => u.email === email);
+    if (!user) throw new Error(`Dev user ${email} not found in auth.users`);
+    const { data: rows, error: mErr } = await admin
+      .from("memberships")
+      .select("restaurant_id, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (mErr) throw mErr;
+    const row = rows?.[0];
+    if (!row) throw new Error(`No restaurant membership for ${email}`);
+    return row.restaurant_id as string;
+  }
+
+  async function fetchItems(_page: Page): Promise<OpenBottleItem[]> {
+    const admin = adminClient();
+    const restaurantId = await resolveRestaurantId();
+    const { data, error } = await admin.rpc("list_open_bottle_items", {
+      p_restaurant_id: restaurantId,
+    });
+    expect(error, error?.message).toBeNull();
+    return (data ?? []) as OpenBottleItem[];
   }
 
   /**
@@ -187,11 +228,10 @@ test.describe("BND-038 pour → reconcile", () => {
       page.getByRole("button", { name: /No changes yet/i }),
     ).toBeVisible({ timeout: 10_000 });
 
-    // --- Step 4: verify via API that an open_bottle exists for the
+    // --- Step 4: verify via RPC that an open_bottle exists for the
     //     wine and its remaining_ml is ~half of the bottle size ------
-    const after = await page.request.get("/api/open-bottles");
-    const afterBody = (await after.json()) as { items: OpenBottleItem[] };
-    const sameWine = afterBody.items.find((i) => i.wine_id === wine.wine_id);
+    const afterItems = await fetchItems(page);
+    const sameWine = afterItems.find((i) => i.wine_id === wine.wine_id);
     expect(sameWine).toBeTruthy();
     // Bottle size is 750 for every wine in the current fixture, but pull
     // from the existing item's state if we need to be general later.

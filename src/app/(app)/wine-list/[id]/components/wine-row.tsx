@@ -5,6 +5,7 @@ import { GripVertical, MoreHorizontal, Trash2 } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
+import { ML_PER_OZ } from "@/lib/units";
 
 type Wine = {
   id: string;
@@ -54,8 +55,6 @@ interface WineRowProps {
   onPourChange: (id: string, field: PourField, value: PourValue) => void;
   dragHandleProps?: Record<string, unknown>;
 }
-
-const ML_PER_OZ = 29.5735;
 
 interface PriceInputProps {
   value: number | null;

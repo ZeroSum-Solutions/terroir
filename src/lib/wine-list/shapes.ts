@@ -1,3 +1,5 @@
+import type { Database } from "@/types/database";
+
 /**
  * DEBT-013: shared shapes for the nested wine_list_sections +
  * wine_list_items + wines embed that the PDF route and the public
@@ -22,3 +24,12 @@ export type WineListSectionEmbed<TItem> = {
   position: number;
   wine_list_items: TItem[];
 };
+
+/**
+ * DEBT-022: single source of truth for the `list_open_bottle_items`
+ * RPC row shape. /pour and /reconcile both consume this RPC and
+ * previously each page.tsx maintained its own structural duplicate.
+ * The generator emits the full 11-field shape directly.
+ */
+export type OpenBottleRow =
+  Database["public"]["Functions"]["list_open_bottle_items"]["Returns"][number];

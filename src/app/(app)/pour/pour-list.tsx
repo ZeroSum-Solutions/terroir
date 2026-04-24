@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { ML_PER_OZ } from "@/lib/units";
+import { predictOpenBottleAfterPour } from "@/lib/pour/predict";
 import type { PourItem } from "./page";
 import { PourPickerModal } from "./pour-picker-modal";
 
-const ML_PER_OZ = 29.5735;
 const UNDO_BANNER_MS = 6000;
 
 export function PourList({
@@ -55,63 +56,42 @@ export function PourList({
       const prev = items.find((it) => it.wine_id === item.wine_id);
       if (!prev) return;
 
-      // Detect whether the RPC will cascade (finish_bottle + new_bottle
-      // + pour) because the current open bottle doesn't have enough
-      // left OR there's no open bottle at all. When cascade fires,
-      // undoing the pour restores the visible glass count but doesn't
-      // un-open the fresh bottle — misleading semantics. We suppress
-      // the Undo banner in that case; the manager can correct via
-      // /reconcile if needed.
-      const currentRemaining = prev.open_remaining_ml ?? 0;
-      const willCascade =
-        (prev.open_remaining_ml === null || currentRemaining < ml) &&
-        prev.sealed_count > 0;
+      // Predict what the RPC will do so the optimistic UI converges
+      // with the ledger before router.refresh lands. See
+      // @/lib/pour/predict for the state machine (mirrors 0016's
+      // record_pour). When the RPC will cascade (new bottle opened),
+      // undoing the pour restores the visible glass count but can't
+      // un-open the fresh bottle — misleading semantics, so we
+      // suppress the Undo banner below.
+      const prediction = predictOpenBottleAfterPour({
+        openRemainingMl: prev.open_remaining_ml,
+        sizeMl: prev.size_ml,
+        sealedCount: prev.sealed_count,
+        mlPoured: ml,
+      });
+      const willCascade = prediction.kind === "cascade";
 
-      // Optimistic update — mirrors the server-side record_pour RPC's
-      // three cases so the UI converges with the ledger even before
-      // router.refresh lands. Without this we clamp remaining to 0 on
-      // overage but leave sealed_count stale; glass count stays wrong.
+      // Optimistic update. If the predictor says out_of_stock we still
+      // clamp the open bottle's remaining to 0 locally; the catch
+      // branch below will revert once the RPC 409s.
       setItems((rows) =>
         rows.map((it) => {
           if (it.wine_id !== item.wine_id) return it;
-
-          // Case 1 — no open bottle, sealed inventory available:
-          //   RPC inserts new_bottle, remaining becomes size_ml - ml.
-          if (it.open_remaining_ml === null && it.sealed_count > 0) {
+          if (prediction.kind === "out_of_stock") {
+            return { ...it, open_remaining_ml: 0 };
+          }
+          if (prediction.kind === "cascade") {
             return {
               ...it,
-              open_remaining_ml: Math.max(0, it.size_ml - ml),
-              sealed_count: it.sealed_count - 1,
+              open_remaining_ml: prediction.openRemainingMl,
+              sealed_count: prediction.sealedCountAfter,
               opened_at: new Date().toISOString(),
             };
           }
-
-          const currentRemaining = it.open_remaining_ml ?? 0;
-
-          // Case 2 — enough in open bottle: straight subtract.
-          if (currentRemaining >= ml) {
-            return {
-              ...it,
-              open_remaining_ml: currentRemaining - ml,
-            };
-          }
-
-          // Case 3 — overage, sealed inventory available:
-          //   RPC cascades finish_bottle + new_bottle + pour. Net
-          //   effect on state = open a fresh bottle and pour the
-          //   full ml from it.
-          if (it.sealed_count > 0) {
-            return {
-              ...it,
-              open_remaining_ml: Math.max(0, it.size_ml - ml),
-              sealed_count: it.sealed_count - 1,
-              opened_at: new Date().toISOString(),
-            };
-          }
-
-          // Case 4 — overage, no sealed left. The RPC will 409; we
-          // clamp to 0 locally and the catch branch will revert.
-          return { ...it, open_remaining_ml: 0 };
+          return {
+            ...it,
+            open_remaining_ml: prediction.openRemainingMl,
+          };
         }),
       );
 

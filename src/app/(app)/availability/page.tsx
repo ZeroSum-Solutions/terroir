@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { requireMembership } from "@/lib/api/auth";
 import { AutoEightysixPanel } from "./auto-eightysix-panel";
@@ -20,12 +21,11 @@ export type WineAvailabilityRow = {
 
 export default async function AvailabilityPage() {
   const auth = await requireMembership();
-  if (auth && "status" in auth) {
+  if (auth instanceof NextResponse) {
     // requireMembership returned a NextResponse (401/403); route to login.
     redirect("/login?next=/availability");
   }
-  // Narrow: the guard above eliminates the NextResponse branch.
-  const { supabase, restaurantId, role } = auth as Exclude<typeof auth, Response>;
+  const { supabase, restaurantId, role } = auth;
 
   // BND-037b: fetch the wine list + the auto-86 restaurant config in
   // parallel. Only owners see the config panel (PATCH is owner-gated).

@@ -3,8 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-
-const ML_PER_OZ = 29.5735;
+import { ML_PER_OZ } from "@/lib/units";
 
 interface Props {
   restaurantId: string;

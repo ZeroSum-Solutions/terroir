@@ -1,13 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { ML_PER_OZ } from "@/lib/units";
+import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import type { PourItem } from "./page";
 
-const ML_PER_OZ = 29.5735;
 const PRESETS_OZ = [1, 3, 5, 8];
-
-const FOCUSABLE_SELECTOR =
-  'button:not([disabled]), input:not([disabled]):not([type="hidden"])';
 
 interface Props {
   item: PourItem | null;
@@ -36,36 +34,11 @@ export function PourPickerModal({ item, onCancel, onConfirm }: Props) {
     onConfirm(ml);
   };
 
-  useEffect(() => {
-    if (!item) return;
-
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onCancel();
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const root = dialogRef.current;
-      if (!root) return;
-      const focusables = Array.from(
-        root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-      );
-      if (focusables.length === 0) return;
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-      if (e.shiftKey && active === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [item, onCancel]);
+  useFocusTrap({
+    containerRef: dialogRef,
+    onEscape: onCancel,
+    enabled: item !== null,
+  });
 
   if (!item) return null;
 
