@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { ArrowLeft } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -43,7 +44,13 @@ export function ScanDetailView({
       .then((data: { url?: string }) => {
         if (data.url) setImageUrl(data.url);
       })
-      .catch((err) => console.error("Failed to load invoice image:", err))
+      .catch((err) => {
+        console.error("Failed to load invoice image:", err);
+        Sentry.captureException(err, {
+          tags: { surface: "scanner", phase: "image-load" },
+          extra: { scan_id: id },
+        });
+      })
       .finally(() => setImageLoading(false));
   }, [id, hasImage]);
 

@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { NextResponse, type NextRequest } from "next/server";
@@ -33,7 +34,11 @@ export async function POST(request: NextRequest) {
   let anthropic: Anthropic;
   try {
     anthropic = getAnthropicClient();
-  } catch {
+  } catch (err) {
+    Sentry.captureException(err, {
+      tags: { surface: "scanner", phase: "client-init" },
+      extra: {},
+    });
     return NextResponse.json(
       { error: "Server not configured: ANTHROPIC_API_KEY missing." },
       { status: 500 },
@@ -144,6 +149,11 @@ export async function POST(request: NextRequest) {
         { status: 502 },
       );
     }
+    console.error("scan-bottle failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "scanner", phase: "claude-call" },
+      extra: { file_size: file.size, file_type: file.type },
+    });
     return NextResponse.json(
       { error: "Something went wrong identifying the wine." },
       { status: 500 },

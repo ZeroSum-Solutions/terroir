@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { requireMembership } from "@/lib/api/auth";
 
@@ -16,6 +17,11 @@ export async function GET() {
     .not("bin_location", "is", null);
 
   if (error) {
+    console.error("cellar grid failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "cellar", phase: "grid-list-rpc" },
+      extra: { restaurant_id: restaurantId },
+    });
     return NextResponse.json(
       { error: "Failed to fetch grid data." },
       { status: 500 },

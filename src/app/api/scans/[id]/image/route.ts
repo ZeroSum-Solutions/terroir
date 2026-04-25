@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireMembership } from "@/lib/api/auth";
 
@@ -30,6 +31,11 @@ export async function GET(
     .createSignedUrl(scan.raw_image_path, 3600);
 
   if (error || !signed?.signedUrl) {
+    console.error("fetch-storage failed:", error);
+    Sentry.captureException(error ?? new Error("No signed URL returned"), {
+      tags: { surface: "scanner", phase: "fetch-storage" },
+      extra: { scan_id: id },
+    });
     return NextResponse.json(
       { error: "Failed to generate image URL." },
       { status: 500 },

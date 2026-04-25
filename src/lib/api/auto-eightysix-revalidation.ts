@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
@@ -51,6 +52,10 @@ export async function revalidateAutoEightysixedWines(params: {
       "auto-86 revalidation: failed to read availability_events:",
       error,
     );
+    Sentry.captureException(error, {
+      tags: { surface: "auto-eightysix", phase: "events-select" },
+      extra: { restaurant_id: restaurantId, wine_count: touchedWineIds.length },
+    });
     return;
   }
 
@@ -71,6 +76,10 @@ export async function revalidateAutoEightysixedWines(params: {
         "auto-86 revalidation: wine_published_list_slugs failed:",
         slugsError,
       );
+      Sentry.captureException(slugsError, {
+        tags: { surface: "auto-eightysix", phase: "slugs-rpc" },
+        extra: { wine_id: wineId, restaurant_id: restaurantId },
+      });
       continue;
     }
 

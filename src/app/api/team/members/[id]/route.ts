@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireOwner } from "@/lib/api/auth";
 
@@ -66,6 +67,11 @@ export async function PATCH(
     .eq("id", id);
 
   if (error) {
+    console.error("role-update-rpc failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "team", phase: "role-update-rpc" },
+      extra: { member_id: id, new_role: newRole },
+    });
     return NextResponse.json(
       { error: "Failed to update role." },
       { status: 500 },
@@ -110,6 +116,11 @@ export async function DELETE(
   const { error } = await supabase.from("memberships").delete().eq("id", id);
 
   if (error) {
+    console.error("member-delete-rpc failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "team", phase: "member-delete-rpc" },
+      extra: { member_id: id },
+    });
     return NextResponse.json(
       { error: "Failed to remove member." },
       { status: 500 },

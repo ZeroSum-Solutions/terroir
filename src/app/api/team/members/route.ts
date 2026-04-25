@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { requireMembership } from "@/lib/api/auth";
 
@@ -19,6 +20,11 @@ export async function GET() {
     .order("created_at");
 
   if (membersError) {
+    console.error("members-list-rpc failed:", membersError);
+    Sentry.captureException(membersError, {
+      tags: { surface: "team", phase: "members-list-rpc" },
+      extra: { restaurant_id: restaurantId },
+    });
     return NextResponse.json(
       { error: "Failed to fetch members." },
       { status: 500 },
@@ -40,6 +46,11 @@ export async function GET() {
     .order("created_at", { ascending: false });
 
   if (invitationsError) {
+    console.error("invite-list-rpc failed:", invitationsError);
+    Sentry.captureException(invitationsError, {
+      tags: { surface: "team", phase: "invite-list-rpc" },
+      extra: { restaurant_id: restaurantId },
+    });
     return NextResponse.json(
       { error: "Failed to fetch invitations." },
       { status: 500 },
