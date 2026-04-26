@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 import { enrichWine } from "@/lib/wine-intelligence/enrich";
+import { enrichWineWithClaude } from "@/lib/wine-intelligence/enrich-claude";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,29 @@ export const runtime = "nodejs";
 // re-invoke until all rows are enriched. Tune up if we ever see
 // real-world restaurants breaking past this.
 const ENRICH_BATCH_LIMIT = 2000;
+
+// BND-039: Claude fallback runs after the rule engine. Hard cap per request
+// because each call costs real API tokens + adds latency. 50 is the
+// realistic upper bound for one tick — bigger backlogs catch up over
+// successive client-driven invocations as the bulk-enrich button loops.
+const CLAUDE_FALLBACK_MAX_PER_REQUEST = 50;
+
+// BND-039: how many Claude calls run concurrently. The Anthropic SDK
+// handles per-call retries; we just cap parallelism so we don't hit
+// rate limits on a 50-wine sweep.
+const CLAUDE_CONCURRENCY = 5;
+
+type EnrichmentPayloadRow = {
+  id: string;
+  drink_window_start: number | null;
+  drink_window_end: number | null;
+  peak_year: number | null;
+  rating_source: string | null;
+  review_excerpt: string | null;
+  serving_temp_min: number | null;
+  serving_temp_max: number | null;
+  serving_temp_label: string | null;
+};
 
 export async function POST() {
   const auth = await requireMembership();
@@ -23,9 +47,12 @@ export async function POST() {
   // re-evaluated them client-side. With the `.or(...is.null)` filter
   // and a LIMIT, steady-state runs do zero work on already-enriched
   // catalogs.
+  //
+  // BND-039: also include `producer, name` so Claude fallback has
+  // enough signal for an obscure-wine inference.
   const { data: wines, error } = await supabase
     .from("wines")
-    .select("id, varietal, region, country, vintage")
+    .select("id, producer, name, varietal, region, country, vintage")
     .eq("restaurant_id", restaurantId)
     .or("drink_window_start.is.null,serving_temp_min.is.null")
     .limit(ENRICH_BATCH_LIMIT);
@@ -38,31 +65,85 @@ export async function POST() {
     );
   }
 
-  // BND-031 / DEBT-008: compute enrichments in Node via the deterministic
-  // rule engine, then ship the whole batch to enrich_wines_batch in one
-  // round-trip. Rows where the rule engine returns all-nulls are filtered
-  // out — no point paying for an empty UPDATE.
-  const payload = (wines ?? [])
-    .map((wine) => {
-      const result = enrichWine({
-        varietal: wine.varietal,
-        region: wine.region,
-        country: wine.country,
-        vintage: wine.vintage,
-      });
-      if (result.servingTempMin == null && result.drinkWindowStart == null) {
-        return null;
-      }
-      return {
-        id: wine.id,
-        drink_window_start: result.drinkWindowStart,
-        drink_window_end: result.drinkWindowEnd,
-        serving_temp_min: result.servingTempMin,
-        serving_temp_max: result.servingTempMax,
-        serving_temp_label: result.servingTempLabel,
-      };
-    })
-    .filter((row): row is NonNullable<typeof row> => row !== null);
+  // BND-031 / DEBT-008 / BND-039 — Tier 1 (rule engine, deterministic, free):
+  // compute enrichments in Node and partition wines into "rule_engine matched"
+  // vs "rule_engine missed". Misses become candidates for Tier 2 (Claude).
+  const ruleEnriched: EnrichmentPayloadRow[] = [];
+  const claudeCandidates: typeof wines = [];
+
+  for (const wine of wines ?? []) {
+    const result = enrichWine({
+      varietal: wine.varietal,
+      region: wine.region,
+      country: wine.country,
+      vintage: wine.vintage,
+    });
+    // If the rule engine returned anything, take it as the source of truth.
+    // Pure miss (no drink window AND no serving temp) → try Claude.
+    if (result.servingTempMin == null && result.drinkWindowStart == null) {
+      claudeCandidates.push(wine);
+      continue;
+    }
+    ruleEnriched.push({
+      id: wine.id,
+      drink_window_start: result.drinkWindowStart,
+      drink_window_end: result.drinkWindowEnd,
+      peak_year: result.peakYear,
+      rating_source: result.ratingSource, // 'rule_engine' on rule match
+      review_excerpt: result.reviewExcerpt,
+      serving_temp_min: result.servingTempMin,
+      serving_temp_max: result.servingTempMax,
+      serving_temp_label: result.servingTempLabel,
+    });
+  }
+
+  // BND-039 — Tier 2 (Claude fallback, paid, slower, higher coverage):
+  // Cap how many calls we make per request so a 200-wine backlog doesn't
+  // burn through Anthropic budget on one click. Subsequent clicks via
+  // the bulk-enrich UI catch up incrementally (hasMore=true).
+  const claudeWork = claudeCandidates.slice(0, CLAUDE_FALLBACK_MAX_PER_REQUEST);
+  const claudeRemaining = Math.max(
+    0,
+    claudeCandidates.length - CLAUDE_FALLBACK_MAX_PER_REQUEST,
+  );
+
+  const claudeResults: EnrichmentPayloadRow[] = [];
+  for (let i = 0; i < claudeWork.length; i += CLAUDE_CONCURRENCY) {
+    const slice = claudeWork.slice(i, i + CLAUDE_CONCURRENCY);
+    const settled = await Promise.all(
+      slice.map(async (wine) => {
+        const result = await enrichWineWithClaude({
+          producer: wine.producer,
+          name: wine.name,
+          vintage: wine.vintage,
+          varietal: wine.varietal,
+          region: wine.region,
+          country: wine.country,
+        });
+        // Claude returns null on rate-limit, parse error, or genuine
+        // "too obscure to estimate". Drop those — partial success is
+        // better than aborting the batch (architect-review finding 6).
+        if (!result || result.drinkWindowStart == null) return null;
+        return {
+          id: wine.id,
+          drink_window_start: result.drinkWindowStart,
+          drink_window_end: result.drinkWindowEnd,
+          peak_year: result.peakYear,
+          rating_source: result.ratingSource,
+          review_excerpt: result.reviewExcerpt,
+          // Don't overwrite serving_temp from Claude — it's not asked.
+          serving_temp_min: null,
+          serving_temp_max: null,
+          serving_temp_label: null,
+        } satisfies EnrichmentPayloadRow;
+      }),
+    );
+    for (const row of settled) {
+      if (row) claudeResults.push(row);
+    }
+  }
+
+  const payload = [...ruleEnriched, ...claudeResults];
 
   let enriched = 0;
   if (payload.length > 0) {
@@ -107,10 +188,16 @@ export async function POST() {
   return NextResponse.json({
     total: processed,
     enriched,
+    ruleEnrichedCount: ruleEnriched.length,
+    claudeEnrichedCount: claudeResults.length,
+    claudeAttemptedCount: claudeWork.length,
+    claudeRemaining,
     lwinMatched,
-    // Client can re-invoke until hasMore=false to finish off a huge catalog.
+    // Client can re-invoke until hasMore=false to finish off a huge catalog
+    // OR a long Claude backlog.
     hasMore:
       processed >= ENRICH_BATCH_LIMIT ||
-      (unmatched?.length ?? 0) >= ENRICH_BATCH_LIMIT,
+      (unmatched?.length ?? 0) >= ENRICH_BATCH_LIMIT ||
+      claudeRemaining > 0,
   });
 }

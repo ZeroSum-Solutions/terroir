@@ -38,4 +38,14 @@ export type CellarWineRow = {
   size_ml: number | null;
   open_remaining_ml: number | null;
   opened_at: string | null;
+
+  // BND-039 — drink-window enrichment metadata. All nullable so a wine
+  // without enrichment data renders with no timeline / no panel; the
+  // UI gracefully degrades.
+  drink_window_start: number | null;
+  drink_window_end: number | null;
+  peak_year: number | null;
+  rating: number | null;
+  rating_source: string | null;
+  review_excerpt: string | null;
 };

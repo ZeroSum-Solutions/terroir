@@ -90,4 +90,57 @@ describe("enrichWine", () => {
     });
     expect(result.drinkWindowStart).toBe(2023);
   });
+
+  // BND-039 additions
+  it("returns peakYear at midpoint of drink window when rule matches", () => {
+    const result = enrichWine({
+      varietal: "Cabernet Sauvignon",
+      region: "Napa Valley",
+      country: "USA",
+      vintage: 2020,
+    });
+    // Window 2025-2040, peak ≈ 2032 (midpoint, rounded)
+    expect(result.peakYear).toBe(Math.round((2025 + 2040) / 2));
+  });
+
+  it("returns null peakYear when vintage is null", () => {
+    const result = enrichWine({
+      varietal: "Pinot Noir",
+      region: "Burgundy",
+      country: "France",
+      vintage: null,
+    });
+    expect(result.peakYear).toBeNull();
+  });
+
+  it("sets ratingSource to 'rule_engine' on a rule match", () => {
+    const result = enrichWine({
+      varietal: "Cabernet Sauvignon",
+      region: "Napa",
+      country: "USA",
+      vintage: 2020,
+    });
+    expect(result.ratingSource).toBe("rule_engine");
+  });
+
+  it("returns null ratingSource on a rule miss", () => {
+    const result = enrichWine({
+      varietal: "Txakoli",
+      region: null,
+      country: null,
+      vintage: 2022,
+    });
+    expect(result.ratingSource).toBeNull();
+    expect(result.peakYear).toBeNull();
+  });
+
+  it("review excerpt is null from rule engine (only Claude fallback fills this)", () => {
+    const result = enrichWine({
+      varietal: "Chardonnay",
+      region: "Burgundy",
+      country: "France",
+      vintage: 2020,
+    });
+    expect(result.reviewExcerpt).toBeNull();
+  });
 });

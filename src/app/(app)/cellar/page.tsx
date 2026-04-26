@@ -54,7 +54,7 @@ export default async function CellarPage() {
     supabase
       .from("wines")
       .select(
-        "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at",
+        "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt",
       )
       .eq("restaurant_id", restaurantId)
       .order("name", { ascending: true }),
@@ -119,6 +119,13 @@ export default async function CellarPage() {
       size_ml: ob?.size_ml ?? null,
       open_remaining_ml: ob?.open_remaining_ml ?? null,
       opened_at: ob?.opened_at ?? null,
+      // BND-039 — drink window metadata (nullable)
+      drink_window_start: w.drink_window_start,
+      drink_window_end: w.drink_window_end,
+      peak_year: w.peak_year,
+      rating: w.rating,
+      rating_source: w.rating_source,
+      review_excerpt: w.review_excerpt,
     };
   });
 

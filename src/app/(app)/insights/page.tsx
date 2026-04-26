@@ -5,6 +5,9 @@ import {
   ScanLine,
 } from "lucide-react";
 import Link from "next/link";
+import { shouldTriggerAlert } from "@/lib/drink-window/status";
+import { BriefingAlertCard, type DrinkWindowAlert } from "./briefing-alert-card";
+import { EnrichCellarButton } from "./enrich-cellar-button";
 
 function formatMoney(n: number) {
   return "$" + n.toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -74,7 +77,13 @@ export default async function DashboardPage() {
   const auth = await getAuthContext();
   if (!auth) return null;
 
-  const { supabase, restaurantId: rid, restaurantName } = auth;
+  const { supabase, restaurantId: rid, restaurantName, user, userRole } = auth;
+
+  // BND-039 — drink-window alerts. Fetch in parallel with the Dashboard
+  // aggregates below; alerts render above the metric cards.
+  const drinkWindowAlerts = await fetchDrinkWindowAlerts(supabase, rid);
+  const firstName = parseFirstName(user.email ?? "") || "there";
+  const canEnrich = userRole === "owner" || userRole === "manager";
 
   // Get this month's aggregates
   const startOfMonth = new Date();
@@ -188,6 +197,43 @@ export default async function DashboardPage() {
           {restaurantName}
         </p>
       </header>
+
+      {/* BND-039 — Drink-window watch. Renders above the spend metrics
+          when there are active alerts OR the user can enrich (so they
+          can populate the data even when no alerts exist). */}
+      {(drinkWindowAlerts.length > 0 || canEnrich) && (
+        <section className="mb-lg md:mb-xl" aria-labelledby="dw-watch-heading">
+          <div className="mb-md flex flex-wrap items-baseline justify-between gap-sm">
+            <h2
+              id="dw-watch-heading"
+              className="text-[10px] font-semibold uppercase tracking-[0.08em] text-accent"
+            >
+              Drink-window watch
+            </h2>
+            <span className="text-[12px] text-ink-muted">
+              {drinkWindowAlerts.length === 0
+                ? "No alerts right now"
+                : `${drinkWindowAlerts.length} alert${drinkWindowAlerts.length === 1 ? "" : "s"}`}
+            </span>
+          </div>
+          {drinkWindowAlerts.length > 0 && (
+            <div className="flex flex-col gap-md">
+              {drinkWindowAlerts.map((alert) => (
+                <BriefingAlertCard
+                  key={alert.wine_id}
+                  alert={alert}
+                  firstName={firstName}
+                />
+              ))}
+            </div>
+          )}
+          {canEnrich && (
+            <div className="mt-md flex items-start gap-sm">
+              <EnrichCellarButton />
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="grid gap-md md:grid-cols-2">
         {/* Hero metric — spans both columns */}
@@ -390,6 +436,97 @@ export default async function DashboardPage() {
       </div>
     </section>
   );
+}
+
+/**
+ * BND-039 — Drink-window alerts fetcher.
+ *
+ * Runs the same logic as `/api/insights/drink-window-alerts` but inline,
+ * avoiding a server-component → API → client round-trip. The API still
+ * exists for client-side refetch scenarios (snooze action triggers a
+ * router.refresh which re-runs THIS server component, not the API).
+ *
+ * Filters mirror the API exactly:
+ *   • drink_window_end non-null AND within alert window
+ *   • alert_snoozed_until null OR expired
+ *   • is_eightysixed = false (architect-review finding 4)
+ *   • bottle_count > 0
+ */
+async function fetchDrinkWindowAlerts(
+  supabase: NonNullable<Awaited<ReturnType<typeof getAuthContext>>>["supabase"],
+  restaurantId: string,
+): Promise<DrinkWindowAlert[]> {
+  const nowIso = new Date().toISOString();
+  const { data: wines } = await supabase
+    .from("wines")
+    .select(
+      "id, name, producer, vintage, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt",
+    )
+    .eq("restaurant_id", restaurantId)
+    .eq("is_eightysixed", false)
+    .not("drink_window_end", "is", null)
+    .or(`alert_snoozed_until.is.null,alert_snoozed_until.lt.${nowIso}`);
+
+  const triggered = (wines ?? []).filter((w) =>
+    shouldTriggerAlert(w.drink_window_end),
+  );
+  if (triggered.length === 0) return [];
+
+  const { data: invRows } = await supabase
+    .from("inventory_items")
+    .select("wine_id, quantity, bin_location")
+    .eq("restaurant_id", restaurantId)
+    .in(
+      "wine_id",
+      triggered.map((w) => w.id),
+    );
+
+  const aggByWine = new Map<string, { count: number; bin: string | null }>();
+  for (const row of invRows ?? []) {
+    if (!row.wine_id) continue;
+    const prev = aggByWine.get(row.wine_id) ?? { count: 0, bin: null };
+    prev.count += row.quantity ?? 0;
+    if (!prev.bin && row.bin_location) prev.bin = row.bin_location;
+    aggByWine.set(row.wine_id, prev);
+  }
+
+  const alerts: DrinkWindowAlert[] = [];
+  for (const w of triggered) {
+    const inv = aggByWine.get(w.id);
+    if (!inv || inv.count <= 0) continue;
+    alerts.push({
+      wine_id: w.id,
+      name: w.name,
+      producer: w.producer,
+      vintage: w.vintage,
+      drink_window_start: w.drink_window_start,
+      drink_window_end: w.drink_window_end,
+      peak_year: w.peak_year,
+      rating: w.rating,
+      rating_source: w.rating_source,
+      review_excerpt: w.review_excerpt,
+      bottle_count: inv.count,
+      bin_location: inv.bin,
+    });
+  }
+
+  // Most urgent first (lowest yearsLeft).
+  alerts.sort((a, b) => {
+    const aY = (a.drink_window_end ?? 9999) - new Date().getFullYear();
+    const bY = (b.drink_window_end ?? 9999) - new Date().getFullYear();
+    if (aY !== bY) return aY - bY;
+    return a.producer.localeCompare(b.producer);
+  });
+  return alerts;
+}
+
+function parseFirstName(email: string): string {
+  // Best-effort first name from email local-part. "devin@example.com" → "Devin"
+  // Falls back to empty string for non-name-shaped emails.
+  const local = email.split("@")[0] ?? "";
+  const cleaned = local.replace(/[._-]+/g, " ").split(" ")[0] ?? "";
+  if (!cleaned) return "";
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
 }
 
 function getTimeAgo(iso: string): string {

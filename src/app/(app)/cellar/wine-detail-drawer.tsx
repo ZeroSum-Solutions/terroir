@@ -8,6 +8,12 @@ import { ML_PER_OZ } from "@/lib/units";
 import { cn } from "@/lib/utils";
 import { NoteModal } from "./note-modal";
 import { PourPickerModal } from "./pour-picker-modal";
+import { DrinkWindowTimeline } from "@/components/drink-window-timeline";
+import {
+  formatStatusLabel,
+  getDrinkWindowStatus,
+  getYearsUntilWindowClose,
+} from "@/lib/drink-window/status";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
 
@@ -239,6 +245,17 @@ export function WineDetailDrawer({
               )}
             </section>
 
+            {/* BND-039 — Drink window panel. Renders only when we have
+                window data; otherwise the section is omitted so unenriched
+                wines don't show an empty placeholder.
+
+                The panel highlights with warning-soft + amber accent bar
+                when the wine is in its drink-now or past-peak phase, so
+                a sommelier scanning the drawer can see urgency at a glance. */}
+            {row.drink_window_end != null && (
+              <DrinkWindowSection row={row} />
+            )}
+
             {errorMsg && (
               <div
                 role="alert"
@@ -347,6 +364,107 @@ export function WineDetailDrawer({
       />
     </>
   );
+}
+
+/**
+ * BND-039 — DrinkWindowSection. Renders the timeline + critic citation +
+ * source-note footer between Stock and Actions in the wine-detail drawer.
+ *
+ * Background tints amber when status is drink_now or past_peak so a
+ * sommelier scanning a list of drawers spots urgency immediately.
+ *
+ * Citation card shows: source (Vinous, Claude AI, etc.), score (when
+ * non-null — Phase 1 only fills this from real critics), tasting-note
+ * quote (italic, Cormorant). When source is "claude_inference" we show
+ * "Estimated · Claude AI" with the date for honest disclosure.
+ */
+function DrinkWindowSection({ row }: { row: CellarWineRow }) {
+  const start = row.drink_window_start;
+  const end = row.drink_window_end;
+  const yearsLeft = getYearsUntilWindowClose(end);
+  const status = getDrinkWindowStatus(start, end);
+  const isUrgent = status === "drink_now" || status === "past_peak";
+  const statusLabel = formatStatusLabel(status, yearsLeft);
+
+  return (
+    <section
+      aria-label="Drink window"
+      className={cn(
+        "mt-md rounded-md p-md",
+        isUrgent
+          ? "border border-warning/30 bg-warning-soft"
+          : "border border-border bg-white",
+      )}
+      style={isUrgent ? { borderLeft: "3px solid var(--color-warning)" } : undefined}
+    >
+      <div className="mb-sm flex items-center justify-between">
+        <span
+          className={cn(
+            "text-[10px] font-semibold uppercase tracking-[0.08em]",
+            isUrgent ? "text-warning" : "text-ink-subtle",
+          )}
+        >
+          Drink window
+        </span>
+        <span
+          className={cn(
+            "rounded-full px-sm py-2xs text-[11px] font-medium",
+            isUrgent
+              ? "bg-warning text-white"
+              : status === "hold"
+                ? "bg-bg-tertiary text-ink-muted"
+                : "bg-success-soft text-success",
+          )}
+        >
+          {statusLabel}
+        </span>
+      </div>
+
+      <DrinkWindowTimeline start={start} end={end} size="full" />
+
+      {(row.review_excerpt || row.rating_source) && (
+        <div className="mt-md rounded-sm bg-white/60 p-sm" style={{ borderLeft: "2px solid var(--color-accent)" }}>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-subtle">
+            {formatRatingSourceLabel(row.rating_source)}
+          </div>
+          {row.rating != null && (
+            <div className="mt-2xs">
+              <span className="font-mono text-[16px] font-medium text-accent">{row.rating}</span>
+              <span className="ml-xs text-[12px] text-ink-muted">points</span>
+            </div>
+          )}
+          {row.review_excerpt && (
+            <p className="mt-2xs font-serif text-[13px] italic text-ink leading-snug">
+              &ldquo;{row.review_excerpt}&rdquo;
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function formatRatingSourceLabel(source: string | null): string {
+  switch (source) {
+    case "rule_engine":
+      return "Estimated · Rule engine";
+    case "claude_inference":
+      return "Estimated · Claude AI";
+    case "vinous":
+      return "Vinous";
+    case "parker":
+      return "Wine Advocate (Parker)";
+    case "js":
+      return "James Suckling";
+    case "wine_spectator":
+      return "Wine Spectator";
+    case "decanter":
+      return "Decanter";
+    case "aggregate":
+      return "Multiple critics";
+    default:
+      return "—";
+  }
 }
 
 function Stat({

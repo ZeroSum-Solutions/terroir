@@ -627,6 +627,7 @@ export type Database = {
       }
       wines: {
         Row: {
+          alert_snoozed_until: string | null
           country: string | null
           created_at: string
           drink_window_end: number | null
@@ -635,11 +636,16 @@ export type Database = {
           eightysixed_by: string | null
           id: string
           is_eightysixed: boolean
+          last_enriched_at: string | null
           lwin_id: string | null
           name: string
+          peak_year: number | null
           producer: string
+          rating: number | null
+          rating_source: string | null
           region: string | null
           restaurant_id: string
+          review_excerpt: string | null
           serving_temp_label: string | null
           serving_temp_max: number | null
           serving_temp_min: number | null
@@ -649,6 +655,7 @@ export type Database = {
           vintage: number | null
         }
         Insert: {
+          alert_snoozed_until?: string | null
           country?: string | null
           created_at?: string
           drink_window_end?: number | null
@@ -657,11 +664,16 @@ export type Database = {
           eightysixed_by?: string | null
           id?: string
           is_eightysixed?: boolean
+          last_enriched_at?: string | null
           lwin_id?: string | null
           name: string
+          peak_year?: number | null
           producer: string
+          rating?: number | null
+          rating_source?: string | null
           region?: string | null
           restaurant_id: string
+          review_excerpt?: string | null
           serving_temp_label?: string | null
           serving_temp_max?: number | null
           serving_temp_min?: number | null
@@ -671,6 +683,7 @@ export type Database = {
           vintage?: number | null
         }
         Update: {
+          alert_snoozed_until?: string | null
           country?: string | null
           created_at?: string
           drink_window_end?: number | null
@@ -679,11 +692,16 @@ export type Database = {
           eightysixed_by?: string | null
           id?: string
           is_eightysixed?: boolean
+          last_enriched_at?: string | null
           lwin_id?: string | null
           name?: string
+          peak_year?: number | null
           producer?: string
+          rating?: number | null
+          rating_source?: string | null
           region?: string | null
           restaurant_id?: string
+          review_excerpt?: string | null
           serving_temp_label?: string | null
           serving_temp_max?: number | null
           serving_temp_min?: number | null
@@ -863,6 +881,10 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      snooze_drink_window_alert: {
+        Args: { p_days?: number; p_wine_id: string }
+        Returns: string
+      }
       wine_published_list_slugs: {
         Args: { p_restaurant_id: string; p_wine_id: string }
         Returns: {
@@ -1000,8 +1022,16 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      added_via: ["manual", "invoice_scan", "bottle_scan"],
-      membership_role: ["owner", "manager", "staff"],
+      added_via: [
+        "manual",
+        "invoice_scan",
+        "bottle_scan",
+      ],
+      membership_role: [
+        "owner",
+        "manager",
+        "staff",
+      ],
     },
   },
 } as const

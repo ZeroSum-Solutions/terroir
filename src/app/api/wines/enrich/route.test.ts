@@ -2,17 +2,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextResponse } from "next/server";
 
 /**
- * POST /api/wines/enrich tests (BND-031).
+ * POST /api/wines/enrich tests (BND-031 + BND-039).
  *
- * The route now ships enrichments to the `enrich_wines_batch` RPC in
- * a single round-trip instead of firing N individual UPDATEs via
- * Promise.all. Tests pin:
+ * The route ships enrichments to the `enrich_wines_batch` RPC in a single
+ * round-trip. BND-039 added:
+ *   • new metadata fields (peak_year, rating_source, review_excerpt)
+ *   • Claude inference fallback for wines the rule engine misses
+ *   • backwards compatibility — old callers / payload shape still work
+ *
+ * Tests pin:
  *   1. Auth: 401 skips everything
  *   2. Fetch error: 500, no RPC call
- *   3. Happy path: wines without a matching rule are filtered from the
- *      payload; RPC receives only the enriched rows
- *   4. Empty payload (no wines match any rule): no RPC call, enriched=0
- *   5. RPC error → 500 with no lwin fallback being attempted
+ *   3. Happy path: rule-engine matches go in payload with new metadata fields
+ *   4. Empty payload (no wines match any rule, Claude returns null): no RPC call
+ *   5. RPC error → 500 with no LWIN fallback attempted
+ *   6. Claude fallback: rule-engine misses are sent to Claude; successful
+ *      Claude results are appended to the payload with rating_source='claude_inference'
+ *   7. Claude failures don't abort the batch — partial success is fine
+ *   8. Backwards compat: existing callers without producer/name still work
+ *      (the route now selects them, but the test fixture must include them)
  */
 
 const mockRequireMembership = vi.fn();
@@ -25,17 +33,36 @@ vi.mock("@/lib/wine-intelligence/enrich", () => ({
   enrichWine: (...args: unknown[]) => mockEnrichWine(...args),
 }));
 
+const mockEnrichWineWithClaude = vi.fn();
+vi.mock("@/lib/wine-intelligence/enrich-claude", () => ({
+  enrichWineWithClaude: (...args: unknown[]) => mockEnrichWineWithClaude(...args),
+}));
+
 const { POST } = await import("./route");
 
 type Wine = {
   id: string;
-  varietal: string;
-  region: string;
+  producer: string;
+  name: string;
+  varietal: string | null;
+  region: string | null;
   country: string | null;
   vintage: number | null;
 };
 
 type FromResult = { data: Wine[] | { id: string }[] | null; error: unknown };
+
+// Default rule-engine miss shape — used by Claude-fallback tests.
+const RULE_MISS = {
+  drinkWindowStart: null,
+  drinkWindowEnd: null,
+  peakYear: null,
+  ratingSource: null,
+  reviewExcerpt: null,
+  servingTempMin: null,
+  servingTempMax: null,
+  servingTempLabel: null,
+};
 
 function buildSupabase(opts: {
   winesResult: FromResult;
@@ -59,12 +86,10 @@ function buildSupabase(opts: {
     return Promise.resolve({ data: null, error: null });
   });
 
-  // ARCH-021: enrich fetch is now
-  //   .select().eq().or(...).limit(...)
+  // ARCH-021 + BND-039: enrich fetch is now
+  //   .select(producer, name, ...).eq().or(...).limit(...)
   // and the LWIN fetch is
-  //   .select().eq().is(...).limit(...)
-  // so the mock chain mirrors both shapes with a terminal `.limit()`
-  // that thenables-through to the configured result.
+  //   .select(id).eq().is(...).limit(...)
   let winesFetchCount = 0;
   const limitForWines = () => ({
     then: (resolve: (v: FromResult) => void) => {
@@ -91,6 +116,9 @@ function buildSupabase(opts: {
 describe("POST /api/wines/enrich", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default Claude mock: returns null (no inference, falls through).
+    // Tests that exercise the Claude path override this.
+    mockEnrichWineWithClaude.mockResolvedValue(null);
   });
 
   it("401s when requireMembership returns a NextResponse", async () => {
@@ -112,16 +140,22 @@ describe("POST /api/wines/enrich", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it("filters out wines with no matching rule and sends only enriched rows in one batch", async () => {
+  it("filters out wines with no matching rule and sends only enriched rows with new metadata fields", async () => {
     const wines: Wine[] = [
-      { id: "w-1", varietal: "Pinot Noir", region: "Burgundy", country: "FR", vintage: 2019 },
-      { id: "w-2", varietal: "Obscure Grape", region: "Nowhere", country: null, vintage: null },
-      { id: "w-3", varietal: "Chardonnay", region: "Burgundy", country: "FR", vintage: 2020 },
+      { id: "w-1", producer: "Domaine X", name: "Pinot", varietal: "Pinot Noir", region: "Burgundy", country: "FR", vintage: 2019 },
+      { id: "w-2", producer: "Obscure Co", name: "Mystery", varietal: "Obscure Grape", region: "Nowhere", country: null, vintage: null },
+      { id: "w-3", producer: "Domaine Y", name: "Chard", varietal: "Chardonnay", region: "Burgundy", country: "FR", vintage: 2020 },
     ];
     mockEnrichWine
-      .mockReturnValueOnce({ drinkWindowStart: 2021, drinkWindowEnd: 2035, servingTempMin: 14, servingTempMax: 16, servingTempLabel: "cellar" })
-      .mockReturnValueOnce({ drinkWindowStart: null, drinkWindowEnd: null, servingTempMin: null, servingTempMax: null, servingTempLabel: null })
-      .mockReturnValueOnce({ drinkWindowStart: 2022, drinkWindowEnd: 2030, servingTempMin: 10, servingTempMax: 12, servingTempLabel: "chilled" });
+      .mockReturnValueOnce({
+        drinkWindowStart: 2021, drinkWindowEnd: 2035, peakYear: 2028, ratingSource: "rule_engine",
+        reviewExcerpt: null, servingTempMin: 14, servingTempMax: 16, servingTempLabel: "cellar",
+      })
+      .mockReturnValueOnce(RULE_MISS)
+      .mockReturnValueOnce({
+        drinkWindowStart: 2022, drinkWindowEnd: 2030, peakYear: 2026, ratingSource: "rule_engine",
+        reviewExcerpt: null, servingTempMin: 10, servingTempMax: 12, servingTempLabel: "chilled",
+      });
 
     const { supabase, rpcCalls } = buildSupabase({
       winesResult: { data: wines, error: null },
@@ -134,27 +168,117 @@ describe("POST /api/wines/enrich", () => {
     const body = await res.json();
     expect(body.total).toBe(3);
     expect(body.enriched).toBe(2);
+    expect(body.ruleEnrichedCount).toBe(2);
+    expect(body.claudeAttemptedCount).toBe(1); // w-2 was sent to Claude
+    expect(body.claudeEnrichedCount).toBe(0); // mock returned null
 
     const enrichCall = rpcCalls.find((c) => c.fn === "enrich_wines_batch");
     expect(enrichCall).toBeDefined();
-    const args = enrichCall!.args as { p_restaurant_id: string; p_enrichments: unknown[] };
+    const args = enrichCall!.args as { p_restaurant_id: string; p_enrichments: Array<Record<string, unknown>> };
     expect(args.p_restaurant_id).toBe("r-1");
     expect(args.p_enrichments).toHaveLength(2);
-    expect((args.p_enrichments[0] as { id: string }).id).toBe("w-1");
-    expect((args.p_enrichments[1] as { id: string }).id).toBe("w-3");
+    expect(args.p_enrichments[0].id).toBe("w-1");
+    // BND-039: new metadata fields are included in the payload
+    expect(args.p_enrichments[0].peak_year).toBe(2028);
+    expect(args.p_enrichments[0].rating_source).toBe("rule_engine");
+    expect(args.p_enrichments[0].review_excerpt).toBeNull();
+    expect(args.p_enrichments[1].id).toBe("w-3");
   });
 
-  it("skips the RPC entirely when no wine matches any rule", async () => {
+  it("Claude fallback fills in rule-engine misses (BND-039)", async () => {
     const wines: Wine[] = [
-      { id: "w-1", varietal: "Obscure", region: "Nowhere", country: null, vintage: null },
+      { id: "w-1", producer: "Krug", name: "Grande Cuvée", varietal: "Champagne Blend", region: "Champagne", country: "FR", vintage: 2008 },
     ];
-    mockEnrichWine.mockReturnValue({
-      drinkWindowStart: null,
-      drinkWindowEnd: null,
+    mockEnrichWine.mockReturnValueOnce(RULE_MISS);
+    mockEnrichWineWithClaude.mockResolvedValueOnce({
+      drinkWindowStart: 2018,
+      drinkWindowEnd: 2032,
+      peakYear: 2025,
+      ratingSource: "claude_inference",
+      reviewExcerpt: "Krug's flagship blends 120+ wines from 12+ vintages — drink with patience.",
       servingTempMin: null,
       servingTempMax: null,
       servingTempLabel: null,
     });
+
+    const { supabase, rpcCalls } = buildSupabase({
+      winesResult: { data: wines, error: null },
+      rpcEnrichResult: { data: 1, error: null },
+    });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+
+    const res = await POST();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ruleEnrichedCount).toBe(0);
+    expect(body.claudeAttemptedCount).toBe(1);
+    expect(body.claudeEnrichedCount).toBe(1);
+
+    const enrichCall = rpcCalls.find((c) => c.fn === "enrich_wines_batch");
+    const args = enrichCall!.args as { p_enrichments: Array<Record<string, unknown>> };
+    expect(args.p_enrichments).toHaveLength(1);
+    expect(args.p_enrichments[0].id).toBe("w-1");
+    expect(args.p_enrichments[0].rating_source).toBe("claude_inference");
+    expect(args.p_enrichments[0].review_excerpt).toBe(
+      "Krug's flagship blends 120+ wines from 12+ vintages — drink with patience.",
+    );
+    expect(args.p_enrichments[0].drink_window_start).toBe(2018);
+    expect(args.p_enrichments[0].drink_window_end).toBe(2032);
+  });
+
+  it("Claude failures don't abort the batch — partial success preferred", async () => {
+    const wines: Wine[] = [
+      { id: "w-1", producer: "X", name: "Pinot", varietal: "Pinot Noir", region: "Burgundy", country: "FR", vintage: 2019 },
+      { id: "w-2", producer: "Y", name: "Mystery", varietal: "Obscure", region: null, country: null, vintage: 2020 },
+      { id: "w-3", producer: "Z", name: "Other", varietal: "Obscure", region: null, country: null, vintage: 2020 },
+    ];
+    mockEnrichWine
+      .mockReturnValueOnce({
+        drinkWindowStart: 2022, drinkWindowEnd: 2030, peakYear: 2026, ratingSource: "rule_engine",
+        reviewExcerpt: null, servingTempMin: 14, servingTempMax: 16, servingTempLabel: "cellar",
+      })
+      .mockReturnValueOnce(RULE_MISS)
+      .mockReturnValueOnce(RULE_MISS);
+
+    // w-2: Claude returns null (rate-limited or parse error).
+    // w-3: Claude succeeds.
+    mockEnrichWineWithClaude
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        drinkWindowStart: 2021,
+        drinkWindowEnd: 2030,
+        peakYear: 2026,
+        ratingSource: "claude_inference",
+        reviewExcerpt: "Approachable now, peaks 2026.",
+        servingTempMin: null,
+        servingTempMax: null,
+        servingTempLabel: null,
+      });
+
+    const { supabase, rpcCalls } = buildSupabase({
+      winesResult: { data: wines, error: null },
+      rpcEnrichResult: { data: 2, error: null },
+    });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+
+    const res = await POST();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ruleEnrichedCount).toBe(1);
+    expect(body.claudeAttemptedCount).toBe(2);
+    expect(body.claudeEnrichedCount).toBe(1); // only w-3 succeeded
+
+    const enrichCall = rpcCalls.find((c) => c.fn === "enrich_wines_batch");
+    const args = enrichCall!.args as { p_enrichments: Array<Record<string, unknown>> };
+    expect(args.p_enrichments).toHaveLength(2);
+  });
+
+  it("skips the RPC entirely when no wine matches any rule and Claude returns null", async () => {
+    const wines: Wine[] = [
+      { id: "w-1", producer: "X", name: "Mystery", varietal: "Obscure", region: "Nowhere", country: null, vintage: null },
+    ];
+    mockEnrichWine.mockReturnValue(RULE_MISS);
+    // Default Claude mock returns null.
 
     const { supabase, rpcCalls } = buildSupabase({
       winesResult: { data: wines, error: null },
@@ -168,16 +292,13 @@ describe("POST /api/wines/enrich", () => {
     expect(rpcCalls.find((c) => c.fn === "enrich_wines_batch")).toBeUndefined();
   });
 
-  it("surfaces RPC errors as 500 without attempting the lwin fallback", async () => {
+  it("surfaces RPC errors as 500 without attempting the LWIN fallback", async () => {
     const wines: Wine[] = [
-      { id: "w-1", varietal: "Pinot Noir", region: "Burgundy", country: "FR", vintage: 2019 },
+      { id: "w-1", producer: "X", name: "Pinot", varietal: "Pinot Noir", region: "Burgundy", country: "FR", vintage: 2019 },
     ];
     mockEnrichWine.mockReturnValue({
-      drinkWindowStart: 2021,
-      drinkWindowEnd: 2035,
-      servingTempMin: 14,
-      servingTempMax: 16,
-      servingTempLabel: "cellar",
+      drinkWindowStart: 2021, drinkWindowEnd: 2035, peakYear: 2028, ratingSource: "rule_engine",
+      reviewExcerpt: null, servingTempMin: 14, servingTempMax: 16, servingTempLabel: "cellar",
     });
 
     const { supabase, rpcCalls } = buildSupabase({
@@ -188,7 +309,6 @@ describe("POST /api/wines/enrich", () => {
 
     const res = await POST();
     expect(res.status).toBe(500);
-    // enrich RPC was called exactly once; lwin RPC was NOT called
     expect(rpcCalls.filter((c) => c.fn === "enrich_wines_batch")).toHaveLength(1);
     expect(rpcCalls.find((c) => c.fn === "match_lwin_batch")).toBeUndefined();
   });

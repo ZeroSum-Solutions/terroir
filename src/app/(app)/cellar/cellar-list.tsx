@@ -5,6 +5,14 @@ import Link from "next/link";
 import { MoreVertical, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
+import {
+  formatStatusLabel,
+  getDrinkWindowStatus,
+  getMarkerPosition,
+  getYearsUntilWindowClose,
+  isClosingWindow,
+  isHolding,
+} from "@/lib/drink-window/status";
 import type { CellarWineRow } from "./types";
 
 /**
@@ -22,7 +30,15 @@ import type { CellarWineRow } from "./types";
  * 86 toggle, etc.). The kebab routing is handled by the parent shell —
  * this component only renders rows and emits intents.
  */
-export type CellarFilter = "all" | "open" | "out" | "low" | "off-site";
+export type CellarFilter =
+  | "all"
+  | "open"
+  | "out"
+  | "low"
+  | "off-site"
+  // BND-039 — drink-window filter chips
+  | "drink-now"
+  | "hold";
 
 export function CellarList({
   rows,
@@ -59,6 +75,16 @@ export function CellarList({
         case "off-site":
           // v1.5 — off-site inventory not yet modeled. Show empty for now.
           return false;
+        case "drink-now":
+          // BND-039 — wines within 2 years of window close (or past peak).
+          // Single source of truth in @/lib/drink-window/status to keep
+          // chip-count and list-filter from drifting.
+          if (!isClosingWindow(r.drink_window_end)) return false;
+          if (r.is_eightysixed) return false;
+          break;
+        case "hold":
+          if (!isHolding(r.drink_window_start)) return false;
+          break;
         case "all":
         default:
           break;
@@ -165,13 +191,22 @@ function CellarRow({
             </div>
             {/* Wine name — display font */}
             <div className="mt-2xs font-serif text-[16px] text-ink">{row.name}</div>
-            {/* Stock + bin row */}
+            {/* Stock + drink-window + bin row */}
             <div className="mt-xs flex flex-wrap items-center gap-sm text-[12px] text-ink-muted">
               <Chip tone={chip.tone}>{chip.label}</Chip>
               {glassesLeft !== null && glassesLeft > 0 && !row.is_eightysixed && (
                 <span className="text-ink-muted">
                   ~{glassesLeft} glass{glassesLeft === 1 ? "" : "es"} left
                 </span>
+              )}
+              {/* BND-039 — mini drink-window indicator. Renders only when
+                  we have a window AND the wine isn't 86'd (an 86'd wine's
+                  drink-window status is overridden by its sold-out state). */}
+              {!row.is_eightysixed && (
+                <DrinkWindowIndicator
+                  start={row.drink_window_start}
+                  end={row.drink_window_end}
+                />
               )}
               {row.bin_location && (
                 <span className="inline-flex items-center gap-2xs font-mono text-ink-subtle">
@@ -190,6 +225,66 @@ function CellarRow({
         </div>
       </button>
     </li>
+  );
+}
+
+/**
+ * BND-039 — mini drink-window indicator for the cellar row.
+ *
+ * Shows a 56px gradient bar with a current-year marker + a status
+ * pill ("Drink now · 4 yrs", "Hold · ready 2027", etc.). The pill
+ * uses the same status-derived tone as the drawer's full timeline so
+ * the two surfaces feel consistent. Returns null when the wine has
+ * no window data — these rows render normally without the indicator.
+ */
+function DrinkWindowIndicator({
+  start,
+  end,
+}: {
+  start: number | null;
+  end: number | null;
+}) {
+  if (start == null || end == null) return null;
+  const status = getDrinkWindowStatus(start, end);
+  const yearsLeft = getYearsUntilWindowClose(end);
+  const markerPct = getMarkerPosition(start, end);
+  const label = formatStatusLabel(status, yearsLeft);
+
+  // Tone:
+  //   drink_now / past_peak → warn (amber)
+  //   hold                  → muted (grey)
+  //   optimal               → ok (green)
+  //   unknown               → muted
+  const tone: "warn" | "muted" | "ok" =
+    status === "drink_now" || status === "past_peak"
+      ? "warn"
+      : status === "hold"
+        ? "muted"
+        : status === "optimal"
+          ? "ok"
+          : "muted";
+
+  return (
+    <span className="inline-flex items-center gap-xs">
+      <span
+        aria-hidden
+        className="relative inline-block h-[4px] w-[56px] rounded-full"
+        style={{
+          background:
+            "linear-gradient(90deg, #E3EFE8 0%, #FBF3DC 60%, #F2D896 88%, #E8DCD0 100%)",
+        }}
+      >
+        <span
+          className="absolute h-[8px] w-[2px]"
+          style={{
+            top: "-2px",
+            left: `${markerPct}%`,
+            background: "var(--color-accent)",
+          }}
+        />
+      </span>
+      <Chip tone={tone}>{label}</Chip>
+    </span>
   );
 }
 

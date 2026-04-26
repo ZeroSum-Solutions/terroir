@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Search, Settings, LayoutGrid, List as ListIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isClosingWindow, isHolding } from "@/lib/drink-window/status";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
 import { CellarList, type CellarFilter } from "./cellar-list";
@@ -124,14 +125,31 @@ export function CellarShell({
       const totalMl = (r.open_remaining_ml ?? 0) + r.sealed_count * r.size_ml;
       return totalMl < 2 * r.size_ml;
     }).length;
-    return { lowCount };
+
+    // BND-039 — count of wines closing their drink window. Single source
+    // of truth via @/lib/drink-window/status; the same predicate powers
+    // the "Drink now" filter chip and the briefing alert API.
+    const drinkNowCount = rows.filter(
+      (r) => !r.is_eightysixed && isClosingWindow(r.drink_window_end),
+    ).length;
+    const holdCount = rows.filter((r) => isHolding(r.drink_window_start)).length;
+
+    return { lowCount, drinkNowCount, holdCount };
   }, [rows]);
 
-  const FILTER_CHIPS: Array<{ id: CellarFilter; label: string }> = [
+  const FILTER_CHIPS: Array<{ id: CellarFilter; label: string; count?: number }> = [
     { id: "all", label: "All" },
     { id: "open", label: "Open" },
     { id: "out", label: "86'd" },
     { id: "low", label: "Low stock" },
+    // BND-039 — drink-window chips. Hidden when count is zero so they
+    // don't clutter the row in cellars without enrichment data.
+    ...(alerts.drinkNowCount > 0
+      ? [{ id: "drink-now" as const, label: "Drink now", count: alerts.drinkNowCount }]
+      : []),
+    ...(alerts.holdCount > 0
+      ? [{ id: "hold" as const, label: "Hold", count: alerts.holdCount }]
+      : []),
   ];
 
   return (
@@ -237,13 +255,25 @@ export function CellarShell({
               aria-selected={filter === c.id}
               onClick={() => setFilter(c.id)}
               className={cn(
-                "h-[32px] shrink-0 rounded-full border px-md text-[12px] font-medium transition-colors",
+                "inline-flex h-[32px] shrink-0 items-center gap-xs rounded-full border px-md text-[12px] font-medium transition-colors",
                 filter === c.id
                   ? "border-accent bg-accent text-white"
                   : "border-border bg-white text-ink-muted hover:bg-surface-muted",
               )}
             >
               {c.label}
+              {c.count !== undefined && (
+                <span
+                  className={cn(
+                    "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-xs font-mono text-[10px]",
+                    filter === c.id
+                      ? "bg-white/25 text-white"
+                      : "bg-bg-tertiary text-ink-muted",
+                  )}
+                >
+                  {c.count}
+                </span>
+              )}
             </button>
           ))}
         </div>
