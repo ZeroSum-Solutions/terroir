@@ -4,15 +4,21 @@ import { createClient } from "@supabase/supabase-js";
 /**
  * BND-038 E2E — full oz-native-inventory cycle.
  *
+ * Updated for the v5 IA redesign (.council/specs/2026-04-24-ux-ia-redesign.md):
+ * /pour and /reconcile have been absorbed into /cellar. Pour now lives
+ * inside the wine-detail drawer; Reconcile opens a modal from the
+ * Cellar surface.
+ *
  * Path exercised:
  *   1. Authenticate via /api/dev-login (DEV_BYPASS_EMAIL in .env.local).
  *   2. Call list_open_bottle_items RPC directly (service-role) to find
  *      a by-the-glass wine with sealed inventory or an open bottle.
- *   3. Navigate to /pour, tap the primary pour button, verify the
- *      "~N glasses left" count decrements by exactly 1.
- *   4. Navigate to /reconcile, tap the "½" fraction for the same wine,
- *      click Save, verify the Save button returns to its "No changes
- *      yet" rest state (= success; any error surfaces the error banner).
+ *   3. Navigate to /cellar, tap the wine row → drawer opens → tap the
+ *      primary "Pour Xoz" button. Verify the row's "~N glasses left"
+ *      count decrements by exactly 1 after refresh.
+ *   4. Open reconcile mode via "Reconcile open bottles →" button → tap
+ *      "½" for the same wine → click Save → verify the save button
+ *      returns to its "No changes yet" rest state.
  *
  * Assertions are RELATIVE (delta = -1 glass) so the test survives
  * concurrent edits to the shared Supabase DB. Skipped in CI until we
@@ -179,53 +185,63 @@ test.describe("BND-038 pour → reconcile", () => {
     const wine = await ensureCascadeSafeWine(page);
     const cardLabel = new RegExp(wine.producer.slice(0, 10), "i");
 
-    // --- Step 1: land on /pour and read the starting glass count ----
-    await page.goto("/pour");
-    // Pick the first <li> that mentions the chosen wine's producer.
-    const card = page.locator("li").filter({ hasText: cardLabel }).first();
-    await expect(card).toBeVisible();
-    const startText = (await card.textContent()) ?? "";
+    // --- Step 1: land on /cellar and find the wine row ----------------
+    await page.goto("/cellar");
+    // Each row is rendered as <li> with a button trigger. Pick the
+    // first row matching the chosen wine's producer.
+    const row = page.locator("li").filter({ hasText: cardLabel }).first();
+    await expect(row).toBeVisible();
+    const startText = (await row.textContent()) ?? "";
     const startMatch = startText.match(/~(\d+) glass/);
-    expect(startMatch, `no glass count in card text: ${startText}`).toBeTruthy();
+    expect(startMatch, `no glass count in row text: ${startText}`).toBeTruthy();
     const startGlasses = Number(startMatch![1]);
     expect(startGlasses).toBeGreaterThan(0);
 
-    // --- Step 2: tap the primary pour button --------------------------
-    const pourBtn = card.getByRole("button", { name: /^Pour \d/i });
+    // --- Step 2: open the drawer and tap the primary pour button -----
+    await row.locator("button").first().click();
+    const drawer = page.getByRole("dialog", { name: /./ }); // any dialog
+    await expect(drawer).toBeVisible();
+    const pourBtn = drawer.getByRole("button", { name: /^Pour \d/i });
     await expect(pourBtn).toBeVisible();
     await pourBtn.click();
 
-    // Undo banner appears (aria-live status region) → proof the
-    // optimistic update + fetch-success branch ran.
-    const banner = page.getByRole("status").filter({ hasText: /Poured/i });
-    await expect(banner).toBeVisible({ timeout: 5_000 });
-
     // Server component refresh should land the committed state back
-    // into the card. Poll until the glass count drops by exactly one.
+    // into the row. Poll until the glass count drops by exactly one.
+    // Close the drawer first so the row text reads cleanly.
+    await drawer.getByRole("button", { name: /close wine detail/i }).click();
     await expect(async () => {
-      const currentText = (await card.textContent()) ?? "";
+      const currentText = (await row.textContent()) ?? "";
       const m = currentText.match(/~(\d+) glass/);
       expect(m).toBeTruthy();
       expect(Number(m![1])).toBe(startGlasses - 1);
     }).toPass({ timeout: 10_000 });
 
-    // --- Step 3: reconcile to half ------------------------------------
-    await page.goto("/reconcile");
-    const row = page.locator("li").filter({ hasText: cardLabel }).first();
-    await expect(row).toBeVisible();
+    // --- Step 3: reconcile to half via the Cellar reconcile modal -----
+    await page.getByRole("button", { name: /Reconcile open bottles/i }).click();
+    const reconcileDialog = page.getByRole("dialog", {
+      name: /Reconcile open bottles/i,
+    });
+    await expect(reconcileDialog).toBeVisible();
 
-    await row.getByRole("button", { name: "½" }).click();
+    const reconcileRow = reconcileDialog
+      .locator("li")
+      .filter({ hasText: cardLabel })
+      .first();
+    await expect(reconcileRow).toBeVisible();
+    await reconcileRow.getByRole("button", { name: "½" }).click();
 
-    const saveBtn = page.getByRole("button", { name: /Save \d+ change/i });
+    const saveBtn = reconcileDialog.getByRole("button", {
+      name: /Save \d+ change/i,
+    });
     await expect(saveBtn).toBeVisible();
     await saveBtn.click();
 
     // After success the button reverts to "No changes yet" (pending map
-    // cleared). Scope the alert check to <main> — Next.js dev tools
-    // render their own role="alert" outside it.
-    await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
+    // cleared). Scope the alert check to the dialog so we don't trip on
+    // Next.js dev-tools error overlays outside it.
+    await expect(reconcileDialog.getByRole("alert")).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: /No changes yet/i }),
+      reconcileDialog.getByRole("button", { name: /No changes yet/i }),
     ).toBeVisible({ timeout: 10_000 });
 
     // --- Step 4: verify via RPC that an open_bottle exists for the

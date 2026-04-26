@@ -1,0 +1,385 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { Search, Settings, LayoutGrid, List as ListIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { OpenBottleRow } from "@/lib/wine-list/shapes";
+import type { CellarWineRow } from "./types";
+import { CellarList, type CellarFilter } from "./cellar-list";
+import { WineDetailDrawer } from "./wine-detail-drawer";
+import { ReconcileModal } from "./reconcile-modal";
+import { AutoEightysixModal } from "./auto-eightysix-modal";
+import { CellarGridView, CellarSetup } from "./cellar-grid";
+
+/**
+ * CellarShell — top-level client orchestrator for the consolidated
+ * Cellar surface (Phase 2 IA redesign — .council/specs/2026-04-24-ux-ia-redesign.md).
+ *
+ * Owns top-level UI state:
+ *   • search query
+ *   • filter chip
+ *   • view toggle (list | grid)
+ *   • selected wine for detail drawer
+ *   • reconcile modal open
+ *   • settings (auto-86) modal open
+ *
+ * Reads `?mode=` URL param on mount to land in a useful state when the
+ * user got here via the FAB:
+ *   ?mode=pour       → focuses search, filter = "open"
+ *   ?mode=eightysix  → focuses search, filter = "all"
+ *
+ * The param is stripped after read so refreshes don't re-trigger.
+ */
+export function CellarShell({
+  rows,
+  reconcileItems,
+  cellarConfig,
+  gridData,
+  restaurantName,
+  restaurantId,
+  autoEightysixEnabled,
+  autoEightysixThresholdMl,
+  role,
+}: {
+  rows: CellarWineRow[];
+  reconcileItems: OpenBottleRow[];
+  cellarConfig: { id: string; rows: number; columns: number; name: string } | null;
+  gridData: Record<
+    string,
+    {
+      wines: Array<{
+        wineId: string;
+        name: string;
+        producer: string;
+        vintage: number | null;
+        quantity: number;
+      }>;
+      totalBottles: number;
+    }
+  >;
+  restaurantName: string;
+  restaurantId: string;
+  autoEightysixEnabled: boolean;
+  autoEightysixThresholdMl: number;
+  role: "owner" | "manager" | "staff";
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // FAB deep-link mode is sampled exactly once on mount via useState's
+  // lazy initializer. The state is never updated — we just want a
+  // stable snapshot of the URL param at mount time. (Using useRef would
+  // trip the react-hooks/refs lint rule about render-time ref reads.)
+  const [initialMode] = useState(() => searchParams.get("mode") ?? "");
+
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<CellarFilter>(
+    initialMode === "pour" ? "open" : "all",
+  );
+  const [view, setView] = useState<"list" | "grid">("list");
+  // Derive selected from selectedId so server-component refresh refreshes
+  // the drawer's stock numbers automatically (rows is the source of truth).
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = useMemo(
+    () => (selectedId ? rows.find((r) => r.wine_id === selectedId) ?? null : null),
+    [rows, selectedId],
+  );
+  const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(
+    initialMode === "pour" || initialMode === "eightysix",
+  );
+
+  const canManage = role === "owner" || role === "manager";
+  const isOwner = role === "owner";
+
+  // FAB deep-link side-effects: strip `?mode=` from the URL so a
+  // refresh doesn't re-trigger the focus jump, and focus the search
+  // input once it's mounted in the overlay. This is purely external
+  // (router + DOM) so setState-in-effect lint doesn't apply.
+  useEffect(() => {
+    if (!initialMode) return;
+    if (initialMode === "pour" || initialMode === "eightysix") {
+      requestAnimationFrame(() => searchInputRef.current?.focus());
+    }
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("mode");
+    const next = params.toString();
+    router.replace(next ? `/cellar?${next}` : "/cellar", { scroll: false });
+    // Run once at mount only. searchParams is captured for the strip
+    // operation; subsequent identity changes (e.g. user edits a chip
+    // that we ever wire to the URL) shouldn't re-fire this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const alerts = useMemo(() => {
+    // Show alerts banner when there are recently-86'd wines or any low
+    // stock items. Compact summary; the actual filter chips do the
+    // detailed work.
+    const lowCount = rows.filter((r) => {
+      if (r.is_eightysixed) return false;
+      if (!r.size_ml) return false;
+      const totalMl = (r.open_remaining_ml ?? 0) + r.sealed_count * r.size_ml;
+      return totalMl < 2 * r.size_ml;
+    }).length;
+    return { lowCount };
+  }, [rows]);
+
+  const FILTER_CHIPS: Array<{ id: CellarFilter; label: string }> = [
+    { id: "all", label: "All" },
+    { id: "open", label: "Open" },
+    { id: "out", label: "86'd" },
+    { id: "low", label: "Low stock" },
+  ];
+
+  return (
+    <section>
+      {/* Header — search trigger, view toggle, settings cog, reconcile */}
+      <header className="mb-md flex items-center gap-sm md:mb-lg">
+        <div className="min-w-0 flex-1">
+          <h1 className="font-serif text-[24px] text-ink md:text-[28px]">Cellar</h1>
+          <p className="mt-2xs text-[12px] text-ink-muted md:text-[13px]">
+            {restaurantName}
+            {cellarConfig && (
+              <>
+                {" "}
+                · {cellarConfig.rows} × {cellarConfig.columns} grid
+              </>
+            )}
+          </p>
+        </div>
+
+        {/* Desktop search inline */}
+        <div className="hidden md:block">
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            inputRef={searchInputRef}
+          />
+        </div>
+
+        <div className="flex items-center gap-2xs">
+          {/* Mobile search trigger */}
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Search wines"
+            className="flex h-9 w-9 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted md:hidden"
+          >
+            <Search className="h-5 w-5" strokeWidth={2} aria-hidden />
+          </button>
+
+          {/* View toggle — only meaningful when cellarConfig exists */}
+          {cellarConfig && (
+            <div className="hidden items-center rounded-sm border border-border md:inline-flex">
+              <ViewToggleButton
+                active={view === "list"}
+                onClick={() => setView("list")}
+                label="List"
+                Icon={ListIcon}
+              />
+              <ViewToggleButton
+                active={view === "grid"}
+                onClick={() => setView("grid")}
+                label="Grid"
+                Icon={LayoutGrid}
+              />
+            </div>
+          )}
+
+          {/* Settings cog — owner only */}
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Cellar settings"
+              className="flex h-9 w-9 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted"
+            >
+              <Settings className="h-5 w-5" strokeWidth={2} aria-hidden />
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* Alerts banner */}
+      {alerts.lowCount > 0 && view === "list" && (
+        <div
+          role="status"
+          className="mb-md flex items-center justify-between gap-md rounded-sm border border-warning/30 bg-warning-soft px-md py-sm text-[13px] text-warning"
+        >
+          <span>
+            {alerts.lowCount} wine{alerts.lowCount === 1 ? "" : "s"} low on stock
+          </span>
+          <button
+            type="button"
+            onClick={() => setFilter("low")}
+            className="font-medium underline-offset-2 hover:underline"
+          >
+            Show
+          </button>
+        </div>
+      )}
+
+      {/* Filter chips */}
+      {view === "list" && (
+        <div
+          className="mb-md flex gap-2xs overflow-x-auto pb-2xs md:flex-wrap"
+          role="tablist"
+          aria-label="Filter wines"
+        >
+          {FILTER_CHIPS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="tab"
+              aria-selected={filter === c.id}
+              onClick={() => setFilter(c.id)}
+              className={cn(
+                "h-[32px] shrink-0 rounded-full border px-md text-[12px] font-medium transition-colors",
+                filter === c.id
+                  ? "border-accent bg-accent text-white"
+                  : "border-border bg-white text-ink-muted hover:bg-surface-muted",
+              )}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Reconcile entry — only for owner/manager and only on list view */}
+      {view === "list" && canManage && reconcileItems.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setReconcileOpen(true)}
+          className="mb-md flex h-[40px] w-full items-center justify-center rounded-sm border border-border-strong bg-white text-[13px] font-medium text-ink hover:bg-surface-muted md:w-auto md:px-md"
+        >
+          Reconcile open bottles →
+        </button>
+      )}
+
+      {/* Main view */}
+      {view === "list" ? (
+        <CellarList
+          rows={rows}
+          query={query}
+          filter={filter}
+          onSelectWine={(row) => setSelectedId(row.wine_id)}
+        />
+      ) : cellarConfig ? (
+        <CellarGridView config={cellarConfig} gridData={gridData} />
+      ) : (
+        <CellarSetup restaurantName={restaurantName} />
+      )}
+
+      {/* Mobile search overlay */}
+      {searchOpen && (
+        <div className="fixed inset-x-0 top-14 z-30 border-b border-border bg-surface px-md py-sm shadow-md md:hidden">
+          <div className="flex items-center gap-sm">
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              inputRef={searchInputRef}
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => setSearchOpen(false)}
+              className="h-[38px] rounded-sm px-sm text-[13px] font-medium text-ink-muted hover:bg-surface-muted"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Drawer + modals. Keying on selectedId remounts the drawer when
+          the user picks a different wine, which cleanly resets the
+          drawer's transient state (busy, error, picker, 86 confirm)
+          without needing setState-in-effect. */}
+      <WineDetailDrawer
+        key={selectedId ?? "none"}
+        row={selected}
+        canManage={canManage}
+        onClose={() => setSelectedId(null)}
+      />
+
+      <ReconcileModal
+        open={reconcileOpen}
+        items={reconcileItems}
+        onClose={() => setReconcileOpen(false)}
+      />
+
+      {isOwner && (
+        <AutoEightysixModal
+          open={settingsOpen}
+          restaurantId={restaurantId}
+          enabled={autoEightysixEnabled}
+          thresholdMl={autoEightysixThresholdMl}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+    </section>
+  );
+}
+
+function SearchInput({
+  value,
+  onChange,
+  inputRef,
+  autoFocus,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  autoFocus?: boolean;
+}) {
+  return (
+    <div className="relative w-full md:w-[320px]">
+      <Search
+        className="pointer-events-none absolute left-sm top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle"
+        strokeWidth={2}
+        aria-hidden
+      />
+      <input
+        ref={inputRef}
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search name, producer, region…"
+        autoFocus={autoFocus}
+        className="h-[38px] w-full rounded-sm border border-border bg-white pl-[32px] pr-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+      />
+    </div>
+  );
+}
+
+function ViewToggleButton({
+  active,
+  onClick,
+  label,
+  Icon,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  Icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={`${label} view`}
+      className={cn(
+        "flex h-9 w-9 items-center justify-center text-ink-muted transition-colors",
+        active && "bg-accent-soft text-accent",
+        !active && "hover:bg-surface-muted",
+      )}
+    >
+      <Icon className="h-4 w-4" strokeWidth={2} aria-hidden />
+    </button>
+  );
+}

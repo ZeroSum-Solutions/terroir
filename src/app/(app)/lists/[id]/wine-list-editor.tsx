@@ -56,7 +56,8 @@ type ListItem = {
   bottle_price: number | null;
   // BND-038: per-wine pour config. glass_pour_ml = null means the wine
   // is not pour-tracked (bottle-only). pour_size_mode 'picker' opens the
-  // picker modal on /pour instead of immediate subtraction.
+  // picker modal in the Cellar wine-detail drawer instead of subtracting
+  // immediately on tap.
   glass_pour_ml: number | null;
   pour_size_mode: "fixed" | "picker";
   tasting_note: string | null;

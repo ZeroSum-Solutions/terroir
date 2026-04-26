@@ -4,7 +4,12 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
-import type { ReconcileItem } from "./page";
+import type { OpenBottleRow } from "@/lib/wine-list/shapes";
+
+// Renamed from ReconcileItem when this file moved into /cellar. The
+// underlying RPC row shape `list_open_bottle_items` lives in
+// @/lib/wine-list/shapes.ts (DEBT-022).
+type ReconcileItem = OpenBottleRow;
 
 const FRACTIONS: Array<{ label: string; value: number }> = [
   { label: "Empty", value: 0 },

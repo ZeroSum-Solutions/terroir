@@ -1,0 +1,217 @@
+"use client";
+
+import { useMemo } from "react";
+import Link from "next/link";
+import { MoreVertical, MapPin } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ML_PER_OZ } from "@/lib/units";
+import type { CellarWineRow } from "./types";
+
+/**
+ * CellarList — the unified wine list inside Cellar's single-screen
+ * consolidation (Phase 2 IA redesign — .council/specs/2026-04-24-ux-ia-redesign.md
+ * §4 "Per-row behavior").
+ *
+ * Each row collapses what used to live across three tabs:
+ *   - Pour:        glass-count chip + remaining ml
+ *   - Availability: 86'd status chip
+ *   - Cellar grid:  bin location
+ *
+ * Tap a row → opens the wine-detail-drawer with quick action buttons.
+ * Tap the kebab → quick actions without opening the drawer (pour now,
+ * 86 toggle, etc.). The kebab routing is handled by the parent shell —
+ * this component only renders rows and emits intents.
+ */
+export type CellarFilter = "all" | "open" | "out" | "low" | "off-site";
+
+export function CellarList({
+  rows,
+  query,
+  filter,
+  onSelectWine,
+}: {
+  rows: CellarWineRow[];
+  query: string;
+  filter: CellarFilter;
+  onSelectWine: (row: CellarWineRow) => void;
+}) {
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter((r) => {
+      // Filter chip predicate
+      switch (filter) {
+        case "open":
+          if (r.open_remaining_ml === null || r.open_remaining_ml <= 0) return false;
+          break;
+        case "out":
+          if (!r.is_eightysixed) return false;
+          break;
+        case "low": {
+          // Low stock heuristic: total available equivalents < 2 bottles.
+          // Treat a wine without size_ml as "not low" since we have no
+          // basis for the check.
+          if (!r.size_ml) return false;
+          const totalMl = (r.open_remaining_ml ?? 0) + r.sealed_count * r.size_ml;
+          if (totalMl >= 2 * r.size_ml) return false;
+          if (r.is_eightysixed) return false; // already out, not "low"
+          break;
+        }
+        case "off-site":
+          // v1.5 — off-site inventory not yet modeled. Show empty for now.
+          return false;
+        case "all":
+        default:
+          break;
+      }
+      if (!q) return true;
+      return (
+        r.name.toLowerCase().includes(q) ||
+        r.producer.toLowerCase().includes(q) ||
+        (r.varietal ?? "").toLowerCase().includes(q) ||
+        (r.region ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [rows, query, filter]);
+
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-md border border-border bg-white px-md py-2xl text-center">
+        <p className="font-serif text-[16px] text-ink">No wines in your cellar yet.</p>
+        <p className="mt-xs text-[13px] text-ink-muted">
+          Scan an invoice to start building your cellar.
+        </p>
+        <Link
+          href="/scan"
+          className="mt-md inline-flex h-[40px] items-center justify-center rounded-sm bg-accent px-md text-[13px] font-medium text-white hover:bg-accent-hover"
+        >
+          Scan an invoice →
+        </Link>
+      </div>
+    );
+  }
+
+  if (filtered.length === 0) {
+    return (
+      <div className="rounded-md border border-border bg-white px-md py-lg text-center text-[13px] text-ink-muted">
+        No wines match the current filter.
+      </div>
+    );
+  }
+
+  return (
+    <ul className="flex flex-col divide-y divide-border rounded-md border border-border bg-white">
+      {filtered.map((row) => (
+        <CellarRow key={row.wine_id} row={row} onSelect={() => onSelectWine(row)} />
+      ))}
+    </ul>
+  );
+}
+
+function CellarRow({
+  row,
+  onSelect,
+}: {
+  row: CellarWineRow;
+  onSelect: () => void;
+}) {
+  const totalMl =
+    row.size_ml === null
+      ? null
+      : (row.open_remaining_ml ?? 0) + row.sealed_count * row.size_ml;
+  const glassesLeft =
+    row.glass_pour_ml && totalMl !== null
+      ? Math.floor(totalMl / row.glass_pour_ml)
+      : null;
+  const ozLeft =
+    row.open_remaining_ml !== null
+      ? (row.open_remaining_ml / ML_PER_OZ).toFixed(1)
+      : null;
+
+  // Stock chip choices map directly to spec §4 examples:
+  //   ⚪ Open · 380ml · Bin C-4
+  //   ● 2 sealed · Bin A-12
+  //   ⚫ 86'd · sold out
+  let chip: { label: string; tone: "neutral" | "ok" | "warn" | "danger" | "muted" };
+  if (row.is_eightysixed) {
+    chip = { label: "86'd", tone: "danger" };
+  } else if (row.open_remaining_ml !== null && row.open_remaining_ml > 0) {
+    chip = {
+      label: `Open · ${ozLeft} oz`,
+      tone: "ok",
+    };
+  } else if (row.sealed_count > 0) {
+    chip = {
+      label: `${row.sealed_count} sealed`,
+      tone: "neutral",
+    };
+  } else {
+    chip = { label: "No stock", tone: "muted" };
+  }
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="w-full px-md py-md text-left transition-colors hover:bg-surface-muted/40"
+      >
+        <div className="flex items-start justify-between gap-md">
+          <div className="min-w-0 flex-1">
+            {/* Producer · Vintage · Region — small caps */}
+            <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-subtle">
+              <span className="text-ink-muted">{row.producer}</span>
+              {row.vintage && <span className="ml-xs font-mono">{row.vintage}</span>}
+              {row.region && <span className="ml-xs">· {row.region}</span>}
+            </div>
+            {/* Wine name — display font */}
+            <div className="mt-2xs font-serif text-[16px] text-ink">{row.name}</div>
+            {/* Stock + bin row */}
+            <div className="mt-xs flex flex-wrap items-center gap-sm text-[12px] text-ink-muted">
+              <Chip tone={chip.tone}>{chip.label}</Chip>
+              {glassesLeft !== null && glassesLeft > 0 && !row.is_eightysixed && (
+                <span className="text-ink-muted">
+                  ~{glassesLeft} glass{glassesLeft === 1 ? "" : "es"} left
+                </span>
+              )}
+              {row.bin_location && (
+                <span className="inline-flex items-center gap-2xs font-mono text-ink-subtle">
+                  <MapPin className="h-3 w-3" strokeWidth={2} aria-hidden />
+                  {row.bin_location}
+                </span>
+              )}
+            </div>
+          </div>
+          <span
+            aria-hidden
+            className="mt-2xs flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-ink-subtle"
+          >
+            <MoreVertical className="h-4 w-4" strokeWidth={2} />
+          </span>
+        </div>
+      </button>
+    </li>
+  );
+}
+
+function Chip({
+  tone,
+  children,
+}: {
+  tone: "neutral" | "ok" | "warn" | "danger" | "muted";
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-sm py-2xs text-[11px] font-medium",
+        tone === "ok" && "bg-success-soft text-success",
+        tone === "warn" && "bg-warning-soft text-warning",
+        tone === "danger" && "bg-warning-soft text-warning",
+        tone === "neutral" && "bg-accent-soft text-accent",
+        tone === "muted" && "bg-surface-muted text-ink-subtle",
+      )}
+    >
+      {children}
+    </span>
+  );
+}

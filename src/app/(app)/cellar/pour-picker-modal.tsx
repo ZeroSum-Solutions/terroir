@@ -3,7 +3,12 @@
 import { useRef, useState } from "react";
 import { ML_PER_OZ } from "@/lib/units";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
-import type { PourItem } from "./page";
+import type { OpenBottleRow } from "@/lib/wine-list/shapes";
+
+// Renamed from PourItem when this file moved into /cellar. Same shape —
+// the underlying RPC row shape `list_open_bottle_items` lives in
+// @/lib/wine-list/shapes.ts (DEBT-022).
+type PourItem = OpenBottleRow;
 
 const PRESETS_OZ = [1, 3, 5, 8];
 
