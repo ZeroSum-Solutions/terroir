@@ -5,8 +5,8 @@ import {
   ScanLine,
 } from "lucide-react";
 import Link from "next/link";
-import { shouldTriggerAlert } from "@/lib/drink-window/status";
-import { BriefingAlertCard, type DrinkWindowAlert } from "./briefing-alert-card";
+import { fetchDrinkWindowAlerts } from "@/lib/drink-window/alerts";
+import { BriefingAlertCard } from "./briefing-alert-card";
 import { EnrichCellarButton } from "./enrich-cellar-button";
 
 function formatMoney(n: number) {
@@ -438,87 +438,9 @@ export default async function DashboardPage() {
   );
 }
 
-/**
- * BND-039 — Drink-window alerts fetcher.
- *
- * Runs the same logic as `/api/insights/drink-window-alerts` but inline,
- * avoiding a server-component → API → client round-trip. The API still
- * exists for client-side refetch scenarios (snooze action triggers a
- * router.refresh which re-runs THIS server component, not the API).
- *
- * Filters mirror the API exactly:
- *   • drink_window_end non-null AND within alert window
- *   • alert_snoozed_until null OR expired
- *   • is_eightysixed = false (architect-review finding 4)
- *   • bottle_count > 0
- */
-async function fetchDrinkWindowAlerts(
-  supabase: NonNullable<Awaited<ReturnType<typeof getAuthContext>>>["supabase"],
-  restaurantId: string,
-): Promise<DrinkWindowAlert[]> {
-  const nowIso = new Date().toISOString();
-  const { data: wines } = await supabase
-    .from("wines")
-    .select(
-      "id, name, producer, vintage, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt",
-    )
-    .eq("restaurant_id", restaurantId)
-    .eq("is_eightysixed", false)
-    .not("drink_window_end", "is", null)
-    .or(`alert_snoozed_until.is.null,alert_snoozed_until.lt.${nowIso}`);
-
-  const triggered = (wines ?? []).filter((w) =>
-    shouldTriggerAlert(w.drink_window_end),
-  );
-  if (triggered.length === 0) return [];
-
-  const { data: invRows } = await supabase
-    .from("inventory_items")
-    .select("wine_id, quantity, bin_location")
-    .eq("restaurant_id", restaurantId)
-    .in(
-      "wine_id",
-      triggered.map((w) => w.id),
-    );
-
-  const aggByWine = new Map<string, { count: number; bin: string | null }>();
-  for (const row of invRows ?? []) {
-    if (!row.wine_id) continue;
-    const prev = aggByWine.get(row.wine_id) ?? { count: 0, bin: null };
-    prev.count += row.quantity ?? 0;
-    if (!prev.bin && row.bin_location) prev.bin = row.bin_location;
-    aggByWine.set(row.wine_id, prev);
-  }
-
-  const alerts: DrinkWindowAlert[] = [];
-  for (const w of triggered) {
-    const inv = aggByWine.get(w.id);
-    if (!inv || inv.count <= 0) continue;
-    alerts.push({
-      wine_id: w.id,
-      name: w.name,
-      producer: w.producer,
-      vintage: w.vintage,
-      drink_window_start: w.drink_window_start,
-      drink_window_end: w.drink_window_end,
-      peak_year: w.peak_year,
-      rating: w.rating,
-      rating_source: w.rating_source,
-      review_excerpt: w.review_excerpt,
-      bottle_count: inv.count,
-      bin_location: inv.bin,
-    });
-  }
-
-  // Most urgent first (lowest yearsLeft).
-  alerts.sort((a, b) => {
-    const aY = (a.drink_window_end ?? 9999) - new Date().getFullYear();
-    const bY = (b.drink_window_end ?? 9999) - new Date().getFullYear();
-    if (aY !== bY) return aY - bY;
-    return a.producer.localeCompare(b.producer);
-  });
-  return alerts;
-}
+// BND-039 — drink-window alerts pipeline lives in
+// @/lib/drink-window/alerts (shared with /api/insights/drink-window-alerts).
+// Code-quality-review finding 5: a local copy here was bound to drift.
 
 function parseFirstName(email: string): string {
   // Best-effort first name from email local-part. "devin@example.com" → "Devin"

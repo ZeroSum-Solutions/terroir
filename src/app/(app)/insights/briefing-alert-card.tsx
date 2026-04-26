@@ -7,6 +7,7 @@ import { ChevronRight, Clock, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DrinkWindowTimeline } from "@/components/drink-window-timeline";
 import { getYearsUntilWindowClose } from "@/lib/drink-window/status";
+import type { DrinkWindowAlertRow } from "@/lib/drink-window/alerts";
 
 /**
  * BND-039 — BriefingAlertCard
@@ -26,20 +27,9 @@ import { getYearsUntilWindowClose } from "@/lib/drink-window/status";
  *   • Snooze 30 days → POST /api/wines/{id}/snooze-alert + refresh
  */
 
-export type DrinkWindowAlert = {
-  wine_id: string;
-  name: string;
-  producer: string;
-  vintage: number | null;
-  drink_window_start: number | null;
-  drink_window_end: number | null;
-  peak_year: number | null;
-  rating: number | null;
-  rating_source: string | null;
-  review_excerpt: string | null;
-  bottle_count: number;
-  bin_location: string | null;
-};
+// Type re-export for back-compat. The canonical shape lives in
+// @/lib/drink-window/alerts (DrinkWindowAlertRow) and is the same here.
+export type DrinkWindowAlert = DrinkWindowAlertRow;
 
 export function BriefingAlertCard({
   alert,

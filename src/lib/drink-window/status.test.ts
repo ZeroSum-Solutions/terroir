@@ -173,7 +173,10 @@ describe("formatStatusLabel", () => {
     expect(formatStatusLabel("drink_now", 4)).toBe("Drink now · 4 yrs left");
     expect(formatStatusLabel("drink_now", 1)).toBe("Drink now · 1 yr left");
     expect(formatStatusLabel("drink_now", 0)).toBe("Drink now · final year");
-    expect(formatStatusLabel("drink_now", -1)).toBe("Drink now · final year");
+    // Negative means past-optimal; status flow shouldn't produce this
+    // (past_peak wins) but the label must still distinguish from
+    // "final year" if it ever does.
+    expect(formatStatusLabel("drink_now", -1)).toBe("Drink now · past optimal");
   });
 
   it("formats hold with years until ready", () => {

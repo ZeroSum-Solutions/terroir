@@ -84,6 +84,9 @@ export function CellarList({
           break;
         case "hold":
           if (!isHolding(r.drink_window_start)) return false;
+          // Exclude 86'd wines from Hold filter: a sold-out wine isn't
+          // an actionable hold decision (matches drink-now predicate).
+          if (r.is_eightysixed) return false;
           break;
         case "all":
         default:

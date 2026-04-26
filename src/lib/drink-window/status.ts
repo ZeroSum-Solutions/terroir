@@ -134,7 +134,13 @@ export function formatStatusLabel(
         : "Hold";
     case "drink_now":
       if (yearsLeft == null) return "Drink now";
-      if (yearsLeft <= 0) return "Drink now · final year";
+      // yearsLeft === 0 → final year of optimal window.
+      // yearsLeft  <  0 → already past optimal (shouldn't happen via
+      // status flow since past_peak wins, but defensive). Distinct
+      // labels because "final year" and "past optimal" mean different
+      // things to a sommelier. Code-quality-review finding 7.
+      if (yearsLeft === 0) return "Drink now · final year";
+      if (yearsLeft < 0) return "Drink now · past optimal";
       return `Drink now · ${yearsLeft} yr${yearsLeft === 1 ? "" : "s"} left`;
     case "past_peak":
       return "Past peak";

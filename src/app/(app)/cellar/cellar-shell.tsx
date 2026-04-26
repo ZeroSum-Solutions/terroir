@@ -69,11 +69,17 @@ export function CellarShell({
   const searchParams = useSearchParams();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // FAB deep-link mode is sampled exactly once on mount via useState's
-  // lazy initializer. The state is never updated — we just want a
-  // stable snapshot of the URL param at mount time. (Using useRef would
-  // trip the react-hooks/refs lint rule about render-time ref reads.)
+  // FAB deep-link mode + briefing-card wine deep-link are sampled
+  // exactly once on mount via useState's lazy initializer. State never
+  // updates — these are stable mount-time snapshots. (Using useRef
+  // would trip react-hooks/refs lint about render-time ref reads.)
+  //
+  // BND-039 — `?wine={id}` deep-link from Insights briefing cards
+  // auto-opens the wine-detail drawer for the alerted wine. This is
+  // the spec's primary CTA on the briefing alert; without it the user
+  // tap-throughs to an unfiltered list and can't find the bottles.
   const [initialMode] = useState(() => searchParams.get("mode") ?? "");
+  const [initialWineId] = useState(() => searchParams.get("wine") ?? "");
 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<CellarFilter>(
@@ -82,7 +88,13 @@ export function CellarShell({
   const [view, setView] = useState<"list" | "grid">("list");
   // Derive selected from selectedId so server-component refresh refreshes
   // the drawer's stock numbers automatically (rows is the source of truth).
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // BND-039: when the user lands here via a briefing-card "View bottles"
+  // deep-link (?wine={id}), auto-open the drawer for that wine.
+  const [selectedId, setSelectedId] = useState<string | null>(
+    initialWineId && rows.some((r) => r.wine_id === initialWineId)
+      ? initialWineId
+      : null,
+  );
   const selected = useMemo(
     () => (selectedId ? rows.find((r) => r.wine_id === selectedId) ?? null : null),
     [rows, selectedId],
@@ -96,22 +108,22 @@ export function CellarShell({
   const canManage = role === "owner" || role === "manager";
   const isOwner = role === "owner";
 
-  // FAB deep-link side-effects: strip `?mode=` from the URL so a
-  // refresh doesn't re-trigger the focus jump, and focus the search
-  // input once it's mounted in the overlay. This is purely external
-  // (router + DOM) so setState-in-effect lint doesn't apply.
+  // Deep-link side-effects: strip `?mode=` and `?wine=` from the URL
+  // so a refresh doesn't re-trigger the focus jump or re-open the
+  // drawer, and focus the search input once it's mounted (FAB flow
+  // only). Purely external (router + DOM) so setState-in-effect lint
+  // doesn't apply.
   useEffect(() => {
-    if (!initialMode) return;
+    if (!initialMode && !initialWineId) return;
     if (initialMode === "pour" || initialMode === "eightysix") {
       requestAnimationFrame(() => searchInputRef.current?.focus());
     }
     const params = new URLSearchParams(searchParams.toString());
     params.delete("mode");
+    params.delete("wine");
     const next = params.toString();
     router.replace(next ? `/cellar?${next}` : "/cellar", { scroll: false });
-    // Run once at mount only. searchParams is captured for the strip
-    // operation; subsequent identity changes (e.g. user edits a chip
-    // that we ever wire to the URL) shouldn't re-fire this effect.
+    // Run once at mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -129,10 +141,16 @@ export function CellarShell({
     // BND-039 — count of wines closing their drink window. Single source
     // of truth via @/lib/drink-window/status; the same predicate powers
     // the "Drink now" filter chip and the briefing alert API.
+    //
+    // Both Drink-now and Hold counts exclude 86'd wines: a sold-out
+    // wine isn't an actionable hold/drink-soon decision the operator
+    // can do anything about. Code-quality-review finding 3 — consistency.
     const drinkNowCount = rows.filter(
       (r) => !r.is_eightysixed && isClosingWindow(r.drink_window_end),
     ).length;
-    const holdCount = rows.filter((r) => isHolding(r.drink_window_start)).length;
+    const holdCount = rows.filter(
+      (r) => !r.is_eightysixed && isHolding(r.drink_window_start),
+    ).length;
 
     return { lowCount, drinkNowCount, holdCount };
   }, [rows]);

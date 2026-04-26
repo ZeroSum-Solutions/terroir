@@ -39,7 +39,17 @@ type EnrichmentPayloadRow = {
 export async function POST() {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  const { supabase, restaurantId, role } = auth;
+
+  // BND-039 — owner+manager only. requireMembership alone passes staff
+  // through; without this gate, staff role can trigger Anthropic
+  // billable Claude calls. Mirrors the snooze-alert role check.
+  if (role !== "owner" && role !== "manager") {
+    return NextResponse.json(
+      { error: "Enriching wines requires owner or manager role." },
+      { status: 403 },
+    );
+  }
 
   // ARCH-021: delta-fetch only wines that actually need enrichment.
   // Previously this route pulled every wine in the tenant (including

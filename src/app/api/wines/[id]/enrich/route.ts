@@ -28,7 +28,17 @@ export async function POST(
 ) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  const { supabase, restaurantId, role } = auth;
+
+  // BND-039 — owner+manager only. Staff role can authenticate but
+  // cannot trigger billable Claude inference. Mirrors snooze-alert
+  // and the bulk enrich endpoint.
+  if (role !== "owner" && role !== "manager") {
+    return NextResponse.json(
+      { error: "Enriching wines requires owner or manager role." },
+      { status: 403 },
+    );
+  }
 
   const { id } = await ctx.params;
   if (!id) {

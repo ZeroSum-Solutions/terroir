@@ -130,11 +130,26 @@ describe("POST /api/wines/enrich", () => {
     expect(mockEnrichWine).not.toHaveBeenCalled();
   });
 
+  it("403s when role is staff (BND-039 — enrichment burns Anthropic spend; owner+manager only)", async () => {
+    const { supabase } = buildSupabase({
+      winesResult: { data: [], error: null },
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-1",
+      role: "staff",
+    });
+    const res = await POST();
+    expect(res.status).toBe(403);
+    expect(mockEnrichWine).not.toHaveBeenCalled();
+    expect(mockEnrichWineWithClaude).not.toHaveBeenCalled();
+  });
+
   it("500s on wines fetch error without calling RPC", async () => {
     const { supabase, rpc } = buildSupabase({
       winesResult: { data: null, error: { message: "DB down" } },
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
     const res = await POST();
     expect(res.status).toBe(500);
     expect(rpc).not.toHaveBeenCalled();
@@ -161,7 +176,7 @@ describe("POST /api/wines/enrich", () => {
       winesResult: { data: wines, error: null },
       rpcEnrichResult: { data: 2, error: null },
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
     const res = await POST();
     expect(res.status).toBe(200);
@@ -205,7 +220,7 @@ describe("POST /api/wines/enrich", () => {
       winesResult: { data: wines, error: null },
       rpcEnrichResult: { data: 1, error: null },
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
     const res = await POST();
     expect(res.status).toBe(200);
@@ -259,7 +274,7 @@ describe("POST /api/wines/enrich", () => {
       winesResult: { data: wines, error: null },
       rpcEnrichResult: { data: 2, error: null },
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
     const res = await POST();
     expect(res.status).toBe(200);
@@ -283,7 +298,7 @@ describe("POST /api/wines/enrich", () => {
     const { supabase, rpcCalls } = buildSupabase({
       winesResult: { data: wines, error: null },
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
     const res = await POST();
     expect(res.status).toBe(200);
@@ -305,7 +320,7 @@ describe("POST /api/wines/enrich", () => {
       winesResult: { data: wines, error: null },
       rpcEnrichResult: { data: null, error: { message: "constraint" } },
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
     const res = await POST();
     expect(res.status).toBe(500);
