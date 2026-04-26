@@ -4,6 +4,7 @@ import { RestaurantProvider } from "@/lib/context/restaurant";
 import { OnboardingModal } from "./onboarding-modal";
 import { SettingsDropdown } from "./settings-dropdown";
 import { DesktopNavLinks, MobileNavLinks } from "./nav-links";
+import { Fab } from "./fab";
 
 export default async function AppLayout({
   children,
@@ -52,9 +53,10 @@ export default async function AppLayout({
         {children}
       </main>
 
-      {/* Bottom tab bar — mobile only, thumb-friendly. Flex lets 6–7
-          tabs (post-BND-038) distribute evenly without pre-declaring
-          grid-cols-N classes. */}
+      {/* Bottom tab bar — mobile only, thumb-friendly. Now 4 tabs
+          per the v5 IA redesign (.council/specs/2026-04-24-ux-ia-redesign.md).
+          Was 6-7 tabs (truncating at ~55px on a 390px phone); now ~97px
+          per tab. */}
       <nav
         className="fixed inset-x-0 bottom-0 z-20 flex border-t border-border bg-surface/95 backdrop-blur-sm md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
@@ -62,6 +64,11 @@ export default async function AppLayout({
       >
         <MobileNavLinks role={userRole} />
       </nav>
+
+      {/* Floating Action Button — mobile-only primary actions surface.
+          Speed-dial: tap "+" to reveal Scan / Pour / 86 / Voice (stub).
+          Hidden on /scan (already a primary-action surface). */}
+      <Fab />
     </div>
     </RestaurantProvider>
   );
