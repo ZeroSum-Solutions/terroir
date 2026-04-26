@@ -8,7 +8,7 @@ test("login page renders", async ({ page }) => {
 });
 
 test("unauthenticated user redirected to login", async ({ page }) => {
-  await page.goto("/scanner");
+  await page.goto("/cellar");
   await expect(page).toHaveURL(/\/login/);
 });
 

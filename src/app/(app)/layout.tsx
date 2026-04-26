@@ -27,7 +27,7 @@ export default async function AppLayout({
       {/* Top bar — minimal on mobile, full nav on md+ */}
       <header className="sticky top-0 z-10 flex h-14 items-center border-b border-border bg-surface/95 px-md backdrop-blur-sm md:h-16 md:px-lg">
         <Link
-          href="/scanner"
+          href="/"
           className="font-serif text-[20px] text-accent md:text-[22px]"
           style={{ fontWeight: 500 }}
         >

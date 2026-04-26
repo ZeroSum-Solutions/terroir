@@ -169,7 +169,7 @@ export default async function DashboardPage() {
             Your wine program metrics will appear here after your first scan.
           </p>
           <Link
-            href="/scanner"
+            href="/scan"
             className="mt-lg flex h-[38px] items-center gap-sm rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
           >
             <ScanLine className="h-4 w-4" strokeWidth={2} />

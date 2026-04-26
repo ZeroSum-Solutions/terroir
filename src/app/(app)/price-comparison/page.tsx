@@ -126,7 +126,7 @@ export default async function PriceComparisonPage() {
             will appear here.
           </p>
           <Link
-            href="/scanner"
+            href="/scan"
             className="mt-lg flex h-[38px] items-center gap-sm rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
           >
             <ScanLine className="h-4 w-4" strokeWidth={2} />

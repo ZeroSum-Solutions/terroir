@@ -307,7 +307,7 @@ export function WineListEditor({
       {/* Header */}
       <header className="mb-lg md:mb-xl">
         <Link
-          href="/wine-list"
+          href="/lists"
           className="mb-sm inline-flex items-center gap-xs text-[13px] text-ink-muted hover:text-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />

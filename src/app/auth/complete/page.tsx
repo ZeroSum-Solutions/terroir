@@ -46,7 +46,7 @@ export default function AuthCompletePage() {
         return;
       }
       history.replaceState(null, "", window.location.pathname);
-      router.replace("/scanner");
+      router.replace("/");
     })();
   }, [router]);
 

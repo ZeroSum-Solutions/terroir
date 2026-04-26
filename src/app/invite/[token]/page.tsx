@@ -25,8 +25,10 @@ export default function AcceptInvitePage() {
       if (res.ok) {
         setStatus("success");
         setMessage(data.message ?? "You have joined the restaurant.");
-        // Redirect to scanner after 2 seconds
-        setTimeout(() => router.push("/scanner"), 2000);
+        // Redirect to role-aware home after 2 seconds; "/" hits the
+        // redirector at src/app/page.tsx which sends the user to
+        // /insights (owner) or /cellar (manager/staff).
+        setTimeout(() => router.push("/"), 2000);
       } else {
         if (res.status === 401) {
           // Not logged in — redirect to login with return URL

@@ -2,16 +2,16 @@ import { describe, it, expect } from "vitest";
 import { safeNext } from "./safe-redirect";
 
 describe("safeNext", () => {
-  const FALLBACK = "/scanner";
+  const FALLBACK = "/";
 
   it("accepts a plain relative path", () => {
-    expect(safeNext("/dashboard", FALLBACK)).toBe("/dashboard");
-    expect(safeNext("/wine-lists/42", FALLBACK)).toBe("/wine-lists/42");
+    expect(safeNext("/insights", FALLBACK)).toBe("/insights");
+    expect(safeNext("/lists/42", FALLBACK)).toBe("/lists/42");
   });
 
   it("accepts a relative path with query and hash", () => {
-    expect(safeNext("/scanner?tab=invoice#top", FALLBACK)).toBe(
-      "/scanner?tab=invoice#top",
+    expect(safeNext("/scan?tab=invoice#top", FALLBACK)).toBe(
+      "/scan?tab=invoice#top",
     );
   });
 
@@ -53,7 +53,7 @@ describe("safeNext", () => {
   });
 
   it("rejects a bare path that does not start with /", () => {
-    expect(safeNext("scanner", FALLBACK)).toBe(FALLBACK);
-    expect(safeNext("./scanner", FALLBACK)).toBe(FALLBACK);
+    expect(safeNext("scan", FALLBACK)).toBe(FALLBACK);
+    expect(safeNext("./scan", FALLBACK)).toBe(FALLBACK);
   });
 });

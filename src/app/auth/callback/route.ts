@@ -2,7 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/api/safe-redirect";
 
-const DEFAULT_POST_LOGIN_PATH = "/scanner";
+// "/" hits the role-aware redirector at src/app/page.tsx, which sends
+// the user to /insights (owner) or /cellar (manager/staff). Hardcoding
+// "/scanner" here would override that for users who hit the magic link
+// without a `next` param.
+const DEFAULT_POST_LOGIN_PATH = "/";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

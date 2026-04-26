@@ -63,8 +63,11 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && pathname === "/login") {
+    // "/" hits the role-aware redirector at src/app/page.tsx, sending
+    // the user to /insights (owner) or /cellar (manager/staff). Was
+    // hardcoded "/scanner" pre-IA-redesign.
     const url = request.nextUrl.clone();
-    url.pathname = "/scanner";
+    url.pathname = "/";
     url.searchParams.delete("next");
     return NextResponse.redirect(url);
   }

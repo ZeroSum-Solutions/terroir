@@ -7,6 +7,41 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
   },
+  /**
+   * v5 IA redesign (.council/specs/2026-04-24-ux-ia-redesign.md):
+   * old route paths redirect to new ones for at least 90 days so any
+   * bookmarked URL keeps working. permanent: false means 307 (so
+   * search engines don't aggressively cache the redirect — we want
+   * room to revisit if anything misbehaves).
+   *
+   * Renames:
+   *   /scanner   → /scan
+   *   /dashboard → /insights
+   *   /wine-list → /lists
+   *
+   * Consolidations (Phase 2 — single-screen Cellar absorbs these):
+   *   /pour         → /cellar
+   *   /availability → /cellar
+   *   /reconcile    → /cellar
+   */
+  async redirects() {
+    return [
+      // Renames
+      { source: "/scanner", destination: "/scan", permanent: false },
+      { source: "/scanner/:path*", destination: "/scan/:path*", permanent: false },
+      { source: "/dashboard", destination: "/insights", permanent: false },
+      { source: "/dashboard/:path*", destination: "/insights/:path*", permanent: false },
+      { source: "/wine-list", destination: "/lists", permanent: false },
+      { source: "/wine-list/:path*", destination: "/lists/:path*", permanent: false },
+      // Consolidations into Cellar
+      { source: "/pour", destination: "/cellar", permanent: false },
+      { source: "/pour/:path*", destination: "/cellar", permanent: false },
+      { source: "/availability", destination: "/cellar", permanent: false },
+      { source: "/availability/:path*", destination: "/cellar", permanent: false },
+      { source: "/reconcile", destination: "/cellar", permanent: false },
+      { source: "/reconcile/:path*", destination: "/cellar", permanent: false },
+    ];
+  },
 };
 
 /**

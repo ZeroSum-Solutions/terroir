@@ -60,7 +60,7 @@ export function ScanDetailView({
     <section>
       <header className="mb-lg">
         <Link
-          href="/scanner"
+          href="/scan"
           className="mb-md inline-flex items-center gap-xs text-[13px] text-ink-muted hover:text-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />

@@ -17,7 +17,7 @@
  *
  * Accepts:
  *   - A relative path whose first character is `/` AND second character is
- *     not `/` (e.g. `/scanner`, `/wine-lists/42`). Rejects `//evil.com/x`.
+ *     not `/` (e.g. `/scan`, `/lists/42`). Rejects `//evil.com/x`.
  *
  * Rejects everything else: empty string, null/undefined, protocol-relative
  * paths (`//...`), absolute URLs of any scheme (including `data:` and

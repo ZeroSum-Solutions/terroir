@@ -23,7 +23,7 @@ function RecentScansList({ scans }: RecentScansListProps) {
         {scans.map((s) => (
           <Link
             key={s.id}
-            href={`/scanner/${s.id}`}
+            href={`/scan/${s.id}`}
             className="block rounded-md border border-border bg-white p-md transition-all hover:border-accent/40 hover:shadow-sm"
           >
             <div className="mb-sm flex items-center justify-between">
@@ -132,7 +132,7 @@ export function ReadyView({
           </div>
           <div className="flex items-center gap-sm">
             <Link
-              href="/wine-list"
+              href="/lists"
               onClick={onDismissSaved}
               className="flex items-center gap-xs rounded-sm px-sm py-xs text-[13px] font-medium text-accent hover:bg-accent-soft"
             >

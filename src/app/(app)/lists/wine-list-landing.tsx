@@ -38,7 +38,7 @@ export function WineListLanding({
       });
       if (!res.ok) throw new Error("Failed to create wine list");
       const { id } = (await res.json()) as { id: string };
-      router.push(`/wine-list/${id}`);
+      router.push(`/lists/${id}`);
     } catch {
       setCreating(false);
     }
@@ -91,7 +91,7 @@ export function WineListLanding({
             <button
               key={list.id}
               type="button"
-              onClick={() => router.push(`/wine-list/${list.id}`)}
+              onClick={() => router.push(`/lists/${list.id}`)}
               className="group rounded-md border border-border bg-surface p-md text-left transition-all hover:-translate-y-px hover:border-border-strong hover:shadow-md"
             >
               <div className="flex items-start justify-between gap-sm">

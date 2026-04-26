@@ -8,7 +8,7 @@ async function sendMagicLink(formData: FormData) {
   "use server";
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const next = String(formData.get("next") ?? "/scanner");
+  const next = String(formData.get("next") ?? "/");
 
   if (!email) redirect(`/login?error=${encodeURIComponent("Enter your email.")}`);
 
@@ -72,7 +72,7 @@ export default async function LoginPage({
           </div>
         ) : (
           <form action={sendMagicLink} className="flex flex-col gap-md">
-            <input type="hidden" name="next" value={next ?? "/scanner"} />
+            <input type="hidden" name="next" value={next ?? "/"} />
             <label className="flex flex-col gap-xs">
               <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
                 Work email
