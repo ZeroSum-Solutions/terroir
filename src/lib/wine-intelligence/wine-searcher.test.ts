@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { __parseForTests } from "./wine-searcher";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { __parseForTests, __resetWineSearcherForTests, fetchRetailPrices } from "./wine-searcher";
 
 // Network-touching code (fetchRetailPrices) is intentionally NOT tested
-// here — we'd be testing the fetch wrapper, not our logic. Schema validation
-// + parsing is exhaustively unit-tested instead. End-to-end happens via
-// manual smoke against real wines (per BND-040 plan §Verification).
+// for business logic here — we'd be testing the fetch wrapper, not our logic.
+// Schema validation + parsing is exhaustively unit-tested instead. End-to-end
+// happens via manual smoke against real wines (per BND-040 plan §Verification).
+// Security invariants for the fetch call (key-not-in-URL, key-in-header) ARE
+// tested below.
 
 describe("Wine-Searcher response parser", () => {
   it("parses a typical trade-API response (top-level fields)", () => {
@@ -118,5 +120,43 @@ describe("Wine-Searcher response parser", () => {
     const after = Date.now();
     expect(result?.refreshedAt.getTime()).toBeGreaterThanOrEqual(before);
     expect(result?.refreshedAt.getTime()).toBeLessThanOrEqual(after);
+  });
+});
+
+describe("fetchRetailPrices — security invariants", () => {
+  const SENTINEL = "TEST-SENTINEL-DO-NOT-LEAK";
+
+  beforeEach(() => {
+    __resetWineSearcherForTests();
+    vi.stubEnv("WINE_SEARCHER_API_KEY", SENTINEL);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          min_price: 80,
+          max_price: 110,
+          average_price: 92,
+          offers_count: 10,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("does NOT include the API key in the URL query string", async () => {
+    await fetchRetailPrices({ lwinId: "1234567" });
+    const [calledUrl] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(calledUrl).not.toContain(SENTINEL);
+  });
+
+  it("sends the API key in the Authorization header", async () => {
+    await fetchRetailPrices({ lwinId: "1234567" });
+    const [, calledInit] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    const authHeader = (calledInit?.headers as Record<string, string>)?.["Authorization"] ?? "";
+    expect(authHeader).toContain(SENTINEL);
   });
 });
