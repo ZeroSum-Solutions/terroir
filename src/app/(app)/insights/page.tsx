@@ -6,9 +6,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { fetchDrinkWindowAlerts } from "@/lib/drink-window/alerts";
+import { fetchPricingAlerts } from "@/lib/pricing/alerts";
 import { BriefingAlertCard } from "./briefing-alert-card";
 import { EnrichCellarButton } from "./enrich-cellar-button";
 import { RefreshRetailButton } from "./refresh-retail-button";
+import { PricingReviewCard } from "./pricing-review-card";
 
 function formatMoney(n: number) {
   return "$" + n.toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -80,9 +82,14 @@ export default async function DashboardPage() {
 
   const { supabase, restaurantId: rid, restaurantName, user, userRole } = auth;
 
-  // BND-039 — drink-window alerts. Fetch in parallel with the Dashboard
-  // aggregates below; alerts render above the metric cards.
-  const drinkWindowAlerts = await fetchDrinkWindowAlerts(supabase, rid);
+  // BND-039 + BND-040 — alerts pipelines. Fetch in parallel with the
+  // Dashboard aggregates below; alerts render above the metric cards.
+  // Pricing alerts gracefully return [] when no retail data is enriched
+  // yet (operator hasn't clicked the Refresh retail button).
+  const [drinkWindowAlerts, pricingAlerts] = await Promise.all([
+    fetchDrinkWindowAlerts(supabase, rid),
+    fetchPricingAlerts(supabase, rid).catch(() => []),
+  ]);
   const firstName = parseFirstName(user.email ?? "") || "there";
   const canEnrich = userRole === "owner" || userRole === "manager";
 
@@ -234,6 +241,26 @@ export default async function DashboardPage() {
               <RefreshRetailButton />
             </div>
           )}
+        </section>
+      )}
+
+      {/* BND-040 — Pricing review section. Renders only when there are
+          alerts. Sits below drink-window watch since drink-window is the
+          time-urgent signal; pricing is a "worth a review" signal. */}
+      {pricingAlerts.length > 0 && (
+        <section className="mb-lg md:mb-xl" aria-labelledby="pricing-review-heading">
+          <div className="mb-md flex flex-wrap items-baseline justify-between gap-sm">
+            <h2
+              id="pricing-review-heading"
+              className="text-[10px] font-semibold uppercase tracking-[0.08em] text-accent"
+            >
+              Pricing review
+            </h2>
+            <span className="text-[12px] text-ink-muted">
+              {pricingAlerts.length} alert{pricingAlerts.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <PricingReviewCard alerts={pricingAlerts} firstName={firstName} />
         </section>
       )}
 
