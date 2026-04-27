@@ -69,6 +69,10 @@ export async function POST() {
 
   if (error) {
     console.error("wines fetch failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "wines-enrich", phase: "fetch" },
+      extra: { restaurantId },
+    });
     return NextResponse.json(
       { error: "Failed to fetch wines." },
       { status: 500 },
