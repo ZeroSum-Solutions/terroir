@@ -1,8 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search, Sparkles } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
+
+// BND-040 — pricing suggestion response shape from
+// /api/wines/[id]/pricing-suggestion. Mirrors the route's JSON.
+type PricingSuggestion = {
+  wineId: string;
+  suggestedBottle: number | null;
+  suggestedGlass: number | null;
+  glassPourMl: number;
+  targetMarkupRatio: number;
+  targetPourCostPct: number;
+  retailMedian: number | null;
+  retailMin: number | null;
+  retailMax: number | null;
+  retailRetailerCount: number | null;
+  retailRefreshedAt: string | null;
+  categoryBandApplied: boolean;
+  hasRetailData: boolean;
+};
 
 type SearchWine = {
   id: string;
@@ -38,10 +56,66 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
   const [bottlePrice, setBottlePrice] = useState("");
   const [glassPrice, setGlassPrice] = useState("");
   const [adding, setAdding] = useState(false);
+  // BND-040 — pricing suggestion state. Auto-fetched when a wine is
+  // selected; user can click "Suggest" to fill the price inputs.
+  const [suggestion, setSuggestion] = useState<PricingSuggestion | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
   const trapRef = useRef<HTMLDivElement>(null);
 
   useFocusTrap({ containerRef: trapRef, onEscape: onClose });
+
+  // BND-040 — fetch pricing suggestion when a wine is selected. Cheap
+  // (cached retail data only, no API quota burn). State is reset by the
+  // event handlers that clear `selected` (handleSelectCatalog, Back
+  // button, handleAdd) — not in an effect — to avoid the setState-in-
+  // effect lint pattern.
+  const selectedId = selected?.id ?? null;
+  useEffect(() => {
+    if (!selectedId) return;
+    let cancelled = false;
+    (async () => {
+      setSuggesting(true);
+      setSuggestError(null);
+      try {
+        const res = await fetch(
+          `/api/wines/${selectedId}/pricing-suggestion?glassPourMl=148`,
+        );
+        if (!res.ok) throw new Error(`Failed (${res.status}).`);
+        const data = (await res.json()) as PricingSuggestion;
+        if (!cancelled) setSuggestion(data);
+      } catch (err) {
+        if (!cancelled) {
+          setSuggestError(err instanceof Error ? err.message : "Suggestion failed.");
+        }
+      } finally {
+        if (!cancelled) setSuggesting(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
+
+  /** Clear suggestion + price drafts when the user goes Back to search. */
+  const clearSelection = () => {
+    setSelected(null);
+    setSuggestion(null);
+    setSuggestError(null);
+    setBottlePrice("");
+    setGlassPrice("");
+  };
+
+  const applySuggestion = () => {
+    if (!suggestion) return;
+    if (suggestion.suggestedBottle != null) {
+      setBottlePrice(suggestion.suggestedBottle.toString());
+    }
+    if (suggestion.suggestedGlass != null) {
+      setGlassPrice(suggestion.suggestedGlass.toString());
+    }
+  };
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -252,6 +326,74 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
               </div>
             </div>
 
+            {/* BND-040 — Pricing suggestion panel. Renders when retail data
+                is available; falls back to a brief unavailable note otherwise.
+                One tap to fill both inputs; user can override anything. */}
+            {suggesting && (
+              <div className="mt-md flex items-center gap-xs text-[12px] text-ink-muted">
+                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} aria-hidden />
+                Computing suggestion…
+              </div>
+            )}
+            {!suggesting && suggestion && suggestion.hasRetailData && (
+              <div
+                className="mt-md rounded-sm bg-bg-secondary p-sm"
+                style={{ borderLeft: "2px solid var(--color-accent)" }}
+              >
+                <div className="flex items-baseline justify-between">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                    Suggested prices
+                  </div>
+                  <button
+                    type="button"
+                    onClick={applySuggestion}
+                    className="inline-flex items-center gap-2xs text-[11px] font-medium text-accent hover:underline"
+                  >
+                    <Sparkles className="h-3 w-3" strokeWidth={2} aria-hidden />
+                    Use these
+                  </button>
+                </div>
+                <div className="mt-xs grid grid-cols-2 gap-sm text-[12px] text-ink-muted">
+                  <div>
+                    <span className="font-mono text-[16px] font-medium text-ink">
+                      {suggestion.suggestedGlass != null
+                        ? `$${suggestion.suggestedGlass}`
+                        : "—"}
+                    </span>
+                    <div className="mt-2xs text-[10px] text-ink-subtle">
+                      glass · target {Math.round(suggestion.targetPourCostPct)}% pour cost
+                    </div>
+                  </div>
+                  <div>
+                    <span className="font-mono text-[16px] font-medium text-ink">
+                      {suggestion.suggestedBottle != null
+                        ? `$${suggestion.suggestedBottle}`
+                        : "—"}
+                    </span>
+                    <div className="mt-2xs text-[10px] text-ink-subtle">
+                      bottle · target {suggestion.targetMarkupRatio.toFixed(1)}× retail
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-xs text-[10px] text-ink-subtle">
+                  Source: Wine-Searcher · {suggestion.retailRetailerCount ?? 0} retailers ·
+                  median ${Math.round(suggestion.retailMedian ?? 0)}
+                  {suggestion.categoryBandApplied && " · category band applied"}
+                </div>
+              </div>
+            )}
+            {!suggesting && suggestion && !suggestion.hasRetailData && (
+              <div className="mt-md rounded-sm bg-bg-secondary p-sm text-[11px] italic text-ink-muted">
+                Pricing data unavailable for this wine. Refresh retail data from
+                Insights to enable suggestions.
+              </div>
+            )}
+            {suggestError && (
+              <p role="alert" className="mt-sm text-[11px] text-error">
+                {suggestError}
+              </p>
+            )}
+
             <div className="mt-md grid grid-cols-2 gap-md">
               <div>
                 <label className="mb-xs block text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
@@ -298,7 +440,7 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
             {selected && (
               <button
                 type="button"
-                onClick={() => setSelected(null)}
+                onClick={clearSelection}
                 className="h-[38px] rounded-sm border border-border-strong px-md text-[14px] font-medium text-ink hover:bg-surface-muted"
               >
                 Back
