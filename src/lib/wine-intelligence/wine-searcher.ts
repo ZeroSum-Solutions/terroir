@@ -85,16 +85,19 @@ export async function fetchRetailPrices(
   // Trial-tier endpoint shape (Wine-Searcher trade API). Production tier
   // exposes more fields but we deliberately only use the aggregate shape
   // for v1.
-  const url = `${API_BASE_URL}/wine?key=${encodeURIComponent(
-    apiKey,
-  )}&lwin=${encodeURIComponent(lwinId)}&format=json`;
+  const url = `${API_BASE_URL}/wine?lwin=${encodeURIComponent(lwinId)}&format=json`;
 
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   let response: Response;
   try {
-    response = await fetch(url, { signal: controller.signal });
+    response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
   } catch (err) {
     Sentry.captureException(err, {
       tags: {
