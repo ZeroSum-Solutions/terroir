@@ -2109,3 +2109,246 @@ comment on column public.wines.eightysixed_at is
 
 comment on column public.wines.eightysixed_by is
   $$BND-037: user who 86'd this wine. Null for auto-86 events (migration 0021 trigger sets user_id = null in availability_events; wines.eightysixed_by stays null too when the auto path fires) and when is_eightysixed = false. Enforcement path is identical to is_eightysixed — see its column comment.$$;
+
+-- === 0025_drink_window_metadata.sql ===
+-- BND-039 — Drink window metadata (the drink-window intelligence feature).
+--
+-- Schema additions: enrichment provenance + alert snooze. drink_window_start
+-- and drink_window_end already exist (since 0014 era).
+--
+-- All columns nullable so existing wines render gracefully without
+-- enrichment data. The UI surfaces degrade — no panel rendered if
+-- drink_window_end is null.
+--
+-- This migration was applied via the Supabase MCP `apply_migration`
+-- on 2026-04-26 against project qcfmwphlaekfkqwkfyth (terroir prod).
+-- The local file exists for git history + future regen reproducibility.
+--
+-- DOWN (manual):
+--   ALTER TABLE public.wines
+--     DROP COLUMN peak_year,
+--     DROP COLUMN rating,
+--     DROP COLUMN rating_source,
+--     DROP COLUMN review_excerpt,
+--     DROP COLUMN last_enriched_at,
+--     DROP COLUMN alert_snoozed_until;
+--   DROP FUNCTION IF EXISTS public.snooze_drink_window_alert(uuid, int);
+--   (revert enrich_wines_batch by re-running 0014's body)
+
+ALTER TABLE public.wines
+  ADD COLUMN peak_year           smallint,
+  ADD COLUMN rating              smallint,
+  ADD COLUMN rating_source       text,
+  ADD COLUMN review_excerpt      text,
+  ADD COLUMN last_enriched_at    timestamptz,
+  ADD COLUMN alert_snoozed_until timestamptz;
+
+ALTER TABLE public.wines
+  ADD CONSTRAINT wines_rating_range
+    CHECK (rating IS NULL OR (rating >= 0 AND rating <= 100)),
+  ADD CONSTRAINT wines_peak_year_range
+    CHECK (peak_year IS NULL OR (peak_year >= 1900 AND peak_year <= 2100));
+
+COMMENT ON COLUMN public.wines.rating_source IS
+  'BND-039 provenance of enrichment data. Allowed: rule_engine | claude_inference | vinous | parker | js | wine_spectator | decanter | aggregate. Validated in app layer (not a DB enum so adding sources is migration-free).';
+
+COMMENT ON COLUMN public.wines.alert_snoozed_until IS
+  'BND-039: per-wine snooze for the Insights drink-window briefing alert. NULL = not snoozed. 30-day default set by /api/wines/[id]/snooze-alert.';
+
+-- Update enrich_wines_batch RPC to accept the new fields. Backwards-compatible:
+-- the jsonb payload may or may not include new keys; absent keys leave the
+-- existing row value untouched (coalesce). Old callers keep working.
+
+create or replace function public.enrich_wines_batch(
+  p_restaurant_id uuid,
+  p_enrichments   jsonb
+) returns int
+language plpgsql
+security invoker
+as $$
+declare
+  v_count int;
+begin
+  if p_enrichments is null or jsonb_typeof(p_enrichments) <> 'array' or jsonb_array_length(p_enrichments) = 0 then
+    return 0;
+  end if;
+
+  with u as (
+    select
+      (e->>'id')::uuid                  as id,
+      (e->>'drink_window_start')::int    as drink_window_start,
+      (e->>'drink_window_end')::int      as drink_window_end,
+      (e->>'peak_year')::int             as peak_year,
+      (e->>'rating')::int                as rating,
+      (e->>'rating_source')              as rating_source,
+      (e->>'review_excerpt')             as review_excerpt,
+      (e->>'serving_temp_min')::int      as serving_temp_min,
+      (e->>'serving_temp_max')::int      as serving_temp_max,
+      (e->>'serving_temp_label')         as serving_temp_label
+    from jsonb_array_elements(p_enrichments) as e
+  )
+  update public.wines w
+  set
+    drink_window_start = coalesce(u.drink_window_start, w.drink_window_start),
+    drink_window_end   = coalesce(u.drink_window_end,   w.drink_window_end),
+    peak_year          = coalesce(u.peak_year,          w.peak_year),
+    rating             = coalesce(u.rating,             w.rating),
+    rating_source      = coalesce(u.rating_source,      w.rating_source),
+    review_excerpt     = coalesce(u.review_excerpt,     w.review_excerpt),
+    serving_temp_min   = coalesce(u.serving_temp_min,   w.serving_temp_min),
+    serving_temp_max   = coalesce(u.serving_temp_max,   w.serving_temp_max),
+    serving_temp_label = coalesce(u.serving_temp_label, w.serving_temp_label),
+    last_enriched_at   = now()
+  from u
+  where w.id = u.id
+    and w.restaurant_id = p_restaurant_id;
+
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+
+comment on function public.enrich_wines_batch(uuid, jsonb) is
+  'BND-031 + BND-039: atomic batch enrichment of wines including drink window, serving temp, and rating metadata. Returns the number of rows updated.';
+
+-- Snooze alert RPC — separate from enrich_wines_batch because it has
+-- different auth gating (owner+manager only, matched via app-level
+-- requireMembership; not enforced via trigger because it's a low-stakes
+-- UX state, not security-critical).
+
+create or replace function public.snooze_drink_window_alert(
+  p_wine_id uuid,
+  p_days    int default 30
+) returns timestamptz
+language plpgsql
+security invoker
+as $$
+declare
+  v_until timestamptz;
+begin
+  v_until := now() + make_interval(days => p_days);
+
+  update public.wines
+  set alert_snoozed_until = v_until
+  where id = p_wine_id;
+
+  if not found then
+    raise exception 'wine not found' using errcode = 'P0002';
+  end if;
+
+  return v_until;
+end;
+$$;
+
+comment on function public.snooze_drink_window_alert(uuid, int) is
+  'BND-039: snooze the drink-window alert for a wine. Default 30 days. Owner+manager gating enforced at the API layer via requireMembership.';
+
+-- === 0026_pricing_intelligence_metadata.sql ===
+-- BND-040 — Pricing Intelligence (Layer A market benchmark + Layer C heuristic recs).
+--
+-- Schema additions:
+--   restaurants: house targets (default 22% pour cost, 2.7× bottle markup)
+--   wines: per-wine target overrides + Wine-Searcher retail cache + dismissal snooze
+--
+-- All new columns nullable so existing wines/restaurants render gracefully
+-- without pricing data. UI surfaces degrade — no panel rendered if retail
+-- cache is empty. Defaults seeded on restaurants.
+--
+-- This migration was applied via Supabase MCP `apply_migration` on
+-- 2026-04-26 against project qcfmwphlaekfkqwkfyth (terroir prod). The
+-- local file exists for git history + future regen reproducibility.
+--
+-- DOWN (manual):
+--   ALTER TABLE public.restaurants
+--     DROP COLUMN default_target_pour_cost_pct,
+--     DROP COLUMN default_target_markup_ratio;
+--   ALTER TABLE public.wines
+--     DROP COLUMN pricing_target_pour_cost_pct,
+--     DROP COLUMN pricing_target_markup_ratio,
+--     DROP COLUMN pricing_dismissed_until,
+--     DROP COLUMN retail_min,
+--     DROP COLUMN retail_max,
+--     DROP COLUMN retail_median,
+--     DROP COLUMN retail_retailer_count,
+--     DROP COLUMN retail_refreshed_at;
+--   DROP INDEX IF EXISTS public.wines_retail_refreshed_at_idx;
+--   DROP FUNCTION IF EXISTS public.dismiss_pricing_alert(uuid, int);
+
+-- House-level pricing targets (defaults applied to all wines unless overridden)
+ALTER TABLE public.restaurants
+  ADD COLUMN default_target_pour_cost_pct  numeric(5,2)  DEFAULT 22.00,
+  ADD COLUMN default_target_markup_ratio   numeric(4,2)  DEFAULT 2.70;
+
+ALTER TABLE public.restaurants
+  ADD CONSTRAINT restaurants_target_pour_cost_pct_range
+    CHECK (default_target_pour_cost_pct IS NULL OR (default_target_pour_cost_pct > 0 AND default_target_pour_cost_pct < 100)),
+  ADD CONSTRAINT restaurants_target_markup_ratio_range
+    CHECK (default_target_markup_ratio IS NULL OR (default_target_markup_ratio >= 1 AND default_target_markup_ratio <= 10));
+
+COMMENT ON COLUMN public.restaurants.default_target_pour_cost_pct IS
+  'BND-040: house-level target pour cost % for glass pricing. Default 22%. Range 0-100.';
+COMMENT ON COLUMN public.restaurants.default_target_markup_ratio IS
+  'BND-040: house-level target bottle markup multiplier (vs retail). Default 2.7×. Range 1-10.';
+
+-- Per-wine targets (overrides house defaults) + Wine-Searcher retail cache + snooze
+ALTER TABLE public.wines
+  ADD COLUMN pricing_target_pour_cost_pct  numeric(5,2),
+  ADD COLUMN pricing_target_markup_ratio   numeric(4,2),
+  ADD COLUMN pricing_dismissed_until       timestamptz,
+  ADD COLUMN retail_min                    numeric(10,2),
+  ADD COLUMN retail_max                    numeric(10,2),
+  ADD COLUMN retail_median                 numeric(10,2),
+  ADD COLUMN retail_retailer_count         smallint,
+  ADD COLUMN retail_refreshed_at           timestamptz;
+
+ALTER TABLE public.wines
+  ADD CONSTRAINT wines_pricing_target_pour_cost_pct_range
+    CHECK (pricing_target_pour_cost_pct IS NULL OR (pricing_target_pour_cost_pct > 0 AND pricing_target_pour_cost_pct < 100)),
+  ADD CONSTRAINT wines_pricing_target_markup_ratio_range
+    CHECK (pricing_target_markup_ratio IS NULL OR (pricing_target_markup_ratio >= 1 AND pricing_target_markup_ratio <= 10)),
+  ADD CONSTRAINT wines_retail_min_max_order
+    CHECK (retail_min IS NULL OR retail_max IS NULL OR retail_min <= retail_max),
+  ADD CONSTRAINT wines_retail_retailer_count_nonneg
+    CHECK (retail_retailer_count IS NULL OR retail_retailer_count >= 0);
+
+COMMENT ON COLUMN public.wines.pricing_target_pour_cost_pct IS
+  'BND-040: per-wine pour cost % override. NULL = inherit restaurant default. Allows allocation wines (Krug, DRC) to have custom targets.';
+COMMENT ON COLUMN public.wines.pricing_target_markup_ratio IS
+  'BND-040: per-wine markup multiplier override. NULL = inherit restaurant default OR category band.';
+COMMENT ON COLUMN public.wines.pricing_dismissed_until IS
+  'BND-040: per-wine snooze for the Insights pricing-review alert. NULL = not snoozed. 30-day default mirrors alert_snoozed_until pattern.';
+COMMENT ON COLUMN public.wines.retail_median IS
+  'BND-040: median retail price across Wine-Searcher retailers. Refreshed weekly via /api/wines/[id]/refresh-retail. NULL = no data yet (wine not enriched OR Wine-Searcher API unavailable).';
+
+-- Index on retail_refreshed_at to make "find wines that need re-fetch" queries cheap.
+CREATE INDEX IF NOT EXISTS wines_retail_refreshed_at_idx
+  ON public.wines (restaurant_id, retail_refreshed_at)
+  WHERE retail_refreshed_at IS NOT NULL;
+
+-- Snooze alert RPC for pricing dismissals (mirrors snooze_drink_window_alert).
+CREATE OR REPLACE FUNCTION public.dismiss_pricing_alert(
+  p_wine_id uuid,
+  p_days    int DEFAULT 30
+) RETURNS timestamptz
+LANGUAGE plpgsql
+SECURITY INVOKER
+AS $$
+DECLARE
+  v_until timestamptz;
+BEGIN
+  v_until := now() + make_interval(days => p_days);
+
+  UPDATE public.wines
+  SET pricing_dismissed_until = v_until
+  WHERE id = p_wine_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'wine not found' USING ERRCODE = 'P0002';
+  END IF;
+
+  RETURN v_until;
+END;
+$$;
+
+COMMENT ON FUNCTION public.dismiss_pricing_alert(uuid, int) IS
+  'BND-040: dismiss the pricing-review alert for a wine. Default 30 days. Owner+manager gating enforced at the API layer via requireMembership.';
