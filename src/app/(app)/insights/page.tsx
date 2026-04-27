@@ -8,6 +8,7 @@ import Link from "next/link";
 import { fetchDrinkWindowAlerts } from "@/lib/drink-window/alerts";
 import { BriefingAlertCard } from "./briefing-alert-card";
 import { EnrichCellarButton } from "./enrich-cellar-button";
+import { RefreshRetailButton } from "./refresh-retail-button";
 
 function formatMoney(n: number) {
   return "$" + n.toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -228,8 +229,9 @@ export default async function DashboardPage() {
             </div>
           )}
           {canEnrich && (
-            <div className="mt-md flex items-start gap-sm">
+            <div className="mt-md flex flex-col items-start gap-md md:flex-row md:items-start">
               <EnrichCellarButton />
+              <RefreshRetailButton />
             </div>
           )}
         </section>

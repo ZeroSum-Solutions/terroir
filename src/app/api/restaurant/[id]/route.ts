@@ -29,8 +29,8 @@ export async function PUT(
   return NextResponse.json({ ok: true, restaurantId: id });
 }
 
-// BND-037b: PATCH now accepts the two auto-86 columns in addition to
-// name. Each field is independently optional — partial updates work.
+// BND-037b + BND-040: PATCH accepts auto-86 columns AND pricing target
+// columns. Each field is independently optional — partial updates work.
 // Zod.strict() rejects unknown keys so the shape is defensible.
 const PatchSchema = z
   .object({
@@ -39,6 +39,10 @@ const PatchSchema = z
     // Upper bound is a sanity cap — no legitimate threshold exceeds
     // a magnum (1500 ml). The DB also has a check (>= 0).
     eightysix_ml_threshold: z.number().int().min(0).max(5000).optional(),
+    // BND-040 — pricing intelligence house targets. Mirror DB CHECK
+    // constraints (0-100 for pour cost %, 1-10 for markup ratio).
+    default_target_pour_cost_pct: z.number().gt(0).lt(100).optional(),
+    default_target_markup_ratio: z.number().gte(1).lte(10).optional(),
   })
   .strict();
 

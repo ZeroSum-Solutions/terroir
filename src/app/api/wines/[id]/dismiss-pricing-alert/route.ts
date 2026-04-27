@@ -1,0 +1,86 @@
+import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
+import { requireMembership } from "@/lib/api/auth";
+
+export const runtime = "nodejs";
+
+/**
+ * BND-040 — POST /api/wines/[id]/dismiss-pricing-alert
+ *
+ * Dismiss the pricing-review alert for a wine. Default 30 days, mirrors
+ * BND-039 snooze pattern.
+ *
+ * Auth: owner+manager only.
+ */
+export async function POST(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, restaurantId, role } = auth;
+
+  if (role !== "owner" && role !== "manager") {
+    return NextResponse.json(
+      { error: "Dismissing pricing alerts requires owner or manager role." },
+      { status: 403 },
+    );
+  }
+
+  const { id } = await ctx.params;
+  if (!id) {
+    return NextResponse.json({ error: "wine id required" }, { status: 400 });
+  }
+
+  // Optional body: { days: number }. Default 30, max 365.
+  let days = 30;
+  try {
+    const body = await req.json().catch(() => ({}));
+    if (typeof body?.days === "number" && Number.isFinite(body.days)) {
+      days = Math.max(1, Math.min(365, Math.round(body.days)));
+    }
+  } catch {
+    // No body / non-JSON → default. Not an error.
+  }
+
+  // Tenant-scope check (defense-in-depth alongside RLS).
+  const { data: wine, error: fetchErr } = await supabase
+    .from("wines")
+    .select("id")
+    .eq("id", id)
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+
+  if (fetchErr) {
+    Sentry.captureException(fetchErr, {
+      tags: { surface: "wines-dismiss-pricing", phase: "wine-fetch" },
+      extra: { wineId: id, restaurantId },
+    });
+    return NextResponse.json({ error: "Lookup failed." }, { status: 500 });
+  }
+  if (!wine) {
+    return NextResponse.json({ error: "Wine not found." }, { status: 404 });
+  }
+
+  const { data: until, error: rpcError } = await supabase.rpc(
+    "dismiss_pricing_alert",
+    { p_wine_id: id, p_days: days },
+  );
+
+  if (rpcError) {
+    Sentry.captureException(rpcError, {
+      tags: { surface: "wines-dismiss-pricing", phase: "rpc" },
+      extra: { wineId: id, restaurantId, days },
+    });
+    return NextResponse.json(
+      { error: "Failed to dismiss alert." },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({
+    wineId: id,
+    dismissedUntil: until,
+    days,
+  });
+}

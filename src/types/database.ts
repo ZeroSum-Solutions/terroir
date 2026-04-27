@@ -434,6 +434,8 @@ export type Database = {
         Row: {
           auto_eightysix_from_inventory: boolean
           created_at: string
+          default_target_markup_ratio: number | null
+          default_target_pour_cost_pct: number | null
           eightysix_ml_threshold: number
           id: string
           name: string
@@ -442,6 +444,8 @@ export type Database = {
         Insert: {
           auto_eightysix_from_inventory?: boolean
           created_at?: string
+          default_target_markup_ratio?: number | null
+          default_target_pour_cost_pct?: number | null
           eightysix_ml_threshold?: number
           id?: string
           name?: string
@@ -450,6 +454,8 @@ export type Database = {
         Update: {
           auto_eightysix_from_inventory?: boolean
           created_at?: string
+          default_target_markup_ratio?: number | null
+          default_target_pour_cost_pct?: number | null
           eightysix_ml_threshold?: number
           id?: string
           name?: string
@@ -640,11 +646,19 @@ export type Database = {
           lwin_id: string | null
           name: string
           peak_year: number | null
+          pricing_dismissed_until: string | null
+          pricing_target_markup_ratio: number | null
+          pricing_target_pour_cost_pct: number | null
           producer: string
           rating: number | null
           rating_source: string | null
           region: string | null
           restaurant_id: string
+          retail_max: number | null
+          retail_median: number | null
+          retail_min: number | null
+          retail_refreshed_at: string | null
+          retail_retailer_count: number | null
           review_excerpt: string | null
           serving_temp_label: string | null
           serving_temp_max: number | null
@@ -668,11 +682,19 @@ export type Database = {
           lwin_id?: string | null
           name: string
           peak_year?: number | null
+          pricing_dismissed_until?: string | null
+          pricing_target_markup_ratio?: number | null
+          pricing_target_pour_cost_pct?: number | null
           producer: string
           rating?: number | null
           rating_source?: string | null
           region?: string | null
           restaurant_id: string
+          retail_max?: number | null
+          retail_median?: number | null
+          retail_min?: number | null
+          retail_refreshed_at?: string | null
+          retail_retailer_count?: number | null
           review_excerpt?: string | null
           serving_temp_label?: string | null
           serving_temp_max?: number | null
@@ -696,11 +718,19 @@ export type Database = {
           lwin_id?: string | null
           name?: string
           peak_year?: number | null
+          pricing_dismissed_until?: string | null
+          pricing_target_markup_ratio?: number | null
+          pricing_target_pour_cost_pct?: number | null
           producer?: string
           rating?: number | null
           rating_source?: string | null
           region?: string | null
           restaurant_id?: string
+          retail_max?: number | null
+          retail_median?: number | null
+          retail_min?: number | null
+          retail_refreshed_at?: string | null
+          retail_retailer_count?: number | null
           review_excerpt?: string | null
           serving_temp_label?: string | null
           serving_temp_max?: number | null
@@ -726,6 +756,10 @@ export type Database = {
     }
     Functions: {
       cleanup_scan_idempotency: { Args: never; Returns: undefined }
+      dismiss_pricing_alert: {
+        Args: { p_days?: number; p_wine_id: string }
+        Returns: string
+      }
       enrich_wines_batch: {
         Args: { p_enrichments: Json; p_restaurant_id: string }
         Returns: number
@@ -1022,16 +1056,8 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      added_via: [
-        "manual",
-        "invoice_scan",
-        "bottle_scan",
-      ],
-      membership_role: [
-        "owner",
-        "manager",
-        "staff",
-      ],
+      added_via: ["manual", "invoice_scan", "bottle_scan"],
+      membership_role: ["owner", "manager", "staff"],
     },
   },
 } as const
