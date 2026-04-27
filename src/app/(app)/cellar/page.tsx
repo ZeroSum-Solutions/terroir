@@ -262,6 +262,8 @@ export default async function CellarPage() {
       restaurantId={restaurantId}
       autoEightysixEnabled={restaurantRow?.auto_eightysix_from_inventory ?? false}
       autoEightysixThresholdMl={restaurantRow?.eightysix_ml_threshold ?? 148}
+      defaultTargetPourCostPct={restaurantRow?.default_target_pour_cost_pct ?? null}
+      defaultTargetMarkupRatio={restaurantRow?.default_target_markup_ratio ?? null}
       role={userRole}
     />
   );

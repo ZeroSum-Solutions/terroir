@@ -11,6 +11,7 @@ import { ML_PER_OZ } from "@/lib/units";
 import { cn } from "@/lib/utils";
 import { NoteModal } from "./note-modal";
 import { PourPickerModal } from "./pour-picker-modal";
+import { PricingTargetOverride } from "./pricing-target-override";
 import { DrinkWindowTimeline } from "@/components/drink-window-timeline";
 import { PriceBand } from "@/components/price-band";
 import {
@@ -264,7 +265,7 @@ export function WineDetailDrawer({
                 only. Verdicts only appear in outlier-context surfaces
                 (Insights pricing review). */}
             {row.retail_median != null && (
-              <PricingSection row={row} />
+              <PricingSection row={row} canManage={canManage} />
             )}
 
             {/* BND-039 — Drink window panel. Renders only when we have
@@ -471,7 +472,13 @@ function DrinkWindowSection({ row }: { row: CellarWineRow }) {
  * review). Numbers + targets only — verdicts live in outlier contexts
  * where flagging is the whole point.
  */
-function PricingSection({ row }: { row: CellarWineRow }) {
+function PricingSection({
+  row,
+  canManage,
+}: {
+  row: CellarWineRow;
+  canManage: boolean;
+}) {
   const targetMarkup = resolveMarkupTarget(
     row.pricing_target_markup_ratio,
     row.restaurant_default_target_markup_ratio,
@@ -623,6 +630,21 @@ function PricingSection({ row }: { row: CellarWineRow }) {
             </span>
           )}
         </div>
+      )}
+
+      {/* BND-040 follow-up — per-wine override. Renders for any wine
+          with retail data; the component itself handles the collapsed/
+          expanded state. Owner+manager gating is enforced at the API
+          level, but the drawer wraps in canManage so staff don't see
+          the affordance. */}
+      {canManage && (
+        <PricingTargetOverride
+          wineId={row.wine_id}
+          perWinePourCostPct={row.pricing_target_pour_cost_pct}
+          perWineMarkupRatio={row.pricing_target_markup_ratio}
+          housePourCostPct={targetPourCost}
+          houseMarkupRatio={targetMarkup}
+        />
       )}
     </section>
   );

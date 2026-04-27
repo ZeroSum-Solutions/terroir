@@ -41,6 +41,8 @@ export function CellarShell({
   restaurantId,
   autoEightysixEnabled,
   autoEightysixThresholdMl,
+  defaultTargetPourCostPct,
+  defaultTargetMarkupRatio,
   role,
 }: {
   rows: CellarWineRow[];
@@ -63,6 +65,11 @@ export function CellarShell({
   restaurantId: string;
   autoEightysixEnabled: boolean;
   autoEightysixThresholdMl: number;
+  // BND-040 follow-up — house pricing targets piped into the Cellar
+  // settings modal. Null means restaurant has never set them; the
+  // panel falls back to built-in defaults (22% pour cost / 2.7× markup).
+  defaultTargetPourCostPct: number | null;
+  defaultTargetMarkupRatio: number | null;
   role: "owner" | "manager" | "staff";
 }) {
   const router = useRouter();
@@ -364,6 +371,8 @@ export function CellarShell({
         <AutoEightysixModal
           open={settingsOpen}
           restaurantId={restaurantId}
+          defaultTargetPourCostPct={defaultTargetPourCostPct}
+          defaultTargetMarkupRatio={defaultTargetMarkupRatio}
           enabled={autoEightysixEnabled}
           thresholdMl={autoEightysixThresholdMl}
           onClose={() => setSettingsOpen(false)}
