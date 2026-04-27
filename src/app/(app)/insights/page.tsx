@@ -11,6 +11,7 @@ import { BriefingAlertCard } from "./briefing-alert-card";
 import { EnrichCellarButton } from "./enrich-cellar-button";
 import { RefreshRetailButton } from "./refresh-retail-button";
 import { PricingReviewCard } from "./pricing-review-card";
+import { SnoozedAlertsCard, type SnoozedRow } from "./snoozed-alerts-card";
 
 function formatMoney(n: number) {
   return "$" + n.toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -86,9 +87,10 @@ export default async function DashboardPage() {
   // Dashboard aggregates below; alerts render above the metric cards.
   // Pricing alerts gracefully return [] when no retail data is enriched
   // yet (operator hasn't clicked the Refresh retail button).
-  const [drinkWindowAlerts, pricingAlerts] = await Promise.all([
+  const [drinkWindowAlerts, pricingAlerts, snoozedRows] = await Promise.all([
     fetchDrinkWindowAlerts(supabase, rid),
     fetchPricingAlerts(supabase, rid).catch(() => []),
+    fetchSnoozedAlerts(supabase, rid).catch(() => [] as SnoozedRow[]),
   ]);
   const firstName = parseFirstName(user.email ?? "") || "there";
   const canEnrich = userRole === "owner" || userRole === "manager";
@@ -261,6 +263,21 @@ export default async function DashboardPage() {
             </span>
           </div>
           <PricingReviewCard alerts={pricingAlerts} firstName={firstName} />
+        </section>
+      )}
+
+      {/* BND-040 follow-up — snoozed-alerts viewer. Audit-finding M2.
+          Renders only when there are active snoozes. Collapsed-by-default
+          card lets operators unsnooze early. */}
+      {snoozedRows.length > 0 && (
+        <section className="mb-lg md:mb-xl" aria-labelledby="snoozed-heading">
+          <h2
+            id="snoozed-heading"
+            className="sr-only"
+          >
+            Snoozed alerts
+          </h2>
+          <SnoozedAlertsCard snoozed={snoozedRows} />
         </section>
       )}
 
@@ -470,6 +487,71 @@ export default async function DashboardPage() {
 // BND-039 — drink-window alerts pipeline lives in
 // @/lib/drink-window/alerts (shared with /api/insights/drink-window-alerts).
 // Code-quality-review finding 5: a local copy here was bound to drift.
+
+/**
+ * BND-040 follow-up — server-side fetch for currently-snoozed wines.
+ * Mirrors the API route at /api/insights/snoozed but inline so the
+ * server component doesn't have to do an extra round-trip.
+ *
+ * "Active snooze" = column non-null AND in the future. Past
+ * timestamps mean the snooze already expired; the alert reappears
+ * naturally without needing a list entry.
+ */
+async function fetchSnoozedAlerts(
+  supabase: NonNullable<Awaited<ReturnType<typeof getAuthContext>>>["supabase"],
+  restaurantId: string,
+): Promise<SnoozedRow[]> {
+  const nowIso = new Date().toISOString();
+  const { data: wines } = await supabase
+    .from("wines")
+    .select(
+      "id, name, producer, vintage, alert_snoozed_until, pricing_dismissed_until",
+    )
+    .eq("restaurant_id", restaurantId)
+    .or(
+      `alert_snoozed_until.gt.${nowIso},pricing_dismissed_until.gt.${nowIso}`,
+    );
+
+  const rows: SnoozedRow[] = (wines ?? [])
+    .map((w) => {
+      const dw = w.alert_snoozed_until;
+      const pr = w.pricing_dismissed_until;
+      const dwActive = dw && new Date(dw).getTime() > Date.now();
+      const prActive = pr && new Date(pr).getTime() > Date.now();
+      if (!dwActive && !prActive) return null;
+      return {
+        wine_id: w.id,
+        name: w.name,
+        producer: w.producer,
+        vintage: w.vintage,
+        drinkWindowSnoozedUntil: dwActive ? dw : null,
+        pricingDismissedUntil: prActive ? pr : null,
+      };
+    })
+    .filter((r): r is SnoozedRow => r !== null);
+
+  rows.sort((a, b) => {
+    const aSoon = Math.min(
+      a.drinkWindowSnoozedUntil
+        ? new Date(a.drinkWindowSnoozedUntil).getTime()
+        : Infinity,
+      a.pricingDismissedUntil
+        ? new Date(a.pricingDismissedUntil).getTime()
+        : Infinity,
+    );
+    const bSoon = Math.min(
+      b.drinkWindowSnoozedUntil
+        ? new Date(b.drinkWindowSnoozedUntil).getTime()
+        : Infinity,
+      b.pricingDismissedUntil
+        ? new Date(b.pricingDismissedUntil).getTime()
+        : Infinity,
+    );
+    if (aSoon !== bSoon) return aSoon - bSoon;
+    return a.producer.localeCompare(b.producer);
+  });
+  return rows;
+}
 
 function parseFirstName(email: string): string {
   // Best-effort first name from email local-part. "devin@example.com" → "Devin"

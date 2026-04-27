@@ -33,11 +33,18 @@ export async function POST(
   }
 
   // Optional body: { days: number }. Default 30, max 365.
+  // Audit-finding M2: days=0 is the unsnooze signal — clears
+  // pricing_dismissed_until so the alert reappears immediately.
   let days = 30;
+  let unsnooze = false;
   try {
     const body = await req.json().catch(() => ({}));
     if (typeof body?.days === "number" && Number.isFinite(body.days)) {
-      days = Math.max(1, Math.min(365, Math.round(body.days)));
+      if (body.days === 0) {
+        unsnooze = true;
+      } else {
+        days = Math.max(1, Math.min(365, Math.round(body.days)));
+      }
     }
   } catch {
     // No body / non-JSON → default. Not an error.
@@ -60,6 +67,26 @@ export async function POST(
   }
   if (!wine) {
     return NextResponse.json({ error: "Wine not found." }, { status: 404 });
+  }
+
+  // Unsnooze path — direct UPDATE to NULL.
+  if (unsnooze) {
+    const { error: clearErr } = await supabase
+      .from("wines")
+      .update({ pricing_dismissed_until: null })
+      .eq("id", id)
+      .eq("restaurant_id", restaurantId);
+    if (clearErr) {
+      Sentry.captureException(clearErr, {
+        tags: { surface: "wines-dismiss-pricing", phase: "clear" },
+        extra: { wineId: id, restaurantId },
+      });
+      return NextResponse.json(
+        { error: "Failed to clear dismissal." },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json({ wineId: id, dismissedUntil: null, days: 0 });
   }
 
   const { data: until, error: rpcError } = await supabase.rpc(

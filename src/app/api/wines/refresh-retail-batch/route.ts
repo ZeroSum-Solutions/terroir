@@ -35,6 +35,23 @@ export async function POST() {
     );
   }
 
+  // Audit-finding M1: surface configuration status so the
+  // RefreshRetailButton can stop reporting "0 wines refreshed" silently
+  // when the cause is just a missing env var. Owner-only message; staff
+  // can't even reach this endpoint via role guard above.
+  const apiKeyConfigured = !!process.env.WINE_SEARCHER_API_KEY;
+  if (!apiKeyConfigured) {
+    return NextResponse.json({
+      total: 0,
+      refreshed: 0,
+      skipped: 0,
+      hasMore: false,
+      apiKeyConfigured: false,
+      message:
+        "Wine-Searcher API key is not configured. Set WINE_SEARCHER_API_KEY in Railway environment variables to enable retail-price enrichment.",
+    });
+  }
+
   // Find wines that need refresh: have LWIN, no retail data OR data older
   // than 7 days. Bound by REFRESH_BATCH_LIMIT to keep request thread snappy
   // and respect Wine-Searcher quota.
@@ -67,6 +84,7 @@ export async function POST() {
       refreshed: 0,
       skipped: 0,
       hasMore: false,
+      apiKeyConfigured: true,
     });
   }
 
@@ -159,5 +177,6 @@ export async function POST() {
     skipped,
     // Client should re-invoke until hasMore=false to drain stale wines.
     hasMore: eligible.length >= REFRESH_BATCH_LIMIT,
+    apiKeyConfigured: true,
   });
 }

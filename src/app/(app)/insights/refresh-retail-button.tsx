@@ -31,6 +31,8 @@ type RefreshResponse = {
   refreshed: number;
   skipped: number;
   hasMore: boolean;
+  apiKeyConfigured?: boolean;
+  message?: string;
 };
 
 const MAX_LOOP_ITERATIONS = 20; // safety cap — 20 × 50 = 1000 wines max
@@ -64,6 +66,18 @@ export function RefreshRetailButton() {
           throw new Error(payload?.error ?? `Refresh failed (${res.status}).`);
         }
         const body = (await res.json()) as RefreshResponse;
+        // Audit-finding M1: when the API key isn't configured, the
+        // route returns a structured signal so we can show a real
+        // "configure WINE_SEARCHER_API_KEY" message instead of a
+        // misleading "0 wines refreshed".
+        if (body.apiKeyConfigured === false) {
+          setErrorMsg(
+            body.message ??
+              "Wine-Searcher API key not configured. Contact the admin.",
+          );
+          setProgress(null);
+          return;
+        }
         totalRefreshed += body.refreshed;
         totalSkipped += body.skipped;
         setProgress({
