@@ -47,3 +47,8 @@ next-env.d.ts
 
 # LWIN data (large CSV, not committed)
 scripts/lwin.csv
+
+# code-council per-project enablement + cross-session state
+# (per-project plugin opt-in; runtime state mutates between bundles)
+/.claude/settings.json
+/.council/
