@@ -61,12 +61,13 @@ export function PricingReviewCard({
     }
   };
 
-  const tightCount = alerts.filter(
-    (a) => a.bottleStatus === "tight" || a.glassStatus === "tight",
-  ).length;
-  const outlierCount = alerts.filter(
-    (a) => a.bottleStatus === "outlier" || a.glassStatus === "outlier",
-  ).length;
+  // Reviewer-find C2: don't derive chip counts from the already-outlier-
+  // filtered alerts list — the semantics break (every entry has at least
+  // one outlier status, so "tight" means "outlier-on-one + tight-on-other"
+  // which isn't what the chip implies). Just report total + bottle/glass
+  // split, which the alert objects DO carry honestly.
+  const bottleCount = alerts.filter((a) => a.bottleStatus === "outlier").length;
+  const glassCount = alerts.filter((a) => a.glassStatus === "outlier").length;
 
   return (
     <article
@@ -81,18 +82,16 @@ export function PricingReviewCard({
       </h3>
       <p className="mt-xs text-[12px] text-ink-muted">
         Worth a review when ready
-        {outlierCount > 0 && (
+        {bottleCount > 0 && (
           <>
             {" "}
-            · <span className="font-mono">{outlierCount}</span> outlier
-            {outlierCount === 1 ? "" : "s"}
+            · <span className="font-mono">{bottleCount}</span> on bottle
           </>
         )}
-        {tightCount > 0 && (
+        {glassCount > 0 && (
           <>
             {" "}
-            · <span className="font-mono">{tightCount}</span> tight margin
-            {tightCount === 1 ? "" : "s"}
+            · <span className="font-mono">{glassCount}</span> on glass
           </>
         )}
       </p>
@@ -151,7 +150,8 @@ function PricingReviewRow({
     );
   }
   if (alert.bottleStatus === "premium" || alert.glassStatus === "premium") {
-    reasons.push("above target");
+    // Reviewer-find Minor 9: use the helper for label consistency.
+    reasons.push(formatPricingStatusLabel("premium").toLowerCase());
   }
 
   const ratioDisplay = formatRatioDisplay(alert);

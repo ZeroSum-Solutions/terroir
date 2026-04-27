@@ -112,9 +112,13 @@ describe("getGlassStatus", () => {
   it("premium when actual < target by 10-20% (better pour cost)", () => {
     expect(getGlassStatus(19, target)).toBe("premium"); // 13.6% under
   });
-  it("outlier when deviation >20%", () => {
+  it("outlier when deviation >20% in either direction", () => {
     expect(getGlassStatus(28, target)).toBe("outlier"); // 27% over (very tight margin)
-    expect(getGlassStatus(15, target)).toBe("premium"); // 31.8% under (much better than target — premium)
+    // Reviewer-find C1: 31.8% under target (much better margin than wanted)
+    // SHOULD flag for review — could be missed opportunity OR wrong-wine
+    // cost basis from a bad LWIN match. Don't silently swallow extreme
+    // favorable deviations.
+    expect(getGlassStatus(15, target)).toBe("outlier"); // 31.8% under
   });
 });
 

@@ -64,16 +64,11 @@ const RULES: readonly CategoryRule[] = [
   },
 
   // ── Burgundy (allocation-driven, lower markup) ──
-  {
-    region: "burgundy",
-    band: {
-      markupLow: 2.0,
-      markupHigh: 2.8,
-      pourCostLow: 22,
-      pourCostHigh: 28,
-      label: "Burgundy",
-    },
-  },
+  // Reviewer-find Minor 11 — more-specific (varietal + region) rules
+  // MUST come before the generic region rule, otherwise they're dead.
+  // Same band values today, but separating the labels lets the drawer
+  // surface "Burgundy red / white" precision and lets future overrides
+  // diverge without re-ordering.
   {
     varietal: "pinot noir",
     region: "burgundy",
@@ -94,6 +89,16 @@ const RULES: readonly CategoryRule[] = [
       pourCostLow: 22,
       pourCostHigh: 28,
       label: "Burgundy white",
+    },
+  },
+  {
+    region: "burgundy",
+    band: {
+      markupLow: 2.0,
+      markupHigh: 2.8,
+      pourCostLow: 22,
+      pourCostHigh: 28,
+      label: "Burgundy",
     },
   },
 

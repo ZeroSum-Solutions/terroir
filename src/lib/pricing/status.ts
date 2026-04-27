@@ -176,8 +176,12 @@ export function getGlassStatus(
   if (actualPourCostPct > targetPourCostPct) {
     return deviationPct > OUTLIER_DEVIATION_PCT ? "outlier" : "tight";
   }
-  // actualPourCostPct < targetPourCostPct — better margin than target
-  return deviationPct > OUTLIER_DEVIATION_PCT ? "premium" : "premium";
+  // actualPourCostPct < targetPourCostPct — better margin than target.
+  // Reviewer-find C1: extreme favorable outliers also flag for review —
+  // could be missed pricing opportunity OR wrong-wine cost basis from a
+  // bad LWIN match. Prior code returned "premium" in both branches,
+  // swallowing the signal.
+  return deviationPct > OUTLIER_DEVIATION_PCT ? "outlier" : "premium";
 }
 
 /**

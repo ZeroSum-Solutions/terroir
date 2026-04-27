@@ -13,9 +13,21 @@ describe("getCategoryBand", () => {
     expect(band?.markupHigh).toBe(2.5);
   });
 
-  it("returns Burgundy band (region) over generic Pinot Noir varietal", () => {
-    // Burgundy region rule comes before generic pinot noir in lookup order
+  it("returns Burgundy red band for Pinot Noir + Burgundy (more-specific match wins)", () => {
+    // Reviewer-find Minor 11: varietal + region rules must come BEFORE
+    // the generic region rule so they're reachable. "Burgundy red" is
+    // the precise label when both signals match.
     const band = getCategoryBand({ varietal: "Pinot Noir", region: "Burgundy" });
+    expect(band?.label).toBe("Burgundy red");
+  });
+
+  it("returns Burgundy white band for Chardonnay + Burgundy", () => {
+    const band = getCategoryBand({ varietal: "Chardonnay", region: "Burgundy" });
+    expect(band?.label).toBe("Burgundy white");
+  });
+
+  it("returns generic Burgundy band when only region matches (varietal unknown)", () => {
+    const band = getCategoryBand({ varietal: null, region: "Burgundy" });
     expect(band?.label).toBe("Burgundy");
   });
 
@@ -62,8 +74,10 @@ describe("getCategoryBand", () => {
   });
 
   it("handles case-insensitive matching", () => {
+    // Pinot Noir + Burgundy now resolves to "Burgundy red" (more-specific
+    // match wins after Minor-11 reorder).
     const band = getCategoryBand({ varietal: "PINOT NOIR", region: "BURGUNDY" });
-    expect(band?.label).toBe("Burgundy");
+    expect(band?.label).toBe("Burgundy red");
   });
 
   it("returns null on missing inputs", () => {

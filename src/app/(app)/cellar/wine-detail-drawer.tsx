@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { X, Wine, PowerOff, Edit3, ChevronDown } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { ML_PER_OZ } from "@/lib/units";
+// Re-imported for clarity — used by both DrinkWindowSection (BND-039) and
+// PricingSection (BND-040). Reviewer-find I4: don't hand-code 0.0338 next
+// to a file that already imports the constant.
 import { cn } from "@/lib/utils";
 import { NoteModal } from "./note-modal";
 import { PourPickerModal } from "./pour-picker-modal";
@@ -517,7 +520,7 @@ function PricingSection({ row }: { row: CellarWineRow }) {
         <PricingCard
           label={
             row.glass_pour_ml
-              ? `Glass · ${Math.round(row.glass_pour_ml * 0.0338)} oz`
+              ? `Glass · ${Math.round(row.glass_pour_ml / ML_PER_OZ)} oz`
               : "Glass"
           }
           price={row.current_glass_price}
@@ -526,6 +529,26 @@ function PricingSection({ row }: { row: CellarWineRow }) {
           status={glassStatus}
         />
       </div>
+
+      {/* Multi-list disclosure (reviewer-find C3) — let the sommelier
+          know which list these prices came from when the wine appears
+          on more than one. Otherwise the drawer + alert can disagree
+          silently and erode trust. */}
+      {row.current_list_name && (
+        <p className="mt-xs text-[11px] text-ink-tertiary">
+          From{" "}
+          <span className="font-medium text-ink-muted">
+            {row.current_list_name}
+          </span>
+          {row.current_other_list_count > 0 && (
+            <span>
+              {" "}
+              · also on {row.current_other_list_count} other list
+              {row.current_other_list_count === 1 ? "" : "s"}
+            </span>
+          )}
+        </p>
+      )}
 
       {/* Price band visual */}
       {row.current_bottle_price != null && (

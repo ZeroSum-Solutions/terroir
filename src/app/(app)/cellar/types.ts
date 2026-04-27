@@ -66,6 +66,12 @@ export type CellarWineRow = {
   // on any list.
   current_bottle_price: number | null;
   current_glass_price: number | null;
+  // Most-recently-edited wine_list this price came from (multi-list
+  // disclosure — reviewer-find C3). Null when wine isn't on any list.
+  current_list_name: string | null;
+  // Count of OTHER lists this wine appears on. Drawer shows "+ N other
+  // lists" when > 0 so the sommelier knows pricing may differ elsewhere.
+  current_other_list_count: number;
   // Most-recent invoice cost — drives pour-cost % calculation.
   current_unit_cost: number | null;
   // Restaurant-level defaults (passed through from the page so the

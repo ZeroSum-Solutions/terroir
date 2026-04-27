@@ -82,23 +82,35 @@ export default async function CellarPage() {
   // BND-040 — pull current bottle/glass prices from wine_list_items so
   // the drawer Pricing section can show actual pricing alongside retail
   // benchmark. A wine on multiple lists may have different prices; we
-  // pick the most-recent (highest `id` timestamp via order on created).
+  // pick the most-recently-edited list AND surface its name so the
+  // sommelier knows which list's price they're seeing (reviewer-find C3:
+  // multi-list collision was previously silent, eroding trust when the
+  // alert and drawer disagreed). Also count distinct lists so the UI
+  // can show "+ N other lists" when relevant.
   const { data: listItemRows } = await supabase
     .from("wine_list_items")
     .select(
-      "wine_id, bottle_price, glass_price, glass_pour_ml, created_at, wine_list_sections!inner(wine_lists!inner(restaurant_id))",
+      "wine_id, bottle_price, glass_price, glass_pour_ml, updated_at, wine_list_sections!inner(wine_lists!inner(id, name, restaurant_id))",
     )
-    .order("created_at", { ascending: false });
+    .order("updated_at", { ascending: false });
   type ListItemRow = {
     wine_id: string;
     bottle_price: number | null;
     glass_price: number | null;
     glass_pour_ml: number | null;
-    wine_list_sections: { wine_lists: { restaurant_id: string } | { restaurant_id: string }[] } | { wine_lists: { restaurant_id: string } | { restaurant_id: string }[] }[];
+    wine_list_sections:
+      | { wine_lists: { id: string; name: string; restaurant_id: string } | { id: string; name: string; restaurant_id: string }[] }
+      | { wine_lists: { id: string; name: string; restaurant_id: string } | { id: string; name: string; restaurant_id: string }[] }[];
   };
   const priceByWine = new Map<
     string,
-    { bottle: number | null; glass: number | null; pourMl: number | null }
+    {
+      bottle: number | null;
+      glass: number | null;
+      pourMl: number | null;
+      listName: string;
+      otherListCount: number;
+    }
   >();
   for (const item of ((listItemRows ?? []) as unknown as ListItemRow[])) {
     const sections = Array.isArray(item.wine_list_sections)
@@ -109,12 +121,17 @@ export default async function CellarPage() {
       ? sections.wine_lists[0]
       : sections.wine_lists;
     if (lists?.restaurant_id !== restaurantId) continue;
-    if (!priceByWine.has(item.wine_id)) {
+    const existing = priceByWine.get(item.wine_id);
+    if (!existing) {
       priceByWine.set(item.wine_id, {
         bottle: item.bottle_price,
         glass: item.glass_price,
         pourMl: item.glass_pour_ml,
+        listName: lists.name,
+        otherListCount: 0,
       });
+    } else if (existing.listName !== lists.name) {
+      existing.otherListCount += 1;
     }
   }
 
@@ -190,6 +207,8 @@ export default async function CellarPage() {
       pricing_dismissed_until: w.pricing_dismissed_until,
       current_bottle_price: price?.bottle ?? null,
       current_glass_price: price?.glass ?? null,
+      current_list_name: price?.listName ?? null,
+      current_other_list_count: price?.otherListCount ?? 0,
       current_unit_cost: inv.latestCost,
       restaurant_default_target_pour_cost_pct:
         restaurantRow?.default_target_pour_cost_pct ?? null,

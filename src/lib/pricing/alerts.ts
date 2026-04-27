@@ -207,12 +207,28 @@ export async function fetchPricingAlerts(
     });
   }
 
-  // Sort: outlier-on-both first, then bottle outliers, then glass outliers,
-  // then by deviation magnitude (largest first).
+  // Sort: outlier-on-both first, then by combined deviation magnitude
+  // (largest first), then alphabetically by producer for stable order.
+  // Reviewer-find Minor 10 — comment + code now agree.
+  const deviationMagnitude = (a: PricingAlertRow): number => {
+    let total = 0;
+    if (a.markupRatio != null && a.targetMarkupRatio > 0) {
+      total += Math.abs((a.markupRatio - a.targetMarkupRatio) / a.targetMarkupRatio);
+    }
+    if (a.pourCostPct != null && a.targetPourCostPct > 0) {
+      total += Math.abs(
+        (a.pourCostPct - a.targetPourCostPct) / a.targetPourCostPct,
+      );
+    }
+    return total;
+  };
   alerts.sort((a, b) => {
     const aBoth = a.bottleStatus === "outlier" && a.glassStatus === "outlier";
     const bBoth = b.bottleStatus === "outlier" && b.glassStatus === "outlier";
     if (aBoth !== bBoth) return aBoth ? -1 : 1;
+    const aMag = deviationMagnitude(a);
+    const bMag = deviationMagnitude(b);
+    if (aMag !== bMag) return bMag - aMag; // largest first
     return a.producer.localeCompare(b.producer);
   });
 
