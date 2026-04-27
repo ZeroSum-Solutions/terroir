@@ -54,14 +54,15 @@ export default async function CellarPage() {
     supabase
       .from("wines")
       .select(
-        "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt",
+        "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until",
       )
       .eq("restaurant_id", restaurantId)
       .order("name", { ascending: true }),
     supabase
       .from("inventory_items")
-      .select("wine_id, bin_location, quantity")
-      .eq("restaurant_id", restaurantId),
+      .select("wine_id, bin_location, quantity, unit_cost, added_at")
+      .eq("restaurant_id", restaurantId)
+      .order("added_at", { ascending: false }),
     supabase.rpc("list_open_bottle_items", { p_restaurant_id: restaurantId }),
     supabase
       .from("cellar_config")
@@ -71,23 +72,73 @@ export default async function CellarPage() {
       .maybeSingle(),
     supabase
       .from("restaurants")
-      .select("auto_eightysix_from_inventory, eightysix_ml_threshold")
+      .select(
+        "auto_eightysix_from_inventory, eightysix_ml_threshold, default_target_pour_cost_pct, default_target_markup_ratio",
+      )
       .eq("id", restaurantId)
       .single(),
   ]);
 
+  // BND-040 — pull current bottle/glass prices from wine_list_items so
+  // the drawer Pricing section can show actual pricing alongside retail
+  // benchmark. A wine on multiple lists may have different prices; we
+  // pick the most-recent (highest `id` timestamp via order on created).
+  const { data: listItemRows } = await supabase
+    .from("wine_list_items")
+    .select(
+      "wine_id, bottle_price, glass_price, glass_pour_ml, created_at, wine_list_sections!inner(wine_lists!inner(restaurant_id))",
+    )
+    .order("created_at", { ascending: false });
+  type ListItemRow = {
+    wine_id: string;
+    bottle_price: number | null;
+    glass_price: number | null;
+    glass_pour_ml: number | null;
+    wine_list_sections: { wine_lists: { restaurant_id: string } | { restaurant_id: string }[] } | { wine_lists: { restaurant_id: string } | { restaurant_id: string }[] }[];
+  };
+  const priceByWine = new Map<
+    string,
+    { bottle: number | null; glass: number | null; pourMl: number | null }
+  >();
+  for (const item of ((listItemRows ?? []) as unknown as ListItemRow[])) {
+    const sections = Array.isArray(item.wine_list_sections)
+      ? item.wine_list_sections[0]
+      : item.wine_list_sections;
+    if (!sections) continue;
+    const lists = Array.isArray(sections.wine_lists)
+      ? sections.wine_lists[0]
+      : sections.wine_lists;
+    if (lists?.restaurant_id !== restaurantId) continue;
+    if (!priceByWine.has(item.wine_id)) {
+      priceByWine.set(item.wine_id, {
+        bottle: item.bottle_price,
+        glass: item.glass_price,
+        pourMl: item.glass_pour_ml,
+      });
+    }
+  }
+
   // Aggregate inventory_items per wine: sum sealed count, pick the
-  // first bin_location encountered (most wines live in one bin; multi-
-  // bin layouts pick the first by db sort which is deterministic).
+  // first bin_location encountered, capture most-recent unit_cost (the
+  // inventoryRows query is now ordered by added_at desc, so the first
+  // item per wine_id is the most recent).
   const inventoryByWine = new Map<
     string,
-    { sealed: number; bin: string | null }
+    { sealed: number; bin: string | null; latestCost: number | null }
   >();
   for (const item of inventoryRows ?? []) {
     if (!item.wine_id) continue;
-    const prev = inventoryByWine.get(item.wine_id) ?? { sealed: 0, bin: null };
+    const prev =
+      inventoryByWine.get(item.wine_id) ?? {
+        sealed: 0,
+        bin: null,
+        latestCost: null,
+      };
     prev.sealed += item.quantity ?? 0;
     if (!prev.bin && item.bin_location) prev.bin = item.bin_location;
+    if (prev.latestCost == null && item.unit_cost != null) {
+      prev.latestCost = item.unit_cost;
+    }
     inventoryByWine.set(item.wine_id, prev);
   }
 
@@ -100,8 +151,10 @@ export default async function CellarPage() {
   // Build the unified row list. The wines table is canonical — every
   // wine in the cellar shows up, with optional stock data layered on.
   const rows: CellarWineRow[] = (wineRows ?? []).map((w) => {
-    const inv = inventoryByWine.get(w.id) ?? { sealed: 0, bin: null };
+    const inv =
+      inventoryByWine.get(w.id) ?? { sealed: 0, bin: null, latestCost: null };
     const ob = openByWine.get(w.id);
+    const price = priceByWine.get(w.id);
     return {
       wine_id: w.id,
       name: w.name,
@@ -114,7 +167,7 @@ export default async function CellarPage() {
       sealed_count: inv.sealed,
       bin_location: inv.bin,
       wine_list_item_id: ob?.wine_list_item_id ?? null,
-      glass_pour_ml: ob?.glass_pour_ml ?? null,
+      glass_pour_ml: ob?.glass_pour_ml ?? price?.pourMl ?? null,
       pour_size_mode: ob?.pour_size_mode ?? null,
       size_ml: ob?.size_ml ?? null,
       open_remaining_ml: ob?.open_remaining_ml ?? null,
@@ -126,6 +179,22 @@ export default async function CellarPage() {
       rating: w.rating,
       rating_source: w.rating_source,
       review_excerpt: w.review_excerpt,
+      // BND-040 — pricing intelligence (nullable)
+      retail_min: w.retail_min,
+      retail_max: w.retail_max,
+      retail_median: w.retail_median,
+      retail_retailer_count: w.retail_retailer_count,
+      retail_refreshed_at: w.retail_refreshed_at,
+      pricing_target_pour_cost_pct: w.pricing_target_pour_cost_pct,
+      pricing_target_markup_ratio: w.pricing_target_markup_ratio,
+      pricing_dismissed_until: w.pricing_dismissed_until,
+      current_bottle_price: price?.bottle ?? null,
+      current_glass_price: price?.glass ?? null,
+      current_unit_cost: inv.latestCost,
+      restaurant_default_target_pour_cost_pct:
+        restaurantRow?.default_target_pour_cost_pct ?? null,
+      restaurant_default_target_markup_ratio:
+        restaurantRow?.default_target_markup_ratio ?? null,
     };
   });
 

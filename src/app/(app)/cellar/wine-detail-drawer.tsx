@@ -9,11 +9,22 @@ import { cn } from "@/lib/utils";
 import { NoteModal } from "./note-modal";
 import { PourPickerModal } from "./pour-picker-modal";
 import { DrinkWindowTimeline } from "@/components/drink-window-timeline";
+import { PriceBand } from "@/components/price-band";
 import {
   formatStatusLabel,
   getDrinkWindowStatus,
   getYearsUntilWindowClose,
 } from "@/lib/drink-window/status";
+import {
+  formatPricingStatusLabel,
+  getBottleStatus,
+  getGlassStatus,
+  getMarkupRatio,
+  getPourCostPct,
+  isRetailStale,
+  resolveMarkupTarget,
+  resolvePourCostTarget,
+} from "@/lib/pricing/status";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
 
@@ -245,13 +256,17 @@ export function WineDetailDrawer({
               )}
             </section>
 
+            {/* BND-040 — Pricing panel. Renders when retail data is
+                available. No verdict pills in the drawer; numbers + targets
+                only. Verdicts only appear in outlier-context surfaces
+                (Insights pricing review). */}
+            {row.retail_median != null && (
+              <PricingSection row={row} />
+            )}
+
             {/* BND-039 — Drink window panel. Renders only when we have
                 window data; otherwise the section is omitted so unenriched
-                wines don't show an empty placeholder.
-
-                The panel highlights with warning-soft + amber accent bar
-                when the wine is in its drink-now or past-peak phase, so
-                a sommelier scanning the drawer can see urgency at a glance. */}
+                wines don't show an empty placeholder. */}
             {row.drink_window_end != null && (
               <DrinkWindowSection row={row} />
             )}
@@ -441,6 +456,187 @@ function DrinkWindowSection({ row }: { row: CellarWineRow }) {
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * BND-040 — PricingSection. Renders bottle list / glass list pricing
+ * cards with current ratio + target deviation, plus a retail benchmark
+ * card and the price-band visual.
+ *
+ * Trust language locked: NO verdict pills in the drawer (per architect
+ * review). Numbers + targets only — verdicts live in outlier contexts
+ * where flagging is the whole point.
+ */
+function PricingSection({ row }: { row: CellarWineRow }) {
+  const targetMarkup = resolveMarkupTarget(
+    row.pricing_target_markup_ratio,
+    row.restaurant_default_target_markup_ratio,
+  );
+  const targetPourCost = resolvePourCostTarget(
+    row.pricing_target_pour_cost_pct,
+    row.restaurant_default_target_pour_cost_pct,
+  );
+  const markupRatio = getMarkupRatio(row.current_bottle_price, row.retail_median);
+  const pourCostPct = getPourCostPct(
+    row.current_unit_cost ?? row.retail_median,
+    row.size_ml,
+    row.glass_pour_ml,
+    row.current_glass_price,
+  );
+  const bottleStatus = getBottleStatus(markupRatio, targetMarkup);
+  const glassStatus = getGlassStatus(pourCostPct, targetPourCost);
+  const stale = isRetailStale(row.retail_refreshed_at);
+
+  return (
+    <section
+      aria-label="Pricing"
+      className="mt-md rounded-md border border-border bg-white p-md"
+    >
+      <div className="mb-sm flex items-center justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+          Pricing
+        </span>
+        <span className="text-[11px] text-ink-subtle">
+          {row.retail_refreshed_at
+            ? stale
+              ? "Retail data > 7d old"
+              : "Retail data current"
+            : ""}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-md">
+        <PricingCard
+          label="Bottle list"
+          price={row.current_bottle_price}
+          ratio={markupRatio != null ? `${markupRatio.toFixed(1)}× retail` : null}
+          target={`target ${targetMarkup.toFixed(1)}×`}
+          status={bottleStatus}
+        />
+        <PricingCard
+          label={
+            row.glass_pour_ml
+              ? `Glass · ${Math.round(row.glass_pour_ml * 0.0338)} oz`
+              : "Glass"
+          }
+          price={row.current_glass_price}
+          ratio={pourCostPct != null ? `${pourCostPct.toFixed(0)}% pour cost` : null}
+          target={`target ${Math.round(targetPourCost)}%`}
+          status={glassStatus}
+        />
+      </div>
+
+      {/* Price band visual */}
+      {row.current_bottle_price != null && (
+        <div className="mt-md">
+          <PriceBand
+            bottleList={row.current_bottle_price}
+            retailReference={row.retail_median}
+            targetMarkup={targetMarkup}
+            size="full"
+          />
+        </div>
+      )}
+
+      {/* Retail benchmark card */}
+      <div
+        className="mt-md rounded-sm bg-bg-secondary p-sm"
+        style={{ borderLeft: "2px solid var(--color-accent)" }}
+      >
+        <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+          Market retail · Wine-Searcher
+        </div>
+        <div className="mt-xs flex items-baseline justify-between text-[12px] text-ink-muted">
+          <span>Low / median / high</span>
+          <span className="font-mono text-ink">
+            ${Math.round(row.retail_min ?? 0)} / ${Math.round(row.retail_median ?? 0)} / $
+            {Math.round(row.retail_max ?? 0)}
+          </span>
+        </div>
+        {row.retail_retailer_count != null && (
+          <div className="mt-2xs text-[11px] text-ink-subtle">
+            {row.retail_retailer_count} retailer
+            {row.retail_retailer_count === 1 ? "" : "s"}
+            {row.retail_refreshed_at && (
+              <span className="ml-xs">
+                · refreshed {new Date(row.retail_refreshed_at).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Local benchmark — Layer B preserved hook (honest empty state per
+          BND-040 plan §Layer B). No CTA, no viral mechanic. */}
+      <div
+        className="mt-sm rounded-sm bg-bg-secondary p-sm"
+        style={{ borderLeft: "2px solid var(--color-border-strong)" }}
+      >
+        <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+          Local benchmark
+        </div>
+        <p className="mt-2xs text-[12px] italic text-ink-muted">
+          Local benchmark unavailable — using national retail comps. Available
+          when 10+ restaurants in your region opt in.
+        </p>
+      </div>
+
+      {/* Status hint — only when we have a status (not unknown). Trust
+          language: never use prescriptive verbs like "you should". */}
+      {(bottleStatus !== "unknown" || glassStatus !== "unknown") && (
+        <div className="mt-sm text-[11px] text-ink-tertiary">
+          {bottleStatus !== "unknown" && (
+            <span>
+              Bottle: <span className="text-ink-muted">{formatPricingStatusLabel(bottleStatus)}</span>
+            </span>
+          )}
+          {bottleStatus !== "unknown" && glassStatus !== "unknown" && (
+            <span className="mx-xs text-ink-subtle">·</span>
+          )}
+          {glassStatus !== "unknown" && (
+            <span>
+              Glass: <span className="text-ink-muted">{formatPricingStatusLabel(glassStatus)}</span>
+            </span>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PricingCard({
+  label,
+  price,
+  ratio,
+  target,
+  status,
+}: {
+  label: string;
+  price: number | null;
+  ratio: string | null;
+  target: string;
+  status: ReturnType<typeof getBottleStatus>;
+}) {
+  const ratioClass =
+    status === "tight" || status === "outlier"
+      ? "text-warning"
+      : status === "premium"
+        ? "text-success"
+        : "text-ink-muted";
+  return (
+    <div className="rounded-sm bg-bg-secondary p-sm">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+        {label}
+      </div>
+      <div className="mt-xs font-mono text-[20px] font-medium text-ink">
+        {price != null ? `$${Math.round(price)}` : "—"}
+      </div>
+      {ratio && (
+        <div className={`mt-2xs font-mono text-[12px] ${ratioClass}`}>{ratio}</div>
+      )}
+      <div className="mt-2xs text-[11px] text-ink-subtle">{target}</div>
+    </div>
   );
 }
 

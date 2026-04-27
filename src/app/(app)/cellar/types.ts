@@ -48,4 +48,28 @@ export type CellarWineRow = {
   rating: number | null;
   rating_source: string | null;
   review_excerpt: string | null;
+
+  // BND-040 — pricing intelligence. All nullable so wines without retail
+  // data render the drawer without a Pricing section. Targets resolve to
+  // restaurant default at the helper layer when null.
+  retail_min: number | null;
+  retail_max: number | null;
+  retail_median: number | null;
+  retail_retailer_count: number | null;
+  retail_refreshed_at: string | null;
+  pricing_target_pour_cost_pct: number | null;
+  pricing_target_markup_ratio: number | null;
+  pricing_dismissed_until: string | null;
+  // The current bottle list / glass list when the wine appears on a
+  // restaurant list. Pulled from wine_list_items via aggregator (most
+  // common price across multiple lists, or first one). Null when not
+  // on any list.
+  current_bottle_price: number | null;
+  current_glass_price: number | null;
+  // Most-recent invoice cost — drives pour-cost % calculation.
+  current_unit_cost: number | null;
+  // Restaurant-level defaults (passed through from the page so the
+  // drawer's helpers can resolve effective targets without another fetch).
+  restaurant_default_target_pour_cost_pct: number | null;
+  restaurant_default_target_markup_ratio: number | null;
 };
