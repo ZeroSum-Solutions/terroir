@@ -111,3 +111,120 @@ describe("POST /api/team/accept-invite", () => {
     expect(bFirst.status).not.toBe(429);
   });
 });
+
+/**
+ * BND-011: invitation email-binding tests.
+ *
+ * The invitation row carries the email it was sent to. The consumer
+ * MUST compare invitation.email against auth.user.email and return the
+ * SAME opaque 404 used for token-not-found on mismatch — so a
+ * brute-forcer can't distinguish "valid token wrong user" from "no
+ * such token".
+ */
+describe("POST /api/team/accept-invite — email binding", () => {
+  const membershipInsert = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetRateLimitForTests();
+
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "user-1", email: "alice@example.com" } },
+    });
+
+    mockFromInvitations.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          single: async () => ({
+            data: {
+              id: "inv-1",
+              restaurant_id: "rest-1",
+              role: "staff",
+              email: "bob@example.com", // different user
+              expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+              accepted_at: null,
+            },
+            error: null,
+          }),
+        }),
+      }),
+      // also stub .update() in case we ever reach it (we shouldn't on mismatch)
+      update: () => ({ eq: async () => ({ error: null }) }),
+    });
+
+    mockFromMemberships.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            limit: () => ({
+              single: async () => ({ data: null, error: null }),
+            }),
+          }),
+        }),
+      }),
+      insert: membershipInsert.mockResolvedValue({ error: null }),
+    });
+  });
+
+  it("returns 404 on email mismatch (opaque, matches token-not-found)", async () => {
+    const res = await POST(
+      makeJsonRequest({ token: "valid-token" }, { "x-forwarded-for": "1.1.1.1" }),
+    );
+    expect(res.status).toBe(404);
+    expect(membershipInsert).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when invitation.email is null (defensive — should not happen post-migration)", async () => {
+    mockFromInvitations.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          single: async () => ({
+            data: {
+              id: "inv-2",
+              restaurant_id: "rest-1",
+              role: "staff",
+              email: null,
+              expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+              accepted_at: null,
+            },
+            error: null,
+          }),
+        }),
+      }),
+      update: () => ({ eq: async () => ({ error: null }) }),
+    });
+
+    const res = await POST(
+      makeJsonRequest({ token: "valid-token" }, { "x-forwarded-for": "2.2.2.2" }),
+    );
+    expect(res.status).toBe(404);
+    expect(membershipInsert).not.toHaveBeenCalled();
+  });
+
+  it("matches case-insensitively after normalization", async () => {
+    mockFromInvitations.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          single: async () => ({
+            data: {
+              id: "inv-3",
+              restaurant_id: "rest-1",
+              role: "manager",
+              email: "Alice@Example.com",
+              expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+              accepted_at: null,
+            },
+            error: null,
+          }),
+        }),
+      }),
+      update: () => ({ eq: async () => ({ error: null }) }),
+    });
+
+    const res = await POST(
+      makeJsonRequest({ token: "valid-token" }, { "x-forwarded-for": "3.3.3.3" }),
+    );
+    expect(res.status).toBe(200);
+    expect(membershipInsert).toHaveBeenCalled();
+  });
+});
