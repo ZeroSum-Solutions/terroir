@@ -68,11 +68,23 @@ export async function POST(request: NextRequest) {
   // Find the invitation
   const { data: invitation, error: findError } = await supabase
     .from("invitations")
-    .select("id, restaurant_id, role, expires_at, accepted_at")
+    .select("id, restaurant_id, role, email, expires_at, accepted_at")
     .eq("token", body.token)
     .single();
 
   if (findError || !invitation) {
+    return NextResponse.json(
+      { error: "Invalid or expired invitation." },
+      { status: 404 },
+    );
+  }
+
+  // BND-011: email-binding enforcement. Mismatch returns the same opaque
+  // 404 used for token-not-found so a brute-forcer can't distinguish
+  // "valid token, wrong user" from "no such token".
+  const inviteeEmail = invitation.email?.trim().toLowerCase();
+  const userEmail = user.email?.trim().toLowerCase();
+  if (!inviteeEmail || !userEmail || inviteeEmail !== userEmail) {
     return NextResponse.json(
       { error: "Invalid or expired invitation." },
       { status: 404 },

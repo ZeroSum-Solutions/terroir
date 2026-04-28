@@ -6,6 +6,10 @@ import { requireOwner } from "@/lib/api/auth";
 export const runtime = "nodejs";
 
 const InviteSchema = z.object({
+  // BND-011: trim + lowercase before validating so 'Alice@Example.com  '
+  // normalizes to 'alice@example.com' and matches the case-insensitive
+  // comparison in accept-invite. .email() runs against the normalized form.
+  email: z.string().trim().toLowerCase().pipe(z.string().email()),
   role: z.enum(["manager", "staff"]).optional().default("staff"),
 });
 
@@ -29,16 +33,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const email = parsed.data.email; // already trimmed + lowercased by Zod schema
   const role = parsed.data.role;
 
   const { data: invitation, error } = await supabase
     .from("invitations")
     .insert({
       restaurant_id: restaurantId,
+      email,
       role,
       invited_by: user.id,
     })
-    .select("id, token, role, expires_at, created_at")
+    .select("id, token, role, email, expires_at, created_at")
     .single();
 
   if (error || !invitation) {
