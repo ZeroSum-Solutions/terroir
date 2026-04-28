@@ -24,13 +24,9 @@ const COOKIE_MAX_AGE_S = 60 * 60 * 24 * 30; // 30 days
 function getSecret(): string {
   const s = process.env.ACTIVE_RESTAURANT_COOKIE_SECRET;
   if (s && s.length >= 16) return s;
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "ACTIVE_RESTAURANT_COOKIE_SECRET must be set to a random ≥16-char string in production.",
-    );
-  }
-  // Dev-only fallback — predictable, never used in prod.
-  return "dev-insecure-active-restaurant-do-not-deploy";
+  throw new Error(
+    "ACTIVE_RESTAURANT_COOKIE_SECRET must be set to a random ≥16-char string.",
+  );
 }
 
 function hmac(value: string): string {
