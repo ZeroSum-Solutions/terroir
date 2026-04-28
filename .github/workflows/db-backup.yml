@@ -1,0 +1,100 @@
+# Defense-in-depth logical backup of the Supabase production database.
+#
+# WHY: Free tier daily backups exist on Supabase's side but are not downloadable
+# and require a support ticket to restore. This workflow gives us a self-service
+# logical backup we can replay against a fresh project without external help.
+#
+# RUNBOOK: .council/runbooks/database-backup.md (read it before merging
+# BND-008/009 work — it documents the mandatory pre-migration backup step).
+#
+# REQUIRED SECRET: SUPABASE_DB_URL — full postgres connection string against
+# the DIRECT host (not the pooler). Format:
+#   postgresql://postgres:<DB_PASSWORD>@db.qcfmwphlaekfkqwkfyth.supabase.co:5432/postgres
+# Get the password from https://supabase.com/dashboard/project/qcfmwphlaekfkqwkfyth/settings/database
+#
+# SECURITY NOTE: this workflow consumes a secret (SUPABASE_DB_URL) and reads
+# zero untrusted user input. There are no `${{ github.event.* }}` interpolations
+# in any `run:` block, so the GH Actions injection class doesn't apply here.
+# If you ever add `workflow_run` or PR-comment triggers, audit before shipping.
+
+name: DB Backup
+
+on:
+  schedule:
+    # 06:00 UTC daily — late evening US Pacific the prior day. Quiet window.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    # Manual trigger — used before any production down migration. See runbook.
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: pg_dump production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Postgres 17 client
+        # Match the production Postgres major version (17). Default ubuntu image
+        # ships an older client which can produce dumps the server won't reject
+        # but may include subtly wrong syntax for newer features.
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+      - name: Run pg_dump
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set. See .council/runbooks/database-backup.md."
+            exit 1
+          fi
+
+          TIMESTAMP=$(date -u +"%Y-%m-%d-%H%M%S")
+          DUMP_FILE="terroir-db-backup-${TIMESTAMP}.sql"
+
+          # --no-owner / --no-privileges keep the dump portable across projects
+          # so we can replay it into a fresh Supabase project without role
+          # ownership conflicts.
+          pg_dump \
+            --no-owner \
+            --no-privileges \
+            --format=plain \
+            --file="$DUMP_FILE" \
+            "$SUPABASE_DB_URL"
+
+          gzip "$DUMP_FILE"
+          ls -lh "${DUMP_FILE}.gz"
+          echo "DUMP_FILE=${DUMP_FILE}.gz" >> "$GITHUB_ENV"
+
+      - name: Sanity-check the dump
+        # A near-empty dump usually means auth failed silently or the dump
+        # finished before any tables were written. Fail loudly so the empty
+        # artifact doesn't sit there pretending to be a real backup.
+        run: |
+          SIZE=$(stat -c%s "$DUMP_FILE" 2>/dev/null || stat -f%z "$DUMP_FILE")
+          echo "Compressed dump size: ${SIZE} bytes"
+          if [ "$SIZE" -lt 1024 ]; then
+            echo "::error::Dump is suspiciously small (<1KB). Aborting before upload."
+            exit 1
+          fi
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.DUMP_FILE }}
+          path: ${{ env.DUMP_FILE }}
+          retention-days: 90
+          if-no-files-found: error
+          compression-level: 0
