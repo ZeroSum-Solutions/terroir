@@ -2,9 +2,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { TeamActions } from "./team-actions";
 
 export default async function TeamPage() {
-  const auth = await getAuthContext();
-  if (!auth) return null;
-
+  const auth = (await getAuthContext())!; // AppLayout redirects when null
   const { supabase, restaurantId, restaurantName } = auth;
 
   const [{ data: members }, { data: invitations }] = await Promise.all([

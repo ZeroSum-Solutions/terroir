@@ -78,9 +78,7 @@ function Sparkline({ data }: { data: number[] }) {
 }
 
 export default async function DashboardPage() {
-  const auth = await getAuthContext();
-  if (!auth) return null;
-
+  const auth = (await getAuthContext())!; // AppLayout redirects when null
   const { supabase, restaurantId: rid, restaurantName, user, userRole } = auth;
 
   // BND-039 + BND-040 — alerts pipelines. Fetch in parallel with the
