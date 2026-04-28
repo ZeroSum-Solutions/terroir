@@ -2364,9 +2364,18 @@ COMMENT ON FUNCTION public.dismiss_pricing_alert(uuid, int) IS
 -- compares case-insensitively and returns opaque 404 on mismatch).
 --
 -- DEFENSIVE GUARD: the DO block aborts loudly with a clear message if any
--- unexpected NULL rows exist, instead of silently destroying data. DEMO
--- has no real in-flight invitations; production should be the same.
--- Operators clean up flagged rows manually before re-running.
+-- unexpected NULL rows exist, instead of silently destroying data.
+--
+-- DATA CLEANUP (one-time, 2026-04-27): the bundle author predicted DEMO
+-- would have no NULL-email rows, but production had a small number of
+-- pre-email-tracking legacy invitations. They were removed manually
+-- before this migration applied via:
+--
+--   DELETE FROM public.invitations WHERE email IS NULL;
+--
+-- (run inside the same transaction as the migration). Future production
+-- environments that re-apply this migration must perform the same
+-- cleanup if any NULL rows still exist.
 --
 -- This migration is intended to be applied via Supabase MCP
 -- `apply_migration` against project qcfmwphlaekfkqwkfyth (terroir prod).
