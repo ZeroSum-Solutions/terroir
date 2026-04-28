@@ -29,9 +29,7 @@ type WineComparison = {
 };
 
 export default async function PriceComparisonPage() {
-  const auth = await getAuthContext();
-  if (!auth) return null;
-
+  const auth = (await getAuthContext())!; // AppLayout redirects when null
   const { supabase, restaurantId: rid } = auth;
 
   // Fetch inventory items with wine + invoice scan details

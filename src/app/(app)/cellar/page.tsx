@@ -39,9 +39,7 @@ type GridData = Record<string, BinData>;
  * degrades to a sealed-only chip + bin location.
  */
 export default async function CellarPage() {
-  const auth = await getAuthContext();
-  if (!auth) return null;
-
+  const auth = (await getAuthContext())!; // AppLayout redirects when null
   const { supabase, restaurantId, restaurantName, userRole } = auth;
 
   const [

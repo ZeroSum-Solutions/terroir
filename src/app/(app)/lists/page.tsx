@@ -2,9 +2,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { WineListLanding } from "./wine-list-landing";
 
 export default async function WineListPage() {
-  const auth = await getAuthContext();
-  if (!auth) return null;
-
+  const auth = (await getAuthContext())!; // AppLayout redirects when null
   const { supabase, restaurantId } = auth;
 
   const { data: lists } = await supabase
