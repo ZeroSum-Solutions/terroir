@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useFocusTrap } from "@/lib/use-focus-trap";
+import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 
 interface QrCodeProps {
   url: string;
@@ -42,15 +42,8 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
   const [slug, setSlug] = useState(currentSlug);
   const [published, setPublished] = useState(isPublished);
   const [copied, setCopied] = useState(false);
-  const trapRef = useFocusTrap<HTMLDivElement>();
-
-  useEffect(() => {
-    function handleEscape(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [onClose]);
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap({ containerRef: trapRef, onEscape: onClose });
 
   const publicUrl = slug
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/list/${slug}`

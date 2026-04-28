@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useFocusTrap } from "@/lib/use-focus-trap";
+import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 
 export function OnboardingModal({
   restaurantId,
@@ -12,7 +12,8 @@ export function OnboardingModal({
   const router = useRouter();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
-  const trapRef = useFocusTrap<HTMLDivElement>();
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap({ containerRef: trapRef, onEscape: () => router.refresh() });
 
   const submit = useCallback(async () => {
     const trimmed = name.trim();
