@@ -27,10 +27,12 @@ export function WineListLanding({
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const createList = useCallback(async () => {
     const name = newName.trim() || "Untitled Wine List";
     setCreating(true);
+    setCreateError(null);
     try {
       const res = await fetch("/api/wine-lists", {
         method: "POST",
@@ -41,6 +43,7 @@ export function WineListLanding({
       const { id } = (await res.json()) as { id: string };
       router.push(`/lists/${id}`);
     } catch {
+      setCreateError("Couldn't create wine list. Please try again.");
       setCreating(false);
     }
   }, [newName, router]);
@@ -137,9 +140,16 @@ export function WineListLanding({
       {showModal && (
         <CreateListModal
           newName={newName}
-          setNewName={setNewName}
+          setNewName={(v) => {
+            setNewName(v);
+            if (createError) setCreateError(null);
+          }}
           creating={creating}
-          onClose={() => setShowModal(false)}
+          error={createError}
+          onClose={() => {
+            setShowModal(false);
+            setCreateError(null);
+          }}
           onCreate={createList}
         />
       )}
@@ -151,12 +161,14 @@ function CreateListModal({
   newName,
   setNewName,
   creating,
+  error,
   onClose,
   onCreate,
 }: {
   newName: string;
   setNewName: (v: string) => void;
   creating: boolean;
+  error: string | null;
   onClose: () => void;
   onCreate: () => void;
 }) {
@@ -197,6 +209,14 @@ function CreateListModal({
           placeholder="Spring 2026 Wine List…"
           className="mt-lg h-[38px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
         />
+        {error && (
+          <p
+            role="alert"
+            className="mt-sm rounded-sm border border-danger/30 bg-danger-soft px-sm py-xs text-[13px] text-danger"
+          >
+            {error}
+          </p>
+        )}
         <div className="mt-lg flex justify-end gap-sm">
           <button
             type="button"
