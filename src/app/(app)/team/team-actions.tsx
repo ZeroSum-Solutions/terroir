@@ -163,6 +163,23 @@ export function TeamActions({
     router.refresh();
   };
 
+  const revokeInvitation = async (invitationId: string) => {
+    setMemberActionError(null);
+    const res = await fetch(`/api/team/invite/${invitationId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      setMemberActionError(
+        await extractServerError(
+          res,
+          "Couldn't revoke invitation. Please try again.",
+        ),
+      );
+      return;
+    }
+    router.refresh();
+  };
+
   return (
     <>
       {/* Members */}
@@ -292,7 +309,7 @@ export function TeamActions({
                     Expires
                   </th>
                   {isOwner && (
-                    <th className="w-[120px] px-sm py-sm font-semibold" />
+                    <th className="w-[200px] px-sm py-sm font-semibold" />
                   )}
                 </tr>
               </thead>
@@ -346,19 +363,37 @@ export function TeamActions({
                       </td>
                       {isOwner && (
                         <td className="px-sm py-sm text-right">
-                          <button
-                            type="button"
-                            onClick={() => copyInvitationLink(inv)}
-                            aria-label={`Copy invite link for ${inv.email ?? "invitation"}`}
-                            className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
-                          >
-                            {justCopied ? (
-                              <Check className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                            ) : (
-                              <Copy className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                            )}
-                            {justCopied ? "Copied" : "Copy link"}
-                          </button>
+                          <div className="flex items-center justify-end gap-xs">
+                            <button
+                              type="button"
+                              onClick={() => copyInvitationLink(inv)}
+                              aria-label={`Copy invite link for ${inv.email ?? "invitation"}`}
+                              className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                            >
+                              {justCopied ? (
+                                <Check className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                              )}
+                              {justCopied ? "Copied" : "Copy link"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    `Revoke invitation for ${inv.email ?? "this address"}? The link will stop working immediately.`,
+                                  )
+                                ) {
+                                  revokeInvitation(inv.id);
+                                }
+                              }}
+                              aria-label={`Revoke invitation for ${inv.email ?? "invitation"}`}
+                              className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-sm border border-border-strong bg-white text-ink-subtle hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
