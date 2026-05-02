@@ -61,6 +61,9 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
   const [suggestion, setSuggestion] = useState<PricingSuggestion | null>(null);
   const [suggesting, setSuggesting] = useState(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
+  // Surfaces failures from POST /api/wines/create-from-lwin so the user
+  // isn't left staring at a spinner that quietly disappears.
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
   const trapRef = useRef<HTMLDivElement>(null);
 
@@ -155,13 +158,21 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
 
   const handleSelectCatalog = async (lwin: LwinWine) => {
     setLoading(true);
+    setCatalogError(null);
     try {
       const res = await fetch("/api/wines/create-from-lwin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(lwin),
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        const message = await res
+          .json()
+          .then((d: { error?: string }) => d?.error)
+          .catch(() => null);
+        setCatalogError(message ?? `Couldn't import wine (${res.status}).`);
+        return;
+      }
       const { id } = await res.json();
       setSelected({
         id,
@@ -171,6 +182,8 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
         varietal: lwin.varietal,
         region: lwin.region,
       });
+    } catch {
+      setCatalogError("Couldn't import wine. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -201,7 +214,7 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
             <div className="flex gap-xs border-b border-border px-lg">
               <button
                 type="button"
-                onClick={() => { setSearchMode("inventory"); setQuery(""); }}
+                onClick={() => { setSearchMode("inventory"); setQuery(""); setCatalogError(null); }}
                 className={`px-sm py-xs text-[13px] font-medium border-b-2 transition-colors ${
                   searchMode === "inventory"
                     ? "border-accent text-accent"
@@ -212,7 +225,7 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
               </button>
               <button
                 type="button"
-                onClick={() => { setSearchMode("catalog"); setQuery(""); }}
+                onClick={() => { setSearchMode("catalog"); setQuery(""); setCatalogError(null); }}
                 className={`px-sm py-xs text-[13px] font-medium border-b-2 transition-colors ${
                   searchMode === "catalog"
                     ? "border-accent text-accent"
@@ -229,13 +242,26 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
                   autoFocus
                   type="text"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setCatalogError(null);
+                  }}
                   placeholder="Search by producer or wine name…"
                   aria-label="Search wines"
                   className="h-[38px] w-full rounded-sm border border-border bg-white pl-xl pr-sm text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
                 />
               </div>
             </div>
+            {searchMode === "catalog" && catalogError && (
+              <div className="border-b border-border px-lg py-sm">
+                <p
+                  role="alert"
+                  className="rounded-sm border border-danger/30 bg-danger-soft px-sm py-xs text-[12px] text-danger"
+                >
+                  {catalogError}
+                </p>
+              </div>
+            )}
             <div className="flex-1 overflow-y-auto">
               {loading ? (
                 <div className="flex items-center justify-center py-xl">
