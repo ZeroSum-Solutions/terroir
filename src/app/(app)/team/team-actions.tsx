@@ -35,6 +35,7 @@ export function TeamActions({
   const router = useRouter();
   const [showInvite, setShowInvite] = useState(false);
   const [inviteRole, setInviteRole] = useState<"manager" | "staff">("staff");
+  const [inviteEmail, setInviteEmail] = useState("");
   const [inviteUrl, setInviteUrl] = useState("");
   const [creating, setCreating] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -45,19 +46,31 @@ export function TeamActions({
   );
 
   const createInvite = async () => {
+    const email = inviteEmail.trim();
+    if (!email) {
+      setInviteError("Enter the invitee's email address.");
+      return;
+    }
     setCreating(true);
     setInviteError(null);
     try {
       const res = await fetch("/api/team/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: inviteRole }),
+        body: JSON.stringify({ email, role: inviteRole }),
       });
       if (!res.ok) {
+        let serverMessage: string | undefined;
+        try {
+          const body = (await res.json()) as { error?: unknown };
+          if (typeof body.error === "string") serverMessage = body.error;
+        } catch {
+          // non-JSON body — fall through to status-based message
+        }
         throw new Error(
           res.status === 403
             ? "Only owners can create invite links."
-            : "Failed to create invite",
+            : serverMessage ?? "Failed to create invite",
         );
       }
       const invite = await res.json();
@@ -106,6 +119,8 @@ export function TeamActions({
               onClick={() => {
                 setShowInvite(true);
                 setInviteUrl("");
+                setInviteEmail("");
+                setInviteError(null);
               }}
               className="flex h-[34px] items-center gap-xs rounded-sm bg-accent px-md text-[13px] font-medium text-white hover:bg-accent-hover"
             >
@@ -195,6 +210,7 @@ export function TeamActions({
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                  <th className="px-md py-sm text-left font-semibold">Email</th>
                   <th className="px-md py-sm text-left font-semibold">Role</th>
                   <th className="px-md py-sm text-left font-semibold">
                     Created
@@ -210,6 +226,13 @@ export function TeamActions({
                     key={inv.id}
                     className="border-t border-dashed border-border"
                   >
+                    <td className="px-md py-sm text-ink">
+                      {inv.email ?? (
+                        <span className="text-ink-subtle italic">
+                          (no email)
+                        </span>
+                      )}
+                    </td>
                     <td className="px-md py-sm capitalize text-ink">
                       {inv.role}
                     </td>
@@ -230,6 +253,11 @@ export function TeamActions({
       {/* Invite modal */}
       {showInvite && (
         <InviteModal
+          inviteEmail={inviteEmail}
+          setInviteEmail={(e) => {
+            setInviteEmail(e);
+            if (inviteError) setInviteError(null);
+          }}
           inviteRole={inviteRole}
           setInviteRole={(r) => {
             setInviteRole(r);
@@ -242,6 +270,7 @@ export function TeamActions({
           onClose={() => {
             setShowInvite(false);
             setInviteError(null);
+            setInviteEmail("");
           }}
           onCreate={createInvite}
           onCopy={copyLink}
@@ -252,6 +281,8 @@ export function TeamActions({
 }
 
 function InviteModal({
+  inviteEmail,
+  setInviteEmail,
   inviteRole,
   setInviteRole,
   inviteUrl,
@@ -262,6 +293,8 @@ function InviteModal({
   onCreate,
   onCopy,
 }: {
+  inviteEmail: string;
+  setInviteEmail: (e: string) => void;
   inviteRole: "manager" | "staff";
   setInviteRole: (r: "manager" | "staff") => void;
   inviteUrl: string;
@@ -303,10 +336,43 @@ function InviteModal({
         {!inviteUrl ? (
           <>
             <div className="mt-lg">
-              <label className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              <label
+                htmlFor="invite-email"
+                className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle"
+              >
+                Email
+              </label>
+              <input
+                id="invite-email"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                required
+                placeholder="teammate@restaurant.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !creating) {
+                    e.preventDefault();
+                    onCreate();
+                  }
+                }}
+                className="mt-xs w-full rounded-sm border border-border bg-white px-md py-sm text-[14px] text-ink"
+              />
+              <p className="mt-xs text-[12px] text-ink-subtle">
+                The link will only work for this address.
+              </p>
+            </div>
+
+            <div className="mt-md">
+              <label
+                htmlFor="invite-role"
+                className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle"
+              >
                 Role
               </label>
               <select
+                id="invite-role"
                 value={inviteRole}
                 onChange={(e) =>
                   setInviteRole(e.target.value as "manager" | "staff")
@@ -343,7 +409,7 @@ function InviteModal({
               <button
                 type="button"
                 onClick={onCreate}
-                disabled={creating}
+                disabled={creating || inviteEmail.trim().length === 0}
                 className="flex h-[38px] items-center gap-xs rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
               >
                 {creating && (
