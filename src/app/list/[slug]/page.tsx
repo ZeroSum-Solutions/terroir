@@ -130,6 +130,22 @@ export default async function PublicWineListPage({
         </h1>
       </header>
 
+      {/* Empty state — published list with zero visible items (e.g. every
+          wine 86'd, or list was published before items were added). Without
+          this, the page renders header + footer around a blank middle, which
+          reads as broken to a guest. Hidden in print so a paper copy doesn't
+          carry a stray "Nothing to pour" line. */}
+      {sections.length === 0 && (
+        <div className="my-3xl rounded-md border border-dashed border-border-strong bg-surface-muted px-lg py-2xl text-center print:hidden">
+          <p className="font-serif text-[18px] text-ink">
+            Nothing to pour right now.
+          </p>
+          <p className="mt-xs text-[13px] text-ink-muted">
+            Check back soon — this list is being updated.
+          </p>
+        </div>
+      )}
+
       {/* Sections */}
       {sections.map((section) => (
         <section
