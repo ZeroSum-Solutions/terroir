@@ -152,8 +152,15 @@ export default async function PublicWineListPage({
           key={section.id}
           className="mb-2xl print:mb-lg print:break-inside-avoid"
         >
-          <h2 className="mb-md font-serif text-[22px] font-medium text-ink print:mb-sm print:text-[18px] print:text-black">
-            {section.name}
+          <h2 className="mb-md flex items-baseline gap-sm font-serif text-[22px] font-medium text-ink print:mb-sm print:text-[18px] print:text-black">
+            <span>{section.name}</span>
+            {/* Lightweight count so guests can see how deep each category
+                is without scrolling. renderWineListSections filters out 86'd
+                wines, so this is the actually-pourable count. Kept visible
+                in print — a paper menu benefits from the same signal. */}
+            <span className="font-mono text-[13px] font-normal text-ink-muted print:text-black">
+              {section.items.length}
+            </span>
           </h2>
           <div className="flex flex-col">
             {section.items.map((item) => {
