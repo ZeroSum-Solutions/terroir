@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { MagicLinkSubmit } from "./magic-link-submit";
 
 type SearchParams = Promise<{ sent?: string; error?: string; next?: string }>;
 
@@ -89,12 +90,7 @@ export default async function LoginPage({
             {error && (
               <div className="text-[13px] text-danger">{error}</div>
             )}
-            <button
-              type="submit"
-              className="h-[38px] rounded-sm bg-accent px-md text-[14px] font-medium text-white transition-colors hover:bg-accent-hover"
-            >
-              Send magic link
-            </button>
+            <MagicLinkSubmit />
           </form>
         )}
 
