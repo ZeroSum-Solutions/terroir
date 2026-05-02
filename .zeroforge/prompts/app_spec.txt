@@ -1,0 +1,645 @@
+<project_specification>
+  <project_name>terroir</project_name>
+
+  <overview>
+    Terroir is a wine-management SaaS for restaurants and serious cellars. Staff photograph paper invoices, the system runs Azure OCR + Claude structured extraction to build a typed inventory, and the app surfaces a public wine list, drink-window guidance, pour tracking, and reconciliation against open bottles. Built on Next.js 16 + Supabase + Anthropic Claude, deployed as a single service on Railway.
+  </overview>
+
+  <feature_budget>
+    Generate at most 200 features. Treat each "User can…", "System displays…", or "API returns…" assertion in the core_features section below as one feature — do NOT split a single assertion into multiple sub-features, and do NOT add features beyond what is enumerated. This budget OVERRIDES any complexity-tier table you would otherwise apply.
+  </feature_budget>
+
+  <initializer_guidance>
+    - Call `feature_create_bulk` directly. Do NOT write a code generator script to emit features.
+    - If you need to create 200 features, call `feature_create_bulk` 4 times with ~50 each. That is the intended pattern.
+    - `depends_on_indices` is batch-local. Use `feature_add_dependency` (with returned `feature_id` values) for cross-batch dependencies after all batches are written.
+    - Do NOT run small probe batches to test dependency semantics.
+    - If a Bash command is blocked by the allowlist (e.g., `sqlite3`), use the MCP `feature_*` tools instead — never write workaround scripts.
+  </initializer_guidance>
+
+  <critical_constraints>
+    <next_js_version>
+      This project uses Next.js 16.2.4, which has breaking changes vs. earlier versions and likely vs. your training data. Before writing or modifying any Next.js code (route handlers, layouts, server actions, params handling, caching directives, etc.), read the relevant guide in `node_modules/next/dist/docs/`. Heed all deprecation notices. Do not assume Next.js 14/15 patterns work.
+    </next_js_version>
+    <design_source_of_truth>
+      Visual and UI decisions are governed by `../DESIGN.md` (one directory up from terroir, at the Wine Management workspace root). The approved prototype lives in `../Wine Scanner Dashboard/` and is the canonical visual reference. Do not invent colors, typography, spacing, or aesthetic direction. Read DESIGN.md before any visual change. Flag any code that diverges.
+    </design_source_of_truth>
+    <mobile_parity>
+      Phone and desktop are equal first-class surfaces. Design every screen at 390×844 (iPhone 14/15) first, then scale up at the `md` breakpoint (768px). The Phase-1 core workflow is photographing invoices on a phone — any screen that only works in one viewport is incomplete.
+    </mobile_parity>
+    <existing_vs_new>
+      This spec mixes features that already exist in the codebase with features the agent should build. Treat the existing 18 top-level API routes (`src/app/api/*`), Supabase schema (`supabase/schema.snapshot.sql`), and `src/app/(app)/` route folders as the established baseline. Sub-routes such as `/cellar/config`, `/cellar/open`, `/cellar/reconcile`, and `/lists/[slug]/print` are net-new and need to be created. When in doubt, run a Glob for the file path before claiming a feature is implemented.
+    </existing_vs_new>
+  </critical_constraints>
+
+  <technology_stack>
+    <frontend>
+      <framework>Next.js 16.2.4 App Router (React 19.2.4, TypeScript 5)</framework>
+      <styling>Tailwind CSS v4 with class-variance-authority component variants</styling>
+      <state_management>React Server Components by default; minimal client state via React hooks and Supabase auth context</state_management>
+      <routing>Next.js App Router (file-based)</routing>
+      <port>3000</port>
+    </frontend>
+    <backend>
+      <runtime>Next.js Route Handlers (Node.js 20+) — same process as frontend</runtime>
+      <database>Supabase Postgres (RLS-enforced) with forward-only migrations and DB-function business logic</database>
+      <port>3000</port>
+    </backend>
+    <communication>
+      <api>RESTful JSON route handlers under /api/* with Zod validation at every boundary</api>
+    </communication>
+    <ai_layer>
+      <ocr>Azure Document Intelligence (@azure-rest/ai-document-intelligence)</ocr>
+      <extraction>Anthropic Claude (@anthropic-ai/sdk) — structured JSON via system prompt, Zod-validated</extraction>
+    </ai_layer>
+    <observability>Sentry (server, edge, client) with source-map upload on Railway deploy</observability>
+    <testing>Vitest 4 (unit + route), Playwright 1.59 (E2E)</testing>
+  </technology_stack>
+
+  <prerequisites>
+    <environment_setup>
+      - Node.js 20+ and pnpm 9+ installed
+      - Supabase project provisioned with migrations applied: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+      - Anthropic API key: ANTHROPIC_API_KEY
+      - Azure Document Intelligence: AZURE_DOC_INTELLIGENCE_ENDPOINT, AZURE_DOC_INTELLIGENCE_KEY
+      - Sentry: SENTRY_AUTH_TOKEN, SENTRY_DSN (and project/org IDs)
+      - LWIN catalog seeded into public.lwin_catalog
+      - Railway project linked (railway.toml at repo root)
+      - Run `pnpm install`, then `pnpm dev` (port 3000)
+    </environment_setup>
+  </prerequisites>
+
+  <core_features>
+
+    <authentication_and_session>
+      - User can sign up with email and password via Supabase Auth
+      - User can log in at /login and receive a Supabase session cookie
+      - User can log out and have the session cookie cleared
+      - User can request a password reset email via Supabase Auth
+      - User can complete a password reset from the emailed link
+      - System redirects unauthenticated requests to (app)/* back to /login
+      - System restores session on page refresh via @supabase/ssr cookie helpers
+      - System exposes a server-side Supabase client for route handlers
+      - System exposes a browser-side Supabase client for client components
+      - API returns 401 when an authenticated route is hit without a session
+      - API returns 403 when the user is authenticated but not a member of the requested restaurant
+      - System enforces Row-Level Security on every table via is_member / is_member_with_role
+      - Dev login route bypasses email auth in non-production environments only
+    </authentication_and_session>
+
+    <restaurants_and_teams>
+      - Owner can create a new restaurant on first login
+      - Owner can rename their restaurant
+      - Owner can invite a team member by email
+      - System creates a row in invitations with a single-use token
+      - Invitee can accept an invitation at /invite/[token]
+      - System creates a memberships row when an invitation is accepted
+      - Owner can assign a role (owner, manager, staff) to each member
+      - Owner can revoke a member's access by deleting their membership
+      - Owner can resend a pending invitation
+      - Owner can cancel a pending invitation
+      - Manager can perform inventory and list operations but not delete the restaurant
+      - Staff can record pours and view inventory but cannot edit wine lists
+      - System enforces role gates via is_member_with_role DB function
+      - User can switch between restaurants they belong to via the settings dropdown
+      - User can view the team roster on /team with current roles and pending invites
+      - API returns 403 when a non-owner attempts an owner-only mutation
+    </restaurants_and_teams>
+
+    <invoice_scanning>
+      - User can open the camera-based scan UI at /scan on mobile
+      - User can upload a single invoice image from the file picker
+      - User can upload a multi-page invoice as multiple images in one batch
+      - System uploads each image to Supabase Storage under the restaurant's bucket
+      - POST /api/scan submits a stored image for OCR processing
+      - System calls Azure Document Intelligence and receives raw text plus tables
+      - System sends OCR text to Claude with a structured-extraction system prompt
+      - Claude returns a typed JSON list of line items (producer, wine, vintage, qty, unit price, currency, format)
+      - System validates Claude's response with a Zod schema before any DB write
+      - System rejects responses that fail validation and surfaces a user-readable error
+      - System deduplicates accidental double-submits via the scan_idempotency table
+      - System creates an invoice_scans row capturing OCR + extraction metadata
+      - System upserts wines via find_or_create_wines_batch DB function
+      - System creates inventory_items for each parsed line item linked to the scan
+      - System enriches new wines against the LWIN catalog via match_lwin_batch
+      - User can review extracted line items in a side-by-side view against the photo
+      - User can edit a parsed line item before committing it to inventory
+      - User can delete a parsed line item before committing
+      - User can re-run extraction on a stored scan if Claude misread it
+      - User can view the full history of past scans at /scans
+      - User can drill into a single scan to see its image, OCR text, and resulting inventory
+      - User can attach a delivery date and supplier name to a scan
+      - System shows extraction confidence per line item when available
+      - API returns 422 when no wines could be extracted from the image
+      - API returns 429 when the user exceeds the per-minute scan rate limit
+      - API rejects images larger than 10 MB
+      - API rejects file types other than jpeg, png, heic, and pdf
+    </invoice_scanning>
+
+    <bottle_scanning>
+      - User can scan an existing bottle's QR code via the /scan-bottle camera UI
+      - System decodes the QR payload and looks up the wine by ID
+      - User can confirm or correct the wine match
+      - User can record the bottle's current section and bin location
+      - System creates an inventory_items row when a new bottle is scanned in
+      - System rejects QR codes that do not belong to the current restaurant
+      - User can scan multiple bottles in rapid succession in a single session
+    </bottle_scanning>
+
+    <cellar_and_inventory>
+      - User can view the full cellar inventory at /cellar grouped by section
+      - User can search wines by producer, varietal, region, or vintage
+      - User can filter wines by color (red, white, rose, sparkling, dessert, fortified)
+      - User can filter wines by region or country
+      - User can filter wines by vintage range
+      - User can sort wines by price, vintage, name, or quantity
+      - User can drill into a single wine to see its full detail page
+      - System displays current quantity, average cost, and last-purchase date per wine
+      - System displays inventory by format (750ml, magnum, half, etc.)
+      - User can manually adjust a wine's quantity with a reason note
+      - System logs every quantity adjustment as an availability_event
+      - User can mark a wine as 86'd (unavailable) without deleting it
+      - System auto-86s a wine when inventory hits zero via auto_eightysix_on_low_inventory
+      - User can un-86 a wine when restocked
+      - User can edit a wine's metadata (producer, name, region, varietal, vintage)
+      - User can attach tasting notes to a wine
+      - User can attach a hero image to a wine in Supabase Storage
+      - User can delete a wine if it has no historical pour or scan references
+      - User can export the current cellar to CSV via /api/export
+      - User can configure cellar sections (e.g., Reds by Region, Cult Cabs, By the Glass) at /cellar/config
+      - User can reorder cellar sections via drag-and-drop (dnd-kit)
+      - System persists section order in cellar_config
+      - User can move a wine between sections with drag-and-drop
+      - User can bulk-assign wines to a section
+      - System displays low-stock badges when quantity drops below a configurable threshold
+      - System displays peak-window badges on wines entering or in their drink window
+      - System surfaces wines past their peak window in a "drink now" filter
+    </cellar_and_inventory>
+
+    <wine_intelligence>
+      - System computes a drink window (start year, peak year, end year) for each wine
+      - System computes recommended serving temperature range per wine
+      - System computes recommended decant time per wine
+      - User can view drink-window guidance on each wine's detail page
+      - User can override system-computed drink-window with manual values
+      - System flags wines whose vintage falls outside their drink window with a visual cue
+      - System enriches imported wines via enrich_wines_batch DB function
+      - System batches Claude calls for enrichment to control cost
+      - User can request a re-enrichment of a single wine
+      - System falls back to LWIN catalog data when Claude has no opinion
+      - System never overwrites a manually-set field during enrichment
+    </wine_intelligence>
+
+    <wine_lists_editor>
+      - User can create a new wine list at /lists with a name and description
+      - User can publish or unpublish a wine list
+      - User can set a wine list's slug for the public URL
+      - System rejects slug collisions across the same restaurant
+      - User can clone an existing wine list as a starting point
+      - User can archive a wine list without deleting it
+      - User can delete an archived wine list
+      - User can add a section to a wine list (e.g., Reds, Whites, Champagne)
+      - User can rename a section
+      - User can reorder sections via drag-and-drop
+      - User can delete a section (cascades to its items with confirmation)
+      - User can add a wine to a section by searching the cellar
+      - User can add a wine to multiple sections at once
+      - User can reorder items within a section via drag-and-drop
+      - System persists item order via reorder_wine_list_items DB function
+      - User can override the public price per list item
+      - User can override the display name per list item
+      - User can attach a custom blurb per list item
+      - User can hide a list item without removing it
+      - User can preview a wine list as a guest would see it
+      - System auto-removes 86'd wines from published lists (or marks them gray, configurable)
+      - User can publish a list to a public slug at /list/[slug]
+      - System renders the public list with restaurant branding
+      - System exposes wine_published_list_slugs for cross-list lookups
+      - User can export a wine list as a print-ready PDF via /api/pdf
+      - System generates the PDF via Puppeteer headless Chrome
+      - User can download a wine list as CSV
+      - User can share the public list URL via the share sheet on mobile
+      - User can copy the public list URL with one click
+    </wine_lists_editor>
+
+    <public_wine_list>
+      - Guest can view a published wine list at /list/[slug] without logging in
+      - System renders the list mobile-first with large touch targets
+      - System displays the restaurant's name and optional logo at top
+      - System groups wines by section in the configured order
+      - System shows price, vintage, and producer for each wine
+      - System hides 86'd wines or marks them visibly unavailable per restaurant config
+      - System renders a printable view at /list/[slug]/print
+      - System sets cache-control headers appropriate for a public page
+      - System returns 404 for unpublished or nonexistent slugs
+      - Guest can switch between multiple published lists if the restaurant has them
+    </public_wine_list>
+
+    <pour_and_open_bottles>
+      - Staff can record a pour from /cellar against a specific bottle
+      - System opens a new bottle if none is currently open for the wine + format
+      - System decrements the open bottle's remaining ounces by the pour amount
+      - System closes a bottle automatically when remaining drops below a threshold
+      - System creates a pour_events row for every pour
+      - System maintains the open_bottles table via pour_events_maintain_open_bottle trigger
+      - User can cancel/undo the most recent pour
+      - User can view all currently open bottles at /cellar/open
+      - User can manually open a bottle without recording a pour (e.g., for tasting)
+      - User can manually close an open bottle and discard remaining
+      - System exposes record_pour DB function as the only write path for pours
+      - System rejects pours when no inventory remains
+      - User can configure default pour sizes per format (e.g., 5oz red glass)
+      - User can record a pour in a custom amount
+      - User can attach a note to a pour event
+    </pour_and_open_bottles>
+
+    <reconciliation>
+      - Manager can run end-of-shift reconciliation at /cellar/reconcile
+      - System lists every open bottle with its tracked remaining volume
+      - User can enter the actual remaining volume for each open bottle
+      - System computes variance and persists adjustments via reconcile_open_bottle
+      - User can reconcile all open bottles in one batch via reconcile_open_bottles_batch
+      - System logs each reconciliation as an availability_event with the manager's user ID
+      - System highlights variances exceeding a configurable threshold
+      - User can view reconciliation history with variance trends
+      - System enforces manager-or-owner role for reconciliation writes
+    </reconciliation>
+
+    <price_comparison>
+      - User can view market price comparisons for a wine at /price-comparison
+      - System displays the wine's last-paid price next to indicative market data
+      - User can flag a wine as overpaid for follow-up
+      - User can sort the price-comparison view by variance percentage
+      - System highlights wines whose market price has shifted by more than a configurable percent
+    </price_comparison>
+
+    <insights_and_analytics>
+      - User can view restaurant-level analytics at /insights
+      - System shows total inventory value at current cost
+      - System shows pour volume by section over a selectable date range
+      - System shows top-N wines by pour count
+      - System shows top-N wines by revenue (price * pours)
+      - System shows wines aging past their drink window
+      - System shows scan throughput (invoices processed per week)
+      - System shows extraction accuracy (auto-accepted vs. corrected line items)
+      - User can change the date range with a quick selector (7d, 30d, 90d, YTD, custom)
+      - User can export an insights view as CSV
+    </insights_and_analytics>
+
+    <api_layer>
+      - GET /api/health returns 200 with a JSON liveness payload
+      - GET /api/cellar returns the authenticated user's cellar
+      - POST /api/cellar adds a wine to the cellar
+      - PATCH /api/cellar/[id] updates a wine
+      - DELETE /api/cellar/[id] removes a wine (rejects when references exist)
+      - GET /api/wines returns wines with pagination and filtering
+      - GET /api/wines/[id] returns a single wine with enrichment data
+      - POST /api/scan submits a stored image for OCR + extraction
+      - GET /api/scans lists past scans for the current restaurant
+      - GET /api/scans/[id] returns a single scan with line items
+      - POST /api/scan-bottle decodes a QR code and resolves the wine
+      - GET /api/inventory returns aggregate inventory data
+      - POST /api/pour records a pour event
+      - POST /api/reconcile reconciles one or more open bottles
+      - GET /api/wine-lists returns lists for the restaurant
+      - POST /api/wine-lists creates a new list
+      - PATCH /api/wine-lists/[id] updates a list
+      - DELETE /api/wine-lists/[id] archives a list
+      - GET /api/wine-list-sections returns sections for a list
+      - POST /api/wine-list-sections creates a section
+      - PATCH /api/wine-list-sections/[id] reorders or renames a section
+      - GET /api/wine-list-items returns items for a section
+      - POST /api/wine-list-items adds a wine to a section
+      - PATCH /api/wine-list-items/[id] updates an item override
+      - GET /api/insights returns aggregate metrics for the restaurant
+      - GET /api/restaurant returns restaurant metadata
+      - PATCH /api/restaurant updates restaurant metadata
+      - GET /api/team returns memberships and pending invitations
+      - POST /api/team invites a new member
+      - DELETE /api/team/[membership_id] revokes membership
+      - POST /api/pdf generates a print-ready PDF for a wine list
+      - GET /api/export streams a CSV export
+      - All write endpoints validate input with Zod and return 400 on invalid bodies
+      - All endpoints return a consistent error envelope shape
+      - All endpoints return 401 for unauthenticated requests
+      - All endpoints return 403 for cross-restaurant access attempts
+      - All endpoints return 404 for missing resources rather than leaking existence
+      - All endpoints return 429 when per-user rate limits are exceeded
+    </api_layer>
+
+    <user_interface>
+      - UI is responsive at the iPhone 14/15 baseline (390×844) per project mobile-parity rule
+      - UI is responsive on tablet (768px width)
+      - UI is responsive on desktop (1280px+)
+      - UI uses Tailwind v4 utility classes only
+      - UI uses CVA-driven component variants for consistency
+      - UI uses lucide-react icons exclusively
+      - UI surfaces a floating action button on mobile authed views
+      - UI shows an onboarding modal on first login until dismissed
+      - UI shows loading skeletons during async fetches
+      - UI shows toast notifications for write actions
+      - UI handles errors gracefully with user-readable messages
+      - UI hides destructive actions behind a confirm dialog
+      - UI persists drag-and-drop reorders optimistically with rollback on error
+      - UI surfaces auth state via the settings dropdown in the header
+      - UI prevents double-submission on slow network by disabling submit buttons mid-request
+      - UI works offline-tolerant for read-only views via Next.js caching
+      - UI keeps touch targets at or above 44px
+    </user_interface>
+
+    <database_constraints_and_functions>
+      - Migrations are forward-only (downs:check enforces in CI)
+      - schema.snapshot.sql is regenerated on every schema change (snapshot:check enforces in CI)
+      - set_updated_at trigger keeps updated_at in sync on row updates
+      - handle_new_user trigger creates a profile row on auth signup
+      - find_or_create_wine and find_or_create_wines_batch upsert wines idempotently
+      - generate_slug produces unique slugs for wine lists
+      - match_lwin and match_lwin_batch enrich wines from LWIN catalog
+      - lwin_search exposes Postgres full-text search over the catalog
+      - cleanup_scan_idempotency periodically clears stale idempotency keys
+      - record_pour is the canonical pour-write entry point
+      - reconcile_open_bottle and reconcile_open_bottles_batch settle inventory
+      - auto_eightysix_on_low_inventory flips availability when stock hits zero
+      - enrich_wines_batch performs AI enrichment in a single DB-coordinated batch
+      - All RLS policies route through is_member or is_member_with_role
+    </database_constraints_and_functions>
+
+    <observability_and_ops>
+      - Sentry captures server-side errors via instrumentation.ts
+      - Sentry captures client-side errors via instrumentation-client.ts
+      - Sentry captures edge-runtime errors via sentry.edge.config.ts
+      - global-error.tsx renders a Sentry-reported error boundary at the root
+      - Source maps upload to Sentry on Railway deploy
+      - GET /api/health returns a JSON payload usable by Railway health checks
+      - Railway deploy is driven by railway.toml at repo root
+      - pnpm build produces a standalone Next.js production build
+      - pnpm start serves the built app on the configured Railway port
+    </observability_and_ops>
+
+    <testing_quality>
+      - Vitest runs unit tests with happy-dom environment
+      - Vitest tests cover route handler logic for cellar, scan, pour, reconcile, wine-lists
+      - Vitest tests cover Zod schemas for OCR-extraction validation
+      - Vitest tests cover LWIN matching and slug generation
+      - Playwright covers the invoice-scan happy path end-to-end
+      - Playwright covers the pour + reconcile end-to-end
+      - Playwright covers wine-list publish + public-view end-to-end
+      - Playwright covers team invite + accept end-to-end
+      - ESLint 9 flat config enforces lint cleanliness
+      - TypeScript strict mode enforces type safety
+      - pnpm types:check verifies Supabase types are in sync
+      - pnpm snapshot:check verifies schema snapshot is in sync
+    </testing_quality>
+
+  </core_features>
+
+  <database_schema>
+    <tables>
+      <restaurants>
+        - id (uuid, PK)
+        - name, slug, logo_url
+        - created_at, updated_at
+      </restaurants>
+      <memberships>
+        - user_id (FK auth.users)
+        - restaurant_id (FK restaurants)
+        - role (enum: owner, manager, staff)
+        - created_at
+      </memberships>
+      <invitations>
+        - id, restaurant_id, email, token (unique), role, expires_at, accepted_at
+      </invitations>
+      <wines>
+        - id (uuid, PK), restaurant_id, producer, name, vintage, varietal, region, country
+        - color, format, drink_window_start, drink_window_peak, drink_window_end
+        - serving_temp_min, serving_temp_max, decant_minutes
+        - lwin_id (FK lwin_catalog), enrichment_metadata (jsonb)
+      </wines>
+      <invoice_scans>
+        - id, restaurant_id, image_path, ocr_text (jsonb), extraction (jsonb)
+        - supplier, delivery_date, status, created_by, created_at
+      </invoice_scans>
+      <inventory_items>
+        - id, restaurant_id, wine_id, scan_id (nullable), format, qty, unit_cost, currency
+      </inventory_items>
+      <wine_lists>
+        - id, restaurant_id, name, slug (unique per restaurant), description, published, archived
+      </wine_lists>
+      <wine_list_sections>
+        - id, list_id, name, sort_order
+      </wine_list_sections>
+      <wine_list_items>
+        - id, section_id, wine_id, sort_order, price_override, name_override, blurb, hidden
+      </wine_list_items>
+      <lwin_catalog>
+        - lwin (PK), producer, wine_name, region, country, color, sub_region (read-only seeded data)
+      </lwin_catalog>
+      <cellar_config>
+        - restaurant_id (PK), section_order (jsonb), low_stock_threshold, eightysix_strategy
+      </cellar_config>
+      <scan_idempotency>
+        - key (PK), created_at — auto-cleaned by cleanup_scan_idempotency
+      </scan_idempotency>
+      <availability_events>
+        - id, wine_id, restaurant_id, kind (adjust, eightysix, restock, reconcile)
+        - delta, reason, actor_id, created_at
+      </availability_events>
+      <open_bottles>
+        - id, wine_id, restaurant_id, format, opened_at, remaining_oz, closed_at
+      </open_bottles>
+      <pour_events>
+        - id, open_bottle_id, wine_id, restaurant_id, oz, note, actor_id, created_at
+      </pour_events>
+    </tables>
+  </database_schema>
+
+  <api_endpoints_summary>
+    <auth>
+      - GET / POST handled by Supabase Auth (email/password + OAuth)
+      - POST /api/dev-login (non-prod only)
+    </auth>
+    <core_resources>
+      - GET / POST /api/cellar
+      - GET / PATCH / DELETE /api/cellar/[id]
+      - GET /api/wines, GET /api/wines/[id]
+      - GET / POST /api/scans, GET /api/scans/[id]
+      - POST /api/scan, POST /api/scan-bottle
+      - GET /api/inventory
+      - POST /api/pour
+      - POST /api/reconcile
+      - GET / POST /api/wine-lists, PATCH / DELETE /api/wine-lists/[id]
+      - GET / POST /api/wine-list-sections, PATCH /api/wine-list-sections/[id]
+      - GET / POST /api/wine-list-items, PATCH /api/wine-list-items/[id]
+      - GET /api/insights
+      - GET / PATCH /api/restaurant
+      - GET / POST /api/team, DELETE /api/team/[id]
+      - POST /api/pdf
+      - GET /api/export
+      - GET /api/health
+    </core_resources>
+  </api_endpoints_summary>
+
+  <ui_layout>
+    <main_structure>
+      - Authed shell at (app)/* with persistent header (logo, nav-links, settings-dropdown)
+      - Mobile floating action button (fab.tsx) for primary actions per view
+      - Onboarding modal on first login (onboarding-modal.tsx)
+      - Public routes (login, auth, invite, list) render outside the authed shell
+    </main_structure>
+    <key_views>
+      - /cellar — inventory grouped by section, search/filter sidebar
+      - /scan — camera-first photo capture with review pane
+      - /lists — wine-list editor with drag-and-drop sections and items
+      - /insights — analytics dashboard with date-range selector
+      - /price-comparison — variance-sorted market view
+      - /team — member roster + pending invitations
+      - /list/[slug] — public guest-facing menu
+    </key_views>
+  </ui_layout>
+
+  <design_system>
+    <source_of_truth>
+      The complete design system — color palette, typography, spacing, motion, component aesthetics — is defined in `../DESIGN.md` (Wine Management workspace root, one level up from `terroir/`). The approved visual prototype is in `../Wine Scanner Dashboard/`. Both are canonical.
+    </source_of_truth>
+    <enforcement>
+      - Read `../DESIGN.md` before any visual or UI change
+      - Never invent colors, typography, spacing, or aesthetic direction not defined in DESIGN.md
+      - Cross-reference `../Wine Scanner Dashboard/` for component-level visual fidelity
+      - Flag any code that diverges from DESIGN.md as incomplete
+      - Visual changes outside DESIGN.md require explicit user approval
+    </enforcement>
+    <implementation_constraints>
+      - Tailwind CSS v4 utility classes only (no CSS Modules, no inline styles)
+      - Component variants via class-variance-authority (CVA) + clsx + tailwind-merge
+      - Icons: lucide-react exclusively
+      - Drag-and-drop: dnd-kit exclusively
+      - No third-party UI library (no shadcn/ui, no MUI, no Chakra, no Ant Design)
+    </implementation_constraints>
+  </design_system>
+
+  <key_interactions>
+    <invoice_scan_flow>
+      1. User taps Scan FAB on mobile, captures invoice photo
+      2. App uploads image to Supabase Storage
+      3. App POSTs scan reference to /api/scan
+      4. Server runs Azure OCR, then sends text to Claude with extraction prompt
+      5. Server validates Claude response with Zod
+      6. Server upserts wines via find_or_create_wines_batch
+      7. Server creates invoice_scans + inventory_items rows
+      8. Server enriches new wines via match_lwin_batch and enrich_wines_batch
+      9. Client navigates to scan-review screen with editable line items
+      10. User confirms or edits, then commits to inventory
+    </invoice_scan_flow>
+    <pour_flow>
+      1. Staff opens cellar, taps a wine, selects pour
+      2. Client POSTs to /api/pour with oz amount
+      3. record_pour DB function opens a new bottle if none open
+      4. record_pour decrements remaining_oz on the open bottle
+      5. UI updates inventory and open-bottle indicators optimistically
+    </pour_flow>
+    <publish_list_flow>
+      1. User edits sections and items in /lists/[id]
+      2. User toggles Published, system validates slug uniqueness
+      3. Public route /list/[slug] renders for guests with cache headers
+      4. Auto-86 logic hides or marks unavailable wines based on cellar_config
+    </publish_list_flow>
+    <reconcile_flow>
+      1. Manager opens /cellar/reconcile at end of shift
+      2. UI lists every open bottle with tracked remaining oz
+      3. Manager enters actual remaining for each
+      4. Client POSTs to /api/reconcile (single or batch)
+      5. reconcile_open_bottles_batch persists deltas as availability_events
+    </reconcile_flow>
+  </key_interactions>
+
+  <implementation_steps>
+    <step number="1">
+      <title>Foundations</title>
+      <tasks>
+        - Verify Supabase env vars and migrations applied
+        - Verify Anthropic + Azure DI keys present
+        - Run pnpm install, pnpm dev, confirm /api/health returns 200
+        - Run pnpm test and pnpm test:e2e to baseline existing suites
+      </tasks>
+    </step>
+    <step number="2">
+      <title>Auth + Multi-Tenancy</title>
+      <tasks>
+        - Confirm RLS via is_member / is_member_with_role on every table
+        - Confirm invitation accept flow end-to-end
+        - Verify role gates on team and reconcile routes
+      </tasks>
+    </step>
+    <step number="3">
+      <title>Inventory Core</title>
+      <tasks>
+        - Cellar list, search, filter, sort
+        - Manual wine CRUD with availability_events logging
+        - Section reorder via dnd-kit persisted to cellar_config
+      </tasks>
+    </step>
+    <step number="4">
+      <title>Scan Pipeline</title>
+      <tasks>
+        - Storage upload, OCR call, Claude extraction with Zod validation
+        - Idempotency via scan_idempotency
+        - Review-and-commit UI
+        - LWIN enrichment batch
+      </tasks>
+    </step>
+    <step number="5">
+      <title>Pour + Reconcile</title>
+      <tasks>
+        - record_pour wired to UI with optimistic updates
+        - Open bottles view
+        - Reconcile UI driven by reconcile_open_bottles_batch
+      </tasks>
+    </step>
+    <step number="6">
+      <title>Wine Lists + Public View</title>
+      <tasks>
+        - Editor with section + item drag-and-drop
+        - Slug uniqueness, publish/unpublish, archive
+        - Public /list/[slug] with print view and PDF export
+      </tasks>
+    </step>
+    <step number="7">
+      <title>Insights + Price Comparison</title>
+      <tasks>
+        - Insights dashboard with date-range selector
+        - Price-comparison variance view
+        - CSV export
+      </tasks>
+    </step>
+    <step number="8">
+      <title>Hardening</title>
+      <tasks>
+        - Rate limiting on write endpoints
+        - Sentry coverage verified across server, edge, client
+        - E2E test coverage on critical journeys
+      </tasks>
+    </step>
+  </implementation_steps>
+
+  <success_criteria>
+    <functionality>
+      - Existing invoice-scan, pour, reconcile, and publish flows continue working
+      - All RLS policies remain intact; no cross-restaurant data leakage in tests
+      - schema.snapshot.sql and src/types/database.ts stay in sync (CI checks pass)
+      - All Vitest and Playwright suites pass
+    </functionality>
+    <user_experience>
+      - Mobile-first responsive at 375px through 1280px+
+      - Touch targets ≥ 44px
+      - Loading states present on all async operations
+      - Error states surfaced with user-readable messages
+    </user_experience>
+    <technical_quality>
+      - TypeScript strict, no new any without justification
+      - Zod validation at every API boundary
+      - Server Components by default; "use client" only when justified
+      - Forward-only migrations; DB business rules in functions, not application code
+      - Sentry captures errors across all runtimes
+    </technical_quality>
+  </success_criteria>
+</project_specification>

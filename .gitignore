@@ -52,3 +52,6 @@ scripts/lwin.csv
 # (per-project plugin opt-in; runtime state mutates between bundles)
 /.claude/settings.json
 /.council/
+
+.playwright-cli/
+.playwright/
