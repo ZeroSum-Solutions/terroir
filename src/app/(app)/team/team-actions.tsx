@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, Copy, Link2, Loader2, Trash2 } from "lucide-react";
+import { Check, Copy, Link2, Loader2, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 
@@ -40,6 +40,12 @@ export function TeamActions({
   const [creating, setCreating] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Surface server errors from role-change / member-removal so the
+  // owner sees why an action didn't take effect (e.g. "Cannot demote
+  // the last owner.", "Cannot remove yourself.").
+  const [memberActionError, setMemberActionError] = useState<string | null>(
+    null,
+  );
 
   const isOwner = members.some(
     (m) => m.user_id === currentUserId && m.role === "owner",
@@ -93,17 +99,48 @@ export function TeamActions({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const extractServerError = async (
+    res: Response,
+    fallback: string,
+  ): Promise<string> => {
+    try {
+      const body = (await res.json()) as { error?: unknown };
+      if (typeof body.error === "string" && body.error.length > 0) {
+        return body.error;
+      }
+    } catch {
+      // non-JSON body — fall through to fallback
+    }
+    return fallback;
+  };
+
   const changeRole = async (memberId: string, role: string) => {
-    await fetch(`/api/team/members/${memberId}`, {
+    setMemberActionError(null);
+    const res = await fetch(`/api/team/members/${memberId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role }),
     });
+    if (!res.ok) {
+      setMemberActionError(
+        await extractServerError(res, "Couldn't update role. Please try again."),
+      );
+      return;
+    }
     router.refresh();
   };
 
   const removeMember = async (memberId: string) => {
-    await fetch(`/api/team/members/${memberId}`, { method: "DELETE" });
+    setMemberActionError(null);
+    const res = await fetch(`/api/team/members/${memberId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      setMemberActionError(
+        await extractServerError(res, "Couldn't remove member. Please try again."),
+      );
+      return;
+    }
     router.refresh();
   };
 
@@ -129,6 +166,23 @@ export function TeamActions({
             </button>
           )}
         </div>
+
+        {memberActionError && (
+          <div
+            role="alert"
+            className="mb-sm flex items-start justify-between gap-sm rounded-sm border border-danger/30 bg-danger-soft px-sm py-xs text-[13px] text-danger"
+          >
+            <span>{memberActionError}</span>
+            <button
+              type="button"
+              onClick={() => setMemberActionError(null)}
+              aria-label="Dismiss error"
+              className="-mr-2xs flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-danger/70 hover:bg-danger/10 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            </button>
+          </div>
+        )}
 
         <div className="rounded-md border border-border bg-surface">
           <table className="w-full text-[13px]">
