@@ -19,6 +19,8 @@ test-results*.json
 # next.js
 /.next/
 /out/
+.next-dev.log
+.next-dev.pid
 
 # production
 /build
