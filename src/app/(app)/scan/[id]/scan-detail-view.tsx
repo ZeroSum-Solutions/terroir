@@ -1,11 +1,12 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { accuracyColor } from "@/lib/scanner/accuracy-color";
+import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
 import type { LineItem } from "@/lib/scanner/types";
 
 interface ScanDetailViewProps {
@@ -57,6 +58,19 @@ export function ScanDetailView({
 
   const total = items.reduce((s, it) => s + it.qty * it.unitCost, 0);
 
+  const handleExportCsv = useCallback(() => {
+    if (items.length === 0) return;
+    downloadCsv(
+      csvFilename({
+        distributor,
+        invoiceNo: invoiceNumber ?? "",
+        invoiceDate: invoiceDate ?? createdAt.slice(0, 10),
+        parsedAt: createdAt,
+      }),
+      toCsv(items),
+    );
+  }, [items, distributor, invoiceNumber, invoiceDate, createdAt]);
+
   return (
     <section>
       <header className="mb-lg">
@@ -67,9 +81,23 @@ export function ScanDetailView({
           <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
           Back to scanner
         </Link>
-        <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
-          Scan details
-        </h1>
+        <div className="flex items-center justify-between gap-md">
+          <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
+            Scan details
+          </h1>
+          {items.length > 0 && (
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              className="flex h-10 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px]"
+              title="Download line items as CSV"
+            >
+              <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+              <span className="hidden sm:inline">Export CSV</span>
+              <span className="sm:hidden">CSV</span>
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="grid gap-md md:grid-cols-2">
