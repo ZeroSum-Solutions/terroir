@@ -1,9 +1,5 @@
 import { getAuthContext } from "@/lib/auth-context";
-import {
-  ArrowDown,
-  BarChart3,
-  ScanLine,
-} from "lucide-react";
+import { BarChart3, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { fetchDrinkWindowAlerts } from "@/lib/drink-window/alerts";
 import { fetchPricingAlerts } from "@/lib/pricing/alerts";
@@ -129,8 +125,12 @@ export default async function DashboardPage() {
     (s) => new Date(s.created_at) >= startOfMonth,
   );
 
-  // Compute metrics
-  const monthlySpend = items.reduce((s, i) => s + i.quantity * i.unit_cost, 0);
+  // Compute metrics. The hero shows total inventory value at current
+  // cost (spec §insights_and_analytics — "System shows total inventory
+  // value at current cost"), so this sums quantity × unit_cost across
+  // every item still on hand. `scanCount` is the per-month activity
+  // counter shown beneath the hero.
+  const inventoryValue = items.reduce((s, i) => s + i.quantity * i.unit_cost, 0);
   const totalBottles = items.reduce((s, i) => s + i.quantity, 0);
   const scanCount = monthScans.length;
 
@@ -295,19 +295,14 @@ export default async function DashboardPage() {
         <div className="rounded-md border border-border bg-surface p-lg md:col-span-2 md:grid md:grid-cols-2 md:gap-lg md:p-xl">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-              Monthly spend
+              Inventory value
             </div>
             <div className="mt-sm font-mono text-[48px] font-medium leading-none tracking-[-0.04em] text-ink md:text-[72px]">
-              {formatMoney(monthlySpend)}
+              {formatMoney(inventoryValue)}
             </div>
-            <div className="mt-sm flex items-center gap-md">
-              <span className="inline-flex items-center gap-xs rounded-pill bg-success-soft px-sm py-xs text-[12px] font-medium text-success">
-                <ArrowDown className="h-3 w-3" strokeWidth={2.5} />
-                this month
-              </span>
-              <span className="text-[13px] text-ink-muted">
-                {scanCount} scans
-              </span>
+            <div className="mt-sm text-[13px] text-ink-muted">
+              at current cost · {scanCount} scan{scanCount === 1 ? "" : "s"}{" "}
+              this month
             </div>
 
             <div className="mt-lg grid grid-cols-3 gap-sm md:gap-md">
