@@ -40,6 +40,24 @@ type PriceEntry = {
   invoiceDate: string | null;
 };
 
+/**
+ * Pick the entry with the most recent invoice_date. When no entries
+ * carry a date, fall back to the last entry in the array (preserves the
+ * pre-existing behaviour for invoices imported before invoice_date was
+ * captured). Returns undefined for an empty list.
+ */
+function pickMostRecent(prices: PriceEntry[]): PriceEntry | undefined {
+  if (prices.length === 0) return undefined;
+  let best: PriceEntry | undefined;
+  for (const p of prices) {
+    if (!p.invoiceDate) continue;
+    if (!best || (best.invoiceDate && p.invoiceDate > best.invoiceDate)) {
+      best = p;
+    }
+  }
+  return best ?? prices[prices.length - 1];
+}
+
 type WineComparison = {
   wine: {
     id: string;
@@ -509,7 +527,16 @@ export default async function PriceComparisonPage() {
               </thead>
               <tbody>
                 {singleSource.map((comp) => {
-                  const latest = comp.prices[comp.prices.length - 1];
+                  // `comp.prices` is sorted ascending by unitCost upstream,
+                  // so picking the last element would surface the MOST
+                  // EXPENSIVE quote — misleading when a distributor's
+                  // price has changed across multiple invoices. Pick the
+                  // entry with the most recent invoice_date instead, and
+                  // fall back to the last array entry when no dates exist.
+                  const latest = pickMostRecent(comp.prices);
+                  const latestDate = formatInvoiceDate(
+                    latest?.invoiceDate ?? null,
+                  );
                   return (
                     <tr
                       key={comp.wine.id}
@@ -532,7 +559,12 @@ export default async function PriceComparisonPage() {
                         </Link>
                       </td>
                       <td className="px-md py-sm text-ink-muted">
-                        {latest?.distributor ?? "—"}
+                        <div>{latest?.distributor ?? "—"}</div>
+                        {latestDate && (
+                          <div className="mt-2xs font-mono text-[11px] text-ink-subtle">
+                            {latestDate}
+                          </div>
+                        )}
                       </td>
                       <td className="px-md py-sm text-right font-mono text-ink">
                         {latest ? formatPrice(latest.unitCost) : "—"}
