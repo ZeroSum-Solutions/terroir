@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { accuracyColor } from "@/lib/scanner/accuracy-color";
 import type { LineItem } from "@/lib/scanner/types";
 
 interface ScanDetailViewProps {
@@ -101,7 +102,11 @@ export function ScanDetailView({
               <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
                 Accuracy
               </div>
-              <div className="mt-xs font-mono text-[14px] text-success">
+              <div
+                className={`mt-xs font-mono text-[14px] ${
+                  accuracy != null ? accuracyColor(accuracy) : "text-ink"
+                }`}
+              >
                 {accuracy != null ? `${accuracy}%` : "—"}
               </div>
             </div>

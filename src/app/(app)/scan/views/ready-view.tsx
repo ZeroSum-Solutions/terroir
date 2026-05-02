@@ -5,6 +5,7 @@ import { Check, ListOrdered, ScanLine } from "lucide-react";
 import { useRef } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { accuracyColor } from "@/lib/scanner/accuracy-color";
 import type { RecentScan, ScanMode } from "@/lib/scanner/types";
 import { formatMoney } from "../components/field-inputs";
 
@@ -32,7 +33,7 @@ function RecentScansList({ scans }: RecentScansListProps) {
                 {s.hasImage && (
                   <ImageIcon className="h-3 w-3 text-ink-subtle" strokeWidth={2} aria-label="Has invoice image" />
                 )}
-                <span className="tabular text-[12px] text-success">{s.accuracy}%</span>
+                <span className={cn("tabular text-[12px]", accuracyColor(s.accuracy))}>{s.accuracy}%</span>
               </div>
             </div>
             <div className="mb-xs text-[14px] font-medium text-ink">

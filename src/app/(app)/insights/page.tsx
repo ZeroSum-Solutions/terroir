@@ -7,6 +7,7 @@ import {
 import Link from "next/link";
 import { fetchDrinkWindowAlerts } from "@/lib/drink-window/alerts";
 import { fetchPricingAlerts } from "@/lib/pricing/alerts";
+import { accuracyColor } from "@/lib/scanner/accuracy-color";
 import { timeAgo } from "@/lib/time";
 import { BriefingAlertCard } from "./briefing-alert-card";
 import { EnrichCellarButton } from "./enrich-cellar-button";
@@ -467,7 +468,11 @@ export default async function DashboardPage() {
                       </div>
                     </div>
                     {scan.accuracy_score != null && (
-                      <span className="font-mono text-[12px] text-success">
+                      <span
+                        className={`font-mono text-[12px] ${accuracyColor(
+                          Math.round(scan.accuracy_score * 100),
+                        )}`}
+                      >
                         {Math.round(scan.accuracy_score * 100)}%
                       </span>
                     )}
