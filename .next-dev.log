@@ -1,0 +1,22 @@
+
+> terroir@0.1.0 dev /Users/zero-suminc./Desktop/Projects/Wine Management/terroir
+> next dev
+
+▲ Next.js 16.2.4 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.50.74:3000
+- Environments: .env.local
+✓ Ready in 323ms
+Attention: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://nextjs.org/telemetry
+
+Debugger listening on ws://127.0.0.1:53320/4211b6f1-49a8-4c94-92aa-fc74e384d394
+For help, see: https://nodejs.org/en/docs/inspector
+- Experiments (use with caution):
+  · clientTraceMetadata
+
+ GET /api/health 200 in 1150ms (next.js: 500ms, application-code: 649ms)
+ GET /api/health 200 in 866ms (next.js: 5ms, application-code: 861ms)
+ GET /api/health 200 in 192ms (next.js: 3ms, application-code: 188ms)
