@@ -162,6 +162,12 @@ export default async function DashboardPage() {
     distMap.set(distName, existing);
   }
 
+  // Whole-program distributor spend (across all distributors, not just
+  // the top-5 slice below) so each row's % reflects share-of-program,
+  // not share-of-top-5. Floored at 1 to avoid divide-by-zero.
+  const distTotalSpend =
+    [...distMap.values()].reduce((s, d) => s + d.spend, 0) || 1;
+
   const distributors = [...distMap.entries()]
     .sort((a, b) => b[1].spend - a[1].spend)
     .slice(0, 5);
@@ -416,24 +422,42 @@ export default async function DashboardPage() {
                 <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
                   <th scope="col" className="pb-sm text-left font-semibold">Distributor</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Spend</th>
+                  <th scope="col" className="pb-sm text-right font-semibold">Share</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Scans</th>
                 </tr>
               </thead>
               <tbody>
-                {distributors.map(([name, data]) => (
-                  <tr
-                    key={name}
-                    className="border-t border-dashed border-border"
-                  >
-                    <td className="py-sm font-medium text-ink">{name}</td>
-                    <td className="py-sm text-right font-mono text-ink">
-                      {formatMoney(data.spend)}
-                    </td>
-                    <td className="py-sm text-right font-mono text-ink-muted">
-                      {data.scans}
-                    </td>
-                  </tr>
-                ))}
+                {distributors.map(([name, data], i) => {
+                  const pct = data.spend / distTotalSpend;
+                  return (
+                    <tr
+                      key={name}
+                      className="border-t border-dashed border-border"
+                    >
+                      <td className="py-sm">
+                        <div className="font-medium text-ink">{name}</div>
+                        <div className="mt-2xs h-1.5 overflow-hidden rounded-pill bg-surface-sunken">
+                          <div
+                            className="h-full rounded-pill bg-accent"
+                            style={{
+                              width: `${pct * 100}%`,
+                              opacity: 1 - i * 0.07,
+                            }}
+                          />
+                        </div>
+                      </td>
+                      <td className="py-sm text-right font-mono text-ink">
+                        {formatMoney(data.spend)}
+                      </td>
+                      <td className="py-sm text-right font-mono text-ink-muted">
+                        {Math.round(pct * 100)}%
+                      </td>
+                      <td className="py-sm text-right font-mono text-ink-muted">
+                        {data.scans}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
