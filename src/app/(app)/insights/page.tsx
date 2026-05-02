@@ -524,7 +524,26 @@ export default async function DashboardPage() {
             </h3>
           </div>
           {recentScans.length === 0 ? (
-            <p className="text-[13px] text-ink-muted">No activity yet</p>
+            <div className="flex flex-col items-center justify-center px-md py-xl text-center">
+              <ScanLine
+                className="mb-sm h-8 w-8 text-ink-subtle"
+                strokeWidth={1.5}
+                aria-hidden
+              />
+              <p className="text-[14px] font-medium text-ink">
+                No invoices scanned yet
+              </p>
+              <p className="mt-2xs text-[13px] text-ink-muted">
+                Scan a distributor invoice to start tracking your activity.
+              </p>
+              <Link
+                href="/scan"
+                className="mt-md inline-flex h-[34px] items-center gap-xs rounded-sm bg-accent px-md text-[13px] font-medium text-white hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+              >
+                <ScanLine className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                Scan an invoice
+              </Link>
+            </div>
           ) : (
             <div>
               {recentScans.map((scan, i) => {
