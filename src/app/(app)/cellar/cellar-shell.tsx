@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Search, Settings, LayoutGrid, List as ListIcon } from "lucide-react";
+import { Search, Settings, LayoutGrid, List as ListIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isClosingWindow, isHolding } from "@/lib/drink-window/status";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
@@ -338,6 +338,7 @@ export function CellarShell({
               onChange={setQuery}
               inputRef={searchInputRef}
               autoFocus
+              onEscape={() => setSearchOpen(false)}
             />
             <button
               type="button"
@@ -387,11 +388,16 @@ function SearchInput({
   onChange,
   inputRef,
   autoFocus,
+  onEscape,
 }: {
   value: string;
   onChange: (v: string) => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
   autoFocus?: boolean;
+  // Mobile overlay passes this to also close the overlay on Escape.
+  // When the field has text, Escape clears the text first; a second
+  // Escape (now on an empty field) fires onEscape.
+  onEscape?: () => void;
 }) {
   return (
     <div className="relative w-full md:w-[320px]">
@@ -405,10 +411,34 @@ function SearchInput({
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            if (value) {
+              e.preventDefault();
+              onChange("");
+            } else if (onEscape) {
+              e.preventDefault();
+              onEscape();
+            }
+          }
+        }}
         placeholder="Search name, producer, region…"
         autoFocus={autoFocus}
-        className="h-[38px] w-full rounded-sm border border-border bg-white pl-[32px] pr-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+        className="h-[38px] w-full rounded-sm border border-border bg-white pl-[32px] pr-[36px] text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
       />
+      {value && (
+        <button
+          type="button"
+          aria-label="Clear search"
+          onClick={() => {
+            onChange("");
+            inputRef.current?.focus();
+          }}
+          className="absolute right-2xs top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-ink-subtle hover:bg-surface-muted hover:text-ink-muted focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent-soft"
+        >
+          <X className="h-4 w-4" strokeWidth={2} aria-hidden />
+        </button>
+      )}
     </div>
   );
 }
