@@ -1,12 +1,13 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import { ArrowLeft, Download, ExternalLink } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Download, ExternalLink } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { accuracyColor } from "@/lib/scanner/accuracy-color";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
+import { LOW_CONFIDENCE_ITEM_THRESHOLD } from "@/lib/scanner/scoring";
 import type { LineItem } from "@/lib/scanner/types";
 
 interface ScanDetailViewProps {
@@ -57,6 +58,13 @@ export function ScanDetailView({
   }, [id, hasImage]);
 
   const total = items.reduce((s, it) => s + it.qty * it.unitCost, 0);
+  // Flag rows where the parser's self-reported confidence fell below the
+  // same threshold used by /api/scan to decide whether to recommend a
+  // manual review. Surfacing the count + per-row indicator lets buyers
+  // jump straight to the uncertain rows instead of re-reading every line.
+  const flaggedCount = items.filter(
+    (it) => it.confidence < LOW_CONFIDENCE_ITEM_THRESHOLD,
+  ).length;
 
   const handleExportCsv = useCallback(() => {
     if (items.length === 0) return;
@@ -139,10 +147,23 @@ export function ScanDetailView({
               </div>
             </div>
           </div>
-          <div className="mt-md flex items-center gap-md border-t border-dashed border-border pt-md text-[13px] text-ink-muted">
+          <div className="mt-md flex flex-wrap items-center gap-md border-t border-dashed border-border pt-md text-[13px] text-ink-muted">
             <span>{itemCount} wines</span>
             <span aria-hidden className="text-ink-subtle">·</span>
             <span className="font-mono">${formatMoney(total)}</span>
+            {flaggedCount > 0 && (
+              <>
+                <span aria-hidden className="text-ink-subtle">·</span>
+                <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
+                  <AlertTriangle
+                    className="h-3 w-3"
+                    strokeWidth={2.5}
+                    aria-hidden="true"
+                  />
+                  {flaggedCount} to review
+                </span>
+              </>
+            )}
           </div>
         </div>
 
@@ -220,12 +241,27 @@ export function ScanDetailView({
                 </tr>
               </thead>
               <tbody>
-                {items.map((it, i) => (
+                {items.map((it, i) => {
+                  const lowConf = it.confidence < LOW_CONFIDENCE_ITEM_THRESHOLD;
+                  return (
                   <tr
                     key={it.id}
-                    className={i > 0 ? "border-t border-dashed border-border" : ""}
+                    className={`${i > 0 ? "border-t border-dashed border-border" : ""} ${
+                      lowConf ? "bg-warning-soft/40" : ""
+                    }`}
                   >
-                    <td className="py-sm font-medium text-ink">{it.name}</td>
+                    <td className="py-sm font-medium text-ink">
+                      <span className="inline-flex items-center gap-xs">
+                        {lowConf && (
+                          <AlertTriangle
+                            className="h-3.5 w-3.5 shrink-0 text-warning"
+                            strokeWidth={2.5}
+                            aria-label={`Low confidence (${Math.round(it.confidence * 100)}%) — review`}
+                          />
+                        )}
+                        {it.name}
+                      </span>
+                    </td>
                     <td className="py-sm text-ink">{it.producer}</td>
                     <td className="py-sm text-right font-mono text-ink">
                       {it.vintage ?? "NV"}
@@ -239,7 +275,8 @@ export function ScanDetailView({
                       ${formatMoney(it.qty * it.unitCost)}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
               {items.length > 0 && (
                 <tfoot>
@@ -261,13 +298,30 @@ export function ScanDetailView({
 
           {/* Mobile cards */}
           <div className="flex flex-col gap-sm md:hidden">
-            {items.map((it) => (
+            {items.map((it) => {
+              const lowConf = it.confidence < LOW_CONFIDENCE_ITEM_THRESHOLD;
+              return (
               <div
                 key={it.id}
-                className="rounded-md border border-border bg-white p-md"
+                className={`rounded-md border p-md ${
+                  lowConf
+                    ? "border-warning/40 bg-warning-soft/40"
+                    : "border-border bg-white"
+                }`}
               >
-                <div className="text-[14px] font-medium text-ink">{it.name}</div>
-                <div className="mt-2xs text-[13px] text-ink-muted">{it.producer}</div>
+                <div className="flex items-start gap-xs">
+                  {lowConf && (
+                    <AlertTriangle
+                      className="mt-2xs h-4 w-4 shrink-0 text-warning"
+                      strokeWidth={2.5}
+                      aria-label={`Low confidence (${Math.round(it.confidence * 100)}%) — review`}
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[14px] font-medium text-ink">{it.name}</div>
+                    <div className="mt-2xs text-[13px] text-ink-muted">{it.producer}</div>
+                  </div>
+                </div>
                 <div className="mt-sm flex flex-wrap items-center gap-x-md gap-y-xs text-[12px] text-ink-muted">
                   <span className="font-mono">{it.vintage ?? "NV"}</span>
                   <span>{it.varietal}</span>
@@ -282,7 +336,8 @@ export function ScanDetailView({
                   </span>
                 </div>
               </div>
-            ))}
+              );
+            })}
             {items.length > 0 && (
               <div className="mt-xs flex items-center justify-between border-t border-border px-md pt-md">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
