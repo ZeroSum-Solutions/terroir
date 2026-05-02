@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
 import { ArrowDown, ArrowUp, DollarSign, ScanLine } from "lucide-react";
 import Link from "next/link";
+import {
+  ExportCsvButton,
+  type PriceComparisonCsvRow,
+} from "./export-csv-button";
 
 export const metadata: Metadata = { title: "Price comparison" };
 
@@ -149,6 +153,43 @@ export default async function PriceComparisonPage() {
     0,
   );
 
+  // Flatten the same (wine, latest-per-distributor) shape the tables
+  // render into spreadsheet-ready rows. Comparable wines come first so
+  // the highest-impact buying decisions appear at the top of the CSV.
+  const csvRows: PriceComparisonCsvRow[] = [];
+  for (const comp of [...comparable, ...singleSource]) {
+    const byDist = new Map<string, PriceEntry>();
+    for (const p of comp.prices) {
+      const existing = byDist.get(p.distributor);
+      if (
+        !existing ||
+        (p.invoiceDate &&
+          (!existing.invoiceDate || p.invoiceDate > existing.invoiceDate))
+      ) {
+        byDist.set(p.distributor, p);
+      }
+    }
+    const distPrices = [...byDist.values()].sort(
+      (a, b) => a.unitCost - b.unitCost,
+    );
+    for (const price of distPrices) {
+      csvRows.push({
+        producer: comp.wine.producer,
+        wineName: comp.wine.name,
+        vintage: comp.wine.vintage,
+        distributor: price.distributor,
+        unitCost: price.unitCost,
+        quantity: price.quantity,
+        invoiceDate: price.invoiceDate,
+        distributorCount: comp.distributorCount,
+        spreadPct: comp.spread * 100,
+        potentialSavings: comp.potentialSavings,
+        isCheapest:
+          distPrices.length > 1 && price.unitCost === comp.cheapest,
+      });
+    }
+  }
+
   // Empty state
   if (comparisons.length === 0) {
     return (
@@ -188,12 +229,17 @@ export default async function PriceComparisonPage() {
   return (
     <section>
       <header className="mb-lg md:mb-xl">
-        <h1 className="font-serif text-[28px] text-ink">
-          Distributor Pricing
-        </h1>
-        <p className="mt-xs text-[15px] text-ink-muted">
-          Compare prices across suppliers
-        </p>
+        <div className="flex items-start justify-between gap-md">
+          <div>
+            <h1 className="font-serif text-[28px] text-ink">
+              Distributor Pricing
+            </h1>
+            <p className="mt-xs text-[15px] text-ink-muted">
+              Compare prices across suppliers
+            </p>
+          </div>
+          <ExportCsvButton rows={csvRows} />
+        </div>
       </header>
 
       {/* Summary card */}
