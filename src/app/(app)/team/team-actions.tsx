@@ -40,6 +40,12 @@ export function TeamActions({
   const [creating, setCreating] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Per-row "copied" indicator for the Pending invitations table —
+  // tracks the invitation id whose link was most recently copied so we
+  // can flash a confirmation on that row only.
+  const [copiedInvitationId, setCopiedInvitationId] = useState<string | null>(
+    null,
+  );
   // Surface server errors from role-change / member-removal so the
   // owner sees why an action didn't take effect (e.g. "Cannot demote
   // the last owner.", "Cannot remove yourself.").
@@ -97,6 +103,19 @@ export function TeamActions({
     await navigator.clipboard.writeText(inviteUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const copyInvitationLink = async (invitation: Invitation) => {
+    const url = `${window.location.origin}/invite/${invitation.token}`;
+    await navigator.clipboard.writeText(url);
+    setCopiedInvitationId(invitation.id);
+    setTimeout(
+      () =>
+        setCopiedInvitationId((current) =>
+          current === invitation.id ? null : current,
+        ),
+      2000,
+    );
   };
 
   const extractServerError = async (
@@ -272,32 +291,55 @@ export function TeamActions({
                   <th className="px-md py-sm text-right font-semibold">
                     Expires
                   </th>
+                  {isOwner && (
+                    <th className="w-[120px] px-sm py-sm font-semibold" />
+                  )}
                 </tr>
               </thead>
               <tbody>
-                {invitations.map((inv) => (
-                  <tr
-                    key={inv.id}
-                    className="border-t border-dashed border-border"
-                  >
-                    <td className="px-md py-sm text-ink">
-                      {inv.email ?? (
-                        <span className="text-ink-subtle italic">
-                          (no email)
-                        </span>
+                {invitations.map((inv) => {
+                  const justCopied = copiedInvitationId === inv.id;
+                  return (
+                    <tr
+                      key={inv.id}
+                      className="border-t border-dashed border-border"
+                    >
+                      <td className="px-md py-sm text-ink">
+                        {inv.email ?? (
+                          <span className="text-ink-subtle italic">
+                            (no email)
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-md py-sm capitalize text-ink">
+                        {inv.role}
+                      </td>
+                      <td className="px-md py-sm font-mono text-[12px] text-ink-muted">
+                        {new Intl.DateTimeFormat().format(new Date(inv.created_at))}
+                      </td>
+                      <td className="px-md py-sm text-right font-mono text-[12px] text-ink-subtle">
+                        {new Intl.DateTimeFormat().format(new Date(inv.expires_at))}
+                      </td>
+                      {isOwner && (
+                        <td className="px-sm py-sm text-right">
+                          <button
+                            type="button"
+                            onClick={() => copyInvitationLink(inv)}
+                            aria-label={`Copy invite link for ${inv.email ?? "invitation"}`}
+                            className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                          >
+                            {justCopied ? (
+                              <Check className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                            )}
+                            {justCopied ? "Copied" : "Copy link"}
+                          </button>
+                        </td>
                       )}
-                    </td>
-                    <td className="px-md py-sm capitalize text-ink">
-                      {inv.role}
-                    </td>
-                    <td className="px-md py-sm font-mono text-[12px] text-ink-muted">
-                      {new Intl.DateTimeFormat().format(new Date(inv.created_at))}
-                    </td>
-                    <td className="px-md py-sm text-right font-mono text-[12px] text-ink-subtle">
-                      {new Intl.DateTimeFormat().format(new Date(inv.expires_at))}
-                    </td>
-                  </tr>
-                ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
