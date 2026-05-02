@@ -1,7 +1,7 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, Download, ExternalLink } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -157,15 +157,40 @@ export function ScanDetailView({
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
               </div>
             ) : imageUrl ? (
-              <Image
-                src={imageUrl}
-                alt={`Invoice from ${distributor}`}
-                width={0}
-                height={0}
-                unoptimized
-                className="max-h-[60vh] w-full rounded object-contain md:max-h-[70vh]"
-                style={{ width: "100%", height: "auto", touchAction: "pinch-zoom" }}
-              />
+              <>
+                {/* The visible <Image> is capped at 60-70vh so it fits next to
+                    the line-items table, but buyers verifying scan accuracy
+                    often need to zoom into specific rows on the original.
+                    Wrapping the image in a same-tab-friendly anchor opens it
+                    at native resolution; the inline "Open full size" affordance
+                    below keeps the action keyboard-accessible. */}
+                <a
+                  href={imageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Open full-resolution invoice from ${distributor} in a new tab`}
+                  className="block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                >
+                  <Image
+                    src={imageUrl}
+                    alt={`Invoice from ${distributor}`}
+                    width={0}
+                    height={0}
+                    unoptimized
+                    className="max-h-[60vh] w-full cursor-zoom-in rounded object-contain md:max-h-[70vh]"
+                    style={{ width: "100%", height: "auto", touchAction: "pinch-zoom" }}
+                  />
+                </a>
+                <a
+                  href={imageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-sm inline-flex items-center gap-xs text-[12px] text-ink-muted hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                >
+                  <ExternalLink className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
+                  Open full size
+                </a>
+              </>
             ) : (
               <div className="flex h-[200px] items-center justify-center rounded bg-surface-muted text-[13px] text-ink-muted">
                 Image unavailable
