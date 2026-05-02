@@ -191,6 +191,7 @@ export function ScanDetailView({
                   <th scope="col" className="pb-sm text-left font-semibold">Varietal</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Qty</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Unit cost</th>
+                  <th scope="col" className="pb-sm text-right font-semibold">Subtotal</th>
                 </tr>
               </thead>
               <tbody>
@@ -209,9 +210,27 @@ export function ScanDetailView({
                     <td className="py-sm text-right font-mono text-ink">
                       ${formatMoney(it.unitCost)}
                     </td>
+                    <td className="py-sm text-right font-mono font-medium text-ink">
+                      ${formatMoney(it.qty * it.unitCost)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
+              {items.length > 0 && (
+                <tfoot>
+                  <tr className="border-t border-border">
+                    <td
+                      colSpan={6}
+                      className="py-sm pr-sm text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle"
+                    >
+                      Total
+                    </td>
+                    <td className="py-sm text-right font-mono font-semibold text-ink">
+                      ${formatMoney(total)}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
 
