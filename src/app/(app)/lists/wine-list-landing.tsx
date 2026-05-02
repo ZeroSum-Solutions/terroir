@@ -132,9 +132,24 @@ export function WineListLanding({
                       </span>{" "}
                       wines
                     </span>
-                    <span>
-                      Updated <TimeAgo iso={list.updated_at} />
-                    </span>
+                    {/* For published lists, show when the public-facing
+                        version was last refreshed — that's the timestamp
+                        operators actually care about. Drafts keep the
+                        generic "Updated" since publish_at is null. Falls
+                        back to updated_at if last_published_at is missing
+                        (defensive for legacy rows). */}
+                    {list.is_published ? (
+                      <span>
+                        Published{" "}
+                        <TimeAgo
+                          iso={list.last_published_at ?? list.updated_at}
+                        />
+                      </span>
+                    ) : (
+                      <span>
+                        Updated <TimeAgo iso={list.updated_at} />
+                      </span>
+                    )}
                   </div>
                 </button>
                 {showCopyAction && (
