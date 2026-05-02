@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
 import { ArrowDown, ArrowUp, DollarSign, ScanLine } from "lucide-react";
 import Link from "next/link";
+
+export const metadata: Metadata = { title: "Price comparison" };
 
 function formatPrice(n: number) {
   return "$" + n.toFixed(2);
@@ -26,6 +29,10 @@ type WineComparison = {
   mostExpensive: number;
   spread: number;
   distributorCount: number;
+  // Potential dollar savings if every unit had been bought at the
+  // cheapest distributor's price. Used to sort comparable wines so the
+  // biggest savings opportunities surface first.
+  potentialSavings: number;
 };
 
 export default async function PriceComparisonPage() {
@@ -61,6 +68,7 @@ export default async function PriceComparisonPage() {
         mostExpensive: 0,
         spread: 0,
         distributorCount: 0,
+        potentialSavings: 0,
       };
       wineMap.set(wine.id, entry);
     }
@@ -74,30 +82,52 @@ export default async function PriceComparisonPage() {
   }
 
   // Compute derived fields
-  const comparisons: WineComparison[] = [...wineMap.values()]
-    .map((entry) => {
-      const sorted = entry.prices.sort((a, b) => a.unitCost - b.unitCost);
-      const cheapest = sorted[0]?.unitCost ?? 0;
-      const mostExpensive = sorted[sorted.length - 1]?.unitCost ?? 0;
-      const spread = cheapest > 0 ? (mostExpensive - cheapest) / cheapest : 0;
-      const distributorCount = new Set(sorted.map((p) => p.distributor)).size;
+  const comparisons: WineComparison[] = [...wineMap.values()].map((entry) => {
+    const sorted = entry.prices.sort((a, b) => a.unitCost - b.unitCost);
+    const cheapest = sorted[0]?.unitCost ?? 0;
+    const mostExpensive = sorted[sorted.length - 1]?.unitCost ?? 0;
+    const spread = cheapest > 0 ? (mostExpensive - cheapest) / cheapest : 0;
+    const distributorCount = new Set(sorted.map((p) => p.distributor)).size;
+    const totalQty = sorted.reduce((s, p) => s + p.quantity, 0);
+    const potentialSavings = (mostExpensive - cheapest) * totalQty;
 
-      return { ...entry, cheapest, mostExpensive, spread, distributorCount };
-    })
+    return {
+      ...entry,
+      cheapest,
+      mostExpensive,
+      spread,
+      distributorCount,
+      potentialSavings,
+    };
+  });
+
+  // Comparable wines (2+ distributors) sort by potential dollar
+  // savings descending so the highest-impact rows surface first; spread
+  // % is the tiebreak so two wines with identical savings stay in a
+  // stable order. Single-source wines have no comparison signal, so
+  // they keep alphabetical order for predictable scanning.
+  const comparable = comparisons
+    .filter((c) => c.distributorCount >= 2)
+    .sort((a, b) => {
+      if (b.potentialSavings !== a.potentialSavings) {
+        return b.potentialSavings - a.potentialSavings;
+      }
+      if (b.spread !== a.spread) return b.spread - a.spread;
+      const cmp = a.wine.producer.localeCompare(b.wine.producer);
+      return cmp !== 0 ? cmp : a.wine.name.localeCompare(b.wine.name);
+    });
+  const singleSource = comparisons
+    .filter((c) => c.distributorCount < 2)
     .sort((a, b) => {
       const cmp = a.wine.producer.localeCompare(b.wine.producer);
       return cmp !== 0 ? cmp : a.wine.name.localeCompare(b.wine.name);
     });
 
-  // Only wines with 2+ distributors are interesting for comparison
-  const comparable = comparisons.filter((c) => c.distributorCount >= 2);
-  const singleSource = comparisons.filter((c) => c.distributorCount < 2);
-
   // Total savings opportunity
-  const totalSavings = comparable.reduce((sum, c) => {
-    const totalQty = c.prices.reduce((s, p) => s + p.quantity, 0);
-    return sum + (c.mostExpensive - c.cheapest) * totalQty;
-  }, 0);
+  const totalSavings = comparable.reduce(
+    (sum, c) => sum + c.potentialSavings,
+    0,
+  );
 
   // Empty state
   if (comparisons.length === 0) {
