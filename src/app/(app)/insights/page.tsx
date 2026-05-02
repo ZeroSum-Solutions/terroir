@@ -448,9 +448,11 @@ export default async function DashboardPage() {
               {recentScans.map((scan, i) => {
                 const timeAgo = getTimeAgo(scan.created_at);
                 return (
-                  <div
+                  <Link
                     key={scan.id}
-                    className={`flex items-center gap-md py-sm ${i > 0 ? "border-t border-dashed border-border" : ""}`}
+                    href={`/scan/${scan.id}`}
+                    aria-label={`View scan from ${scan.distributor_name}, ${scan.item_count} wines, ${timeAgo}`}
+                    className={`flex items-center gap-md rounded-sm py-sm transition-colors hover:bg-surface-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft ${i > 0 ? "border-t border-dashed border-border" : ""}`}
                   >
                     <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-muted text-ink-muted">
                       <ScanLine className="h-4 w-4" strokeWidth={1.75} />
@@ -471,7 +473,7 @@ export default async function DashboardPage() {
                     <span className="shrink-0 font-mono text-[12px] text-ink-subtle">
                       {timeAgo}
                     </span>
-                  </div>
+                  </Link>
                 );
               })}
             </div>
