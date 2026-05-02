@@ -258,6 +258,16 @@ export function ScanDetailView({
                 </div>
               </div>
             ))}
+            {items.length > 0 && (
+              <div className="mt-xs flex items-center justify-between border-t border-border px-md pt-md">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                  Total
+                </span>
+                <span className="font-mono text-[14px] font-semibold text-ink">
+                  ${formatMoney(total)}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
