@@ -72,6 +72,25 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const downloadQr = useCallback(async () => {
+    if (!publicUrl || !slug) return;
+    // PNG (not the inline SVG) so non-technical users can drop it straight
+    // into print templates. White background required — the displayed QR
+    // uses a transparent background which won't render on light table tents.
+    const QRCode = await import("qrcode");
+    const dataUrl = await QRCode.toDataURL(publicUrl, {
+      margin: 2,
+      width: 1024,
+      color: { dark: "#1A1A1A", light: "#FFFFFF" },
+    });
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `wine-list-${slug}-qr.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }, [publicUrl, slug]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-md"
@@ -136,6 +155,13 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
                     {copied ? "Copied!" : "Copy"}
                   </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={downloadQr}
+                  className="mt-sm inline-flex h-[32px] items-center rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                >
+                  Download QR (PNG)
+                </button>
               </div>
             )}
 
