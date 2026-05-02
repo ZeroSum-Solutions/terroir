@@ -9,6 +9,26 @@ function formatPrice(n: number) {
   return "$" + n.toFixed(2);
 }
 
+/**
+ * Short, scannable date for distributor price freshness. The buyer needs
+ * "is this quote current?" at a glance, not full ISO precision. Same-year
+ * dates collapse to "Apr 15" so the column stays narrow; older dates keep
+ * the year ("Mar 3, 2025") so a stale quote is obvious. Returns null on
+ * missing/invalid input so callers can omit the line entirely.
+ */
+function formatInvoiceDate(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+}
+
 type PriceEntry = {
   distributor: string;
   unitCost: number;
@@ -271,7 +291,14 @@ export default async function PriceComparisonPage() {
                           </Link>
                         </td>
                       ) : null}
-                      <td className="py-sm text-ink">{price.distributor}</td>
+                      <td className="py-sm text-ink">
+                        <div>{price.distributor}</div>
+                        {formatInvoiceDate(price.invoiceDate) && (
+                          <div className="mt-2xs font-mono text-[11px] text-ink-subtle">
+                            {formatInvoiceDate(price.invoiceDate)}
+                          </div>
+                        )}
+                      </td>
                       <td className="py-sm text-right font-mono text-ink">
                         {formatPrice(price.unitCost)}
                         {price.unitCost === comp.cheapest &&
@@ -367,8 +394,13 @@ export default async function PriceComparisonPage() {
                             : ""
                         }`}
                       >
-                        <span className="text-[13px] text-ink">
-                          {price.distributor}
+                        <span className="min-w-0 text-[13px] text-ink">
+                          <span className="block truncate">{price.distributor}</span>
+                          {formatInvoiceDate(price.invoiceDate) && (
+                            <span className="mt-2xs block font-mono text-[11px] text-ink-subtle">
+                              {formatInvoiceDate(price.invoiceDate)}
+                            </span>
+                          )}
                         </span>
                         <span className="font-mono text-[13px] font-medium text-ink">
                           {formatPrice(price.unitCost)}
