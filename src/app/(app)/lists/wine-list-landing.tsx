@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ListOrdered, Plus } from "lucide-react";
+import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import type { WineListWithCount } from "@/lib/wine-list/types";
 
 function timeAgo(iso: string): string {
@@ -134,50 +135,86 @@ export function WineListLanding({
 
       {/* Create modal */}
       {showModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-md"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowModal(false);
-          }}
-        >
-          <div className="w-full max-w-[400px] rounded-md border border-border bg-surface p-lg shadow-lg">
-            <h2 className="font-serif text-[22px] text-ink">
-              New wine list
-            </h2>
-            <p className="mt-xs text-[13px] text-ink-muted">
-              Default sections will be created. You can rename or add more later.
-            </p>
-            <input
-              autoFocus
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") createList();
-              }}
-              placeholder="Spring 2026 Wine List…"
-              className="mt-lg h-[38px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
-            />
-            <div className="mt-lg flex justify-end gap-sm">
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="h-[38px] rounded-sm border border-border-strong px-md text-[14px] font-medium text-ink hover:bg-surface-muted"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={createList}
-                disabled={creating}
-                className="h-[38px] rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
-              >
-                {creating ? "Creating..." : "Create"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <CreateListModal
+          newName={newName}
+          setNewName={setNewName}
+          creating={creating}
+          onClose={() => setShowModal(false)}
+          onCreate={createList}
+        />
       )}
     </section>
+  );
+}
+
+function CreateListModal({
+  newName,
+  setNewName,
+  creating,
+  onClose,
+  onCreate,
+}: {
+  newName: string;
+  setNewName: (v: string) => void;
+  creating: boolean;
+  onClose: () => void;
+  onCreate: () => void;
+}) {
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap({ containerRef: trapRef, onEscape: onClose });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-md"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="new-wine-list-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={trapRef}
+        className="w-full max-w-[400px] rounded-md border border-border bg-surface p-lg shadow-lg"
+      >
+        <h2
+          id="new-wine-list-title"
+          className="font-serif text-[22px] text-ink"
+        >
+          New wine list
+        </h2>
+        <p className="mt-xs text-[13px] text-ink-muted">
+          Default sections will be created. You can rename or add more later.
+        </p>
+        <input
+          autoFocus
+          type="text"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onCreate();
+          }}
+          placeholder="Spring 2026 Wine List…"
+          className="mt-lg h-[38px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+        />
+        <div className="mt-lg flex justify-end gap-sm">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-[38px] rounded-sm border border-border-strong px-md text-[14px] font-medium text-ink hover:bg-surface-muted"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onCreate}
+            disabled={creating}
+            className="h-[38px] rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+          >
+            {creating ? "Creating..." : "Create"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

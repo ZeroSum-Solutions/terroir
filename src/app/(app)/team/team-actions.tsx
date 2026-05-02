@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check, Copy, Link2, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 
 type Member = {
   id: string;
@@ -212,96 +213,146 @@ export function TeamActions({
 
       {/* Invite modal */}
       {showInvite && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/20 backdrop-blur-sm">
-          <div className="mx-md w-full max-w-[420px] rounded-md border border-border bg-surface p-lg shadow-lg">
-            <h3 className="text-[18px] font-serif font-medium text-ink">
-              Invite team member
-            </h3>
-            <p className="mt-xs text-[13px] text-ink-muted">
-              Create a shareable link. Anyone with the link can join your
-              restaurant as the selected role.
-            </p>
-
-            {!inviteUrl ? (
-              <>
-                <div className="mt-lg">
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-                    Role
-                  </label>
-                  <select
-                    value={inviteRole}
-                    onChange={(e) =>
-                      setInviteRole(e.target.value as "manager" | "staff")
-                    }
-                    className="mt-xs w-full rounded-sm border border-border bg-white px-md py-sm text-[14px] text-ink"
-                  >
-                    <option value="manager">Manager</option>
-                    <option value="staff">Staff</option>
-                  </select>
-                  <p className="mt-xs text-[12px] text-ink-subtle">
-                    {inviteRole === "manager"
-                      ? "Can scan, create wine lists, and publish."
-                      : "Can scan invoices only."}
-                  </p>
-                </div>
-
-                <div className="mt-lg flex justify-end gap-sm">
-                  <button
-                    type="button"
-                    onClick={() => setShowInvite(false)}
-                    className="flex h-[38px] items-center rounded-sm border border-border-strong bg-white px-md text-[14px] font-medium text-ink hover:bg-surface-muted"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={createInvite}
-                    disabled={creating}
-                    className="flex h-[38px] items-center gap-xs rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
-                  >
-                    {creating && (
-                      <Loader2
-                        className="h-4 w-4 animate-spin"
-                        strokeWidth={2}
-                      />
-                    )}
-                    Generate link
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="mt-lg rounded-sm border border-border bg-surface-muted p-md">
-                  <p className="break-all font-mono text-[12px] text-ink">
-                    {inviteUrl}
-                  </p>
-                </div>
-                <div className="mt-md flex justify-end gap-sm">
-                  <button
-                    type="button"
-                    onClick={() => setShowInvite(false)}
-                    className="flex h-[38px] items-center rounded-sm border border-border-strong bg-white px-md text-[14px] font-medium text-ink hover:bg-surface-muted"
-                  >
-                    Done
-                  </button>
-                  <button
-                    type="button"
-                    onClick={copyLink}
-                    className="flex h-[38px] items-center gap-xs rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
-                  >
-                    {copied ? (
-                      <Check className="h-4 w-4" strokeWidth={2} />
-                    ) : (
-                      <Copy className="h-4 w-4" strokeWidth={2} />
-                    )}
-                    {copied ? "Copied" : "Copy link"}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        <InviteModal
+          inviteRole={inviteRole}
+          setInviteRole={setInviteRole}
+          inviteUrl={inviteUrl}
+          creating={creating}
+          copied={copied}
+          onClose={() => setShowInvite(false)}
+          onCreate={createInvite}
+          onCopy={copyLink}
+        />
       )}
     </>
+  );
+}
+
+function InviteModal({
+  inviteRole,
+  setInviteRole,
+  inviteUrl,
+  creating,
+  copied,
+  onClose,
+  onCreate,
+  onCopy,
+}: {
+  inviteRole: "manager" | "staff";
+  setInviteRole: (r: "manager" | "staff") => void;
+  inviteUrl: string;
+  creating: boolean;
+  copied: boolean;
+  onClose: () => void;
+  onCreate: () => void;
+  onCopy: () => void;
+}) {
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap({ containerRef: trapRef, onEscape: onClose });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/20 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="invite-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={trapRef}
+        className="mx-md w-full max-w-[420px] rounded-md border border-border bg-surface p-lg shadow-lg"
+      >
+        <h3
+          id="invite-modal-title"
+          className="text-[18px] font-serif font-medium text-ink"
+        >
+          Invite team member
+        </h3>
+        <p className="mt-xs text-[13px] text-ink-muted">
+          Create a shareable link. Anyone with the link can join your
+          restaurant as the selected role.
+        </p>
+
+        {!inviteUrl ? (
+          <>
+            <div className="mt-lg">
+              <label className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                Role
+              </label>
+              <select
+                value={inviteRole}
+                onChange={(e) =>
+                  setInviteRole(e.target.value as "manager" | "staff")
+                }
+                className="mt-xs w-full rounded-sm border border-border bg-white px-md py-sm text-[14px] text-ink"
+              >
+                <option value="manager">Manager</option>
+                <option value="staff">Staff</option>
+              </select>
+              <p className="mt-xs text-[12px] text-ink-subtle">
+                {inviteRole === "manager"
+                  ? "Can scan, create wine lists, and publish."
+                  : "Can scan invoices only."}
+              </p>
+            </div>
+
+            <div className="mt-lg flex justify-end gap-sm">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-[38px] items-center rounded-sm border border-border-strong bg-white px-md text-[14px] font-medium text-ink hover:bg-surface-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={onCreate}
+                disabled={creating}
+                className="flex h-[38px] items-center gap-xs rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+              >
+                {creating && (
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    strokeWidth={2}
+                  />
+                )}
+                Generate link
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="mt-lg rounded-sm border border-border bg-surface-muted p-md">
+              <p className="break-all font-mono text-[12px] text-ink">
+                {inviteUrl}
+              </p>
+            </div>
+            <div className="mt-md flex justify-end gap-sm">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-[38px] items-center rounded-sm border border-border-strong bg-white px-md text-[14px] font-medium text-ink hover:bg-surface-muted"
+              >
+                Done
+              </button>
+              <button
+                type="button"
+                onClick={onCopy}
+                className="flex h-[38px] items-center gap-xs rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
+              >
+                {copied ? (
+                  <Check className="h-4 w-4" strokeWidth={2} />
+                ) : (
+                  <Copy className="h-4 w-4" strokeWidth={2} />
+                )}
+                {copied ? "Copied" : "Copy link"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
