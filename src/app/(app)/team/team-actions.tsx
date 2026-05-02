@@ -37,6 +37,7 @@ export function TeamActions({
   const [inviteRole, setInviteRole] = useState<"manager" | "staff">("staff");
   const [inviteUrl, setInviteUrl] = useState("");
   const [creating, setCreating] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const isOwner = members.some(
@@ -45,17 +46,32 @@ export function TeamActions({
 
   const createInvite = async () => {
     setCreating(true);
-    const res = await fetch("/api/team/invite", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: inviteRole }),
-    });
-    if (res.ok) {
+    setInviteError(null);
+    try {
+      const res = await fetch("/api/team/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: inviteRole }),
+      });
+      if (!res.ok) {
+        throw new Error(
+          res.status === 403
+            ? "Only owners can create invite links."
+            : "Failed to create invite",
+        );
+      }
       const invite = await res.json();
       setInviteUrl(invite.inviteUrl);
       router.refresh();
+    } catch (err) {
+      setInviteError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Couldn't create invite link. Please try again.",
+      );
+    } finally {
+      setCreating(false);
     }
-    setCreating(false);
   };
 
   const copyLink = async () => {
@@ -215,11 +231,18 @@ export function TeamActions({
       {showInvite && (
         <InviteModal
           inviteRole={inviteRole}
-          setInviteRole={setInviteRole}
+          setInviteRole={(r) => {
+            setInviteRole(r);
+            if (inviteError) setInviteError(null);
+          }}
           inviteUrl={inviteUrl}
           creating={creating}
+          error={inviteError}
           copied={copied}
-          onClose={() => setShowInvite(false)}
+          onClose={() => {
+            setShowInvite(false);
+            setInviteError(null);
+          }}
           onCreate={createInvite}
           onCopy={copyLink}
         />
@@ -233,6 +256,7 @@ function InviteModal({
   setInviteRole,
   inviteUrl,
   creating,
+  error,
   copied,
   onClose,
   onCreate,
@@ -242,6 +266,7 @@ function InviteModal({
   setInviteRole: (r: "manager" | "staff") => void;
   inviteUrl: string;
   creating: boolean;
+  error: string | null;
   copied: boolean;
   onClose: () => void;
   onCreate: () => void;
@@ -297,6 +322,15 @@ function InviteModal({
                   : "Can scan invoices only."}
               </p>
             </div>
+
+            {error && (
+              <p
+                role="alert"
+                className="mt-md rounded-sm border border-danger/30 bg-danger-soft px-sm py-xs text-[13px] text-danger"
+              >
+                {error}
+              </p>
+            )}
 
             <div className="mt-lg flex justify-end gap-sm">
               <button
