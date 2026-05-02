@@ -5,6 +5,7 @@ import { Check, ListOrdered, ScanLine } from "lucide-react";
 import { useRef } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { TimeAgo } from "@/components/time-ago";
 import { accuracyColor } from "@/lib/scanner/accuracy-color";
 import type { RecentScan, ScanMode } from "@/lib/scanner/types";
 import { formatMoney } from "../components/field-inputs";
@@ -28,7 +29,7 @@ function RecentScansList({ scans }: RecentScansListProps) {
             className="block rounded-md border border-border bg-white p-md transition-all hover:border-accent/40 hover:shadow-sm"
           >
             <div className="mb-sm flex items-center justify-between">
-              <span className="tabular text-[12px] text-ink-muted">{s.parsedAt}</span>
+              <TimeAgo iso={s.parsedAt} className="tabular text-[12px] text-ink-muted" />
               <div className="flex items-center gap-xs">
                 {s.hasImage && (
                   <ImageIcon className="h-3 w-3 text-ink-subtle" strokeWidth={2} aria-label="Has invoice image" />

@@ -29,7 +29,7 @@ export default async function ScannerPage() {
         );
         return {
           id: s.id,
-          parsedAt: s.created_at.slice(0, 10),
+          parsedAt: s.created_at,
           distributor: s.distributor_name,
           items: s.item_count,
           total,
