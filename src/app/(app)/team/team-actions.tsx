@@ -299,10 +299,11 @@ export function TeamActions({
               <tbody>
                 {invitations.map((inv) => {
                   const justCopied = copiedInvitationId === inv.id;
+                  const expiry = describeExpiry(inv.expires_at);
                   return (
                     <tr
                       key={inv.id}
-                      className="border-t border-dashed border-border"
+                      className={`border-t border-dashed border-border ${expiry.status === "expired" ? "opacity-60" : ""}`}
                     >
                       <td className="px-md py-sm text-ink">
                         {inv.email ?? (
@@ -317,8 +318,31 @@ export function TeamActions({
                       <td className="px-md py-sm font-mono text-[12px] text-ink-muted">
                         {new Intl.DateTimeFormat().format(new Date(inv.created_at))}
                       </td>
-                      <td className="px-md py-sm text-right font-mono text-[12px] text-ink-subtle">
-                        {new Intl.DateTimeFormat().format(new Date(inv.expires_at))}
+                      <td
+                        className="px-md py-sm text-right text-[12px]"
+                        title={new Intl.DateTimeFormat(undefined, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        }).format(new Date(inv.expires_at))}
+                      >
+                        {expiry.status === "expired" ? (
+                          <span className="inline-flex items-center rounded-pill bg-danger-soft px-sm py-xs text-[11px] font-semibold text-danger">
+                            Expired
+                          </span>
+                        ) : expiry.status === "soon" ? (
+                          <span className="inline-flex items-center gap-xs">
+                            <span className="rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
+                              Expires soon
+                            </span>
+                            <span className="font-mono text-ink-muted">
+                              {expiry.label}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="font-mono text-ink-subtle">
+                            {expiry.label}
+                          </span>
+                        )}
                       </td>
                       {isOwner && (
                         <td className="px-sm py-sm text-right">
@@ -551,4 +575,31 @@ function InviteModal({
       </div>
     </div>
   );
+}
+
+/**
+ * Describe an invitation's expiry as a status + short relative label.
+ * - expired: expires_at is in the past
+ * - soon:    expires within the next 48 hours
+ * - ok:      everything else
+ * Used to colour-code the Pending invitations table so operators can
+ * see at a glance which links are still usable.
+ */
+function describeExpiry(
+  expiresAt: string,
+): { status: "expired" | "soon" | "ok"; label: string } {
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms <= 0) return { status: "expired", label: "Expired" };
+
+  const mins = Math.round(ms / 60000);
+  const hours = Math.round(mins / 60);
+  const days = Math.round(hours / 24);
+
+  let label: string;
+  if (mins < 60) label = `in ${Math.max(mins, 1)}m`;
+  else if (hours < 24) label = `in ${hours}h`;
+  else label = `in ${days}d`;
+
+  const status = ms < 48 * 60 * 60 * 1000 ? "soon" : "ok";
+  return { status, label };
 }
