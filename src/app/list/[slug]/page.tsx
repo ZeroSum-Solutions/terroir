@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { renderWineListSections } from "@/lib/wine-list/render";
@@ -15,6 +16,56 @@ function createAnonClient() {
 export const revalidate = 3600; // ISR: revalidate every hour
 
 type Params = Promise<{ slug: string }>;
+
+/**
+ * Per-list metadata so shared links (QR codes, SMS, social) show the
+ * list name in the browser tab and OG previews instead of the root
+ * "Terroir" default. Falls back gracefully when the slug is missing
+ * or the list is unpublished — generateMetadata must never throw.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Params;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  if (!slug || slug.length < 3) return { title: "Wine List" };
+
+  const supabase = createAnonClient();
+  const { data: list } = await supabase
+    .from("wine_lists")
+    .select("name, restaurants(name)")
+    .eq("slug", slug)
+    .eq("is_published", true)
+    .single();
+
+  if (!list) return { title: "Wine List" };
+
+  const restaurantName =
+    (list.restaurants as { name: string } | null)?.name ?? "";
+  const title = restaurantName
+    ? `${list.name} · ${restaurantName}`
+    : list.name;
+  const description = restaurantName
+    ? `The current wine list at ${restaurantName}.`
+    : "A wine list powered by Terroir.";
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      siteName: restaurantName || "Terroir",
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
+    },
+  };
+}
 
 export default async function PublicWineListPage({
   params,
