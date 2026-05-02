@@ -2,7 +2,15 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, ExternalLink, ListOrdered, Plus } from "lucide-react";
+import {
+  Check,
+  Copy,
+  ExternalLink,
+  ListOrdered,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { TimeAgo } from "@/components/time-ago";
 import type { WineListWithCount } from "@/lib/wine-list/types";
@@ -22,6 +30,11 @@ export function WineListLanding({
   // flash a confirmation on that card only. Mirrors the team-page
   // per-row invitation copy pattern.
   const [copiedListId, setCopiedListId] = useState<string | null>(null);
+  // Tracks the list id currently being deleted so we can disable its
+  // Delete button while the request is in flight. Surface API errors in
+  // an inline alert above the grid so the user sees what failed.
+  const [deletingListId, setDeletingListId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const copyListLink = useCallback(async (list: WineListWithCount) => {
     if (!list.slug) return;
@@ -34,6 +47,45 @@ export function WineListLanding({
       2000,
     );
   }, []);
+
+  const deleteList = useCallback(
+    async (list: WineListWithCount) => {
+      // Stronger confirm wording for published lists since deleting
+      // also breaks any QR code or shared link guests are using.
+      const confirmMessage = list.is_published
+        ? `Delete "${list.name}"? This list is currently published — its public link will stop working immediately.`
+        : `Delete "${list.name}"? This can't be undone.`;
+      if (!window.confirm(confirmMessage)) return;
+
+      setDeleteError(null);
+      setDeletingListId(list.id);
+      try {
+        const res = await fetch(`/api/wine-lists/${list.id}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) {
+          let serverMessage: string | undefined;
+          try {
+            const body = (await res.json()) as { error?: unknown };
+            if (typeof body.error === "string") serverMessage = body.error;
+          } catch {
+            // non-JSON body — fall through to generic message
+          }
+          throw new Error(serverMessage ?? "Couldn't delete wine list.");
+        }
+        router.refresh();
+      } catch (err) {
+        setDeleteError(
+          err instanceof Error && err.message
+            ? err.message
+            : "Couldn't delete wine list. Please try again.",
+        );
+      } finally {
+        setDeletingListId(null);
+      }
+    },
+    [router],
+  );
 
   const createList = useCallback(async () => {
     const name = newName.trim() || "Untitled Wine List";
@@ -97,9 +149,26 @@ export function WineListLanding({
         </div>
       ) : (
         <div className="grid gap-md md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
+          {deleteError && (
+            <div
+              role="alert"
+              className="md:col-span-full flex items-start justify-between gap-sm rounded-sm border border-danger/30 bg-danger-soft px-sm py-xs text-[13px] text-danger"
+            >
+              <span>{deleteError}</span>
+              <button
+                type="button"
+                onClick={() => setDeleteError(null)}
+                aria-label="Dismiss error"
+                className="-mr-2xs flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-danger/70 hover:bg-danger/10 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+              >
+                <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              </button>
+            </div>
+          )}
           {lists.map((list) => {
             const justCopied = copiedListId === list.id;
             const showCopyAction = list.is_published && list.slug;
+            const isDeleting = deletingListId === list.id;
             return (
               <div
                 key={list.id}
@@ -152,48 +221,64 @@ export function WineListLanding({
                     )}
                   </div>
                 </button>
-                {showCopyAction && (
-                  // Sibling (not nested) so we don't end up with a
-                  // button-inside-button — invalid HTML the parser
-                  // would silently un-nest.
-                  <div className="flex items-center gap-xs border-t border-border px-md py-sm">
-                    <button
-                      type="button"
-                      onClick={() => copyListLink(list)}
-                      aria-label={`Copy public link for ${list.name}`}
-                      className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
-                    >
-                      {justCopied ? (
-                        <Check
-                          className="h-3.5 w-3.5"
-                          strokeWidth={2}
-                          aria-hidden
-                        />
-                      ) : (
-                        <Copy
-                          className="h-3.5 w-3.5"
-                          strokeWidth={2}
-                          aria-hidden
-                        />
-                      )}
-                      {justCopied ? "Copied" : "Copy link"}
-                    </button>
-                    <a
-                      href={`/list/${list.slug}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Open public ${list.name} list in a new tab`}
-                      className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
-                    >
-                      <ExternalLink
-                        className="h-3.5 w-3.5"
-                        strokeWidth={2}
-                        aria-hidden
-                      />
-                      Open
-                    </a>
+                {/* Sibling (not nested) so we don't end up with a
+                    button-inside-button — invalid HTML the parser
+                    would silently un-nest. Footer always renders so
+                    Delete is reachable for both Draft and Published
+                    lists; Copy/Open only appear when there's a public
+                    URL to act on. */}
+                <div className="flex items-center justify-between gap-xs border-t border-border px-md py-sm">
+                  <div className="flex items-center gap-xs">
+                    {showCopyAction && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => copyListLink(list)}
+                          aria-label={`Copy public link for ${list.name}`}
+                          className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                        >
+                          {justCopied ? (
+                            <Check
+                              className="h-3.5 w-3.5"
+                              strokeWidth={2}
+                              aria-hidden
+                            />
+                          ) : (
+                            <Copy
+                              className="h-3.5 w-3.5"
+                              strokeWidth={2}
+                              aria-hidden
+                            />
+                          )}
+                          {justCopied ? "Copied" : "Copy link"}
+                        </button>
+                        <a
+                          href={`/list/${list.slug}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Open public ${list.name} list in a new tab`}
+                          className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                        >
+                          <ExternalLink
+                            className="h-3.5 w-3.5"
+                            strokeWidth={2}
+                            aria-hidden
+                          />
+                          Open
+                        </a>
+                      </>
+                    )}
                   </div>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => deleteList(list)}
+                    disabled={isDeleting}
+                    aria-label={`Delete ${list.name}`}
+                    className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-sm border border-border-strong bg-white text-ink-subtle hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 disabled:opacity-60"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  </button>
+                </div>
               </div>
             );
           })}
