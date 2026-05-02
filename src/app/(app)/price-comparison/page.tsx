@@ -254,15 +254,21 @@ export default async function PriceComparisonPage() {
                           className="py-sm align-top"
                           rowSpan={distPrices.length}
                         >
-                          <div className="font-medium text-ink">
-                            {comp.wine.producer}
-                          </div>
-                          <div className="text-ink-muted">
-                            {comp.wine.name}
-                            {comp.wine.vintage
-                              ? ` ${comp.wine.vintage}`
-                              : ""}
-                          </div>
+                          <Link
+                            href={`/cellar?wine=${comp.wine.id}`}
+                            aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
+                            className="group block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                          >
+                            <div className="font-medium text-ink group-hover:text-accent">
+                              {comp.wine.producer}
+                            </div>
+                            <div className="text-ink-muted group-hover:text-accent">
+                              {comp.wine.name}
+                              {comp.wine.vintage
+                                ? ` ${comp.wine.vintage}`
+                                : ""}
+                            </div>
+                          </Link>
                         </td>
                       ) : null}
                       <td className="py-sm text-ink">{price.distributor}</td>
@@ -332,15 +338,19 @@ export default async function PriceComparisonPage() {
                   className="rounded-md border border-border bg-surface p-md"
                 >
                   <div className="mb-sm flex items-start justify-between">
-                    <div>
-                      <div className="font-serif text-[16px] font-medium text-ink">
+                    <Link
+                      href={`/cellar?wine=${comp.wine.id}`}
+                      aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
+                      className="group min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                    >
+                      <div className="font-serif text-[16px] font-medium text-ink group-hover:text-accent">
                         {comp.wine.name}
                         {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
                       </div>
-                      <div className="text-[13px] text-ink-muted">
+                      <div className="text-[13px] text-ink-muted group-hover:text-accent">
                         {comp.wine.producer}
                       </div>
-                    </div>
+                    </Link>
                     {comp.spread >= 0.1 && (
                       <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
                         {Math.round(comp.spread * 100)}%
@@ -408,14 +418,20 @@ export default async function PriceComparisonPage() {
                       className="border-t border-dashed border-border"
                     >
                       <td className="px-md py-sm">
-                        <span className="font-medium text-ink">
-                          {comp.wine.producer}
-                        </span>
-                        <span className="text-ink-muted">
-                          {" "}
-                          {comp.wine.name}
-                          {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
-                        </span>
+                        <Link
+                          href={`/cellar?wine=${comp.wine.id}`}
+                          aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
+                          className="group inline-block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                        >
+                          <span className="font-medium text-ink group-hover:text-accent">
+                            {comp.wine.producer}
+                          </span>
+                          <span className="text-ink-muted group-hover:text-accent">
+                            {" "}
+                            {comp.wine.name}
+                            {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
+                          </span>
+                        </Link>
                       </td>
                       <td className="px-md py-sm text-ink-muted">
                         {latest?.distributor ?? "—"}
