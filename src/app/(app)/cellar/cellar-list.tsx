@@ -40,16 +40,32 @@ export type CellarFilter =
   | "drink-now"
   | "hold";
 
+// Human-readable labels for filter chips, shown in the empty-results
+// state so the user can see exactly which filter is excluding their
+// wines. Keep in sync with FILTER_CHIPS in cellar-shell.tsx.
+const FILTER_LABELS: Record<Exclude<CellarFilter, "all">, string> = {
+  open: "Open",
+  out: "86'd",
+  low: "Low stock",
+  "off-site": "Off-site",
+  "drink-now": "Drink now",
+  hold: "Hold",
+};
+
 export function CellarList({
   rows,
   query,
   filter,
   onSelectWine,
+  onResetFilters,
 }: {
   rows: CellarWineRow[];
   query: string;
   filter: CellarFilter;
   onSelectWine: (row: CellarWineRow) => void;
+  // Called when the user taps the empty-state "Clear filter & search"
+  // button. The parent shell owns query + filter state.
+  onResetFilters: () => void;
 }) {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -120,9 +136,28 @@ export function CellarList({
   }
 
   if (filtered.length === 0) {
+    const trimmedQuery = query.trim();
+    const filterLabel = filter === "all" ? null : FILTER_LABELS[filter];
+    let message: string;
+    if (trimmedQuery && filterLabel) {
+      message = `No wines match “${trimmedQuery}” in ${filterLabel}.`;
+    } else if (trimmedQuery) {
+      message = `No wines match “${trimmedQuery}”.`;
+    } else if (filterLabel) {
+      message = `No wines match the ${filterLabel} filter.`;
+    } else {
+      message = "No wines match the current filter.";
+    }
     return (
-      <div className="rounded-md border border-border bg-white px-md py-lg text-center text-[13px] text-ink-muted">
-        No wines match the current filter.
+      <div className="rounded-md border border-border bg-white px-md py-lg text-center">
+        <p className="text-[13px] text-ink-muted">{message}</p>
+        <button
+          type="button"
+          onClick={onResetFilters}
+          className="mt-sm inline-flex h-[32px] items-center rounded-sm border border-border-strong bg-white px-md text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent-soft"
+        >
+          Clear filter &amp; search
+        </button>
       </div>
     );
   }

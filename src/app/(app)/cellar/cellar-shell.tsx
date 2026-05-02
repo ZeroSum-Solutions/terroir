@@ -322,6 +322,10 @@ export function CellarShell({
           query={query}
           filter={filter}
           onSelectWine={(row) => setSelectedId(row.wine_id)}
+          onResetFilters={() => {
+            setFilter("all");
+            setQuery("");
+          }}
         />
       ) : cellarConfig ? (
         <CellarGridView config={cellarConfig} gridData={gridData} />
