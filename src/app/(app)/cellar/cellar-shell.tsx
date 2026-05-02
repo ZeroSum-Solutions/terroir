@@ -134,6 +134,35 @@ export function CellarShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // "/" focuses the search input (GitHub-style shortcut). Skipped when
+  // the user is already typing in a form field or contenteditable so
+  // the literal slash still types in those contexts. On mobile the
+  // search input is unmounted until the overlay is open, so we open
+  // the overlay and rely on its `autoFocus` to land focus.
+  useEffect(() => {
+    function handleSlash(e: KeyboardEvent) {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        if (target.isContentEditable) return;
+      }
+      e.preventDefault();
+      const input = searchInputRef.current;
+      if (input) {
+        input.focus();
+        input.select();
+      } else {
+        // Mobile: search input not yet mounted — open the overlay,
+        // which auto-focuses on mount.
+        setSearchOpen(true);
+      }
+    }
+    document.addEventListener("keydown", handleSlash);
+    return () => document.removeEventListener("keydown", handleSlash);
+  }, []);
+
   const alerts = useMemo(() => {
     // Show alerts banner when there are recently-86'd wines or any low
     // stock items. Compact summary; the actual filter chips do the
@@ -403,6 +432,11 @@ function SearchInput({
   // Escape (now on an empty field) fires onEscape.
   onEscape?: () => void;
 }) {
+  // Show the "/" shortcut hint only when the field is empty and not
+  // focused — otherwise the kbd visually competes with the clear-X
+  // button or the user's typing.
+  const [focused, setFocused] = useState(false);
+  const showHint = !value && !focused;
   return (
     <div className="relative w-full md:w-[320px]">
       <Search
@@ -415,6 +449,8 @@ function SearchInput({
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             if (value) {
@@ -430,7 +466,7 @@ function SearchInput({
         autoFocus={autoFocus}
         className="h-[38px] w-full rounded-sm border border-border bg-white pl-[32px] pr-[36px] text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
       />
-      {value && (
+      {value ? (
         <button
           type="button"
           aria-label="Clear search"
@@ -442,6 +478,15 @@ function SearchInput({
         >
           <X className="h-4 w-4" strokeWidth={2} aria-hidden />
         </button>
+      ) : (
+        showHint && (
+          <kbd
+            aria-hidden
+            className="pointer-events-none absolute right-sm top-1/2 hidden h-[20px] -translate-y-1/2 items-center rounded-sm border border-border bg-surface-muted px-2xs font-mono text-[11px] text-ink-subtle md:inline-flex"
+          >
+            /
+          </kbd>
+        )
       )}
     </div>
   );
