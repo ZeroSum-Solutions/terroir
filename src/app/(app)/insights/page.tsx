@@ -368,18 +368,34 @@ export default async function DashboardPage() {
                 <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
                   Avg accuracy
                 </div>
-                <div className="mt-xs font-mono text-[20px] font-medium text-ink">
-                  {allScans.length > 0
-                    ? `${Math.round(
-                        (allScans.reduce(
-                          (s, sc) => s + (sc.accuracy_score ?? 0),
-                          0,
-                        ) /
-                          allScans.length) *
-                          100,
-                      )}%`
-                    : "—"}
-                </div>
+                {(() => {
+                  // Color-code the hero average using the same threshold
+                  // helper as the badges below (recent-activity rows,
+                  // scan detail header) so a glance at the dashboard
+                  // signals scan quality, not just the number.
+                  if (allScans.length === 0) {
+                    return (
+                      <div className="mt-xs font-mono text-[20px] font-medium text-ink">
+                        —
+                      </div>
+                    );
+                  }
+                  const avgPct = Math.round(
+                    (allScans.reduce(
+                      (s, sc) => s + (sc.accuracy_score ?? 0),
+                      0,
+                    ) /
+                      allScans.length) *
+                      100,
+                  );
+                  return (
+                    <div
+                      className={`mt-xs font-mono text-[20px] font-medium ${accuracyColor(avgPct)}`}
+                    >
+                      {avgPct}%
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
