@@ -7,6 +7,7 @@ import {
 import Link from "next/link";
 import { fetchDrinkWindowAlerts } from "@/lib/drink-window/alerts";
 import { fetchPricingAlerts } from "@/lib/pricing/alerts";
+import { timeAgo } from "@/lib/time";
 import { BriefingAlertCard } from "./briefing-alert-card";
 import { EnrichCellarButton } from "./enrich-cellar-button";
 import { RefreshRetailButton } from "./refresh-retail-button";
@@ -446,12 +447,12 @@ export default async function DashboardPage() {
           ) : (
             <div>
               {recentScans.map((scan, i) => {
-                const timeAgo = getTimeAgo(scan.created_at);
+                const relative = timeAgo(scan.created_at);
                 return (
                   <Link
                     key={scan.id}
                     href={`/scan/${scan.id}`}
-                    aria-label={`View scan from ${scan.distributor_name}, ${scan.item_count} wines, ${timeAgo}`}
+                    aria-label={`View scan from ${scan.distributor_name}, ${scan.item_count} wines, ${relative}`}
                     className={`flex items-center gap-md rounded-sm py-sm transition-colors hover:bg-surface-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft ${i > 0 ? "border-t border-dashed border-border" : ""}`}
                   >
                     <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-muted text-ink-muted">
@@ -471,7 +472,7 @@ export default async function DashboardPage() {
                       </span>
                     )}
                     <span className="shrink-0 font-mono text-[12px] text-ink-subtle">
-                      {timeAgo}
+                      {relative}
                     </span>
                   </Link>
                 );
@@ -562,12 +563,3 @@ function parseFirstName(email: string): string {
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
 }
 
-function getTimeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}

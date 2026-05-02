@@ -4,19 +4,8 @@ import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, ListOrdered, Plus } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
+import { timeAgo } from "@/lib/time";
 import type { WineListWithCount } from "@/lib/wine-list/types";
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  const weeks = Math.floor(days / 7);
-  return `${weeks}w ago`;
-}
 
 export function WineListLanding({
   lists,
