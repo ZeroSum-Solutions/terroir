@@ -512,7 +512,9 @@ export default async function PriceComparisonPage() {
           <h2 className="mb-md text-[15px] font-semibold text-ink-muted">
             Single source ({singleSource.length})
           </h2>
-          <div className="rounded-md border border-border bg-surface">
+
+          {/* Desktop table */}
+          <div className="hidden rounded-md border border-border bg-surface md:block">
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
@@ -574,6 +576,52 @@ export default async function PriceComparisonPage() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile cards — phone parity with the comparable-wines section
+              above. The 3-column table cramps long producer + wine + distributor
+              strings on a 390px viewport; cards stack the fields and keep the
+              tap target wide. */}
+          <div className="flex flex-col gap-sm md:hidden">
+            {singleSource.map((comp) => {
+              const latest = pickMostRecent(comp.prices);
+              const latestDate = formatInvoiceDate(latest?.invoiceDate ?? null);
+              return (
+                <div
+                  key={comp.wine.id}
+                  className="rounded-md border border-border bg-surface p-md"
+                >
+                  <div className="flex items-start justify-between gap-sm">
+                    <Link
+                      href={`/cellar?wine=${comp.wine.id}`}
+                      aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
+                      className="group min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                    >
+                      <div className="font-serif text-[16px] font-medium text-ink group-hover:text-accent">
+                        {comp.wine.name}
+                        {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
+                      </div>
+                      <div className="text-[13px] text-ink-muted group-hover:text-accent">
+                        {comp.wine.producer}
+                      </div>
+                    </Link>
+                    <span className="shrink-0 font-mono text-[14px] font-medium text-ink">
+                      {latest ? formatPrice(latest.unitCost) : "—"}
+                    </span>
+                  </div>
+                  <div className="mt-sm flex items-baseline justify-between border-t border-dashed border-border pt-sm text-[13px] text-ink-muted">
+                    <span className="min-w-0 truncate">
+                      {latest?.distributor ?? "—"}
+                    </span>
+                    {latestDate && (
+                      <span className="ml-sm shrink-0 font-mono text-[11px] text-ink-subtle">
+                        {latestDate}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
