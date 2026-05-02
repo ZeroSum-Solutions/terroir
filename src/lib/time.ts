@@ -20,3 +20,23 @@ export function timeAgo(iso: string): string {
   const weeks = Math.floor(days / 7);
   return `${weeks}w ago`;
 }
+
+/**
+ * Locale-aware absolute timestamp used as the hover tooltip
+ * (`title="…"`) for relative times. Returning a stable, human-readable
+ * string ("May 1, 2026, 3:42 PM") lets users see the exact moment
+ * something happened without losing the at-a-glance compactness of
+ * "5m ago". Returns the raw ISO if parsing fails so we never display
+ * "Invalid Date" in a tooltip.
+ */
+export function formatAbsolute(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}

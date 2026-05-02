@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, ListOrdered, Plus } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
-import { timeAgo } from "@/lib/time";
+import { TimeAgo } from "@/components/time-ago";
 import type { WineListWithCount } from "@/lib/wine-list/types";
 
 export function WineListLanding({
@@ -132,7 +132,9 @@ export function WineListLanding({
                       </span>{" "}
                       wines
                     </span>
-                    <span>Updated {timeAgo(list.updated_at)}</span>
+                    <span>
+                      Updated <TimeAgo iso={list.updated_at} />
+                    </span>
                   </div>
                 </button>
                 {showCopyAction && (

@@ -9,6 +9,7 @@ import { fetchDrinkWindowAlerts } from "@/lib/drink-window/alerts";
 import { fetchPricingAlerts } from "@/lib/pricing/alerts";
 import { accuracyColor } from "@/lib/scanner/accuracy-color";
 import { timeAgo } from "@/lib/time";
+import { TimeAgo } from "@/components/time-ago";
 import { BriefingAlertCard } from "./briefing-alert-card";
 import { EnrichCellarButton } from "./enrich-cellar-button";
 import { RefreshRetailButton } from "./refresh-retail-button";
@@ -476,9 +477,10 @@ export default async function DashboardPage() {
                         {Math.round(scan.accuracy_score * 100)}%
                       </span>
                     )}
-                    <span className="shrink-0 font-mono text-[12px] text-ink-subtle">
-                      {relative}
-                    </span>
+                    <TimeAgo
+                      iso={scan.created_at}
+                      className="shrink-0 font-mono text-[12px] text-ink-subtle"
+                    />
                   </Link>
                 );
               })}

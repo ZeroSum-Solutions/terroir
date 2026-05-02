@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { timeAgo } from "./time";
+import { formatAbsolute, timeAgo } from "./time";
 
 const NOW = new Date("2026-05-01T12:00:00.000Z").getTime();
 
@@ -44,5 +44,19 @@ describe("timeAgo", () => {
   it("uses weeks at 7+ days", () => {
     expect(timeAgo(isoAgo(7 * 24 * 60 * 60_000))).toBe("1w ago");
     expect(timeAgo(isoAgo(30 * 24 * 60 * 60_000))).toBe("4w ago");
+  });
+});
+
+describe("formatAbsolute", () => {
+  it("renders a human-readable date and time for a valid ISO string", () => {
+    const out = formatAbsolute("2026-05-01T12:00:00.000Z");
+    // Locale formatting varies by environment, so assert on the
+    // structural pieces instead of the exact rendered string.
+    expect(out).toMatch(/2026/);
+    expect(out).toMatch(/May/);
+  });
+
+  it("falls back to the raw input rather than 'Invalid Date'", () => {
+    expect(formatAbsolute("not-a-date")).toBe("not-a-date");
   });
 });
