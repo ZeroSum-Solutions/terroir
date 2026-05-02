@@ -347,7 +347,8 @@ export function CellarShell({
           onClick={() => setReconcileOpen(true)}
           className="mb-md flex h-[40px] w-full items-center justify-center rounded-sm border border-border-strong bg-white text-[13px] font-medium text-ink hover:bg-surface-muted md:w-auto md:px-md"
         >
-          Reconcile open bottles →
+          Reconcile {reconcileItems.length} open bottle
+          {reconcileItems.length === 1 ? "" : "s"} →
         </button>
       )}
 
