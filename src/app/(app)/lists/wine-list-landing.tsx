@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, ListOrdered, Plus } from "lucide-react";
+import { Check, Copy, ExternalLink, ListOrdered, Plus } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { TimeAgo } from "@/components/time-ago";
 import type { WineListWithCount } from "@/lib/wine-list/types";
@@ -141,7 +141,7 @@ export function WineListLanding({
                   // Sibling (not nested) so we don't end up with a
                   // button-inside-button — invalid HTML the parser
                   // would silently un-nest.
-                  <div className="border-t border-border px-md py-sm">
+                  <div className="flex items-center gap-xs border-t border-border px-md py-sm">
                     <button
                       type="button"
                       onClick={() => copyListLink(list)}
@@ -163,6 +163,20 @@ export function WineListLanding({
                       )}
                       {justCopied ? "Copied" : "Copy link"}
                     </button>
+                    <a
+                      href={`/list/${list.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Open public ${list.name} list in a new tab`}
+                      className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                    >
+                      <ExternalLink
+                        className="h-3.5 w-3.5"
+                        strokeWidth={2}
+                        aria-hidden
+                      />
+                      Open
+                    </a>
                   </div>
                 )}
               </div>
