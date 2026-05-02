@@ -167,6 +167,13 @@ export function CellarShell({
     // Show alerts banner when there are recently-86'd wines or any low
     // stock items. Compact summary; the actual filter chips do the
     // detailed work.
+    //
+    // Open/out/low predicates mirror CellarList's filter switch so the
+    // chip badges always equal the actual filtered list size.
+    const openCount = rows.filter(
+      (r) => r.open_remaining_ml !== null && r.open_remaining_ml > 0,
+    ).length;
+    const outCount = rows.filter((r) => r.is_eightysixed).length;
     const lowCount = rows.filter((r) => {
       if (r.is_eightysixed) return false;
       if (!r.size_ml) return false;
@@ -188,14 +195,14 @@ export function CellarShell({
       (r) => !r.is_eightysixed && isHolding(r.drink_window_start),
     ).length;
 
-    return { lowCount, drinkNowCount, holdCount };
+    return { openCount, outCount, lowCount, drinkNowCount, holdCount };
   }, [rows]);
 
   const FILTER_CHIPS: Array<{ id: CellarFilter; label: string; count?: number }> = [
     { id: "all", label: "All" },
-    { id: "open", label: "Open" },
-    { id: "out", label: "86'd" },
-    { id: "low", label: "Low stock" },
+    { id: "open", label: "Open", count: alerts.openCount },
+    { id: "out", label: "86'd", count: alerts.outCount },
+    { id: "low", label: "Low stock", count: alerts.lowCount },
     // BND-039 — drink-window chips. Hidden when count is zero so they
     // don't clutter the row in cellars without enrichment data.
     ...(alerts.drinkNowCount > 0
