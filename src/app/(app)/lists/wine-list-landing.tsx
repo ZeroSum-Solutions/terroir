@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ListOrdered, Plus } from "lucide-react";
+import { Check, Copy, ListOrdered, Plus } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import type { WineListWithCount } from "@/lib/wine-list/types";
 
@@ -28,6 +28,23 @@ export function WineListLanding({
   const [newName, setNewName] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  // Per-card "copied" indicator for the published-list footer — tracks
+  // the list id whose public link was most recently copied so we can
+  // flash a confirmation on that card only. Mirrors the team-page
+  // per-row invitation copy pattern.
+  const [copiedListId, setCopiedListId] = useState<string | null>(null);
+
+  const copyListLink = useCallback(async (list: WineListWithCount) => {
+    if (!list.slug) return;
+    const url = `${window.location.origin}/list/${list.slug}`;
+    await navigator.clipboard.writeText(url);
+    setCopiedListId(list.id);
+    setTimeout(
+      () =>
+        setCopiedListId((current) => (current === list.id ? null : current)),
+      2000,
+    );
+  }, []);
 
   const createList = useCallback(async () => {
     const name = newName.trim() || "Untitled Wine List";
@@ -91,39 +108,75 @@ export function WineListLanding({
         </div>
       ) : (
         <div className="grid gap-md md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
-          {lists.map((list) => (
-            <button
-              key={list.id}
-              type="button"
-              onClick={() => router.push(`/lists/${list.id}`)}
-              className="group rounded-md border border-border bg-surface p-md text-left transition-all hover:-translate-y-px hover:border-border-strong hover:shadow-md"
-            >
-              <div className="flex items-start justify-between gap-sm">
-                <h3 className="font-serif text-[18px] text-ink group-hover:text-accent">
-                  {list.name}
-                </h3>
-                {list.is_published ? (
-                  <span className="flex shrink-0 items-center gap-xs rounded-pill bg-success-soft px-sm py-xs text-[11px] font-medium text-success">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
-                    Published
-                  </span>
-                ) : (
-                  <span className="shrink-0 rounded-pill bg-surface-sunken px-sm py-xs text-[11px] font-medium text-ink-muted">
-                    Draft
-                  </span>
+          {lists.map((list) => {
+            const justCopied = copiedListId === list.id;
+            const showCopyAction = list.is_published && list.slug;
+            return (
+              <div
+                key={list.id}
+                className="group rounded-md border border-border bg-surface transition-all hover:-translate-y-px hover:border-border-strong hover:shadow-md"
+              >
+                <button
+                  type="button"
+                  onClick={() => router.push(`/lists/${list.id}`)}
+                  className="block w-full rounded-md p-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                >
+                  <div className="flex items-start justify-between gap-sm">
+                    <h3 className="font-serif text-[18px] text-ink group-hover:text-accent">
+                      {list.name}
+                    </h3>
+                    {list.is_published ? (
+                      <span className="flex shrink-0 items-center gap-xs rounded-pill bg-success-soft px-sm py-xs text-[11px] font-medium text-success">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
+                        Published
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-pill bg-surface-sunken px-sm py-xs text-[11px] font-medium text-ink-muted">
+                        Draft
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-md flex items-center justify-between text-[12px] text-ink-muted">
+                    <span>
+                      <span className="font-medium text-ink">
+                        {list.wine_count}
+                      </span>{" "}
+                      wines
+                    </span>
+                    <span>Updated {timeAgo(list.updated_at)}</span>
+                  </div>
+                </button>
+                {showCopyAction && (
+                  // Sibling (not nested) so we don't end up with a
+                  // button-inside-button — invalid HTML the parser
+                  // would silently un-nest.
+                  <div className="border-t border-border px-md py-sm">
+                    <button
+                      type="button"
+                      onClick={() => copyListLink(list)}
+                      aria-label={`Copy public link for ${list.name}`}
+                      className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                    >
+                      {justCopied ? (
+                        <Check
+                          className="h-3.5 w-3.5"
+                          strokeWidth={2}
+                          aria-hidden
+                        />
+                      ) : (
+                        <Copy
+                          className="h-3.5 w-3.5"
+                          strokeWidth={2}
+                          aria-hidden
+                        />
+                      )}
+                      {justCopied ? "Copied" : "Copy link"}
+                    </button>
+                  </div>
                 )}
               </div>
-              <div className="mt-md flex items-center justify-between text-[12px] text-ink-muted">
-                <span>
-                  <span className="font-medium text-ink">
-                    {list.wine_count}
-                  </span>{" "}
-                  wines
-                </span>
-                <span>Updated {timeAgo(list.updated_at)}</span>
-              </div>
-            </button>
-          ))}
+            );
+          })}
           <button
             type="button"
             onClick={() => setShowModal(true)}
