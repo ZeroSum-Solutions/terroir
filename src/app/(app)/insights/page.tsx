@@ -16,30 +16,51 @@ function formatMoney(n: number) {
   return "$" + n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
-function Sparkline({ data }: { data: number[] }) {
+type SparklinePoint = { value: number; date?: string };
+
+function formatSparkDate(iso: string | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+}
+
+function Sparkline({ data }: { data: SparklinePoint[] }) {
   if (data.length < 2) return null;
   const width = 440;
   const height = 100;
   const pad = 6;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
+  const values = data.map((d) => d.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
   const range = max - min || 1;
   const w = width - pad * 2;
   const h = height - pad * 2;
 
-  const points = data.map((v, i) => {
+  const points = data.map((d, i) => {
     const x = pad + (i / (data.length - 1)) * w;
-    const y = pad + (1 - (v - min) / range) * h;
-    return [x, y] as [number, number];
+    const y = pad + (1 - (d.value - min) / range) * h;
+    return { x, y, value: d.value, date: d.date };
   });
 
   const path = points
-    .map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`)
+    .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
     .join(" ");
 
   const last = points[points.length - 1];
   const first = points[0];
-  const areaPath = `${path} L ${last[0].toFixed(1)},${height - pad} L ${first[0].toFixed(1)},${height - pad} Z`;
+  const areaPath = `${path} L ${last.x.toFixed(1)},${height - pad} L ${first.x.toFixed(1)},${height - pad} Z`;
+
+  // Accessible summary: range + last value so screen-reader users get
+  // the same signal sighted users get from the chart shape.
+  const ariaLabel =
+    `Scan activity over the last ${data.length} scans: ` +
+    `${min}–${max} items per scan, most recent ${last.value}.`;
 
   return (
     <svg
@@ -47,6 +68,8 @@ function Sparkline({ data }: { data: number[] }) {
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
+      role="img"
+      aria-label={ariaLabel}
       className="block"
     >
       <defs>
@@ -64,14 +87,33 @@ function Sparkline({ data }: { data: number[] }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle
-        cx={last[0]}
-        cy={last[1]}
-        r="4"
-        fill="var(--color-accent)"
-        stroke="var(--color-surface)"
-        strokeWidth="2"
-      />
+      {/* Per-point hit targets. The visible circle is small; the
+          transparent overlay is wider so hover/touch picks up easily
+          even on dense charts. SVG <title> renders as a native
+          browser tooltip without extra JS. */}
+      {points.map((p, i) => {
+        const dateLabel = formatSparkDate(p.date);
+        const tooltip =
+          `${p.value} item${p.value === 1 ? "" : "s"}` +
+          (dateLabel ? ` · ${dateLabel}` : "");
+        const isLast = i === points.length - 1;
+        return (
+          <g key={i}>
+            <circle
+              cx={p.x}
+              cy={p.y}
+              r={isLast ? 4 : 2.5}
+              fill="var(--color-accent)"
+              stroke="var(--color-surface)"
+              strokeWidth={isLast ? 2 : 1}
+              opacity={isLast ? 1 : 0.7}
+            />
+            <circle cx={p.x} cy={p.y} r="10" fill="transparent">
+              <title>{tooltip}</title>
+            </circle>
+          </g>
+        );
+      })}
     </svg>
   );
 }
@@ -352,7 +394,7 @@ export default async function DashboardPage() {
                 data={allScans
                   .slice(0, 12)
                   .reverse()
-                  .map((s) => s.item_count)}
+                  .map((s) => ({ value: s.item_count, date: s.created_at }))}
               />
             ) : (
               <div className="flex h-[100px] items-center justify-center text-[13px] text-ink-subtle">
