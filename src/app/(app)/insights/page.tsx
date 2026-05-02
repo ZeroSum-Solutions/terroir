@@ -106,7 +106,9 @@ export default async function DashboardPage() {
     await Promise.all([
       supabase
         .from("invoice_scans")
-        .select("id, distributor_name, item_count, accuracy_score, created_at")
+        .select(
+          "id, distributor_name, item_count, accuracy_score, created_at, final_line_items",
+        )
         .eq("restaurant_id", rid)
         .order("created_at", { ascending: false }),
       supabase
@@ -450,11 +452,19 @@ export default async function DashboardPage() {
             <div>
               {recentScans.map((scan, i) => {
                 const relative = timeAgo(scan.created_at);
+                const lineItems = (scan.final_line_items ?? []) as Array<{
+                  qty?: number;
+                  unitCost?: number;
+                }>;
+                const scanTotal = lineItems.reduce(
+                  (sum, it) => sum + (it.qty ?? 0) * (it.unitCost ?? 0),
+                  0,
+                );
                 return (
                   <Link
                     key={scan.id}
                     href={`/scan/${scan.id}`}
-                    aria-label={`View scan from ${scan.distributor_name}, ${scan.item_count} wines, ${relative}`}
+                    aria-label={`View scan from ${scan.distributor_name}, ${scan.item_count} wines, ${formatMoney(scanTotal)}, ${relative}`}
                     className={`flex items-center gap-md rounded-sm py-sm transition-colors hover:bg-surface-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft ${i > 0 ? "border-t border-dashed border-border" : ""}`}
                   >
                     <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-muted text-ink-muted">
@@ -466,6 +476,14 @@ export default async function DashboardPage() {
                       </div>
                       <div className="mt-2xs text-[13px] text-ink-muted">
                         {scan.distributor_name} · {scan.item_count} wines
+                        {scanTotal > 0 && (
+                          <>
+                            {" · "}
+                            <span className="font-mono">
+                              {formatMoney(scanTotal)}
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
                     {scan.accuracy_score != null && (
