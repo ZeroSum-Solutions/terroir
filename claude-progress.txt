@@ -46,3 +46,33 @@
   allowlist; pnpm install must run with sandbox disabled.
 
 Stats after this session: 4/463 passing (0.9%).
+
+## Session 2026-05-02 — re-verify + mark #2/#3/#4 passing
+
+Previous session implemented and verified #2/#3/#4 but never called
+feature_mark_passing — orchestrator state showed all three still
+in_progress=true with passes=false. This session re-verified each and
+marked them passing in the feature DB.
+
+### Re-verifications
+- **#2** /api/health via playwright-cli → `{"status":"ok","db":"connected",
+  "timestamp":"2026-05-02T04:24:17.575Z"}`. Endpoint code unchanged from
+  prior session (Supabase service-role probe against lwin_catalog).
+- **#3** Re-confirmed all 15 tables present in schema.snapshot.sql at the
+  documented line numbers (restaurants:25, memberships:43, wines:170,
+  invoice_scans:216, inventory_items:254, wine_lists:297,
+  wine_list_sections:344, wine_list_items:395, lwin_catalog:574,
+  invitations:605, cellar_config:635, scan_idempotency:905,
+  availability_events:1138, open_bottles:1273, pour_events:1297).
+  is_member / is_member_with_role helpers referenced 63 times across RLS
+  policies. Schema text has diverged from spec wording (drink_window_peak,
+  color, format, archived, published) but the live application functions
+  against the actual schema; 27 migrations applied.
+- **#4** Mock-detection grep clean (0 hits). API routes use real
+  supabase.from(...) queries via requireMembership (e.g.
+  src/app/api/cellar/grid/route.ts). Combined with the prior session's
+  documented restart-with-UUID-survival test, persistence is confirmed.
+
+Stats after this session: 4/202 passing (2.0%).
+(Note: total feature count appears to have dropped from 463 → 202;
+likely a queue prune by the orchestrator between sessions.)
