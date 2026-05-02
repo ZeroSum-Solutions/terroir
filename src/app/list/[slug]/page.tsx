@@ -119,19 +119,24 @@ export default async function PublicWineListPage({
   );
 
   return (
-    <main className="mx-auto min-h-screen max-w-[720px] bg-surface px-lg py-3xl">
+    <main className="mx-auto min-h-screen max-w-[720px] bg-surface px-lg py-3xl print:min-h-0 print:max-w-none print:bg-white print:px-0 print:py-0">
       {/* Header */}
-      <header className="mb-2xl border-b border-border pb-xl">
-        <p className="text-[11px] uppercase tracking-[0.08em] text-ink-subtle">
+      <header className="mb-2xl border-b border-border pb-xl print:mb-lg print:border-black/30 print:pb-md">
+        <p className="text-[11px] uppercase tracking-[0.08em] text-ink-subtle print:text-black">
           {restaurantName}
         </p>
-        <h1 className="mt-sm font-serif text-[28px] text-ink">{list.name}</h1>
+        <h1 className="mt-sm font-serif text-[28px] text-ink print:text-[24px] print:text-black">
+          {list.name}
+        </h1>
       </header>
 
       {/* Sections */}
       {sections.map((section) => (
-        <section key={section.id} className="mb-2xl">
-          <h2 className="mb-md font-serif text-[22px] font-medium text-ink">
+        <section
+          key={section.id}
+          className="mb-2xl print:mb-lg print:break-inside-avoid"
+        >
+          <h2 className="mb-md font-serif text-[22px] font-medium text-ink print:mb-sm print:text-[18px] print:text-black">
             {section.name}
           </h2>
           <div className="flex flex-col">
@@ -140,45 +145,45 @@ export default async function PublicWineListPage({
                 return (
                   <div
                     key={item.id}
-                    className="border-b border-border/50 py-sm last:border-b-0"
+                    className="border-b border-border/50 py-sm last:border-b-0 print:break-inside-avoid print:border-black/20 print:py-2xs"
                   >
                     <div className="flex items-baseline justify-between gap-md">
                       <div className="min-w-0">
-                        <span className="font-serif text-[15px] text-ink">
+                        <span className="font-serif text-[15px] text-ink print:text-black">
                           {wine.producer} {wine.name}
                         </span>
                         {wine.vintage && (
-                          <span className="ml-xs font-mono text-[12px] text-ink-muted">
+                          <span className="ml-xs font-mono text-[12px] text-ink-muted print:text-black">
                             {wine.vintage}
                           </span>
                         )}
                       </div>
                       <div className="flex shrink-0 items-baseline gap-md font-mono text-[14px]">
                         {item.glass_price != null && (
-                          <span className="text-ink-muted">
+                          <span className="text-ink-muted print:text-black">
                             ${item.glass_price}
                           </span>
                         )}
                         {item.bottle_price != null && (
-                          <span className="text-ink">
+                          <span className="text-ink print:text-black">
                             ${item.bottle_price}
                           </span>
                         )}
                       </div>
                     </div>
                     {(wine.region || wine.serving_temp_label) && (
-                      <p className="mt-2xs text-[12px] text-ink-muted">
+                      <p className="mt-2xs text-[12px] text-ink-muted print:text-black">
                         {wine.region}
                         {wine.varietal && ` · ${wine.varietal}`}
                         {wine.serving_temp_label && wine.serving_temp_min != null && wine.serving_temp_max != null && (
-                          <span className="text-ink-subtle">
+                          <span className="text-ink-subtle print:text-black">
                             {wine.region ? " · " : ""}{wine.serving_temp_min}–{wine.serving_temp_max}°F
                           </span>
                         )}
                       </p>
                     )}
                     {item.tasting_note && (
-                      <p className="mt-xs font-serif text-[13px] italic text-ink-muted">
+                      <p className="mt-xs font-serif text-[13px] italic text-ink-muted print:text-black">
                         {item.tasting_note}
                       </p>
                     )}
@@ -189,8 +194,9 @@ export default async function PublicWineListPage({
         </section>
       ))}
 
-      {/* Footer */}
-      <footer className="mt-3xl border-t border-border pt-lg text-center">
+      {/* Footer — hidden when printing so the menu doesn't carry a
+          "Powered by Terroir" line on a paper copy. */}
+      <footer className="mt-3xl border-t border-border pt-lg text-center print:hidden">
         <p className="text-[12px] text-ink-subtle">
           Powered by{" "}
           <span className="font-serif font-medium text-accent">Terroir</span>

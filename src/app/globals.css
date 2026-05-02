@@ -92,3 +92,22 @@ body {
     transition-duration: 0ms !important;
   }
 }
+
+/*
+ * Print defaults — half-inch margins so paper menus don't waste a page
+ * on padding, and a forced white surface so cellar/UI hover effects
+ * don't print as grey blocks. The public wine-list page layers
+ * print:-prefixed Tailwind utilities on top of this baseline; other
+ * surfaces inherit only the page geometry.
+ */
+@media print {
+  @page {
+    margin: 0.5in;
+  }
+
+  html,
+  body {
+    background: #ffffff;
+    color: #000000;
+  }
+}
