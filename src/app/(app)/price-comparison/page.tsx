@@ -239,6 +239,7 @@ export default async function PriceComparisonPage() {
                   <th scope="col" className="pb-sm text-right font-semibold">Unit cost</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Qty</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Spread</th>
+                  <th scope="col" className="pb-sm text-right font-semibold">Savings</th>
                 </tr>
               </thead>
               <tbody>
@@ -333,6 +334,18 @@ export default async function PriceComparisonPage() {
                           )}
                         </td>
                       ) : null}
+                      {i === 0 ? (
+                        <td
+                          className="py-sm text-right align-top font-mono text-success"
+                          rowSpan={distPrices.length}
+                        >
+                          {comp.potentialSavings > 0
+                            ? formatPrice(comp.potentialSavings)
+                            : (
+                                <span className="text-ink-subtle">—</span>
+                              )}
+                        </td>
+                      ) : null}
                     </tr>
                   ));
                 })}
@@ -378,11 +391,18 @@ export default async function PriceComparisonPage() {
                         {comp.wine.producer}
                       </div>
                     </Link>
-                    {comp.spread >= 0.1 && (
-                      <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
-                        {Math.round(comp.spread * 100)}%
-                      </span>
-                    )}
+                    <div className="flex flex-col items-end gap-xs">
+                      {comp.spread >= 0.1 && (
+                        <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
+                          {Math.round(comp.spread * 100)}%
+                        </span>
+                      )}
+                      {comp.potentialSavings > 0 && (
+                        <span className="font-mono text-[11px] font-medium text-success">
+                          Save {formatPrice(comp.potentialSavings)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex flex-col gap-xs">
                     {distPrices.map((price) => (
