@@ -103,25 +103,32 @@ export function WineListEditor({
     [sections],
   );
 
+  // BND-165: addWineToSection now accepts sectionIds[] so the user can
+  // assign a wine to multiple sections in one action. Each selected
+  // section gets its own wine_list_items row via POST.
   const addWineToSection = useCallback(
-    async (wineId: string, glassPrice: number | null, bottlePrice: number | null) => {
-      if (!activeSection) return;
-      const res = await fetch("/api/wine-list-items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          section_id: activeSection,
-          wine_id: wineId,
-          glass_price: glassPrice,
-          bottle_price: bottlePrice,
-        }),
-      });
-      if (res.ok) {
+    async (wineId: string, glassPrice: number | null, bottlePrice: number | null, sectionIds: string[]) => {
+      if (sectionIds.length === 0) return;
+      let failed = false;
+      for (const sectionId of sectionIds) {
+        const res = await fetch("/api/wine-list-items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            section_id: sectionId,
+            wine_id: wineId,
+            glass_price: glassPrice,
+            bottle_price: bottlePrice,
+          }),
+        });
+        if (!res.ok) failed = true;
+      }
+      if (!failed) {
         setShowAddWine(false);
         startTransition(() => router.refresh());
       }
     },
-    [activeSection, router],
+    [router],
   );
 
   // BND-025: wire 'Add section' button. window.prompt() is the minimal
@@ -535,7 +542,8 @@ export function WineListEditor({
 
       {showAddWine && currentSection && (
         <AddWineModal
-          sectionName={currentSection.name}
+          sections={sections.map((s) => ({ id: s.id, name: s.name }))}
+          activeSectionId={activeSection}
           onAdd={addWineToSection}
           onClose={() => setShowAddWine(false)}
         />

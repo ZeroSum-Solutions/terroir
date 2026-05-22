@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Plus, Search, Sparkles } from "lucide-react";
+import { Check, Loader2, Plus, Search, Sparkles } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 
 // BND-040 — pricing suggestion response shape from
@@ -41,18 +41,23 @@ type LwinWine = {
 };
 
 interface AddWineModalProps {
-  sectionName: string;
-  onAdd: (wineId: string, glassPrice: number | null, bottlePrice: number | null) => void;
+  sections: { id: string; name: string }[];
+  activeSectionId: string;
+  onAdd: (wineId: string, glassPrice: number | null, bottlePrice: number | null, sectionIds: string[]) => void;
   onClose: () => void;
 }
 
-export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps) {
+export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddWineModalProps) {
   const [query, setQuery] = useState("");
   const [searchMode, setSearchMode] = useState<"inventory" | "catalog">("inventory");
   const [results, setResults] = useState<SearchWine[]>([]);
   const [catalogResults, setCatalogResults] = useState<LwinWine[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<SearchWine | null>(null);
+  // BND-165: multi-section select. activeSectionId is pre-checked.
+  const [selectedSectionIds, setSelectedSectionIds] = useState<Set<string>>(
+    new Set([activeSectionId]),
+  );
   const [bottlePrice, setBottlePrice] = useState("");
   const [glassPrice, setGlassPrice] = useState("");
   const [adding, setAdding] = useState(false);
@@ -108,6 +113,7 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
     setSuggestError(null);
     setBottlePrice("");
     setGlassPrice("");
+    setSelectedSectionIds(new Set([activeSectionId]));
   };
 
   const applySuggestion = () => {
@@ -118,6 +124,20 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
     if (suggestion.suggestedGlass != null) {
       setGlassPrice(suggestion.suggestedGlass.toString());
     }
+  };
+
+  const toggleSection = (id: string) => {
+    setSelectedSectionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        // Don't allow deselecting the last section
+        if (next.size <= 1) return prev;
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -148,11 +168,11 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
   }, [query, searchMode]);
 
   const handleAdd = async () => {
-    if (!selected || adding) return;
+    if (!selected || adding || selectedSectionIds.size === 0) return;
     setAdding(true);
     const glass = glassPrice ? parseFloat(glassPrice) : null;
     const bottle = bottlePrice ? parseFloat(bottlePrice) : null;
-    await onAdd(selected.id, glass, bottle);
+    await onAdd(selected.id, glass, bottle, Array.from(selectedSectionIds));
     setAdding(false);
   };
 
@@ -189,6 +209,11 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
     }
   };
 
+  const activeSectionName =
+    sections.find((s) => s.id === activeSectionId)?.name ?? "section";
+
+  const selectedCount = selectedSectionIds.size;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 md:items-center"
@@ -202,7 +227,7 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
       <div ref={trapRef} className="flex max-h-[85vh] w-full flex-col rounded-t-lg border border-border bg-surface shadow-lg md:max-w-[480px] md:rounded-md">
         <div className="border-b border-border px-lg py-md">
           <h2 id="add-wine-title" className="font-serif text-[20px] text-ink">
-            Add wine to {sectionName}
+            Add wine to {activeSectionName}
           </h2>
           <p className="mt-xs text-[13px] text-ink-muted">
             Search your inventory or the LWIN catalog.
@@ -341,7 +366,7 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
             </div>
           </>
         ) : (
-          <div className="px-lg py-md">
+          <div className="px-lg py-md overflow-y-auto">
             <div className="rounded-sm border border-border bg-surface-muted px-md py-sm">
               <div className="font-serif text-[14px] font-medium text-ink">
                 {selected.producer}, {selected.name}
@@ -351,6 +376,49 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
                 {selected.region && ` · ${selected.region}`}
               </div>
             </div>
+
+            {/* BND-165: multi-section selector. Shown after a wine is picked;
+                active section is pre-checked, user can select additional sections. */}
+            {sections.length > 1 && (
+              <div className="mt-md">
+                <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+                  Add to {selectedCount > 1 ? `${selectedCount} sections` : "section"}
+                </div>
+                <div className="mt-sm flex flex-col gap-2xs">
+                  {sections.map((s) => {
+                    const checked = selectedSectionIds.has(s.id);
+                    return (
+                      <label
+                        key={s.id}
+                        className="flex cursor-pointer items-center gap-sm rounded-sm px-sm py-xs transition-colors hover:bg-surface-muted"
+                      >
+                        <span
+                          className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-xs border-2 transition-colors ${
+                            checked
+                              ? "border-accent bg-accent"
+                              : "border-border bg-white"
+                          }`}
+                        >
+                          {checked && (
+                            <Check className="h-3 w-3 text-white" strokeWidth={3} aria-hidden="true" />
+                          )}
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleSection(s.id)}
+                          className="sr-only"
+                          aria-label={`Add to ${s.name}`}
+                        />
+                        <span className="text-[14px] font-medium text-ink">
+                          {s.name}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* BND-040 — Pricing suggestion panel. Renders when retail data
                 is available; falls back to a brief unavailable note otherwise.
@@ -483,10 +551,10 @@ export function AddWineModal({ sectionName, onAdd, onClose }: AddWineModalProps)
               <button
                 type="button"
                 onClick={handleAdd}
-                disabled={adding}
+                disabled={adding || selectedSectionIds.size === 0}
                 className="h-[38px] rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
               >
-                {adding ? "Adding..." : "Add to list"}
+                {adding ? "Adding..." : `Add to ${selectedCount > 1 ? `${selectedCount} sections` : "list"}`}
               </button>
             )}
           </div>
