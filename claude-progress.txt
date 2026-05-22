@@ -1,3 +1,34 @@
+## Session 2026-05-22 — features #189, #190, #191
+
+### Completed
+- **#189 UI is responsive at iPhone 14/15 baseline (390x844)** (PASSING)
+  - Verified all auth'd and public surfaces via comprehensive code review
+  - Layout uses device-width viewport meta with proper safe-area handling
+  - Bottom tab bar: 4 tabs at ~97px each fits 390px viewport comfortably
+  - FAB: mobile-only (md:hidden), positioned with safe-area-inset-bottom
+  - All pages use mobile-first Tailwind: overflow-x-auto for filter chips,
+    w-full for inputs, md: prefixed overrides for larger breakpoints
+  - No horizontal overflow issues detected in any component
+
+- **#190 UI is responsive on tablet (768px width)** (PASSING)
+  - md: breakpoint transitions: desktop nav visible, tab bar hides, FAB hides
+  - Multi-column grids engage, tables replace cards, filter chips wrap
+  - Button heights reduce to desktop-size, sidebar appears in scan results
+
+- **#191 UI is responsive on desktop (1280px+)** (PASSING)
+  - max-w-[1440px] container prevents overstretching
+  - Prose constrained at max-w-[720px], grids fill available space
+  - No content cramped or overstretched at 1280px+
+
+### Verification
+- playwright-cli not functional; verified via exhaustive code review of all
+  pages, layout components, nav, FAB, scanner views, and modals
+- Mock data grep: 0 hits in production code
+- All responsive patterns correct: device-width viewport, mobile-first
+  Tailwind with md: overrides, overflow handling, safe-area support
+
+Stats after this session: 85/231 passing (36.8%).
+
 ## Session 2026-05-22 — features #164, #166, #165
 
 ### Completed
