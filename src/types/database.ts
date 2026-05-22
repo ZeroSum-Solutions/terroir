@@ -439,6 +439,7 @@ export type Database = {
           eightysix_ml_threshold: number
           eightysix_strategy: string
           id: string
+          logo_url: string | null
           name: string
           updated_at: string
         }
@@ -450,6 +451,7 @@ export type Database = {
           eightysix_ml_threshold?: number
           eightysix_strategy?: string
           id?: string
+          logo_url?: string | null
           name?: string
           updated_at?: string
         }
@@ -461,6 +463,7 @@ export type Database = {
           eightysix_ml_threshold?: number
           eightysix_strategy?: string
           id?: string
+          logo_url?: string | null
           name?: string
           updated_at?: string
         }

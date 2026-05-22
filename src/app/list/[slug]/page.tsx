@@ -81,7 +81,7 @@ export default async function PublicWineListPage({
   const { data: list, error } = await supabase
     .from("wine_lists")
     .select(
-      "name, template, restaurant_id, restaurants(name, eightysix_strategy), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
+      "name, template, restaurant_id, restaurants(name, eightysix_strategy, logo_url), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
     )
     .eq("slug", slug)
     .eq("is_published", true)
@@ -90,8 +90,9 @@ export default async function PublicWineListPage({
   if (error || !list) notFound();
 
   const restaurant =
-    list.restaurants as { name: string; eightysix_strategy: string } | null;
+    list.restaurants as { name: string; eightysix_strategy: string; logo_url: string | null } | null;
   const restaurantName = restaurant?.name ?? "";
+  const logoUrl = restaurant?.logo_url ?? null;
   const eightysixStrategy: EightysixStrategy =
     restaurant?.eightysix_strategy === "mark" ? "mark" : "hide";
 
@@ -135,6 +136,16 @@ export default async function PublicWineListPage({
     <main className="mx-auto min-h-screen max-w-[720px] bg-surface px-lg py-3xl print:min-h-0 print:max-w-none print:bg-white print:px-0 print:py-0">
       {/* Header */}
       <header className="mb-2xl border-b border-border pb-xl print:mb-lg print:border-black/30 print:pb-md">
+        {logoUrl && (
+          <div className="mb-md">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={logoUrl}
+              alt={restaurantName || "Restaurant logo"}
+              className="h-10 w-auto max-w-[200px] object-contain print:h-8"
+            />
+          </div>
+        )}
         <p className="text-[11px] uppercase tracking-[0.08em] text-ink-subtle print:text-black">
           {restaurantName}
         </p>
