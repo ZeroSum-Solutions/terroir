@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, Copy, Link2, Loader2, Trash2, X } from "lucide-react";
+import { Check, Copy, Link2, Loader2, RefreshCw, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { TimeAgo } from "@/components/time-ago";
@@ -174,6 +174,23 @@ export function TeamActions({
         await extractServerError(
           res,
           "Couldn't revoke invitation. Please try again.",
+        ),
+      );
+      return;
+    }
+    router.refresh();
+  };
+
+  const resendInvitation = async (invitationId: string) => {
+    setMemberActionError(null);
+    const res = await fetch(`/api/team/invite/${invitationId}/resend`, {
+      method: "POST",
+    });
+    if (!res.ok) {
+      setMemberActionError(
+        await extractServerError(
+          res,
+          "Couldn't resend invitation. Please try again.",
         ),
       );
       return;
@@ -377,6 +394,15 @@ export function TeamActions({
                                 <Copy className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                               )}
                               {justCopied ? "Copied" : "Copy link"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => resendInvitation(inv.id)}
+                              aria-label={`Resend invitation for ${inv.email ?? "invitation"}`}
+                              className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                              Resend
                             </button>
                             <button
                               type="button"
