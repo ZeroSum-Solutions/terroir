@@ -282,6 +282,32 @@ export default async function PriceComparisonPage() {
                 </div>
               </div>
             )}
+            {/* Top opportunity — the table is sorted by potential savings
+                desc, so comparable[0] is the highest-impact buy. Surfacing
+                it on the summary card turns the aggregate "potential
+                savings" total into a concrete next action without
+                requiring the operator to scroll the table (especially on
+                mobile, where the table sits below the fold). */}
+            {comparable[0] && comparable[0].potentialSavings > 0 && (
+              <Link
+                href={`/cellar?wine=${comparable[0].wine.id}`}
+                aria-label={`View top savings opportunity: ${comparable[0].wine.producer} ${comparable[0].wine.name} in cellar`}
+                className="group min-w-0 max-w-full rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+              >
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                  Top opportunity
+                </div>
+                <div className="mt-xs font-mono text-[20px] font-medium text-success group-hover:text-accent">
+                  Save {formatPrice(comparable[0].potentialSavings)}
+                </div>
+                <div className="mt-2xs truncate text-[12px] text-ink-muted group-hover:text-accent">
+                  {comparable[0].wine.producer} · {comparable[0].wine.name}
+                  {comparable[0].wine.vintage
+                    ? ` ${comparable[0].wine.vintage}`
+                    : ""}
+                </div>
+              </Link>
+            )}
           </div>
         </div>
       )}
