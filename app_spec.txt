@@ -5,6 +5,18 @@
     Terroir is a wine-management SaaS for restaurants and serious cellars. Staff photograph paper invoices, the system runs Azure OCR + Claude structured extraction to build a typed inventory, and the app surfaces a public wine list, drink-window guidance, pour tracking, and reconciliation against open bottles. Built on Next.js 16 + Supabase + Anthropic Claude, deployed as a single service on Railway.
   </overview>
 
+  <feature_budget>
+    Generate at most 200 features. Treat each "User can…", "System displays…", or "API returns…" assertion in the core_features section below as one feature — do NOT split a single assertion into multiple sub-features, and do NOT add features beyond what is enumerated. This budget OVERRIDES any complexity-tier table you would otherwise apply.
+  </feature_budget>
+
+  <initializer_guidance>
+    - Call `feature_create_bulk` directly. Do NOT write a code generator script to emit features.
+    - If you need to create 200 features, call `feature_create_bulk` 4 times with ~50 each. That is the intended pattern.
+    - `depends_on_indices` is batch-local. Use `feature_add_dependency` (with returned `feature_id` values) for cross-batch dependencies after all batches are written.
+    - Do NOT run small probe batches to test dependency semantics.
+    - If a Bash command is blocked by the allowlist (e.g., `sqlite3`), use the MCP `feature_*` tools instead — never write workaround scripts.
+  </initializer_guidance>
+
   <critical_constraints>
     <next_js_version>
       This project uses Next.js 16.2.4, which has breaking changes vs. earlier versions and likely vs. your training data. Before writing or modifying any Next.js code (route handlers, layouts, server actions, params handling, caching directives, etc.), read the relevant guide in `node_modules/next/dist/docs/`. Heed all deprecation notices. Do not assume Next.js 14/15 patterns work.
