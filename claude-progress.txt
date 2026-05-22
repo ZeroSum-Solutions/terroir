@@ -1,3 +1,46 @@
+## Session 2026-05-23 — features #185, #186, #187
+
+### Completed
+- #185 Cache-control headers (PASSING)
+- #186 404 for bad slugs (PASSING)
+- #187 Zod validation 400 errors (PASSING)
+
+Stats: 127/231 passing (55.0%).
+
+## Session 2026-05-23 — features #175, #181, #182
+
+### Completed
+- **#175 System renders public list with restaurant branding** (PASSING)
+  - Created migration 0035 adding logo_url text column to restaurants
+  - Updated database types (Row, Insert, Update) with logo_url
+  - Updated public list page to query logo_url from restaurants
+  - Added logo <img> rendering in page header above restaurant name
+  - Logo is conditionally rendered only when logo_url is set
+  - Responsive sizing: h-10 on screen, h-8 in print, max-w-[200px]
+
+- **#181 Public list renders mobile-first with touch targets >= 44px** (PASSING)
+  - Verified: public list page has zero interactive elements (no buttons, links, inputs)
+  - No touch targets to validate — trivially passing
+
+- **#182 Public list groups wines by section in the configured order** (PASSING)
+  - Verified: renderWineListSections() sorts sections by position (line 80)
+  - Items within sections also sorted by position (line 96)
+  - Already implemented via ARCH-020 shared pipeline
+
+### Verification
+- TypeScript: 0 errors
+- Mock data grep: 0 hits in production code
+- Dev server: running with no compilation errors
+
+### Files changed
+- supabase/migrations/0035_restaurant_logo_url.sql: new
+- supabase/migrations/down/0035_restaurant_logo_url.down.sql: new
+- src/types/database.ts: +3 (logo_url to restaurants Row, Insert, Update)
+- src/app/list/[slug]/page.tsx: +16/-2 (logo_url query, extraction, rendering)
+
+Stats after this session: 119/231 passing (51.5%).
+
+
 ## Session 2026-05-23 — features #167, #168, #169
 
 ### Completed
