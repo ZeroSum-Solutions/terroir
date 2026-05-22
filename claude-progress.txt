@@ -1,3 +1,27 @@
+## Session 2026-05-22 — feature #152
+
+### Completed
+- **#152 Add per-page browser tab titles** (PASSING)
+  - The root layout.tsx already had `title.template: "%s · Terroir"` from commit e507415
+  - Most main app pages already had metadata titles (cellar, scan, team, lists, price-comparison, login)
+  - Added `export const metadata = { title: "Insights" }` to insights/page.tsx (was missing)
+  - Created `src/app/invite/layout.tsx` with `title: "Invitation"` for the invite/[token] page
+    (page is "use client" so metadata goes through layout)
+
+### Verification
+- ESLint: clean on changed files (0 errors)
+- TypeScript: 0 errors
+- All 355 tests passing across 35 test files
+- Mock data grep: 0 hits in production code (test files only)
+- Next.js build: blocked by sandbox port-binding restriction (known env issue)
+- Browser verification: dev server not running (sandbox blocks port binding)
+
+### Files changed
+- src/app/(app)/insights/page.tsx: +2 lines (Metadata import + export)
+- src/app/invite/layout.tsx: new file (12 lines, metadata + layout wrapper)
+
+Stats after this session: 100/231 passing (43.3%).
+
 ## Session 2026-05-22 — features #22, #32, #33
 
 ### Completed
