@@ -1,3 +1,124 @@
+## Session 2026-05-22 — features #156, #157, #159
+
+### Completed
+- **#156 System rejects slug collisions across the same restaurant** (PASSING)
+  - Added .eq("restaurant_id", restaurantId) to slug uniqueness checks in:
+    PATCH /api/wine-lists/[id] and POST /api/wine-lists/[id]/publish
+  - Added code: "slug_collision" to 409 error responses per feature spec
+  - Slugs are now scoped per-restaurant: two restaurants can each have "dinner"
+  - Updated tests: 18/18 passing (new tests for cross-restaurant slug allowance,
+    restaurant-scoped collision with code field)
+
+- **#157 User can clone an existing wine list as a starting point** (PASSING)
+  - Created POST /api/wine-lists/[id]/clone endpoint
+  - Clones name (appends " (copy)"), description, template, sections, and items
+  - Clone is unpublished by default (is_published=false, no slug)
+  - Cleanup on partial failure (deletes partially-created clone list)
+  - Added Clone button to wine list cards with Files icon + confirm dialog
+  - Navigates to the cloned list on success
+
+- **#159 User can delete an archived wine list** (PASSING)
+  - DELETE /api/wine-lists/[id] now returns 409 with code: "must_archive_first"
+    for non-archived lists
+  - Pre-delete fetch validates archived=true before proceeding
+  - Cascade delete: fetches section IDs, deletes items, deletes sections,
+    deletes the list (defense-in-depth with explicit deletes)
+  - UI: Delete button only shown for archived lists (conditional render)
+  - Enhanced confirm dialog wording for destructive permanent delete
+
+### Verification
+- TypeScript: 0 errors
+- All 357 tests passing (35 test files)
+- Mock data grep: 0 hits in production code
+- route.test.ts: 18/18 passing (new tests for slug_collision code,
+  cross-restaurant slug scoping, must_archive_first, archived delete flow)
+
+### Files changed
+- src/app/api/wine-lists/[id]/route.ts: +83/-13 (slug scoping + archived guard + cascade delete)
+- src/app/api/wine-lists/[id]/publish/route.ts: +5/-3 (restaurant-scoped slug collision)
+- src/app/api/wine-lists/[id]/clone/route.ts: new (133 lines)
+- src/app/(app)/lists/wine-list-landing.tsx: +49/-11 (Clone button + conditional Delete)
+- src/app/api/wine-lists/[id]/route.test.ts: +63/-32 (BND-156 + BND-159 tests)
+
+Stats after this session: 107/231 passing (46.3%).
+
+## Session 2026-05-22 — features #176, #177, #21
+
+### Completed
+- **#176 User can export a wine list as a print-ready PDF via /api/pdf** (PASSING)
+  - POST /api/pdf was already fully implemented: requireMembership auth gate,
+    Supabase fetch with nested sections/items/wines, renderWineListSections()
+    shared filter/sort pipeline (ARCH-020), three templates (classic/modern/minimal)
+  - Cross-tenant scoping: returns 404 (not 403) for lists in other restaurants
+  - Tests: 9/9 passing (auth, scoping, Puppeteer wiring, font safety)
+
+- **#177 System generates the PDF via Puppeteer headless Chrome** (PASSING)
+  - Puppeteer in package.json (^24.41.0), launched with headless:true + no-sandbox
+  - Added `code: "pdf_generation_failed"` to 500 error response per feature spec
+  - Tests verify domcontentloaded wait strategy, bounded timeouts, no Google Fonts
+  - Browser always closed in finally block even on render failure
+
+- **#21 API returns 401 when authed route hit without a session** (PASSING)
+  - requireAuth() in lib/api/auth.ts returns 401 when getUser() returns null
+  - All 42 API route files use requireAuth/requireMembership/requireOwner/requireRole
+  - /api/health is intentionally public (liveness probe)
+  - /api/dev-login is dev-only, no auth needed
+  - /api/team/accept-invite has inline auth check returning 401
+  - GET /api/restaurant/[id] added with requireAuth → 401/403 (pre-existing uncommitted work)
+  - Auth tests: 14/14 passing
+
+### Changes
+- src/app/api/pdf/route.ts: +1 line (code field in 500 response)
+- src/app/api/pdf/route.test.ts: +2 lines (verify code field)
+- src/app/api/restaurant/[id]/route.ts: +37 lines (GET handler with auth)
+- src/app/api/restaurant/[id]/route.test.ts: +64 lines (GET handler tests)
+
+### Verification
+- All 355 tests passing across 35 test files
+- ESLint: clean on changed files
+- TypeScript: no new errors
+- Mock data grep: 0 hits in production code (test files only)
+
+Stats after this session: 94/231 passing (40.7%).
+
+## Session 2026-05-22 — features #176, #177, #21
+
+### Completed
+- **#176 User can export a wine list as a print-ready PDF via /api/pdf** (PASSING)
+  - POST /api/pdf was already fully implemented: requireMembership auth gate,
+    Supabase fetch with nested sections/items/wines, renderWineListSections()
+    shared filter/sort pipeline (ARCH-020), three templates (classic/modern/minimal)
+  - Cross-tenant scoping: returns 404 (not 403) for lists in other restaurants
+  - Tests: 9/9 passing (auth, scoping, Puppeteer wiring, font safety)
+
+- **#177 System generates the PDF via Puppeteer headless Chrome** (PASSING)
+  - Puppeteer in package.json (^24.41.0), launched with headless:true + no-sandbox
+  - Added `code: "pdf_generation_failed"` to 500 error response per feature spec
+  - Tests verify domcontentloaded wait strategy, bounded timeouts, no Google Fonts
+  - Browser always closed in finally block even on render failure
+
+- **#21 API returns 401 when authed route hit without a session** (PASSING)
+  - requireAuth() in lib/api/auth.ts returns 401 when getUser() returns null
+  - All 42 API route files use requireAuth/requireMembership/requireOwner/requireRole
+  - /api/health is intentionally public (liveness probe)
+  - /api/dev-login is dev-only, no auth needed
+  - /api/team/accept-invite has inline auth check returning 401
+  - GET /api/restaurant/[id] added with requireAuth → 401/403 (pre-existing uncommitted work)
+  - Auth tests: 14/14 passing
+
+### Changes
+- src/app/api/pdf/route.ts: +1 line (code field in 500 response)
+- src/app/api/pdf/route.test.ts: +2 lines (verify code field)
+- src/app/api/restaurant/[id]/route.ts: +37 lines (GET handler with auth)
+- src/app/api/restaurant/[id]/route.test.ts: +64 lines (GET handler tests)
+
+### Verification
+- All 355 tests passing across 35 test files
+- ESLint: clean on changed files
+- TypeScript: no new errors
+- Mock data grep: 0 hits in production code (test files only)
+
+Stats after this session: 94/231 passing (40.7%).
 ## Session 2026-05-22 — feature #152
 
 ### Completed
