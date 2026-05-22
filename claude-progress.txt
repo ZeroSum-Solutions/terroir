@@ -189,3 +189,44 @@ Stats after this session: 107/231 passing (46.3%).
 - TypeScript: 0 errors, Mock data grep: clean, Browser: blocked by sandbox
 
 Stats: 116/231 passing (50.2%).
+
+## Session 2026-05-23 — features #178, #179, #184
+
+### Completed
+- **#178 User can download a wine list as CSV** (PASSING)
+  - Created GET /api/wine-lists/[id]/csv returning CSV with columns: Section, Producer,
+    Name, Vintage, Glass Price, Bottle Price, Name Override, Hidden
+  - Uses requireMembership() for auth; scoped to restaurant_id for defense-in-depth
+  - Added "CSV" download button (FileText icon) to wine list editor header
+  - Follows existing escapeField pattern from /api/insights/csv
+
+- **#179 User can copy the public list URL with one click** (PASSING)
+  - Added "Copy URL" button to wine list editor header (Copy icon from lucide-react)
+  - Button only visible when list.is_published && list.slug
+  - Copies absolute URL (window.location.origin + /list/[slug]) to clipboard
+  - Toast notification: "URL copied to clipboard." with fade-in animation,
+    auto-dismiss after 2.5s
+
+- **#184 System renders a printable view at /list/[slug]/print** (PASSING)
+  - Created /list/[slug]/print page — anon-accessible, no auth required
+  - Print-optimized layout: full-width (800px max), white bg, no nav/footer
+  - @media print stylesheet with @page margins (0.75in, letter size),
+    color-adjust: exact, no-print hiding
+  - Larger typography (32px title, 24px section headers, 17px wine names)
+  - More generous spacing (gap-md between items vs py-sm on public view)
+  - Screen-only print instruction banner
+  - Reuses renderWineListSections pipeline, respects eightysix_strategy and hidden items
+  - ISR revalidate every hour, noindex robots meta
+
+### Verification
+- TypeScript: 0 errors across all changes
+- Mock data grep: 0 hits in production src/ (only test files)
+- Browser verification: blocked by sandbox (known limitation)
+- All dependencies verified passing before implementation
+
+### Files changed
+- src/app/api/wine-lists/[id]/csv/route.ts: new (119 lines)
+- src/app/(app)/lists/[id]/wine-list-editor.tsx: +30 (Copy URL button + toast, CSV button)
+- src/app/list/[slug]/print/page.tsx: new (281 lines)
+
+Stats after this session: 120/231 passing (51.9%).
