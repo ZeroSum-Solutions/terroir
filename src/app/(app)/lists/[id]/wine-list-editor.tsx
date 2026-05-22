@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ChevronDown,
+  Copy,
   Download,
   Eye,
   FileSpreadsheet,
@@ -254,6 +255,7 @@ export function WineListEditor({
   const [showAddWine, setShowAddWine] = useState(false);
   const [showPublish, setShowPublish] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState(false);
 
   const totalWines = useMemo(
     () => sections.reduce((sum, s) => sum + s.wine_list_items.length, 0),
@@ -597,6 +599,17 @@ export function WineListEditor({
     }
   }, [list.id, list.name, list.template]);
 
+  const copyUrl = useCallback(() => {
+    if (!list.slug) return;
+    const url = `${window.location.origin}/list/${list.slug}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 2500);
+    }).catch(() => {
+      // Clipboard API may fail in insecure contexts — silently ignore.
+    });
+  }, [list.slug]);
+
   const updateTemplate = useCallback(
     async (template: Template) => {
       await fetch(`/api/wine-lists/${list.id}`, {
@@ -677,6 +690,16 @@ export function WineListEditor({
               <Eye className="h-3.5 w-3.5" strokeWidth={2} />
               <span className="hidden md:inline">Preview</span>
             </a>
+            {list.is_published && list.slug && (
+              <button
+                type="button"
+                onClick={copyUrl}
+                className="flex h-[34px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[13px] font-medium text-ink hover:bg-surface-muted md:px-md"
+              >
+                <Copy className="h-3.5 w-3.5" strokeWidth={2} />
+                <span className="hidden md:inline">Copy URL</span>
+              </button>
+            )}
                         <button
               type="button"
               onClick={() => setShowPublish(true)}
@@ -932,6 +955,13 @@ export function WineListEditor({
             startTransition(() => router.refresh());
           }}
         />
+      )}
+
+      {/* Copy URL toast */}
+      {copyFeedback && (
+        <div className="fixed bottom-lg left-1/2 z-50 -translate-x-1/2 rounded-md bg-ink px-lg py-sm text-[13px] font-medium text-white shadow-lg animate-in fade-in slide-in-from-bottom-2">
+          URL copied to clipboard.
+        </div>
       )}
     </section>
   );
