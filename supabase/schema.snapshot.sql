@@ -302,6 +302,7 @@ create table public.wine_lists (
   template          text        not null default 'classic',
   slug              text,
   is_published      boolean     not null default false,
+  archived          boolean     not null default false,
   last_published_at timestamptz,
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()
@@ -401,7 +402,10 @@ create table public.wine_list_items (
   glass_price   numeric(10,2),
   bottle_price  numeric(10,2),
   tasting_note  text,
+  name_override text,
+  blurb         text,
   is_available  boolean       not null default true,
+  hidden        boolean       not null default false,
   created_at    timestamptz   not null default now(),
   updated_at    timestamptz   not null default now()
 );
@@ -2394,3 +2398,41 @@ END $$;
 
 ALTER TABLE public.invitations
   ALTER COLUMN email SET NOT NULL;
+-- 0028_wine_lists_description.sql
+-- Add description column to wine_lists for feature #153
+alter table public.wine_lists
+  add column if not exists description text;
+
+-- 0029_public_restaurant_read.sql
+-- Allow anonymous (public) users to read restaurant names when they have
+-- published wine lists.
+create policy "public can read restaurants with published lists"
+  on public.restaurants for select to anon
+  using (
+    exists (
+      select 1
+      from public.wine_lists wl
+      where wl.restaurant_id = restaurants.id
+        and wl.is_published = true
+    )
+  );
+
+-- 0030_wine_lists_archived.sql
+-- Add archived column to wine_lists for feature #158
+alter table public.wine_lists
+  add column if not exists archived boolean not null default false;
+
+-- 0031_wine_list_items_name_override.sql
+-- BND-169: add name_override column to wine_list_items
+alter table public.wine_list_items
+  add column if not exists name_override text;
+
+-- 0032_wine_list_items_blurb.sql
+-- BND-170: add blurb column to wine_list_items for custom per-item text
+alter table public.wine_list_items
+  add column if not exists blurb text;
+
+-- 0033_wine_list_items_hidden.sql
+-- BND-171: add hidden column to wine_list_items to exclude from public views
+alter table public.wine_list_items
+  add column if not exists hidden boolean not null default false;
