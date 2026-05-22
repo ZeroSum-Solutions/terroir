@@ -1,3 +1,41 @@
+## Session 2026-05-22 — features #176, #177, #21
+
+### Completed
+- **#176 User can export a wine list as a print-ready PDF via /api/pdf** (PASSING)
+  - POST /api/pdf was already fully implemented: requireMembership auth gate,
+    Supabase fetch with nested sections/items/wines, renderWineListSections()
+    shared filter/sort pipeline (ARCH-020), three templates (classic/modern/minimal)
+  - Cross-tenant scoping: returns 404 (not 403) for lists in other restaurants
+  - Tests: 9/9 passing (auth, scoping, Puppeteer wiring, font safety)
+
+- **#177 System generates the PDF via Puppeteer headless Chrome** (PASSING)
+  - Puppeteer in package.json (^24.41.0), launched with headless:true + no-sandbox
+  - Added `code: "pdf_generation_failed"` to 500 error response per feature spec
+  - Tests verify domcontentloaded wait strategy, bounded timeouts, no Google Fonts
+  - Browser always closed in finally block even on render failure
+
+- **#21 API returns 401 when authed route hit without a session** (PASSING)
+  - requireAuth() in lib/api/auth.ts returns 401 when getUser() returns null
+  - All 42 API route files use requireAuth/requireMembership/requireOwner/requireRole
+  - /api/health is intentionally public (liveness probe)
+  - /api/dev-login is dev-only, no auth needed
+  - /api/team/accept-invite has inline auth check returning 401
+  - GET /api/restaurant/[id] added with requireAuth → 401/403 (pre-existing uncommitted work)
+  - Auth tests: 14/14 passing
+
+### Changes
+- src/app/api/pdf/route.ts: +1 line (code field in 500 response)
+- src/app/api/pdf/route.test.ts: +2 lines (verify code field)
+- src/app/api/restaurant/[id]/route.ts: +37 lines (GET handler with auth)
+- src/app/api/restaurant/[id]/route.test.ts: +64 lines (GET handler tests)
+
+### Verification
+- All 355 tests passing across 35 test files
+- ESLint: clean on changed files
+- TypeScript: no new errors
+- Mock data grep: 0 hits in production code (test files only)
+
+Stats after this session: 94/231 passing (40.7%).
 ## Session 2026-05-22 — features #15, #16, #158
 
 ### Completed
