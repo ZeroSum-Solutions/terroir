@@ -9,6 +9,7 @@ import {
   Download,
   Eye,
   FileSpreadsheet,
+  FileText,
   GripVertical,
   Loader2,
   Pencil,
@@ -657,6 +658,14 @@ export function WineListEditor({
             >
               <FileSpreadsheet className="h-3.5 w-3.5" strokeWidth={2} />
               <span className="hidden md:inline">Toast Export</span>
+            </a>
+            <a
+              href={`/api/wine-lists/${list.id}/csv`}
+              download
+              className="flex h-[34px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[13px] font-medium text-ink hover:bg-surface-muted md:px-md"
+            >
+              <FileText className="h-3.5 w-3.5" strokeWidth={2} />
+              <span className="hidden md:inline">CSV</span>
             </a>
             {/* BND-172: Preview button */}
             <a
