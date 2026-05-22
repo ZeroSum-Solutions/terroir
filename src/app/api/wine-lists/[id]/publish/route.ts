@@ -6,8 +6,18 @@ export const runtime = "nodejs";
 
 type Params = Promise<{ id: string }>;
 
+const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+function validateSlug(slug: string): string | null {
+  const trimmed = slug.trim().toLowerCase();
+  if (!trimmed) return "Slug must not be empty.";
+  if (!SLUG_RE.test(trimmed)) return "Slug must contain only lowercase letters, numbers, and hyphens.";
+  if (trimmed.length > 50) return "Slug must be 50 characters or fewer.";
+  return null;
+}
+
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Params },
 ) {
   const { id } = await params;
@@ -31,10 +41,45 @@ export async function POST(
     return NextResponse.json({ error: "Wine list not found." }, { status: 404 });
   }
 
-  // Generate slug if needed
-  let slug = list.slug;
+  // Determine slug — in priority order:
+  // 1. Custom slug from request body (optional)
+  // 2. Existing slug on the list (set via PATCH)
+  // 3. Auto-generated slug from restaurant name
+  let slug: string | null = list.slug;
+
+  // Parse request body for optional custom slug
+  let customSlug: string | undefined;
+  try {
+    const body = await request.json();
+    if (body && typeof body.slug === "string") customSlug = body.slug;
+  } catch {
+    // No body or bad JSON — use existing slug or auto-generate
+  }
+
+  if (customSlug) {
+    const error = validateSlug(customSlug);
+    if (error) {
+      return NextResponse.json({ error }, { status: 422 });
+    }
+    const trimmed = customSlug.trim().toLowerCase();
+    // Check uniqueness
+    const { data: existing } = await supabase
+      .from("wine_lists")
+      .select("id")
+      .eq("slug", trimmed)
+      .neq("id", id)
+      .maybeSingle();
+    if (existing) {
+      return NextResponse.json(
+        { error: "This slug is already in use." },
+        { status: 409 },
+      );
+    }
+    slug = trimmed;
+  }
+
+  // If still no slug, auto-generate
   if (!slug) {
-    // Get restaurant name for slug
     const { data: restaurant } = await supabase
       .from("restaurants")
       .select("name")

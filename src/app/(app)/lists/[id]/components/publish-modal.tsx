@@ -39,7 +39,10 @@ interface PublishModalProps {
 
 export function PublishModal({ listId, currentSlug, isPublished, onClose }: PublishModalProps) {
   const [publishing, setPublishing] = useState(false);
-  const [slug, setSlug] = useState(currentSlug);
+  const [slug, setSlug] = useState(currentSlug ?? "");
+  const [slugInput, setSlugInput] = useState(currentSlug ?? "");
+  const [slugError, setSlugError] = useState<string | null>(null);
+  const [slugSuccess, setSlugSuccess] = useState(false);
   const [published, setPublished] = useState(isPublished);
   const [copied, setCopied] = useState(false);
   const trapRef = useRef<HTMLDivElement>(null);
@@ -51,19 +54,29 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
 
   const publish = useCallback(async () => {
     setPublishing(true);
+    setSlugError(null);
     try {
+      const body: Record<string, string> = {};
+      const trimmed = slugInput.trim().toLowerCase();
+      if (trimmed) body.slug = trimmed;
+
       const res = await fetch(`/api/wine-lists/${listId}/publish`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
+      const data = await res.json();
       if (res.ok) {
-        const data = (await res.json()) as { slug: string };
-        setSlug(data.slug);
+        setSlug((data as { slug: string }).slug);
+        setSlugInput((data as { slug: string }).slug);
         setPublished(true);
+      } else {
+        setSlugError((data as { error?: string }).error ?? "Publish failed.");
       }
     } finally {
       setPublishing(false);
     }
-  }, [listId]);
+  }, [listId, slugInput]);
 
   const unpublish = useCallback(async () => {
     setPublishing(true);
@@ -73,11 +86,45 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
       });
       if (res.ok) {
         setPublished(false);
+        setSlug("");
+        setSlugInput("");
       }
     } finally {
       setPublishing(false);
     }
   }, [listId]);
+
+  const saveSlug = useCallback(async () => {
+    const trimmed = slugInput.trim().toLowerCase();
+    if (!trimmed) {
+      setSlugError("Slug must not be empty.");
+      return;
+    }
+    if (trimmed === slug) {
+      setSlugError(null);
+      return;
+    }
+    setPublishing(true);
+    setSlugError(null);
+    setSlugSuccess(false);
+    try {
+      const res = await fetch(`/api/wine-lists/${listId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: trimmed }),
+      });
+      if (res.ok) {
+        setSlug(trimmed);
+        setSlugSuccess(true);
+        setTimeout(() => setSlugSuccess(false), 2000);
+      } else {
+        const data = await res.json();
+        setSlugError((data as { error?: string }).error ?? "Failed to update slug.");
+      }
+    } finally {
+      setPublishing(false);
+    }
+  }, [listId, slugInput, slug]);
 
   const copyUrl = () => {
     if (!publicUrl) return;
@@ -125,6 +172,38 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
               This will create a public page anyone can view. You can unpublish
               at any time.
             </p>
+
+            {/* Slug input */}
+            <div className="mt-md">
+              <label htmlFor="publish-slug" className="block text-[13px] font-medium text-ink">
+                Public URL slug
+              </label>
+              <p className="mt-0.5 text-[12px] text-ink-muted">
+                Leave blank to auto-generate from your restaurant name.
+              </p>
+              <div className="mt-sm flex items-center gap-0 rounded-sm border border-border bg-white">
+                <span className="pl-sm text-[13px] text-ink-muted select-none">/list/</span>
+                <input
+                  id="publish-slug"
+                  type="text"
+                  value={slugInput}
+                  onChange={(e) => {
+                    setSlugInput(e.target.value);
+                    setSlugError(null);
+                  }}
+                  placeholder="spring-2026"
+                  className="flex-1 h-[38px] bg-transparent px-0 text-[14px] text-ink placeholder:text-ink-muted/50 focus:outline-none"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </div>
+              {slugError && (
+                <p className="mt-xs text-[12px] text-red" role="alert">
+                  {slugError}
+                </p>
+              )}
+            </div>
+
             <div className="mt-lg flex justify-end gap-sm">
               <button
                 type="button"
@@ -178,6 +257,49 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
                 </button>
               </div>
             )}
+
+            {/* Slug editing for published lists */}
+            <div className="mt-md">
+              <label htmlFor="edit-slug" className="block text-[13px] font-medium text-ink">
+                Slug
+              </label>
+              <div className="mt-sm flex items-center gap-sm">
+                <div className="flex flex-1 items-center gap-0 rounded-sm border border-border bg-white">
+                  <span className="pl-sm text-[13px] text-ink-muted select-none">/list/</span>
+                  <input
+                    id="edit-slug"
+                    type="text"
+                    value={slugInput}
+                    onChange={(e) => {
+                      setSlugInput(e.target.value);
+                      setSlugError(null);
+                      setSlugSuccess(false);
+                    }}
+                    className="flex-1 h-[38px] bg-transparent px-0 text-[14px] text-ink focus:outline-none"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={saveSlug}
+                  disabled={publishing || slugInput.trim().toLowerCase() === slug}
+                  className="h-[38px] shrink-0 rounded-sm border border-border-strong px-md text-[13px] font-medium text-ink hover:bg-surface-muted disabled:opacity-40"
+                >
+                  {publishing ? "..." : "Save"}
+                </button>
+              </div>
+              {slugError && (
+                <p className="mt-xs text-[12px] text-red" role="alert">
+                  {slugError}
+                </p>
+              )}
+              {slugSuccess && (
+                <p className="mt-xs text-[12px] text-green-600">
+                  Slug updated.
+                </p>
+              )}
+            </div>
 
             <div className="mt-lg flex justify-between items-center">
               <a

@@ -27,17 +27,53 @@ export async function PATCH(
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
-  let body: { name?: string; template?: string };
+  let body: { name?: string; template?: string; slug?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  // Only allow updating safe fields
-  const allowed: { name?: string; template?: string } = {};
+  // Only allow updating safe fields (name, template, slug)
+  const allowed: { name?: string; template?: string; slug?: string } = {};
   if (typeof body.name === "string") allowed.name = body.name.trim();
   if (typeof body.template === "string") allowed.template = body.template;
+  if (typeof body.slug === "string") {
+    const trimmed = body.slug.trim().toLowerCase();
+    if (!trimmed) {
+      return NextResponse.json(
+        { error: "Slug must not be empty." },
+        { status: 422 },
+      );
+    }
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(trimmed)) {
+      return NextResponse.json(
+        { error: "Slug must contain only lowercase letters, numbers, and hyphens." },
+        { status: 422 },
+      );
+    }
+    if (trimmed.length > 50) {
+      return NextResponse.json(
+        { error: "Slug must be 50 characters or fewer." },
+        { status: 422 },
+      );
+    }
+    // Check slug uniqueness (DB partial unique index covers this, but app-level
+    // check gives a better error message and avoids a 500 on constraint violation)
+    const { data: existing } = await supabase
+      .from("wine_lists")
+      .select("id")
+      .eq("slug", trimmed)
+      .neq("id", id)
+      .maybeSingle();
+    if (existing) {
+      return NextResponse.json(
+        { error: "This slug is already in use." },
+        { status: 409 },
+      );
+    }
+    allowed.slug = trimmed;
+  }
 
   if (Object.keys(allowed).length === 0) {
     return NextResponse.json({ error: "No valid fields to update." }, { status: 400 });

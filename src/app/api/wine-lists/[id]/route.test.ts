@@ -20,39 +20,64 @@ vi.mock("@/lib/api/auth", () => ({
 
 const { PATCH, DELETE } = await import("./route");
 
-type Row = { id: string; restaurant_id: string };
+type Row = { id: string; restaurant_id: string; slug?: string };
 
 /**
- * Build a mock supabase client whose `wine_lists` table holds `rows`. It
- * mimics the real client's chained-builder pattern: every `.eq(col, val)`
- * records a filter, and the terminal `.select()` returns rows that match
- * EVERY recorded filter. If the route drops a filter, the match set widens
- * to include cross-tenant rows — which is exactly the RLS-bypassed scenario
- * BND-008 is defending against.
+ * Build a mock supabase client whose `wine_lists` table holds `rows`.
+ *
+ * Two call patterns are supported:
+ * 1. Mutation chain: .update(payload).eq().eq().select("id") — terminal
+ *    Returns { data: matched[], error } where matched only includes rows
+ *    that pass all filters.
+ * 2. Query chain: .select("id").eq().neq().maybeSingle() — for slug
+ *    uniqueness checks. Returns { data: matched[0] | null, error }.
  */
-// Module-level capture for PATCH payload assertions and an error-injection
-// switch for 500 tests. Reset inside each test's beforeEach.
 let lastUpdatePayload: Record<string, unknown> | null = null;
 let selectError: { message: string } | null = null;
 
 function makeSupabase(rows: Row[]) {
   return {
     from: (_table: string) => {
-      const filters: Array<[string, string]> = [];
-      const chain = {
+      // --- Query-builder chain (select-first pattern) ---
+      const queryFilters: Array<[string, unknown, string]> = []; // [col, val, op]
+      const queryChain = {
+        eq: (col: string, val: unknown) => {
+          queryFilters.push([col, val, "eq"]);
+          return queryChain;
+        },
+        neq: (col: string, val: unknown) => {
+          queryFilters.push([col, val, "neq"]);
+          return queryChain;
+        },
+        maybeSingle: async () => {
+          if (selectError) return { data: null, error: selectError };
+          const matched = rows.filter((r) =>
+            queryFilters.every(([col, val, op]) => {
+              if (op === "neq") return (r as any)[col] !== val;
+              return (r as any)[col] === val;
+            }),
+          );
+          return { data: matched.length > 0 ? matched[0] : null, error: null };
+        },
+      };
+
+      // --- Mutation chain (update/delete-first pattern) ---
+      const mutFilters: Array<[string, string]> = [];
+      const mutChain = {
         update: (payload: Record<string, unknown>) => {
           lastUpdatePayload = payload;
-          return chain;
+          return mutChain;
         },
-        delete: () => chain,
+        delete: () => mutChain,
         eq: (col: string, val: string) => {
-          filters.push([col, val]);
-          return chain;
+          mutFilters.push([col, val]);
+          // Also add to queryFilters for when select is used as query builder
+          return mutChain;
         },
         select: async (_cols?: string) => {
           if (selectError) return { data: null, error: selectError };
           const matched = rows.filter((r) =>
-            filters.every(([col, val]) => {
+            mutFilters.every(([col, val]) => {
               if (col === "id") return r.id === val;
               if (col === "restaurant_id") return r.restaurant_id === val;
               return true;
@@ -60,9 +85,19 @@ function makeSupabase(rows: Row[]) {
           );
           return { data: matched, error: null };
         },
-        then: undefined,
       };
-      return chain;
+
+      // The top-level from() return value
+      // .select("id") returns the query chain
+      // .update() / .delete() returns the mutation chain
+      return {
+        select: (_cols?: string) => queryChain,
+        update: (payload: Record<string, unknown>) => {
+          lastUpdatePayload = payload;
+          return mutChain;
+        },
+        delete: () => mutChain,
+      };
     },
   };
 }
@@ -162,7 +197,7 @@ describe("PATCH /api/wine-lists/[id]", () => {
     expect(res.status).toBe(400);
   });
 
-  it("filters unsafe fields from the update payload (only allows name + template)", async () => {
+  it("filters unsafe fields from the update payload (only allows name + template + slug)", async () => {
     const supabase = makeSupabase([
       { id: "list-a", restaurant_id: "restaurant-A" },
     ]);
@@ -175,18 +210,99 @@ describe("PATCH /api/wine-lists/[id]", () => {
       patchRequest({
         name: "clean",
         template: "elegant",
+        slug: "my-custom-slug",
         is_published: true,
         restaurant_id: "restaurant-B",
-        slug: "injected",
       }),
       { params: Promise.resolve({ id: "list-a" }) },
     );
     expect(res.status).toBe(200);
     // Critical: only the allowlisted fields made it to the UPDATE payload.
-    expect(lastUpdatePayload).toEqual({ name: "clean", template: "elegant" });
+    expect(lastUpdatePayload).toEqual({
+      name: "clean",
+      template: "elegant",
+      slug: "my-custom-slug",
+    });
     expect(lastUpdatePayload).not.toHaveProperty("is_published");
     expect(lastUpdatePayload).not.toHaveProperty("restaurant_id");
-    expect(lastUpdatePayload).not.toHaveProperty("slug");
+  });
+
+  it("rejects empty slug with 422", async () => {
+    const supabase = makeSupabase([
+      { id: "list-a", restaurant_id: "restaurant-A" },
+    ]);
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "restaurant-A",
+      user: { id: "u1" },
+    });
+    const res = await PATCH(patchRequest({ slug: "   " }), {
+      params: Promise.resolve({ id: "list-a" }),
+    });
+    expect(res.status).toBe(422);
+  });
+
+  it("rejects invalid slug characters with 422", async () => {
+    const supabase = makeSupabase([
+      { id: "list-a", restaurant_id: "restaurant-A" },
+    ]);
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "restaurant-A",
+      user: { id: "u1" },
+    });
+    const res = await PATCH(patchRequest({ slug: "My Bad Slug!" }), {
+      params: Promise.resolve({ id: "list-a" }),
+    });
+    expect(res.status).toBe(422);
+  });
+
+  it("rejects slug that is too long with 422", async () => {
+    const supabase = makeSupabase([
+      { id: "list-a", restaurant_id: "restaurant-A" },
+    ]);
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "restaurant-A",
+      user: { id: "u1" },
+    });
+    const res = await PATCH(
+      patchRequest({ slug: "a".repeat(51) }),
+      { params: Promise.resolve({ id: "list-a" }) },
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it("returns 409 on slug collision", async () => {
+    const supabase = makeSupabase([
+      { id: "list-a", restaurant_id: "restaurant-A" },
+      { id: "list-b", restaurant_id: "restaurant-A", slug: "taken-slug" },
+    ]);
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "restaurant-A",
+      user: { id: "u1" },
+    });
+    const res = await PATCH(patchRequest({ slug: "taken-slug" }), {
+      params: Promise.resolve({ id: "list-a" }),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it("accepts valid slug with 200", async () => {
+    const supabase = makeSupabase([
+      { id: "list-a", restaurant_id: "restaurant-A" },
+    ]);
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "restaurant-A",
+      user: { id: "u1" },
+    });
+    const res = await PATCH(patchRequest({ slug: "spring-2026" }), {
+      params: Promise.resolve({ id: "list-a" }),
+    });
+    expect(res.status).toBe(200);
+    expect(lastUpdatePayload).toHaveProperty("slug", "spring-2026");
   });
 
   it("returns 500 when the Supabase update errors", async () => {
