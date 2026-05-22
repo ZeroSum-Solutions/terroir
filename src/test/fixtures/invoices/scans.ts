@@ -82,3 +82,15 @@ export function makeParsedInvoice() {
     },
   };
 }
+
+/** Returned by Claude when no wine lines were found (e.g. landscape photo). */
+export function makeEmptyParsedInvoice() {
+  return {
+    parsed_output: {
+      distributor: "Unknown",
+      invoiceNumber: null,
+      invoiceDate: null,
+      lineItems: [],
+    },
+  };
+}

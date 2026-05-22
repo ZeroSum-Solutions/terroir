@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
 import { OK_OCR } from "@/test/mocks/azure";
-import { makeParsedInvoice } from "@/test/fixtures/invoices/scans";
+import { makeParsedInvoice, makeEmptyParsedInvoice } from "@/test/fixtures/invoices/scans";
 
 /**
  * /api/scan route tests.
@@ -266,6 +266,28 @@ describe("POST /api/scan", () => {
     // Both items are ≥0.9 confidence and we have ≥3? No — we have 2. The
     // route flags `tooFew` when totalItems < 3, so the fallback fires.
     expect(body.quality.manualFallbackTriggered).toBe(true);
+    expect(body.rawText).toBe(OK_OCR.rawText);
+  });
+
+  it("returns 422 no_wines_extracted when Claude returns empty line items", async () => {
+    auth.requireMembership.mockResolvedValue({
+      supabase: {},
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+    azure.analyzeInvoice.mockResolvedValue(OK_OCR);
+    anthropic.parse.mockResolvedValue(makeEmptyParsedInvoice());
+
+    const fd = new FormData();
+    fd.append("file", pdfFile());
+
+    const res = await POST(makeFormRequest(fd));
+
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.code).toBe("no_wines_extracted");
+    expect(body.message).toBeTruthy();
     expect(body.rawText).toBe(OK_OCR.rawText);
   });
 });

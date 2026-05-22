@@ -97,6 +97,15 @@ export async function POST(request: NextRequest) {
     throw e;
   }
 
+  // Stage 2.5: empty extraction check
+  if (parsed.lineItems.length === 0) {
+    return json({
+      code: "no_wines_extracted",
+      message: "No wines could be extracted from this image.",
+      rawText: ocr.rawText,
+    }, 422);
+  }
+
   // ── Stage 3: response assembly ──
   const parsedAt = new Date().toISOString();
   const items: LineItem[] = parsed.lineItems.map((item, idx) => ({

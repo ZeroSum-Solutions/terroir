@@ -83,10 +83,10 @@ async function postScan(file: File, signal: AbortSignal): Promise<Scan> {
   const res = await fetch("/api/scan", { method: "POST", body, signal });
   if (!res.ok) {
     const payload = (await res.json().catch(() => null)) as
-      | { error?: string; rawText?: string }
+      | { error?: string; message?: string; rawText?: string }
       | null;
     throw new ScanError(
-      payload?.error ?? `Scan failed (${res.status})`,
+      payload?.error ?? payload?.message ?? `Scan failed (${res.status})`,
       payload?.rawText,
     );
   }
