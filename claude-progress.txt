@@ -1,3 +1,43 @@
+## Session 2026-05-22 — features #34, #36, #151
+
+### Completed
+- **#34 Owner can cancel a pending invitation** (PASSING)
+  - Already fully implemented: DELETE /api/team/invite/[id] with requireOwner(),
+    Revoke button in team-actions.tsx, token invalidation via accept-invite 404
+  - Verified via code review, TypeScript (0 errors), full test suite (355 passing)
+
+- **#36 Staff role: record pours and view inventory but cannot edit wine lists** (PASSING)
+  - Staff can: GET /api/cellar/grid, POST /api/pour (RPC-gated all roles), POST /api/scan
+  - Staff CANNOT (403 via requireRole(["owner", "manager"])):
+    POST /api/wine-lists, PATCH/DELETE /api/wine-lists/[id],
+    POST/DELETE /api/wine-lists/[id]/publish, POST /api/wine-list-sections,
+    POST /api/wine-list-items, PATCH /api/wine-list-items/reorder,
+    POST /api/cellar, POST /api/reconcile (RPC-gated 42501→403)
+  - Created PATCH /api/cellar/[id] for editing inventory (quantity, unit_cost, bin_location)
+  - Updated 3 test files to mock requireRole instead of requireMembership
+
+- **#151 User can export an insights view as CSV** (PASSING)
+  - Added Export CSV button to /insights page header (inline SVG download icon)
+  - Created GET /api/insights/csv with text/csv Content-Type
+  - CSV has 3 sections: Scan Activity, Distributor Breakdown, Varietal Breakdown
+  - Uses same Supabase queries as insights page for data consistency
+
+### Verification
+- TypeScript: 0 errors
+- All 357 tests passing (35 test files)
+- Mock data grep: 0 hits in production code
+- Pre-existing uncommitted changes from clone agent (BND-156/159) included
+
+### Files changed
+- src/app/api/cellar/route.ts: requireMembership → requireRole
+- src/app/api/cellar/[id]/route.ts: new PATCH endpoint
+- src/app/api/insights/csv/route.ts: new CSV export endpoint
+- src/app/(app)/insights/page.tsx: +Export CSV button
+- 6 other route files: requireMembership → requireRole
+- 3 test files: mock requireMembership → requireRole
+
+Stats after this session: 104/231 passing (45.0%).
+
 ## Session 2026-05-22 — features #161, #162, #163
 
 ### Completed
