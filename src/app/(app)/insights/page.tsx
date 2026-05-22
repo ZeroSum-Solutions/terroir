@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
 import { BarChart3, ScanLine } from "lucide-react";
 import Link from "next/link";
@@ -11,6 +12,8 @@ import { EnrichCellarButton } from "./enrich-cellar-button";
 import { RefreshRetailButton } from "./refresh-retail-button";
 import { PricingReviewCard } from "./pricing-review-card";
 import { SnoozedAlertsCard, type SnoozedRow } from "./snoozed-alerts-card";
+
+export const metadata: Metadata = { title: "Insights" };
 
 function formatMoney(n: number) {
   return "$" + n.toLocaleString("en-US", { maximumFractionDigits: 0 });
