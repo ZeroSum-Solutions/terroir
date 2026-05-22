@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 
 const CreateListSchema = z.object({
   name: z.string().min(1),
+  description: z.string().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -30,12 +31,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { name } = parsed.data;
+  const { name, description } = parsed.data;
 
   // Create the wine list
+  const insertPayload: { name: string; restaurant_id: string; description?: string } = {
+    name: name.trim(),
+    restaurant_id: restaurantId,
+  };
+  if (description?.trim()) {
+    insertPayload.description = description.trim();
+  }
+
   const { data: list, error: listError } = await supabase
     .from("wine_lists")
-    .insert({ name: name.trim(), restaurant_id: restaurantId })
+    .insert(insertPayload)
     .select("id")
     .single();
 

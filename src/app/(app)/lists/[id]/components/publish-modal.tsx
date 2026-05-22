@@ -65,6 +65,20 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
     }
   }, [listId]);
 
+  const unpublish = useCallback(async () => {
+    setPublishing(true);
+    try {
+      const res = await fetch(`/api/wine-lists/${listId}/publish`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setPublished(false);
+      }
+    } finally {
+      setPublishing(false);
+    }
+  }, [listId]);
+
   const copyUrl = () => {
     if (!publicUrl) return;
     navigator.clipboard.writeText(publicUrl);
@@ -165,7 +179,7 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
               </div>
             )}
 
-            <div className="mt-lg flex justify-between">
+            <div className="mt-lg flex justify-between items-center">
               <a
                 href={publicUrl ?? "#"}
                 target="_blank"
@@ -174,13 +188,23 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
               >
                 Open in new tab
               </a>
-              <button
-                type="button"
-                onClick={onClose}
-                className="h-[38px] rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
-              >
-                Done
-              </button>
+              <div className="flex gap-sm">
+                <button
+                  type="button"
+                  onClick={unpublish}
+                  disabled={publishing}
+                  className="h-[38px] rounded-sm border border-border-strong px-md text-[14px] font-medium text-ink hover:bg-surface-muted disabled:opacity-60"
+                >
+                  {publishing ? "Unpublishing..." : "Unpublish"}
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="h-[38px] rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </>
         )}

@@ -298,6 +298,7 @@ create table public.wine_lists (
   id                uuid        primary key default gen_random_uuid(),
   restaurant_id     uuid        not null references public.restaurants(id) on delete cascade,
   name              text        not null,
+  description       text,
   template          text        not null default 'classic',
   slug              text,
   is_published      boolean     not null default false,

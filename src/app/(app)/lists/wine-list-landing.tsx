@@ -23,6 +23,7 @@ export function WineListLanding({
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newDescription, setNewDescription] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   // Per-card "copied" indicator for the published-list footer — tracks
@@ -92,10 +93,14 @@ export function WineListLanding({
     setCreating(true);
     setCreateError(null);
     try {
+      const body: { name: string; description?: string } = { name };
+      if (newDescription.trim()) {
+        body.description = newDescription.trim();
+      }
       const res = await fetch("/api/wine-lists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("Failed to create wine list");
       const { id } = (await res.json()) as { id: string };
@@ -104,7 +109,7 @@ export function WineListLanding({
       setCreateError("Couldn't create wine list. Please try again.");
       setCreating(false);
     }
-  }, [newName, router]);
+  }, [newName, newDescription, router]);
 
   return (
     <section>
@@ -194,6 +199,11 @@ export function WineListLanding({
                       </span>
                     )}
                   </div>
+                  {list.description && (
+                    <p className="mt-xs text-[13px] text-ink-muted line-clamp-2">
+                      {list.description}
+                    </p>
+                  )}
                   <div className="mt-md flex items-center justify-between text-[12px] text-ink-muted">
                     <span>
                       <span className="font-medium text-ink">
@@ -302,6 +312,11 @@ export function WineListLanding({
             setNewName(v);
             if (createError) setCreateError(null);
           }}
+          newDescription={newDescription}
+          setNewDescription={(v) => {
+            setNewDescription(v);
+            if (createError) setCreateError(null);
+          }}
           creating={creating}
           error={createError}
           onClose={() => {
@@ -318,6 +333,8 @@ export function WineListLanding({
 function CreateListModal({
   newName,
   setNewName,
+  newDescription,
+  setNewDescription,
   creating,
   error,
   onClose,
@@ -325,6 +342,8 @@ function CreateListModal({
 }: {
   newName: string;
   setNewName: (v: string) => void;
+  newDescription: string;
+  setNewDescription: (v: string) => void;
   creating: boolean;
   error: string | null;
   onClose: () => void;
@@ -366,6 +385,13 @@ function CreateListModal({
           }}
           placeholder="Spring 2026 Wine List…"
           className="mt-lg h-[38px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+        />
+        <textarea
+          value={newDescription}
+          onChange={(e) => setNewDescription(e.target.value)}
+          placeholder="Description (optional)"
+          rows={3}
+          className="mt-sm w-full rounded-sm border border-border bg-white px-sm py-xs text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft resize-none"
         />
         {error && (
           <p

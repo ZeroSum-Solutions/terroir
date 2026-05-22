@@ -68,3 +68,45 @@ export async function POST(
 
   return NextResponse.json({ slug });
 }
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Params },
+) {
+  const { id } = await params;
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, restaurantId } = auth;
+
+  // Verify the list exists and belongs to this restaurant
+  const { data: list, error: fetchError } = await supabase
+    .from("wine_lists")
+    .select("id")
+    .eq("id", id)
+    .eq("restaurant_id", restaurantId)
+    .single();
+
+  if (fetchError || !list) {
+    return NextResponse.json({ error: "Wine list not found." }, { status: 404 });
+  }
+
+  const { error: updateError } = await supabase
+    .from("wine_lists")
+    .update({
+      is_published: false,
+      slug: null,
+    })
+    .eq("id", id)
+    .eq("restaurant_id", restaurantId);
+
+  if (updateError) {
+    console.error("unpublish failed:", updateError);
+    Sentry.captureException(updateError, {
+      tags: { surface: "wine-list", phase: "unpublish" },
+      extra: { restaurantId, list_id: id },
+    });
+    return NextResponse.json({ error: "Unpublish failed." }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
+}
