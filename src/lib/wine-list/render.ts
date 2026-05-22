@@ -10,6 +10,10 @@
  * Drifting copies of "the same public rendering rules" across two
  * consumers was a recipe for the PDF showing a wine the public list
  * hid (or vice versa). One helper, one source of truth.
+ *
+ * BND-173: eightysixStrategy controls how 86'd wines appear.
+ *   'hide' (default) — remove 86'd wines entirely
+ *   'mark'           — keep them with is_marked_eightysixed = true
  */
 
 type ItemBase = {
@@ -24,12 +28,24 @@ type SectionShape = {
 };
 
 /**
- * Narrowed item whose wines is guaranteed non-null + not 86'd.
+ * Narrowed item whose wines is guaranteed non-null.
  * Consumers can use this to drop the `item.wines!` non-null assertion.
+ * When eightysixStrategy is 'mark', 86'd wines are included with
+ * `is_marked_eightysixed = true` for gray/strikethrough rendering.
  */
 export type RenderableItem<TItem extends ItemBase> = TItem & {
   wines: NonNullable<TItem["wines"]>;
+  /** True when the item's wine is 86'd and the strategy is 'mark'.
+   *  Consumers should render these with muted styling. */
+  is_marked_eightysixed: boolean;
 };
+
+export type EightysixStrategy = "hide" | "mark";
+
+export interface RenderWineListSectionsOptions {
+  /** Strategy for handling 86'd wines. Defaults to 'hide'. */
+  eightysixStrategy?: EightysixStrategy;
+}
 
 /**
  * Apply the public-facing rendering rules to a raw wine_list_sections
@@ -43,16 +59,19 @@ export type RenderableItem<TItem extends ItemBase> = TItem & {
  * rather than falling back to the ItemBase constraint.
  *
  * @returns sections sorted by position, each with items sorted by
- *   position and 86'd/no-wine items filtered out. Sections that end
- *   up empty are dropped.
+ *   position. 86'd/no-wine items are filtered out when strategy is
+ *   'hide'; kept with is_marked_eightysixed = true when 'mark'.
+ *   Sections that end up empty are dropped.
  */
 export function renderWineListSections<TSection extends SectionShape>(
   sections: TSection[],
+  options?: RenderWineListSectionsOptions,
 ): Array<
   Omit<TSection, "wine_list_items"> & {
     items: RenderableItem<TSection["wine_list_items"][number]>[];
   }
 > {
+  const strategy: EightysixStrategy = options?.eightysixStrategy ?? "hide";
   type Item = TSection["wine_list_items"][number];
   type Rendered = Omit<TSection, "wine_list_items"> & {
     items: RenderableItem<Item>[];
@@ -61,10 +80,19 @@ export function renderWineListSections<TSection extends SectionShape>(
     .sort((a, b) => a.position - b.position)
     .map((s) => {
       const { wine_list_items, ...rest } = s;
-      const items = [...wine_list_items].filter(
-        (it): it is RenderableItem<Item> =>
-          it.wines != null && !it.wines.is_eightysixed,
-      );
+      const items = [...wine_list_items]
+        .filter((it): it is RenderableItem<Item> => {
+          // Always drop items with no wine (orphaned references).
+          if (it.wines == null) return false;
+          // When strategy is 'hide', drop 86'd wines. When 'mark',
+          // keep them so they render gray/strikethrough.
+          if (strategy === "hide" && it.wines.is_eightysixed) return false;
+          return true;
+        })
+        .map((it) => ({
+          ...it,
+          is_marked_eightysixed: it.wines.is_eightysixed,
+        })) as RenderableItem<Item>[];
       items.sort((a, b) => a.position - b.position);
       return { ...rest, items } as unknown as Rendered;
     })

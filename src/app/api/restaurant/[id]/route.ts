@@ -8,10 +8,6 @@ export const runtime = "nodejs";
 
 type Params = Promise<{ id: string }>;
 
-/**
- * GET /api/restaurant/[id] — return restaurant metadata.
- * Returns 403 when the authenticated user is not a member of :id.
- */
 export async function GET(
   _request: NextRequest,
   { params }: { params: Params },
@@ -21,7 +17,6 @@ export async function GET(
   if (auth instanceof NextResponse) return auth;
   const { supabase, user } = auth;
 
-  // Check membership in the requested restaurant
   const { data: membership } = await supabase
     .from("memberships")
     .select("role, restaurants(name)")
@@ -45,11 +40,6 @@ export async function GET(
   });
 }
 
-/**
- * PUT /api/restaurant/[id] — switch the caller's active restaurant to :id.
- * The membership check happens inside setActiveRestaurant; users who aren't
- * members of :id get a 403 and no cookie change.
- */
 export async function PUT(
   _request: NextRequest,
   { params }: { params: Params },
@@ -67,19 +57,16 @@ export async function PUT(
 }
 
 // BND-037b + BND-040: PATCH accepts auto-86 columns AND pricing target
-// columns. Each field is independently optional — partial updates work.
-// Zod.strict() rejects unknown keys so the shape is defensible.
+// columns. BND-173: added eightysix_strategy for hide-vs-mark on /list/[slug].
 const PatchSchema = z
   .object({
     name: z.string().trim().min(1).max(200).optional(),
     auto_eightysix_from_inventory: z.boolean().optional(),
-    // Upper bound is a sanity cap — no legitimate threshold exceeds
-    // a magnum (1500 ml). The DB also has a check (>= 0).
     eightysix_ml_threshold: z.number().int().min(0).max(5000).optional(),
-    // BND-040 — pricing intelligence house targets. Mirror DB CHECK
-    // constraints (0-100 for pour cost %, 1-10 for markup ratio).
     default_target_pour_cost_pct: z.number().gt(0).lt(100).optional(),
     default_target_markup_ratio: z.number().gte(1).lte(10).optional(),
+    // BND-173 — how 86'd wines appear on public lists
+    eightysix_strategy: z.enum(["hide", "mark"]).optional(),
   })
   .strict();
 
@@ -132,13 +119,6 @@ export async function PATCH(
   return NextResponse.json({ ok: true });
 }
 
-/**
- * DELETE /api/restaurant/[id] — delete a restaurant (owner-only).
- *
- * Managers and staff receive 403 via requireOwner().
- * DB-level ON DELETE CASCADE handles cleanup of related rows
- * (wines, inventory_items, memberships, invitations, etc.).
- */
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Params },

@@ -2437,3 +2437,9 @@ alter table public.wine_list_items
 -- BND-171: add hidden column to wine_list_items to exclude from public views
 alter table public.wine_list_items
   add column if not exists hidden boolean not null default false;
+
+-- 0034_eightysix_strategy.sql
+-- BND-173: add eightysix_strategy column to restaurants for 86'd wine display control
+alter table public.restaurants
+  add column if not exists eightysix_strategy text not null default 'hide'
+    check (eightysix_strategy in ('hide', 'mark'));

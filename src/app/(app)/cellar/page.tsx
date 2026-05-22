@@ -35,7 +35,7 @@ type GridData = Record<string, BinData>;
  *   • `inventory_items`    → bin location + sealed counts (aggregate)
  *   • `list_open_bottle_items` RPC → per-wine pour/open-bottle data
  *   • `cellar_config`      → optional grid layout for the Grid toggle
- *   • `restaurants`        → auto-86 settings (owner-only Settings modal)
+ *   • `restaurants`        → auto-86 settings + eightysix_strategy (owner-only Settings modal)
  *
  * Joined client-side into a single CellarWineRow[]. Wines without a
  * by-the-glass list-item have null pour fields — the row UI gracefully
@@ -74,7 +74,7 @@ export default async function CellarPage() {
     supabase
       .from("restaurants")
       .select(
-        "auto_eightysix_from_inventory, eightysix_ml_threshold, default_target_pour_cost_pct, default_target_markup_ratio",
+        "auto_eightysix_from_inventory, eightysix_ml_threshold, eightysix_strategy, default_target_pour_cost_pct, default_target_markup_ratio",
       )
       .eq("id", restaurantId)
       .single(),
@@ -244,6 +244,8 @@ export default async function CellarPage() {
     gridData[bin].totalBottles += item.quantity ?? 0;
   }
 
+  const eightysixStrategy = restaurantRow?.eightysix_strategy === "mark" ? "mark" as const : "hide" as const;
+
   return (
     <CellarShell
       rows={rows}
@@ -263,6 +265,7 @@ export default async function CellarPage() {
       restaurantId={restaurantId}
       autoEightysixEnabled={restaurantRow?.auto_eightysix_from_inventory ?? false}
       autoEightysixThresholdMl={restaurantRow?.eightysix_ml_threshold ?? 148}
+      eightysixStrategy={eightysixStrategy}
       defaultTargetPourCostPct={restaurantRow?.default_target_pour_cost_pct ?? null}
       defaultTargetMarkupRatio={restaurantRow?.default_target_markup_ratio ?? null}
       role={userRole}

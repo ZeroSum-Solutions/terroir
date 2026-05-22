@@ -169,3 +169,23 @@ Stats after this session: 106/231 passing (45.9%).
 - src/app/api/wine-lists/[id]/route.test.ts: +63/-32 (BND-156 + BND-159 tests)
 
 Stats after this session: 107/231 passing (46.3%).
+
+## Session 2026-05-23 — features #170, #171, #172
+
+### Completed
+- #170 User can attach a custom blurb per list item (PASSING)
+- #171 User can hide a list item without removing it (PASSING)
+- #172 User can preview a wine list as a guest would see it (PASSING)
+
+### Details
+- DB migrations 0032 (blurb) and 0033 (hidden) on wine_list_items
+- PATCH /api/wine-list-items/[id] accepts blurb and hidden fields
+- Wine row UI: inline blurb textarea and hide/show toggle
+- Public list: filters hidden items, renders blurb below tasting note
+- Preview page at /lists/[id]/preview with public styling and hidden warnings
+- Eye icon Preview button in editor header
+
+### Verification
+- TypeScript: 0 errors, Mock data grep: clean, Browser: blocked by sandbox
+
+Stats: 116/231 passing (50.2%).

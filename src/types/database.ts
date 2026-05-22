@@ -437,6 +437,7 @@ export type Database = {
           default_target_markup_ratio: number | null
           default_target_pour_cost_pct: number | null
           eightysix_ml_threshold: number
+          eightysix_strategy: string
           id: string
           name: string
           updated_at: string
@@ -447,6 +448,7 @@ export type Database = {
           default_target_markup_ratio?: number | null
           default_target_pour_cost_pct?: number | null
           eightysix_ml_threshold?: number
+          eightysix_strategy?: string
           id?: string
           name?: string
           updated_at?: string
@@ -457,6 +459,7 @@ export type Database = {
           default_target_markup_ratio?: number | null
           default_target_pour_cost_pct?: number | null
           eightysix_ml_threshold?: number
+          eightysix_strategy?: string
           id?: string
           name?: string
           updated_at?: string

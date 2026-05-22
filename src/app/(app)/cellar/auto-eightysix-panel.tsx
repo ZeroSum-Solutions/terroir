@@ -9,12 +9,14 @@ interface Props {
   restaurantId: string;
   enabled: boolean;
   thresholdMl: number;
+  eightysixStrategy: "hide" | "mark";
 }
 
 /**
- * BND-037b: owner-only panel on /availability that toggles auto-86
- * on low inventory and lets the owner tune the threshold. PATCHes
- * /api/restaurant/[id] with whichever field(s) changed.
+ * BND-037b + BND-173: owner-only panel on /cellar that toggles auto-86
+ * on low inventory, tunes the threshold, and sets the 86 display strategy
+ * (hide vs mark) for public wine lists. PATCHes /api/restaurant/[id] with
+ * whichever field(s) changed.
  *
  * Optimistic UX: flip local state immediately; revert on error. No
  * router.refresh() because the panel's state is self-contained —
@@ -24,10 +26,12 @@ export function AutoEightysixPanel({
   restaurantId,
   enabled: initialEnabled,
   thresholdMl: initialThreshold,
+  eightysixStrategy: initialStrategy,
 }: Props) {
   const router = useRouter();
   const [enabled, setEnabled] = useState(initialEnabled);
   const [thresholdMl, setThresholdMl] = useState(initialThreshold);
+  const [eightysixStrategy, setEightysixStrategy] = useState(initialStrategy);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [, startTransition] = useTransition();
@@ -35,6 +39,7 @@ export function AutoEightysixPanel({
   const patch = async (body: {
     auto_eightysix_from_inventory?: boolean;
     eightysix_ml_threshold?: number;
+    eightysix_strategy?: "hide" | "mark";
   }) => {
     setError(null);
     setSaving(true);
@@ -50,7 +55,8 @@ export function AutoEightysixPanel({
           | null;
         throw new Error(payload?.error ?? `Request failed (${res.status}).`);
       }
-      // Re-render server component so revalidated auto-86s land in the list.
+      // Re-render server component so revalidated auto-86s land in the list
+      // and public lists reflect the strategy change.
       startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
@@ -80,6 +86,16 @@ export function AutoEightysixPanel({
       await patch({ eightysix_ml_threshold: value });
     } catch {
       setThresholdMl(prev); // revert
+    }
+  };
+
+  const onStrategyChange = async (next: "hide" | "mark") => {
+    const prev = eightysixStrategy;
+    setEightysixStrategy(next);
+    try {
+      await patch({ eightysix_strategy: next });
+    } catch {
+      setEightysixStrategy(prev); // revert
     }
   };
 
@@ -145,6 +161,42 @@ export function AutoEightysixPanel({
           </p>
         </div>
       )}
+
+      {/* BND-173: 86 display strategy on public wine lists */}
+      <div className="mt-md border-t border-border/60 pt-md">
+        <h3 className="font-serif text-[14px] text-ink">
+          86&rsquo;d wine display on public lists
+        </h3>
+        <p className="mt-xs text-[13px] text-ink-muted">
+          When a wine is 86&rsquo;d, choose whether to hide it entirely
+          or show it grayed out with a strikethrough on published wine
+          lists.
+        </p>
+        <fieldset className="mt-sm flex gap-md" disabled={saving}>
+          <label className="flex items-center gap-xs text-[13px] text-ink">
+            <input
+              type="radio"
+              name="eightysix_strategy"
+              value="hide"
+              checked={eightysixStrategy === "hide"}
+              onChange={() => void onStrategyChange("hide")}
+              className="h-4 w-4"
+            />
+            Hide
+          </label>
+          <label className="flex items-center gap-xs text-[13px] text-ink">
+            <input
+              type="radio"
+              name="eightysix_strategy"
+              value="mark"
+              checked={eightysixStrategy === "mark"}
+              onChange={() => void onStrategyChange("mark")}
+              className="h-4 w-4"
+            />
+            Mark gray
+          </label>
+        </fieldset>
+      </div>
 
       {error && (
         <div

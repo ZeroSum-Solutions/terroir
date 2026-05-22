@@ -41,6 +41,7 @@ export function CellarShell({
   restaurantId,
   autoEightysixEnabled,
   autoEightysixThresholdMl,
+  eightysixStrategy,
   defaultTargetPourCostPct,
   defaultTargetMarkupRatio,
   role,
@@ -65,9 +66,11 @@ export function CellarShell({
   restaurantId: string;
   autoEightysixEnabled: boolean;
   autoEightysixThresholdMl: number;
+  // BND-173 — how 86'd wines appear on public lists
+  eightysixStrategy: "hide" | "mark";
   // BND-040 follow-up — house pricing targets piped into the Cellar
   // settings modal. Null means restaurant has never set them; the
-  // panel falls back to built-in defaults (22% pour cost / 2.7× markup).
+  // panel falls back to built-in defaults (22% pour cost / 2.7x markup).
   defaultTargetPourCostPct: number | null;
   defaultTargetMarkupRatio: number | null;
   role: "owner" | "manager" | "staff";
@@ -76,15 +79,6 @@ export function CellarShell({
   const searchParams = useSearchParams();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // FAB deep-link mode + briefing-card wine deep-link are sampled
-  // exactly once on mount via useState's lazy initializer. State never
-  // updates — these are stable mount-time snapshots. (Using useRef
-  // would trip react-hooks/refs lint about render-time ref reads.)
-  //
-  // BND-039 — `?wine={id}` deep-link from Insights briefing cards
-  // auto-opens the wine-detail drawer for the alerted wine. This is
-  // the spec's primary CTA on the briefing alert; without it the user
-  // tap-throughs to an unfiltered list and can't find the bottles.
   const [initialMode] = useState(() => searchParams.get("mode") ?? "");
   const [initialWineId] = useState(() => searchParams.get("wine") ?? "");
 
@@ -93,10 +87,6 @@ export function CellarShell({
     initialMode === "pour" ? "open" : "all",
   );
   const [view, setView] = useState<"list" | "grid">("list");
-  // Derive selected from selectedId so server-component refresh refreshes
-  // the drawer's stock numbers automatically (rows is the source of truth).
-  // BND-039: when the user lands here via a briefing-card "View bottles"
-  // deep-link (?wine={id}), auto-open the drawer for that wine.
   const [selectedId, setSelectedId] = useState<string | null>(
     initialWineId && rows.some((r) => r.wine_id === initialWineId)
       ? initialWineId
@@ -115,11 +105,6 @@ export function CellarShell({
   const canManage = role === "owner" || role === "manager";
   const isOwner = role === "owner";
 
-  // Deep-link side-effects: strip `?mode=` and `?wine=` from the URL
-  // so a refresh doesn't re-trigger the focus jump or re-open the
-  // drawer, and focus the search input once it's mounted (FAB flow
-  // only). Purely external (router + DOM) so setState-in-effect lint
-  // doesn't apply.
   useEffect(() => {
     if (!initialMode && !initialWineId) return;
     if (initialMode === "pour" || initialMode === "eightysix") {
@@ -130,15 +115,9 @@ export function CellarShell({
     params.delete("wine");
     const next = params.toString();
     router.replace(next ? `/cellar?${next}` : "/cellar", { scroll: false });
-    // Run once at mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // "/" focuses the search input (GitHub-style shortcut). Skipped when
-  // the user is already typing in a form field or contenteditable so
-  // the literal slash still types in those contexts. On mobile the
-  // search input is unmounted until the overlay is open, so we open
-  // the overlay and rely on its `autoFocus` to land focus.
   useEffect(() => {
     function handleSlash(e: KeyboardEvent) {
       if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -154,8 +133,6 @@ export function CellarShell({
         input.focus();
         input.select();
       } else {
-        // Mobile: search input not yet mounted — open the overlay,
-        // which auto-focuses on mount.
         setSearchOpen(true);
       }
     }
@@ -164,12 +141,6 @@ export function CellarShell({
   }, []);
 
   const alerts = useMemo(() => {
-    // Show alerts banner when there are recently-86'd wines or any low
-    // stock items. Compact summary; the actual filter chips do the
-    // detailed work.
-    //
-    // Open/out/low predicates mirror CellarList's filter switch so the
-    // chip badges always equal the actual filtered list size.
     const openCount = rows.filter(
       (r) => r.open_remaining_ml !== null && r.open_remaining_ml > 0,
     ).length;
@@ -181,13 +152,6 @@ export function CellarShell({
       return totalMl < 2 * r.size_ml;
     }).length;
 
-    // BND-039 — count of wines closing their drink window. Single source
-    // of truth via @/lib/drink-window/status; the same predicate powers
-    // the "Drink now" filter chip and the briefing alert API.
-    //
-    // Both Drink-now and Hold counts exclude 86'd wines: a sold-out
-    // wine isn't an actionable hold/drink-soon decision the operator
-    // can do anything about. Code-quality-review finding 3 — consistency.
     const drinkNowCount = rows.filter(
       (r) => !r.is_eightysixed && isClosingWindow(r.drink_window_end),
     ).length;
@@ -203,8 +167,6 @@ export function CellarShell({
     { id: "open", label: "Open", count: alerts.openCount },
     { id: "out", label: "86'd", count: alerts.outCount },
     { id: "low", label: "Low stock", count: alerts.lowCount },
-    // BND-039 — drink-window chips. Hidden when count is zero so they
-    // don't clutter the row in cellars without enrichment data.
     ...(alerts.drinkNowCount > 0
       ? [{ id: "drink-now" as const, label: "Drink now", count: alerts.drinkNowCount }]
       : []),
@@ -417,6 +379,7 @@ export function CellarShell({
           defaultTargetMarkupRatio={defaultTargetMarkupRatio}
           enabled={autoEightysixEnabled}
           thresholdMl={autoEightysixThresholdMl}
+          eightysixStrategy={eightysixStrategy}
           onClose={() => setSettingsOpen(false)}
         />
       )}
@@ -435,14 +398,8 @@ function SearchInput({
   onChange: (v: string) => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
   autoFocus?: boolean;
-  // Mobile overlay passes this to also close the overlay on Escape.
-  // When the field has text, Escape clears the text first; a second
-  // Escape (now on an empty field) fires onEscape.
   onEscape?: () => void;
 }) {
-  // Show the "/" shortcut hint only when the field is empty and not
-  // focused — otherwise the kbd visually competes with the clear-X
-  // button or the user's typing.
   const [focused, setFocused] = useState(false);
   const showHint = !value && !focused;
   return (

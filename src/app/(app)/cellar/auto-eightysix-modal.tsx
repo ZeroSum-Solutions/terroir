@@ -11,7 +11,7 @@ import { PricingTargetsPanel } from "./pricing-targets-panel";
  * cog icon in the Cellar header.
  *
  * Hosts two panels:
- *   1. Auto-86 from inventory (BND-037b)
+ *   1. Auto-86 from inventory (BND-037b + BND-173 eightysix_strategy)
  *   2. House pricing targets (BND-040 follow-up — pour cost % + bottle
  *      markup ratio that drive every pricing recommendation)
  *
@@ -23,6 +23,7 @@ export function AutoEightysixModal({
   restaurantId,
   enabled,
   thresholdMl,
+  eightysixStrategy,
   defaultTargetPourCostPct,
   defaultTargetMarkupRatio,
   onClose,
@@ -31,6 +32,7 @@ export function AutoEightysixModal({
   restaurantId: string;
   enabled: boolean;
   thresholdMl: number;
+  eightysixStrategy: "hide" | "mark";
   defaultTargetPourCostPct: number | null;
   defaultTargetMarkupRatio: number | null;
   onClose: () => void;
@@ -93,6 +95,7 @@ export function AutoEightysixModal({
             restaurantId={restaurantId}
             enabled={enabled}
             thresholdMl={thresholdMl}
+            eightysixStrategy={eightysixStrategy}
           />
         </div>
       </div>
