@@ -27,17 +27,28 @@ export async function PATCH(
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
-  let body: { name?: string; template?: string; slug?: string };
+  let body: {
+    name?: string;
+    template?: string;
+    slug?: string;
+    archived?: boolean;
+  };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  // Only allow updating safe fields (name, template, slug)
-  const allowed: { name?: string; template?: string; slug?: string } = {};
+  // Only allow updating safe fields (name, template, slug, archived)
+  const allowed: {
+    name?: string;
+    template?: string;
+    slug?: string;
+    archived?: boolean;
+  } = {};
   if (typeof body.name === "string") allowed.name = body.name.trim();
   if (typeof body.template === "string") allowed.template = body.template;
+  if (typeof body.archived === "boolean") allowed.archived = body.archived;
   if (typeof body.slug === "string") {
     const trimmed = body.slug.trim().toLowerCase();
     if (!trimmed) {

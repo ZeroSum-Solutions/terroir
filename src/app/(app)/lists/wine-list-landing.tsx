@@ -3,6 +3,8 @@
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Archive,
+  ArchiveRestore,
   Check,
   Copy,
   ExternalLink,
@@ -17,8 +19,12 @@ import type { WineListWithCount } from "@/lib/wine-list/types";
 
 export function WineListLanding({
   lists,
+  archivedLists = [],
+  showArchived = false,
 }: {
   lists: WineListWithCount[];
+  archivedLists?: WineListWithCount[];
+  showArchived?: boolean;
 }) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
@@ -36,6 +42,8 @@ export function WineListLanding({
   // an inline alert above the grid so the user sees what failed.
   const [deletingListId, setDeletingListId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Tracks which list is being archived/unarchived
+  const [archivingListId, setArchivingListId] = useState<string | null>(null);
 
   const copyListLink = useCallback(async (list: WineListWithCount) => {
     if (!list.slug) return;
@@ -48,6 +56,44 @@ export function WineListLanding({
       2000,
     );
   }, []);
+
+  const toggleArchive = useCallback(
+    async (list: WineListWithCount) => {
+      const willArchive = !list.archived;
+      const action = willArchive ? "archive" : "unarchive";
+      const confirmMessage = willArchive
+        ? `Archive "${list.name}"? It will be hidden from the default view but can be restored later.`
+        : `Restore "${list.name}"? It will appear in the default view again.`;
+      if (!window.confirm(confirmMessage)) return;
+
+      setArchivingListId(list.id);
+      try {
+        const res = await fetch(`/api/wine-lists/${list.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ archived: willArchive }),
+        });
+        if (!res.ok) {
+          const body = (await res.json()) as { error?: unknown };
+          throw new Error(
+            typeof body.error === "string"
+              ? body.error
+              : `Couldn't ${action} wine list.`,
+          );
+        }
+        router.refresh();
+      } catch (err) {
+        setDeleteError(
+          err instanceof Error && err.message
+            ? err.message
+            : `Couldn't ${action} wine list. Please try again.`,
+        );
+      } finally {
+        setArchivingListId(null);
+      }
+    },
+    [router],
+  );
 
   const deleteList = useCallback(
     async (list: WineListWithCount) => {
@@ -111,6 +157,145 @@ export function WineListLanding({
     }
   }, [newName, newDescription, router]);
 
+  const renderCard = (list: WineListWithCount) => {
+    const justCopied = copiedListId === list.id;
+    const showCopyAction = list.is_published && list.slug;
+    const isDeleting = deletingListId === list.id;
+    const isArchiving = archivingListId === list.id;
+    return (
+      <div
+        key={list.id}
+        className="group rounded-md border border-border bg-surface transition-all hover:-translate-y-px hover:border-border-strong hover:shadow-md"
+      >
+        <button
+          type="button"
+          onClick={() => router.push(`/lists/${list.id}`)}
+          className="block w-full rounded-md p-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+        >
+          <div className="flex items-start justify-between gap-sm">
+            <h3 className="font-serif text-[18px] text-ink group-hover:text-accent">
+              {list.name}
+            </h3>
+            <div className="flex items-center gap-xs">
+              {list.archived ? (
+                <span className="shrink-0 rounded-pill bg-surface-sunken px-sm py-xs text-[11px] font-medium text-ink-subtle">
+                  Archived
+                </span>
+              ) : list.is_published ? (
+                <span className="flex shrink-0 items-center gap-xs rounded-pill bg-success-soft px-sm py-xs text-[11px] font-medium text-success">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
+                  Published
+                </span>
+              ) : (
+                <span className="shrink-0 rounded-pill bg-surface-sunken px-sm py-xs text-[11px] font-medium text-ink-muted">
+                  Draft
+                </span>
+              )}
+            </div>
+          </div>
+          {list.description && (
+            <p className="mt-xs text-[13px] text-ink-muted line-clamp-2">
+              {list.description}
+            </p>
+          )}
+          <div className="mt-md flex items-center justify-between text-[12px] text-ink-muted">
+            <span>
+              <span className="font-medium text-ink">
+                {list.wine_count}
+              </span>{" "}
+              wines
+            </span>
+            {list.is_published ? (
+              <span>
+                Published{" "}
+                <TimeAgo
+                  iso={list.last_published_at ?? list.updated_at}
+                />
+              </span>
+            ) : (
+              <span>
+                Updated <TimeAgo iso={list.updated_at} />
+              </span>
+            )}
+          </div>
+        </button>
+        <div className="flex items-center justify-between gap-xs border-t border-border px-md py-sm">
+          <div className="flex items-center gap-xs">
+            {showCopyAction && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => copyListLink(list)}
+                  aria-label={`Copy public link for ${list.name}`}
+                  className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                >
+                  {justCopied ? (
+                    <Check
+                      className="h-3.5 w-3.5"
+                      strokeWidth={2}
+                      aria-hidden
+                    />
+                  ) : (
+                    <Copy
+                      className="h-3.5 w-3.5"
+                      strokeWidth={2}
+                      aria-hidden
+                    />
+                  )}
+                  {justCopied ? "Copied" : "Copy link"}
+                </button>
+                <a
+                  href={`/list/${list.slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Open public ${list.name} list in a new tab`}
+                  className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                >
+                  <ExternalLink
+                    className="h-3.5 w-3.5"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                  Open
+                </a>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-xs">
+            <button
+              type="button"
+              onClick={() => toggleArchive(list)}
+              disabled={isArchiving}
+              aria-label={
+                list.archived
+                  ? `Restore ${list.name}`
+                  : `Archive ${list.name}`
+              }
+              className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-sm border border-border-strong bg-white text-ink-subtle hover:bg-surface-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft disabled:opacity-60"
+            >
+              {list.archived ? (
+                <ArchiveRestore className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              ) : (
+                <Archive className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => deleteList(list)}
+              disabled={isDeleting}
+              aria-label={`Delete ${list.name}`}
+              className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-sm border border-border-strong bg-white text-ink-subtle hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 disabled:opacity-60"
+            >
+              <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const noListsAtAll = lists.length === 0 && archivedLists.length === 0;
+
   return (
     <section>
       <header className="mb-lg flex flex-col gap-sm md:mb-xl md:flex-row md:items-end md:justify-between">
@@ -121,17 +306,28 @@ export function WineListLanding({
             inventory automatically.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowModal(true)}
-          className="flex h-[38px] items-center gap-sm self-start rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover md:self-auto"
-        >
-          <Plus className="h-4 w-4" strokeWidth={2} />
-          New wine list
-        </button>
+        <div className="flex items-center gap-sm">
+          {archivedLists.length > 0 && (
+            <a
+              href={showArchived ? "/lists" : "/lists?show_archived=1"}
+              className="flex h-[38px] items-center gap-xs rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted self-start md:self-auto"
+            >
+              <Archive className="h-4 w-4" strokeWidth={2} />
+              {showArchived ? "Hide archived" : `Show archived (${archivedLists.length})`}
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowModal(true)}
+            className="flex h-[38px] items-center gap-sm self-start rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover md:self-auto"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2} />
+            New wine list
+          </button>
+        </div>
       </header>
 
-      {lists.length === 0 ? (
+      {noListsAtAll ? (
         <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-border-strong bg-surface-muted px-lg py-3xl text-center">
           <ListOrdered
             className="mb-md h-10 w-10 text-ink-subtle"
@@ -153,155 +349,74 @@ export function WineListLanding({
           </button>
         </div>
       ) : (
-        <div className="grid gap-md md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
-          {deleteError && (
-            <div
-              role="alert"
-              className="md:col-span-full flex items-start justify-between gap-sm rounded-sm border border-danger/30 bg-danger-soft px-sm py-xs text-[13px] text-danger"
-            >
-              <span>{deleteError}</span>
+        <>
+          {/* Active lists */}
+          {lists.length > 0 && (
+            <div className="grid gap-md md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
+              {deleteError && (
+                <div
+                  role="alert"
+                  className="md:col-span-full flex items-start justify-between gap-sm rounded-sm border border-danger/30 bg-danger-soft px-sm py-xs text-[13px] text-danger"
+                >
+                  <span>{deleteError}</span>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteError(null)}
+                    aria-label="Dismiss error"
+                    className="-mr-2xs flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-danger/70 hover:bg-danger/10 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+                  >
+                    <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  </button>
+                </div>
+              )}
+              {lists.map(renderCard)}
               <button
                 type="button"
-                onClick={() => setDeleteError(null)}
-                aria-label="Dismiss error"
-                className="-mr-2xs flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-danger/70 hover:bg-danger/10 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+                onClick={() => setShowModal(true)}
+                className="flex flex-col items-center justify-center gap-sm rounded-md border border-dashed border-border-strong p-xl text-center text-ink-subtle transition-colors hover:border-accent hover:text-accent"
               >
-                <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                <Plus className="h-5 w-5" strokeWidth={2} />
+                <span className="text-[14px] font-medium">Create a new list</span>
+                <span className="text-[12px]">Start from scratch or a template</span>
               </button>
             </div>
           )}
-          {lists.map((list) => {
-            const justCopied = copiedListId === list.id;
-            const showCopyAction = list.is_published && list.slug;
-            const isDeleting = deletingListId === list.id;
-            return (
-              <div
-                key={list.id}
-                className="group rounded-md border border-border bg-surface transition-all hover:-translate-y-px hover:border-border-strong hover:shadow-md"
-              >
-                <button
-                  type="button"
-                  onClick={() => router.push(`/lists/${list.id}`)}
-                  className="block w-full rounded-md p-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
-                >
-                  <div className="flex items-start justify-between gap-sm">
-                    <h3 className="font-serif text-[18px] text-ink group-hover:text-accent">
-                      {list.name}
-                    </h3>
-                    {list.is_published ? (
-                      <span className="flex shrink-0 items-center gap-xs rounded-pill bg-success-soft px-sm py-xs text-[11px] font-medium text-success">
-                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
-                        Published
-                      </span>
-                    ) : (
-                      <span className="shrink-0 rounded-pill bg-surface-sunken px-sm py-xs text-[11px] font-medium text-ink-muted">
-                        Draft
-                      </span>
-                    )}
-                  </div>
-                  {list.description && (
-                    <p className="mt-xs text-[13px] text-ink-muted line-clamp-2">
-                      {list.description}
-                    </p>
-                  )}
-                  <div className="mt-md flex items-center justify-between text-[12px] text-ink-muted">
-                    <span>
-                      <span className="font-medium text-ink">
-                        {list.wine_count}
-                      </span>{" "}
-                      wines
-                    </span>
-                    {/* For published lists, show when the public-facing
-                        version was last refreshed — that's the timestamp
-                        operators actually care about. Drafts keep the
-                        generic "Updated" since publish_at is null. Falls
-                        back to updated_at if last_published_at is missing
-                        (defensive for legacy rows). */}
-                    {list.is_published ? (
-                      <span>
-                        Published{" "}
-                        <TimeAgo
-                          iso={list.last_published_at ?? list.updated_at}
-                        />
-                      </span>
-                    ) : (
-                      <span>
-                        Updated <TimeAgo iso={list.updated_at} />
-                      </span>
-                    )}
-                  </div>
-                </button>
-                {/* Sibling (not nested) so we don't end up with a
-                    button-inside-button — invalid HTML the parser
-                    would silently un-nest. Footer always renders so
-                    Delete is reachable for both Draft and Published
-                    lists; Copy/Open only appear when there's a public
-                    URL to act on. */}
-                <div className="flex items-center justify-between gap-xs border-t border-border px-md py-sm">
-                  <div className="flex items-center gap-xs">
-                    {showCopyAction && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => copyListLink(list)}
-                          aria-label={`Copy public link for ${list.name}`}
-                          className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
-                        >
-                          {justCopied ? (
-                            <Check
-                              className="h-3.5 w-3.5"
-                              strokeWidth={2}
-                              aria-hidden
-                            />
-                          ) : (
-                            <Copy
-                              className="h-3.5 w-3.5"
-                              strokeWidth={2}
-                              aria-hidden
-                            />
-                          )}
-                          {justCopied ? "Copied" : "Copy link"}
-                        </button>
-                        <a
-                          href={`/list/${list.slug}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label={`Open public ${list.name} list in a new tab`}
-                          className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
-                        >
-                          <ExternalLink
-                            className="h-3.5 w-3.5"
-                            strokeWidth={2}
-                            aria-hidden
-                          />
-                          Open
-                        </a>
-                      </>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => deleteList(list)}
-                    disabled={isDeleting}
-                    aria-label={`Delete ${list.name}`}
-                    className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-sm border border-border-strong bg-white text-ink-subtle hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 disabled:opacity-60"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                  </button>
-                </div>
+
+          {/* Archived lists (shown when toggled) */}
+          {showArchived && archivedLists.length > 0 && (
+            <div className="mt-xl">
+              <h2 className="mb-md font-serif text-[20px] text-ink-muted">
+                Archived
+              </h2>
+              <div className="grid gap-md md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
+                {archivedLists.map(renderCard)}
               </div>
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => setShowModal(true)}
-            className="flex flex-col items-center justify-center gap-sm rounded-md border border-dashed border-border-strong p-xl text-center text-ink-subtle transition-colors hover:border-accent hover:text-accent"
-          >
-            <Plus className="h-5 w-5" strokeWidth={2} />
-            <span className="text-[14px] font-medium">Create a new list</span>
-            <span className="text-[12px]">Start from scratch or a template</span>
-          </button>
-        </div>
+            </div>
+          )}
+
+          {/* All lists are archived, none active */}
+          {lists.length === 0 && !showArchived && archivedLists.length > 0 && (
+            <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-border-strong bg-surface-muted px-lg py-3xl text-center">
+              <Archive
+                className="mb-md h-10 w-10 text-ink-subtle"
+                strokeWidth={1.5}
+              />
+              <p className="text-[15px] font-medium text-ink">
+                All wine lists are archived
+              </p>
+              <p className="mt-xs text-[13px] text-ink-muted">
+                Restore them or create a new one.
+              </p>
+              <a
+                href="/lists?show_archived=1"
+                className="mt-lg inline-flex h-[38px] items-center gap-sm rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted"
+              >
+                <Archive className="h-4 w-4" strokeWidth={2} />
+                Show archived lists
+              </a>
+            </div>
+          )}
+        </>
       )}
 
       {/* Create modal */}

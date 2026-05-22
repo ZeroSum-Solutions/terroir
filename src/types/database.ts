@@ -589,6 +589,7 @@ export type Database = {
       }
       wine_lists: {
         Row: {
+          archived: boolean
           created_at: string
           description: string | null
           id: string
@@ -601,6 +602,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archived?: boolean
           created_at?: string
           description?: string | null
           id?: string
@@ -613,6 +615,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archived?: boolean
           created_at?: string
           description?: string | null
           id?: string

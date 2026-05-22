@@ -6,7 +6,17 @@ import { MagicLinkSubmit } from "./magic-link-submit";
 
 export const metadata: Metadata = { title: "Sign in" };
 
-type SearchParams = Promise<{ sent?: string; error?: string; next?: string }>;
+type SearchParams = Promise<{
+  sent?: string;
+  error?: string;
+  next?: string;
+  /** When "1", show the forgot-password form instead of sign-in */
+  forgot?: string;
+  /** When "1", forgot-password reset email was sent successfully */
+  reset?: string;
+  /** When "1", password was successfully reset; user can now sign in */
+  reset_done?: string;
+}>;
 
 async function sendMagicLink(formData: FormData) {
   "use server";
@@ -36,12 +46,38 @@ async function sendMagicLink(formData: FormData) {
   redirect(`/login?sent=${encodeURIComponent(email)}`);
 }
 
+async function sendPasswordReset(formData: FormData) {
+  "use server";
+
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+
+  if (!email) redirect(`/login?forgot=1&error=${encodeURIComponent("Enter your email.")}`);
+
+  const hdrs = await headers();
+  const origin =
+    hdrs.get("origin") ??
+    (hdrs.get("host") ? `https://${hdrs.get("host")}` : "http://localhost:3000");
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${origin}/auth/callback`,
+  });
+
+  // Per security best-practice, always show a success message regardless of
+  // whether the email exists. This prevents account enumeration.
+  if (error) {
+    // Log server-side for observability, but show generic success to user
+    console.error("Password reset request failed:", error.message);
+  }
+  redirect(`/login?reset=1`);
+}
+
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
-  const { sent, error, next } = await searchParams;
+  const { sent, error, next, forgot, reset, reset_done } = await searchParams;
   // Server-only env var (no NEXT_PUBLIC_ prefix) — reading it here is fine
   // because LoginPage is a Server Component and the value never reaches the
   // client bundle. The value is only used to decide whether to render the
@@ -50,6 +86,8 @@ export default async function LoginPage({
     process.env.NODE_ENV !== "production"
       ? process.env.DEV_BYPASS_EMAIL
       : undefined;
+
+  const isForgotPassword = forgot === "1";
 
   return (
     <main className="flex min-h-screen items-center justify-center px-lg">
@@ -62,18 +100,60 @@ export default async function LoginPage({
             Terroir
           </div>
           <h1 className="font-serif text-[28px] leading-tight text-ink">
-            Sign in
+            {isForgotPassword ? "Reset your password" : "Sign in"}
           </h1>
           <p className="mt-xs text-[14px] text-ink-muted">
-            We&rsquo;ll email you a magic link.
+            {isForgotPassword
+              ? "We&rsquo;ll email you a reset link."
+              : "We&rsquo;ll email you a magic link."}
           </p>
         </div>
 
-        {sent ? (
+        {reset_done === "1" ? (
+          <div className="rounded-md border border-success/30 bg-success-soft p-lg text-[14px] text-success">
+            Password updated. Sign in with a magic link or your new password.
+          </div>
+        ) : sent ? (
           <div className="rounded-md border border-success/30 bg-success-soft p-lg text-[14px] text-success">
             Check <span className="font-medium">{sent}</span> for a sign-in link.
             You can close this tab.
           </div>
+        ) : reset === "1" ? (
+          <div className="rounded-md border border-success/30 bg-success-soft p-lg text-[14px] text-success">
+            If that email is registered, we&rsquo;ve sent a password reset link.
+            Check your inbox.
+          </div>
+        ) : isForgotPassword ? (
+          <form action={sendPasswordReset} className="flex flex-col gap-md">
+            <label className="flex flex-col gap-xs">
+              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+                Work email
+              </span>
+              <input
+                type="email"
+                name="email"
+                autoComplete="email"
+                required
+                placeholder="you@restaurant.com…"
+                className="h-[38px] rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+              />
+            </label>
+            {error && (
+              <div className="text-[13px] text-danger">{error}</div>
+            )}
+            <button
+              type="submit"
+              className="flex h-[38px] items-center justify-center rounded-sm bg-accent px-md text-[14px] font-medium text-white transition-colors hover:bg-accent-hover"
+            >
+              Send reset link
+            </button>
+            <a
+              href="/login"
+              className="text-center text-[13px] text-ink-muted hover:text-ink"
+            >
+              Back to sign in
+            </a>
+          </form>
         ) : (
           <form action={sendMagicLink} className="flex flex-col gap-md">
             <input type="hidden" name="next" value={next ?? "/"} />
@@ -94,10 +174,16 @@ export default async function LoginPage({
               <div className="text-[13px] text-danger">{error}</div>
             )}
             <MagicLinkSubmit />
+            <a
+              href="/login?forgot=1"
+              className="text-center text-[13px] text-ink-muted hover:text-ink"
+            >
+              Forgot password?
+            </a>
           </form>
         )}
 
-        {devBypassEmail && !sent && (
+        {devBypassEmail && !sent && reset !== "1" && reset_done !== "1" && (
           <div className="mt-lg border-t border-dashed border-border pt-lg">
             <p className="mb-sm text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
               Dev only

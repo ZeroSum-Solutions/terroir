@@ -4,7 +4,14 @@ import { WineListLanding } from "./wine-list-landing";
 
 export const metadata: Metadata = { title: "Wine lists" };
 
-export default async function WineListPage() {
+type SearchParams = Promise<{ show_archived?: string }>;
+
+export default async function WineListPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const { show_archived } = await searchParams;
   const auth = (await getAuthContext())!; // AppLayout redirects when null
   const { supabase, restaurantId } = auth;
 
@@ -16,8 +23,8 @@ export default async function WineListPage() {
     .eq("restaurant_id", restaurantId)
     .order("updated_at", { ascending: false });
 
-  // Compute wine counts from the nested join
-  const listsWithCounts = (lists ?? []).map((list) => {
+  // Compute wine counts from the nested join, split by archived state
+  const allLists = (lists ?? []).map((list) => {
     const sections = (list.wine_list_sections ?? []) as Array<{
       wine_list_items: Array<{ id: string }>;
     }>;
@@ -30,7 +37,19 @@ export default async function WineListPage() {
     return { ...rest, wine_count };
   });
 
+  const activeLists = allLists.filter((l) => !l.archived);
+  const archivedLists = allLists.filter((l) => l.archived);
+
+  const visibleLists =
+    show_archived === "1"
+      ? activeLists // when showing archived, show active + archived separately
+      : activeLists;
+
   return (
-    <WineListLanding lists={listsWithCounts} />
+    <WineListLanding
+      lists={visibleLists}
+      archivedLists={archivedLists}
+      showArchived={show_archived === "1"}
+    />
   );
 }

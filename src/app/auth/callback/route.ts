@@ -42,5 +42,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Password recovery flow: after exchanging the recovery code, redirect to
+  // a dedicated page where the user sets their new password.
+  const type = searchParams.get("type");
+  if (type === "recovery") {
+    return NextResponse.redirect(`${origin}/auth/reset-password`);
+  }
+
   return NextResponse.redirect(`${origin}${next}`);
 }
