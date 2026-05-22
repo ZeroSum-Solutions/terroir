@@ -230,7 +230,7 @@ describe("POST /api/pdf", () => {
 
   // ── Upstream failures ───────────────────────────────────────────────
 
-  it("returns 500 when puppeteer throws during rendering", async () => {
+  it("returns 500 with code pdf_generation_failed when puppeteer throws", async () => {
     authedAsA();
     mockSingle.mockResolvedValue(okListRow());
     mockPdf.mockRejectedValue(new Error("headless crashed"));
@@ -238,6 +238,8 @@ describe("POST /api/pdf", () => {
     const res = await POST(makeRequest({ listId: "list-a" }));
 
     expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.code).toBe("pdf_generation_failed");
     // Even though rendering failed, we must close the browser.
     expect(mockClose).toHaveBeenCalled();
   });

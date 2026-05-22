@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
       tags: { surface: "pdf", phase: "puppeteer-render" },
     });
     return NextResponse.json(
-      { error: "PDF generation failed." },
+      { error: "PDF generation failed.", code: "pdf_generation_failed" },
       { status: 500 },
     );
   } finally {

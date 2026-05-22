@@ -11,10 +11,10 @@ vi.mock("@/lib/api/active-restaurant", () => ({
   setActiveRestaurant: vi.fn(),
 }));
 
-const { PATCH } = await import("./route");
+const { PATCH, GET } = await import("./route");
 
 /**
- * Simple mock — tracks update payloads, returns null error.
+ * Simple mock for PATCH — tracks update payloads, returns null error.
  */
 function makeSupabase() {
   const updates: Array<Record<string, unknown>> = [];
@@ -34,12 +34,72 @@ function makeSupabase() {
   };
 }
 
+/**
+ * Supabase mock for GET — supports chained .select().eq().eq().maybeSingle().
+ */
+function makeSupabaseForGet(membership: Record<string, unknown> | null) {
+  return {
+    from: (_t: string) => ({
+      select: (_cols: string) => ({
+        eq: (_k: string, _v: string) => ({
+          eq: (_k2: string, _v2: string) => ({
+            maybeSingle: () => Promise.resolve({ data: membership, error: null }),
+          }),
+        }),
+      }),
+    }),
+  };
+}
+
 function makeReq(body: unknown): NextRequest {
   return { json: async () => body } as NextRequest;
 }
 
 const R = "11111111-1111-4111-8111-111111111111";
 const params = Promise.resolve({ id: R });
+
+describe("GET /api/restaurant/[id]", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns restaurant metadata when user is a member", async () => {
+    const sup = makeSupabaseForGet({
+      role: "owner",
+      restaurants: { name: "Test Bistro" },
+    });
+    mockRequireAuth.mockResolvedValue({
+      supabase: sup,
+      user: { id: "u-1", email: "u1@test.com" },
+    });
+    const res = await GET({} as NextRequest, { params });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({
+      id: R,
+      name: "Test Bistro",
+      role: "owner",
+    });
+  });
+
+  it("403s when user is authenticated but not a member of the requested restaurant", async () => {
+    const sup = makeSupabaseForGet(null);
+    mockRequireAuth.mockResolvedValue({
+      supabase: sup,
+      user: { id: "u-1", email: "u1@test.com" },
+    });
+    const res = await GET({} as NextRequest, { params });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toBe("Not a member of this restaurant.");
+  });
+
+  it("401s when user is not authenticated", async () => {
+    mockRequireAuth.mockResolvedValue(
+      NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    );
+    const res = await GET({} as NextRequest, { params });
+    expect(res.status).toBe(401);
+  });
+});
 
 describe("PATCH /api/restaurant/[id]", () => {
   beforeEach(() => vi.clearAllMocks());

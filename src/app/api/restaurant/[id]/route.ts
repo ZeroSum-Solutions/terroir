@@ -9,6 +9,43 @@ export const runtime = "nodejs";
 type Params = Promise<{ id: string }>;
 
 /**
+ * GET /api/restaurant/[id] — return restaurant metadata.
+ * Returns 403 when the authenticated user is not a member of :id.
+ */
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Params },
+) {
+  const { id } = await params;
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, user } = auth;
+
+  // Check membership in the requested restaurant
+  const { data: membership } = await supabase
+    .from("memberships")
+    .select("role, restaurants(name)")
+    .eq("user_id", user.id)
+    .eq("restaurant_id", id)
+    .maybeSingle();
+
+  if (!membership) {
+    return NextResponse.json(
+      { error: "Not a member of this restaurant." },
+      { status: 403 },
+    );
+  }
+
+  const restaurant = membership.restaurants as { name: string } | null;
+
+  return NextResponse.json({
+    id,
+    name: restaurant?.name ?? "My Restaurant",
+    role: membership.role,
+  });
+}
+
+/**
  * PUT /api/restaurant/[id] — switch the caller's active restaurant to :id.
  * The membership check happens inside setActiveRestaurant; users who aren't
  * members of :id get a 403 and no cookie change.
