@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { requireMembership } from "@/lib/api/auth";
+import { requireRole } from "@/lib/api/auth";
 import { areAllOwnWineListItems } from "@/lib/api/wine-list-scope";
 
 export const runtime = "nodejs";
@@ -16,7 +16,7 @@ export const runtime = "nodejs";
  * on RLS alone to block the position write.
  */
 export async function PATCH(request: NextRequest) {
-  const auth = await requireMembership();
+  const auth = await requireRole(["owner", "manager"]);
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 

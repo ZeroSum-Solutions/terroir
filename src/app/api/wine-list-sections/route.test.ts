@@ -11,9 +11,9 @@ import { NextResponse, type NextRequest } from "next/server";
  * leak into the owner check and the 404 assertion breaks loudly.
  */
 
-const mockRequireMembership = vi.fn();
+const mockRequireRole = vi.fn();
 vi.mock("@/lib/api/auth", () => ({
-  requireMembership: (...args: unknown[]) => mockRequireMembership(...args),
+  requireRole: (...args: unknown[]) => mockRequireRole(...args),
 }));
 
 const { POST } = await import("./route");
@@ -97,7 +97,7 @@ describe("POST /api/wine-list-sections", () => {
   });
 
   it("401 on unauthenticated request", async () => {
-    mockRequireMembership.mockResolvedValue(
+    mockRequireRole.mockResolvedValue(
       NextResponse.json({ error: "Unauthorized." }, { status: 401 }),
     );
     const res = await POST(postRequest({ wine_list_id: "11111111-1111-4111-8111-111111111111", name: "Reds" }));
@@ -106,7 +106,7 @@ describe("POST /api/wine-list-sections", () => {
   });
 
   it("400 on invalid JSON", async () => {
-    mockRequireMembership.mockResolvedValue({
+    mockRequireRole.mockResolvedValue({
       supabase: makeSupabase([]),
       restaurantId: "r-A",
       user: { id: "u1" },
@@ -117,7 +117,7 @@ describe("POST /api/wine-list-sections", () => {
   });
 
   it("400 on missing/empty name", async () => {
-    mockRequireMembership.mockResolvedValue({
+    mockRequireRole.mockResolvedValue({
       supabase: makeSupabase([]),
       restaurantId: "r-A",
       user: { id: "u1" },
@@ -127,7 +127,7 @@ describe("POST /api/wine-list-sections", () => {
   });
 
   it("404 when the wine_list_id belongs to another restaurant (RLS-bypassed mock)", async () => {
-    mockRequireMembership.mockResolvedValue({
+    mockRequireRole.mockResolvedValue({
       supabase: makeSupabase([
         { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "r-B" },
       ]),
@@ -144,7 +144,7 @@ describe("POST /api/wine-list-sections", () => {
 
   it("201 on happy path, assigns position = existing count, inserts correct payload", async () => {
     sectionsCount = 2; // list already has 2 sections → new one at index 2
-    mockRequireMembership.mockResolvedValue({
+    mockRequireRole.mockResolvedValue({
       supabase: makeSupabase([
         { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "r-A" },
       ]),

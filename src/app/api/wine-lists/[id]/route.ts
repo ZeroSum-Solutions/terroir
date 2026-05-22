@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { requireMembership } from "@/lib/api/auth";
+import { requireRole } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
 
@@ -23,7 +23,7 @@ export async function PATCH(
   { params }: { params: Params },
 ) {
   const { id } = await params;
-  const auth = await requireMembership();
+  const auth = await requireRole(["owner", "manager"]);
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
@@ -69,17 +69,18 @@ export async function PATCH(
         { status: 422 },
       );
     }
-    // Check slug uniqueness (DB partial unique index covers this, but app-level
-    // check gives a better error message and avoids a 500 on constraint violation)
+    // Check slug uniqueness within the same restaurant (BND-156: slugs are
+    // scoped per-restaurant; two restaurants can each have "dinner").
     const { data: existing } = await supabase
       .from("wine_lists")
       .select("id")
       .eq("slug", trimmed)
+      .eq("restaurant_id", restaurantId)
       .neq("id", id)
       .maybeSingle();
     if (existing) {
       return NextResponse.json(
-        { error: "This slug is already in use." },
+        { error: "This slug is already in use by another list in your restaurant.", code: "slug_collision" },
         { status: 409 },
       );
     }
@@ -118,9 +119,89 @@ export async function DELETE(
   { params }: { params: Params },
 ) {
   const { id } = await params;
-  const auth = await requireMembership();
+  const auth = await requireRole(["owner", "manager"]);
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
+
+  // BND-159: only archived lists can be permanently deleted. Active lists
+  // must be archived first. Fetch the current state before deleting.
+  const { data: list, error: fetchError } = await supabase
+    .from("wine_lists")
+    .select("archived")
+    .eq("id", id)
+    .eq("restaurant_id", restaurantId)
+    .single();
+
+  if (fetchError) {
+    // PGRST116 = "No rows returned" — surface as 404. Any other error is
+    // a server-side failure (e.g. connection drop, constraint violation).
+    if ((fetchError as { code?: string }).code === "PGRST116") {
+      return NextResponse.json({ error: "Wine list not found." }, { status: 404 });
+    }
+    console.error("wine_lists pre-delete fetch failed:", fetchError);
+    Sentry.captureException(fetchError, {
+      tags: { surface: "wine-list", phase: "delete-fetch" },
+      extra: { restaurantId, list_id: id },
+    });
+    return NextResponse.json({ error: "Delete failed." }, { status: 500 });
+  }
+  if (!list) {
+    return NextResponse.json({ error: "Wine list not found." }, { status: 404 });
+  }
+
+  if (!list.archived) {
+    return NextResponse.json(
+      { error: "Active lists must be archived before they can be deleted.", code: "must_archive_first" },
+      { status: 409 },
+    );
+  }
+
+  // Cascade delete: fetch section IDs, delete items, then sections, then the list.
+  const { data: sections, error: sectionsFetchError } = await supabase
+    .from("wine_list_sections")
+    .select("id")
+    .eq("wine_list_id", id);
+
+  if (sectionsFetchError) {
+    console.error("wine_list_sections fetch failed:", sectionsFetchError);
+    Sentry.captureException(sectionsFetchError, {
+      tags: { surface: "wine-list", phase: "delete-sections-fetch" },
+      extra: { restaurantId, list_id: id },
+    });
+    return NextResponse.json({ error: "Delete failed." }, { status: 500 });
+  }
+
+  const sectionIds = sections.map((s) => s.id);
+
+  if (sectionIds.length > 0) {
+    const { error: itemsError } = await supabase
+      .from("wine_list_items")
+      .delete()
+      .in("section_id", sectionIds);
+
+    if (itemsError) {
+      console.error("wine_list_items cascade delete failed:", itemsError);
+      Sentry.captureException(itemsError, {
+        tags: { surface: "wine-list", phase: "delete-items" },
+        extra: { restaurantId, list_id: id },
+      });
+      return NextResponse.json({ error: "Delete failed." }, { status: 500 });
+    }
+  }
+
+  const { error: sectionsError } = await supabase
+    .from("wine_list_sections")
+    .delete()
+    .eq("wine_list_id", id);
+
+  if (sectionsError) {
+    console.error("wine_list_sections cascade delete failed:", sectionsError);
+    Sentry.captureException(sectionsError, {
+      tags: { surface: "wine-list", phase: "delete-sections" },
+      extra: { restaurantId, list_id: id },
+    });
+    return NextResponse.json({ error: "Delete failed." }, { status: 500 });
+  }
 
   const { data, error } = await supabase
     .from("wine_lists")

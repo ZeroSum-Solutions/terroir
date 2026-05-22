@@ -264,10 +264,37 @@ export default async function DashboardPage() {
   return (
     <section>
       <header className="mb-lg md:mb-xl">
-        <h1 className="font-serif text-[28px] text-ink">Dashboard</h1>
-        <p className="mt-xs text-[15px] text-ink-muted">
-          {restaurantName}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-md">
+          <div>
+            <h1 className="font-serif text-[28px] text-ink">Dashboard</h1>
+            <p className="mt-xs text-[15px] text-ink-muted">
+              {restaurantName}
+            </p>
+          </div>
+          <a
+            href="/api/insights/csv"
+            download="insights-export.csv"
+            className="flex h-[34px] items-center gap-xs rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
+              aria-hidden="true"
+            >
+              <path d="M14 10v2.67A1.33 1.33 0 0 1 12.67 14H3.33A1.33 1.33 0 0 1 2 12.67V10" />
+              <path d="M4.67 6.67L8 10l3.33-3.33" />
+              <path d="M8 10V2" />
+            </svg>
+            Export CSV
+          </a>
+        </div>
       </header>
 
       {/* BND-039 — Drink-window watch. Renders above the spend metrics

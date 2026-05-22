@@ -8,6 +8,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  Files,
   ListOrdered,
   Plus,
   Trash2,
@@ -44,6 +45,8 @@ export function WineListLanding({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // Tracks which list is being archived/unarchived
   const [archivingListId, setArchivingListId] = useState<string | null>(null);
+  // Tracks which list is being cloned
+  const [cloningListId, setCloningListId] = useState<string | null>(null);
 
   const copyListLink = useCallback(async (list: WineListWithCount) => {
     if (!list.slug) return;
@@ -97,11 +100,14 @@ export function WineListLanding({
 
   const deleteList = useCallback(
     async (list: WineListWithCount) => {
-      // Stronger confirm wording for published lists since deleting
-      // also breaks any QR code or shared link guests are using.
+      // BND-159: only archived lists can be deleted. The API enforces this,
+      // but the UI should never call DELETE on a non-archived list — archive
+      // first.
+      if (!list.archived) return;
+
       const confirmMessage = list.is_published
-        ? `Delete "${list.name}"? This list is currently published — its public link will stop working immediately.`
-        : `Delete "${list.name}"? This can't be undone.`;
+        ? `Permanently delete "${list.name}"? This list is currently published — its public link will stop working immediately. This cannot be undone.`
+        : `Permanently delete "${list.name}"? Its sections and items will be removed. This cannot be undone.`;
       if (!window.confirm(confirmMessage)) return;
 
       setDeleteError(null);
@@ -129,6 +135,41 @@ export function WineListLanding({
         );
       } finally {
         setDeletingListId(null);
+      }
+    },
+    [router],
+  );
+
+  const cloneList = useCallback(
+    async (list: WineListWithCount) => {
+      const confirmMessage = `Clone "${list.name}"? A new unpublished copy will be created with all sections and items preserved.`;
+      if (!window.confirm(confirmMessage)) return;
+
+      setCloningListId(list.id);
+      try {
+        const res = await fetch(`/api/wine-lists/${list.id}/clone`, {
+          method: "POST",
+        });
+        if (!res.ok) {
+          const body = (await res.json()) as { error?: unknown };
+          throw new Error(
+            typeof body.error === "string"
+              ? body.error
+              : "Clone failed. Please try again.",
+          );
+        }
+        const { id } = (await res.json()) as { id: string };
+        router.refresh();
+        // Navigate to the clone
+        router.push(`/lists/${id}`);
+      } catch (err) {
+        setDeleteError(
+          err instanceof Error && err.message
+            ? err.message
+            : "Clone failed. Please try again.",
+        );
+      } finally {
+        setCloningListId(null);
       }
     },
     [router],
@@ -162,6 +203,7 @@ export function WineListLanding({
     const showCopyAction = list.is_published && list.slug;
     const isDeleting = deletingListId === list.id;
     const isArchiving = archivingListId === list.id;
+    const isCloning = cloningListId === list.id;
     return (
       <div
         key={list.id}
@@ -260,6 +302,17 @@ export function WineListLanding({
                 </a>
               </>
             )}
+            {/* Clone button — available for all lists */}
+            <button
+              type="button"
+              onClick={() => cloneList(list)}
+              disabled={isCloning}
+              aria-label={`Clone ${list.name}`}
+              className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft disabled:opacity-60"
+            >
+              <Files className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              Clone
+            </button>
           </div>
           <div className="flex items-center gap-xs">
             <button
@@ -279,15 +332,18 @@ export function WineListLanding({
                 <Archive className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               )}
             </button>
-            <button
-              type="button"
-              onClick={() => deleteList(list)}
-              disabled={isDeleting}
-              aria-label={`Delete ${list.name}`}
-              className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-sm border border-border-strong bg-white text-ink-subtle hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 disabled:opacity-60"
-            >
-              <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-            </button>
+            {/* BND-159: Delete button only shown for archived lists */}
+            {list.archived && (
+              <button
+                type="button"
+                onClick={() => deleteList(list)}
+                disabled={isDeleting}
+                aria-label={`Permanently delete ${list.name}`}
+                className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-sm border border-border-strong bg-white text-ink-subtle hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 disabled:opacity-60"
+              >
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              </button>
+            )}
           </div>
         </div>
       </div>

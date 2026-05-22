@@ -11,9 +11,9 @@ import { NextResponse, type NextRequest } from "next/server";
  * restaurant before the RPC is invoked.
  */
 
-const mockRequireMembership = vi.fn();
+const mockRequireRole = vi.fn();
 vi.mock("@/lib/api/auth", () => ({
-  requireMembership: (...args: unknown[]) => mockRequireMembership(...args),
+  requireRole: (...args: unknown[]) => mockRequireRole(...args),
 }));
 
 const { PATCH } = await import("./route");
@@ -78,7 +78,7 @@ describe("PATCH /api/wine-list-items/reorder", () => {
   });
 
   it("401s when requireMembership returns a NextResponse", async () => {
-    mockRequireMembership.mockResolvedValue(
+    mockRequireRole.mockResolvedValue(
       NextResponse.json({ error: "Unauthorized." }, { status: 401 }),
     );
     const res = await PATCH(makeRequest({ orderedIds: ["a", "b"] }));
@@ -90,7 +90,7 @@ describe("PATCH /api/wine-list-items/reorder", () => {
       rpcResult: { data: null, error: null },
       ownershipRows: [],
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
     const res = await PATCH(makeRequest("{not json"));
     expect(res.status).toBe(400);
     expect(rpc).not.toHaveBeenCalled();
@@ -101,7 +101,7 @@ describe("PATCH /api/wine-list-items/reorder", () => {
       rpcResult: { data: null, error: null },
       ownershipRows: [],
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
     const res = await PATCH(makeRequest({ orderedIds: [] }));
     expect(res.status).toBe(400);
     expect(rpc).not.toHaveBeenCalled();
@@ -113,7 +113,7 @@ describe("PATCH /api/wine-list-items/reorder", () => {
       rpcResult: { data: null, error: null },
       ownershipRows: ids.map((id) => ownedRow(id, "r-1")),
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
     const res = await PATCH(makeRequest({ orderedIds: ids }));
     expect(res.status).toBe(200);
     expect(rpc).toHaveBeenCalledTimes(1);
@@ -131,7 +131,7 @@ describe("PATCH /api/wine-list-items/reorder", () => {
       },
       ownershipRows: ids.map((id) => ownedRow(id, "r-1")),
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
     const res = await PATCH(makeRequest({ orderedIds: ids }));
     expect(res.status).toBe(500);
     expect(rpc).toHaveBeenCalledTimes(1);
@@ -146,7 +146,7 @@ describe("PATCH /api/wine-list-items/reorder", () => {
       rpcResult: { data: null, error: null },
       ownershipRows: [ownedRow("item-a", "r-1"), ownedRow("item-b", "r-2")],
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
     const res = await PATCH(makeRequest({ orderedIds: ids }));
     expect(res.status).toBe(404);
     expect(rpc).not.toHaveBeenCalled();
@@ -159,7 +159,7 @@ describe("PATCH /api/wine-list-items/reorder", () => {
       // Only one row returned for two ids → len mismatch → reject.
       ownershipRows: [ownedRow("item-a", "r-1")],
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
     const res = await PATCH(makeRequest({ orderedIds: ids }));
     expect(res.status).toBe(404);
     expect(rpc).not.toHaveBeenCalled();

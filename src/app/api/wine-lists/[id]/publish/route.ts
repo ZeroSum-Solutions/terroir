@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { requireMembership } from "@/lib/api/auth";
+import { requireRole } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,7 @@ export async function POST(
   { params }: { params: Params },
 ) {
   const { id } = await params;
-  const auth = await requireMembership();
+  const auth = await requireRole(["owner", "manager"]);
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
@@ -62,16 +62,18 @@ export async function POST(
       return NextResponse.json({ error }, { status: 422 });
     }
     const trimmed = customSlug.trim().toLowerCase();
-    // Check uniqueness
+    // Check uniqueness within the same restaurant (BND-156: slugs are
+    // scoped per-restaurant; two restaurants can each have "dinner").
     const { data: existing } = await supabase
       .from("wine_lists")
       .select("id")
       .eq("slug", trimmed)
+      .eq("restaurant_id", restaurantId)
       .neq("id", id)
       .maybeSingle();
     if (existing) {
       return NextResponse.json(
-        { error: "This slug is already in use." },
+        { error: "This slug is already in use by another list in your restaurant.", code: "slug_collision" },
         { status: 409 },
       );
     }
@@ -119,7 +121,7 @@ export async function DELETE(
   { params }: { params: Params },
 ) {
   const { id } = await params;
-  const auth = await requireMembership();
+  const auth = await requireRole(["owner", "manager"]);
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
-import { requireMembership } from "@/lib/api/auth";
+import { requireRole } from "@/lib/api/auth";
 import { isOwnWineListSection } from "@/lib/api/wine-list-scope";
 
 export const runtime = "nodejs";
@@ -14,7 +14,7 @@ const AddItemSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const auth = await requireMembership();
+  const auth = await requireRole(["owner", "manager"]);
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
