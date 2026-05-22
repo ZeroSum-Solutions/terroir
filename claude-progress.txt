@@ -1,3 +1,41 @@
+## Session 2026-05-22 — features #22, #32, #33
+
+### Completed
+- **#22 API returns 403 when user is authenticated but not a member of the requested restaurant** (PASSING)
+  - GET /api/restaurant/[id] was already implemented by concurrent agent (commit b369de9)
+  - Returns 403 with "Not a member of this restaurant." for non-members
+  - PUT/PATCH/DELETE on same route already returned 403 for cross-restaurant access
+  - requireMembership() returns 403 for users with no membership
+  - Verified: 355/355 tests pass, TS clean, no mock data
+
+- **#32 Owner can revoke a member's access by deleting their membership** (PASSING)
+  - Already fully implemented: DELETE /api/team/members/[id] with requireOwner()
+  - Restaurant-scoped lookup, self-removal prevention, Sentry error tracking
+  - UI has Remove button with window.confirm() dialog and dismissible error bar
+  - Verified: 355/355 tests pass, TS clean, no mock data
+
+- **#33 Owner can resend a pending invitation** (PASSING)
+  - Created POST /api/team/invite/[id]/resend endpoint
+    - requireOwner() gate, fetches original invitation by ID (restaurant-scoped)
+    - Creates fresh row with same email+role, new token, new expiry
+    - Old invitation row preserved (remains valid for explicit revoke)
+    - Returns 404 if not found, 400 if already accepted
+  - Added Resend button to pending invitations table on /team
+    - RefreshCw icon, placed between "Copy link" and "Revoke" buttons
+    - Error handling via existing memberActionError dismissible alert
+    - router.refresh() on success to show fresh invitation in pending list
+
+### Changes
+- src/app/api/team/invite/[id]/resend/route.ts: +74 lines (new file)
+- src/app/(app)/team/team-actions.tsx: +33/-1 lines (Resend button + handler)
+
+### Verification
+- TypeScript: 0 errors
+- All 355 tests passing (35 test files)
+- Mock data grep: 0 hits in production code
+
+Stats after this session: 96/231 passing (41.6%).
+
 ## Session 2026-05-22 — features #176, #177, #21
 
 ### Completed
