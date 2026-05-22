@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
 import { TeamActions } from "./team-actions";
+
+export const metadata: Metadata = { title: "Team" };
 
 export default async function TeamPage() {
   const auth = (await getAuthContext())!; // AppLayout redirects when null

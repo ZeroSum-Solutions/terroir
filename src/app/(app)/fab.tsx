@@ -101,7 +101,10 @@ function FabInner() {
       style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 80px)" }}
       aria-hidden={false}
     >
-      {/* Action stack — only renders when open, fades+slides in. */}
+      {/* Action stack — fades+slides in. When closed, `inert` removes
+          the menu from the tab order and accessibility tree so keyboard
+          and screen-reader users can't reach the hidden actions through
+          the visual cloak (opacity-0 alone leaves them focusable). */}
       <div
         className={cn(
           "pointer-events-none absolute right-md flex flex-col-reverse items-end gap-sm transition-opacity",
@@ -110,6 +113,8 @@ function FabInner() {
         style={{ bottom: "72px" }}
         role="menu"
         aria-label="Primary actions"
+        aria-hidden={!open}
+        inert={!open}
       >
         {ACTIONS.map((action, i) => (
           <ActionPill

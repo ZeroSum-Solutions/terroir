@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import { CellarShell } from "./cellar-shell";
@@ -5,6 +6,8 @@ import type { CellarWineRow } from "./types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Cellar" };
 
 type BinData = {
   wines: Array<{

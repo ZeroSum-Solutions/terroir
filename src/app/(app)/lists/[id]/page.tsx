@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { NextResponse } from "next/server";
 import { notFound, redirect } from "next/navigation";
 import { requireMembership } from "@/lib/api/auth";
 import { WineListEditor } from "./wine-list-editor";
+
+export const metadata: Metadata = { title: "Edit list" };
 
 type Params = Promise<{ id: string }>;
 

@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
 import { WineListLanding } from "./wine-list-landing";
+
+export const metadata: Metadata = { title: "Wine lists" };
 
 export default async function WineListPage() {
   const auth = (await getAuthContext())!; // AppLayout redirects when null

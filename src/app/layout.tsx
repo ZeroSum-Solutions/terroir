@@ -25,7 +25,10 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Terroir",
+  title: {
+    template: "%s · Terroir",
+    default: "Terroir",
+  },
   description: "Wine management for upscale restaurants.",
 };
 

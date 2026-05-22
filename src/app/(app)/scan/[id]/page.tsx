@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAuthContext } from "@/lib/auth-context";
 import type { LineItem } from "@/lib/scanner/types";
 import { ScanDetailView } from "./scan-detail-view";
+
+export const metadata: Metadata = { title: "Scan details" };
 
 type Params = Promise<{ id: string }>;
 

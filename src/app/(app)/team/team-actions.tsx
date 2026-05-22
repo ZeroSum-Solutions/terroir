@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Check, Copy, Link2, Loader2, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
+import { TimeAgo } from "@/components/time-ago";
 
 type Member = {
   id: string;
@@ -263,7 +264,7 @@ export function TeamActions({
                     )}
                   </td>
                   <td className="px-md py-sm text-right font-mono text-[12px] text-ink-subtle">
-                    {new Intl.DateTimeFormat().format(new Date(member.created_at))}
+                    <TimeAgo iso={member.created_at} />
                   </td>
                   {isOwner && (
                     <td className="px-sm py-sm text-right">
@@ -333,7 +334,7 @@ export function TeamActions({
                         {inv.role}
                       </td>
                       <td className="px-md py-sm font-mono text-[12px] text-ink-muted">
-                        {new Intl.DateTimeFormat().format(new Date(inv.created_at))}
+                        <TimeAgo iso={inv.created_at} />
                       </td>
                       <td
                         className="px-md py-sm text-right text-[12px]"

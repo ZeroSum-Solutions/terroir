@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MagicLinkSubmit } from "./magic-link-submit";
+
+export const metadata: Metadata = { title: "Sign in" };
 
 type SearchParams = Promise<{ sent?: string; error?: string; next?: string }>;
 

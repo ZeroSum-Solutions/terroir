@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
 import { Scanner } from "./scanner";
 import type { RecentScan } from "@/lib/scanner/types";
+
+export const metadata: Metadata = { title: "Scan" };
 
 export default async function ScannerPage() {
   const auth = await getAuthContext();
