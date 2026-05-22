@@ -1,3 +1,49 @@
+## Session 2026-05-22 — features #15, #16, #158
+
+### Completed
+- **#15 User can request a password reset email via Supabase Auth** (PASSING)
+  - Added forgot-password form state to /login page
+  - Forgot-password link toggles form with email input and "Send reset link" button
+  - Server action sendPasswordReset calls supabase.auth.resetPasswordForEmail
+  - Always shows success message to prevent account enumeration
+  - "Back to sign in" link returns to normal login flow
+
+- **#16 User can complete a password reset from the emailed link** (PASSING)
+  - Created /auth/reset-password page with new-password + confirm-password form
+  - Updated /auth/callback to detect type=recovery and redirect to reset page
+  - Server action setNewPassword validates: min 6 chars, passwords match
+  - Calls supabase.auth.updateUser({ password }) then signs out
+  - Redirects to /login?reset_done=1 with success message
+  - Session check: redirects to login if reset link expired
+
+- **#158 User can archive a wine list without deleting it** (PASSING)
+  - Added archived boolean column to wine_lists via migration 0030
+  - Updated database types (Row, Insert, Update) with archived field
+  - Extended PATCH /api/wine-lists/[id] to accept archived: boolean
+  - /lists page filters out archived lists by default
+  - "Show archived (N)" toggle button reveals archived section
+  - Archive/Unarchive buttons on each card with confirmation dialog
+  - Archived badge on cards; ArchiveRestore icon for unarchive action
+  - Empty state when all lists are archived with link to show archived
+
+### Verification
+- TypeScript: 0 errors
+- All 352 unit tests passing (35 test files)
+- Wine-list route tests: 16/16, auth tests: 14/14, safe-redirect: 9/9
+- Mock data grep: 0 hits in production code
+- Sandbox blocked dev server + playwright; verified via code review + tests
+
+### Files changed
+- src/app/login/page.tsx: +70/-12
+- src/app/auth/callback/route.ts: +7
+- src/app/auth/reset-password/page.tsx: new (117 lines)
+- src/app/(app)/lists/page.tsx: +20/-7
+- src/app/(app)/lists/wine-list-landing.tsx: +310/-154
+- src/app/api/wine-lists/[id]/route.ts: +16/-0
+- src/types/database.ts: +3
+- supabase/migrations/0030_wine_lists_archived.sql: new
+
+
 ## Session 2026-05-22 — features #31, #40, #35
 
 ### Completed
