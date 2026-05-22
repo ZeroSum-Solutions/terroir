@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -8,9 +8,13 @@ import {
   ChevronDown,
   Download,
   FileSpreadsheet,
+  GripVertical,
   Loader2,
+  Pencil,
   Plus,
   Share2,
+  Trash2,
+  X,
 } from "lucide-react";
 import {
   DndContext,
@@ -23,8 +27,10 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
+  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import type { WineList } from "@/lib/wine-list/types";
 import { type Template } from "@/lib/wine-list/types";
@@ -54,16 +60,9 @@ type ListItem = {
   position: number;
   glass_price: number | null;
   bottle_price: number | null;
-  // BND-038: per-wine pour config. glass_pour_ml = null means the wine
-  // is not pour-tracked (bottle-only). pour_size_mode 'picker' opens the
-  // picker modal in the Cellar wine-detail drawer instead of subtracting
-  // immediately on tap.
   glass_pour_ml: number | null;
   pour_size_mode: "fixed" | "picker";
   tasting_note: string | null;
-  // ARCH-017: is_available deprecated by BND-037's is_eightysixed.
-  // Not writable via PATCH; dropped from the editor state so it
-  // can't drift back into mutations.
   wines: Wine;
 };
 
@@ -74,6 +73,143 @@ type Section = {
   wine_list_id: string;
   wine_list_items: ListItem[];
 };
+
+// BND-161: inline-rename input overlay.
+// BND-162: sortable section sidebar button.
+function SortableSectionButton({
+  section,
+  isActive,
+  onSelect,
+  onRename,
+  onDelete,
+  editingId,
+  editName,
+  onEditStart,
+  onEditChange,
+  onEditCommit,
+  onEditCancel,
+  editRef,
+}: {
+  section: Section;
+  isActive: boolean;
+  onSelect: () => void;
+  onRename: (id: string) => void;
+  onDelete: (section: Section) => void;
+  editingId: string | null;
+  editName: string;
+  onEditStart: (id: string, name: string) => void;
+  onEditChange: (name: string) => void;
+  onEditCommit: () => void;
+  onEditCancel: () => void;
+  editRef: React.RefObject<HTMLInputElement | null>;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: section.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  const isEditing = editingId === section.id;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "group flex items-center rounded-sm transition-colors",
+        isActive && !isDragging
+          ? "bg-surface-muted shadow-sm"
+          : "hover:bg-surface-muted",
+      )}
+    >
+      {/* Drag handle */}
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="flex-shrink-0 cursor-grab touch-none px-1 py-xs text-ink-subtle hover:text-ink active:cursor-grabbing"
+        aria-label={`Drag to reorder ${section.name}`}
+      >
+        <GripVertical className="h-3.5 w-3.5" strokeWidth={2} />
+      </button>
+
+      {/* Section name or inline edit input */}
+      {isEditing ? (
+        <div className="flex-1 flex items-center gap-xs min-w-0 px-sm py-xs">
+          <input
+            ref={editRef}
+            type="text"
+            value={editName}
+            onChange={(e) => onEditChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onEditCommit();
+              if (e.key === "Escape") onEditCancel();
+            }}
+            onBlur={onEditCommit}
+            className="flex-1 min-w-0 rounded-sm border border-accent bg-white px-xs py-0.5 text-[13px] font-medium text-ink outline-none focus:ring-2 focus:ring-accent-soft"
+            autoFocus
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onSelect}
+          className={cn(
+            "flex-1 flex items-center justify-between min-w-0 px-sm py-xs text-left",
+            isActive ? "text-ink font-medium" : "text-ink-muted",
+          )}
+        >
+          <span className="truncate text-[14px]">{section.name}</span>
+          <span
+            className={cn(
+              "tabular text-[12px] ml-xs",
+              isActive ? "text-ink" : "text-ink-subtle",
+            )}
+          >
+            {section.wine_list_items.length}
+          </span>
+        </button>
+      )}
+
+      {/* Action buttons — visible on hover */}
+      {!isEditing && (
+        <div className="hidden group-hover:flex items-center gap-0.5 pr-sm">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEditStart(section.id, section.name);
+            }}
+            className="p-1 rounded-sm text-ink-subtle hover:text-ink hover:bg-surface-sunken"
+            aria-label={`Rename ${section.name}`}
+          >
+            <Pencil className="h-3 w-3" strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(section);
+            }}
+            className="p-1 rounded-sm text-ink-subtle hover:text-danger hover:bg-danger-soft"
+            aria-label={`Delete ${section.name}`}
+          >
+            <Trash2 className="h-3 w-3" strokeWidth={2} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function WineListEditor({
   list,
@@ -89,6 +225,22 @@ export function WineListEditor({
   );
   const [isPending, startTransition] = useTransition();
 
+  // BND-161: inline rename state
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [editSectionName, setEditSectionName] = useState("");
+  const editInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Focus the input when entering edit mode
+  useEffect(() => {
+    if (editingSectionId && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingSectionId]);
+
+  // BND-163: delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState<Section | null>(null);
+
   const currentSection = useMemo(
     () => sections.find((s) => s.id === activeSection),
     [sections, activeSection],
@@ -103,9 +255,64 @@ export function WineListEditor({
     [sections],
   );
 
-  // BND-165: addWineToSection now accepts sectionIds[] so the user can
-  // assign a wine to multiple sections in one action. Each selected
-  // section gets its own wine_list_items row via POST.
+  // BND-161: commit inline rename
+  const commitRename = useCallback(async () => {
+    const id = editingSectionId;
+    const name = editSectionName.trim();
+    if (!id || !name) {
+      setEditingSectionId(null);
+      return;
+    }
+
+    // Optimistic update
+    setSections((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, name } : s)),
+    );
+    setEditingSectionId(null);
+
+    const res = await fetch(`/api/wine-list-sections/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+
+    if (!res.ok) {
+      startTransition(() => router.refresh());
+    }
+  }, [editingSectionId, editSectionName, router]);
+
+  const cancelRename = useCallback(() => {
+    setEditingSectionId(null);
+  }, []);
+
+  // BND-163: delete section
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    const targetId = deleteTarget.id;
+
+    // Optimistic update
+    setSections((prev) => prev.filter((s) => s.id !== targetId));
+
+    // If the deleted section was active, switch to the first remaining
+    if (activeSection === targetId) {
+      setSections((prev) => {
+        const remaining = prev.filter((s) => s.id !== targetId);
+        if (remaining.length > 0) setActiveSection(remaining[0].id);
+        return remaining;
+      });
+    }
+
+    setDeleteTarget(null);
+
+    const res = await fetch(`/api/wine-list-sections/${targetId}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      startTransition(() => router.refresh());
+    }
+  }, [deleteTarget, activeSection, router]);
+
   const addWineToSection = useCallback(
     async (wineId: string, glassPrice: number | null, bottlePrice: number | null, sectionIds: string[]) => {
       if (sectionIds.length === 0) return;
@@ -131,12 +338,6 @@ export function WineListEditor({
     [router],
   );
 
-  // BND-025: wire 'Add section' button. window.prompt() is the minimal
-  // viable UX; an inline-rename input is a polish follow-up.
-  // TODO (wine-list-editor UX polish): replace with an inline text
-  // input that takes the spot of the 'Add section' button — commits
-  // on Enter / blur, Esc cancels. Matches DESIGN.md 'no browser
-  // chrome in app UI' intent. ~50 LOC, deferred out of BND-025.
   const addSection = useCallback(async () => {
     const raw = window.prompt("New section name");
     if (raw === null) return;
@@ -160,7 +361,41 @@ export function WineListEditor({
     startTransition(() => router.refresh());
   }, [list.id, router]);
 
-  const sensors = useSensors(
+  // BND-162: sensors for section drag-and-drop
+  const sectionSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+  );
+
+  // BND-162: handle section reorder drag end
+  const handleSectionDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+
+      const oldIndex = sections.findIndex((s) => s.id === active.id);
+      const newIndex = sections.findIndex((s) => s.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const reordered = [...sections];
+      const [moved] = reordered.splice(oldIndex, 1);
+      reordered.splice(newIndex, 0, moved);
+
+      // Optimistic update
+      setSections(reordered.map((s, i) => ({ ...s, position: i })));
+
+      // Persist
+      await fetch("/api/wine-list-sections/reorder", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderedIds: reordered.map((s) => s.id) }),
+      });
+    },
+    [sections],
+  );
+
+  // Wine-item drag sensors (within a section)
+  const wineSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
   );
@@ -175,11 +410,9 @@ export function WineListEditor({
       const newIndex = items.findIndex((i) => i.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
 
-      // Reorder locally
       const [moved] = items.splice(oldIndex, 1);
       items.splice(newIndex, 0, moved);
 
-      // Optimistic update
       setSections((prev) =>
         prev.map((s) =>
           s.id === activeSection
@@ -188,7 +421,6 @@ export function WineListEditor({
         ),
       );
 
-      // Persist
       await fetch("/api/wine-list-items/reorder", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -200,7 +432,6 @@ export function WineListEditor({
 
   const deleteItem = useCallback(
     async (itemId: string) => {
-      // Optimistic update
       setSections((prev) =>
         prev.map((s) => ({
           ...s,
@@ -212,7 +443,6 @@ export function WineListEditor({
         method: "DELETE",
       });
       if (!res.ok) {
-        // Revert on failure
         startTransition(() => router.refresh());
       }
     },
@@ -225,7 +455,6 @@ export function WineListEditor({
       field: "glass_price" | "bottle_price",
       value: number | null,
     ) => {
-      // Optimistic update
       setSections((prev) =>
         prev.map((s) => ({
           ...s,
@@ -247,9 +476,6 @@ export function WineListEditor({
     [router],
   );
 
-  // BND-038: per-item pour config (glass_pour_ml + pour_size_mode).
-  // Same optimistic + PATCH shape as price updates. Passing null for
-  // glass_pour_ml turns pour tracking off for the wine.
   const updateItemPour = useCallback(
     async (
       itemId: string,
@@ -396,29 +622,37 @@ export function WineListEditor({
             Sections
           </div>
           <div className="mt-sm flex flex-col gap-2xs">
-            {sections.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setActiveSection(s.id)}
-                className={cn(
-                  "flex items-center justify-between rounded-sm px-sm py-xs text-[14px] font-medium transition-colors",
-                  activeSection === s.id
-                    ? "bg-surface-muted text-ink shadow-sm"
-                    : "text-ink-muted hover:bg-surface-muted hover:text-ink",
-                )}
+            <DndContext
+              sensors={sectionSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleSectionDragEnd}
+            >
+              <SortableContext
+                items={sections.map((s) => s.id)}
+                strategy={verticalListSortingStrategy}
               >
-                <span>{s.name}</span>
-                <span
-                  className={cn(
-                    "tabular text-[12px]",
-                    activeSection === s.id ? "text-ink" : "text-ink-subtle",
-                  )}
-                >
-                  {s.wine_list_items.length}
-                </span>
-              </button>
-            ))}
+                {sections.map((s) => (
+                  <SortableSectionButton
+                    key={s.id}
+                    section={s}
+                    isActive={activeSection === s.id}
+                    onSelect={() => setActiveSection(s.id)}
+                    onRename={() => {}}
+                    onDelete={setDeleteTarget}
+                    editingId={editingSectionId}
+                    editName={editSectionName}
+                    onEditStart={(id, name) => {
+                      setEditingSectionId(id);
+                      setEditSectionName(name);
+                    }}
+                    onEditChange={setEditSectionName}
+                    onEditCommit={commitRename}
+                    onEditCancel={cancelRename}
+                    editRef={editInputRef}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
             <button
               type="button"
               onClick={addSection}
@@ -455,12 +689,6 @@ export function WineListEditor({
                 </p>
               </div>
               <div className="flex gap-sm">
-                {/* DEBT-014: removed the dead "From scan" button.
-                    It had no onClick and the full flow (scan-picker +
-                    recent-scans endpoint + batch import) is tracked
-                    as BND-034. Rendering a visibly-unresponsive
-                    button was worse than omitting it; when BND-034
-                    ships it'll add the button back wired up. */}
                 <button
                   type="button"
                   onClick={() => setShowAddWine(true)}
@@ -484,7 +712,7 @@ export function WineListEditor({
               </div>
             ) : (
               <DndContext
-                sensors={sensors}
+                sensors={wineSensors}
                 collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
               >
@@ -539,6 +767,57 @@ export function WineListEditor({
           </div>
         )}
       </div>
+
+      {/* Delete confirmation dialog (BND-163) */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-md">
+          <div className="w-full max-w-sm rounded-lg border border-border bg-white shadow-xl">
+            <div className="px-lg py-lg">
+              <div className="flex items-start justify-between">
+                <h3 className="font-serif text-[18px] font-medium text-ink">
+                  Delete section
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setDeleteTarget(null)}
+                  className="rounded-sm p-1 text-ink-subtle hover:text-ink"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" strokeWidth={2} />
+                </button>
+              </div>
+              <p className="mt-sm text-[14px] text-ink-muted leading-relaxed">
+                Are you sure you want to delete{" "}
+                <strong className="text-ink">{deleteTarget.name}</strong>?
+              </p>
+              {deleteTarget.wine_list_items.length > 0 && (
+                <p className="mt-sm rounded-sm bg-danger-soft px-sm py-sm text-[13px] text-danger font-medium">
+                  This will permanently remove{" "}
+                  {deleteTarget.wine_list_items.length} wine
+                  {deleteTarget.wine_list_items.length !== 1 ? "s" : ""} from
+                  this list.
+                </p>
+              )}
+              <div className="mt-lg flex justify-end gap-sm">
+                <button
+                  type="button"
+                  onClick={() => setDeleteTarget(null)}
+                  className="rounded-sm border border-border px-md py-1.5 text-[13px] font-medium text-ink-muted hover:bg-surface-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDelete}
+                  className="rounded-sm bg-danger px-md py-1.5 text-[13px] font-medium text-white hover:bg-danger-hover"
+                >
+                  Delete section
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAddWine && currentSection && (
         <AddWineModal
