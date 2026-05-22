@@ -94,3 +94,43 @@ export async function PATCH(
 
   return NextResponse.json({ ok: true });
 }
+
+/**
+ * DELETE /api/restaurant/[id] — delete a restaurant (owner-only).
+ *
+ * Managers and staff receive 403 via requireOwner().
+ * DB-level ON DELETE CASCADE handles cleanup of related rows
+ * (wines, inventory_items, memberships, invitations, etc.).
+ */
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Params },
+) {
+  const { id } = await params;
+  const auth = await requireOwner();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, restaurantId } = auth;
+
+  if (id !== restaurantId) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+
+  const { error } = await supabase
+    .from("restaurants")
+    .delete()
+    .eq("id", restaurantId);
+
+  if (error) {
+    console.error("restaurant delete failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "restaurant", phase: "delete" },
+      extra: { restaurantId },
+    });
+    return NextResponse.json(
+      { error: "Failed to delete restaurant." },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ ok: true });
+}
