@@ -176,17 +176,25 @@ export default async function DashboardPage() {
   const totalBottles = items.reduce((s, i) => s + i.quantity, 0);
   const scanCount = monthScans.length;
 
-  // Varietal breakdown
+  // Varietal breakdown. Total spans every varietal (mirrors the
+  // distributor table's whole-program denominator below) so the bar
+  // widths + % labels reflect share-of-program, not share-of-top-6.
+  // Otherwise a cellar with 12 varietals would see the top-6 add to
+  // 100% and overstate each one's share.
   const varietalMap = new Map<string, number>();
   for (const item of items) {
     const varietal =
       (item.wines as { varietal: string | null } | null)?.varietal ?? "Other";
     varietalMap.set(varietal, (varietalMap.get(varietal) ?? 0) + item.quantity * item.unit_cost);
   }
-  const varietalBreakdown = [...varietalMap.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6);
-  const varietalTotal = varietalBreakdown.reduce((s, [, v]) => s + v, 0) || 1;
+  const varietalEntries = [...varietalMap.entries()].sort((a, b) => b[1] - a[1]);
+  const varietalBreakdown = varietalEntries.slice(0, 6);
+  const varietalTotalAll =
+    varietalEntries.reduce((s, [, v]) => s + v, 0) || 1;
+  const otherVarietalCount = Math.max(
+    0,
+    varietalEntries.length - varietalBreakdown.length,
+  );
 
   // Distributor breakdown — spend from inventory items linked via invoice scans
   const distMap = new Map<string, { scans: number; spend: number }>();
@@ -427,36 +435,44 @@ export default async function DashboardPage() {
               Spend by varietal
             </h3>
             <span className="font-mono text-[12px] text-ink-subtle">
-              {formatMoney(varietalTotal)} total
+              {formatMoney(varietalTotalAll)} total
             </span>
           </div>
           {varietalBreakdown.length === 0 ? (
             <p className="text-[13px] text-ink-muted">No data yet</p>
           ) : (
-            <div className="flex flex-col gap-sm">
-              {varietalBreakdown.map(([label, spend], i) => {
-                const pct = spend / varietalTotal;
-                return (
-                  <div key={label} className="flex items-center gap-sm">
-                    <span className="w-[100px] shrink-0 truncate text-[13px] text-ink">
-                      {label}
-                    </span>
-                    <div className="h-2.5 flex-1 overflow-hidden rounded-pill bg-surface-sunken">
-                      <div
-                        className="h-full rounded-pill bg-accent"
-                        style={{
-                          width: `${pct * 100}%`,
-                          opacity: 1 - i * 0.07,
-                        }}
-                      />
+            <>
+              <div className="flex flex-col gap-sm">
+                {varietalBreakdown.map(([label, spend], i) => {
+                  const pct = spend / varietalTotalAll;
+                  return (
+                    <div key={label} className="flex items-center gap-sm">
+                      <span className="w-[100px] shrink-0 truncate text-[13px] text-ink">
+                        {label}
+                      </span>
+                      <div className="h-2.5 flex-1 overflow-hidden rounded-pill bg-surface-sunken">
+                        <div
+                          className="h-full rounded-pill bg-accent"
+                          style={{
+                            width: `${pct * 100}%`,
+                            opacity: 1 - i * 0.07,
+                          }}
+                        />
+                      </div>
+                      <span className="w-[36px] shrink-0 text-right font-mono text-[12px] text-ink-muted">
+                        {Math.round(pct * 100)}%
+                      </span>
                     </div>
-                    <span className="w-[36px] shrink-0 text-right font-mono text-[12px] text-ink-muted">
-                      {Math.round(pct * 100)}%
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+              {otherVarietalCount > 0 && (
+                <p className="mt-sm text-[12px] text-ink-subtle">
+                  +{otherVarietalCount} more varietal
+                  {otherVarietalCount === 1 ? "" : "s"}
+                </p>
+              )}
+            </>
           )}
         </div>
 
