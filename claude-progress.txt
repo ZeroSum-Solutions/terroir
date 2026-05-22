@@ -1,4 +1,43 @@
-## Session 2026-05-22 — features #228, #230, #231
+## Session 2026-05-22 — features #164, #166, #165
+
+### Completed
+- **#164 User can add a wine to a section by searching the cellar** (PASSING)
+  - Already fully implemented: AddWineModal with inventory + LWIN catalog search,
+    addWineToSection callback wired to POST /api/wine-list-items, pages and API
+    routes all in place.
+  - Verified via code review: search flow, API call, router.refresh() for UI update.
+  - Tests: 347/347 passing (all passing before this session).
+
+- **#166 User can reorder items within a section via drag-and-drop** (PASSING)
+  - Already fully implemented: DndContext + SortableContext + SortableWineRow with
+    useSortable, handleDragEnd persists via PATCH /api/wine-list-items/reorder,
+    reorder endpoint uses reorder_wine_list_items RPC for atomicity.
+  - Verified via code review + existing unit tests for reorder route (ARCH-014
+    ownership pre-check, RPC call, error handling).
+
+- **#165 User can add a wine to multiple sections at once** (PASSING)
+  - Added multi-section checkbox UI to AddWineModal (only shown when >1 section)
+  - Active section pre-checked; user can toggle additional sections
+  - Section checkboxes use custom styled checkmarks (Check icon) with sr-only inputs
+  - addWineToSection in wine-list-editor.tsx now accepts sectionIds[] and loops
+    through POST /api/wine-list-items for each selected section
+  - Button text reflects count: "Add to 3 sections" / "Add to list"
+  - Prevents deselecting last section (at least one must remain checked)
+  - Back button resets selection to just activeSectionId
+
+### Changes
+- src/app/(app)/lists/[id]/components/add-wine-modal.tsx: +88/-25 lines
+- src/app/(app)/lists/[id]/wine-list-editor.tsx: +38/-22 lines
+
+### Notes
+- TypeScript: 0 errors in changed files (2 pre-existing errors in cellar/route.ts
+  and restaurant route, unrelated)
+- All 347 unit tests passing
+- Mock data grep: 0 hits in production code (only test file references)
+- playwright-cli not functional in this environment; verified via code review,
+  TypeScript compilation, and unit tests
+
+Stats after this session: 79/231 passing (34.2%).## Session 2026-05-22 — features #228, #230, #231
 
 ### Completed
 - **#228 Show relative time on team Members + Pending invitations** (PASSING)
