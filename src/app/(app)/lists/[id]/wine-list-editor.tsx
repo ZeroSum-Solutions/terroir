@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ChevronDown,
   Download,
+  Eye,
   FileSpreadsheet,
   GripVertical,
   Loader2,
@@ -63,6 +64,9 @@ type ListItem = {
   glass_pour_ml: number | null;
   pour_size_mode: "fixed" | "picker";
   tasting_note: string | null;
+  name_override: string | null;
+  blurb: string | null;
+  hidden: boolean;
   wines: Wine;
 };
 
@@ -503,6 +507,74 @@ export function WineListEditor({
     [router],
   );
 
+  const updateItemName = useCallback(
+    async (itemId: string, value: string | null) => {
+      setSections((prev) =>
+        prev.map((s) => ({
+          ...s,
+          wine_list_items: s.wine_list_items.map((i) =>
+            i.id === itemId ? { ...i, name_override: value } : i,
+          ),
+        })),
+      );
+
+      const res = await fetch(`/api/wine-list-items/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name_override: value }),
+      });
+      if (!res.ok) {
+        startTransition(() => router.refresh());
+      }
+    },
+    [router],
+  );
+  const updateItemBlurb = useCallback(
+    async (itemId: string, value: string | null) => {
+      setSections((prev) =>
+        prev.map((s) => ({
+          ...s,
+          wine_list_items: s.wine_list_items.map((i) =>
+            i.id === itemId ? { ...i, blurb: value } : i,
+          ),
+        })),
+      );
+
+      const res = await fetch(`/api/wine-list-items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blurb: value }),
+      });
+      if (!res.ok) {
+        startTransition(() => router.refresh());
+      }
+    },
+    [router],
+  );
+
+  const updateItemHidden = useCallback(
+    async (itemId: string, value: boolean) => {
+      setSections((prev) =>
+        prev.map((s) => ({
+          ...s,
+          wine_list_items: s.wine_list_items.map((i) =>
+            i.id === itemId ? { ...i, hidden: value } : i,
+          ),
+        })),
+      );
+
+      const res = await fetch(`/api/wine-list-items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hidden: value }),
+      });
+      if (!res.ok) {
+        startTransition(() => router.refresh());
+      }
+    },
+    [router],
+  );
+
   const downloadPdf = useCallback(async () => {
     setGeneratingPdf(true);
     try {
@@ -586,7 +658,17 @@ export function WineListEditor({
               <FileSpreadsheet className="h-3.5 w-3.5" strokeWidth={2} />
               <span className="hidden md:inline">Toast Export</span>
             </a>
-            <button
+            {/* BND-172: Preview button */}
+            <a
+              href={`/lists/${list.id}/preview`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-[34px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[13px] font-medium text-ink hover:bg-surface-muted md:px-md"
+            >
+              <Eye className="h-3.5 w-3.5" strokeWidth={2} />
+              <span className="hidden md:inline">Preview</span>
+            </a>
+                        <button
               type="button"
               onClick={() => setShowPublish(true)}
               className="flex h-[34px] items-center gap-xs rounded-sm bg-accent px-sm text-[13px] font-medium text-white hover:bg-accent-hover md:px-md"
@@ -743,6 +825,9 @@ export function WineListEditor({
                         onDelete={deleteItem}
                         onPriceChange={updateItemPrice}
                         onPourChange={updateItemPour}
+                        onNameChange={updateItemName}
+                        onBlurbChange={updateItemBlurb}
+                        onHiddenChange={updateItemHidden}
                       />
                     ))}
                   </div>

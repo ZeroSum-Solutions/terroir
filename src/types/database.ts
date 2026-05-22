@@ -503,6 +503,9 @@ export type Database = {
           glass_price: number | null
           id: string
           is_available: boolean
+          hidden: boolean
+          name_override: string | null
+          blurb: string | null
           position: number
           pour_size_mode: string
           section_id: string
@@ -517,6 +520,9 @@ export type Database = {
           glass_price?: number | null
           id?: string
           is_available?: boolean
+          hidden?: boolean
+          name_override?: string | null
+          blurb?: string | null
           position?: number
           pour_size_mode?: string
           section_id: string
@@ -531,6 +537,9 @@ export type Database = {
           glass_price?: number | null
           id?: string
           is_available?: boolean
+          hidden?: boolean
+          name_override?: string | null
+          blurb?: string | null
           position?: number
           pour_size_mode?: string
           section_id?: string

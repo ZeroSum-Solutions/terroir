@@ -10,6 +10,7 @@ type ItemData = {
   glass_price: number | null;
   bottle_price: number | null;
   tasting_note: string | null;
+  name_override: string | null;
   wines: WineData;
 };
 
@@ -39,7 +40,7 @@ function formatPrice(n: number | null): string {
 
 function renderItem(item: ItemData, template: "classic" | "modern" | "minimal"): string {
   const w = item.wines;
-  const name = escapeHtml(`${w.producer} ${w.name}`);
+  const name = escapeHtml(item.name_override ?? `${w.producer} ${w.name}`);
   const vintage = w.vintage ? ` ${w.vintage}` : "";
   const region = w.region ? escapeHtml(w.region) : "";
   const glass = formatPrice(item.glass_price);

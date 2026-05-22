@@ -402,6 +402,7 @@ create table public.wine_list_items (
   glass_price   numeric(10,2),
   bottle_price  numeric(10,2),
   tasting_note  text,
+  hidden        boolean       not null default false,
   name_override text,
   blurb         text,
   is_available  boolean       not null default true,

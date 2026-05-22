@@ -86,12 +86,12 @@ export default async function WineListEditorPage({
     .sort((a, b) => a.position - b.position)
     .map((s) => ({
       ...s,
-      wine_list_items: [...(s.wine_list_items ?? [])].sort(
+      wine_list_items: [...(s.wine_list_items ?? [])].map((item) => ({ ...item, name_override: ((item as Record<string, unknown>).name_override as string | null) ?? null, blurb: ((item as Record<string, unknown>).blurb as string | null) ?? null, hidden: ((item as Record<string, unknown>).hidden as boolean) ?? false })).sort(
         (a, b) => a.position - b.position,
       ),
     }));
 
   const { wine_list_sections: _, ...listMeta } = list;
 
-  return <WineListEditor list={listMeta} sections={sections} />;
+  return <WineListEditor list={listMeta} sections={sections as any} />;
 }

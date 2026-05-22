@@ -11,6 +11,7 @@ const AddItemSchema = z.object({
   wine_id: z.string().uuid(),
   glass_price: z.number().nonnegative().nullable().optional(),
   bottle_price: z.number().nonnegative().nullable().optional(),
+  name_override: z.string().nullable().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
       position: nextPosition,
       glass_price: body.glass_price ?? null,
       bottle_price: body.bottle_price ?? null,
+        name_override: body.name_override ?? null,
     })
     .select("id")
     .single();

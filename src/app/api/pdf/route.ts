@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   const { data: list, error: fetchError } = await supabase
     .from("wine_lists")
     .select(
-      "name, template, restaurant_id, restaurants(name), wine_list_sections(name, position, wine_list_items(position, glass_price, bottle_price, tasting_note, wines(name, producer, vintage, varietal, region, is_eightysixed)))",
+      "name, template, restaurant_id, restaurants(name), wine_list_sections(name, position, wine_list_items(position, glass_price, bottle_price, tasting_note, name_override, wines(name, producer, vintage, varietal, region, is_eightysixed)))",
     )
     .eq("id", body.listId)
     .eq("restaurant_id", restaurantId)
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     glass_price: number | null;
     bottle_price: number | null;
     tasting_note: string | null;
-    wines: {
+    name_override: string | null;    wines: {
       name: string;
       producer: string;
       vintage: number | null;

@@ -2,8 +2,9 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import { renderWineListSections } from "@/lib/wine-list/render";
+import { renderWineListSections, type EightysixStrategy } from "@/lib/wine-list/render";
 import type { WineListSectionEmbed } from "@/lib/wine-list/shapes";
+import { cn } from "@/lib/utils";
 
 /** Anon client for public pages — respects RLS, no auth session needed. */
 function createAnonClient() {
@@ -80,7 +81,7 @@ export default async function PublicWineListPage({
   const { data: list, error } = await supabase
     .from("wine_lists")
     .select(
-      "name, template, restaurant_id, restaurants(name), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, wines(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
+      "name, template, restaurant_id, restaurants(name, eightysix_strategy), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
     )
     .eq("slug", slug)
     .eq("is_published", true)
@@ -88,8 +89,11 @@ export default async function PublicWineListPage({
 
   if (error || !list) notFound();
 
-  const restaurantName =
-    (list.restaurants as { name: string } | null)?.name ?? "";
+  const restaurant =
+    list.restaurants as { name: string; eightysix_strategy: string } | null;
+  const restaurantName = restaurant?.name ?? "";
+  const eightysixStrategy: EightysixStrategy =
+    restaurant?.eightysix_strategy === "mark" ? "mark" : "hide";
 
   // Sort sections and items by position
   type PublicWineItem = {
@@ -98,6 +102,9 @@ export default async function PublicWineListPage({
     glass_price: number | null;
     bottle_price: number | null;
     tasting_note: string | null;
+    name_override: string | null;
+    blurb: string | null;
+    hidden: boolean;
     wines: {
       name: string;
       producer: string;
@@ -113,9 +120,15 @@ export default async function PublicWineListPage({
   // DEBT-013: shared WineListSectionEmbed<TItem> generic.
   // ARCH-020: shared renderWineListSections() filter + sort pipeline
   // (same rules the PDF route applies). Sections come back already
-  // sorted, 86'd wines already filtered out, empty sections dropped.
+  // sorted, 86'd wines handled per eightysix_strategy, empty sections dropped.
+  // BND-171: exclude hidden items from public view
+  const visibleSections = (list.wine_list_sections ?? []).map(function (section) {
+    var items = section.wine_list_items as any[];
+    return { ...section, wine_list_items: items.filter(function (item: any) { return !item.hidden; }) };
+  });
   const sections = renderWineListSections(
-    (list.wine_list_sections ?? []) as unknown as WineListSectionEmbed<PublicWineItem>[],
+    visibleSections as unknown as WineListSectionEmbed<PublicWineItem>[],
+    { eightysixStrategy },
   );
 
   return (
@@ -155,9 +168,9 @@ export default async function PublicWineListPage({
           <h2 className="mb-md flex items-baseline gap-sm font-serif text-[22px] font-medium text-ink print:mb-sm print:text-[18px] print:text-black">
             <span>{section.name}</span>
             {/* Lightweight count so guests can see how deep each category
-                is without scrolling. renderWineListSections filters out 86'd
-                wines, so this is the actually-pourable count. Kept visible
-                in print — a paper menu benefits from the same signal. */}
+                is. When strategy is 'mark', this count includes 86'd wines
+                (which appear gray/strikethrough). Kept visible in print —
+                a paper menu benefits from the same signal. */}
             <span className="font-mono text-[13px] font-normal text-ink-muted print:text-black">
               {section.items.length}
             </span>
@@ -165,37 +178,64 @@ export default async function PublicWineListPage({
           <div className="flex flex-col">
             {section.items.map((item) => {
                 const wine = item.wines;
+                const is86d = item.is_marked_eightysixed;
                 return (
                   <div
                     key={item.id}
-                    className="border-b border-border/50 py-sm last:border-b-0 print:break-inside-avoid print:border-black/20 print:py-2xs"
+                    className={cn(
+                      "border-b border-border/50 py-sm last:border-b-0 print:break-inside-avoid print:border-black/20 print:py-2xs",
+                      // BND-173: when strategy is 'mark', 86'd wines get muted styling
+                      is86d && "opacity-50",
+                    )}
                   >
                     <div className="flex items-baseline justify-between gap-md">
                       <div className="min-w-0">
-                        <span className="font-serif text-[15px] text-ink print:text-black">
-                          {wine.producer} {wine.name}
+                        <span
+                          className={cn(
+                            "font-serif text-[15px] text-ink print:text-black",
+                            is86d && "line-through",
+                          )}
+                        >
+                          {item.name_override ?? `${wine.producer} ${wine.name}`}
                         </span>
+                        {is86d && (
+                          <span className="ml-xs font-mono text-[11px] uppercase text-ink-subtle print:hidden">
+                            86&rsquo;d
+                          </span>
+                        )}
                         {wine.vintage && (
-                          <span className="ml-xs font-mono text-[12px] text-ink-muted print:text-black">
+                          <span className={cn(
+                            "ml-xs font-mono text-[12px] text-ink-muted print:text-black",
+                            is86d && "line-through",
+                          )}>
                             {wine.vintage}
                           </span>
                         )}
                       </div>
                       <div className="flex shrink-0 items-baseline gap-md font-mono text-[14px]">
                         {item.glass_price != null && (
-                          <span className="text-ink-muted print:text-black">
+                          <span className={cn(
+                            "text-ink-muted print:text-black",
+                            is86d && "line-through",
+                          )}>
                             ${item.glass_price}
                           </span>
                         )}
                         {item.bottle_price != null && (
-                          <span className="text-ink print:text-black">
+                          <span className={cn(
+                            "text-ink print:text-black",
+                            is86d && "line-through",
+                          )}>
                             ${item.bottle_price}
                           </span>
                         )}
                       </div>
                     </div>
                     {(wine.region || wine.serving_temp_label) && (
-                      <p className="mt-2xs text-[12px] text-ink-muted print:text-black">
+                      <p className={cn(
+                        "mt-2xs text-[12px] text-ink-muted print:text-black",
+                        is86d && "line-through",
+                      )}>
                         {wine.region}
                         {wine.varietal && ` · ${wine.varietal}`}
                         {wine.serving_temp_label && wine.serving_temp_min != null && wine.serving_temp_max != null && (
@@ -206,8 +246,20 @@ export default async function PublicWineListPage({
                       </p>
                     )}
                     {item.tasting_note && (
-                      <p className="mt-xs font-serif text-[13px] italic text-ink-muted print:text-black">
+                      <p className={cn(
+                        "mt-xs font-serif text-[13px] italic text-ink-muted print:text-black",
+                        is86d && "line-through",
+                      )}>
                         {item.tasting_note}
+                      </p>
+                    )}
+                    {/* BND-170: blurb renders under wine on public list */}
+                    {item.blurb && (
+                      <p className={cn(
+                        "mt-xs text-[13px] text-ink-muted leading-relaxed print:text-black",
+                        is86d && "line-through",
+                      )}>
+                        {item.blurb}
                       </p>
                     )}
                   </div>

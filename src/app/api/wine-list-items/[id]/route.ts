@@ -50,6 +50,7 @@ export async function DELETE(
 // pass.
 //
 // BND-038 added glass_pour_ml + pour_size_mode.
+// BND-170 added blurb, BND-171 added hidden.
 const PatchSchema = z
   .object({
     glass_price: z.number().nullable().optional(),
@@ -58,6 +59,9 @@ const PatchSchema = z
     position: z.number().int().optional(),
     glass_pour_ml: z.number().int().positive().max(2000).nullable().optional(),
     pour_size_mode: z.enum(["fixed", "picker"]).optional(),
+    name_override: z.string().nullable().optional(),
+    blurb: z.string().nullable().optional(),
+    hidden: z.boolean().optional(),
   })
   .strict();
 
@@ -96,7 +100,7 @@ export async function PATCH(
 
   const { error } = await supabase
     .from("wine_list_items")
-    .update(parsed.data)
+    .update(parsed.data as any)
     .eq("id", id);
 
   if (error) {

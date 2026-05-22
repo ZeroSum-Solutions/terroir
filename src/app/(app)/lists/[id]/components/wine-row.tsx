@@ -32,6 +32,9 @@ type ListItem = {
   glass_pour_ml: number | null;
   pour_size_mode: "fixed" | "picker";
   tasting_note: string | null;
+  name_override: string | null;
+  blurb: string | null;
+  hidden: boolean;
   // ARCH-017: is_available deprecated. Not written, not read
   // by the editor. Omitted from the type to keep it from drifting
   // back into the PATCH payload.
@@ -46,6 +49,9 @@ interface SortableWineRowProps {
   onDelete: (id: string) => void;
   onPriceChange: (id: string, field: "glass_price" | "bottle_price", value: number | null) => void;
   onPourChange: (id: string, field: PourField, value: PourValue) => void;
+  onNameChange: (id: string, value: string | null) => void;
+  onBlurbChange: (id: string, value: string | null) => void;
+  onHiddenChange: (id: string, value: boolean) => void;
 }
 
 interface WineRowProps {
@@ -53,6 +59,9 @@ interface WineRowProps {
   onDelete: (id: string) => void;
   onPriceChange: (id: string, field: "glass_price" | "bottle_price", value: number | null) => void;
   onPourChange: (id: string, field: PourField, value: PourValue) => void;
+  onNameChange: (id: string, value: string | null) => void;
+  onBlurbChange: (id: string, value: string | null) => void;
+  onHiddenChange: (id: string, value: boolean) => void;
   dragHandleProps?: Record<string, unknown>;
 }
 
@@ -122,6 +131,78 @@ export function PriceInput({ value, onChange, muted }: PriceInputProps) {
 }
 
 /**
+ * BND-169: inline click-to-edit for the list item's display name.
+ * When name_override is set, it replaces the wine name on the public
+ * list. When null, the original wine name is used.
+ */
+function NameEdit({
+  item,
+  onNameChange,
+}: {
+  item: ListItem;
+  onNameChange: (id: string, value: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(item.name_override ?? "");
+
+  const commit = () => {
+    setEditing(false);
+    const trimmed = draft.trim();
+    if (trimmed === "" || trimmed === item.wines.name) {
+      // Blank or matching original → clear override (use wine name)
+      onNameChange(item.id, null);
+    } else {
+      onNameChange(item.id, trimmed);
+    }
+  };
+
+  if (!editing) {
+    const displayName = item.name_override ?? `${item.wines.producer}, ${item.wines.name}`;
+    const isOverridden = item.name_override != null;
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setDraft(item.name_override ?? "");
+          setEditing(true);
+        }}
+        className={cn(
+          "rounded-sm border border-transparent px-xs py-2xs text-left transition-colors hover:border-border hover:bg-white",
+          "font-serif text-[14px] font-medium",
+          isOverridden ? "text-accent italic" : "text-ink",
+        )}
+        title={isOverridden ? "Custom display name (click to edit)" : "Click to set a custom display name"}
+      >
+        {isOverridden ? (
+          <>
+            <span className="line-through text-ink-muted mr-xs text-[12px]">{item.wines.name}</span>
+            {displayName}
+          </>
+        ) : (
+          displayName
+        )}
+      </button>
+    );
+  }
+
+  return (
+    <input
+      autoFocus
+      type="text"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+        if (e.key === "Escape") setEditing(false);
+      }}
+      placeholder={item.wines.name}
+      className="w-full rounded-sm border border-accent bg-white px-xs py-2xs font-serif text-[14px] font-medium text-ink outline-none ring-2 ring-accent-soft"
+    />
+  );
+}
+
+/**
  * BND-038: compact per-wine pour config. An integer ml input with an
  * "≈ X.X oz" hint + a Fixed/Picker radio toggle. The radios disable
  * when ml is blank (pour tracking is off). Renders identically on
@@ -146,9 +227,6 @@ function PourConfigRow({
         <input
           type="number"
           min={1}
-          // Matches the API's Zod cap in /api/wine-list-items/[id].
-          // A 2L pour is already physically absurd; 20L would be a
-          // silent 400 from the server.
           max={2000}
           value={pour ?? ""}
           onChange={(e) => {
@@ -211,6 +289,9 @@ export function WineRow({
   onDelete,
   onPriceChange,
   onPourChange,
+  onNameChange,
+  onBlurbChange,
+  onHiddenChange,
   dragHandleProps,
 }: WineRowProps) {
   const wine = item.wines;
@@ -228,11 +309,7 @@ export function WineRow({
           <GripVertical className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
         </div>
         <div>
-          <div className="text-[14px] font-medium text-ink">
-            <span className="font-serif">
-              {wine.producer}, {wine.name}
-            </span>
-          </div>
+          <NameEdit item={item} onNameChange={onNameChange} />
           <div className="mt-2xs flex items-center gap-xs text-[12px] text-ink-muted">
             <span className="font-mono text-ink-subtle">
               {wine.vintage ?? "NV"}
@@ -279,6 +356,29 @@ export function WineRow({
       <div className="hidden border-t border-border/40 bg-surface-muted/30 px-lg pb-sm pt-xs md:grid md:grid-cols-[28px_1fr]">
         <div />
         <PourConfigRow item={item} onPourChange={onPourChange} />
+          {/* BND-170: blurb input */}
+          <div className="flex items-start gap-sm">
+            <textarea
+              value={item.blurb ?? ""}
+              onChange={(e) => onBlurbChange(item.id, e.target.value || null)}
+              onBlur={(e) => { if (!e.target.value.trim()) onBlurbChange(item.id, null); }}
+              placeholder="Add a note for guests (e.g., sommelier pick, pairing suggestion)"
+              rows={2}
+              className="flex-1 rounded-sm border border-border bg-white px-xs py-1 text-[12px] text-ink resize-none outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft placeholder:text-ink-muted/50"
+            />
+            {/* BND-171: hide toggle */}
+            <button
+              type="button"
+              onClick={() => onHiddenChange(item.id, !item.hidden)}
+              className={cn(
+                "shrink-0 rounded-sm px-sm py-1 text-[11px] font-medium transition-colors",
+                item.hidden ? "bg-warning-soft text-warning" : "bg-surface-sunken text-ink-subtle hover:text-ink"
+              )}
+              title={item.hidden ? "Hidden from public list" : "Visible on public list"}
+            >
+              {item.hidden ? "Hidden" : "Visible"}
+            </button>
+          </div>
       </div>
       </div>
 
@@ -286,9 +386,7 @@ export function WineRow({
       <div className="border-b border-border px-md py-md last:border-b-0 md:hidden">
         <div className="flex items-start justify-between">
           <div className="min-w-0 flex-1">
-            <div className="font-serif text-[15px] font-medium text-ink">
-              {wine.producer}, {wine.name}
-            </div>
+            <NameEdit item={item} onNameChange={onNameChange} />
             <div className="mt-2xs flex flex-wrap items-center gap-xs text-[12px] text-ink-muted">
               <span className="rounded-sm bg-surface-muted px-xs py-2xs font-mono text-[11px] text-ink-subtle">
                 {wine.vintage ?? "NV"}
@@ -342,6 +440,31 @@ export function WineRow({
             <PourConfigRow item={item} onPourChange={onPourChange} />
           </div>
         </div>
+        {/* BND-170/171: blurb + hide toggle (mobile) */}
+        <div className="mt-sm border-t border-border/50 pt-sm">
+          <div className="text-[11px] uppercase tracking-[0.06em] text-ink-subtle">
+            Note
+          </div>
+          <textarea
+            value={item.blurb ?? ""}
+            onChange={(e) => onBlurbChange(item.id, e.target.value || null)}
+            onBlur={(e) => { if (!e.target.value.trim()) onBlurbChange(item.id, null); }}
+            placeholder="Sommelier pick, pairing suggestion..."
+            rows={2}
+            className="mt-xs w-full rounded-sm border border-border bg-white px-xs py-1 text-[12px] text-ink resize-none outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft placeholder:text-ink-muted/50"
+          />
+          <button
+            type="button"
+            onClick={() => onHiddenChange(item.id, !item.hidden)}
+            className={cn(
+              "mt-xs rounded-sm px-sm py-xs text-[11px] font-medium transition-colors",
+              item.hidden ? "bg-warning-soft text-warning" : "bg-surface-sunken text-ink-subtle hover:text-ink"
+            )}
+            title={item.hidden ? "Hidden from public list" : "Visible on public list"}
+          >
+            {item.hidden ? "Hidden from list" : "Visible on list"}
+          </button>
+        </div>
       </div>
     </>
   );
@@ -352,6 +475,9 @@ export function SortableWineRow({
   onDelete,
   onPriceChange,
   onPourChange,
+  onNameChange,
+  onBlurbChange,
+  onHiddenChange,
 }: SortableWineRowProps) {
   const {
     attributes,
@@ -377,6 +503,9 @@ export function SortableWineRow({
         onDelete={onDelete}
         onPriceChange={onPriceChange}
         onPourChange={onPourChange}
+        onNameChange={onNameChange}
+        onBlurbChange={onBlurbChange}
+        onHiddenChange={onHiddenChange}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
     </div>
