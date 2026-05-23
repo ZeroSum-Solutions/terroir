@@ -1,3 +1,34 @@
+## Session 2026-05-23 — features #88, #89, #91
+
+### Completed
+- **#88 System rejects responses that fail validation with a user-readable error** (PASSING)
+  - Changed AiExtractError response from {error} to {code, message} envelope in POST /api/scan
+  - Updated scanner UI to prefer message field over error field
+  - All 10 scan route tests pass
+
+- **#89 System deduplicates accidental double-submits via scan_idempotency** (PASSING)
+  - Extracted scan processing into processScanOnce() wrapped with withIdempotency()
+  - Form-data path creates invoice_scans row inside handler to avoid duplicates on retry
+  - Scanner client generates scanKeyRef UUID, sends as Idempotency-Key header
+  - All 22 scan + idempotency tests pass
+
+- **#91 System upserts wines via find_or_create_wines_batch DB function** (PASSING)
+  - Already fully implemented: migration 0006 provides the DB function
+  - Save-scan route calls find_or_create_wines_batch during inventory save
+  - All 9 save-scan tests pass
+
+### Verification
+- TypeScript: pre-existing errors only (0 new)
+- Mock data grep: clean (only comment in health route)
+- All scan/save-scan/idempotency tests pass (31 total)
+- 10 pre-existing test failures unrelated to changes
+
+### Files changed
+- MODIFIED src/app/api/scan/route.ts: error envelope + idempotency integration (~+240/-210)
+- MODIFIED src/app/(app)/scan/scanner.tsx: error handling + scanKeyRef (+15 lines)
+
+Stats after this session: 193/231 passing (83.5%).
+
 ## Session 2026-05-23 — features #58, #63, #64
 
 ### Completed
