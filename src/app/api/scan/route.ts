@@ -252,8 +252,14 @@ export async function POST(request: NextRequest) {
     }
 
     const ext = imagePath.split(".").pop()?.toLowerCase() ?? "jpg";
-    const mimeType = ext === "pdf" ? "application/pdf" : ext === "png" ? "image/png" : "image/jpeg";
+    const mimeType = ext === "pdf" ? "application/pdf" : ext === "png" ? "image/png" : ext === "heic" ? "image/heic" : ext === "heif" ? "image/heif" : "image/jpeg";
     const fileBuffer = Buffer.from(await fileData.arrayBuffer());
+
+	    // BND-105: reject unsupported file types in JSON body path too.
+	    var ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "heic", "heif", "pdf"]);
+	    if (!ALLOWED_EXT.has(ext)) {
+	      return json({ code: "unsupported_type", error: "Unsupported file type: ." + ext + ". Allowed: jpeg, png, heic, pdf." }, 415);
+	    }
 
     if (fileBuffer.length > MAX_BYTES) return json({ error: "File exceeds 10 MB." }, 413);
 
@@ -306,7 +312,7 @@ export async function POST(request: NextRequest) {
   if (!(file instanceof File)) return json({ error: "Invalid file." }, 400);
   if (file.size === 0) return json({ error: "Empty file." }, 400);
   if (file.size > MAX_BYTES) return json({ error: "File exceeds 10 MB." }, 413);
-  if (!ALLOWED_MIME.has(file.type)) return json({ error: "Unsupported file type: " + (file.type || "unknown") + "." }, 415);
+  if (!ALLOWED_MIME.has(file.type)) return json({ code: "unsupported_type", error: "Unsupported file type: " + (file.type || "unknown") + "." }, 415);
 
   var fileBuffer = Buffer.from(new Uint8Array(await file.arrayBuffer()));
 

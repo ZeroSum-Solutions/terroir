@@ -165,7 +165,37 @@ describe("POST /api/scan", () => {
 
     const res = await POST(makeFormRequest(fd));
     expect(res.status).toBe(415);
+    var body415 = await res.json();
+    expect(body415.code).toBe("unsupported_type");
     expect(azure.analyzeInvoice).not.toHaveBeenCalled();
+  });
+
+  it("returns 415 when JSON body path has an unsupported file extension", async () => {
+    var s = makeSupabase();
+    s.storage.from("invoice-images").download = vi.fn().mockResolvedValue({
+      data: new Blob(["GIF89a stub"]),
+      error: null,
+    });
+
+    auth.requireMembership.mockResolvedValue({
+      supabase: s,
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+
+    var rq = new Request("http://localhost/api/scan", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ imagePath: "restaurant-A/scan-1/image.gif" }),
+    }) as any;
+
+    var rs = await POST(rq);
+    expect(rs.status).toBe(415);
+    var bd = await rs.json();
+    expect(bd.code).toBe("unsupported_type");
+    expect(azure.analyzeInvoice).not.toHaveBeenCalled();
+    expect(anthropic.parse).not.toHaveBeenCalled();
   });
 
   it("returns 413 when the file exceeds 10 MB", async () => {
