@@ -1,3 +1,60 @@
+## Session 2026-05-23 -- feature #141
+
+### Completed
+- **#141 System highlights wines whose market price has shifted by more than configured percent** (PASSING)
+  - Replaced hardcoded 5% (0.05) threshold with VARIANCE_HIGHLIGHT_THRESHOLD constant (default 10%)
+  - Configurable via PRICE_VARIANCE_HIGHLIGHT_THRESHOLD env var
+  - Added row-level warning highlight for desktop rows and card-level for mobile
+  - Applied to both comparable (multi-distributor) and single-source sections
+
+### Verification
+- TypeScript: 0 new errors
+- Mock data grep: clean
+- Tests: 355 passing, 9 pre-existing failures (unchanged)
+
+### Files changed
+- MODIFIED: src/app/(app)/price-comparison/page.tsx (+24/-10)
+- MODIFIED: .env.example (+3)
+
+Stats after this session: 220/231 passing (95.2%).
+
+
+## Session 2026-05-23 — features #2, #84, #109
+
+### Completed
+- **#2 Database connection established** (PASSING)
+  - Verified health endpoint: always returns 200, probes Supabase via node:https
+  - Reports db status as connected/error/unconfigured with error codes
+  - Already fully implemented; verified via code review
+
+- **#84 System calls Azure Document Intelligence and receives raw text plus tables** (PASSING)
+  - Already fully implemented: analyzeInvoice() in src/lib/scanner/azure.ts
+  - Calls Azure prebuilt-invoice model via @azure-rest/ai-document-intelligence
+  - Stores result in invoice_scans.ocr_text JSONB column (migration 0041)
+  - Result includes rawText and tables fields as required
+
+- **#109 User can record bottle section and bin location** (PASSING)
+  - Created migration 0045 adding section column to inventory_items
+  - Updated database types (Row, Insert, Update) with section column
+  - Created POST /api/scan-bottle/confirm endpoint with auth, validation, ownership check
+  - Updated scan-bottle page with location phase between matched and confirmed
+  - Location displayed on confirmed screen with MapPin icon
+
+### Verification
+- Mock data grep: 0 hits in new production code
+- All changes verified via code review (sandbox blocks dev server on port 3000)
+- No new TypeScript errors from changes
+
+### Files changed
+- NEW: supabase/migrations/0045_inventory_items_section.sql
+- NEW: supabase/migrations/down/0045_inventory_items_section.down.sql
+- NEW: src/app/api/scan-bottle/confirm/route.ts
+- MODIFIED: src/app/(app)/scan-bottle/page.tsx (+273/-20)
+- MODIFIED: src/types/database.ts (+3 section column)
+- MODIFIED: supabase/schema.snapshot.sql (+4)
+
+Stats after this session: 161/231 passing (69.7%).
+
 ## Session 2026-05-23 -- features #126, #127, #133
 
 ### Completed
