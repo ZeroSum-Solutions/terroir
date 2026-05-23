@@ -17,11 +17,18 @@ const SectionSchema = z.object({
   name: z.string().min(1).max(100),
 });
 
+const PourDefaultSchema = z.object({
+  size_ml: z.number().int().positive(),
+  colour: z.string().min(1).max(50),
+  default_oz: z.number().positive(),
+});
+
 const PatchSectionsSchema = z.object({
-  sections: z.array(SectionSchema),
+  sections: z.array(SectionSchema).optional(),
   // BND-062 — explicit section_order for querying order without
   // deserializing the full sections array.
   section_order: z.array(z.string()).optional(),
+  pour_defaults: z.array(PourDefaultSchema).optional(),
 });
 
 export async function GET() {
@@ -113,7 +120,12 @@ export async function PATCH(request: NextRequest) {
     return Errors.validation(parsed.error.issues, "Invalid sections.");
   }
 
-  const { sections, section_order } = parsed.data;
+  const { sections, section_order, pour_defaults } = parsed.data;
+
+  // If no data to update, return 400.
+  if (!sections && !pour_defaults) {
+    return Errors.badRequest('Provide sections and/or pour_defaults.');
+  }
 
   // Fetch existing config to read the current labels.
   const { data: existing } = await supabase
@@ -124,7 +136,15 @@ export async function PATCH(request: NextRequest) {
     .single();
 
   if (!existing) {
-    // No config yet — create one with the sections.
+    // No config yet — create one with the provided data.
+    const createLabels: Record<string, unknown> = {} as Record<string, unknown>;
+    if (sections) {
+      createLabels.sections = sections;
+      createLabels.section_order = section_order ?? (sections as any[]).map((s: any) => s.id);
+    }
+    if (pour_defaults) {
+      createLabels.pour_defaults = pour_defaults;
+    }
     const { data: config, error } = await supabase
       .from("cellar_config")
       .insert({
@@ -132,10 +152,7 @@ export async function PATCH(request: NextRequest) {
         name: "Main Cellar",
         rows: 10,
         columns: 10,
-        labels: {
-          sections,
-          section_order: section_order ?? sections.map((s) => s.id),
-        },
+        labels: createLabels as any,
       })
       .select("*")
       .single();
@@ -152,17 +169,22 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(config);
   }
 
-  // BND-062 — merge sections AND section_order into existing labels.
+  // BND-062 / BND-125 — merge sections, section_order, and pour_defaults into existing labels.
   const currentLabels = (existing.labels as Record<string, unknown>) ?? {};
-  const updatedLabels = {
+  const updatedLabels: Record<string, unknown> = {
     ...currentLabels,
-    sections,
-    section_order: section_order ?? sections.map((s) => s.id),
   };
+  if (sections) {
+    updatedLabels.sections = sections;
+    updatedLabels.section_order = section_order ?? sections.map((s) => s.id);
+  }
+  if (pour_defaults) {
+    updatedLabels.pour_defaults = pour_defaults;
+  }
 
   const { data: config, error } = await supabase
     .from("cellar_config")
-    .update({ labels: updatedLabels })
+    .update({ labels: updatedLabels as any })
     .eq("id", existing.id)
     .select("*")
     .single();
