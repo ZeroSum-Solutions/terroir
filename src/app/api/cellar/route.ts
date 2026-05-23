@@ -146,6 +146,15 @@ export async function POST(request: NextRequest) {
     // Best-effort: don't fail the request if enrichment fails.
   }
 
+  // BND-093: match new wines against LWIN catalog
+  try {
+    await supabase.rpc("match_lwin_batch", {
+      p_wine_ids: [wineId],
+    });
+  } catch {
+    // Best-effort: don't fail the request if LWIN matching fails.
+  }
+
   return NextResponse.json({
     wineId,
     inventoryId: inventoryItem.id,

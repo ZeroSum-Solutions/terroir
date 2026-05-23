@@ -1,0 +1,58 @@
+"use client";
+
+import * as Sentry from "@sentry/nextjs";
+import { RefreshCw } from "lucide-react";
+import { useCallback, useState } from "react";
+
+interface ReExtractButtonProps {
+  scanId: string;
+}
+
+export function ReExtractButton({ scanId }: ReExtractButtonProps) {
+  const [reExtracting, setReExtracting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleClick = useCallback(async () => {
+    setReExtracting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/scans/${scanId}/re-extract`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.error || `Re-extraction failed (${res.status})`);
+      }
+      window.location.reload();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Re-extraction failed";
+      setError(msg);
+      Sentry.captureException(e, {
+        tags: { surface: "scanner", phase: "re-extract" },
+        extra: { scan_id: scanId },
+      });
+    } finally {
+      setReExtracting(false);
+    }
+  }, [scanId]);
+
+  return (
+    <div className="flex flex-col items-start gap-sm">
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={reExtracting}
+        className="flex h-10 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink disabled:opacity-50 hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px]"
+        title="Re-run Claude extraction on the stored OCR text"
+      >
+        <RefreshCw
+          className={`h-4 w-4`${reExtracting ? " animate-spin" : ""}`}
+          strokeWidth={2}
+          aria-hidden="true"
+        />
+        {reExtracting ? "Re-extracting…\n" : <span className="hidden sm:inline">Re-run extraction</span>}
+      </button>
+      {error && (
+        <p className="text-[12px] text-danger">{error}</p>
+      )}
+    </div>
+  );
+}

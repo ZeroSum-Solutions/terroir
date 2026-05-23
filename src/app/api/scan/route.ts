@@ -39,6 +39,8 @@ export async function POST(request: NextRequest) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
 
+  const { supabase, user, restaurantId } = auth;
+
 
   // BND-083: storage-path based submission via JSON body
   // Supports submitting a previously-uploaded image by its Supabase storage path.
@@ -75,6 +77,7 @@ export async function POST(request: NextRequest) {
       .from("invoice_scans")
       .insert({
         restaurant_id: auth.restaurantId,
+        created_by: user.id,
         distributor_name: "Unknown",
         parsed_line_items: [],
         final_line_items: [],
@@ -130,6 +133,7 @@ export async function POST(request: NextRequest) {
         distributor_name: result.source.distributor,
         invoice_number: result.source.invoiceNo === "—" ? null : result.source.invoiceNo,
         invoice_date: result.source.invoiceDate,
+        ocr_text: JSON.parse(JSON.stringify(ocr)),
         parsed_line_items: JSON.parse(JSON.stringify(parsed.lineItems)) as any,
         final_line_items: JSON.parse(JSON.stringify(items)) as any,
         accuracy_score: result.quality.score,
@@ -163,10 +167,40 @@ export async function POST(request: NextRequest) {
 
   const fileBuffer = Buffer.from(new Uint8Array(await file.arrayBuffer()));
 
-  // ── Stage 1: Azure OCR ──
+  // BND-090: create invoice_scans row before OCR for audit trail
+  const { data: invScan, error: invErr } = await supabase
+    .from("invoice_scans")
+    .insert({
+      restaurant_id: restaurantId,
+      created_by: user.id,
+      distributor_name: "Unknown",
+      parsed_line_items: [],
+      final_line_items: [],
+      edits: {},
+      item_count: 0,
+      status: "processing",
+    })
+    .select("id")
+    .single();
+
+  if (invErr || !invScan) {
+    console.error("invoice_scans insert failed:", invErr);
+    return json({ error: "Failed to create scan record." }, 500);
+  }
+
+  const scanId = invScan.id;
+
+  // BND-080: upload image to Supabase Storage under restaurant prefix
+  var ext = file.type === "application/pdf" ? "pdf" : file.type === "image/png" ? "png" : "jpg";
+  var sPath = restaurantId + "/" + scanId + "." + ext;
+  var upRes = await supabase.storage.from("invoice-images").upload(sPath, fileBuffer, { contentType: file.type, upsert: true });
+  if (!upRes.error) { await supabase.from("invoice_scans").update({ raw_image_path: sPath }).eq("id", scanId); }
+  // ── Stage 1: Azure OCR ——
   let ocr;
   try { ocr = await extractOcr(fileBuffer, file.type); }
   catch (e) {
+    // BND-090: mark scan as failed on OCR error
+    await supabase.from("invoice_scans").update({ status: "failed" }).eq("id", scanId).catch(() => {});
     if (e instanceof OcrError) {
       // BND-032 smoke: capture upstream Azure failures (not user-facing
       // misconfig) so they land in Sentry Issues with request context.
@@ -206,7 +240,13 @@ export async function POST(request: NextRequest) {
 
   // Stage 2.5: empty extraction check
   if (parsed.lineItems.length === 0) {
+    // BND-090: update scan row for empty extraction
+    await supabase.from("invoice_scans").update({
+      status: "complete",
+      item_count: 0,
+    }).eq("id", scanId).catch(() => {});
     return json({
+      scanId,
       code: "no_wines_extracted",
       message: "No wines could be extracted from this image.",
       rawText: ocr.rawText,
@@ -223,6 +263,20 @@ export async function POST(request: NextRequest) {
     lowFields: item.lowFields.length > 0 ? item.lowFields : undefined,
   }));
 
+// BND-090: update invoice_scans with OCR and extraction results
+  const quality = scoreItems(items);
+  await supabase.from("invoice_scans").update({
+    distributor_name: parsed.distributor ?? ocr.vendorName ?? "Unknown",
+    invoice_number: parsed.invoiceNumber ?? ocr.invoiceNumber || null,
+    invoice_date: parsed.invoiceDate ?? ocr.invoiceDate ?? parsedAt.slice(0, 10),
+    ocr_text: JSON.parse(JSON.stringify(ocr)),
+    parsed_line_items: JSON.parse(JSON.stringify(parsed.lineItems)),
+    final_line_items: JSON.parse(JSON.stringify(items)),
+    accuracy_score: quality.score,
+    item_count: items.length,
+    status: "complete",
+  }).eq("id", scanId).catch(() => {});
+
   const scan: Scan = {
     source: {
       distributor: parsed.distributor ?? ocr.vendorName ?? "Unknown",
@@ -232,5 +286,5 @@ export async function POST(request: NextRequest) {
     },
     items, edits: {}, quality: scoreItems(items), rawText: ocr.rawText,
   };
-  return json(scan, 200);
+  return json({ scanId, ...scan }, 200);
 }

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getAuthContext } from "@/lib/auth-context";
 import type { LineItem } from "@/lib/scanner/types";
 import { ScanDetailView } from "./scan-detail-view";
+import { ReExtractButton } from "./components/re-extract-button";
 
 export const metadata: Metadata = { title: "Scan details" };
 
@@ -45,16 +46,19 @@ export default async function ScanDetailPage({
   ) satisfies LineItem[];
 
   return (
-    <ScanDetailView
-      id={scan.id}
-      distributor={scan.distributor_name}
-      invoiceNumber={scan.invoice_number}
-      invoiceDate={scan.invoice_date}
-      accuracy={scan.accuracy_score != null ? Math.round(scan.accuracy_score * 100) : null}
-      itemCount={scan.item_count}
-      createdAt={scan.created_at}
-      items={items}
-      hasImage={!!scan.raw_image_path}
-    />
+    <>
+      <ReExtractButton scanId={scan.id} />
+      <ScanDetailView
+        id={scan.id}
+        distributor={scan.distributor_name}
+        invoiceNumber={scan.invoice_number}
+        invoiceDate={scan.invoice_date}
+        accuracy={scan.accuracy_score != null ? Math.round(scan.accuracy_score * 100) : null}
+        itemCount={scan.item_count}
+        createdAt={scan.created_at}
+        items={items}
+        hasImage={!!scan.raw_image_path}
+      />
+    </>
   );
 }
