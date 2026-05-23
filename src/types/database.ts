@@ -719,6 +719,7 @@ export type Database = {
           lwin_id: string | null
           manual_overrides: string[]
           name: string
+          overpaid_flag: boolean
           peak_year: number | null
           pricing_dismissed_until: string | null
           pricing_target_markup_ratio: number | null
@@ -761,6 +762,7 @@ export type Database = {
           lwin_id?: string | null
           manual_overrides?: string[]
           name: string
+          overpaid_flag?: boolean
           peak_year?: number | null
           pricing_dismissed_until?: string | null
           pricing_target_markup_ratio?: number | null
@@ -803,6 +805,7 @@ export type Database = {
           lwin_id?: string | null
           manual_overrides?: string[]
           name?: string
+          overpaid_flag?: boolean
           peak_year?: number | null
           pricing_dismissed_until?: string | null
           pricing_target_markup_ratio?: number | null

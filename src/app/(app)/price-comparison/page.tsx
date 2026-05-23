@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
 import { ArrowDown, ArrowUp, DollarSign, ScanLine, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
+import { OverpaidFlagButton } from "@/components/overpaid-flag-button";
 import {
   ExportCsvButton,
   type PriceComparisonCsvRow,
@@ -67,6 +68,7 @@ type WineComparison = {
   lastPaid: number;
   marketPrice: number | null;
   variancePct: number | null;
+  flagged: boolean;
 };
 
 export default async function PriceComparisonPage() {
@@ -77,7 +79,7 @@ export default async function PriceComparisonPage() {
   const { data: items } = await supabase
     .from("inventory_items")
     .select(
-      "unit_cost, quantity, wine_id, wines(id, name, producer, vintage, varietal, retail_median, retail_min, retail_max, enrichment_metadata), invoice_scan_id, invoice_scans(distributor_name, invoice_date)",
+      "unit_cost, quantity, wine_id, wines(id, name, producer, vintage, varietal, retail_median, retail_min, retail_max, enrichment_metadata, overpaid_flag), invoice_scan_id, invoice_scans(distributor_name, invoice_date)",
     )
     .eq("restaurant_id", rid);
 
@@ -101,6 +103,7 @@ export default async function PriceComparisonPage() {
       id: string; name: string; producer: string; vintage: number | null; varietal: string | null;
       retail_median: number | null; retail_min: number | null; retail_max: number | null;
       enrichment_metadata: Record<string, unknown> | null;
+      overpaid_flag: boolean | null;
     } | null;
     const scan = item.invoice_scans as {
       distributor_name: string;
@@ -128,6 +131,7 @@ export default async function PriceComparisonPage() {
         lastPaid: 0,
         marketPrice: null,
         variancePct: null,
+        flagged: wine.overpaid_flag ?? false,
       };
       wineMap.set(wine.id, entry);
     }
@@ -395,19 +399,22 @@ export default async function PriceComparisonPage() {
                     >
                       {i === 0 ? (
                         <td className="py-sm align-top" rowSpan={distPrices.length}>
-                          <Link
-                            href={`/cellar?wine=${comp.wine.id}`}
-                            aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                            className="group block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
-                          >
-                            <div className="font-medium text-ink group-hover:text-accent">
-                              {comp.wine.producer}
-                            </div>
-                            <div className="text-ink-muted group-hover:text-accent">
-                              {comp.wine.name}
-                              {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
-                            </div>
-                          </Link>
+                          <div className="flex items-start gap-xs">
+                            <Link
+                              href={`/cellar?wine=${comp.wine.id}`}
+                              aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
+                              className="group block min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                            >
+                              <div className="font-medium text-ink group-hover:text-accent">
+                                {comp.wine.producer}
+                              </div>
+                              <div className="text-ink-muted group-hover:text-accent">
+                                {comp.wine.name}
+                                {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
+                              </div>
+                            </Link>
+                            <OverpaidFlagButton wineId={comp.wine.id} flagged={comp.flagged} />
+                          </div>
                         </td>
                       ) : null}
                       <td className="py-sm text-ink">
@@ -524,19 +531,22 @@ export default async function PriceComparisonPage() {
                   className="rounded-md border border-border bg-surface p-md"
                 >
                   <div className="mb-sm flex items-start justify-between">
-                    <Link
-                      href={`/cellar?wine=${comp.wine.id}`}
-                      aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                      className="group min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
-                    >
-                      <div className="font-serif text-[16px] font-medium text-ink group-hover:text-accent">
-                        {comp.wine.name}
-                        {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
-                      </div>
-                      <div className="text-[13px] text-ink-muted group-hover:text-accent">
-                        {comp.wine.producer}
-                      </div>
-                    </Link>
+                    <div className="flex items-start gap-xs min-w-0 flex-1">
+                      <Link
+                        href={`/cellar?wine=${comp.wine.id}`}
+                        aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
+                        className="group min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                      >
+                        <div className="font-serif text-[16px] font-medium text-ink group-hover:text-accent">
+                          {comp.wine.name}
+                          {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
+                        </div>
+                        <div className="text-[13px] text-ink-muted group-hover:text-accent">
+                          {comp.wine.producer}
+                        </div>
+                      </Link>
+                      <OverpaidFlagButton wineId={comp.wine.id} flagged={comp.flagged} />
+                    </div>
                     <div className="flex flex-col items-end gap-xs">
                       {comp.spread >= 0.1 && (
                         <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
@@ -641,20 +651,23 @@ export default async function PriceComparisonPage() {
                   return (
                     <tr key={comp.wine.id} className="border-t border-dashed border-border">
                       <td className="px-md py-sm">
-                        <Link
-                          href={`/cellar?wine=${comp.wine.id}`}
-                          aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                          className="group inline-block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
-                        >
-                          <span className="font-medium text-ink group-hover:text-accent">
-                            {comp.wine.producer}
-                          </span>
-                          <span className="text-ink-muted group-hover:text-accent">
-                            {" "}
-                            {comp.wine.name}
-                            {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
-                          </span>
-                        </Link>
+                        <div className="flex items-start gap-xs">
+                          <Link
+                            href={`/cellar?wine=${comp.wine.id}`}
+                            aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
+                            className="group inline-block min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                          >
+                            <span className="font-medium text-ink group-hover:text-accent">
+                              {comp.wine.producer}
+                            </span>
+                            <span className="text-ink-muted group-hover:text-accent">
+                              {" "}
+                              {comp.wine.name}
+                              {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
+                            </span>
+                          </Link>
+                          <OverpaidFlagButton wineId={comp.wine.id} flagged={comp.flagged} />
+                        </div>
                       </td>
                       <td className="px-md py-sm text-ink-muted">
                         <div>{latest?.distributor ?? "—"}</div>
@@ -709,19 +722,22 @@ export default async function PriceComparisonPage() {
                   className="rounded-md border border-border bg-surface p-md"
                 >
                   <div className="flex items-start justify-between gap-sm">
-                    <Link
-                      href={`/cellar?wine=${comp.wine.id}`}
-                      aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                      className="group min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
-                    >
-                      <div className="font-serif text-[16px] font-medium text-ink group-hover:text-accent">
-                        {comp.wine.name}
-                        {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
-                      </div>
-                      <div className="text-[13px] text-ink-muted group-hover:text-accent">
-                        {comp.wine.producer}
-                      </div>
-                    </Link>
+                    <div className="flex items-start gap-xs min-w-0 flex-1">
+                      <Link
+                        href={`/cellar?wine=${comp.wine.id}`}
+                        aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
+                        className="group min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                      >
+                        <div className="font-serif text-[16px] font-medium text-ink group-hover:text-accent">
+                          {comp.wine.name}
+                          {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
+                        </div>
+                        <div className="text-[13px] text-ink-muted group-hover:text-accent">
+                          {comp.wine.producer}
+                        </div>
+                      </Link>
+                      <OverpaidFlagButton wineId={comp.wine.id} flagged={comp.flagged} />
+                    </div>
                     <span className="shrink-0 font-mono text-[14px] font-medium text-ink">
                       {latest ? formatPrice(latest.unitCost) : "—"}
                     </span>
