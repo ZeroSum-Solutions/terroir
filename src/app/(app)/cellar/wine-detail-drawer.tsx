@@ -2,13 +2,10 @@
 
 import { useRef, useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { X, Wine, PowerOff, Edit3, ChevronDown, Sparkles, Loader2 } from "lucide-react";
+import { X, Wine, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, Undo2 } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { useToast } from "@/lib/toast";
 import { ML_PER_OZ } from "@/lib/units";
-// Re-imported for clarity — used by both DrinkWindowSection (BND-039) and
-// PricingSection (BND-040). Reviewer-find I4: don't hand-code 0.0338 next
-// to a file that already imports the constant.
 import { cn } from "@/lib/utils";
 import { NoteModal } from "./note-modal";
 import { PourPickerModal } from "./pour-picker-modal";
@@ -33,22 +30,6 @@ import {
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
 
-/**
- * WineDetailDrawer — per-wine action panel (Phase 2 IA redesign §4
- * "Per-row behavior"). Opens when the user taps a row in the cellar
- * list. Hosts the quick action buttons that used to be the entry
- * points for /pour and /availability.
- *
- * Mobile: bottom sheet, slides up from the bottom-nav.
- * Desktop: right-side panel that doesn't cover the list.
- *
- * Actions:
- *   • Pour — only when wine has glass_pour_ml. Tap performs the pour
- *     using the wine's default size; long-press / picker caret offers
- *     custom pour sizes (mode = picker).
- *   • 86 / Restore — toggle availability. Opens the note modal first.
- *   • Edit — placeholder for v1.5 metadata editor (admin only).
- */
 export function WineDetailDrawer({
   row,
   canManage,
@@ -64,15 +45,15 @@ export function WineDetailDrawer({
   const [, startTransition] = useTransition();
   const toast = useToast();
 
-  // Pour-side local state. Only relevant when row.glass_pour_ml is set.
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  // BND-262: single-wine re-enrichment state.
   const [enriching, setEnriching] = useState(false);
   const [enrichMsg, setEnrichMsg] = useState<string | null>(null);
 
-  // 86/restore note-modal flow.
+  // BND-119: track last pour for undo.
+  const [lastPour, setLastPour] = useState<{ ml: number } | null>(null);
+
   const [pendingDirection, setPendingDirection] = useState<
     "eightysixed" | "restored" | null
   >(null);
@@ -82,22 +63,14 @@ export function WineDetailDrawer({
     onEscape: onClose,
     enabled: row !== null,
   });
-  // Note: parent (CellarShell) keys this component on selectedId, so
-  // changing wines remounts and naturally clears transient state. No
-  // reset effect needed.
 
   const doPour = useCallback(
     async (ml: number) => {
       if (!row || !row.glass_pour_ml) return;
       setErrorMsg(null);
       setBusy(true);
+      setLastPour(null);
 
-      // We let the server reconcile via router.refresh after a
-      // successful pour. The drawer doesn't do an optimistic update —
-      // /api/pour returns quickly and the spinner busy-state covers
-      // the brief gap. (The /pour grid did optimistic + cascade
-      // prediction; the drawer's single-action surface doesn't need
-      // that complexity.)
       try {
         const res = await fetch("/api/pour", {
           method: "POST",
@@ -111,6 +84,7 @@ export function WineDetailDrawer({
           throw new Error(payload?.error ?? `Request failed (${res.status}).`);
         }
         toast.success("Glass poured");
+        setLastPour({ ml });
         startTransition(() => router.refresh());
       } catch (err) {
         toast.error("Pour failed");
@@ -122,8 +96,37 @@ export function WineDetailDrawer({
     [row, router],
   );
 
-  // BND-262: single-wine re-enrichment. Calls POST /api/wines/[id]/enrich
-  // and refreshes the page so the drink-window panel re-renders.
+  // BND-119: undo the most recent pour.
+  const doUndo = useCallback(
+    async () => {
+      if (!row || !lastPour) return;
+      setErrorMsg(null);
+      setBusy(true);
+      try {
+        const res = await fetch("/api/pour/undo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wine_id: row.wine_id }),
+        });
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          throw new Error(payload?.error ?? `Undo failed (${res.status}).`);
+        }
+        toast.success("Pour undone");
+        setLastPour(null);
+        startTransition(() => router.refresh());
+      } catch (err) {
+        toast.error("Undo failed");
+        setErrorMsg(err instanceof Error ? err.message : "Undo failed.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [row, lastPour, router],
+  );
+
   const doEnrich = useCallback(
     async () => {
       if (!row) return;
@@ -185,8 +188,6 @@ export function WineDetailDrawer({
 
   if (!row) return null;
 
-  // Construct a synthetic OpenBottleRow shape for the picker modal (it
-  // expects the RPC row shape).
   const pickerItem: OpenBottleRow | null =
     row.wine_list_item_id && row.glass_pour_ml && row.size_ml
       ? {
@@ -217,56 +218,43 @@ export function WineDetailDrawer({
       ? (row.open_remaining_ml / ML_PER_OZ).toFixed(1)
       : null;
 
-  const canPour = !!row.glass_pour_ml && !row.is_eightysixed;
-  const outOfStock = totalMl !== null && row.glass_pour_ml !== null && totalMl < row.glass_pour_ml;
+  const canPour =
+    row.glass_pour_ml &&
+    row.glass_pour_ml > 0 &&
+    !row.is_eightysixed;
+  const outOfStock = canPour && totalMl !== null && totalMl < row.glass_pour_ml!;
 
   return (
     <>
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={headingId}
-        className="fixed inset-0 z-40 flex items-end justify-center bg-ink/40 md:items-stretch md:justify-end"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onClose();
-        }}
-      >
-        {/* Mobile: bottom sheet. Desktop: right-side rail. */}
+      {row && (
         <div
-          className={cn(
-            "w-full overflow-hidden border-border bg-surface shadow-lg",
-            "max-h-[85vh] rounded-t-md border-x border-t",
-            "md:h-full md:max-h-none md:max-w-[420px] md:rounded-none md:border-l md:border-x-0 md:border-t-0",
-          )}
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={headingId}
+          className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-lg bg-surface md:absolute md:inset-y-0 md:right-0 md:left-auto md:w-[420px] md:rounded-none md:border-l md:border-border"
+          style={{ maxHeight: "calc(100dvh - 3.5rem)" }}
         >
-          <header className="flex items-start justify-between border-b border-border px-md py-md md:px-lg">
-            <div className="min-w-0">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-subtle">
-                <span>{row.producer}</span>
-                {row.vintage && <span className="ml-xs font-mono">{row.vintage}</span>}
-                {row.region && <span className="ml-xs">· {row.region}</span>}
-              </div>
-              <h2
-                id={headingId}
-                className="mt-2xs font-serif text-[20px] text-ink md:text-[22px]"
-              >
-                {row.name}
-              </h2>
-              {row.varietal && (
-                <p className="mt-2xs text-[12px] text-ink-muted">{row.varietal}</p>
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-border px-md py-sm">
+            <h2 id={headingId} className="text-[15px] font-semibold text-ink leading-snug">
+              <span className="font-serif">{row.producer}</span>{" "}
+              <span className="font-medium">{row.name}</span>
+              {row.vintage != null && (
+                <span className="font-normal text-ink-muted"> {row.vintage}</span>
               )}
-            </div>
+            </h2>
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close wine detail"
-              className="ml-md flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted"
+              aria-label="Close"
+              className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted"
             >
-              <X className="h-5 w-5" strokeWidth={2} aria-hidden />
+              <X className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
-          </header>
+          </div>
 
+          {/* Body */}
           <div
             className="overflow-y-auto px-md py-md md:px-lg md:py-lg"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
@@ -302,17 +290,10 @@ export function WineDetailDrawer({
               )}
             </section>
 
-            {/* BND-040 — Pricing panel. Renders when retail data is
-                available. No verdict pills in the drawer; numbers + targets
-                only. Verdicts only appear in outlier-context surfaces
-                (Insights pricing review). */}
             {row.retail_median != null && (
               <PricingSection row={row} canManage={canManage} />
             )}
 
-            {/* BND-039 — Drink window panel. Renders only when we have
-                window data; otherwise the section is omitted so unenriched
-                wines don't show an empty placeholder. */}
             {row.drink_window_end != null && (
               <DrinkWindowSection row={row} />
             )}
@@ -357,6 +338,19 @@ export function WineDetailDrawer({
                 </div>
               )}
 
+              {/* BND-119: Undo last pour */}
+              {lastPour && canPour && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={doUndo}
+                  className="flex h-[40px] items-center justify-center gap-xs rounded-sm border border-warning/40 bg-warning-soft text-[13px] font-medium text-warning-text transition-colors hover:bg-warning-soft/70 disabled:opacity-60"
+                >
+                  <Undo2 className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  Undo last pour ({(lastPour.ml / ML_PER_OZ).toFixed(1)} oz)
+                </button>
+              )}
+
               {canManage && (
                 <button
                   type="button"
@@ -376,8 +370,6 @@ export function WineDetailDrawer({
                 </button>
               )}
 
-              {/* BND-262 — single-wine re-enrichment. Fires POST /api/wines/[id]/enrich
-                  to re-run the rule-engine + Claude fallback pipeline. */}
               {canManage && (
                 <div className="flex flex-col gap-xs">
                   <button
@@ -406,8 +398,6 @@ export function WineDetailDrawer({
                 </div>
               )}
 
-              {/* Edit metadata — placeholder for v1.5 admin flow. Hidden
-                  on staff role. */}
               {canManage && (
                 <button
                   type="button"
@@ -427,359 +417,38 @@ export function WineDetailDrawer({
                 </div>
               )}
             </section>
-
-            {row.is_eightysixed && row.eightysixed_at && (
-              <p className="mt-md text-center text-[11px] text-ink-subtle">
-                86&apos;d {new Date(row.eightysixed_at).toLocaleString()}
-              </p>
-            )}
           </div>
         </div>
-      </div>
+      )}
 
-      <PourPickerModal
-        item={pickerOpen ? pickerItem : null}
-        onCancel={() => setPickerOpen(false)}
-        onConfirm={(ml) => {
-          setPickerOpen(false);
-          void doPour(ml);
-        }}
-      />
+      {/* Pour picker modal */}
+      {pickerOpen && pickerItem && (
+        <PourPickerModal
+          item={pickerItem}
+          onCancel={() => setPickerOpen(false)}
+          onConfirm={(ml) => {
+            setPickerOpen(false);
+            doPour(ml);
+          }}
+        />
+      )}
 
-      <NoteModal
-        open={pendingDirection !== null}
-        wineName={`${row.producer} ${row.name}${row.vintage ? ` ${row.vintage}` : ""}`}
-        direction={pendingDirection ?? "eightysixed"}
-        onCancel={() => setPendingDirection(null)}
-        onConfirm={onConfirm86}
-      />
+      {/* 86/restore note modal */}
+      {pendingDirection && row && (
+        <NoteModal
+          title={pendingDirection === "eightysixed" ? "Mark as 86'd" : "Restore"}
+          actionLabel={
+            pendingDirection === "eightysixed" ? "Mark 86'd" : "Restore"
+          }
+          onSubmit={(note) => onConfirm86(note)}
+          onCancel={() => setPendingDirection(null)}
+        />
+      )}
     </>
   );
 }
 
-/**
- * BND-039 — DrinkWindowSection. Renders the timeline + critic citation +
- * source-note footer between Stock and Actions in the wine-detail drawer.
- *
- * Background tints amber when status is drink_now or past_peak so a
- * sommelier scanning a list of drawers spots urgency immediately.
- *
- * Citation card shows: source (Vinous, Claude AI, etc.), score (when
- * non-null — Phase 1 only fills this from real critics), tasting-note
- * quote (italic, Cormorant). When source is "claude_inference" we show
- * "Estimated · Claude AI" with the date for honest disclosure.
- */
-function DrinkWindowSection({ row }: { row: CellarWineRow }) {
-  const start = row.drink_window_start;
-  const end = row.drink_window_end;
-  const yearsLeft = getYearsUntilWindowClose(end);
-  const status = getDrinkWindowStatus(start, end);
-  const isUrgent = status === "drink_now" || status === "past_peak";
-  const statusLabel = formatStatusLabel(status, yearsLeft);
-
-  return (
-    <section
-      aria-label="Drink window"
-      className={cn(
-        "mt-md rounded-md p-md",
-        isUrgent
-          ? "border border-warning/30 bg-warning-soft"
-          : "border border-border bg-white",
-      )}
-      style={isUrgent ? { borderLeft: "3px solid var(--color-warning)" } : undefined}
-    >
-      <div className="mb-sm flex items-center justify-between">
-        <span
-          className={cn(
-            "text-[10px] font-semibold uppercase tracking-[0.08em]",
-            isUrgent ? "text-warning" : "text-ink-subtle",
-          )}
-        >
-          Drink window
-        </span>
-        <span
-          className={cn(
-            "rounded-full px-sm py-2xs text-[11px] font-medium",
-            isUrgent
-              ? "bg-warning text-white"
-              : status === "hold"
-                ? "bg-bg-tertiary text-ink-muted"
-                : "bg-success-soft text-success",
-          )}
-        >
-          {statusLabel}
-        </span>
-      </div>
-
-      <DrinkWindowTimeline start={start} end={end} size="full" />
-
-      {(row.review_excerpt || row.rating_source) && (
-        <div className="mt-md rounded-sm bg-white/60 p-sm" style={{ borderLeft: "2px solid var(--color-accent)" }}>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-subtle">
-            {formatRatingSourceLabel(row.rating_source)}
-          </div>
-          {row.rating != null && (
-            <div className="mt-2xs">
-              <span className="font-mono text-[16px] font-medium text-accent">{row.rating}</span>
-              <span className="ml-xs text-[12px] text-ink-muted">points</span>
-            </div>
-          )}
-          {row.review_excerpt && (
-            <p className="mt-2xs font-serif text-[13px] italic text-ink leading-snug">
-              &ldquo;{row.review_excerpt}&rdquo;
-            </p>
-          )}
-        </div>
-      )}
-    </section>
-  );
-}
-
-/**
- * BND-040 — PricingSection. Renders bottle list / glass list pricing
- * cards with current ratio + target deviation, plus a retail benchmark
- * card and the price-band visual.
- *
- * Trust language locked: NO verdict pills in the drawer (per architect
- * review). Numbers + targets only — verdicts live in outlier contexts
- * where flagging is the whole point.
- */
-function PricingSection({
-  row,
-  canManage,
-}: {
-  row: CellarWineRow;
-  canManage: boolean;
-}) {
-  const targetMarkup = resolveMarkupTarget(
-    row.pricing_target_markup_ratio,
-    row.restaurant_default_target_markup_ratio,
-  );
-  const targetPourCost = resolvePourCostTarget(
-    row.pricing_target_pour_cost_pct,
-    row.restaurant_default_target_pour_cost_pct,
-  );
-  const markupRatio = getMarkupRatio(row.current_bottle_price, row.retail_median);
-  const pourCostPct = getPourCostPct(
-    row.current_unit_cost ?? row.retail_median,
-    row.size_ml,
-    row.glass_pour_ml,
-    row.current_glass_price,
-  );
-  const bottleStatus = getBottleStatus(markupRatio, targetMarkup);
-  const glassStatus = getGlassStatus(pourCostPct, targetPourCost);
-  const stale = isRetailStale(row.retail_refreshed_at);
-
-  return (
-    <section
-      aria-label="Pricing"
-      className="mt-md rounded-md border border-border bg-white p-md"
-    >
-      <div className="mb-sm flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-          Pricing
-        </span>
-        <span className="text-[11px] text-ink-subtle">
-          {row.retail_refreshed_at
-            ? stale
-              ? "Retail data > 7d old"
-              : "Retail data current"
-            : ""}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-md">
-        <PricingCard
-          label="Bottle list"
-          price={row.current_bottle_price}
-          ratio={markupRatio != null ? `${markupRatio.toFixed(1)}× retail` : null}
-          target={`target ${targetMarkup.toFixed(1)}×`}
-          status={bottleStatus}
-        />
-        <PricingCard
-          label={
-            row.glass_pour_ml
-              ? `Glass · ${Math.round(row.glass_pour_ml / ML_PER_OZ)} oz`
-              : "Glass"
-          }
-          price={row.current_glass_price}
-          ratio={pourCostPct != null ? `${pourCostPct.toFixed(0)}% pour cost` : null}
-          target={`target ${Math.round(targetPourCost)}%`}
-          status={glassStatus}
-        />
-      </div>
-
-      {/* Multi-list disclosure (reviewer-find C3) — let the sommelier
-          know which list these prices came from when the wine appears
-          on more than one. Otherwise the drawer + alert can disagree
-          silently and erode trust. */}
-      {row.current_list_name && (
-        <p className="mt-xs text-[11px] text-ink-tertiary">
-          From{" "}
-          <span className="font-medium text-ink-muted">
-            {row.current_list_name}
-          </span>
-          {row.current_other_list_count > 0 && (
-            <span>
-              {" "}
-              · also on {row.current_other_list_count} other list
-              {row.current_other_list_count === 1 ? "" : "s"}
-            </span>
-          )}
-        </p>
-      )}
-
-      {/* Price band visual */}
-      {row.current_bottle_price != null && (
-        <div className="mt-md">
-          <PriceBand
-            bottleList={row.current_bottle_price}
-            retailReference={row.retail_median}
-            targetMarkup={targetMarkup}
-            size="full"
-          />
-        </div>
-      )}
-
-      {/* Retail benchmark card */}
-      <div
-        className="mt-md rounded-sm bg-bg-secondary p-sm"
-        style={{ borderLeft: "2px solid var(--color-accent)" }}
-      >
-        <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-          Market retail · Wine-Searcher
-        </div>
-        <div className="mt-xs flex items-baseline justify-between text-[12px] text-ink-muted">
-          <span>Low / median / high</span>
-          <span className="font-mono text-ink">
-            ${Math.round(row.retail_min ?? 0)} / ${Math.round(row.retail_median ?? 0)} / $
-            {Math.round(row.retail_max ?? 0)}
-          </span>
-        </div>
-        {row.retail_retailer_count != null && (
-          <div className="mt-2xs text-[11px] text-ink-subtle">
-            {row.retail_retailer_count} retailer
-            {row.retail_retailer_count === 1 ? "" : "s"}
-            {row.retail_refreshed_at && (
-              <span className="ml-xs">
-                · refreshed {new Date(row.retail_refreshed_at).toLocaleDateString()}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Local benchmark — Layer B preserved hook (honest empty state per
-          BND-040 plan §Layer B). No CTA, no viral mechanic. */}
-      <div
-        className="mt-sm rounded-sm bg-bg-secondary p-sm"
-        style={{ borderLeft: "2px solid var(--color-border-strong)" }}
-      >
-        <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-          Local benchmark
-        </div>
-        <p className="mt-2xs text-[12px] italic text-ink-muted">
-          Local benchmark unavailable — using national retail comps. Available
-          when 10+ restaurants in your region opt in.
-        </p>
-      </div>
-
-      {/* Status hint — only when we have a status (not unknown). Trust
-          language: never use prescriptive verbs like "you should". */}
-      {(bottleStatus !== "unknown" || glassStatus !== "unknown") && (
-        <div className="mt-sm text-[11px] text-ink-tertiary">
-          {bottleStatus !== "unknown" && (
-            <span>
-              Bottle: <span className="text-ink-muted">{formatPricingStatusLabel(bottleStatus)}</span>
-            </span>
-          )}
-          {bottleStatus !== "unknown" && glassStatus !== "unknown" && (
-            <span className="mx-xs text-ink-subtle">·</span>
-          )}
-          {glassStatus !== "unknown" && (
-            <span>
-              Glass: <span className="text-ink-muted">{formatPricingStatusLabel(glassStatus)}</span>
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* BND-040 follow-up — per-wine override. Renders for any wine
-          with retail data; the component itself handles the collapsed/
-          expanded state. Owner+manager gating is enforced at the API
-          level, but the drawer wraps in canManage so staff don't see
-          the affordance. */}
-      {canManage && (
-        <PricingTargetOverride
-          wineId={row.wine_id}
-          perWinePourCostPct={row.pricing_target_pour_cost_pct}
-          perWineMarkupRatio={row.pricing_target_markup_ratio}
-          housePourCostPct={targetPourCost}
-          houseMarkupRatio={targetMarkup}
-        />
-      )}
-    </section>
-  );
-}
-
-function PricingCard({
-  label,
-  price,
-  ratio,
-  target,
-  status,
-}: {
-  label: string;
-  price: number | null;
-  ratio: string | null;
-  target: string;
-  status: ReturnType<typeof getBottleStatus>;
-}) {
-  const ratioClass =
-    status === "tight" || status === "outlier"
-      ? "text-warning"
-      : status === "premium"
-        ? "text-success"
-        : "text-ink-muted";
-  return (
-    <div className="rounded-sm bg-bg-secondary p-sm">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-        {label}
-      </div>
-      <div className="mt-xs font-mono text-[20px] font-medium text-ink">
-        {price != null ? `$${Math.round(price)}` : "—"}
-      </div>
-      {ratio && (
-        <div className={`mt-2xs font-mono text-[12px] ${ratioClass}`}>{ratio}</div>
-      )}
-      <div className="mt-2xs text-[11px] text-ink-subtle">{target}</div>
-    </div>
-  );
-}
-
-function formatRatingSourceLabel(source: string | null): string {
-  switch (source) {
-    case "rule_engine":
-      return "Estimated · Rule engine";
-    case "claude_inference":
-      return "Estimated · Claude AI";
-    case "vinous":
-      return "Vinous";
-    case "parker":
-      return "Wine Advocate (Parker)";
-    case "js":
-      return "James Suckling";
-    case "wine_spectator":
-      return "Wine Spectator";
-    case "decanter":
-      return "Decanter";
-    case "aggregate":
-      return "Multiple critics";
-    default:
-      return "—";
-  }
-}
-
+/** Tiny stat chip used inside the drawer stock grid. */
 function Stat({
   label,
   value,
@@ -790,19 +459,162 @@ function Stat({
   tone?: "ok" | "warn";
 }) {
   return (
-    <div>
-      <div
+    <div className="flex flex-col items-center gap-2xs">
+      <span className="text-[11px] uppercase tracking-[0.04em] text-ink-muted">
+        {label}
+      </span>
+      <span
         className={cn(
-          "font-mono text-[18px] text-ink",
-          tone === "warn" && "text-warning",
+          "text-[14px] font-semibold leading-none",
+          tone === "warn" && "text-warning-text",
           tone === "ok" && "text-success",
+          !tone && "text-ink",
         )}
       >
         {value}
-      </div>
-      <div className="mt-2xs text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-        {label}
-      </div>
+      </span>
     </div>
+  );
+}
+
+/**
+ * BND-040 — PricingSection. Renders the pricing panel for wines that
+ * have retail price data. Shows glass/bottle prices and their margins
+ * relative to the restaurant's pricing targets.
+ */
+function PricingSection({
+  row,
+  canManage,
+}: {
+  row: CellarWineRow;
+  canManage: boolean;
+}) {
+  const glassStatus = getGlassStatus(row as any);
+  const bottleStatus = getBottleStatus(row as any);
+  const isRetailOld =
+    row.retail_median != null &&
+    row.retail_scrape_date != null &&
+    isRetailStale(row.retail_scrape_date);
+
+  return (
+    <section
+      aria-label="Pricing"
+      className="mt-md rounded-md border border-border bg-white p-md"
+    >
+      <h3 className="text-[13px] font-semibold text-ink mb-sm">Pricing</h3>
+
+      <div className="space-y-sm">
+        {/* Glass pour row */}
+        {row.glass_price != null && row.glass_pour_ml && (
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[14px] font-medium text-ink">
+                ${row.glass_price.toFixed(2)}{" "}
+                <span className="font-normal text-ink-muted">
+                  / {(row.glass_pour_ml / ML_PER_OZ).toFixed(1)} oz glass
+                </span>
+              </p>
+              {glassStatus !== "ok" && glassStatus !== "unknown" && (
+                <p className="text-[12px] text-ink-muted">
+                  {formatPricingStatusLabel(glassStatus)}
+                </p>
+              )}
+            </div>
+            <PriceBand
+              status={glassStatus}
+              markupRatio={getMarkupRatio(row as any, "glass")}
+              pourCostPct={getPourCostPct(row as any, "glass")}
+              targetMarkup={resolveMarkupTarget(row as any, "glass")}
+              targetPourCost={resolvePourCostTarget(row as any, "glass")}
+            />
+          </div>
+        )}
+
+        {/* Bottle row */}
+        {row.bottle_price != null && (
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[14px] font-medium text-ink">
+                ${row.bottle_price.toFixed(2)}{" "}
+                <span className="font-normal text-ink-muted">/ bottle</span>
+              </p>
+              {bottleStatus !== "ok" && bottleStatus !== "unknown" && (
+                <p className="text-[12px] text-ink-muted">
+                  {formatPricingStatusLabel(bottleStatus)}
+                </p>
+              )}
+            </div>
+            <PriceBand
+              status={bottleStatus}
+              markupRatio={getMarkupRatio(row as any, "bottle")}
+              pourCostPct={getPourCostPct(row as any, "bottle")}
+              targetMarkup={resolveMarkupTarget(row as any, "bottle")}
+              targetPourCost={resolvePourCostTarget(row as any, "bottle")}
+            />
+          </div>
+        )}
+
+        {isRetailOld && (
+          <p className="text-[11px] text-ink-subtle">
+            Retail data is over 30 days old. May not reflect current pricing.
+          </p>
+        )}
+      </div>
+
+      {canManage && row.bottle_price != null && (
+        <div className="mt-md">
+          <PricingTargetOverride wineId={row.wine_id} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * BND-039 — DrinkWindowSection. Renders the timeline + critic citation +
+ * key dates for wines that have been enriched with drink-window data.
+ * Maps peak_year to a diamond marker and drink_window_start/end to a
+ * horizontal bar.
+ */
+function DrinkWindowSection({ row }: { row: CellarWineRow }) {
+  const status = getDrinkWindowStatus(row as any);
+  const yearsLeft = getYearsUntilWindowClose(row as any);
+
+  return (
+    <section
+      aria-label="Drink window"
+      className="mt-md rounded-md border border-border bg-white p-md"
+    >
+      <h3 className="text-[13px] font-semibold text-ink mb-sm">Drink window</h3>
+
+      <DrinkWindowTimeline
+        start={row.drink_window_start as number}
+        end={row.drink_window_end as number}
+        peak={row.peak_year as number | undefined}
+        status={status}
+      />
+
+      <div className="mt-sm flex items-center justify-between text-[12px]">
+        <span className="text-ink-muted">{formatStatusLabel(status)}</span>
+        {yearsLeft !== null && (
+          <span className="text-ink-subtle">
+            {yearsLeft >= 0
+              ? `${yearsLeft} year${yearsLeft === 1 ? "" : "s"} left`
+              : `${Math.abs(yearsLeft)} year${Math.abs(yearsLeft) === 1 ? "" : "s"} past`}
+          </span>
+        )}
+      </div>
+
+      {row.review_excerpt && (
+        <blockquote className="mt-sm border-l-2 border-accent-soft pl-sm text-[12px] text-ink-muted italic leading-relaxed">
+          {row.review_excerpt}
+          {row.rating && row.rating_source && (
+            <cite className="mt-2xs block not-italic font-medium text-ink-subtle">
+              {row.rating} pts — {row.rating_source}
+            </cite>
+          )}
+        </blockquote>
+      )}
+    </section>
   );
 }

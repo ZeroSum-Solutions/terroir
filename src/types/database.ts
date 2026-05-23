@@ -219,6 +219,7 @@ export type Database = {
         Row: {
           accuracy_score: number | null
           created_at: string
+          created_by: string | null
           distributor_name: string
           edits: Json
           final_line_items: Json
@@ -226,14 +227,17 @@ export type Database = {
           invoice_date: string | null
           invoice_number: string | null
           item_count: number
+          ocr_text: Json | null
           parsed_line_items: Json
           raw_image_path: string | null
+          extra_image_paths: Json
           restaurant_id: string
           status: string
         }
         Insert: {
           accuracy_score?: number | null
           created_at?: string
+          created_by?: string | null
           distributor_name: string
           edits?: Json
           final_line_items: Json
@@ -241,14 +245,17 @@ export type Database = {
           invoice_date?: string | null
           invoice_number?: string | null
           item_count?: number
+          ocr_text?: Json | null
           parsed_line_items: Json
           raw_image_path?: string | null
+          extra_image_paths?: Json
           restaurant_id: string
           status?: string
         }
         Update: {
           accuracy_score?: number | null
           created_at?: string
+          created_by?: string | null
           distributor_name?: string
           edits?: Json
           final_line_items?: Json
@@ -256,8 +263,10 @@ export type Database = {
           invoice_date?: string | null
           invoice_number?: string | null
           item_count?: number
+          ocr_text?: Json | null
           parsed_line_items?: Json
           raw_image_path?: string | null
+          extra_image_paths?: Json
           restaurant_id?: string
           status?: string
         }

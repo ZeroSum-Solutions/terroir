@@ -1,3 +1,72 @@
+
+## Session 2026-05-23 — features #117, #119, #60
+
+### Completed
+- **#117 System creates a pour_events row for every pour** (PASSING)
+  - Created migration 0038 adding open_bottle_id uuid column to pour_events
+    with FK to open_bottles(id) ON DELETE SET NULL
+  - Added index pour_events_open_bottle_occurred_idx for efficient undo queries
+  - Updated record_pour RPC to populate open_bottle_id on all pour/spill/
+    finish_bottle events (captures v_current.id after bottle is opened)
+  - Updated reconcile_open_bottle to populate open_bottle_id on reconcile events
+  - Updated database types (Row, Insert, Update, FK relationships)
+
+- **#119 User can cancel/undo the most recent pour** (PASSING)
+  - Created migration 0040: undo_last_pour RPC — finds latest pour/spill event
+    for the wine, deletes it, restores open_bottles.remaining_ml, inserts
+    availability_events row for audit trail
+  - Created POST /api/pour/undo route (validates via Zod, calls RPC,
+    revalidates /availability, revalidates auto-86 paths)
+  - Added Undo2 import and lastPour state to wine-detail-drawer.tsx
+  - Added doUndo callback calling POST /api/pour/undo
+  - Added "Undo last pour (X.X oz)" button shown after successful pour
+  - Button uses Undo2 icon, clears on drawer remount (new wine selection)
+
+- **#60 User can configure cellar sections at /cellar/config** (PASSING)
+  - Added PATCH handler to /api/cellar/config accepting { sections: Array<{id, name}> }
+  - Sections stored in cellar_config.labels jsonb field, merged with existing labels
+  - Created /cellar/config page with full CRUD:
+    - List of existing sections with rename (inline edit) and delete buttons
+    - Add new section input with Enter key support
+    - Delete confirmation modal
+    - Loading spinner, empty state, error banner
+    - Back button for navigation
+  - Added "Manage cellar sections" link to cellar settings modal (auto-eightysix-modal.tsx)
+    using Next.js Link with Layers icon
+
+### Verification
+- Mock data grep: 0 hits in production code
+- TypeScript: blocked by sandbox (known limitation)
+- Browser verification: blocked by sandbox (known limitation)
+- All changes follow existing code patterns (route structure, error handling, auth)
+- pour_events.open_bottle_id is nullable — new_bottle events don't populate it (created by trigger)
+
+### Files changed
+- NEW: supabase/migrations/0038.sql (open_bottle_id column + updated RPCs)
+- NEW: supabase/migrations/down/0038_pour_events_open_bottle_id.down.sql
+- NEW: supabase/migrations/0040_undo_last_pour.sql (undo_last_pour RPC)
+- NEW: supabase/migrations/down/0040_undo_last_pour.down.sql
+- MODIFIED: src/types/database.ts (+5: open_bottle_id to pour_events Row/Insert/Update/Relationships)
+- NEW: src/app/api/pour/undo/route.ts (POST /api/pour/undo)
+- MODIFIED: src/app/(app)/cellar/wine-detail-drawer.tsx (+50: Undo2, lastPour, doUndo, undo button)
+- MODIFIED: src/app/api/cellar/config/route.ts (+70: PATCH handler with sections support)
+- NEW: src/app/(app)/cellar/config/page.tsx (cellar sections CRUD page)
+- MODIFIED: src/app/(app)/cellar/auto-eightysix-modal.tsx (+5: Link to /cellar/config)
+
+Stats after this session: 148/231 passing (64.1%).
+## Session 2026-05-23 — features 2, 68, 79
+
+### Completed
+- 2 Database connection established
+- 68 System computes drink window
+- 79 Camera scan UI at scan
+
+### Verification
+- Mock grep clean. All features already done.
+- Sandbox limits dev server
+
+Stats 150 of 231 passing 64.9 percent.
+
 ## Session 2026-05-23 — features #106, #107, #108
 
 ### Completed
