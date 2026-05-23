@@ -7,7 +7,7 @@
  * This shape is built on the server in cellar/page.tsx by joining:
  *
  *   - `wines` table        → metadata + 86 status
- *   - `inventory_items`    → bin location + sealed count
+ *   - `inventory_items`    → bin location + sealed count + section
  *   - `list_open_bottle_items` RPC → open-bottle ml + glass pour size
  *
  * Wines without a wine_list_item with pour size won't have stock fields
@@ -31,6 +31,8 @@ export type CellarWineRow = {
   // From inventory_items (aggregate)
   sealed_count: number;
   bin_location: string | null;
+  // BND-063/064 — cellar section from inventory_items.section
+  section: string | null;
 
   // From list_open_bottle_items RPC (only set if wine has a list-item
   // with pour size — i.e. it's by-the-glass).

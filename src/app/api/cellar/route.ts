@@ -22,6 +22,7 @@ function buildEnrichmentMetadata(result: ReturnType<typeof enrichWine>) {
   const fields: string[] = [];
   if (result.drinkWindowStart != null || result.drinkWindowEnd != null) fields.push("drink_window");
   if (result.servingTempMin != null || result.servingTempMax != null || result.servingTempLabel != null) fields.push("serving_temp");
+  if (result.decantMinutes != null) fields.push("decant");
   if (result.peakYear != null) fields.push("peak_year");
   if (result.ratingSource != null) fields.push("rating_source");
   if (result.reviewExcerpt != null) fields.push("review_excerpt");
@@ -138,6 +139,7 @@ export async function POST(request: NextRequest) {
           serving_temp_min: result.servingTempMin,
           serving_temp_max: result.servingTempMax,
           serving_temp_label: result.servingTempLabel ?? null,
+          decant_minutes: result.decantMinutes ?? null,
           enrichment_metadata: metadata,
         }],
       });

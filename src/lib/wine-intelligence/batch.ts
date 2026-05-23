@@ -47,6 +47,7 @@ type EnrichmentPayloadRow = {
   serving_temp_min: number | null;
   serving_temp_max: number | null;
   serving_temp_label: string | null;
+  decant_minutes: number | null;
   enrichment_metadata: EnrichmentMetadata;
 };
 
@@ -63,6 +64,7 @@ function buildMetadata(source: string, result: {
   const fields: string[] = [];
   if (result.drinkWindowStart != null || result.drinkWindowEnd != null) fields.push("drink_window");
   if (result.servingTempMin != null || result.servingTempMax != null || result.servingTempLabel != null) fields.push("serving_temp");
+  if (result.decantMinutes != null) fields.push("decant");
   if (result.peakYear != null) fields.push("peak_year");
   if (result.ratingSource != null) fields.push("rating_source");
   if (result.reviewExcerpt != null) fields.push("review_excerpt");
@@ -148,6 +150,7 @@ export async function enrichRestaurantBatch(
       serving_temp_min: result.servingTempMin,
       serving_temp_max: result.servingTempMax,
       serving_temp_label: result.servingTempLabel,
+      decant_minutes: result.decantMinutes,
       enrichment_metadata: buildMetadata("rule_engine", result),
     });
   }
@@ -175,6 +178,7 @@ export async function enrichRestaurantBatch(
         serving_temp_min: null,
         serving_temp_max: null,
         serving_temp_label: null,
+        decant_minutes: null,
         enrichment_metadata: buildMetadata("claude_inference", result),
       });
     }

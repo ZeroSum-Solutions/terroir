@@ -29,6 +29,7 @@ export type EnrichmentResult = {
   servingTempMin: number | null;
   servingTempMax: number | null;
   servingTempLabel: string | null;
+  decantMinutes: number | null;
 };
 
 function normalize(s: string | null): string {
@@ -130,6 +131,7 @@ export function enrichWine(wine: WineData): EnrichmentResult {
       servingTempMin: null,
       servingTempMax: null,
       servingTempLabel: null,
+      decantMinutes: null,
     };
   }
 
@@ -159,5 +161,6 @@ export function enrichWine(wine: WineData): EnrichmentResult {
     servingTempMin: rule.servingTemp.min,
     servingTempMax: rule.servingTemp.max,
     servingTempLabel: rule.servingTemp.label,
+    decantMinutes: rule.decantMinutes,
   };
 }

@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { X, Wine, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, Undo2, Image as ImageIcon, Upload, Trash2 } from "lucide-react";
+import { X, Wine, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, Undo2, Image as ImageIcon, Upload, Trash2, AlertTriangle } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { useToast } from "@/lib/toast";
 import { ML_PER_OZ } from "@/lib/units";
@@ -34,10 +34,12 @@ import type { CellarWineRow } from "./types";
 export function WineDetailDrawer({
   row,
   canManage,
+  isOwner,
   onClose,
 }: {
   row: CellarWineRow | null;
   canManage: boolean;
+  isOwner?: boolean;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -62,6 +64,9 @@ export function WineDetailDrawer({
   const [pendingDirection, setPendingDirection] = useState<
     "eightysixed" | "restored" | null
   >(null);
+
+  // BND-058: delete wine confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   useFocusTrap({
     containerRef: dialogRef,
@@ -213,6 +218,35 @@ export function WineDetailDrawer({
       }
     },
     [row, router, toast],
+  );
+
+  // BND-058: delete the wine after confirming no references exist.
+  const doDelete = useCallback(
+    async () => {
+      if (!row) return;
+      setDeleteConfirm(false);
+      setErrorMsg(null);
+      setBusy(true);
+      try {
+        const res = await fetch(`/api/cellar/${row.wine_id}`, { method: "DELETE" });
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => null)) as
+            | { error?: { code?: string; message?: string } }
+            | null;
+          throw new Error(
+            payload?.error?.message ?? `Delete failed (${res.status}).`,
+          );
+        }
+        toast.success("Wine deleted");
+        onClose();
+        startTransition(() => router.refresh());
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : "Delete failed.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [row, router, onClose],
   );
 
   const onConfirm86 = async (note: string | undefined) => {
@@ -415,6 +449,12 @@ export function WineDetailDrawer({
             {row.drink_window_end != null && (
               <DrinkWindowSection row={row} />
             )}
+            {row.serving_temp_label && row.serving_temp_min != null && row.serving_temp_max != null && (
+              <ServingTempSection row={row} />
+            )}
+            {row.decant_minutes != null && row.decant_minutes > 0 && (
+              <DecantTimeSection row={row} />
+            )}
 
             {errorMsg && (
               <div
@@ -527,6 +567,50 @@ export function WineDetailDrawer({
                 </button>
               )}
 
+              {/* BND-058: Delete wine — owner only */}
+              {isOwner && (
+                <>
+                  {deleteConfirm ? (
+                    <div className="flex flex-col gap-xs rounded-sm border border-danger/30 bg-danger-soft p-sm">
+                      <p className="text-[13px] font-medium text-danger">
+                        Permanently delete this wine?
+                      </p>
+                      <p className="text-[12px] text-danger/80">
+                        This action cannot be undone. Consider using &ldquo;86 this wine&rdquo; instead.
+                      </p>
+                      <div className="flex gap-xs mt-xs">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setDeleteConfirm(false)}
+                          className="flex-1 h-[36px] rounded-sm border border-border bg-white text-[13px] font-medium text-ink hover:bg-surface-muted disabled:opacity-60"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={doDelete}
+                          className="flex-1 h-[36px] rounded-sm bg-danger text-[13px] font-medium text-white hover:opacity-90 disabled:opacity-60"
+                        >
+                          {busy ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setDeleteConfirm(true)}
+                      className="flex h-[40px] items-center justify-center gap-xs rounded-sm border border-danger/30 bg-white text-[13px] font-medium text-danger hover:bg-danger-soft transition-colors disabled:opacity-60"
+                    >
+                      <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
+                      Delete wine
+                    </button>
+                  )}
+                </>
+              )}
+
               {!canPour && !canManage && (
                 <div className="rounded-sm border border-border bg-surface-muted px-md py-sm text-center text-[12px] text-ink-muted">
                   <Wine className="mx-auto mb-2xs h-4 w-4" strokeWidth={1.5} aria-hidden />
@@ -624,10 +708,6 @@ function PricingSection({
 }) {
   const glassStatus = getGlassStatus(row as any);
   const bottleStatus = getBottleStatus(row as any);
-  const isRetailOld =
-    row.retail_median != null &&
-    row.retail_scrape_date != null &&
-    isRetailStale(row.retail_scrape_date);
 
   return (
     <section
@@ -687,7 +767,7 @@ function PricingSection({
           </div>
         )}
 
-        {isRetailOld && (
+        {isRetailStale(row.retail_refreshed_at ?? undefined) && (
           <p className="text-[11px] text-ink-subtle">
             Retail data is over 30 days old. May not reflect current pricing.
           </p>
@@ -698,6 +778,60 @@ function PricingSection({
         <div className="mt-md">
           <PricingTargetOverride wineId={row.wine_id} />
         </div>
+      )}
+    </section>
+  );
+}
+
+
+/**
+ * BND-070 — DecantTimeSection. Shows recommended decant time
+ * when enrichment has set it and it's > 0 minutes.
+ */
+function DecantTimeSection({ row }: { row: CellarWineRow }) {
+  const hours = row.decant_minutes! >= 60
+    ? Math.floor(row.decant_minutes! / 60)
+    : 0;
+  const mins = row.decant_minutes! % 60;
+
+  let display: string;
+  if (hours > 0 && mins > 0) {
+    display = hours + "h " + mins + "m";
+  } else if (hours > 0) {
+    display = hours + " hour" + (hours === 1 ? "" : "s");
+  } else {
+    display = mins + " min";
+  }
+
+  return (
+    <section
+      aria-label="Decant time"
+      className="mt-md rounded-md border border-border bg-white p-md"
+    >
+      <h3 className="text-[13px] font-semibold text-ink mb-xs">Decant time</h3>
+      <p className="text-[14px] text-ink-muted">
+        {display}
+      </p>
+    </section>
+  );
+}
+
+/**
+ * BND-069 — ServingTempSection. Shows recommended serving temperature
+ * when enrichment has set it.
+ */
+function ServingTempSection({ row }: { row: CellarWineRow }) {
+  return (
+    <section
+      aria-label="Serving temperature"
+      className="mt-md rounded-md border border-border bg-white p-md"
+    >
+      <h3 className="text-[13px] font-semibold text-ink mb-xs">Serving temperature</h3>
+      <p className="text-[14px] text-ink-muted">
+        {row.serving_temp_min}–{row.serving_temp_max}°F
+      </p>
+      {row.serving_temp_label && (
+        <p className="mt-2xs text-[12px] text-ink-subtle">{row.serving_temp_label}</p>
       )}
     </section>
   );

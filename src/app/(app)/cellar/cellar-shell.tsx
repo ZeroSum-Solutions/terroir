@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Search, Settings, LayoutGrid, List as ListIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isClosingWindow, isHolding } from "@/lib/drink-window/status";
+import { getDrinkWindowStatus, isHolding } from "@/lib/drink-window/status";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
 import { CellarList, type CellarFilter } from "./cellar-list";
@@ -13,24 +13,11 @@ import { ReconcileModal } from "./reconcile-modal";
 import { AutoEightysixModal } from "./auto-eightysix-modal";
 import { CellarGridView, CellarSetup } from "./cellar-grid";
 
+type CellarSection = { id: string; name: string };
+
 /**
  * CellarShell — top-level client orchestrator for the consolidated
  * Cellar surface (Phase 2 IA redesign — .council/specs/2026-04-24-ux-ia-redesign.md).
- *
- * Owns top-level UI state:
- *   • search query
- *   • filter chip
- *   • view toggle (list | grid)
- *   • selected wine for detail drawer
- *   • reconcile modal open
- *   • settings (auto-86) modal open
- *
- * Reads `?mode=` URL param on mount to land in a useful state when the
- * user got here via the FAB:
- *   ?mode=pour       → focuses search, filter = "open"
- *   ?mode=eightysix  → focuses search, filter = "all"
- *
- * The param is stripped after read so refreshes don't re-trigger.
  */
 export function CellarShell({
   rows,
@@ -45,6 +32,7 @@ export function CellarShell({
   defaultTargetPourCostPct,
   defaultTargetMarkupRatio,
   role,
+  cellarSections,
 }: {
   rows: CellarWineRow[];
   reconcileItems: OpenBottleRow[];
@@ -66,14 +54,12 @@ export function CellarShell({
   restaurantId: string;
   autoEightysixEnabled: boolean;
   autoEightysixThresholdMl: number;
-  // BND-173 — how 86'd wines appear on public lists
   eightysixStrategy: "hide" | "mark";
-  // BND-040 follow-up — house pricing targets piped into the Cellar
-  // settings modal. Null means restaurant has never set them; the
-  // panel falls back to built-in defaults (22% pour cost / 2.7x markup).
   defaultTargetPourCostPct: number | null;
   defaultTargetMarkupRatio: number | null;
   role: "owner" | "manager" | "staff";
+  // BND-063/064 — cellar sections for grouping and DnD
+  cellarSections?: CellarSection[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -83,9 +69,6 @@ export function CellarShell({
   const [initialWineId] = useState(() => searchParams.get("wine") ?? "");
 
   const [query, setQuery] = useState("");
-  // BND-201 / PERF-002 — debounce raw input so useMemo filtering
-  // doesn't recompute on every keystroke. With 1000+ wines loaded,
-  // this keeps rendering smooth during fast typing.
   const [debouncedQuery, setDebouncedQuery] = useState("");
   useEffect(() => {
     const id = setTimeout(() => setDebouncedQuery(query), 150);
@@ -162,7 +145,7 @@ export function CellarShell({
     }).length;
 
     const drinkNowCount = rows.filter(
-      (r) => !r.is_eightysixed && isClosingWindow(r.drink_window_end),
+      (r) => !r.is_eightysixed && getDrinkWindowStatus(r.drink_window_start, r.drink_window_end) === "past_peak",
     ).length;
     const holdCount = rows.filter(
       (r) => !r.is_eightysixed && isHolding(r.drink_window_start),
@@ -186,7 +169,7 @@ export function CellarShell({
 
   return (
     <section>
-      {/* Header — search trigger, view toggle, settings cog, reconcile */}
+      {/* Header */}
       <header className="mb-md flex items-center gap-sm md:mb-lg">
         <div className="min-w-0 flex-1">
           <h1 className="font-serif text-[24px] text-ink md:text-[28px]">Cellar</h1>
@@ -201,7 +184,6 @@ export function CellarShell({
           </p>
         </div>
 
-        {/* Desktop search inline */}
         <div className="hidden md:block">
           <SearchInput
             value={query}
@@ -211,7 +193,6 @@ export function CellarShell({
         </div>
 
         <div className="flex items-center gap-2xs">
-          {/* Mobile search trigger */}
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
@@ -221,7 +202,6 @@ export function CellarShell({
             <Search className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
 
-          {/* View toggle — only meaningful when cellarConfig exists */}
           {cellarConfig && (
             <div className="hidden items-center rounded-sm border border-border md:inline-flex">
               <ViewToggleButton
@@ -239,7 +219,6 @@ export function CellarShell({
             </div>
           )}
 
-          {/* Settings cog — owner only */}
           {isOwner && (
             <button
               type="button"
@@ -311,7 +290,7 @@ export function CellarShell({
         </div>
       )}
 
-      {/* Reconcile entry — only for owner/manager and only on list view */}
+      {/* Reconcile entry */}
       {view === "list" && canManage && reconcileItems.length > 0 && (
         <button
           type="button"
@@ -335,6 +314,7 @@ export function CellarShell({
             setFilter("all");
             setQuery("");
           }}
+          sections={cellarSections}
         />
       ) : cellarConfig ? (
         <CellarGridView config={cellarConfig} gridData={gridData} />
@@ -364,14 +344,12 @@ export function CellarShell({
         </div>
       )}
 
-      {/* Drawer + modals. Keying on selectedId remounts the drawer when
-          the user picks a different wine, which cleanly resets the
-          drawer's transient state (busy, error, picker, 86 confirm)
-          without needing setState-in-effect. */}
+      {/* Drawer + modals */}
       <WineDetailDrawer
         key={selectedId ?? "none"}
         row={selected}
         canManage={canManage}
+        isOwner={isOwner}
         onClose={() => setSelectedId(null)}
       />
 

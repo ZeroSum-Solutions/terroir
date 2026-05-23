@@ -67,6 +67,7 @@ export async function POST(
     serving_temp_min: ruleResult.servingTempMin,
     serving_temp_max: ruleResult.servingTempMax,
     serving_temp_label: ruleResult.servingTempLabel,
+    decant_minutes: ruleResult.decantMinutes,
   };
 
   let metadataSource = "rule_engine";
@@ -97,6 +98,7 @@ export async function POST(
         serving_temp_min: null,
         serving_temp_max: null,
         serving_temp_label: null,
+        decant_minutes: null,
       };
     }
   }
@@ -117,6 +119,7 @@ export async function POST(
   const enrichmentFields: string[] = [];
   if (payload.drink_window_start != null || payload.drink_window_end != null) enrichmentFields.push("drink_window");
   if (payload.serving_temp_min != null || payload.serving_temp_max != null || payload.serving_temp_label != null) enrichmentFields.push("serving_temp");
+  if (payload.decant_minutes != null) enrichmentFields.push("decant");
   if (payload.peak_year != null) enrichmentFields.push("peak_year");
   if (payload.rating_source != null) enrichmentFields.push("rating_source");
   if (payload.review_excerpt != null) enrichmentFields.push("review_excerpt");

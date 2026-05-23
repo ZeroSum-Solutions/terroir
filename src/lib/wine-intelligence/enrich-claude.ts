@@ -56,6 +56,7 @@ type ClaudeResponse = {
   drinkWindowEnd: number | null;
   peakYear: number | null;
   reviewExcerpt: string | null;
+  decantMinutes: number | null;
 };
 
 // ── Single-wine (backwards compat) ──
@@ -66,7 +67,8 @@ const SYSTEM_PROMPT = `You are a sommelier estimating a wine's optimal drinking 
   "drinkWindowStart": <year, integer>,
   "drinkWindowEnd": <year, integer>,
   "peakYear": <year, integer>,
-  "reviewExcerpt": "<≤200 char tasting-note style sentence describing the wine's expected character at peak>"
+  "reviewExcerpt": "<≤200 char tasting-note style sentence describing the wine's expected character at peak>",
+  "decantMinutes": <integer, minutes to decant before serving, 0 if no decanting needed>
 }
 
 Use your knowledge of:
@@ -75,7 +77,7 @@ Use your knowledge of:
 - The varietal's aging curve (Cab/Nebbiolo long, Pinot moderate, Sauv Blanc short)
 - The region's terroir (Bordeaux structured, Burgundy delicate, Napa ripe)
 
-Conservative when uncertain — narrower windows are better than wildly wrong ones.
+Decant guidelines: young, tannic reds (Cab, Nebbiolo, Syrah) need 60-120 min; lighter reds (Pinot Noir, Gamay) 0-30 min; most whites 0 min; sparkling 0 min; aged wines need less decanting than young ones. Conservative when uncertain — narrower windows are better than wildly wrong ones.
 
 If the wine is too obscure to estimate confidently, OR if it's a non-vintage wine where drinking-window doesn't apply (most NV Champagnes, fortified wines for immediate consumption), return null fields:
 { "drinkWindowStart": null, "drinkWindowEnd": null, "peakYear": null, "reviewExcerpt": null }
@@ -141,13 +143,14 @@ export async function enrichWineWithClaude(
 
 // ── Batched Claude (BND-262) ──
 
-const BATCH_SYSTEM_PROMPT = `You are a sommelier estimating optimal drinking windows for a batch of wines. You will receive a list of wines, each with producer, name, vintage, varietal, and region. Return a JSON array with one object per wine, in the same order, with these fields:
+const BATCH_SYSTEM_PROMPT = `You are a sommelier estimating optimal drinking windows and decant times for a batch of wines. You will receive a list of wines, each with producer, name, vintage, varietal, and region. Return a JSON array with one object per wine, in the same order, with these fields:
 
 {
   "drinkWindowStart": <year, integer>,
   "drinkWindowEnd": <year, integer>,
   "peakYear": <year, integer>,
-  "reviewExcerpt": "<≤200 char tasting-note style sentence describing the wine's expected character at peak>"
+  "reviewExcerpt": "<≤200 char tasting-note style sentence describing the wine's expected character at peak>",
+  "decantMinutes": <integer, minutes to decant before serving, 0 if no decanting needed>
 }
 
 Use your knowledge of:
@@ -155,6 +158,8 @@ Use your knowledge of:
 - The vintage's reputation (warm/cool year, classified-growth ratings)
 - The varietal's aging curve (Cab/Nebbiolo long, Pinot moderate, Sauv Blanc short)
 - The region's terroir (Bordeaux structured, Burgundy delicate, Napa ripe)
+
+Decant guidelines: young, tannic reds (Cab, Nebbiolo, Syrah) need 60-120 min; lighter reds (Pinot Noir, Gamay) 0-30 min; most whites 0 min; sparkling 0 min.
 
 Conservative when uncertain — narrower windows are better than wildly wrong ones.
 
@@ -307,6 +312,7 @@ function parseClaudeResponse(raw: string): EnrichmentResult | null {
     servingTempMin: null,
     servingTempMax: null,
     servingTempLabel: null,
+    decantMinutes: parsed.decantMinutes ?? null,
   };
 }
 
@@ -340,7 +346,7 @@ function validateClaudeResponse(r: unknown): r is ClaudeResponse {
 
   const hasField = (k: string) => Object.prototype.hasOwnProperty.call(obj, k);
   if (!hasField("drinkWindowStart") || !hasField("drinkWindowEnd")) return false;
-  if (!hasField("peakYear") || !hasField("reviewExcerpt")) return false;
+  if (!hasField("peakYear") || !hasField("reviewExcerpt") || !hasField("decantMinutes")) return false;
 
   // All-null is valid (the unknown-wine branch).
   if (
@@ -348,7 +354,8 @@ function validateClaudeResponse(r: unknown): r is ClaudeResponse {
     obj.drinkWindowEnd === null &&
     obj.peakYear === null
   ) {
-    return obj.reviewExcerpt === null || typeof obj.reviewExcerpt === "string";
+    return (obj.reviewExcerpt === null || typeof obj.reviewExcerpt === "string") &&
+      (obj.decantMinutes === null || (typeof obj.decantMinutes === "number" && Number.isInteger(obj.decantMinutes) && obj.decantMinutes >= 0));
   }
 
   // Otherwise all year fields must be valid integers in range.
@@ -365,6 +372,12 @@ function validateClaudeResponse(r: unknown): r is ClaudeResponse {
   if (
     obj.reviewExcerpt !== null &&
     (typeof obj.reviewExcerpt !== "string" || obj.reviewExcerpt.length > 240)
+  ) {
+    return false;
+  }
+  if (
+    obj.decantMinutes !== null &&
+    (typeof obj.decantMinutes !== "number" || !Number.isInteger(obj.decantMinutes) || obj.decantMinutes < 0 || obj.decantMinutes > 240)
   ) {
     return false;
   }

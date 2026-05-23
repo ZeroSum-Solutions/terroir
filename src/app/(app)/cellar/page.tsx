@@ -42,9 +42,9 @@ type GridData = Record<string, BinData>;
  *
  * Data fetched here:
  *   • `wines`              → metadata + 86 status (canonical row source)
- *   • `inventory_items`    → bin location + sealed counts (aggregate)
+ *   • `inventory_items`    → bin location + sealed counts + section (aggregate)
  *   • `list_open_bottle_items` RPC → per-wine pour/open-bottle data
- *   • `cellar_config`      → optional grid layout for the Grid toggle
+ *   • `cellar_config`      → optional grid layout + sections for the Grid toggle
  *   • `restaurants`        → auto-86 settings + eightysix_strategy (owner-only Settings modal)
  *
  * Joined client-side into a single CellarWineRow[]. Wines without a
@@ -65,13 +65,13 @@ export default async function CellarPage() {
     supabase
       .from("wines")
       .select(
-        "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until, tasting_notes, hero_image_url",
+        "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, serving_temp_min, serving_temp_max, serving_temp_label, decant_minutes, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until, tasting_notes, hero_image_url",
       )
       .eq("restaurant_id", restaurantId)
       .order("name", { ascending: true }),
     supabase
       .from("inventory_items")
-      .select("wine_id, bin_location, quantity, unit_cost, added_at")
+      .select("wine_id, bin_location, quantity, unit_cost, added_at, section")
       .eq("restaurant_id", restaurantId)
       .order("added_at", { ascending: false }),
     supabase.rpc("list_open_bottle_items", { p_restaurant_id: restaurantId }),
@@ -148,12 +148,12 @@ export default async function CellarPage() {
   }
 
   // Aggregate inventory_items per wine: sum sealed count, pick the
-  // first bin_location encountered, capture most-recent unit_cost (the
-  // inventoryRows query is now ordered by added_at desc, so the first
-  // item per wine_id is the most recent).
+  // first bin_location and section encountered, capture most-recent
+  // unit_cost (inventoryRows is ordered by added_at desc, so the
+  // first item per wine_id is the most recent).
   const inventoryByWine = new Map<
     string,
-    { sealed: number; bin: string | null; latestCost: number | null }
+    { sealed: number; bin: string | null; section: string | null; latestCost: number | null }
   >();
   for (const item of inventoryRows ?? []) {
     if (!item.wine_id) continue;
@@ -161,10 +161,12 @@ export default async function CellarPage() {
       inventoryByWine.get(item.wine_id) ?? {
         sealed: 0,
         bin: null,
+        section: null,
         latestCost: null,
       };
     prev.sealed += item.quantity ?? 0;
     if (!prev.bin && item.bin_location) prev.bin = item.bin_location;
+    if (!prev.section && item.section) prev.section = item.section;
     if (prev.latestCost == null && item.unit_cost != null) {
       prev.latestCost = item.unit_cost;
     }
@@ -181,7 +183,7 @@ export default async function CellarPage() {
   // wine in the cellar shows up, with optional stock data layered on.
   const rows: CellarWineRow[] = (wineRows ?? []).map((w) => {
     const inv =
-      inventoryByWine.get(w.id) ?? { sealed: 0, bin: null, latestCost: null };
+      inventoryByWine.get(w.id) ?? { sealed: 0, bin: null, section: null, latestCost: null };
     const ob = openByWine.get(w.id);
     const price = priceByWine.get(w.id);
     return {
@@ -197,6 +199,7 @@ export default async function CellarPage() {
       hero_image_url: w.hero_image_url ?? null,
       sealed_count: inv.sealed,
       bin_location: inv.bin,
+      section: inv.section,
       wine_list_item_id: ob?.wine_list_item_id ?? null,
       glass_pour_ml: ob?.glass_pour_ml ?? price?.pourMl ?? null,
       pour_size_mode: ob?.pour_size_mode ?? null,
@@ -210,6 +213,10 @@ export default async function CellarPage() {
       rating: w.rating,
       rating_source: w.rating_source,
       review_excerpt: w.review_excerpt,
+      serving_temp_min: w.serving_temp_min,
+      serving_temp_max: w.serving_temp_max,
+      serving_temp_label: w.serving_temp_label,
+      decant_minutes: w.decant_minutes,
       // BND-040 — pricing intelligence (nullable)
       retail_min: w.retail_min,
       retail_max: w.retail_max,
@@ -259,6 +266,15 @@ export default async function CellarPage() {
     gridData[bin].totalBottles += item.quantity ?? 0;
   }
 
+  // BND-063/064 — extract cellar sections from config
+  const cellarSections: Array<{ id: string; name: string }> = (() => {
+    const labels = configRow?.labels as Record<string, unknown> | null;
+    if (labels?.sections && Array.isArray(labels.sections)) {
+      return labels.sections as Array<{ id: string; name: string }>;
+    }
+    return [];
+  })();
+
   const eightysixStrategy = restaurantRow?.eightysix_strategy === "mark" ? "mark" as const : "hide" as const;
 
   return (
@@ -277,6 +293,7 @@ export default async function CellarPage() {
             }
           : null
       }
+      cellarSections={cellarSections}
       gridData={gridData}
       restaurantName={restaurantName}
       restaurantId={restaurantId}
