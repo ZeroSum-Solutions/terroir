@@ -2690,3 +2690,7 @@ COMMENT ON FUNCTION public.enrich_wines_batch(uuid, jsonb) IS
 alter table public.inventory_items
   add column if not exists format   text,
   add column if not exists currency text;
+
+
+-- === 0049_wines_colour.sql ===
+ALTER TABLE public.wines ADD COLUMN IF NOT EXISTS colour text;

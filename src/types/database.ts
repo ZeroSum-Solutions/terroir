@@ -705,6 +705,7 @@ export type Database = {
         Row: {
           alert_snoozed_until: string | null
           country: string | null
+          colour: string | null
           created_at: string
           drink_window_end: number | null
           drink_window_start: number | null
@@ -746,6 +747,7 @@ export type Database = {
         Insert: {
           alert_snoozed_until?: string | null
           country?: string | null
+          colour?: string | null
           created_at?: string
           drink_window_end?: number | null
           drink_window_start?: number | null
@@ -787,6 +789,7 @@ export type Database = {
         Update: {
           alert_snoozed_until?: string | null
           country?: string | null
+          colour?: string | null
           created_at?: string
           drink_window_end?: number | null
           drink_window_start?: number | null
