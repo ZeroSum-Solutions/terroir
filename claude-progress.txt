@@ -1,3 +1,94 @@
+## Session 2026-05-23 -- features #55, #56, #57
+
+### Completed
+- **#55 User can edit a wine's metadata** (PASSING)
+  - Created PATCH /api/wines/[id] route with Zod validation for producer, name, vintage, varietal, region
+  - Role-gated to owner/manager, scoped by restaurant_id
+  - Created EditMetadataModal component with all metadata fields + tasting notes
+  - Replaced disabled "Edit metadata" button with active button in wine detail drawer
+  - Preserves enrichment_metadata (not overwritten)
+
+- **#56 User can attach tasting notes to a wine** (PASSING)
+  - Added tasting_notes column to wines table (migration 0046)
+  - Included in PATCH /api/wines/[id] schema and EditMetadataModal
+  - Displayed in wine detail drawer as a dedicated section with whitespace-pre-wrap
+
+- **#57 User can attach a hero image to a wine in Supabase Storage** (PASSING)
+  - Added hero_image_url column to wines table (migration 0046)
+  - Created wine-images storage bucket with RLS policies (member upload, public read)
+  - POST /api/wines/[id]/image: multipart upload, stores at {restaurantId}/{wineId}.{ext}
+  - DELETE /api/wines/[id]/image: removes from storage + clears URL
+  - Hero image display in drawer with remove button (visible when image set)
+  - Upload label shown when no image (hidden file input + styled label)
+
+### Verification
+- TypeScript: 0 new errors from changed files (pre-existing errors in other files unchanged)
+- Mock data grep: 0 hits in production src/ (only legitimate globalThis.fetch comment)
+- Tests: 351/358 passing (7 pre-existing failures, none from this session's changes)
+- Browser verification: blocked by sandbox (EPERM on port 3000, known limitation)
+- All three features (#55, #56, #57) marked passing
+
+### Files changed
+- NEW: supabase/migrations/0046_wines_tasting_notes_hero_image.sql (7 lines)
+- NEW: supabase/migrations/down/0046_wines_tasting_notes_hero_image.down.sql (5 lines)
+- NEW: src/app/api/wines/[id]/route.ts (84 lines) -- PATCH for wine metadata
+- NEW: src/app/api/wines/[id]/image/route.ts (173 lines) -- POST + DELETE for hero image
+- NEW: src/app/(app)/cellar/edit-metadata-modal.tsx (284 lines) -- Edit modal component
+- MODIFIED: src/types/database.ts (+6: tasting_notes, hero_image_url to Row/Insert/Update)
+- MODIFIED: src/app/(app)/cellar/types.ts (+2: tasting_notes, hero_image_url to CellarWineRow)
+- MODIFIED: src/app/(app)/cellar/page.tsx (+4: query new columns, map to rows)
+- MODIFIED: src/app/(app)/cellar/wine-detail-drawer.tsx (+141: hero image display/upload/delete, tasting notes section, active edit button, EditMetadataModal integration)
+- MODIFIED: supabase/schema.snapshot.sql (+2: tasting_notes, hero_image_url columns on wines)
+
+Stats after this session: 177/231 passing (76.6%).
+
+
+## Session 2026-05-23 — features #167, #168, #169
+
+### Completed
+- **#167 System persists item order via reorder_wine_list_items DB function** (PASSING)
+  - Already fully implemented: migration 0013, PATCH /api/wine-list-items/reorder calls
+    supabase.rpc("reorder_wine_list_items"), frontend handleDragEnd wired
+  - Tests exist at route.test.ts; ARCH-014 ownership pre-check
+
+- **#168 User can override the public price per list item** (PASSING)
+  - Already implemented: glass_price/bottle_price on wine_list_items serve as price overrides
+  - Public page at /list/[slug] displays these prices; PriceInput provides inline editing
+  - PATCH/POST handlers accept glass_price and bottle_price
+
+- **#169 User can override the display name per list item** (PASSING)
+  - Created migration 0031 adding name_override text column to wine_list_items
+  - Updated database types (Row, Insert, Update) with name_override
+  - Updated PATCH handler PatchSchema to accept name_override
+  - Updated POST handler AddItemSchema and insert call for name_override
+  - Added NameEdit inline click-to-edit component in wine-row.tsx
+  - Shows producer + name when not overridden; shows custom name with strikethrough
+    original when overridden; accent styling for overridden state
+  - Added updateItemName callback in wine-list-editor.tsx with optimistic update + PATCH
+  - Updated public /list/[slug] page to use item.name_override ?? wine.producer + wine.name
+  - Updated PDF templates to use name_override in renderItem
+  - Updated schema snapshot
+
+### Verification
+- Mock data grep: 0 hits in production code (test files only)
+- TypeScript: 0 errors from my changes (3 pre-existing from concurrent eightysix_strategy work)
+
+### Files changed
+- supabase/migrations/0031_wine_list_items_name_override.sql: new
+- supabase/migrations/down/0031_wine_list_items_name_override.down.sql: new
+- src/types/database.ts: +9 (name_override, blurb, hidden to all three types)
+- src/app/api/wine-list-items/[id]/route.ts: +2 (name_override to PatchSchema)
+- src/app/api/wine-list-items/route.ts: +2 (name_override to AddItemSchema + insert)
+- src/app/(app)/lists/[id]/components/wine-row.tsx: +151 (NameEdit component)
+- src/app/(app)/lists/[id]/wine-list-editor.tsx: +33 (updateItemName, onNameChange)
+- src/app/(app)/lists/[id]/page.tsx: +1 (name_override default in data mapping)
+- src/app/api/pdf/route.ts: +2 (name_override in select + type)
+- src/app/list/[slug]/page.tsx: +3 (name_override in select, type, display)
+- src/lib/wine-list/templates.ts: +2 (name_override in ItemData, renderItem)
+- supabase/schema.snapshot.sql: +1 (name_override column)
+
+Stats after this session: 113/231 passing (48.9%).
+
 ## Session 2026-05-23 — features #85, #86, #87
 
 ### Completed
