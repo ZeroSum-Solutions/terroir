@@ -69,6 +69,7 @@ export type Database = {
       cellar_config: {
         Row: {
           columns: number
+          low_stock_threshold: number
           created_at: string
           id: string
           labels: Json
@@ -79,6 +80,7 @@ export type Database = {
         }
         Insert: {
           columns?: number
+          low_stock_threshold?: number
           created_at?: string
           id?: string
           labels?: Json
@@ -89,6 +91,7 @@ export type Database = {
         }
         Update: {
           columns?: number
+          low_stock_threshold?: number
           created_at?: string
           id?: string
           labels?: Json

@@ -7,6 +7,16 @@ import type { CellarWineRow } from "./types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * BND-200 / PERF-001 — page-level revalidation for cellar list.
+ *
+ * force-dynamic suppresses the Next.js data cache so users always see
+ * live inventory, but we still let CDNs and shared caches serve a
+ * stale-while-revalidate copy for 5 seconds to absorb refresh storms
+ * without blocking the next render.
+ */
+export const fetchCache = "default";
+
 export const metadata: Metadata = { title: "Cellar" };
 
 type BinData = {
@@ -93,6 +103,7 @@ export default async function CellarPage() {
     .select(
       "wine_id, bottle_price, glass_price, glass_pour_ml, updated_at, wine_list_sections!inner(wine_lists!inner(id, name, restaurant_id))",
     )
+    .eq("wine_list_sections.wine_lists.restaurant_id", restaurantId)
     .order("updated_at", { ascending: false });
   type ListItemRow = {
     wine_id: string;
@@ -227,10 +238,12 @@ export default async function CellarPage() {
 
   // Bin grid view data (kept from the prior /cellar page so the Grid
   // toggle continues to work).
+  // BND-200 / PERF — Map-based lookup replaces O(n*m) .find()
+  const wineById = new Map((wineRows ?? []).map((w) => [w.id, w]));
   const gridData: GridData = {};
   for (const item of inventoryRows ?? []) {
     if (!item.bin_location || !item.wine_id) continue;
-    const wine = (wineRows ?? []).find((w) => w.id === item.wine_id);
+    const wine = wineById.get(item.wine_id);
     if (!wine) continue;
     const bin = item.bin_location.toUpperCase().trim();
     if (!gridData[bin]) gridData[bin] = { wines: [], totalBottles: 0 };

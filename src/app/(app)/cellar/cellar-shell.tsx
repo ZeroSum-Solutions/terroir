@@ -83,6 +83,15 @@ export function CellarShell({
   const [initialWineId] = useState(() => searchParams.get("wine") ?? "");
 
   const [query, setQuery] = useState("");
+  // BND-201 / PERF-002 — debounce raw input so useMemo filtering
+  // doesn't recompute on every keystroke. With 1000+ wines loaded,
+  // this keeps rendering smooth during fast typing.
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(query), 150);
+    return () => clearTimeout(id);
+  }, [query]);
+
   const [filter, setFilter] = useState<CellarFilter>(
     initialMode === "pour" ? "open" : "all",
   );
@@ -318,7 +327,7 @@ export function CellarShell({
       {view === "list" ? (
         <CellarList
           rows={rows}
-          query={query}
+          query={debouncedQuery}
           filter={filter}
           onSelectWine={(row) => setSelectedId(row.wine_id)}
           onResetFilters={() => {

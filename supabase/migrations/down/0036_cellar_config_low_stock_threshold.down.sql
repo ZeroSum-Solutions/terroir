@@ -1,0 +1,1 @@
+alter table public.cellar_config drop column if exists low_stock_threshold;

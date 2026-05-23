@@ -1,0 +1,1 @@
+alter table public.cellar_config add column low_stock_threshold integer not null default 3;
