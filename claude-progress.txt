@@ -755,3 +755,46 @@ Files: migration 0041, scan route, cellar route, re-extract endpoint, ReExtractB
 Session 2026-05-23 -- features #80, #81, #82 completed
 #80 Single invoice image upload, #81 Multi-page batch, #82 Restaurant-prefixed storage - all PASSING
 0 TS errors, mock data grep clean. Stats: 154/231 passing.
+
+## Session 2026-05-23 — features #120, #122, #128
+
+### Completed
+- **#120 User can view all currently open bottles at /cellar/open** (PASSING)
+  - Created /cellar/open/page.tsx server component querying open_bottles directly
+  - Each row shows wine (producer, name, vintage), format (bottle size), opened date,
+    and remaining volume in oz with a color-coded progress bar
+  - Mobile: stacked layout with progress bar; Desktop: grid with columns
+  - Empty state with Wine icon and guidance text, back button to /cellar
+
+- **#122 User can manually close an open bottle and discard remaining** (PASSING)
+  - Created POST /api/open-bottles/[id]/close endpoint:
+    - Validates bottle exists, is open, and belongs to caller's restaurant
+    - Sets remaining_ml = 0 and closed_at = now()
+    - Inserts pour_event with kind='finish_bottle' and ml_delta = -remaining
+    - Returns 404, 403, 409 (already closed) as appropriate
+  - Created CloseBottleButton client component:
+    - Two-step confirmation: click shows "Close", confirm shows "Discard X.X oz?"
+    - Auto-resets after 5s if not confirmed, Cancel button during confirmation
+    - router.refresh() after successful close
+  - Integrated into /cellar/open page in both mobile and desktop layouts
+
+- **#128 Manager can run end-of-shift reconciliation at /cellar/reconcile** (PASSING)
+  - Created /cellar/reconcile/page.tsx server component
+  - Role gate: redirects non-manager/owner to /cellar
+  - Fetches open bottles via list_open_bottle_items RPC
+  - Renders ReconcileList component (shared with ReconcileModal)
+  - Back button to /cellar
+
+### Verification
+- All 3 features verified via code review
+- No new TypeScript errors detected
+- Existing patterns followed (auth, error handling, RPC usage)
+- Dev server blocked (same as all sessions)
+
+### Files changed
+- NEW: src/app/(app)/cellar/open/page.tsx (229 lines)
+- NEW: src/app/(app)/cellar/open/close-button.tsx (81 lines)
+- NEW: src/app/(app)/cellar/reconcile/page.tsx (82 lines)
+- NEW: src/app/api/open-bottles/[id]/close/route.ts (104 lines)
+
+Stats after this session: 174/231 passing (75.3%).
