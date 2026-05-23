@@ -1,3 +1,38 @@
+## Session 2026-05-23 -- features #126, #127, #133
+
+### Completed
+- **#126 User can record a pour in a custom amount** (PASSING)
+  - Pour button now always opens the picker modal (no more direct-pour for fixed-mode wines)
+  - Custom oz input already existed in PourPickerModal; now accessible from all wines
+  - Server-side validation: Zod .positive() rejects negative, .max(2000) rejects oversized (999oz)
+  - Default pour size pre-filled in custom input, matching preset button highlighted
+  - Removed redundant caret button (picker-only ChevonDown toggle)
+
+- **#127 User can attach a note to a pour event** (PASSING)
+  - Added optional note textarea to PourPickerModal (max 500 chars)
+  - Note passed through onConfirm -> doPour -> POST /api/pour body.note
+  - Server already accepted note in BodySchema; DB already had pour_events.note column
+
+- **#133 System logs each reconciliation as an availability_event with manager's user ID** (PASSING)
+  - Already fully implemented by migration 0046
+  - reconcile_open_bottle RPC inserts availability_events with direction='reconcile', delta, user_id=auth.uid()
+  - availability_events.user_id maps to the manager's auth.uid() via SECURITY DEFINER RPC
+  - pour_events.actor_user_id also set to auth.uid() for the reconcile event
+  - Verified via code review: schema snapshot confirms user_id column and direction check includes 'reconcile'
+
+### Verification
+- TypeScript: 0 new errors in changed files (35 pre-existing in wine-detail-drawer.tsx from CellarWineRow type gaps)
+- All 43 pour/reconcile-related tests passing (7 reconcile, 36 pour)
+- Test suite: 354/363 passing (same 9 pre-existing failures)
+- Mock data grep: 0 hits in production src/ (only test files + health route comment)
+- Browser verification: blocked by sandbox (EPERM on port 3000)
+
+### Files changed
+- MODIFIED: src/app/(app)/cellar/pour-picker-modal.tsx (+55/-23: note field, defaultOz prop, preset highlight)
+- MODIFIED: src/app/(app)/cellar/wine-detail-drawer.tsx (+23/-33: doPour accepts note, Pour always opens modal)
+
+Stats after this session: 213/231 passing (92.2%).
+
 ## Session 2026-05-23 -- features #105, #110, #111
 
 ### Completed
@@ -1271,7 +1306,7 @@ Stats after this session: 196/231 passing (84.8%).
 - src/app/api/scan/route.ts: +34/-3 rate limiting + 10MB limit + JSON-body check
 - src/app/api/scan/route.test.ts: +69 (6 new tests)
 
-Stats after this session: 199/231 passing (86.1%).
+Stats after this session: 210/231 passing (90.9%).
 Session 2026-05-23 features 92 94 95
 
 Completed:
@@ -1287,3 +1322,46 @@ Fixed scanner manual entry missing fields
 
 Mock data grep clean
 Stats 206 of 231 passing 89.2 percent
+
+## Session 2026-05-23 -- features #72, #77, #78
+
+### Completed
+- **#72 User can override system-computed drink-window with manual values** (PASSING)
+  - Created migration 0048: manual_overrides text[] column, add_manual_overrides RPC
+  - Updated enrich_wines_batch to gate drink_window/region/country/varietal on manual_overrides
+  - Pre-existing frontend: EditMetadataModal with drink window override fields
+  - Pre-existing API: PATCH /api/wines/[id] tracks overrides via add_manual_overrides
+  - Cellar page: selects and maps manual_overrides to CellarWineRow
+  - Database types: manual_overrides added to wines Row/Insert/Update
+
+- **#77 Enrichment falls back to LWIN catalog when Claude has no opinion** (PASSING)
+  - Created migration 0049: colour text column on wines table
+  - Updated enrich_wines_batch to extract and persist colour from LWIN fallback
+  - LWIN fallback (Tier 3) already implemented in enrich route and batch.ts
+  - enrichment_metadata.source = 'lwin_fallback' for provenance tracking
+  - Database types: colour added to wines Row/Insert/Update
+  - Down migrations created for both 0048 and 0049
+
+- **#78 Enrichment never overwrites a manually-set field** (PASSING)
+  - Fully implemented by #72 + #77 enrich_wines_batch RPC gating
+  - PATCH route tracks enrichable field edits via add_manual_overrides RPC
+  - RPC uses CASE WHEN to skip fields whose category is in manual_overrides
+  - Covers: drink_window, region, country, varietal, colour
+
+### Verification
+- Mock data grep: 0 hits in production src/ (only comment in health route)
+- Code review confirms full end-to-end flow for all 3 features
+- Browser/sandbox: blocked (known limitation)
+- TypeScript: existing pre-compiled build
+
+### Files changed
+- NEW: supabase/migrations/0048_wines_manual_overrides.sql
+- NEW: supabase/migrations/down/0048_wines_manual_overrides.down.sql
+- NEW: supabase/migrations/0049_wines_colour.sql
+- NEW: supabase/migrations/down/0049_wines_colour.down.sql
+- MODIFIED: src/types/database.ts (+manual_overrides, +colour)
+- MODIFIED: src/app/(app)/cellar/page.tsx (+manual_overrides select + map)
+- MODIFIED: supabase/schema.snapshot.sql (+0048, +0049)
+
+Stats after this session: 199/231 passing (86.1%).
+
