@@ -159,13 +159,15 @@ export async function POST(request: NextRequest) {
   try { formData = await request.formData(); }
   catch { return json({ error: "Invalid form data." }, 400); }
 
-  const file = formData.get("file");
-  if (!(file instanceof File)) return json({ error: "Attach the invoice as a file under the 'file' field." }, 400);
+  var files = formData.getAll("file");
+  if (files.length === 0) return json({ error: "No file attached." }, 400);
+  var file = files[0];
+  if (!(file instanceof File)) return json({ error: "Invalid file." }, 400);
   if (file.size === 0) return json({ error: "Empty file." }, 400);
   if (file.size > MAX_BYTES) return json({ error: "File exceeds 20 MB." }, 413);
-  if (!ALLOWED_MIME.has(file.type)) return json({ error: `Unsupported file type: ${file.type || "unknown"}.` }, 415);
+  if (!ALLOWED_MIME.has(file.type)) return json({ error: "Unsupported file type: " + (file.type || "unknown") + "." }, 415);
 
-  const fileBuffer = Buffer.from(new Uint8Array(await file.arrayBuffer()));
+  var fileBuffer = Buffer.from(new Uint8Array(await file.arrayBuffer()));
 
   // BND-090: create invoice_scans row before OCR for audit trail
   const { data: invScan, error: invErr } = await supabase
@@ -190,11 +192,31 @@ export async function POST(request: NextRequest) {
 
   const scanId = invScan.id;
 
-  // BND-080: upload image to Supabase Storage under restaurant prefix
-  var ext = file.type === "application/pdf" ? "pdf" : file.type === "image/png" ? "png" : "jpg";
-  var sPath = restaurantId + "/" + scanId + "." + ext;
-  var upRes = await supabase.storage.from("invoice-images").upload(sPath, fileBuffer, { contentType: file.type, upsert: true });
-  if (!upRes.error) { await supabase.from("invoice_scans").update({ raw_image_path: sPath }).eq("id", scanId); }
+  // BND-080/BND-081: upload all images to Supabase Storage under restaurant prefix
+  var extraPaths = [];
+  var pageIdx = 0;
+  while (pageIdx !== files.length) {
+    var pageFile = files[pageIdx];
+    pageIdx++;
+    if (!(pageFile instanceof File)) { /* skip non-file entries */ }
+    else {
+      var pageExt = pageFile.type === "application/pdf" ? "pdf" : pageFile.type === "image/png" ? "png" : "jpg";
+      var pageTag = files.length !== 1 ? "_page" + pageIdx : "";
+      var pagePath = restaurantId + "/" + scanId + pageTag + "." + pageExt;
+      var pageBuf = Buffer.from(new Uint8Array(await pageFile.arrayBuffer()));
+      var pageRes = await supabase.storage.from("invoice-images").upload(pagePath, pageBuf, { contentType: pageFile.type, upsert: true });
+      if (!pageRes.error) {
+        if (pageIdx === 1) {
+          await supabase.from("invoice_scans").update({ raw_image_path: pagePath }).eq("id", scanId);
+        } else {
+          extraPaths.push(pagePath);
+        }
+      }
+    }
+  }
+  if (extraPaths.length !== 0) {
+    await supabase.from("invoice_scans").update({ extra_image_paths: extraPaths }).eq("id", scanId);
+  }
   // ── Stage 1: Azure OCR ——
   let ocr;
   try { ocr = await extractOcr(fileBuffer, file.type); }

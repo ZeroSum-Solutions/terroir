@@ -77,9 +77,9 @@ class ScanError extends Error {
   }
 }
 
-async function postScan(file: File, signal: AbortSignal): Promise<Scan> {
+async function postScan(files: File[], signal: AbortSignal): Promise<Scan> {
   const body = new FormData();
-  body.append("file", file);
+  files.forEach(function(f) { body.append("file", f); });
   const res = await fetch("/api/scan", { method: "POST", body, signal });
   if (!res.ok) {
     const payload = (await res.json().catch(() => null)) as
@@ -163,19 +163,19 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     return () => window.clearInterval(id);
   }, [status]);
 
-  const startScan = useCallback(async (file: File) => {
+  const startScan = useCallback(async (files: File[]) => {
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
 
-    setLastFile(file);
+    setLastFile(files[0]);
     setProgress(0);
     setStepIndex(0);
     setStatus("processing");
     setError(null);
 
     try {
-      const fresh = await postScan(file, ac.signal);
+      const fresh = await postScan(files, ac.signal);
       if (ac.signal.aborted) return;
       setProgress(100);
       setScan(fresh);
@@ -326,7 +326,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   }, [scan, originalItems, isSaving, lastFile]);
 
   const retryScan = useCallback(() => {
-    if (lastFile) startScan(lastFile);
+    if (lastFile) startScan([lastFile]);
   }, [lastFile, startScan]);
 
   const enterManualEntry = useCallback(() => {
@@ -448,7 +448,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   );
 
   const handleStart = useCallback(
-    (file: File) => {
+    (files: File[]) => {
       if (mode === "bottle") {
         startBottleScan(file);
       } else {

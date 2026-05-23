@@ -53,7 +53,7 @@ function RecentScansList({ scans }: RecentScansListProps) {
 }
 
 interface ReadyViewProps {
-  onStart: (file: File) => void;
+  onStart: (files: File[]) => void;
   mode: ScanMode;
   onModeChange: (mode: ScanMode) => void;
   recentScans: RecentScan[];
@@ -74,9 +74,9 @@ export function ReadyView({
   const isBottle = mode === "bottle";
 
   const handleFiles = (files: FileList | null) => {
-    const file = files?.[0];
-    if (!file) return;
-    onStart(file);
+    var fileArr = files ? Array.from(files) : [];
+    if (fileArr.length === 0) return;
+    onStart(fileArr);
   };
 
   return (
@@ -199,6 +199,7 @@ export function ReadyView({
         ref={fileRef}
         type="file"
         accept={isBottle ? "image/jpeg,image/png" : "image/*,application/pdf"}
+        multiple
         className="sr-only"
         onChange={(e) => handleFiles(e.target.files)}
       />
