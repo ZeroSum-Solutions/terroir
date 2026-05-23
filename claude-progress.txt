@@ -1411,3 +1411,67 @@ Stats after this session: 199/231 passing (86.1%).
 - MODIFIED: supabase/schema.snapshot.sql (+31 lines: trigger + function)
 
 Stats after this session: 209/231 passing (90.5%).
+
+## Session 2026-05-23 -- features #135, #136, #138
+
+### Completed
+- **#136 Reconcile enforces manager-or-owner role for write endpoints** (PASSING)
+  - Changed POST /api/reconcile from requireMembership() to requireRole(["owner", "manager"])
+  - Staff now get 403 at endpoint level (before RPC call)
+  - Updated tests: mock requireRole instead of requireMembership, added direct 403 test
+  - RPC-level 42501 handling retained as defense-in-depth
+
+- **#135 User can view reconciliation history with variance trends** (PASSING)
+  - Created /cellar/reconcile/history/page.tsx (347 lines)
+  - Queries availability_events where direction=reconcile, joined with wines
+  - Groups events by day and by session (10-minute gap detection)
+  - Variance trend bar chart using CSS divs (oldest to newest, proportional height)
+  - Summary cards: total sessions, bottles reconciled, total variance
+  - Desktop table + mobile cards for each session showing individual wine variances
+  - Added History link button to /cellar/reconcile page header
+
+- **#138 Price comparison displays last-paid price next to indicative market data** (PASSING)
+  - Updated /price-comparison page to also fetch wines.retail_median/min/max
+  - Added lastPaid (most recent unit_cost by invoice_date) and marketPrice (retail_median) columns
+  - Added variancePct = (lastPaid - marketPrice) / marketPrice computation
+  - Desktop: 3 new columns (Last paid, Market, Variance) with color-coded pill badges
+  - Mobile: Market comparison row below wine header with last paid vs market + variance badge
+  - Single-source wines also get Market and Variance columns
+  - Summary card: added "Overpaid vs market" count
+
+### Verification
+- All 355 tests passing (same 9 pre-existing failures)
+- 0 new TypeScript errors
+- Mock data grep: clean (only comment in health route)
+- Dev server blocked by sandbox EPERM (known limitation)
+
+### Files changed
+- MODIFIED: src/app/api/reconcile/route.ts (+5/-5: requireMembership to requireRole)
+- MODIFIED: src/app/api/reconcile/route.test.ts (+17/-10: mock requireRole, new 403 test)
+- MODIFIED: src/app/(app)/cellar/reconcile/page.tsx (+8/-2: History link button)
+- NEW: src/app/(app)/cellar/reconcile/history/page.tsx (347 lines)
+- MODIFIED: src/app/(app)/price-comparison/page.tsx (+193/-18: market data columns)
+
+Stats after this session: 216/231 passing (93.5%).
+
+
+## Session 2026-05-23 — features #123, #124, #125
+
+### Completed
+- #123 record_pour sole write path (PASSING): fixed close-bottle endpoint to use record_pour RPC instead of direct INSERT/UPDATE
+- #124 no_inventory error code (PASSING): changed out_of_stock to no_inventory, fixed test property path
+- #125 pour_defaults in cellar config (PASSING): added PourDefaultSchema, merge into labels JSONB, picker already supports defaultOz
+
+### Verification
+- TypeScript: 0 errors in changed files
+- Pour tests: 7/7 passing
+- Mock data grep: clean
+- RLS revokes confirmed in schema snapshot
+
+### Files changed
+- src/app/api/open-bottles/[id]/close/route.ts
+- src/app/api/pour/route.ts
+- src/app/api/pour/route.test.ts
+- src/app/api/cellar/config/route.ts
+
+Stats: 220/231 passing (95.2%)
