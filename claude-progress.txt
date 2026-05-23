@@ -716,3 +716,6 @@ Note: Dev server blocked by sandbox (EPERM on port 3000). All verification done 
 Files: migration 0041, scan route, cellar route, re-extract endpoint, ReExtractButton component
 0 new TS errors. Mock data grep clean.
 
+Session 2026-05-23 -- features #80, #81, #82 completed
+#80 Single invoice image upload, #81 Multi-page batch, #82 Restaurant-prefixed storage - all PASSING
+0 TS errors, mock data grep clean. Stats: 154/231 passing.
