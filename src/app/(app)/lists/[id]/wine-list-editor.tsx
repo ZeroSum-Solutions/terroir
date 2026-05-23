@@ -15,6 +15,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  Printer,
   Share2,
   Trash2,
   X,
@@ -259,7 +260,7 @@ export function WineListEditor({
   const [showPublish, setShowPublish] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
-  const [errorToast, setErrorToast] = useState(null);
+  const [errorToast, setErrorToast] = useState<string | null>(null);
   const [addingSection, setAddingSection] = useState(false);
   const [deletingItem, setDeletingItem] = useState(false);
   const [deletingSection, setDeletingSection] = useState(false);
@@ -501,12 +502,12 @@ export function WineListEditor({
     [router],
   );
 
-  var requestDeleteItem = useCallback(function(item) {
+  const requestDeleteItem = useCallback(function(item: ListItem) {
     setWineToDelete(item);
   }, []);
 
-  var confirmDeleteItem = useCallback(async function() {
-    var target = wineToDelete;
+  const confirmDeleteItem = useCallback(async function() {
+    const target = wineToDelete;
     if (!target) return;
     setDeletingItem(true);
     setWineToDelete(null);
@@ -747,6 +748,15 @@ export function WineListEditor({
               <Eye className="h-3.5 w-3.5" strokeWidth={2} />
               <span className="hidden md:inline">Preview</span>
             </a>
+            <a
+              href={`/lists/${list.id}/print`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-[34px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[13px] font-medium text-ink hover:bg-surface-muted md:px-md"
+            >
+              <Printer className="h-3.5 w-3.5" strokeWidth={2} />
+              <span className="hidden md:inline">Print</span>
+            </a>
             {list.is_published && list.slug && (
               <button
                 type="button"
@@ -912,7 +922,7 @@ export function WineListEditor({
                       <SortableWineRow
                         key={item.id}
                         item={item}
-                        onDelete={requestDeleteItem}
+                        onDelete={() => requestDeleteItem(item)}
                         onPriceChange={updateItemPrice}
                         onPourChange={updateItemPour}
                         onNameChange={updateItemName}

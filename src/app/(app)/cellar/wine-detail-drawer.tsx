@@ -348,11 +348,12 @@ export function WineDetailDrawer({
       ? (row.open_remaining_ml / ML_PER_OZ).toFixed(1)
       : null;
 
-  const canPour =
+  const canPour = Boolean(
     row.glass_pour_ml &&
     row.glass_pour_ml > 0 &&
-    !row.is_eightysixed;
-  const outOfStock = canPour && totalMl !== null && totalMl < row.glass_pour_ml!;
+    !row.is_eightysixed,
+  );
+  const outOfStock = Boolean(canPour && totalMl !== null && totalMl < row.glass_pour_ml!);
 
   return (
     <>
@@ -688,11 +689,10 @@ export function WineDetailDrawer({
       {/* 86/restore note modal */}
       {pendingDirection && row && (
         <NoteModal
-          title={pendingDirection === "eightysixed" ? "Mark as 86'd" : "Restore"}
-          actionLabel={
-            pendingDirection === "eightysixed" ? "Mark 86'd" : "Restore"
-          }
-          onSubmit={(note) => onConfirm86(note)}
+          open={true}
+          wineName={row.name}
+          direction={pendingDirection}
+          onConfirm={(note: string | undefined) => onConfirm86(note)}
           onCancel={() => setPendingDirection(null)}
         />
       )}
@@ -760,8 +760,23 @@ function PricingSection({
   row: CellarWineRow;
   canManage: boolean;
 }) {
-  const glassStatus = getGlassStatus(row as any);
-  const bottleStatus = getBottleStatus(row as any);
+  const targetMarkup = resolveMarkupTarget(
+    row.pricing_target_markup_ratio,
+    row.restaurant_default_target_markup_ratio,
+  );
+  const targetPourCost = resolvePourCostTarget(
+    row.pricing_target_pour_cost_pct,
+    row.restaurant_default_target_pour_cost_pct,
+  );
+  const markupRatio = getMarkupRatio(row.current_bottle_price, row.retail_median);
+  const pourCostPct = getPourCostPct(
+    row.current_unit_cost,
+    row.size_ml,
+    row.glass_pour_ml,
+    row.current_glass_price,
+  );
+  const glassStatus = getGlassStatus(pourCostPct, targetPourCost);
+  const bottleStatus = getBottleStatus(markupRatio, targetMarkup);
 
   return (
     <section
@@ -772,51 +787,49 @@ function PricingSection({
 
       <div className="space-y-sm">
         {/* Glass pour row */}
-        {row.glass_price != null && row.glass_pour_ml && (
+        {row.current_glass_price != null && row.glass_pour_ml && (
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[14px] font-medium text-ink">
-                ${row.glass_price.toFixed(2)}{" "}
+                ${row.current_glass_price.toFixed(2)}{" "}
                 <span className="font-normal text-ink-muted">
                   / {(row.glass_pour_ml / ML_PER_OZ).toFixed(1)} oz glass
                 </span>
               </p>
-              {glassStatus !== "ok" && glassStatus !== "unknown" && (
+              {glassStatus !== "on_target" && glassStatus !== "unknown" && (
                 <p className="text-[12px] text-ink-muted">
                   {formatPricingStatusLabel(glassStatus)}
                 </p>
               )}
             </div>
             <PriceBand
-              status={glassStatus}
-              markupRatio={getMarkupRatio(row as any, "glass")}
-              pourCostPct={getPourCostPct(row as any, "glass")}
-              targetMarkup={resolveMarkupTarget(row as any, "glass")}
-              targetPourCost={resolvePourCostTarget(row as any, "glass")}
+              bottleList={row.current_bottle_price}
+              retailReference={row.retail_median}
+              targetMarkup={targetMarkup}
+              size="mini"
             />
           </div>
         )}
 
         {/* Bottle row */}
-        {row.bottle_price != null && (
+        {row.current_bottle_price != null && (
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[14px] font-medium text-ink">
-                ${row.bottle_price.toFixed(2)}{" "}
+                ${row.current_bottle_price.toFixed(2)}{" "}
                 <span className="font-normal text-ink-muted">/ bottle</span>
               </p>
-              {bottleStatus !== "ok" && bottleStatus !== "unknown" && (
+              {bottleStatus !== "on_target" && bottleStatus !== "unknown" && (
                 <p className="text-[12px] text-ink-muted">
                   {formatPricingStatusLabel(bottleStatus)}
                 </p>
               )}
             </div>
             <PriceBand
-              status={bottleStatus}
-              markupRatio={getMarkupRatio(row as any, "bottle")}
-              pourCostPct={getPourCostPct(row as any, "bottle")}
-              targetMarkup={resolveMarkupTarget(row as any, "bottle")}
-              targetPourCost={resolvePourCostTarget(row as any, "bottle")}
+              bottleList={row.current_bottle_price}
+              retailReference={row.retail_median}
+              targetMarkup={targetMarkup}
+              size="mini"
             />
           </div>
         )}
@@ -828,9 +841,19 @@ function PricingSection({
         )}
       </div>
 
-      {canManage && row.bottle_price != null && (
+      {canManage && row.current_bottle_price != null && (
         <div className="mt-md">
-          <PricingTargetOverride wineId={row.wine_id} />
+          <PricingTargetOverride
+            wineId={row.wine_id}
+            perWinePourCostPct={row.pricing_target_pour_cost_pct}
+            perWineMarkupRatio={row.pricing_target_markup_ratio}
+            housePourCostPct={
+              row.restaurant_default_target_pour_cost_pct ?? targetPourCost
+            }
+            houseMarkupRatio={
+              row.restaurant_default_target_markup_ratio ?? targetMarkup
+            }
+          />
         </div>
       )}
     </section>

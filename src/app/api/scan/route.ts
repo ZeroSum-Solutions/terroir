@@ -136,7 +136,7 @@ async function processScanOnce(opts: ScanHandlerOpts): Promise<{ status: number;
       varietal: item.varietal, region: item.region, qty: item.qty,
       unitCost: item.unitCost, currency: item.currency ?? null, format: item.format ?? null, confidence: item.confidence,
       lowFields: item.lowFields.length > 0 ? item.lowFields : undefined,
-    }));
+    })) as LineItem[];
 
     const result: Scan = {
       source: {
@@ -156,19 +156,19 @@ async function processScanOnce(opts: ScanHandlerOpts): Promise<{ status: number;
       ocr_text: JSON.parse(JSON.stringify(ocr)),
       parsed_line_items: JSON.parse(JSON.stringify(parsed.lineItems)),
       final_line_items: JSON.parse(JSON.stringify(items)),
-      accuracy_score: result.quality.score,
+      accuracy_score: result.quality?.avgConfidence ?? null,
       item_count: items.length,
       status: "complete",
     };
     if (preUploadedPath) {
       updatePayload.raw_image_path = preUploadedPath;
     }
-    await supabase.from("invoice_scans").update(updatePayload).eq("id", scanId);
+    await supabase.from("invoice_scans").update(updatePayload as never).eq("id", scanId);
 
     return { status: 200, body: { scanId, ...result } };
   } catch (e) {
     // Mark as failed on any pipeline error.
-    await supabase.from("invoice_scans").update({ status: "failed" }).eq("id", scanId).catch(() => {});
+    try { await supabase.from("invoice_scans").update({ status: "failed" }).eq("id", scanId); } catch {}
 
     if (e instanceof OcrError) {
       if (e.code === "upstream_error") {
@@ -256,7 +256,7 @@ export async function POST(request: NextRequest) {
     const fileBuffer = Buffer.from(await fileData.arrayBuffer());
 
 	    // BND-105: reject unsupported file types in JSON body path too.
-	    var ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "heic", "heif", "pdf"]);
+	    const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "heic", "heif", "pdf"]);
 	    if (!ALLOWED_EXT.has(ext)) {
 	      return json({ code: "unsupported_type", error: "Unsupported file type: ." + ext + ". Allowed: jpeg, png, heic, pdf." }, 415);
 	    }
@@ -306,15 +306,16 @@ export async function POST(request: NextRequest) {
   try { formData = await request.formData(); }
   catch { return json({ error: "Invalid form data." }, 400); }
 
-  var files = formData.getAll("file");
+  const files = formData.getAll("file");
   if (files.length === 0) return json({ error: "No file attached." }, 400);
-  var file = files[0];
-  if (!(file instanceof File)) return json({ error: "Invalid file." }, 400);
+  const firstEntry = files[0];
+  if (!(firstEntry instanceof File)) return json({ error: "Invalid file." }, 400);
+  const file: File = firstEntry;
   if (file.size === 0) return json({ error: "Empty file." }, 400);
   if (file.size > MAX_BYTES) return json({ error: "File exceeds 10 MB." }, 413);
   if (!ALLOWED_MIME.has(file.type)) return json({ code: "unsupported_type", error: "Unsupported file type: " + (file.type || "unknown") + "." }, 415);
 
-  var fileBuffer = Buffer.from(new Uint8Array(await file.arrayBuffer()));
+  const fileBuffer = Buffer.from(new Uint8Array(await file.arrayBuffer()));
 
   // BND-089: wrap the scan in idempotency so retries return the cached
   // result without re-running Azure OCR or Claude extraction.
@@ -333,18 +334,18 @@ export async function POST(request: NextRequest) {
   if (!result.replayed && result.status === 200) {
     const scanId = (result.body as { scanId?: string }).scanId;
     if (scanId) {
-      var extraPaths: string[] = [];
-      var pageIdx = 0;
+      const extraPaths: string[] = [];
+      let pageIdx = 0;
       while (pageIdx !== files.length) {
-        var pageFile = files[pageIdx];
+        const pageFile = files[pageIdx];
         pageIdx++;
         if (!(pageFile instanceof File)) { /* skip non-file entries */ }
         else {
-          var pageExt = pageFile.type === "application/pdf" ? "pdf" : pageFile.type === "image/png" ? "png" : "jpg";
-          var pageTag = files.length !== 1 ? "_page" + pageIdx : "";
-          var pagePath = restaurantId + "/" + scanId + pageTag + "." + pageExt;
-          var pageBuf = Buffer.from(new Uint8Array(await pageFile.arrayBuffer()));
-          var pageRes = await supabase.storage.from("invoice-images").upload(pagePath, pageBuf, { contentType: pageFile.type, upsert: true });
+          const pageExt = pageFile.type === "application/pdf" ? "pdf" : pageFile.type === "image/png" ? "png" : "jpg";
+          const pageTag = files.length !== 1 ? "_page" + pageIdx : "";
+          const pagePath = restaurantId + "/" + scanId + pageTag + "." + pageExt;
+          const pageBuf = Buffer.from(new Uint8Array(await pageFile.arrayBuffer()));
+          const pageRes = await supabase.storage.from("invoice-images").upload(pagePath, pageBuf, { contentType: pageFile.type, upsert: true });
           if (!pageRes.error) {
             if (pageIdx === 1) {
               await supabase.from("invoice_scans").update({ raw_image_path: pagePath }).eq("id", scanId);

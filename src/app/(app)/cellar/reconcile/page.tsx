@@ -8,7 +8,6 @@ import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const fetchCache = "default";
 
 export const metadata: Metadata = { title: "Reconcile — Terroir" };
 

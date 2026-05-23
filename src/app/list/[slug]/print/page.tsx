@@ -98,7 +98,7 @@ export default async function PrintWineListPage({
   };
 
   const visibleSections = (list.wine_list_sections ?? []).map(function (section) {
-    var items = section.wine_list_items as any[];
+    const items = section.wine_list_items as any[];
     return { ...section, wine_list_items: items.filter(function (item: any) { return !item.hidden; }) };
   });
   const sections = renderWineListSections(

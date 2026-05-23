@@ -52,7 +52,8 @@ function useQrScanner(
     if (!active || typeof window === "undefined") return;
 
     let cancelled = false;
-    let detector: BarcodeDetector | null = null;
+    // BarcodeDetector is a browser API not in lib.dom yet (Safari/Chrome only).
+    let detector: { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> } | null = null;
 
     if ("BarcodeDetector" in window) {
       try {

@@ -8,7 +8,6 @@ import { CloseBottleButton } from "./close-button";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const fetchCache = "default";
 
 export const metadata: Metadata = { title: "Open Bottles" };
 
@@ -44,7 +43,7 @@ export default async function OpenBottlesPage() {
     console.error("Failed to load open bottles:", error);
   }
 
-  const openBottles = (bottles ?? []) as OBRow[];
+  const openBottles = (bottles ?? []) as unknown as OBRow[];
 
   return (
     <section>

@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    var { restaurant_id: _rid, ...wine } = globalWine;
+    const { restaurant_id: _rid, ...wine } = globalWine;
     return NextResponse.json(wine);
   }
 

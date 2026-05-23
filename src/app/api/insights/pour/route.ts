@@ -97,8 +97,8 @@ export async function GET(request: NextRequest) {
 
     const pourVolumeBySection = Array.from(sectionMl.entries())
       .map(function (_a) {
-        var section = _a[0];
-        var ml = _a[1];
+        const section = _a[0];
+        const ml = _a[1];
         return {
           section: section,
           oz: Math.round(ml * 0.033814 * 10) / 10,
@@ -120,8 +120,8 @@ export async function GET(request: NextRequest) {
       .sort(function (a, b) { return b[1] - a[1]; })
       .slice(0, topN)
       .map(function (_a) {
-        var wineId = _a[0];
-        var count = _a[1];
+        const wineId = _a[0];
+        const count = _a[1];
         const wine = pourEvents.find(function (e) { return e.wine_id === wineId; });
         const w = wine?.wines as
           | { name: string; producer: string; vintage: number | null }
@@ -185,8 +185,8 @@ export async function GET(request: NextRequest) {
       .sort(function (a, b) { return b[1] - a[1]; })
       .slice(0, topN)
       .map(function (_a) {
-        var wineId = _a[0];
-        var revenue = _a[1];
+        const wineId = _a[0];
+        const revenue = _a[1];
         const wine = pourEvents.find(function (e) { return e.wine_id === wineId; });
         const w = wine?.wines as
           | { name: string; producer: string; vintage: number | null }

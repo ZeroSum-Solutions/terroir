@@ -51,18 +51,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const ocrText = typeof scan.ocr_text === "string"
     ? JSON.parse(scan.ocr_text as string)
     : scan.ocr_text;
-  const ocr = ocrText as { rawText: string; vendorName?: string; invoiceNumber?: string; invoiceDate?: string };
+  const ocr = ocrText as { rawText: string; vendorName?: string; invoiceNumber?: string; invoiceDate?: string; tables?: unknown[] };
 
   if (!ocr.rawText) {
     return json({ error: "No OCR text available for re-extraction." }, 422);
   }
 
+  // Stored OCR JSON predates the `tables` field — backfill so the
+  // OcrResult contract holds.
+  const ocrInput = { ...ocr, tables: ocr.tables ?? [] } as Parameters<typeof extractFromOcr>[0];
+
   // Re-invoke Claude with the stored OCR text
   let parsed;
-  try { parsed = await extractFromOcr(ocr); }
+  try { parsed = await extractFromOcr(ocrInput); }
   catch (e) {
     if (e instanceof AiExtractError) {
-      return json({ error: e.message, rawText: ocr.rawText }, 
+      return json({ error: e.message, rawText: ocr.rawText },
         e.code === "parse_failed" ? 422 : e.code === "rate_limited" ? 429 : 500);
     }
     throw e;
@@ -84,17 +88,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     varietal: item.varietal, region: item.region, qty: item.qty,
     unitCost: item.unitCost, confidence: item.confidence,
     lowFields: item.lowFields.length > 0 ? item.lowFields : undefined,
-  }));
+  })) as LineItem[];
 
   // Update the invoice_scans row with new extraction results
   // NOTE: does NOT mutate existing inventory_items.
   const quality = scoreItems(items);
-  await supabase.from("invoice_scans").update({
-    parsed_line_items: JSON.parse(JSON.stringify(parsed.lineItems)),
-    final_line_items: JSON.parse(JSON.stringify(items)),
-    accuracy_score: quality.score,
-    item_count: items.length,
-  }).eq("id", id).catch(() => {});
+  try {
+    await supabase.from("invoice_scans").update({
+      parsed_line_items: JSON.parse(JSON.stringify(parsed.lineItems)),
+      final_line_items: JSON.parse(JSON.stringify(items)),
+      accuracy_score: quality.avgConfidence,
+      item_count: items.length,
+    }).eq("id", id);
+  } catch {}
 
   return json({
     scanId: id,

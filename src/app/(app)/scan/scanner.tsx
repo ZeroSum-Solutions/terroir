@@ -485,9 +485,9 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const handleStart = useCallback(
     (files: File[]) => {
       if (mode === "bottle") {
-        startBottleScan(file);
+        if (files[0]) startBottleScan(files[0]);
       } else {
-        startScan(file);
+        startScan(files);
       }
     },
     [mode, startBottleScan, startScan],

@@ -56,6 +56,12 @@ export type CellarWineRow = {
   manual_overrides: string[];
   colour: string | null;
 
+  // BND-069/BND-070 — serving temp + decant enrichment metadata.
+  serving_temp_min: number | null;
+  serving_temp_max: number | null;
+  serving_temp_label: string | null;
+  decant_minutes: number | null;
+
   // BND-040 — pricing intelligence. All nullable so wines without retail
   // data render the drawer without a Pricing section. Targets resolve to
   // restaurant default at the helper layer when null.

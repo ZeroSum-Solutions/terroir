@@ -165,13 +165,13 @@ describe("POST /api/scan", () => {
 
     const res = await POST(makeFormRequest(fd));
     expect(res.status).toBe(415);
-    var body415 = await res.json();
+    const body415 = await res.json();
     expect(body415.code).toBe("unsupported_type");
     expect(azure.analyzeInvoice).not.toHaveBeenCalled();
   });
 
   it("returns 415 when JSON body path has an unsupported file extension", async () => {
-    var s = makeSupabase();
+    const s = makeSupabase();
     s.storage.from("invoice-images").download = vi.fn().mockResolvedValue({
       data: new Blob(["GIF89a stub"]),
       error: null,
@@ -184,15 +184,15 @@ describe("POST /api/scan", () => {
       role: "owner",
     });
 
-    var rq = new Request("http://localhost/api/scan", {
+    const rq = new Request("http://localhost/api/scan", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ imagePath: "restaurant-A/scan-1/image.gif" }),
     }) as any;
 
-    var rs = await POST(rq);
+    const rs = await POST(rq);
     expect(rs.status).toBe(415);
-    var bd = await rs.json();
+    const bd = await rs.json();
     expect(bd.code).toBe("unsupported_type");
     expect(azure.analyzeInvoice).not.toHaveBeenCalled();
     expect(anthropic.parse).not.toHaveBeenCalled();
@@ -207,15 +207,15 @@ describe("POST /api/scan", () => {
     });
 
     // Create a Buffer whose byte length is > 10 MB so File.size reflects reality
-    var buf = Buffer.alloc(11 * 1024 * 1024, 65); // 11 MB of "A"
-    var bigFile = new File([buf], "big.jpg", { type: "image/jpeg" });
-    var fd = new FormData();
+    const buf = Buffer.alloc(11 * 1024 * 1024, 65); // 11 MB of "A"
+    const bigFile = new File([buf], "big.jpg", { type: "image/jpeg" });
+    const fd = new FormData();
     fd.append("file", bigFile);
 
-    var res = await POST(makeFormRequest(fd));
+    const res = await POST(makeFormRequest(fd));
 
     expect(res.status).toBe(413);
-    var body = await res.json();
+    const body = await res.json();
     expect(body.error).toContain("10 MB");
     // Azure DI must not be called for oversized uploads
     expect(azure.analyzeInvoice).not.toHaveBeenCalled();

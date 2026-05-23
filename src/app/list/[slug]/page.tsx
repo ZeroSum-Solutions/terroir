@@ -124,7 +124,7 @@ export default async function PublicWineListPage({
   // sorted, 86'd wines handled per eightysix_strategy, empty sections dropped.
   // BND-171: exclude hidden items from public view
   const visibleSections = (list.wine_list_sections ?? []).map(function (section) {
-    var items = section.wine_list_items as any[];
+    const items = section.wine_list_items as any[];
     return { ...section, wine_list_items: items.filter(function (item: any) { return !item.hidden; }) };
   });
   const sections = renderWineListSections(

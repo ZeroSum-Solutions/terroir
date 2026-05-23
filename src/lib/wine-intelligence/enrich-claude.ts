@@ -269,6 +269,7 @@ export async function enrichWinesWithClaudeBatch(
       servingTempMin: null,
       servingTempMax: null,
       servingTempLabel: null,
+      decantMinutes: null,
     });
   }
 

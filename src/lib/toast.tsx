@@ -20,23 +20,23 @@ type ToastCtx = {
 
 const ToastCTX = createContext<ToastCtx | null>(null);
 
-export function ToastProvider({ children }) {
-  var nid = useRef(0);
-  var [items, setItems] = useState([]);
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const nid = useRef(0);
+  const [items, setItems] = useState<ToastItem[]>([]);
 
-  var add = useCallback(function(text, tone) {
-    var id = nid.current++;
-    setItems(function(prev) { return prev.concat({ id, text, tone }); });
-    setTimeout(function() {
-      setItems(function(prev) { return prev.filter(function(t) { return t.id !== id; }); });
+  const add = useCallback((text: string, tone: ToastTone) => {
+    const id = nid.current++;
+    setItems((prev) => prev.concat({ id, text, tone }));
+    setTimeout(() => {
+      setItems((prev) => prev.filter((t) => t.id !== id));
     }, 5000);
   }, []);
 
-  var toast = useCallback(function(text, tone) { add(text, tone || "success"); }, [add]);
-  var success = useCallback(function(text) { add(text, "success"); }, [add]);
-  var error = useCallback(function(text) { add(text, "error"); }, [add]);
+  const toast = useCallback((text: string, tone?: ToastTone) => { add(text, tone || "success"); }, [add]);
+  const success = useCallback((text: string) => { add(text, "success"); }, [add]);
+  const error = useCallback((text: string) => { add(text, "error"); }, [add]);
 
-  var ctx = { toast, success, error };
+  const ctx: ToastCtx = { toast, success, error };
 
   return (
     <ToastCTX.Provider value={ctx}>
@@ -47,14 +47,14 @@ export function ToastProvider({ children }) {
 }
 
 export function useToast() {
-  var ctx = useContext(ToastCTX);
+  const ctx = useContext(ToastCTX);
   if (!ctx) {
     throw new Error("useToast must be used inside a ToastProvider");
   }
   return ctx;
 }
 
-function ToastContainer({  items  }) {
+function ToastContainer({ items }: { items: ToastItem[] }) {
   if (items.length === 0) return null;
   return (
     <div
@@ -65,7 +65,7 @@ function ToastContainer({  items  }) {
       )}
     >
       <div className="flex flex-col gap-xs">
-        {items.map(function(t) {
+        {items.map((t) => {
           return (
             <div
               key={t.id}

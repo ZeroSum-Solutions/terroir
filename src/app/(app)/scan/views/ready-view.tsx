@@ -72,7 +72,7 @@ export function ReadyView({
   const isBottle = mode === "bottle";
 
   const handleFiles = (files: FileList | null) => {
-    var fileArr = files ? Array.from(files) : [];
+    const fileArr = files ? Array.from(files) : [];
     if (fileArr.length === 0) return;
     onStart(fileArr);
   };
