@@ -2,12 +2,13 @@
 
 import { useRef, useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { X, Wine, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, Undo2 } from "lucide-react";
+import { X, Wine, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, Undo2, Image as ImageIcon, Upload, Trash2 } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { useToast } from "@/lib/toast";
 import { ML_PER_OZ } from "@/lib/units";
 import { cn } from "@/lib/utils";
 import { NoteModal } from "./note-modal";
+import { EditMetadataModal } from "./edit-metadata-modal";
 import { PourPickerModal } from "./pour-picker-modal";
 import { PricingTargetOverride } from "./pricing-target-override";
 import { DrinkWindowTimeline } from "@/components/drink-window-timeline";
@@ -50,6 +51,10 @@ export function WineDetailDrawer({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const [enrichMsg, setEnrichMsg] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // BND-119: track last pour for undo.
   const [lastPour, setLastPour] = useState<{ ml: number } | null>(null);
@@ -158,6 +163,58 @@ export function WineDetailDrawer({
     [row, router],
   );
 
+  const handleImageUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file || !row) return;
+      setUploading(true);
+      setUploadMsg(null);
+      setErrorMsg(null);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch(`/api/wines/${row.wine_id}/image`, {
+          method: "POST",
+          body: formData,
+        });
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+          throw new Error(payload?.error?.message ?? `Upload failed (${res.status}).`);
+        }
+        toast.success("Image uploaded");
+        startTransition(() => router.refresh());
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : "Upload failed.");
+      } finally {
+        setUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    },
+    [row, router, toast],
+  );
+
+  const handleImageDelete = useCallback(
+    async () => {
+      if (!row) return;
+      setUploading(true);
+      setErrorMsg(null);
+      try {
+        const res = await fetch(`/api/wines/${row.wine_id}/image`, { method: "DELETE" });
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+          throw new Error(payload?.error?.message ?? `Delete failed (${res.status}).`);
+        }
+        toast.success("Image removed");
+        startTransition(() => router.refresh());
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : "Delete failed.");
+      } finally {
+        setUploading(false);
+      }
+    },
+    [row, router, toast],
+  );
+
   const onConfirm86 = async (note: string | undefined) => {
     if (!row || !pendingDirection) return;
     const direction = pendingDirection;
@@ -259,6 +316,54 @@ export function WineDetailDrawer({
             className="overflow-y-auto px-md py-md md:px-lg md:py-lg"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
           >
+            {/* Hero image */}
+            {row.hero_image_url && (
+              <section aria-label="Hero image" className="mb-md">
+                <div className="relative rounded-md overflow-hidden border border-border bg-surface-muted">
+                  <img
+                    src={row.hero_image_url}
+                    alt={`${row.producer} ${row.name}`}
+                    className="w-full h-48 object-cover"
+                  />
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={handleImageDelete}
+                      disabled={uploading}
+                      className="absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-sm bg-black/50 text-white hover:bg-black/70 disabled:opacity-40"
+                      aria-label="Remove image"
+                    >
+                      <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {canManage && !row.hero_image_url && (
+              <section aria-label="Upload image" className="mb-md">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                  id="hero-image-upload"
+                />
+                <label
+                  htmlFor="hero-image-upload"
+                  className="flex h-[48px] w-full cursor-pointer items-center justify-center gap-xs rounded-sm border border-dashed border-border-strong bg-white text-[13px] font-medium text-ink-muted hover:bg-surface-muted transition-colors"
+                >
+                  {uploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
+                  ) : (
+                    <Upload className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  )}
+                  {uploading ? "Uploading..." : "Upload hero image"}
+                </label>
+              </section>
+            )}
+
             {/* Stock breakdown */}
             <section
               aria-label="Stock"
@@ -289,6 +394,19 @@ export function WineDetailDrawer({
                 </p>
               )}
             </section>
+
+            {/* Tasting notes */}
+            {row.tasting_notes && (
+              <section
+                aria-label="Tasting notes"
+                className="mt-md rounded-md border border-border bg-white p-md"
+              >
+                <h3 className="text-[13px] font-semibold text-ink mb-sm">Tasting notes</h3>
+                <p className="text-[13px] text-ink-muted leading-relaxed whitespace-pre-wrap">
+                  {row.tasting_notes}
+                </p>
+              </section>
+            )}
 
             {row.retail_median != null && (
               <PricingSection row={row} canManage={canManage} />
@@ -401,9 +519,8 @@ export function WineDetailDrawer({
               {canManage && (
                 <button
                   type="button"
-                  disabled
-                  title="Wine editor coming soon"
-                  className="flex h-[40px] cursor-not-allowed items-center justify-center gap-xs rounded-sm border border-border bg-surface-muted text-[13px] font-medium text-ink-subtle"
+                  onClick={() => setEditOpen(true)}
+                  className="flex h-[40px] items-center justify-center gap-xs rounded-sm border border-border-strong bg-white text-[13px] font-medium text-ink hover:bg-surface-muted transition-colors"
                 >
                   <Edit3 className="h-4 w-4" strokeWidth={2} aria-hidden />
                   Edit metadata
@@ -442,6 +559,22 @@ export function WineDetailDrawer({
           }
           onSubmit={(note) => onConfirm86(note)}
           onCancel={() => setPendingDirection(null)}
+        />
+      )}
+
+      {/* Edit metadata modal */}
+      {editOpen && row && (
+        <EditMetadataModal
+          wineId={row.wine_id}
+          initial={{
+            producer: row.producer,
+            name: row.name,
+            vintage: row.vintage,
+            varietal: row.varietal,
+            region: row.region,
+            tasting_notes: row.tasting_notes,
+          }}
+          onClose={() => setEditOpen(false)}
         />
       )}
     </>

@@ -25,6 +25,8 @@ export type CellarWineRow = {
   region: string | null;
   is_eightysixed: boolean;
   eightysixed_at: string | null;
+  tasting_notes: string | null;
+  hero_image_url: string | null;
 
   // From inventory_items (aggregate)
   sealed_count: number;

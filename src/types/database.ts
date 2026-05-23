@@ -696,6 +696,7 @@ export type Database = {
           eightysixed_at: string | null
           eightysixed_by: string | null
           enrichment_metadata: Json | null
+          hero_image_url: string | null
           id: string
           is_eightysixed: boolean
           last_enriched_at: string | null
@@ -720,6 +721,7 @@ export type Database = {
           serving_temp_max: number | null
           serving_temp_min: number | null
           size_ml: number
+          tasting_notes: string | null
           updated_at: string
           varietal: string | null
           vintage: number | null
@@ -733,6 +735,7 @@ export type Database = {
           eightysixed_at?: string | null
           eightysixed_by?: string | null
           enrichment_metadata?: Json | null
+          hero_image_url?: string | null
           id?: string
           is_eightysixed?: boolean
           last_enriched_at?: string | null
@@ -757,6 +760,7 @@ export type Database = {
           serving_temp_max?: number | null
           serving_temp_min?: number | null
           size_ml?: number
+          tasting_notes?: string | null
           updated_at?: string
           varietal?: string | null
           vintage?: number | null
@@ -770,6 +774,7 @@ export type Database = {
           eightysixed_at?: string | null
           eightysixed_by?: string | null
           enrichment_metadata?: Json | null
+          hero_image_url?: string | null
           id?: string
           is_eightysixed?: boolean
           last_enriched_at?: string | null
@@ -794,6 +799,7 @@ export type Database = {
           serving_temp_max?: number | null
           serving_temp_min?: number | null
           size_ml?: number
+          tasting_notes?: string | null
           updated_at?: string
           varietal?: string | null
           vintage?: number | null

@@ -65,7 +65,7 @@ export default async function CellarPage() {
     supabase
       .from("wines")
       .select(
-        "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until",
+        "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until, tasting_notes, hero_image_url",
       )
       .eq("restaurant_id", restaurantId)
       .order("name", { ascending: true }),
@@ -193,6 +193,8 @@ export default async function CellarPage() {
       region: w.region,
       is_eightysixed: w.is_eightysixed ?? false,
       eightysixed_at: w.eightysixed_at,
+      tasting_notes: w.tasting_notes ?? null,
+      hero_image_url: w.hero_image_url ?? null,
       sealed_count: inv.sealed,
       bin_location: inv.bin,
       wine_list_item_id: ob?.wine_list_item_id ?? null,
