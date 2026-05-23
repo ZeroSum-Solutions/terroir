@@ -93,6 +93,17 @@ body {
   }
 }
 
+
+/*
+ * Skeleton shimmer animation for loading states.
+ */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+
 /*
  * Print defaults — half-inch margins so paper menus don't waste a page
  * on padding, and a forced white surface so cellar/UI hover effects
