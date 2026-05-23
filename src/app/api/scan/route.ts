@@ -16,6 +16,7 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
+import { rateLimit } from "@/lib/api/rate-limit";
 import { getAnthropicClient } from "@/lib/ai/anthropic-client";
 import { requireMembership } from "@/lib/api/auth";
 import { withIdempotency, isValidIdempotencyKey } from "@/lib/api/idempotency";
@@ -29,6 +30,20 @@ import type { OcrResult } from "@/lib/scanner/ocr-service";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
+
+/** Max scan requests per restaurant per minute. */
+const SCAN_RATE_LIMIT = 10;
+/** Rate-limit window in ms (one minute). */
+const SCAN_RATE_WINDOW_MS = 60 * 1000;
+
+/**
+ * Best-effort client-IP extraction. Uses x-forwarded-for or x-real-ip.
+ */
+function clientIp(request: NextRequest): string {
+  const fwd = request.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
+  return request.headers.get("x-real-ip")?.trim() || "unknown";
+}
 
 const MAX_BYTES = 20 * 1024 * 1024;
 const ALLOWED_MIME = new Set([
@@ -192,6 +207,20 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   const { supabase, user, restaurantId } = auth;
+
+  // INT-003: rate-limit scans per restaurant to control Azure + Anthropic spend.
+  // Keyed per restaurant so a single restaurant can't burn through the budget.
+  const limit = rateLimit(
+    `scan:${restaurantId}:${clientIp(request)}`,
+    SCAN_RATE_LIMIT,
+    SCAN_RATE_WINDOW_MS,
+  );
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: "Too many scan requests. Please wait before scanning again." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+    );
+  }
 
   // BND-089: extract idempotency key before any processing.
   const rawKey = request.headers.get("Idempotency-Key");

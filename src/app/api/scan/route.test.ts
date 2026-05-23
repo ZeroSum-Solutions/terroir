@@ -57,6 +57,11 @@ vi.mock("@/lib/scanner/azure", () => ({
   analyzeInvoice: (...args: unknown[]) => azure.analyzeInvoice(...args),
 }));
 
+const rateLimitMock = vi.hoisted(() => ({ rateLimit: vi.fn() }));
+vi.mock("@/lib/api/rate-limit", () => ({
+  rateLimit: (...args: unknown[]) => rateLimitMock.rateLimit(...args),
+}));
+
 function makeSupabase() { return { from: vi.fn().mockReturnThis(), insert: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: { id: "scan-1" }, error: null }), update: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), storage: { from: vi.fn().mockReturnThis(), download: vi.fn().mockRejectedValue(new Error("not found")), upload: vi.fn().mockResolvedValue({ error: null }) }, rpc: vi.fn(), catch: vi.fn().mockReturnThis() }; }
 
 const { POST } = await import("./route");
@@ -87,6 +92,7 @@ describe("POST /api/scan", () => {
     process.env.AZURE_DOC_INTELLIGENCE_ENDPOINT = "https://example.invalid";
     process.env.AZURE_DOC_INTELLIGENCE_KEY = "test-key";
     process.env.ANTHROPIC_API_KEY = "sk-test";
+    rateLimitMock.rateLimit.mockReturnValue({ ok: true });
   });
 
   // ── Auth ──────────────────────────────────────────────────────────────
@@ -292,4 +298,62 @@ describe("POST /api/scan", () => {
     expect(body.message).toBeTruthy();
     expect(body.rawText).toBe(OK_OCR.rawText);
   });
+  // ── Rate limiting ──────────────────────────────────────────────────────
+
+  it("returns 429 when the per-minute scan rate limit is exceeded", async () => {
+    auth.requireMembership.mockResolvedValue({
+      supabase: makeSupabase(),
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+    rateLimitMock.rateLimit.mockReturnValue({ ok: false, retryAfterSeconds: 30 });
+
+    const fd = new FormData();
+    fd.append("file", pdfFile());
+
+    const res = await POST(makeFormRequest(fd));
+
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toBeTruthy();
+  });
+
+  it("returns a Retry-After header when returning 429", async () => {
+    auth.requireMembership.mockResolvedValue({
+      supabase: makeSupabase(),
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+    rateLimitMock.rateLimit.mockReturnValue({ ok: false, retryAfterSeconds: 42 });
+
+    const fd = new FormData();
+    fd.append("file", pdfFile());
+
+    const res = await POST(makeFormRequest(fd));
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("42");
+  });
+
+  it("proceeds normally when rate limit is not exceeded", async () => {
+    auth.requireMembership.mockResolvedValue({
+      supabase: makeSupabase(),
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+    rateLimitMock.rateLimit.mockReturnValue({ ok: true });
+    azure.analyzeInvoice.mockResolvedValue(OK_OCR);
+    anthropic.parse.mockResolvedValue(makeParsedInvoice());
+
+    const fd = new FormData();
+    fd.append("file", pdfFile());
+
+    const res = await POST(makeFormRequest(fd));
+
+    expect(res.status).toBe(200);
+  });
+
 });
