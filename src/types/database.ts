@@ -24,6 +24,7 @@ export type Database = {
       availability_events: {
         Row: {
           created_at: string
+          delta: number | null
           direction: string
           id: string
           note: string | null
@@ -34,6 +35,7 @@ export type Database = {
         Insert: {
           created_at?: string
           direction: string
+          delta?: number | null
           id?: string
           note?: string | null
           restaurant_id: string
@@ -43,6 +45,7 @@ export type Database = {
         Update: {
           created_at?: string
           direction?: string
+          delta?: number | null
           id?: string
           note?: string | null
           restaurant_id?: string
@@ -717,6 +720,7 @@ export type Database = {
           retail_refreshed_at: string | null
           retail_retailer_count: number | null
           review_excerpt: string | null
+          decant_minutes: number | null
           serving_temp_label: string | null
           serving_temp_max: number | null
           serving_temp_min: number | null
@@ -756,6 +760,7 @@ export type Database = {
           retail_refreshed_at?: string | null
           retail_retailer_count?: number | null
           review_excerpt?: string | null
+          decant_minutes?: number | null
           serving_temp_label?: string | null
           serving_temp_max?: number | null
           serving_temp_min?: number | null
@@ -795,6 +800,7 @@ export type Database = {
           retail_refreshed_at?: string | null
           retail_retailer_count?: number | null
           review_excerpt?: string | null
+          decant_minutes?: number | null
           serving_temp_label?: string | null
           serving_temp_max?: number | null
           serving_temp_min?: number | null

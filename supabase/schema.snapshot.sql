@@ -573,6 +573,8 @@ alter table public.wines
   add column serving_temp_min   int,
   add column serving_temp_max   int,
   add column serving_temp_label text;
+alter table public.wines
+  add column decant_minutes      int;
 
 -------------------------------------------------------------------------------
 -- lwin_catalog — Liv-ex LWIN reference data for matching and enrichment
@@ -1084,7 +1086,8 @@ begin
       (e->>'drink_window_end')::int      as drink_window_end,
       (e->>'serving_temp_min')::int      as serving_temp_min,
       (e->>'serving_temp_max')::int      as serving_temp_max,
-      (e->>'serving_temp_label')         as serving_temp_label
+      (e->>'serving_temp_label')         as serving_temp_label,
+      (e->>'decant_minutes')::int          as decant_minutes
     from jsonb_array_elements(p_enrichments) as e
   )
   update public.wines w
@@ -1093,7 +1096,8 @@ begin
     drink_window_end   = u.drink_window_end,
     serving_temp_min   = u.serving_temp_min,
     serving_temp_max   = u.serving_temp_max,
-    serving_temp_label = u.serving_temp_label
+    serving_temp_label = u.serving_temp_label,
+    decant_minutes      = u.decant_minutes
   from u
   where w.id = u.id
     and w.restaurant_id = p_restaurant_id;
@@ -2193,7 +2197,8 @@ begin
       (e->>'review_excerpt')             as review_excerpt,
       (e->>'serving_temp_min')::int      as serving_temp_min,
       (e->>'serving_temp_max')::int      as serving_temp_max,
-      (e->>'serving_temp_label')         as serving_temp_label
+      (e->>'serving_temp_label')         as serving_temp_label,
+      (e->>'decant_minutes')::int          as decant_minutes
     from jsonb_array_elements(p_enrichments) as e
   )
   update public.wines w
@@ -2207,6 +2212,7 @@ begin
     serving_temp_min   = coalesce(u.serving_temp_min,   w.serving_temp_min),
     serving_temp_max   = coalesce(u.serving_temp_max,   w.serving_temp_max),
     serving_temp_label = coalesce(u.serving_temp_label, w.serving_temp_label),
+    decant_minutes      = coalesce(u.decant_minutes,      w.decant_minutes),
     last_enriched_at   = now()
   from u
   where w.id = u.id

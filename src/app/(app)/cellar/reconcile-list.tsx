@@ -6,16 +6,13 @@ import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 
-// Renamed from ReconcileItem when this file moved into /cellar. The
-// underlying RPC row shape `list_open_bottle_items` lives in
-// @/lib/wine-list/shapes.ts (DEBT-022).
 type ReconcileItem = OpenBottleRow;
 
 const FRACTIONS: Array<{ label: string; value: number }> = [
   { label: "Empty", value: 0 },
-  { label: "¼", value: 0.25 },
-  { label: "½", value: 0.5 },
-  { label: "¾", value: 0.75 },
+  { label: "Quarter", value: 0.25 },
+  { label: "Half", value: 0.5 },
+  { label: "Three Quarter", value: 0.75 },
   { label: "Full", value: 1 },
 ];
 
@@ -99,11 +96,6 @@ export function ReconcileList({
         ))}
       </ul>
 
-      {/*
-        Sticky save bar on mobile (sits above the fixed bottom nav at
-        72px). On desktop the page has room, so it drops inline below
-        the list with `md:static`.
-      */}
       <div className="fixed bottom-[72px] left-0 right-0 z-30 border-t border-border bg-white px-lg py-sm md:static md:mt-lg md:border-0 md:px-0 md:py-0">
         <button
           type="button"
@@ -117,7 +109,7 @@ export function ReconcileList({
           )}
         >
           {saving
-            ? "Saving…"
+            ? "Saving..."
             : changedCount > 0
               ? `Save ${changedCount} change${changedCount === 1 ? "" : "s"}`
               : "No changes yet"}
@@ -139,40 +131,112 @@ function ReconcileRow({
   varianceThresholdOz: number;
 }) {
   const currentMl = pending?.newRemainingMl ?? item.open_remaining_ml;
-  const currentOz = (currentMl / ML_PER_OZ).toFixed(1);
+  const currentOz = currentMl / ML_PER_OZ;
+  const trackedOz = item.open_remaining_ml / ML_PER_OZ;
   const glassesLeft = useMemo(
     () => Math.floor(item.open_remaining_ml / item.glass_pour_ml),
     [item.open_remaining_ml, item.glass_pour_ml],
   );
 
-  // BND-134: highlight rows where |expected - actual| exceeds the configurable threshold.
   const expectedMl = item.open_remaining_ml;
   const actualMl = pending?.newRemainingMl ?? expectedMl;
-  const varianceOz = Math.abs(expectedMl - actualMl) / ML_PER_OZ;
-  const isVarianceFlagged = varianceOz > varianceThresholdOz;
+  const varianceMl = actualMl - expectedMl;
+  const varianceOz = varianceMl / ML_PER_OZ;
+  const hasVariance = pending !== null && pending.newRemainingMl !== item.open_remaining_ml;
+  const isVarianceFlagged = hasVariance && Math.abs(varianceOz) > varianceThresholdOz;
 
   return (
-    <li className={`rounded-md border p-md ${
-    isVarianceFlagged
-      ? "border-warning/50 bg-warning-soft/20"
-      : "border-border bg-white"
-  }`}>
+    <li
+      className={`rounded-md border p-md ${
+        isVarianceFlagged
+          ? "border-warning/50 bg-warning-soft/20"
+          : "border-border bg-white"
+      }`}
+    >
       <div className="mb-sm">
-        <div className="font-serif text-[15px] text-ink">
-          {item.producer} {item.name}
-          {item.vintage !== null && (
-            <span className="ml-xs font-mono text-[12px] text-ink-muted">
-              {item.vintage}
-            </span>
-          )}
+        <div className="flex items-start justify-between gap-sm">
+          <div className="min-w-0">
+            <div className="font-serif text-[15px] text-ink leading-snug">
+              {item.producer} {item.name}
+              {item.vintage !== null && (
+                <span className="ml-xs font-mono text-[12px] text-ink-muted">
+                  {item.vintage}
+                </span>
+              )}
+            </div>
+            <div className="mt-2xs flex flex-wrap items-center gap-xs text-[12px] text-ink-muted">
+              <span className="rounded-pill bg-surface-muted px-sm py-2xs font-mono">
+                {formatBottleSize(item.size_ml)}
+              </span>
+              {item.opened_at && (
+                <span className="tabular-nums">
+                  Opened {formatOpenedAt(item.opened_at)}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="mt-2xs text-[12px] text-ink-muted">
-          System says ~{item.open_remaining_ml} ml (~{glassesLeft} glass
-          {glassesLeft === 1 ? "" : "es"})
+      </div>
+
+      <div className="mb-sm rounded-sm bg-surface-muted px-sm py-sm">
+        <div className="flex flex-wrap items-baseline gap-sm">
+          <span className="text-[12px] text-ink-muted">Tracked:</span>
+          <span className="font-mono text-[15px] font-semibold text-ink tabular-nums">
+            {trackedOz.toFixed(1)} oz
+          </span>
+          <span className="text-[12px] text-ink-subtle tabular-nums">
+            ({item.open_remaining_ml} ml ~{glassesLeft} glass
+            {glassesLeft === 1 ? "" : "es"})
+          </span>
         </div>
-        {pending && isVarianceFlagged && (
-          <div className="mt-xs inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-2xs text-[11px] font-semibold text-warning">
-            ⚠ {varianceOz.toFixed(1)} oz variance
+      </div>
+
+      <div className="mb-sm">
+        <div className="flex flex-wrap items-center gap-sm">
+          <label className="flex items-center gap-xs text-[13px] text-ink-muted">
+            <span>Actual:</span>
+            <input
+              type="number"
+              min={0}
+              max={item.size_ml}
+              value={currentMl}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === "") {
+                  onChange({
+                    newRemainingMl: 0,
+                    note: pending?.note,
+                  });
+                  return;
+                }
+                const val = Number(raw);
+                if (isNaN(val) || val < 0) {
+                  return;
+                }
+                onChange({
+                  newRemainingMl: Math.min(item.size_ml, val),
+                  note: pending?.note,
+                });
+              }}
+              className="h-[40px] w-[96px] rounded-sm border border-border bg-white px-sm text-[14px] font-mono tabular-nums outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
+              aria-label="Actual remaining volume in ml"
+            />
+          </label>
+          <span className="text-[13px] text-ink-subtle tabular-nums">
+            = {currentOz.toFixed(1)} oz
+          </span>
+        </div>
+        {hasVariance && (
+          <div
+            className={`mt-xs inline-flex items-center gap-xs rounded-pill px-sm py-2xs text-[12px] font-semibold ${
+              Math.abs(varianceOz) > varianceThresholdOz
+                ? "bg-warning-soft text-warning"
+                : "bg-surface-muted text-ink-subtle"
+            }`}
+          >
+            {varianceOz > 0 ? "↑" : varianceOz < 0 ? "↓" : "="}{" "}
+            {Math.abs(varianceOz).toFixed(1)} oz{" "}
+            {varianceOz > 0 ? "less than tracked" : varianceOz < 0 ? "more than tracked" : "no change"}
           </div>
         )}
       </div>
@@ -204,49 +268,48 @@ function ReconcileRow({
         })}
       </div>
 
-      <details className="mt-sm">
-        <summary className="cursor-pointer text-[12px] text-accent">
-          Exact ml / oz
-        </summary>
-        <div className="mt-xs flex flex-wrap items-center gap-sm text-[12px] text-ink-muted">
-          <label className="flex items-center gap-xs">
-            ml:
-            <input
-              type="number"
-              min={0}
-              max={item.size_ml}
-              value={currentMl}
-              onChange={(e) =>
-                onChange({
-                  newRemainingMl: Math.max(
-                    0,
-                    Math.min(item.size_ml, Number(e.target.value) || 0),
-                  ),
-                  note: pending?.note,
-                })
-              }
-              className="h-[32px] w-[80px] rounded-sm border border-border bg-white px-sm text-[13px] outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
-            />
-          </label>
-          <span>(≈ {currentOz} oz)</span>
-          <label className="flex w-full items-center gap-xs sm:w-auto sm:flex-1">
+      <div className="flex flex-wrap items-center gap-sm">
+        <label className="flex w-full items-center gap-xs sm:w-auto sm:flex-1">
+          <span className="text-[12px] text-ink-muted whitespace-nowrap">
             Note:
-            <input
-              type="text"
-              maxLength={500}
-              value={pending?.note ?? ""}
-              onChange={(e) =>
-                onChange({
-                  newRemainingMl: currentMl,
-                  note: e.target.value,
-                })
-              }
-              placeholder="spill / miscount / etc."
-              className="h-[32px] flex-1 rounded-sm border border-border bg-white px-sm text-[13px] outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
-            />
-          </label>
-        </div>
-      </details>
+          </span>
+          <input
+            type="text"
+            maxLength={500}
+            value={pending?.note ?? ""}
+            onChange={(e) =>
+              onChange({
+                newRemainingMl: currentMl,
+                note: e.target.value,
+              })
+            }
+            placeholder="spill, miscount, etc."
+            className="h-[32px] flex-1 rounded-sm border border-border bg-white px-sm text-[13px] outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
+          />
+        </label>
+      </div>
     </li>
   );
+}
+
+function formatBottleSize(sizeMl: number): string {
+  if (sizeMl === 750) return "750ml";
+  if (sizeMl === 375) return "Half (375ml)";
+  if (sizeMl === 1500) return "Magnum (1.5L)";
+  if (sizeMl === 3000) return "Double Magnum (3L)";
+  if (sizeMl === 6000) return "Imperial (6L)";
+  if (sizeMl >= 1000) return `${(sizeMl / 1000).toFixed(1)}L`;
+  return `${sizeMl}ml`;
+}
+
+function formatOpenedAt(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return "today";
+  if (diffDays === 1) return "yesterday";
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
