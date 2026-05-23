@@ -251,7 +251,12 @@ export async function POST(request: NextRequest) {
           extra: { rawTextLen: ocr.rawText.length },
         });
       }
-      const body: { error: string; rawText?: string } = { error: e.message };
+      // BND-088: return { code, message } envelope for all AiExtractError
+      // responses so the UI can display user-readable error messages.
+      const body: { code: string; message: string; rawText?: string } = {
+        code: e.code,
+        message: e.message,
+      };
       // Surface rawText for every failure except "not configured" so the UI
       // can offer manual entry on the OCR output we already paid for.
       if (e.code !== "not_configured") body.rawText = ocr.rawText;

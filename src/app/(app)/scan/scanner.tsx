@@ -83,10 +83,12 @@ async function postScan(files: File[], signal: AbortSignal): Promise<Scan> {
   const res = await fetch("/api/scan", { method: "POST", body, signal });
   if (!res.ok) {
     const payload = (await res.json().catch(() => null)) as
-      | { error?: string; message?: string; rawText?: string }
+      | { error?: string; code?: string; message?: string; rawText?: string }
       | null;
+    // BND-088: prefer { code, message } envelope for AiExtractError,
+    // fall back to legacy { error } for OCR and other error types.
     throw new ScanError(
-      payload?.error ?? payload?.message ?? `Scan failed (${res.status})`,
+      payload?.message ?? payload?.error ?? `Scan failed (${res.status})`,
       payload?.rawText,
     );
   }
