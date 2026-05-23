@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, History } from "lucide-react";
 import { getAuthContext } from "@/lib/auth-context";
 import { ReconcileList } from "../reconcile-list";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
@@ -13,13 +13,14 @@ export const fetchCache = "default";
 export const metadata: Metadata = { title: "Reconcile — Terroir" };
 
 /**
- * /cellar/reconcile — BND-128
+ * /cellar/reconcile — BND-128 / BND-135
  *
  * Dedicated end-of-shift reconciliation page. Gated to manager+ only;
  * staff are redirected to /cellar with a 403-like UX.
  *
  * Renders the ReconcileList component (shared with the ReconcileModal)
- * in a full-page layout with a back button to /cellar.
+ * in a full-page layout with a back button to /cellar and a link to
+ * the reconciliation history view (BND-135).
  */
 export default async function ReconcilePage() {
   const auth = await getAuthContext();
@@ -69,6 +70,13 @@ export default async function ReconcilePage() {
             {reconcileItems.length !== 1 ? "s" : ""} to verify
           </p>
         </div>
+        <Link
+          href="/cellar/reconcile/history"
+          className="flex h-[38px] items-center gap-xs rounded-sm border border-border bg-white px-sm text-[13px] font-medium text-ink-muted hover:bg-surface-muted hover:text-ink transition-colors"
+        >
+          <History className="h-4 w-4" strokeWidth={1.5} />
+          <span className="hidden sm:inline">History</span>
+        </Link>
       </header>
 
       <ReconcileList

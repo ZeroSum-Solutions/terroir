@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import * as Sentry from "@sentry/nextjs";
 import { Errors } from "@/lib/api/errors";
 import { z } from "zod";
-import { requireMembership } from "@/lib/api/auth";
+import { requireRole } from "@/lib/api/auth";
 import { revalidateAutoEightysixedWines } from "@/lib/api/auto-eightysix-revalidation";
 
 export const runtime = "nodejs";
@@ -24,23 +24,24 @@ const BodySchema = z.object({
 /**
  * POST /api/reconcile
  *
- * BND-038. End-of-shift reconcile: batch-update open_bottles.remaining_ml
+ * BND-038 / BND-136. End-of-shift reconcile: batch-update open_bottles.remaining_ml
  * to match physical reality. Each entry becomes a `reconcile` pour_event
  * inserted by reconcile_open_bottle inside reconcile_open_bottles_batch —
  * the whole set runs in one PL/pgSQL transaction, so partial-apply is
  * impossible and retries are idempotent (a failed batch rolls back every
  * entry, not just the failing one).
  *
- * Role-gated inside the per-entry RPC to owner | manager.
+ * Role-gated to owner | manager via requireRole (endpoint-level 403 for staff).
+ * The RPC also enforces role as defense-in-depth.
  *
  * 200: { updated: N }
  * 400: invalid body / empty entries / > 100 entries / remaining_ml > size_ml
- * 401: unauthenticated (from requireMembership)
- * 403: role mismatch (reported by RPC as 42501)
+ * 401: unauthenticated (from requireRole)
+ * 403: role mismatch (staff rejected at endpoint; manager/owner required)
  * 500: unhandled RPC failure
  */
 export async function POST(request: NextRequest) {
-  const auth = await requireMembership();
+  const auth = await requireRole(["owner", "manager"]);
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 

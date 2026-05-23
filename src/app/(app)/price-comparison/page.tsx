@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
-import { ArrowDown, ArrowUp, DollarSign, ScanLine } from "lucide-react";
+import { ArrowDown, ArrowUp, DollarSign, ScanLine, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import {
   ExportCsvButton,
@@ -13,13 +13,10 @@ function formatPrice(n: number) {
   return "$" + n.toFixed(2);
 }
 
-/**
- * Short, scannable date for distributor price freshness. The buyer needs
- * "is this quote current?" at a glance, not full ISO precision. Same-year
- * dates collapse to "Apr 15" so the column stays narrow; older dates keep
- * the year ("Mar 3, 2025") so a stale quote is obvious. Returns null on
- * missing/invalid input so callers can omit the line entirely.
- */
+function formatPct(n: number) {
+  return (n * 100).toFixed(0) + "%";
+}
+
 function formatInvoiceDate(iso: string | null): string | null {
   if (!iso) return null;
   const d = new Date(iso);
@@ -40,12 +37,6 @@ type PriceEntry = {
   invoiceDate: string | null;
 };
 
-/**
- * Pick the entry with the most recent invoice_date. When no entries
- * carry a date, fall back to the last entry in the array (preserves the
- * pre-existing behaviour for invoices imported before invoice_date was
- * captured). Returns undefined for an empty list.
- */
 function pickMostRecent(prices: PriceEntry[]): PriceEntry | undefined {
   if (prices.length === 0) return undefined;
   let best: PriceEntry | undefined;
@@ -71,29 +62,46 @@ type WineComparison = {
   mostExpensive: number;
   spread: number;
   distributorCount: number;
-  // Potential dollar savings if every unit had been bought at the
-  // cheapest distributor's price. Used to sort comparable wines so the
-  // biggest savings opportunities surface first.
   potentialSavings: number;
+  // BND-138
+  lastPaid: number;
+  marketPrice: number | null;
+  variancePct: number | null;
 };
 
 export default async function PriceComparisonPage() {
   const auth = (await getAuthContext())!; // AppLayout redirects when null
   const { supabase, restaurantId: rid } = auth;
 
-  // Fetch inventory items with wine + invoice scan details
+  // Fetch inventory items with wine retail data + invoice scan details
   const { data: items } = await supabase
     .from("inventory_items")
     .select(
-      "unit_cost, quantity, wine_id, wines(id, name, producer, vintage, varietal), invoice_scan_id, invoice_scans(distributor_name, invoice_date)",
+      "unit_cost, quantity, wine_id, wines(id, name, producer, vintage, varietal, retail_median, retail_min, retail_max, enrichment_metadata), invoice_scan_id, invoice_scans(distributor_name, invoice_date)",
     )
     .eq("restaurant_id", rid);
+
+  // BND-138: also fetch wines without inventory items that still have retail data
+  const { data: winesWithRetail } = await supabase
+    .from("wines")
+    .select("id, retail_median, retail_min, retail_max, enrichment_metadata")
+    .eq("restaurant_id", rid)
+    .not("retail_median", "is", null);
+
+  const retailByWineId = new Map<string, { median: number | null; min: number | null; max: number | null }>();
+  for (const w of winesWithRetail ?? []) {
+    retailByWineId.set(w.id, { median: w.retail_median, min: w.retail_min, max: w.retail_max });
+  }
 
   // Group by wine, then compute comparison data
   const wineMap = new Map<string, WineComparison>();
 
   for (const item of items ?? []) {
-    const wine = item.wines as WineComparison["wine"] | null;
+    const wine = item.wines as {
+      id: string; name: string; producer: string; vintage: number | null; varietal: string | null;
+      retail_median: number | null; retail_min: number | null; retail_max: number | null;
+      enrichment_metadata: Record<string, unknown> | null;
+    } | null;
     const scan = item.invoice_scans as {
       distributor_name: string;
       invoice_date: string | null;
@@ -104,13 +112,22 @@ export default async function PriceComparisonPage() {
     let entry = wineMap.get(wine.id);
     if (!entry) {
       entry = {
-        wine,
+        wine: {
+          id: wine.id,
+          name: wine.name,
+          producer: wine.producer,
+          vintage: wine.vintage,
+          varietal: wine.varietal,
+        },
         prices: [],
         cheapest: 0,
         mostExpensive: 0,
         spread: 0,
         distributorCount: 0,
         potentialSavings: 0,
+        lastPaid: 0,
+        marketPrice: null,
+        variancePct: null,
       };
       wineMap.set(wine.id, entry);
     }
@@ -133,6 +150,19 @@ export default async function PriceComparisonPage() {
     const totalQty = sorted.reduce((s, p) => s + p.quantity, 0);
     const potentialSavings = (mostExpensive - cheapest) * totalQty;
 
+    // BND-138: last-paid = most recent unit_cost by invoice date
+    const mostRecent = pickMostRecent(sorted);
+    const lastPaid = mostRecent?.unitCost ?? 0;
+
+    // BND-138: market price — retail_median from wines table (populated
+    // by enrichment pipeline or external retail data refresh)
+    const retail = retailByWineId.get(entry.wine.id);
+    const marketPrice = retail?.median ?? null;
+
+    // BND-138: variance = (lastPaid - marketPrice) / marketPrice
+    const variancePct =
+      marketPrice && marketPrice > 0 ? (lastPaid - marketPrice) / marketPrice : null;
+
     return {
       ...entry,
       cheapest,
@@ -140,14 +170,13 @@ export default async function PriceComparisonPage() {
       spread,
       distributorCount,
       potentialSavings,
+      lastPaid,
+      marketPrice,
+      variancePct,
     };
   });
 
-  // Comparable wines (2+ distributors) sort by potential dollar
-  // savings descending so the highest-impact rows surface first; spread
-  // % is the tiebreak so two wines with identical savings stay in a
-  // stable order. Single-source wines have no comparison signal, so
-  // they keep alphabetical order for predictable scanning.
+  // Comparable wines (2+ distributors) sort by potential dollar savings desc
   const comparable = comparisons
     .filter((c) => c.distributorCount >= 2)
     .sort((a, b) => {
@@ -171,9 +200,7 @@ export default async function PriceComparisonPage() {
     0,
   );
 
-  // Flatten the same (wine, latest-per-distributor) shape the tables
-  // render into spreadsheet-ready rows. Comparable wines come first so
-  // the highest-impact buying decisions appear at the top of the CSV.
+  // Build CSV rows
   const csvRows: PriceComparisonCsvRow[] = [];
   for (const comp of [...comparable, ...singleSource]) {
     const byDist = new Map<string, PriceEntry>();
@@ -282,12 +309,16 @@ export default async function PriceComparisonPage() {
                 </div>
               </div>
             )}
-            {/* Top opportunity — the table is sorted by potential savings
-                desc, so comparable[0] is the highest-impact buy. Surfacing
-                it on the summary card turns the aggregate "potential
-                savings" total into a concrete next action without
-                requiring the operator to scroll the table (especially on
-                mobile, where the table sits below the fold). */}
+            {comparable.filter((c) => c.variancePct != null && c.variancePct > 0).length > 0 && (
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                  Overpaid vs market
+                </div>
+                <div className="mt-xs font-mono text-[20px] font-medium text-warning">
+                  {comparable.filter((c) => c.variancePct != null && c.variancePct > 0).length}
+                </div>
+              </div>
+            )}
             {comparable[0] && comparable[0].potentialSavings > 0 && (
               <Link
                 href={`/cellar?wine=${comparable[0].wine.id}`}
@@ -330,11 +361,13 @@ export default async function PriceComparisonPage() {
                   <th scope="col" className="pb-sm text-right font-semibold">Qty</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Spread</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Savings</th>
+                  <th scope="col" className="pb-sm text-right font-semibold">Last paid</th>
+                  <th scope="col" className="pb-sm text-right font-semibold">Market</th>
+                  <th scope="col" className="pb-sm text-right font-semibold">Variance</th>
                 </tr>
               </thead>
               <tbody>
                 {comparable.map((comp) => {
-                  // Deduplicate prices per distributor (show latest per distributor)
                   const byDist = new Map<string, PriceEntry>();
                   for (const p of comp.prices) {
                     const existing = byDist.get(p.distributor);
@@ -361,10 +394,7 @@ export default async function PriceComparisonPage() {
                       }`}
                     >
                       {i === 0 ? (
-                        <td
-                          className="py-sm align-top"
-                          rowSpan={distPrices.length}
-                        >
+                        <td className="py-sm align-top" rowSpan={distPrices.length}>
                           <Link
                             href={`/cellar?wine=${comp.wine.id}`}
                             aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
@@ -375,9 +405,7 @@ export default async function PriceComparisonPage() {
                             </div>
                             <div className="text-ink-muted group-hover:text-accent">
                               {comp.wine.name}
-                              {comp.wine.vintage
-                                ? ` ${comp.wine.vintage}`
-                                : ""}
+                              {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
                             </div>
                           </Link>
                         </td>
@@ -392,27 +420,22 @@ export default async function PriceComparisonPage() {
                       </td>
                       <td className="py-sm text-right font-mono text-ink">
                         {formatPrice(price.unitCost)}
-                        {price.unitCost === comp.cheapest &&
-                          distPrices.length > 1 && (
-                            <span className="ml-xs inline-flex items-center text-success">
-                              <ArrowDown className="h-3 w-3" strokeWidth={2.5} />
-                            </span>
-                          )}
-                        {price.unitCost === comp.mostExpensive &&
-                          distPrices.length > 1 && (
-                            <span className="ml-xs inline-flex items-center text-error">
-                              <ArrowUp className="h-3 w-3" strokeWidth={2.5} />
-                            </span>
-                          )}
+                        {price.unitCost === comp.cheapest && distPrices.length > 1 && (
+                          <span className="ml-xs inline-flex items-center text-success">
+                            <ArrowDown className="h-3 w-3" strokeWidth={2.5} />
+                          </span>
+                        )}
+                        {price.unitCost === comp.mostExpensive && distPrices.length > 1 && (
+                          <span className="ml-xs inline-flex items-center text-error">
+                            <ArrowUp className="h-3 w-3" strokeWidth={2.5} />
+                          </span>
+                        )}
                       </td>
                       <td className="py-sm text-right font-mono text-ink-muted">
                         {price.quantity}
                       </td>
                       {i === 0 ? (
-                        <td
-                          className="py-sm text-right align-top"
-                          rowSpan={distPrices.length}
-                        >
+                        <td className="py-sm text-right align-top" rowSpan={distPrices.length}>
                           {comp.spread >= 0.1 ? (
                             <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
                               {Math.round(comp.spread * 100)}% spread
@@ -425,15 +448,48 @@ export default async function PriceComparisonPage() {
                         </td>
                       ) : null}
                       {i === 0 ? (
-                        <td
-                          className="py-sm text-right align-top font-mono text-success"
-                          rowSpan={distPrices.length}
-                        >
+                        <td className="py-sm text-right align-top font-mono text-success" rowSpan={distPrices.length}>
                           {comp.potentialSavings > 0
                             ? formatPrice(comp.potentialSavings)
-                            : (
-                                <span className="text-ink-subtle">—</span>
-                              )}
+                            : <span className="text-ink-subtle">—</span>}
+                        </td>
+                      ) : null}
+                      {/* BND-138: Last Paid */}
+                      {i === 0 ? (
+                        <td className="py-sm text-right align-top font-mono text-ink" rowSpan={distPrices.length}>
+                          {comp.lastPaid > 0
+                            ? formatPrice(comp.lastPaid)
+                            : <span className="text-ink-subtle">—</span>}
+                        </td>
+                      ) : null}
+                      {/* BND-138: Market Price */}
+                      {i === 0 ? (
+                        <td className="py-sm text-right align-top font-mono text-ink" rowSpan={distPrices.length}>
+                          {comp.marketPrice != null
+                            ? formatPrice(comp.marketPrice)
+                            : <span className="text-ink-subtle">—</span>}
+                        </td>
+                      ) : null}
+                      {/* BND-138: Variance */}
+                      {i === 0 ? (
+                        <td className="py-sm text-right align-top font-mono" rowSpan={distPrices.length}>
+                          {comp.variancePct != null ? (
+                            comp.variancePct > 0.05 ? (
+                              <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
+                                <TrendingUp className="h-3 w-3" strokeWidth={2.5} />
+                                +{formatPct(comp.variancePct)}
+                              </span>
+                            ) : comp.variancePct < -0.05 ? (
+                              <span className="inline-flex items-center gap-xs rounded-pill bg-success-soft px-sm py-xs text-[11px] font-semibold text-success">
+                                <TrendingDown className="h-3 w-3" strokeWidth={2.5} />
+                                {formatPct(comp.variancePct)}
+                              </span>
+                            ) : (
+                              <span className="text-ink-subtle">{formatPct(comp.variancePct)}</span>
+                            )
+                          ) : (
+                            <span className="text-ink-subtle">—</span>
+                          )}
                         </td>
                       ) : null}
                     </tr>
@@ -494,6 +550,37 @@ export default async function PriceComparisonPage() {
                       )}
                     </div>
                   </div>
+
+                  {/* BND-138: Market comparison row */}
+                  <div className="mb-sm flex items-center justify-between rounded-sm bg-surface-muted px-sm py-sm">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                      Last paid
+                    </span>
+                    <span className="font-mono text-[14px] font-medium text-ink tabular-nums">
+                      {comp.lastPaid > 0 ? formatPrice(comp.lastPaid) : "—"}
+                    </span>
+                    {comp.marketPrice != null && (
+                      <>
+                        <span className="mx-xs text-ink-subtle">vs</span>
+                        <span className="font-mono text-[14px] font-medium text-ink-subtle tabular-nums">
+                          {formatPrice(comp.marketPrice)}
+                        </span>
+                        {comp.variancePct != null && Math.abs(comp.variancePct) > 0.05 && (
+                          <span
+                            className={`ml-sm rounded-pill px-sm py-2xs text-[11px] font-semibold ${
+                              comp.variancePct > 0
+                                ? "bg-warning-soft text-warning"
+                                : "bg-success-soft text-success"
+                            }`}
+                          >
+                            {comp.variancePct > 0 ? "+" : ""}
+                            {formatPct(comp.variancePct)}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </div>
+
                   <div className="flex flex-col gap-xs">
                     {distPrices.map((price) => (
                       <div
@@ -514,13 +601,9 @@ export default async function PriceComparisonPage() {
                         </span>
                         <span className="font-mono text-[13px] font-medium text-ink">
                           {formatPrice(price.unitCost)}
-                          {price.unitCost === comp.cheapest &&
-                            distPrices.length > 1 && (
-                              <ArrowDown
-                                className="ml-xs inline h-3 w-3 text-success"
-                                strokeWidth={2.5}
-                              />
-                            )}
+                          {price.unitCost === comp.cheapest && distPrices.length > 1 && (
+                            <ArrowDown className="ml-xs inline h-3 w-3 text-success" strokeWidth={2.5} />
+                          )}
                         </span>
                       </div>
                     ))}
@@ -545,31 +628,18 @@ export default async function PriceComparisonPage() {
               <thead>
                 <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
                   <th scope="col" className="px-md py-sm text-left font-semibold">Wine</th>
-                  <th scope="col" className="px-md py-sm text-left font-semibold">
-                    Distributor
-                  </th>
-                  <th scope="col" className="px-md py-sm text-right font-semibold">
-                    Unit cost
-                  </th>
+                  <th scope="col" className="px-md py-sm text-left font-semibold">Distributor</th>
+                  <th scope="col" className="px-md py-sm text-right font-semibold">Unit cost</th>
+                  <th scope="col" className="px-md py-sm text-right font-semibold">Market</th>
+                  <th scope="col" className="px-md py-sm text-right font-semibold">Variance</th>
                 </tr>
               </thead>
               <tbody>
                 {singleSource.map((comp) => {
-                  // `comp.prices` is sorted ascending by unitCost upstream,
-                  // so picking the last element would surface the MOST
-                  // EXPENSIVE quote — misleading when a distributor's
-                  // price has changed across multiple invoices. Pick the
-                  // entry with the most recent invoice_date instead, and
-                  // fall back to the last array entry when no dates exist.
                   const latest = pickMostRecent(comp.prices);
-                  const latestDate = formatInvoiceDate(
-                    latest?.invoiceDate ?? null,
-                  );
+                  const latestDate = formatInvoiceDate(latest?.invoiceDate ?? null);
                   return (
-                    <tr
-                      key={comp.wine.id}
-                      className="border-t border-dashed border-border"
-                    >
+                    <tr key={comp.wine.id} className="border-t border-dashed border-border">
                       <td className="px-md py-sm">
                         <Link
                           href={`/cellar?wine=${comp.wine.id}`}
@@ -597,6 +667,30 @@ export default async function PriceComparisonPage() {
                       <td className="px-md py-sm text-right font-mono text-ink">
                         {latest ? formatPrice(latest.unitCost) : "—"}
                       </td>
+                      {/* BND-138: Market Price */}
+                      <td className="px-md py-sm text-right font-mono text-ink">
+                        {comp.marketPrice != null
+                          ? formatPrice(comp.marketPrice)
+                          : <span className="text-ink-subtle">—</span>}
+                      </td>
+                      {/* BND-138: Variance */}
+                      <td className="px-md py-sm text-right font-mono">
+                        {comp.variancePct != null ? (
+                          comp.variancePct > 0.05 ? (
+                            <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
+                              +{formatPct(comp.variancePct)}
+                            </span>
+                          ) : comp.variancePct < -0.05 ? (
+                            <span className="inline-flex items-center gap-xs rounded-pill bg-success-soft px-sm py-xs text-[11px] font-semibold text-success">
+                              {formatPct(comp.variancePct)}
+                            </span>
+                          ) : (
+                            <span className="text-ink-subtle">{formatPct(comp.variancePct)}</span>
+                          )
+                        ) : (
+                          <span className="text-ink-subtle">—</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -604,10 +698,7 @@ export default async function PriceComparisonPage() {
             </table>
           </div>
 
-          {/* Mobile cards — phone parity with the comparable-wines section
-              above. The 3-column table cramps long producer + wine + distributor
-              strings on a 390px viewport; cards stack the fields and keep the
-              tap target wide. */}
+          {/* Mobile cards */}
           <div className="flex flex-col gap-sm md:hidden">
             {singleSource.map((comp) => {
               const latest = pickMostRecent(comp.prices);
@@ -635,6 +726,31 @@ export default async function PriceComparisonPage() {
                       {latest ? formatPrice(latest.unitCost) : "—"}
                     </span>
                   </div>
+                  {/* BND-138: Market comparison for single-source mobile */}
+                  {comp.marketPrice != null && (
+                    <div className="mt-sm flex items-center justify-between border-t border-dashed border-border pt-sm">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                        Market
+                      </span>
+                      <div className="flex items-center gap-sm">
+                        <span className="font-mono text-[13px] text-ink-subtle tabular-nums">
+                          {formatPrice(comp.marketPrice)}
+                        </span>
+                        {comp.variancePct != null && Math.abs(comp.variancePct) > 0.05 && (
+                          <span
+                            className={`rounded-pill px-sm py-2xs text-[11px] font-semibold ${
+                              comp.variancePct > 0
+                                ? "bg-warning-soft text-warning"
+                                : "bg-success-soft text-success"
+                            }`}
+                          >
+                            {comp.variancePct > 0 ? "+" : ""}
+                            {formatPct(comp.variancePct)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   <div className="mt-sm flex items-baseline justify-between border-t border-dashed border-border pt-sm text-[13px] text-ink-muted">
                     <span className="min-w-0 truncate">
                       {latest?.distributor ?? "—"}

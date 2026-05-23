@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextResponse, type NextRequest } from "next/server";
 
-const mockRequireMembership = vi.fn();
+const mockRequireRole = vi.fn();
 vi.mock("@/lib/api/auth", () => ({
-  requireMembership: (...args: unknown[]) => mockRequireMembership(...args),
+  requireRole: (...args: unknown[]) => mockRequireRole(...args),
 }));
 const mockRevalidate = vi.fn();
 vi.mock("next/cache", () => ({ revalidatePath: mockRevalidate }));
@@ -78,18 +78,33 @@ describe("POST /api/reconcile", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("401s when unauthenticated", async () => {
-    mockRequireMembership.mockResolvedValue(
+    mockRequireRole.mockResolvedValue(
       NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
     );
     const res = await POST(makeRequest({ entries: [] }));
     expect(res.status).toBe(401);
   });
 
+  // BND-136: staff role is rejected at the HTTP endpoint level (before RPC)
+  it("returns 403 when staff calls reconcile (endpoint-level role gate)", async () => {
+    mockRequireRole.mockResolvedValue(
+      NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+    );
+    const res = await POST(
+      makeRequest({
+        entries: [{ wine_id: UUID_A, new_remaining_ml: 375 }],
+      }),
+    );
+    expect(res.status).toBe(403);
+    // requireRole was called with owner+manager roles
+    expect(mockRequireRole).toHaveBeenCalledWith(["owner", "manager"]);
+  });
+
   it("400s on empty entries", async () => {
     const { supabase } = makeSupabase({
       reconcile: { data: 0, error: null },
     });
-    mockRequireMembership.mockResolvedValue({
+    mockRequireRole.mockResolvedValue({
       supabase,
       restaurantId: "r-A",
       user: { id: "u-1" },
@@ -103,7 +118,7 @@ describe("POST /api/reconcile", () => {
     const { supabase, calls } = makeSupabase({
       reconcile: { data: 2, error: null },
     });
-    mockRequireMembership.mockResolvedValue({
+    mockRequireRole.mockResolvedValue({
       supabase,
       restaurantId: "r-A",
       user: { id: "u-1" },
@@ -127,18 +142,20 @@ describe("POST /api/reconcile", () => {
     expect(mockRevalidate).toHaveBeenCalledWith("/availability");
   });
 
-  it("returns 403 when the RPC raises permission error (42501)", async () => {
+  // Defense-in-depth: RPC also enforces role. If a manager somehow has
+  // insufficient DB-level perms the RPC surfaces 42501 → 403.
+  it("returns 403 when the RPC raises permission error (42501) as defense-in-depth", async () => {
     const { supabase } = makeSupabase({
       reconcile: {
         data: null,
         error: { code: "42501", message: "forbidden" },
       },
     });
-    mockRequireMembership.mockResolvedValue({
+    mockRequireRole.mockResolvedValue({
       supabase,
       restaurantId: "r-A",
       user: { id: "u-1" },
-      role: "staff",
+      role: "manager",
     });
     const res = await POST(
       makeRequest({
@@ -158,7 +175,7 @@ describe("POST /api/reconcile", () => {
         },
       },
     });
-    mockRequireMembership.mockResolvedValue({
+    mockRequireRole.mockResolvedValue({
       supabase,
       restaurantId: "r-A",
       user: { id: "u-1" },
@@ -180,7 +197,7 @@ describe("POST /api/reconcile", () => {
       reconcile: { data: 2, error: null },
       autoEightysixedWineIds: [],
     });
-    mockRequireMembership.mockResolvedValue({
+    mockRequireRole.mockResolvedValue({
       supabase,
       restaurantId: "r-A",
       user: { id: "u-1" },
@@ -211,7 +228,7 @@ describe("POST /api/reconcile", () => {
       autoEightysixedWineIds: [UUID_B],
       publishedSlugs: [{ slug: "dinner-menu" }],
     });
-    mockRequireMembership.mockResolvedValue({
+    mockRequireRole.mockResolvedValue({
       supabase,
       restaurantId: "r-A",
       user: { id: "u-1" },
