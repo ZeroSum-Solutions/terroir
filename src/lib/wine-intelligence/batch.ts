@@ -6,10 +6,14 @@
  *
  * Orchestration tiers (unchanged from route):
  *   Tier 1 — rule engine (deterministic, free): enrichWine()
- *   Tier 2 — Claude fallback (paid, higher coverage): enrichWineWithClaude()
+ *   Tier 2 — Claude fallback (paid, higher coverage): enrichWinesWithClaudeBatch()
  *
  * BND-039: Claude fallback is hard-capped per request to avoid burning
  * Anthropic budget on a single click. Clients re-invoke until hasMore=false.
+ *
+ * BND-262 (feature #75): Claude calls are batched — all candidate wines
+ * go in a single Claude API call (one system prompt, one round trip),
+ * instead of one call per wine.
  *
  * ARCH-021: fetch and LWIN backfill are bounded by ENRICH_BATCH_LIMIT so
  * large catalogs don't block a request thread.
@@ -19,16 +23,13 @@ import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { enrichWine } from "./enrich";
-import { enrichWineWithClaude } from "./enrich-claude";
+import { enrichWinesWithClaudeBatch } from "./enrich-claude";
 
 // ARCH-021: cap per-request workload.
 const ENRICH_BATCH_LIMIT = 2000;
 
 // BND-039: Claude fallback hard cap per request.
 const CLAUDE_FALLBACK_MAX_PER_REQUEST = 50;
-
-// BND-039: Claude concurrency cap to avoid rate-limit spikes.
-const CLAUDE_CONCURRENCY = 5;
 
 type EnrichmentMetadata = {
   source: string;
@@ -151,7 +152,7 @@ export async function enrichRestaurantBatch(
     });
   }
 
-  // BND-039 — Tier 2 (Claude fallback, paid, slower, higher coverage).
+  // BND-262 — Tier 2 (Claude fallback, single batched call, paid).
   const claudeWork = claudeCandidates.slice(0, CLAUDE_FALLBACK_MAX_PER_REQUEST);
   const claudeRemaining = Math.max(
     0,
@@ -159,35 +160,23 @@ export async function enrichRestaurantBatch(
   );
 
   const claudeResults: EnrichmentPayloadRow[] = [];
-  for (let i = 0; i < claudeWork.length; i += CLAUDE_CONCURRENCY) {
-    const slice = claudeWork.slice(i, i + CLAUDE_CONCURRENCY);
-    const settled = await Promise.all(
-      slice.map(async (wine) => {
-        const result = await enrichWineWithClaude({
-          producer: wine.producer,
-          name: wine.name,
-          vintage: wine.vintage,
-          varietal: wine.varietal,
-          region: wine.region,
-          country: wine.country,
-        });
-        if (!result || result.drinkWindowStart == null) return null;
-        return {
-          id: wine.id,
-          drink_window_start: result.drinkWindowStart,
-          drink_window_end: result.drinkWindowEnd,
-          peak_year: result.peakYear,
-          rating_source: result.ratingSource,
-          review_excerpt: result.reviewExcerpt,
-          serving_temp_min: null,
-          serving_temp_max: null,
-          serving_temp_label: null,
-          enrichment_metadata: buildMetadata("claude_inference", result),
-        } satisfies EnrichmentPayloadRow;
-      }),
-    );
-    for (const row of settled) {
-      if (row) claudeResults.push(row);
+  if (claudeWork.length > 0) {
+    const batchResults = await enrichWinesWithClaudeBatch(claudeWork);
+    for (let i = 0; i < claudeWork.length; i++) {
+      const result = batchResults[i];
+      if (!result || result.drinkWindowStart == null) continue;
+      claudeResults.push({
+        id: claudeWork[i].id,
+        drink_window_start: result.drinkWindowStart,
+        drink_window_end: result.drinkWindowEnd,
+        peak_year: result.peakYear,
+        rating_source: result.ratingSource,
+        review_excerpt: result.reviewExcerpt,
+        serving_temp_min: null,
+        serving_temp_max: null,
+        serving_temp_label: null,
+        enrichment_metadata: buildMetadata("claude_inference", result),
+      });
     }
   }
 

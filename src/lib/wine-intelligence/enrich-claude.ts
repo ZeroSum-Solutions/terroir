@@ -7,20 +7,22 @@
  * Schiava, etc.). For those, we ask Claude to estimate based on
  * producer + name + vintage + varietal + region.
  *
+ * BND-262 (feature #75) — Batched Claude calls.
+ * Instead of one Claude API call per wine (O(n) token overhead, n round
+ * trips), send all candidate wines in a single Claude call and parse the
+ * JSON array response. This reduces cost by sharing the system prompt
+ * and avoids per-wine connection overhead.
+ *
  * Tradeoff vs the rule engine:
  *   • Rule: free, ~5ms, deterministic, ~80% varietal coverage.
  *   • Claude: ~$0.001/call, ~3-5s, ~95% coverage on obscure wines,
  *     produces an actual review excerpt the user can read.
  *
- * Failure modes (returns null gracefully):
+ * Failure modes:
  *   • ANTHROPIC_API_KEY not set → throw on first call (logged once)
- *   • Network/timeout → null + Sentry tag rateLimited:false, parseError:false
- *   • Rate limit 429/529 → null + Sentry tag rateLimited:true
- *   • JSON parse failure → null + Sentry tag parseError:true
- *   • Schema validation failure → null + Sentry tag parseError:true
- *
- * The bulk-enrich route uses these nulls to OMIT failed wines from the
- * batch RPC payload — partial success is preferred over all-or-nothing.
+ *   • Network/timeout → results array of nulls + Sentry
+ *   • Rate limit 429/529 → results array of nulls + Sentry tag rateLimited:true
+ *   • JSON parse failure → results array of nulls + Sentry tag parseError:true
  */
 
 import * as Sentry from "@sentry/nextjs";
@@ -33,7 +35,31 @@ import type { EnrichmentResult } from "./enrich";
  * judgment + general knowledge, not reasoning. Don't pay for Opus.
  */
 const MODEL = "claude-sonnet-4-5-20250929";
-const MAX_TOKENS = 400;
+
+/** Per-wine max tokens for the single-wine function (backwards compat). */
+const MAX_TOKENS_SINGLE = 400;
+
+/** Per-wine token budget multiplier for batched calls. */
+const MAX_TOKENS_PER_WINE = 300;
+
+export type WineForClaude = {
+  producer: string;
+  name: string;
+  vintage: number | null;
+  varietal: string | null;
+  region: string | null;
+  country: string | null;
+};
+
+type ClaudeResponse = {
+  drinkWindowStart: number | null;
+  drinkWindowEnd: number | null;
+  peakYear: number | null;
+  reviewExcerpt: string | null;
+};
+
+// ── Single-wine (backwards compat) ──
+
 const SYSTEM_PROMPT = `You are a sommelier estimating a wine's optimal drinking window. Given a wine's producer, name, vintage, varietal, and region, return a JSON object with these fields:
 
 {
@@ -55,22 +81,6 @@ If the wine is too obscure to estimate confidently, OR if it's a non-vintage win
 { "drinkWindowStart": null, "drinkWindowEnd": null, "peakYear": null, "reviewExcerpt": null }
 
 Return ONLY the JSON object. No prose, no markdown fences.`;
-
-export type WineForClaude = {
-  producer: string;
-  name: string;
-  vintage: number | null;
-  varietal: string | null;
-  region: string | null;
-  country: string | null;
-};
-
-type ClaudeResponse = {
-  drinkWindowStart: number | null;
-  drinkWindowEnd: number | null;
-  peakYear: number | null;
-  reviewExcerpt: string | null;
-};
 
 /**
  * Call Claude to infer drink window for a single wine. Returns an
@@ -99,7 +109,7 @@ export async function enrichWineWithClaude(
     const client = getAnthropicClient();
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: MAX_TOKENS,
+      max_tokens: MAX_TOKENS_SINGLE,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userMessage }],
     });
@@ -113,9 +123,6 @@ export async function enrichWineWithClaude(
     }
     raw = block.text.trim();
   } catch (err) {
-    // Distinguish rate-limit from other errors so the bulk enricher can
-    // surface a useful message ("Anthropic rate-limited; try again in a
-    // few minutes") vs a generic "enrichment failed".
     const status = (err as { status?: number })?.status;
     const rateLimited = status === 429 || status === 529;
     Sentry.captureException(err, {
@@ -129,8 +136,143 @@ export async function enrichWineWithClaude(
     return null;
   }
 
-  // Parse + validate. The system prompt asks for JSON-only, but models
-  // sometimes wrap in fences anyway. Strip them defensively.
+  return parseClaudeResponse(raw);
+}
+
+// ── Batched Claude (BND-262) ──
+
+const BATCH_SYSTEM_PROMPT = `You are a sommelier estimating optimal drinking windows for a batch of wines. You will receive a list of wines, each with producer, name, vintage, varietal, and region. Return a JSON array with one object per wine, in the same order, with these fields:
+
+{
+  "drinkWindowStart": <year, integer>,
+  "drinkWindowEnd": <year, integer>,
+  "peakYear": <year, integer>,
+  "reviewExcerpt": "<≤200 char tasting-note style sentence describing the wine's expected character at peak>"
+}
+
+Use your knowledge of:
+- The producer's house style (oxidative vs reductive winemaking, oak regimen, etc.)
+- The vintage's reputation (warm/cool year, classified-growth ratings)
+- The varietal's aging curve (Cab/Nebbiolo long, Pinot moderate, Sauv Blanc short)
+- The region's terroir (Bordeaux structured, Burgundy delicate, Napa ripe)
+
+Conservative when uncertain — narrower windows are better than wildly wrong ones.
+
+If a wine is too obscure to estimate confidently, OR if it's a non-vintage wine where drinking-window doesn't apply, return null fields for that wine:
+{ "drinkWindowStart": null, "drinkWindowEnd": null, "peakYear": null, "reviewExcerpt": null }
+
+Return ONLY the JSON array. No prose, no markdown fences.`;
+
+/**
+ * BND-262 — Batched Claude enrichment.
+ *
+ * Send all candidate wines in a single Claude API call. Returns an array
+ * of `EnrichmentResult | null` in the same order as the input wines.
+ *
+ * The single call shares the system prompt across all wines, reducing
+ * per-wine token overhead and connection cost. A batch of 50 wines
+ * costs ~1 API call instead of 50.
+ *
+ * On any failure (network, rate limit, parse error), all wines get null
+ * — the caller should retry or skip.
+ */
+export async function enrichWinesWithClaudeBatch(
+  wines: WineForClaude[],
+): Promise<(EnrichmentResult | null)[]> {
+  if (wines.length === 0) return [];
+
+  const userMessage = wines.map((w, i) =>
+    `${i + 1}. ${formatWineForPrompt(w)}`
+  ).join("\n\n");
+
+  let raw: string;
+  try {
+    const client = getAnthropicClient();
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: Math.max(1024, wines.length * MAX_TOKENS_PER_WINE),
+      system: BATCH_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userMessage }],
+    });
+    const block = response.content[0];
+    if (block?.type !== "text") {
+      Sentry.captureMessage("Batched Claude response had no text block", {
+        level: "warning",
+        tags: { surface: "wines-enrich-claude-batch", parseError: "true" },
+        extra: { wineCount: wines.length },
+      });
+      return wines.map(() => null);
+    }
+    raw = block.text.trim();
+  } catch (err) {
+    const status = (err as { status?: number })?.status;
+    const rateLimited = status === 429 || status === 529;
+    Sentry.captureException(err, {
+      tags: {
+        surface: "wines-enrich-claude-batch",
+        rateLimited: String(rateLimited),
+        parseError: "false",
+      },
+      extra: { wineCount: wines.length },
+    });
+    return wines.map(() => null);
+  }
+
+  // Parse the JSON array response.
+  let parsedArray: unknown[];
+  try {
+    const cleaned = raw
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+    parsedArray = JSON.parse(cleaned);
+    if (!Array.isArray(parsedArray)) {
+      throw new Error("Response is not a JSON array.");
+    }
+  } catch (err) {
+    Sentry.captureException(err, {
+      tags: { surface: "wines-enrich-claude-batch", parseError: "true" },
+      extra: { rawResponse: raw.slice(0, 1000), wineCount: wines.length },
+    });
+    return wines.map(() => null);
+  }
+
+  // Validate and convert each response. Pad with nulls if Claude returned fewer.
+  const results: (EnrichmentResult | null)[] = [];
+  for (let i = 0; i < wines.length; i++) {
+    if (i >= parsedArray.length) {
+      results.push(null);
+      continue;
+    }
+    const parsed = parseClaudeResponseFromObject(parsedArray[i]);
+    if (!parsed) {
+      Sentry.captureMessage("Batched Claude response item failed validation", {
+        level: "warning",
+        tags: { surface: "wines-enrich-claude-batch", parseError: "true" },
+        extra: { index: i, item: JSON.stringify(parsedArray[i]).slice(0, 200) },
+      });
+      results.push(null);
+      continue;
+    }
+    results.push({
+      drinkWindowStart: parsed.drinkWindowStart,
+      drinkWindowEnd: parsed.drinkWindowEnd,
+      peakYear: parsed.peakYear,
+      ratingSource: parsed.drinkWindowStart != null ? "claude_inference" : null,
+      reviewExcerpt: parsed.reviewExcerpt,
+      servingTempMin: null,
+      servingTempMax: null,
+      servingTempLabel: null,
+    });
+  }
+
+  return results;
+}
+
+// ── Shared helpers ──
+
+function parseClaudeResponse(raw: string): EnrichmentResult | null {
   let parsed: ClaudeResponse;
   try {
     const cleaned = raw
@@ -162,13 +304,15 @@ export async function enrichWineWithClaude(
     peakYear: parsed.peakYear,
     ratingSource: parsed.drinkWindowStart != null ? "claude_inference" : null,
     reviewExcerpt: parsed.reviewExcerpt,
-    // Claude isn't asked about serving temp — that stays as the rule
-    // engine's responsibility. Returning null here means the caller will
-    // not overwrite a previously-set serving_temp on the row.
     servingTempMin: null,
     servingTempMax: null,
     servingTempLabel: null,
   };
+}
+
+function parseClaudeResponseFromObject(obj: unknown): ClaudeResponse | null {
+  if (!validateClaudeResponse(obj)) return null;
+  return obj as ClaudeResponse;
 }
 
 function formatWineForPrompt(wine: WineForClaude): string {
