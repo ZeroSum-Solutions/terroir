@@ -320,3 +320,45 @@ Stats: 116/231 passing (50.2%).
 - src/app/list/[slug]/print/page.tsx: new (281 lines)
 
 Stats after this session: 120/231 passing (51.9%).
+
+
+## Session 2026-05-23 — features #183, #192, #193
+
+### Completed
+- **#183 Public list shows price, vintage, and producer for each wine** (PASSING)
+  - Already fully implemented: /list/[slug] page renders producer, vintage,
+    and price (glass_price/bottle_price are the price overrides from #168)
+  - Verified via code review, TS 0 errors, mcrok data grep clean, 357 tests passing
+
+- **#192 UI shows loading skeletons during async fetches** (PASSING)
+  - Created reusable Skeleton component with shimmer animation in src/components/skeleton.tsx
+  - Created loading.tsx for 7 data-heavy routes:
+    /cellar,/lists,/lists/[id],/insights,/scan,/team,/price-comparison
+  - Each loading.tsx mimics the actual page layout with placeholder shapes
+  - Added @keyframes shimmer animation to globals.css
+  - Next.js App Router automatically shows loading.tsx during page transitions
+
+- **#193 UI shows toast notifications for write actions** (PASSING)
+  - Created ToastProvider context + useToast hook + ToastContainer with auto-dismiss
+  - Wired into app layout via ToastWrapper client component
+  - Added success/error toasts to pour action ("Glass poured" / "Pour failed")
+  - Added success/error toasts to 86/restore toggle ("Marked as 86'd" / "Restored" / "Toggle failed")
+  - Toasts auto-dismiss after 5 seconds
+  - Added toast-in slide-up animation to globals.css
+
+### Verification
+- TypeScript: 0 errors (compilation check via local tsc)
+- All 357 tests passing (35 test files)
+- Mock data grep: 0 results in production src/
+- Browser verification: blocked by sandbox (known limitation)
+
+### Files changed
+- *NEW* src/components/skeleton.tsx: reusable Skeleton component
+- *NEW* src/app/(app)/*/loading.tsx: 7 loading skeleton pages
+- *NEW* src/lib/toast.tsx: Toast provider, hook, and container
+- *NEW* src/app/(app)/toast-wrapper.tsx: client wrapper for layout
+- *MODIFIED* src/app/globals.css: shimmer + toast-in @keyframes
+- +MoDIFIED* src/app/(app)/layout.tsx: ToastWrapper integration
+- *MODIFIED* src/app/(app)/cellar/wine-detail-drawer.tsx: useToast + pour/86 toasts
+
+Stats after this session: 123/231 passing (53.2%).
