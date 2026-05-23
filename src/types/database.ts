@@ -70,6 +70,7 @@ export type Database = {
         Row: {
           columns: number
           low_stock_threshold: number
+          reconcile_variance_threshold_oz: number
           created_at: string
           id: string
           labels: Json
@@ -81,6 +82,7 @@ export type Database = {
         Insert: {
           columns?: number
           low_stock_threshold?: number
+          reconcile_variance_threshold_oz?: number
           created_at?: string
           id?: string
           labels?: Json
@@ -92,6 +94,7 @@ export type Database = {
         Update: {
           columns?: number
           low_stock_threshold?: number
+          reconcile_variance_threshold_oz?: number
           created_at?: string
           id?: string
           labels?: Json

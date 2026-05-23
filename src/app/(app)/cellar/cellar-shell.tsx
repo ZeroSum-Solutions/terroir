@@ -48,7 +48,7 @@ export function CellarShell({
 }: {
   rows: CellarWineRow[];
   reconcileItems: OpenBottleRow[];
-  cellarConfig: { id: string; rows: number; columns: number; name: string; lowStockThreshold: number } | null;
+  cellarConfig: { id: string; rows: number; columns: number; name: string; lowStockThreshold: number; reconcileVarianceThresholdOz: number } | null;
   gridData: Record<
     string,
     {
@@ -378,6 +378,7 @@ export function CellarShell({
       <ReconcileModal
         open={reconcileOpen}
         items={reconcileItems}
+        varianceThresholdOz={cellarConfig?.reconcileVarianceThresholdOz ?? 1.0}
         onClose={() => setReconcileOpen(false)}
       />
 

@@ -237,6 +237,7 @@ export function ScanDetailView({
                   <th scope="col" className="pb-sm text-left font-semibold">Varietal</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Qty</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Unit cost</th>
+                  <th scope="col" className="pb-sm text-right font-semibold">Conf.</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Subtotal</th>
                 </tr>
               </thead>
@@ -271,6 +272,9 @@ export function ScanDetailView({
                     <td className="py-sm text-right font-mono text-ink">
                       ${formatMoney(it.unitCost)}
                     </td>
+                    <td className={`py-sm text-right font-mono ${accuracyColor(it.confidence * 100)}`}>
+                      {Math.round(it.confidence * 100)}%
+                    </td>
                     <td className="py-sm text-right font-mono font-medium text-ink">
                       ${formatMoney(it.qty * it.unitCost)}
                     </td>
@@ -282,7 +286,7 @@ export function ScanDetailView({
                 <tfoot>
                   <tr className="border-t border-border">
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="py-sm pr-sm text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle"
                     >
                       Total
@@ -330,6 +334,9 @@ export function ScanDetailView({
                 <div className="mt-sm flex items-center justify-between border-t border-dashed border-border pt-sm">
                   <span className="font-mono text-[13px] text-ink">
                     {it.qty} × ${formatMoney(it.unitCost)}
+                  </span>
+                  <span className={`font-mono text-[12px] ${accuracyColor(it.confidence * 100)}`}>
+                    {Math.round(it.confidence * 100)}% conf.
                   </span>
                   <span className="font-mono text-[13px] font-medium text-ink">
                     ${formatMoney(it.qty * it.unitCost)}

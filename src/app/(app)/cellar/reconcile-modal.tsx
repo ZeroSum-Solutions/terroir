@@ -27,10 +27,12 @@ import { ReconcileList } from "./reconcile-list";
 export function ReconcileModal({
   open,
   items,
+  varianceThresholdOz,
   onClose,
 }: {
   open: boolean;
   items: OpenBottleRow[];
+  varianceThresholdOz?: number;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -91,7 +93,7 @@ export function ReconcileModal({
         </header>
 
         <div className="flex-1 overflow-y-auto px-md py-md md:px-lg md:py-lg">
-          <ReconcileList initialItems={items} />
+          <ReconcileList initialItems={items} varianceThresholdOz={varianceThresholdOz} />
         </div>
       </div>
     </div>

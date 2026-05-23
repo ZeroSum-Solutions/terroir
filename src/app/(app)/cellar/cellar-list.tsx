@@ -56,12 +56,14 @@ export function CellarList({
   rows,
   query,
   filter,
+  lowStockThreshold,
   onSelectWine,
   onResetFilters,
 }: {
   rows: CellarWineRow[];
   query: string;
   filter: CellarFilter;
+  lowStockThreshold?: number;
   onSelectWine: (row: CellarWineRow) => void;
   // Called when the user taps the empty-state "Clear filter & search"
   // button. The parent shell owns query + filter state.

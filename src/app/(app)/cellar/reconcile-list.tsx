@@ -23,8 +23,10 @@ type PendingChange = { newRemainingMl: number; note?: string };
 
 export function ReconcileList({
   initialItems,
+  varianceThresholdOz = 1.0,
 }: {
   initialItems: ReconcileItem[];
+  varianceThresholdOz?: number;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState<Record<string, PendingChange>>({});
@@ -89,6 +91,7 @@ export function ReconcileList({
             key={item.wine_id}
             item={item}
             pending={pending[item.wine_id] ?? null}
+            varianceThresholdOz={varianceThresholdOz}
             onChange={(change) =>
               setPending((prev) => ({ ...prev, [item.wine_id]: change }))
             }
@@ -128,10 +131,12 @@ function ReconcileRow({
   item,
   pending,
   onChange,
+  varianceThresholdOz,
 }: {
   item: ReconcileItem;
   pending: PendingChange | null;
   onChange: (c: PendingChange) => void;
+  varianceThresholdOz: number;
 }) {
   const currentMl = pending?.newRemainingMl ?? item.open_remaining_ml;
   const currentOz = (currentMl / ML_PER_OZ).toFixed(1);
@@ -140,8 +145,18 @@ function ReconcileRow({
     [item.open_remaining_ml, item.glass_pour_ml],
   );
 
+  // BND-134: highlight rows where |expected - actual| exceeds the configurable threshold.
+  const expectedMl = item.open_remaining_ml;
+  const actualMl = pending?.newRemainingMl ?? expectedMl;
+  const varianceOz = Math.abs(expectedMl - actualMl) / ML_PER_OZ;
+  const isVarianceFlagged = varianceOz > varianceThresholdOz;
+
   return (
-    <li className="rounded-md border border-border bg-white p-md">
+    <li className={`rounded-md border p-md ${
+    isVarianceFlagged
+      ? "border-warning/50 bg-warning-soft/20"
+      : "border-border bg-white"
+  }`}>
       <div className="mb-sm">
         <div className="font-serif text-[15px] text-ink">
           {item.producer} {item.name}
@@ -155,6 +170,11 @@ function ReconcileRow({
           System says ~{item.open_remaining_ml} ml (~{glassesLeft} glass
           {glassesLeft === 1 ? "" : "es"})
         </div>
+        {pending && isVarianceFlagged && (
+          <div className="mt-xs inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-2xs text-[11px] font-semibold text-warning">
+            ⚠ {varianceOz.toFixed(1)} oz variance
+          </div>
+        )}
       </div>
 
       <div className="mb-sm grid grid-cols-5 gap-xs">

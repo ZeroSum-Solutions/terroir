@@ -271,6 +271,7 @@ export default async function CellarPage() {
               columns: configRow.columns,
               name: configRow.name,
               lowStockThreshold: configRow.low_stock_threshold ?? 3,
+              reconcileVarianceThresholdOz: configRow.reconcile_variance_threshold_oz ?? 1.0,
             }
           : null
       }
