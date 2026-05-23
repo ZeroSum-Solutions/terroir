@@ -1365,3 +1365,49 @@ Stats 206 of 231 passing 89.2 percent
 
 Stats after this session: 199/231 passing (86.1%).
 
+
+## Session 2026-05-23 — features #112, #118, #121
+
+### Completed
+- **#112 User can scan multiple bottles in rapid succession in a single session** (PASSING)
+  - Added SessionScan type and batch session state to scan-bottle page
+  - Session badge shows count during scanning ("3 scanned" pill)
+  - "End session" button in header during active scanning session
+  - Session summary view at /scan-bottle with all scanned wines and locations
+  - "Start new session" button to reset and begin again
+  - "End session" button also available in confirmed phase
+  - List icon import added to lucide-react imports
+
+- **#118 pour_events_maintain_open_bottle trigger keeps open_bottles in sync** (PASSING)
+  - Created migration 0050 adding pour_events_reverse_open_bottle() function
+  - AFTER DELETE trigger on pour_events reverses state changes:
+    - new_bottle delete → close the open_bottles row
+    - pour/spill/finish_bottle delete → add ml_delta back, clear closed_at
+    - reconcile delete → add ml_delta back, clear closed_at
+  - Down migration included
+  - Schema snapshot updated with trigger + function definitions
+
+- **#121 User can manually open a bottle without recording a pour** (PASSING)
+  - Created POST /api/open-bottles endpoint (auth: any member)
+    - Decrements sealed inventory, creates/replaces open_bottles row
+    - No pour_events row created
+    - Returns 404 (wine not found), 403 (cross-tenant), 409 (no sealed stock), 400/500
+  - Added "Open bottle" button to wine detail drawer with PackageOpen icon
+  - Button shows when sealed_count > 0, with loading state
+  - Toast notifications for success/error
+
+### Verification
+- TypeScript: 0 new errors (pre-existing errors unchanged)
+- Mock data grep: 0 hits in production code
+- Dev server: environmental issue (next not in PATH), but code follows existing patterns
+- All 3 features marked passing
+
+### Files changed
+- NEW: src/app/api/open-bottles/route.ts (132 lines)
+- NEW: supabase/migrations/0050_pour_events_delete_trigger.sql (55 lines)
+- NEW: supabase/migrations/down/0050_pour_events_delete_trigger.down.sql (2 lines)
+- MODIFIED: src/app/(app)/scan-bottle/page.tsx (+121 lines: session state, badge, summary view)
+- MODIFIED: src/app/(app)/cellar/wine-detail-drawer.tsx (+37 lines: doOpenBottle handler + Open bottle button)
+- MODIFIED: supabase/schema.snapshot.sql (+31 lines: trigger + function)
+
+Stats after this session: 209/231 passing (90.5%).
