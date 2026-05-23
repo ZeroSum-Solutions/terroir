@@ -225,6 +225,22 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     [],
   );
 
+
+  const updateSource = useCallback(
+    (field: "distributor" | "invoiceNo" | "invoiceDate", value: string) => {
+      setScan((prev) => {
+        if (!prev) return prev;
+        const next: Scan = {
+          ...prev,
+          source: { ...prev.source, [field]: value },
+        };
+        saveScan(next);
+        return next;
+      });
+    },
+    [],
+  );
+
   const removeItem = useCallback((id: string) => {
     setScan((prev) => {
       if (!prev) return prev;
@@ -503,6 +519,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         <ResultsView
           scan={scan}
           onUpdate={updateField}
+          onUpdateSource={updateSource}
           onRemove={removeItem}
           onScanAnother={startOver}
           onExportCsv={exportCsv}

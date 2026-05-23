@@ -81,6 +81,7 @@ function SummaryRow({ items, bottles, total, lowCount }: SummaryRowProps) {
 interface ResultsViewProps {
   scan: Scan;
   onUpdate: (id: string, field: LineItemField, value: string | number | null) => void;
+  onUpdateSource: (field: "distributor" | "invoiceNo" | "invoiceDate", value: string) => void;
   onRemove: (id: string) => void;
   onScanAnother: () => void;
   onExportCsv: () => void;
@@ -189,17 +190,45 @@ export function ResultsView({
       </header>
 
       <div className="mb-lg rounded-md border border-border bg-white p-md">
-        <div className="flex items-center justify-between gap-md">
-          <div className="min-w-0">
-            <div className="truncate text-[14px] font-medium text-ink">
-              {source.distributor}
-            </div>
-            <div className="mt-2xs flex items-center gap-xs tabular text-[12px] text-ink-muted">
-              <span>INV {source.invoiceNo}</span>
-              <span className="text-ink-subtle">·</span>
-              <span>{source.invoiceDate}</span>
+        <div className="flex flex-col gap-sm">
+          <div>
+            <label className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">Supplier</label>
+            <div className="mt-xs relative flex w-full items-center rounded-sm border border-border bg-white px-sm py-xs transition-colors focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)]">
+              <input
+                value={source.distributor}
+                onChange={(e) => onUpdateSource("distributor", e.target.value)}
+                aria-label="Supplier name"
+                className="w-full bg-transparent text-[14px] font-medium text-ink outline-none"
+              />
             </div>
           </div>
+          <div className="flex items-center gap-sm">
+            <div className="flex-1">
+              <label className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">Invoice #</label>
+              <div className="mt-xs relative flex w-full items-center rounded-sm border border-border bg-white px-sm py-xs transition-colors focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)]">
+                <input
+                  value={source.invoiceNo}
+                  onChange={(e) => onUpdateSource("invoiceNo", e.target.value)}
+                  aria-label="Invoice number"
+                  className="w-full bg-transparent text-[14px] text-ink outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex-1">
+              <label className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">Delivery date</label>
+              <div className="mt-xs relative flex w-full items-center rounded-sm border border-border bg-white px-sm py-xs transition-colors focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)]">
+                <input
+                  type="date"
+                  value={source.invoiceDate}
+                  onChange={(e) => onUpdateSource("invoiceDate", e.target.value)}
+                  aria-label="Delivery date"
+                  className="w-full bg-transparent text-[14px] text-ink outline-none"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="mt-sm flex justify-between items-center">
           <span className="rounded-sm bg-surface-muted px-sm py-xs text-[11px] uppercase tracking-[0.06em] text-ink-subtle">
             {items.length} items
           </span>
