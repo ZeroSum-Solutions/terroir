@@ -14,6 +14,9 @@ type WineMetadata = {
   varietal: string | null;
   region: string | null;
   tasting_notes: string | null;
+  drink_window_start: number | null;
+  drink_window_end: number | null;
+  peak_year: number | null;
 };
 
 export function EditMetadataModal({
@@ -41,6 +44,16 @@ export function EditMetadataModal({
   const [region, setRegion] = useState(initial.region ?? "");
   const [tastingNotes, setTastingNotes] = useState(
     initial.tasting_notes ?? "",
+  );
+  // BND-277 — manual drink-window override (#72)
+  const [dwStart, setDwStart] = useState(
+    initial.drink_window_start != null ? String(initial.drink_window_start) : "",
+  );
+  const [dwEnd, setDwEnd] = useState(
+    initial.drink_window_end != null ? String(initial.drink_window_end) : "",
+  );
+  const [dwPeak, setDwPeak] = useState(
+    initial.peak_year != null ? String(initial.peak_year) : "",
   );
 
   useFocusTrap({
@@ -80,6 +93,22 @@ export function EditMetadataModal({
       body.tasting_notes = trimmedNotes;
     }
 
+    // BND-277 — drink-window override (#72)
+    const parsedDwStart = dwStart.trim() === "" ? null : parseInt(dwStart, 10);
+    if (parsedDwStart !== (initial.drink_window_start ?? null)) {
+      body.drink_window_start = parsedDwStart;
+    }
+
+    const parsedDwEnd = dwEnd.trim() === "" ? null : parseInt(dwEnd, 10);
+    if (parsedDwEnd !== (initial.drink_window_end ?? null)) {
+      body.drink_window_end = parsedDwEnd;
+    }
+
+    const parsedDwPeak = dwPeak.trim() === "" ? null : parseInt(dwPeak, 10);
+    if (parsedDwPeak !== (initial.peak_year ?? null)) {
+      body.peak_year = parsedDwPeak;
+    }
+
     if (Object.keys(body).length === 0) {
       onClose();
       return;
@@ -109,6 +138,7 @@ export function EditMetadataModal({
     }
   }, [
     producer, name, vintage, varietal, region, tastingNotes,
+    dwStart, dwEnd, dwPeak,
     initial, wineId, onClose, router, toast,
   ]);
 
@@ -118,7 +148,10 @@ export function EditMetadataModal({
     (vintage.trim() === "" ? null : parseInt(vintage, 10)) !== initial.vintage ||
     (varietal.trim() || null) !== (initial.varietal ?? null) ||
     (region.trim() || null) !== (initial.region ?? null) ||
-    (tastingNotes.trim() || null) !== (initial.tasting_notes ?? null);
+    (tastingNotes.trim() || null) !== (initial.tasting_notes ?? null) ||
+    (dwStart.trim() === "" ? null : parseInt(dwStart, 10)) !== (initial.drink_window_start ?? null) ||
+    (dwEnd.trim() === "" ? null : parseInt(dwEnd, 10)) !== (initial.drink_window_end ?? null) ||
+    (dwPeak.trim() === "" ? null : parseInt(dwPeak, 10)) !== (initial.peak_year ?? null);
 
   return (
     <div
@@ -220,6 +253,55 @@ export function EditMetadataModal({
             className="w-full rounded-sm border border-border bg-white px-sm py-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft resize-y"
           />
         </Field>
+
+        {/* BND-277 — drink-window override (#72) */}
+        <fieldset className="rounded-sm border border-border p-sm">
+          <legend className="text-[12px] font-medium text-ink-muted px-xs">
+            Drink window (manual override)
+          </legend>
+          <p className="text-[11px] text-ink-subtle mb-sm px-xs">
+            Setting any of these locks the drink window, preventing future
+            enrichment from changing it.
+          </p>
+          <div className="grid grid-cols-3 gap-xs">
+            <Field label="Start year" htmlFor="edit-dw-start">
+              <input
+                id="edit-dw-start"
+                type="number"
+                min="1900"
+                max="2100"
+                value={dwStart}
+                onChange={(e) => setDwStart(e.target.value)}
+                placeholder="e.g. 2025"
+                className="h-[40px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+              />
+            </Field>
+            <Field label="Peak year" htmlFor="edit-dw-peak">
+              <input
+                id="edit-dw-peak"
+                type="number"
+                min="1900"
+                max="2100"
+                value={dwPeak}
+                onChange={(e) => setDwPeak(e.target.value)}
+                placeholder="e.g. 2030"
+                className="h-[40px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+              />
+            </Field>
+            <Field label="End year" htmlFor="edit-dw-end">
+              <input
+                id="edit-dw-end"
+                type="number"
+                min="1900"
+                max="2100"
+                value={dwEnd}
+                onChange={(e) => setDwEnd(e.target.value)}
+                placeholder="e.g. 2035"
+                className="h-[40px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+              />
+            </Field>
+          </div>
+        </fieldset>
 
         {errorMsg && (
           <div

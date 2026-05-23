@@ -52,6 +52,9 @@ export type CellarWineRow = {
   rating: number | null;
   rating_source: string | null;
   review_excerpt: string | null;
+  // BND-277 — manual field overrides (#72, #78).
+  manual_overrides: string[];
+  colour: string | null;
 
   // BND-040 — pricing intelligence. All nullable so wines without retail
   // data render the drawer without a Pricing section. Targets resolve to

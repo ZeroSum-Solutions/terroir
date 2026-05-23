@@ -9,13 +9,21 @@ import type { Json } from "@/types/database";
 export const runtime = "nodejs";
 
 /**
- * BND-039 + BND-261 — single-wine on-demand enrichment.
+ * BND-039 + BND-261 + BND-277 — single-wine on-demand enrichment.
  *
  * Powers the "Re-enrich" action in the cellar detail drawer. Runs
- * Tier 1 (rule engine) + Tier 2 (Claude fallback) for a single wine.
+ * Tier 1 (rule engine) + Tier 2 (Claude fallback) + Tier 3 (LWIN catalog
+ * fallback) for a single wine.
  *
  * BND-261: includes enrichment_metadata in the RPC payload so the
  * per-wine provenance is tracked alongside the enrichment data.
+ *
+ * BND-277 (feature #77): LWIN fallback — when Claude returns null,
+ * populates region/country/varietal/colour from LWIN catalog with
+ * source='lwin_fallback'.
+ *
+ * BND-278 (feature #78): enrich_wines_batch RPC respects manual_overrides
+ * so manually-set fields are never overwritten.
  *
  * Owner+manager only via requireMembership.
  */
@@ -37,9 +45,10 @@ export async function POST(
   }
 
   // Tenant-scoped fetch (defense-in-depth alongside RLS).
+  // BND-278: also fetch manual_overrides.
   const { data: wine, error: fetchError } = await supabase
     .from("wines")
-    .select("id, producer, name, varietal, region, country, vintage")
+    .select("id, producer, name, varietal, region, country, vintage, lwin_id, manual_overrides")
     .eq("id", id)
     .eq("restaurant_id", restaurantId)
     .single();
@@ -56,7 +65,7 @@ export async function POST(
     vintage: wine.vintage,
   });
 
-  let source: RatingSource | null = ruleResult.ratingSource;
+  let source: string | null = ruleResult.ratingSource;
   let payload: Record<string, Json> = {
     id: wine.id,
     drink_window_start: ruleResult.drinkWindowStart,
@@ -103,6 +112,41 @@ export async function POST(
     }
   }
 
+  // BND-277 — Tier 3: LWIN catalog fallback when Claude also produced nothing.
+  if (source == null) {
+    const { data: lwinMatch } = await supabase.rpc("match_lwin", {
+      p_producer: wine.producer,
+      p_name: wine.name,
+    });
+
+    if (lwinMatch && (lwinMatch as Record<string, unknown>[]).length > 0) {
+      const match = (lwinMatch as Record<string, unknown>[])[0];
+      const hasMetadata =
+        match.region || match.country || match.varietal || match.colour;
+
+      if (hasMetadata) {
+        source = "lwin_fallback";
+        metadataSource = "lwin_fallback";
+        payload = {
+          id: wine.id,
+          drink_window_start: null,
+          drink_window_end: null,
+          peak_year: null,
+          rating_source: null,
+          review_excerpt: null,
+          serving_temp_min: null,
+          serving_temp_max: null,
+          serving_temp_label: null,
+          decant_minutes: null,
+          region: (match.region as string) ?? null,
+          country: (match.country as string) ?? null,
+          varietal: (match.varietal as string) ?? null,
+          colour: (match.colour as string) ?? null,
+        };
+      }
+    }
+  }
+
   if (source == null) {
     return NextResponse.json(
       {
@@ -123,6 +167,10 @@ export async function POST(
   if (payload.peak_year != null) enrichmentFields.push("peak_year");
   if (payload.rating_source != null) enrichmentFields.push("rating_source");
   if (payload.review_excerpt != null) enrichmentFields.push("review_excerpt");
+  if (payload.region != null) enrichmentFields.push("region");
+  if (payload.country != null) enrichmentFields.push("country");
+  if (payload.varietal != null) enrichmentFields.push("varietal");
+  if (payload.colour != null) enrichmentFields.push("colour");
 
   (payload as Record<string, unknown>).enrichment_metadata = {
     source: metadataSource,

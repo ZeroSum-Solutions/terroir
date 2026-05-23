@@ -704,6 +704,7 @@ export type Database = {
           is_eightysixed: boolean
           last_enriched_at: string | null
           lwin_id: string | null
+          manual_overrides: string[]
           name: string
           peak_year: number | null
           pricing_dismissed_until: string | null
@@ -744,6 +745,7 @@ export type Database = {
           is_eightysixed?: boolean
           last_enriched_at?: string | null
           lwin_id?: string | null
+          manual_overrides?: string[]
           name: string
           peak_year?: number | null
           pricing_dismissed_until?: string | null
@@ -784,6 +786,7 @@ export type Database = {
           is_eightysixed?: boolean
           last_enriched_at?: string | null
           lwin_id?: string | null
+          manual_overrides?: string[]
           name?: string
           peak_year?: number | null
           pricing_dismissed_until?: string | null

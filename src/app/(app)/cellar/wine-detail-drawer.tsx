@@ -156,7 +156,12 @@ export function WineDetailDrawer({
         if (payload?.source == null) {
           setEnrichMsg(payload?.message ?? "Could not enrich this wine.");
         } else {
-          setEnrichMsg(`Enriched via ${payload.source === "claude_inference" ? "Claude AI" : "rule engine"}.`);
+          const sourceLabel = payload.source === "claude_inference"
+            ? "Claude AI"
+            : payload.source === "lwin_fallback"
+              ? "LWIN catalog"
+              : "rule engine";
+          setEnrichMsg(`Enriched via ${sourceLabel}.`);
           startTransition(() => router.refresh());
         }
       } catch (err) {
@@ -657,6 +662,9 @@ export function WineDetailDrawer({
             varietal: row.varietal,
             region: row.region,
             tasting_notes: row.tasting_notes,
+            drink_window_start: row.drink_window_start,
+            drink_window_end: row.drink_window_end,
+            peak_year: row.peak_year,
           }}
           onClose={() => setEditOpen(false)}
         />

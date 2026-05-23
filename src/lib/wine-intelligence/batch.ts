@@ -4,9 +4,10 @@
  * Extracted from POST /api/wines/enrich so the orchestration is
  * independently testable. The route becomes a thin auth+delegate shell.
  *
- * Orchestration tiers (unchanged from route):
+ * Orchestration tiers:
  *   Tier 1 — rule engine (deterministic, free): enrichWine()
  *   Tier 2 — Claude fallback (paid, higher coverage): enrichWinesWithClaudeBatch()
+ *   Tier 3 — LWIN catalog fallback (free, best-effort metadata): lwinEnrichFallback()
  *
  * BND-039: Claude fallback is hard-capped per request to avoid burning
  * Anthropic budget on a single click. Clients re-invoke until hasMore=false.
@@ -14,6 +15,14 @@
  * BND-262 (feature #75): Claude calls are batched — all candidate wines
  * go in a single Claude API call (one system prompt, one round trip),
  * instead of one call per wine.
+ *
+ * BND-277 (feature #77): LWIN fallback — when Claude returns null, the
+ * system populates region/country/varietal/colour from the LWIN catalog
+ * and marks enrichment_metadata.source = 'lwin_fallback'.
+ *
+ * BND-278 (feature #78): Manual overrides — enrichment never overwrites
+ * fields the user has manually set. The enrich_wines_batch RPC checks
+ * manual_overrides before writing each field.
  *
  * ARCH-021: fetch and LWIN backfill are bounded by ENRICH_BATCH_LIMIT so
  * large catalogs don't block a request thread.
@@ -48,6 +57,10 @@ type EnrichmentPayloadRow = {
   serving_temp_max: number | null;
   serving_temp_label: string | null;
   decant_minutes: number | null;
+  region?: string | null;
+  country?: string | null;
+  varietal?: string | null;
+  colour?: string | null;
   enrichment_metadata: EnrichmentMetadata;
 };
 
@@ -60,6 +73,11 @@ function buildMetadata(source: string, result: {
   servingTempMin: number | null;
   servingTempMax: number | null;
   servingTempLabel: string | null;
+  decantMinutes?: number | null;
+  region?: string | null;
+  country?: string | null;
+  varietal?: string | null;
+  colour?: string | null;
 }): EnrichmentMetadata {
   const fields: string[] = [];
   if (result.drinkWindowStart != null || result.drinkWindowEnd != null) fields.push("drink_window");
@@ -68,11 +86,109 @@ function buildMetadata(source: string, result: {
   if (result.peakYear != null) fields.push("peak_year");
   if (result.ratingSource != null) fields.push("rating_source");
   if (result.reviewExcerpt != null) fields.push("review_excerpt");
+  if (result.region != null) fields.push("region");
+  if (result.country != null) fields.push("country");
+  if (result.varietal != null) fields.push("varietal");
+  if (result.colour != null) fields.push("colour");
   return {
     source,
     fields_enriched: fields,
     enriched_at: new Date().toISOString(),
   };
+}
+
+/**
+ * BND-277 — Tier 3 LWIN catalog fallback.
+ *
+ * For wines where neither the rule engine nor Claude produced enrichment,
+ * match against the LWIN catalog and populate region/country/varietal/colour
+ * metadata with source='lwin_fallback'.
+ */
+async function lwinEnrichFallback(
+  supabase: SupabaseClient<Database>,
+  wines: Array<{ id: string; producer: string; name: string }>,
+): Promise<EnrichmentPayloadRow[]> {
+  if (wines.length === 0) return [];
+
+  const wineIds = wines.map((w) => w.id);
+
+  // Run match_lwin_batch to assign LWIN IDs to unmatched wines.
+  const { data: matches } = await supabase.rpc("match_lwin_batch", {
+    p_wine_ids: wineIds,
+  });
+
+  if (!matches || matches.length === 0) return [];
+
+  // Fetch the wines that got matched to get their lwin_id values.
+  const matchedIds = new Set(
+    (matches as Array<{ wine_id: string }>).map((m) => m.wine_id),
+  );
+
+  const { data: winesWithLwin } = await supabase
+    .from("wines")
+    .select("id, lwin_id")
+    .in("id", Array.from(matchedIds))
+    .not("lwin_id", "is", null);
+
+  if (!winesWithLwin || winesWithLwin.length === 0) return [];
+
+  const lwinIds = [...new Set(winesWithLwin.map((w) => w.lwin_id as string))];
+
+  // Fetch LWIN catalog entries for the matched LWIN IDs.
+  const { data: catalogEntries } = await supabase
+    .from("lwin_catalog")
+    .select("lwin_id, region, country, varietal, colour")
+    .in("lwin_id", lwinIds);
+
+  if (!catalogEntries || catalogEntries.length === 0) return [];
+
+  const catalogByLwinId = new Map(
+    catalogEntries.map((e) => [e.lwin_id, e]),
+  );
+
+  const results: EnrichmentPayloadRow[] = [];
+
+  for (const wine of winesWithLwin) {
+    if (!wine.lwin_id) continue;
+    const catalog = catalogByLwinId.get(wine.lwin_id);
+    if (!catalog) continue;
+
+    // Only create a payload if at least one metadata field is present.
+    if (!catalog.region && !catalog.country && !catalog.varietal && !catalog.colour) continue;
+
+    results.push({
+      id: wine.id,
+      drink_window_start: null,
+      drink_window_end: null,
+      peak_year: null,
+      rating_source: null,
+      review_excerpt: null,
+      serving_temp_min: null,
+      serving_temp_max: null,
+      serving_temp_label: null,
+      decant_minutes: null,
+      region: catalog.region,
+      country: catalog.country,
+      varietal: catalog.varietal,
+      colour: catalog.colour,
+      enrichment_metadata: buildMetadata("lwin_fallback", {
+        drinkWindowStart: null,
+        drinkWindowEnd: null,
+        peakYear: null,
+        ratingSource: null,
+        reviewExcerpt: null,
+        servingTempMin: null,
+        servingTempMax: null,
+        servingTempLabel: null,
+        region: catalog.region,
+        country: catalog.country,
+        varietal: catalog.varietal,
+        colour: catalog.colour,
+      }),
+    });
+  }
+
+  return results;
 }
 
 export type EnrichRestaurantBatchInput = {
@@ -97,6 +213,7 @@ export type EnrichRestaurantBatchResult =
       claudeEnrichedCount: number;
       claudeAttemptedCount: number;
       claudeRemaining: number;
+      lwinFallbackCount: number;
       lwinMatched: number;
       hasMore: boolean;
     }
@@ -109,9 +226,10 @@ export async function enrichRestaurantBatch(
 
   // ARCH-021: delta-fetch only wines that actually need enrichment.
   // BND-039: also include `producer, name` so Claude fallback has enough signal.
+  // BND-278: also fetch manual_overrides for field-preservation checks.
   const { data: wines, error } = await supabase
     .from("wines")
-    .select("id, producer, name, varietal, region, country, vintage")
+    .select("id, producer, name, varietal, region, country, vintage, manual_overrides")
     .eq("restaurant_id", restaurantId)
     .or("drink_window_start.is.null,serving_temp_min.is.null")
     .limit(ENRICH_BATCH_LIMIT);
@@ -163,11 +281,21 @@ export async function enrichRestaurantBatch(
   );
 
   const claudeResults: EnrichmentPayloadRow[] = [];
+  const claudeNullResults: Array<{ id: string; producer: string; name: string }> = [];
+
   if (claudeWork.length > 0) {
     const batchResults = await enrichWinesWithClaudeBatch(claudeWork);
     for (let i = 0; i < claudeWork.length; i++) {
       const result = batchResults[i];
-      if (!result || result.drinkWindowStart == null) continue;
+      if (!result || result.drinkWindowStart == null) {
+        // BND-277 — collect for LWIN fallback
+        claudeNullResults.push({
+          id: claudeWork[i].id,
+          producer: claudeWork[i].producer,
+          name: claudeWork[i].name,
+        });
+        continue;
+      }
       claudeResults.push({
         id: claudeWork[i].id,
         drink_window_start: result.drinkWindowStart,
@@ -184,7 +312,10 @@ export async function enrichRestaurantBatch(
     }
   }
 
-  const payload = [...ruleEnriched, ...claudeResults];
+  // BND-277 — Tier 3 (LWIN catalog fallback, free, best-effort).
+  const lwinFallbackResults = await lwinEnrichFallback(supabase, claudeNullResults);
+
+  const payload = [...ruleEnriched, ...claudeResults, ...lwinFallbackResults];
 
   let enriched = 0;
   if (payload.length > 0) {
@@ -228,6 +359,7 @@ export async function enrichRestaurantBatch(
     claudeEnrichedCount: claudeResults.length,
     claudeAttemptedCount: claudeWork.length,
     claudeRemaining,
+    lwinFallbackCount: lwinFallbackResults.length,
     lwinMatched,
     hasMore:
       processed >= ENRICH_BATCH_LIMIT ||
