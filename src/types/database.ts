@@ -229,6 +229,7 @@ export type Database = {
           parsed_line_items: Json
           raw_image_path: string | null
           restaurant_id: string
+          status: string
         }
         Insert: {
           accuracy_score?: number | null
@@ -243,6 +244,7 @@ export type Database = {
           parsed_line_items: Json
           raw_image_path?: string | null
           restaurant_id: string
+          status?: string
         }
         Update: {
           accuracy_score?: number | null
@@ -257,6 +259,7 @@ export type Database = {
           parsed_line_items?: Json
           raw_image_path?: string | null
           restaurant_id?: string
+          status?: string
         }
         Relationships: [
           {

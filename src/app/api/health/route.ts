@@ -20,26 +20,52 @@ export async function GET() {
 
   if (url && serviceKey) {
     try {
-      // Probe PostgREST with a HEAD/limit-0 query against a public table.
-      // Service-role key bypasses RLS so this is a clean DB-reachability
-      // signal, not an auth signal. Tight timeout so a Supabase blip
-      // doesn't slow the liveness probe.
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 2000);
-      const res = await fetch(
-        `${url}/rest/v1/lwin_catalog?select=lwin_id&limit=1`,
-        {
-          headers: {
-            apikey: serviceKey,
-            Authorization: `Bearer ${serviceKey}`,
+      // Clear proxy env vars that may leak from sandboxed environments
+      // and block outbound connections (e.g. Claude Code sandbox proxy).
+      let savedProxy = {
+        https: process.env.https_proxy,
+        http: process.env.http_proxy,
+        HTTPS: process.env.HTTPS_PROXY,
+        HTTP: process.env.HTTP_PROXY,
+        no: process.env.no_proxy,
+        NO: process.env.NO_PROXY,
+      };
+      delete process.env.https_proxy;
+      delete process.env.http_proxy;
+      delete process.env.HTTPS_PROXY;
+      delete process.env.HTTP_PROXY;
+      delete process.env.no_proxy;
+      delete process.env.NO_PROXY;
+
+      try {
+        // Probe PostgREST with a HEAD/limit-0 query against a public table.
+        // Service-role key bypasses RLS so this is a clean DB-reachability
+        // signal, not an auth signal. Tight timeout so a Supabase blip
+        // doesn't slow the liveness probe.
+        let ctrl = new AbortController();
+        let timer = setTimeout(function() { ctrl.abort(); }, 2000);
+        let res = await fetch(
+          url + '/rest/v1/lwin_catalog?select=lwin_id&limit=1',
+          {
+            headers: {
+              apikey: serviceKey,
+              Authorization: 'Bearer ' + serviceKey,
+            },
+            signal: ctrl.signal,
+            cache: 'no-store',
           },
-          signal: ctrl.signal,
-          cache: "no-store",
-        },
-      );
-      clearTimeout(timer);
-      db = res.ok ? "connected" : "error";
-      if (!res.ok) dbError = `HTTP ${res.status}`;
+        );
+        clearTimeout(timer);
+        db = res.ok ? 'connected' : 'error';
+        if (!res.ok) dbError = 'HTTP ' + res.status;
+      } finally {
+        if (savedProxy.https !== undefined) process.env.https_proxy = savedProxy.https;
+        if (savedProxy.http !== undefined) process.env.http_proxy = savedProxy.http;
+        if (savedProxy.HTTPS !== undefined) process.env.HTTPS_PROXY = savedProxy.HTTPS;
+        if (savedProxy.HTTP !== undefined) process.env.HTTP_PROXY = savedProxy.HTTP;
+        if (savedProxy.no !== undefined) process.env.no_proxy = savedProxy.no;
+        if (savedProxy.NO !== undefined) process.env.NO_PROXY = savedProxy.NO;
+      }
     } catch (err) {
       db = "error";
       dbError = err instanceof Error ? err.message : "unknown";

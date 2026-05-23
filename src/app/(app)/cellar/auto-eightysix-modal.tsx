@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import Link from "next/link";
+import { X, Layers } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { AutoEightysixPanel } from "./auto-eightysix-panel";
 import { PricingTargetsPanel } from "./pricing-targets-panel";
@@ -14,6 +15,8 @@ import { PricingTargetsPanel } from "./pricing-targets-panel";
  *   1. Auto-86 from inventory (BND-037b + BND-173 eightysix_strategy)
  *   2. House pricing targets (BND-040 follow-up — pour cost % + bottle
  *      markup ratio that drive every pricing recommendation)
+ *
+ * Also links to /cellar/config for managing cellar sections (BND-060).
  *
  * Mobile: bottom sheet (anchored to bottom, slides up).
  * Desktop: centered card.
@@ -97,6 +100,15 @@ export function AutoEightysixModal({
             thresholdMl={thresholdMl}
             eightysixStrategy={eightysixStrategy}
           />
+          {/* BND-060: link to cellar section configuration */}
+          <Link
+            href="/cellar/config"
+            onClick={onClose}
+            className="flex items-center justify-center gap-xs rounded-sm border border-border bg-white py-sm text-[14px] font-medium text-ink transition-colors hover:bg-surface-muted"
+          >
+            <Layers className="h-4 w-4" strokeWidth={2} aria-hidden />
+            Manage cellar sections
+          </Link>
         </div>
       </div>
     </div>

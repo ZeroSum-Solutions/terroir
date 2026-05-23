@@ -39,6 +39,113 @@ export async function POST(request: NextRequest) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
 
+
+  // BND-083: storage-path based submission via JSON body
+  // Supports submitting a previously-uploaded image by its Supabase storage path.
+  const reqContentType = request.headers.get("content-type") ?? "";
+  if (reqContentType.includes("application/json") && !reqContentType.includes("multipart")) {
+    let jsonBody: { imagePath?: string };
+    try { jsonBody = await request.json(); }
+    catch { return json({ error: "Invalid JSON body." }, 400); }
+
+    const imagePath = jsonBody.imagePath;
+    if (!imagePath) return json({ error: "Missing imagePath field." }, 400);
+
+    const { supabase } = auth;
+
+    // Download image from Supabase Storage
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from("invoice-images")
+      .download(imagePath);
+
+    if (downloadError || !fileData) {
+      return json({ error: `Image not found: ${downloadError?.message ?? "unknown"}` }, 404);
+    }
+
+    const ext = imagePath.split(".").pop()?.toLowerCase() ?? "jpg";
+    const mimeType = ext === "pdf" ? "application/pdf" : ext === "png" ? "image/png" : "image/jpeg";
+    const fileBuffer = Buffer.from(await fileData.arrayBuffer());
+
+    // Preflight Anthropic config
+    try { getAnthropicClient(); }
+    catch { return json({ error: "Server not configured: ANTHROPIC_API_KEY missing." }, 500); }
+
+    // Create invoice_scans row with status=processing
+    const { data: invoiceScan, error: insertError } = await supabase
+      .from("invoice_scans")
+      .insert({
+        restaurant_id: auth.restaurantId,
+        distributor_name: "Unknown",
+        parsed_line_items: [],
+        final_line_items: [],
+        edits: {},
+        item_count: 0,
+        raw_image_path: imagePath,
+        status: "processing",
+      })
+      .select("id")
+      .single();
+
+    if (insertError || !invoiceScan) {
+      console.error("invoice_scans insert failed:", insertError);
+      return json({ error: "Failed to create scan record." }, 500);
+    }
+
+    const scanId = invoiceScan.id;
+
+    try {
+      // Stage 1: Azure OCR
+      const ocr = await extractOcr(fileBuffer, mimeType);
+
+      // Stage 2: Claude structuring
+      const parsed = await extractFromOcr(ocr);
+
+      if (parsed.lineItems.length === 0) {
+        await supabase.from("invoice_scans").update({ status: "complete", item_count: 0 }).eq("id", scanId);
+        return json({ scanId, code: "no_wines_extracted", message: "No wines could be extracted from this image.", rawText: ocr.rawText }, 422);
+      }
+
+      // Stage 3: response assembly
+      const parsedAt = new Date().toISOString();
+      const items: LineItem[] = parsed.lineItems.map((item, idx) => ({
+        id: `${parsedAt}-${idx}`,
+        name: item.name, producer: item.producer, vintage: item.vintage,
+        varietal: item.varietal, region: item.region, qty: item.qty,
+        unitCost: item.unitCost, confidence: item.confidence,
+        lowFields: item.lowFields.length > 0 ? item.lowFields : undefined,
+      }));
+
+      const result: Scan = {
+        source: {
+          distributor: parsed.distributor ?? ocr.vendorName ?? "Unknown",
+          invoiceNo: parsed.invoiceNumber ?? ocr.invoiceNumber ?? "—",
+          invoiceDate: parsed.invoiceDate ?? ocr.invoiceDate ?? parsedAt.slice(0, 10),
+          parsedAt,
+        },
+        items, edits: {}, quality: scoreItems(items), rawText: ocr.rawText,
+      };
+
+      // Update row with full results
+      await supabase.from("invoice_scans").update({
+        distributor_name: result.source.distributor,
+        invoice_number: result.source.invoiceNo === "—" ? null : result.source.invoiceNo,
+        invoice_date: result.source.invoiceDate,
+        parsed_line_items: JSON.parse(JSON.stringify(parsed.lineItems)) as any,
+        final_line_items: JSON.parse(JSON.stringify(items)) as any,
+        accuracy_score: result.quality.score,
+        item_count: items.length,
+        status: "complete",
+      }).eq("id", scanId);
+
+      return json({ scanId, ...result }, 200);
+    } catch (e) {
+      // Mark as failed on any pipeline error
+      await supabase.from("invoice_scans").update({ status: "failed" }).eq("id", scanId).catch(() => {});
+      // Re-throw so existing error handlers catch it
+      throw e;
+    }
+  }
+
   // Preflight Anthropic config BEFORE Azure — avoid burning OCR spend when
   // we can't finish the pipeline. (BND-010 test invariant.)
   try { getAnthropicClient(); }

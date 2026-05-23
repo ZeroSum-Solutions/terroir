@@ -12,6 +12,15 @@ const CellarConfigSchema = z.object({
   name: z.string().min(1).optional(),
 });
 
+const SectionSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1).max(100),
+});
+
+const PatchSectionsSchema = z.object({
+  sections: z.array(SectionSchema),
+});
+
 export async function GET() {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
@@ -66,6 +75,91 @@ export async function POST(request: NextRequest) {
       extra: { restaurantId, rows, columns },
     });
     return Errors.internal("Failed to create cellar configuration.");
+  }
+
+  return NextResponse.json(config);
+}
+
+/**
+ * PATCH /api/cellar/config
+ *
+ * BND-060. Updates the sections array stored in cellar_config.labels.
+ * Sections define named groupings for organizing the cellar (e.g.,
+ * "Reds by Region", "Cult Cabs").
+ *
+ * Body: { sections: Array<{ id: string, name: string }> }
+ */
+export async function PATCH(request: NextRequest) {
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, restaurantId } = auth;
+
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    return Errors.badRequest("Invalid JSON.");
+  }
+
+  const parsed = PatchSectionsSchema.safeParse(raw);
+  if (!parsed.success) {
+    return Errors.validation(parsed.error.issues, "Invalid sections.");
+  }
+
+  const { sections } = parsed.data;
+
+  // Fetch existing config to read the current labels.
+  const { data: existing } = await supabase
+    .from("cellar_config")
+    .select("id, labels")
+    .eq("restaurant_id", restaurantId)
+    .limit(1)
+    .single();
+
+  if (!existing) {
+    // No config yet — create one with the sections.
+    const { data: config, error } = await supabase
+      .from("cellar_config")
+      .insert({
+        restaurant_id: restaurantId,
+        name: "Main Cellar",
+        rows: 10,
+        columns: 10,
+        labels: { sections },
+      })
+      .select("*")
+      .single();
+
+    if (error) {
+      console.error("cellar_config insert (sections) failed:", error);
+      Sentry.captureException(error, {
+        tags: { surface: "cellar-config", phase: "patch-insert" },
+        extra: { restaurantId },
+      });
+      return Errors.internal("Failed to create cellar configuration.");
+    }
+
+    return NextResponse.json(config);
+  }
+
+  // Merge sections into existing labels.
+  const currentLabels = (existing.labels as Record<string, unknown>) ?? {};
+  const updatedLabels = { ...currentLabels, sections };
+
+  const { data: config, error } = await supabase
+    .from("cellar_config")
+    .update({ labels: updatedLabels })
+    .eq("id", existing.id)
+    .select("*")
+    .single();
+
+  if (error) {
+    console.error("cellar_config patch failed:", error);
+    Sentry.captureException(error, {
+      tags: { surface: "cellar-config", phase: "patch-update" },
+      extra: { restaurantId },
+    });
+    return Errors.internal("Failed to update cellar configuration.");
   }
 
   return NextResponse.json(config);

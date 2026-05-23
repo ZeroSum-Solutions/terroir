@@ -1,3 +1,43 @@
+## Session 2026-05-23 — features #106, #107, #108
+
+### Completed
+- **#106 User can scan an existing bottle's QR code via the /scan-bottle camera UI** (PASSING)
+  - Created /scan-bottle page at src/app/(app)/scan-bottle/page.tsx
+  - Camera-first UI using browser BarcodeDetector API for QR scanning
+  - Viewfinder with accent QR frame overlay and "Point camera at QR code" indicator
+  - Manual code-entry fallback (text input with camera switch)
+  - Graceful no-camera state with direct manual entry prompt
+  - Mobile-first: max-w-[480px], 44px touch targets, responsive md breakpoints
+  - QR scanner hook (useQrScanner) manages getUserMedia stream lifecycle
+
+- **#107 System decodes the QR payload and looks up the wine by ID** (PASSING)
+  - Modified POST /api/scan-bottle: content-type routing to dual-path handler
+  - JSON path: accepts { qr_payload: string }, Zod-validated
+  - Looks up wine by ID via Supabase .eq("id", qr_payload).eq("restaurant_id", restaurantId)
+  - Returns wine (id, producer, name, vintage, varietal, region, country)
+  - Returns 404 with code: "wine_not_found" when wine doesn't exist or belongs to other restaurant
+  - Existing file-upload bottle label scanning path preserved unchanged
+  - Auth gated via requireMembership (401 for unauthenticated, 403 for no membership)
+
+- **#108 User can confirm or correct the wine match** (PASSING)
+  - Matched wine card: producer + name in serif, metadata grid (vintage, varietal, region, country)
+  - Success badge ("Match found") in success-soft/success colors
+  - Confirm button leads to confirmed phase with green checkmark, wine name, "Scan another" CTA
+  - Correct button opens wine search view with search input + debounced API results list
+  - Selecting a corrected wine returns to matched phase with the new wine
+  - Cancel button returns to previous match without changes
+
+### Verification
+- Mock data grep: 0 hits in production code (only .test.ts files)
+- Browser verification: blocked by sandbox (known limitation - port 3000 EPERM)
+- Code review confirms: auth gating, restaurant scoping, proper error codes
+- All features depend on #102 (passing)
+
+### Files changed
+- NEW: src/app/(app)/scan-bottle/page.tsx (414 lines)
+- MODIFIED: src/app/api/scan-bottle/route.ts (+57/-1)
+
+Stats after this session: 148/231 passing (64.1%).
 ## Session 2026-05-23 — features #199, #65, #66
 
 ### Completed
