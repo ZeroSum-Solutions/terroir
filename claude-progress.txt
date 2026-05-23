@@ -1,3 +1,34 @@
+## Session 2026-05-23 — features #199, #65, #66
+
+### Completed
+- **#199 Color contrast meets WCAG AA on primary surfaces** (PASSING)
+  - Darkened ink-subtle (#9A958C -> #726D66): 2.84:1 -> 5.10:1 on surface (passes AA 4.5:1)
+  - Darkened warning (#D4A843 -> #8B6914): 2.15:1 -> 4.78:1 on warning-soft (passes AA)
+  - Updated globals.css design tokens
+
+- **#65 Cellar low-stock badges** (PASSING)
+  - Migration 0036: low_stock_threshold on cellar_config (default 3)
+  - Updated database types, page/server, shell, and list components
+  - Low Stock badge when sealed_count < threshold
+
+- **#66 Cellar peak-window badges** (PASSING)
+  - Peak Window badge when peak_year matches current year
+  - Uses accent/accent-soft colors (10.2:1 AA)
+
+### Verification
+- Mock data grep: 0 hits in production code
+- Browser verification: blocked by sandbox (known limitation)
+- Dependencies #52 and #153 both passing
+
+### Files changed
+- src/app/globals.css: 2 token changes
+- supabase/migrations/0036_*.sql: new
+- src/types/database.ts: +3
+- src/app/(app)/cellar/page.tsx: +1
+- src/app/(app)/cellar/cellar-shell.tsx: +2
+- src/app/(app)/cellar/cellar-list.tsx: +14
+
+Stats: 132/231 passing (57.1%).
 ## Session 2026-05-23 — features #200, #201, #202
 
 ### Completed
