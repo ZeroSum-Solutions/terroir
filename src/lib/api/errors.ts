@@ -32,8 +32,8 @@ export const Errors = {
   notFound: (resource = "Resource") =>
     apiError(404, "not_found", resource + " not found."),
 
-  badRequest: (message: string, details?: unknown) =>
-    apiError(400, "bad_request", message, details),
+  badRequest: (message: string, details?: unknown, code?: string) =>
+    apiError(400, code ?? "bad_request", message, details),
 
   validation: (issues: ZodIssue[], message = "Invalid input.") =>
     apiError(400, "validation_error", message, issues),

@@ -303,7 +303,6 @@ export function WineListEditor({
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
     setDeletingSection(true);
-    try {
     const targetId = deleteTarget.id;
 
     // Optimistic update
@@ -320,11 +319,16 @@ export function WineListEditor({
 
     setDeleteTarget(null);
 
-    const res = await fetch(`/api/wine-list-sections/${targetId}`, {
-      method: "DELETE",
-    });
+    try {
+      const res = await fetch(`/api/wine-list-sections/${targetId}`, {
+        method: "DELETE",
+      });
 
-    if (!res.ok) {
+      if (!res.ok) {
+        startTransition(() => router.refresh());
+        setDeletingSection(false);
+      }
+    } catch {
       startTransition(() => router.refresh());
       setDeletingSection(false);
     }

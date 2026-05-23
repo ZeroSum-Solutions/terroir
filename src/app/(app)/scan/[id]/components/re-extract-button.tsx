@@ -44,7 +44,7 @@ export function ReExtractButton({ scanId }: ReExtractButtonProps) {
         title="Re-run Claude extraction on the stored OCR text"
       >
         <RefreshCw
-          className={`h-4 w-4`${reExtracting ? " animate-spin" : ""}`}
+          className={`h-4 w-4${reExtracting ? " animate-spin" : ""}`}
           strokeWidth={2}
           aria-hidden="true"
         />

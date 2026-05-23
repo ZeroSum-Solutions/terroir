@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       // "new_remaining_ml exceeds bottle size" — caller sent a bad
       // value. Surface as 400 so the UI can show "that's more than a
       // 750ml bottle can hold."
-      return Errors.badRequest("new_remaining_ml exceeds bottle size.");
+      return Errors.badRequest("new_remaining_ml exceeds bottle size.", undefined, "EXCEEDS_SIZE");
     }
     console.error("reconcile_open_bottles_batch failed:", error);
     Sentry.captureException(error, {

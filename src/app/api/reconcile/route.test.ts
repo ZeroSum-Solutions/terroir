@@ -171,7 +171,7 @@ describe("POST /api/reconcile", () => {
     );
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.code).toBe("EXCEEDS_SIZE");
+    expect(body.error.code).toBe("EXCEEDS_SIZE");
   });
 
   // ARCH-023: auto-86 revalidation across a batch
