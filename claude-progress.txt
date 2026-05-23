@@ -1,3 +1,47 @@
+## Session 2026-05-23 — features #114, #115, #116
+
+### Completed
+- **#114 System opens a new bottle if none is currently open for the wine + format** (PASSING)
+  - Migration 0038 already added open_bottle_id to pour_events + updated record_pour RPC
+  - Migration 0044 adds closed_at to open_bottles — record_pour now filters for closed_at IS NULL
+    to correctly detect "no active bottle" (closed bottles persist, not deleted)
+  - record_pour opens a new bottle from sealed inventory when no active one exists
+  - pour_events.open_bottle_id references the open_bottles row used for the pour
+
+- **#115 System decrements the open bottle's remaining ounces by the pour amount** (PASSING)
+  - Already fully implemented by pour_events_maintain_open_bottle trigger from migration 0016
+  - remaining_ml = greatest(0, remaining_ml - NEW.ml_delta) on each pour/spill
+  - Added open_bottle_id linkage (migration 0038) to explicitly trace which bottle was poured from
+
+- **#116 System closes a bottle automatically when remaining drops below threshold** (PASSING)
+  - Migration 0044 adds closed_at timestamptz to open_bottles
+  - Updated pour_events_maintain_open_bottle trigger: sets closed_at = now() when remaining_ml = 0
+    instead of deleting the row (preserves bottle lifecycle audit trail)
+  - When new bottle opened, on conflict do update resets closed_at = null
+  - Reconcile trigger also sets closed_at when reconciled to zero
+  - Auto-86 trigger (migration 0021) already logs availability_event with kind=eightysix
+    when total inventory drops below threshold — unchanged
+
+### Additional scope
+- Updated reconcile_open_bottle RPC: filters closed_at IS NULL, includes open_bottle_id, validates
+  p_new_remaining_ml <= size_ml
+- Updated reconcile_open_bottles_batch RPC: delegates to updated reconcile_open_bottle
+- Updated list_open_bottle_items RPC: LEFT JOIN filters ob.closed_at IS NULL so cellar page
+  doesn't show finished bottles as "open with 0ml remaining"
+
+### Verification
+- TypeScript: 0 new errors (8 pre-existing in wine-list-editor.tsx, re-extract-button.tsx — unchanged)
+- Mock data grep: 0 hits in production src/ (health route comment only)
+- Browser verification: blocked by sandbox (listen EPERM on port 3000 — known limitation)
+- Code review: all RPCs verified for correct $$ balancing, trigger logic, constraint handling
+
+### Files changed
+- NEW: supabase/migrations/0044_open_bottles_closed_at.sql (351 lines)
+- NEW: supabase/migrations/down/0044_open_bottles_closed_at.down.sql (209 lines)
+- src/types/database.ts: already included closed_at + open_bottle_id from prior session
+
+Stats after this session: 171/231 passing (74.0%).
+
 ## Session 2026-05-23 — features #2, #84, #109
 
 ### Completed
