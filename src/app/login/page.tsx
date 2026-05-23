@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { MagicLinkSubmit } from "./magic-link-submit";
+import { MagicLinkSubmit, ResetPasswordSubmit } from "./magic-link-submit";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -143,12 +143,7 @@ export default async function LoginPage({
             {error && (
               <div id="reset-error" role="alert" className="text-[13px] text-danger">{error}</div>
             )}
-            <button
-              type="submit"
-              className="flex h-[38px] items-center justify-center rounded-sm bg-accent px-md text-[14px] font-medium text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
-            >
-              Send reset link
-            </button>
+            <ResetPasswordSubmit />
             <a
               href="/login"
               className="text-center text-[13px] text-ink-muted hover:text-ink"

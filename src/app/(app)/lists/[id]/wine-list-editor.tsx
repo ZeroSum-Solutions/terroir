@@ -259,6 +259,10 @@ export function WineListEditor({
   const [showPublish, setShowPublish] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [errorToast, setErrorToast] = useState(null);
+  const [addingSection, setAddingSection] = useState(false);
+  const [deletingItem, setDeletingItem] = useState(false);
+  const [deletingSection, setDeletingSection] = useState(false);
 
   const totalWines = useMemo(
     () => sections.reduce((sum, s) => sum + s.wine_list_items.length, 0),
@@ -298,6 +302,8 @@ export function WineListEditor({
   // BND-163: delete section
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
+    setDeletingSection(true);
+    try {
     const targetId = deleteTarget.id;
 
     // Optimistic update
@@ -320,6 +326,7 @@ export function WineListEditor({
 
     if (!res.ok) {
       startTransition(() => router.refresh());
+      setDeletingSection(false);
     }
   }, [deleteTarget, activeSection, router]);
 
@@ -354,21 +361,26 @@ export function WineListEditor({
     const name = raw.trim();
     if (!name) return;
 
-    const res = await fetch("/api/wine-list-sections", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wine_list_id: list.id, name }),
-    });
+    setAddingSection(true);
+    try {
+      const res = await fetch("/api/wine-list-sections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wine_list_id: list.id, name }),
+      });
 
-    if (!res.ok) {
-      const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-      window.alert(payload?.error ?? `Failed to add section (${res.status}).`);
-      return;
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+        window.alert(payload?.error ?? `Failed to add section (${res.status}).`);
+        return;
+      }
+
+      const created = (await res.json()) as { id: string };
+      setActiveSection(created.id);
+      startTransition(() => router.refresh());
+    } finally {
+      setAddingSection(false);
     }
-
-    const created = (await res.json()) as { id: string };
-    setActiveSection(created.id);
-    startTransition(() => router.refresh());
   }, [list.id, router]);
 
   // BND-162: sensors for section drag-and-drop
@@ -387,6 +399,9 @@ export function WineListEditor({
       const newIndex = sections.findIndex((s) => s.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
 
+      // Save previous order for rollback
+      const previous = sections.map((s) => ({ ...s }));
+
       const reordered = [...sections];
       const [moved] = reordered.splice(oldIndex, 1);
       reordered.splice(newIndex, 0, moved);
@@ -395,11 +410,18 @@ export function WineListEditor({
       setSections(reordered.map((s, i) => ({ ...s, position: i })));
 
       // Persist
-      await fetch("/api/wine-list-sections/reorder", {
+      const res = await fetch("/api/wine-list-sections/reorder", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderedIds: reordered.map((s) => s.id) }),
       });
+
+      // Rollback on failure
+      if (!res.ok) {
+        setSections(previous.map((s, i) => ({ ...s, position: i })));
+        setErrorToast("Failed to reorder sections. Please try again.");
+        setTimeout(() => setErrorToast(null), 4000);
+      }
     },
     [sections],
   );
@@ -420,6 +442,9 @@ export function WineListEditor({
       const newIndex = items.findIndex((i) => i.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
 
+      // Save previous items order for rollback
+      const previousItems = currentSection.wine_list_items.map((i) => ({ ...i }));
+
       const [moved] = items.splice(oldIndex, 1);
       items.splice(newIndex, 0, moved);
 
@@ -431,11 +456,24 @@ export function WineListEditor({
         ),
       );
 
-      await fetch("/api/wine-list-items/reorder", {
+      const res = await fetch("/api/wine-list-items/reorder", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderedIds: items.map((i) => i.id) }),
       });
+
+      // Rollback on failure
+      if (!res.ok) {
+        setSections((prev) =>
+          prev.map((s) =>
+            s.id === activeSection
+              ? { ...s, wine_list_items: previousItems.map((it, idx) => ({ ...it, position: idx })) }
+              : s,
+          ),
+        );
+        setErrorToast("Failed to reorder wines. Please try again.");
+        setTimeout(() => setErrorToast(null), 4000);
+      }
     },
     [currentSection, activeSection],
   );
@@ -466,8 +504,9 @@ export function WineListEditor({
   var confirmDeleteItem = useCallback(async function() {
     var target = wineToDelete;
     if (!target) return;
+    setDeletingItem(true);
     setWineToDelete(null);
-    await deleteItem(target.id);
+    try { await deleteItem(target.id); } finally { setDeletingItem(false); }
   }, [wineToDelete, deleteItem]);
 
   const updateItemPrice = useCallback(
@@ -784,7 +823,8 @@ export function WineListEditor({
             <button
               type="button"
               onClick={addSection}
-              className="flex items-center gap-xs px-sm py-xs text-[13px] text-ink-subtle hover:text-ink"
+              disabled={addingSection}
+              className="flex items-center gap-xs px-sm py-xs text-[13px] text-ink-subtle hover:text-ink disabled:opacity-50"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2} />
               Add section
@@ -937,7 +977,8 @@ export function WineListEditor({
                 <button
                   type="button"
                   onClick={confirmDeleteItem}
-                  className="rounded-sm bg-danger px-md py-1.5 text-[13px] font-medium text-white hover:bg-danger-hover"
+                  disabled={deletingItem}
+                  className="rounded-sm bg-danger px-md py-1.5 text-[13px] font-medium text-white hover:bg-danger-hover disabled:opacity-60"
                 >
                   Remove wine
                 </button>
@@ -988,7 +1029,8 @@ export function WineListEditor({
                 <button
                   type="button"
                   onClick={confirmDelete}
-                  className="rounded-sm bg-danger px-md py-1.5 text-[13px] font-medium text-white hover:bg-danger-hover"
+                  disabled={deletingSection}
+                  className="rounded-sm bg-danger px-md py-1.5 text-[13px] font-medium text-white hover:bg-danger-hover disabled:opacity-60"
                 >
                   Delete section
                 </button>
@@ -1017,6 +1059,13 @@ export function WineListEditor({
             startTransition(() => router.refresh());
           }}
         />
+      )}
+
+      {/* Error toast for failed drag-and-drop reorders */}
+      {errorToast && (
+        <div className="fixed bottom-lg left-1/2 z-50 -translate-x-1/2 rounded-md bg-danger px-lg py-sm text-[13px] font-medium text-white shadow-lg animate-in fade-in slide-in-from-bottom-2">
+          {errorToast}
+        </div>
       )}
 
       {/* Copy URL toast */}

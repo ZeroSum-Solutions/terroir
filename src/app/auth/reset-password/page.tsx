@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { SetPasswordSubmit } from "@/app/login/magic-link-submit";
+
 
 export const metadata: Metadata = { title: "Set new password" };
 
@@ -107,12 +109,7 @@ export default async function ResetPasswordPage({
           {error && (
             <div id="reset-password-error" role="alert" className="text-[13px] text-danger">{error}</div>
           )}
-          <button
-            type="submit"
-            className="flex h-[38px] items-center justify-center rounded-sm bg-accent px-md text-[14px] font-medium text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
-          >
-            Save password
-          </button>
+<SetPasswordSubmit />
         </form>
       </div>
     </main>
