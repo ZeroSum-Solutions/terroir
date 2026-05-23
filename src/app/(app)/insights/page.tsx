@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
-import { BarChart3, ScanLine } from "lucide-react";
+import { BarChart3, ScanLine, History, Activity, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { fetchDrinkWindowAlerts } from "@/lib/drink-window/alerts";
 import { fetchPricingAlerts } from "@/lib/pricing/alerts";
@@ -59,8 +59,6 @@ function Sparkline({ data }: { data: SparklinePoint[] }) {
   const first = points[0];
   const areaPath = `${path} L ${last.x.toFixed(1)},${height - pad} L ${first.x.toFixed(1)},${height - pad} Z`;
 
-  // Accessible summary: range + last value so screen-reader users get
-  // the same signal sighted users get from the chart shape.
   const ariaLabel =
     `Scan activity over the last ${data.length} scans: ` +
     `${min}–${max} items per scan, most recent ${last.value}.`;
@@ -90,10 +88,6 @@ function Sparkline({ data }: { data: SparklinePoint[] }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* Per-point hit targets. The visible circle is small; the
-          transparent overlay is wider so hover/touch picks up easily
-          even on dense charts. SVG <title> renders as a native
-          browser tooltip without extra JS. */}
       {points.map((p, i) => {
         const dateLabel = formatSparkDate(p.date);
         const tooltip =
@@ -121,14 +115,153 @@ function Sparkline({ data }: { data: SparklinePoint[] }) {
   );
 }
 
+// ── Bar chart for scan throughput (#148) ──────────────────────────────
+function ThroughputBarChart({ data }: { data: { weekLabel: string; count: number }[] }) {
+  if (data.length === 0) return null;
+  const maxCount = Math.max(...data.map((d) => d.count), 1);
+  const barHeightMax = 120;
+
+  return (
+    <div className="flex items-end gap-1" style={{ height: barHeightMax + 24 }}>
+      {data.map((d, i) => {
+        const barH = (d.count / maxCount) * barHeightMax;
+        return (
+          <div
+            key={i}
+            className="group relative flex flex-1 flex-col items-center justify-end"
+          >
+            <div
+              className="w-full rounded-t-sm bg-accent/70 transition-colors hover:bg-accent"
+              style={{ height: Math.max(barH, 2), minWidth: 4 }}
+            >
+              <div className="invisible absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-1.5 py-0.5 font-mono text-[11px] text-white opacity-0 transition-opacity group-hover:visible group-hover:opacity-100">
+                {d.count}
+              </div>
+            </div>
+            {data.length <= 8 || i % 4 === 0 || i === data.length - 1 ? (
+              <span className="mt-1 text-[9px] text-ink-muted">{d.weekLabel}</span>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Past drink window row type (#147) ─────────────────────────────────
+type PastDrinkWindowRow = {
+  wine_id: string;
+  name: string;
+  producer: string;
+  vintage: number | null;
+  drink_window_end: number | null;
+  bottle_count: number;
+  bin_location: string | null;
+};
+
+async function fetchPastDrinkWindow(
+  supabase: NonNullable<Awaited<ReturnType<typeof getAuthContext>>>["supabase"],
+  restaurantId: string,
+): Promise<PastDrinkWindowRow[]> {
+  const currentYear = new Date().getFullYear();
+
+  const { data: wines, error: wineErr } = await supabase
+    .from("wines")
+    .select(
+      "id, name, producer, vintage, drink_window_end",
+    )
+    .eq("restaurant_id", restaurantId)
+    .eq("is_eightysixed", false)
+    .not("drink_window_end", "is", null)
+    .lt("drink_window_end", currentYear);
+
+  if (wineErr) throw wineErr;
+  if (!wines || wines.length === 0) return [];
+
+  // Aggregate inventory counts
+  const wineIds = wines.map((w) => w.id);
+  const { data: invRows, error: invErr } = await supabase
+    .from("inventory_items")
+    .select("wine_id, quantity, bin_location")
+    .eq("restaurant_id", restaurantId)
+    .in("wine_id", wineIds);
+
+  if (invErr) throw invErr;
+
+  const aggByWine = new Map<string, { count: number; bin: string | null }>();
+  for (const row of invRows ?? []) {
+    if (!row.wine_id) continue;
+    const prev = aggByWine.get(row.wine_id) ?? { count: 0, bin: null };
+    prev.count += row.quantity ?? 0;
+    if (!prev.bin && row.bin_location) prev.bin = row.bin_location;
+    aggByWine.set(row.wine_id, prev);
+  }
+
+  const rows: PastDrinkWindowRow[] = [];
+  for (const w of wines) {
+    const inv = aggByWine.get(w.id);
+    // Only show wines with stock on hand
+    if (!inv || inv.count <= 0) continue;
+    rows.push({
+      wine_id: w.id,
+      name: w.name,
+      producer: w.producer,
+      vintage: w.vintage,
+      drink_window_end: w.drink_window_end,
+      bottle_count: inv.count,
+      bin_location: inv.bin,
+    });
+  }
+
+  // Sort: oldest past-peak first (lowest drink_window_end first)
+  rows.sort((a, b) => {
+    const aEnd = a.drink_window_end ?? 9999;
+    const bEnd = b.drink_window_end ?? 9999;
+    if (aEnd !== bEnd) return aEnd - bEnd;
+    return a.producer.localeCompare(b.producer);
+  });
+
+  return rows;
+}
+
+// ── Scan throughput type (#148) ───────────────────────────────────────
+type ThroughputWeek = { weekLabel: string; count: number };
+
+function computeScanThroughput(
+  scans: Array<{ created_at: string }>,
+  weekCount: number = 12,
+): ThroughputWeek[] {
+  // Group scans by ISO week
+  const weekMap = new Map<string, number>();
+
+  for (const s of scans) {
+    const d = new Date(s.created_at);
+    if (Number.isNaN(d.getTime())) continue;
+    // ISO week label: e.g. "Jan 5"
+    const weekLabel = d.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+    weekMap.set(weekLabel, (weekMap.get(weekLabel) ?? 0) + 1);
+  }
+
+  // Take the latest `weekCount` weeks in chronological order
+  const entries = [...weekMap.entries()];
+  const sorted = entries
+    .map(([label, count]) => {
+      // Parse the label back to a Date for sorting
+      const parsed = new Date(label);
+      return { label, count, ts: Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime() };
+    })
+    .sort((a, b) => a.ts - b.ts)
+    .slice(-weekCount);
+
+  return sorted.map((s) => ({ weekLabel: s.label, count: s.count }));
+}
 export default async function DashboardPage() {
-  const auth = (await getAuthContext())!; // AppLayout redirects when null
+  const auth = (await getAuthContext())!;
   const { supabase, restaurantId: rid, restaurantName, user, userRole } = auth;
 
-  // BND-039 + BND-040 — alerts pipelines. Fetch in parallel with the
-  // Dashboard aggregates below; alerts render above the metric cards.
-  // Pricing alerts gracefully return [] when no retail data is enriched
-  // yet (operator hasn't clicked the Refresh retail button).
   const [drinkWindowAlerts, pricingAlerts, snoozedRows] = await Promise.all([
     fetchDrinkWindowAlerts(supabase, rid),
     fetchPricingAlerts(supabase, rid).catch(() => []),
@@ -137,13 +270,16 @@ export default async function DashboardPage() {
   const firstName = parseFirstName(user.email ?? "") || "there";
   const canEnrich = userRole === "owner" || userRole === "manager";
 
-  // Get this month's aggregates
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
-  // Fetch all data in parallel instead of sequentially
-  const [{ data: scans }, { data: inventoryItems }, { data: scanItems }] =
+  const [
+    { data: scans },
+    { data: inventoryItems },
+    { data: scanItems },
+    initPastDrinkWindow,
+  ] =
     await Promise.all([
       supabase
         .from("invoice_scans")
@@ -160,30 +296,22 @@ export default async function DashboardPage() {
         .from("inventory_items")
         .select("quantity, unit_cost, invoice_scan_id, invoice_scans!inner(distributor_name)")
         .eq("restaurant_id", rid),
+      fetchPastDrinkWindow(supabase, rid).catch(() => [] as PastDrinkWindowRow[]),
     ]);
 
   const allScans = scans ?? [];
   const items = inventoryItems ?? [];
+  const pastDrinkWindowWines: PastDrinkWindowRow[] = initPastDrinkWindow;
 
-  // This month's scans
   const monthScans = allScans.filter(
     (s) => new Date(s.created_at) >= startOfMonth,
   );
 
-  // Compute metrics. The hero shows total inventory value at current
-  // cost (spec §insights_and_analytics — "System shows total inventory
-  // value at current cost"), so this sums quantity × unit_cost across
-  // every item still on hand. `scanCount` is the per-month activity
-  // counter shown beneath the hero.
   const inventoryValue = items.reduce((s, i) => s + i.quantity * i.unit_cost, 0);
   const totalBottles = items.reduce((s, i) => s + i.quantity, 0);
   const scanCount = monthScans.length;
 
-  // Varietal breakdown. Total spans every varietal (mirrors the
-  // distributor table's whole-program denominator below) so the bar
-  // widths + % labels reflect share-of-program, not share-of-top-6.
-  // Otherwise a cellar with 12 varietals would see the top-6 add to
-  // 100% and overstate each one's share.
+  // Varietal breakdown
   const varietalMap = new Map<string, number>();
   for (const item of items) {
     const varietal =
@@ -199,7 +327,7 @@ export default async function DashboardPage() {
     varietalEntries.length - varietalBreakdown.length,
   );
 
-  // Distributor breakdown — spend from inventory items linked via invoice scans
+  // Distributor breakdown
   const distMap = new Map<string, { scans: number; spend: number }>();
   for (const scan of allScans) {
     const existing = distMap.get(scan.distributor_name) ?? { scans: 0, spend: 0 };
@@ -215,9 +343,6 @@ export default async function DashboardPage() {
     distMap.set(distName, existing);
   }
 
-  // Whole-program distributor spend (across all distributors, not just
-  // the top-5 slice below) so each row's % reflects share-of-program,
-  // not share-of-top-5. Floored at 1 to avoid divide-by-zero.
   const distTotalSpend =
     [...distMap.values()].reduce((s, d) => s + d.spend, 0) || 1;
 
@@ -225,8 +350,37 @@ export default async function DashboardPage() {
     .sort((a, b) => b[1].spend - a[1].spend)
     .slice(0, 5);
 
-  // Recent activity from scans
+  // Recent activity
   const recentScans = allScans.slice(0, 5);
+
+  // ── #148: Scan throughput (invoices per week) ──────────────────────
+  const throughputData = computeScanThroughput(allScans, 12);
+  const totalWeeks = throughputData.length;
+  const avgScansPerWeek =
+    totalWeeks > 0
+      ? Math.round(
+          (throughputData.reduce((s, w) => s + w.count, 0) / totalWeeks) * 10,
+        ) / 10
+      : 0;
+
+  // ── #149: Extraction accuracy (auto-accepted vs corrected) ─────────
+  let totalItemCount = 0;
+  let totalAutoAcceptedFields = 0;
+  for (const s of allScans) {
+    const itemCount = s.item_count ?? 0;
+    const acc = s.accuracy_score ?? 0;
+    totalItemCount += itemCount;
+    totalAutoAcceptedFields += itemCount * acc;
+  }
+  const extractionAccuracyPct =
+    totalItemCount > 0
+      ? Math.round((totalAutoAcceptedFields / totalItemCount) * 100)
+      : 0;
+
+  const latestScanAccuracy =
+    allScans.length > 0 && allScans[0].accuracy_score != null
+      ? Math.round(allScans[0].accuracy_score * 100)
+      : null;
 
   // Empty state
   if (allScans.length === 0 && items.length === 0) {
@@ -297,9 +451,7 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      {/* BND-039 — Drink-window watch. Renders above the spend metrics
-          when there are active alerts OR the user can enrich (so they
-          can populate the data even when no alerts exist). */}
+      {/* Drink-window watch */}
       {(drinkWindowAlerts.length > 0 || canEnrich) && (
         <section className="mb-lg md:mb-xl" aria-labelledby="dw-watch-heading">
           <div className="mb-md flex flex-wrap items-baseline justify-between gap-sm">
@@ -335,9 +487,69 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {/* BND-040 — Pricing review section. Renders only when there are
-          alerts. Sits below drink-window watch since drink-window is the
-          time-urgent signal; pricing is a "worth a review" signal. */}
+      {/* BND-147 — Past drink window */}
+      {pastDrinkWindowWines.length > 0 && (
+        <section className="mb-lg md:mb-xl" aria-labelledby="past-dw-heading">
+          <div className="mb-md flex flex-wrap items-baseline justify-between gap-sm">
+            <h2
+              id="past-dw-heading"
+              className="text-[10px] font-semibold uppercase tracking-[0.08em] text-warning"
+            >
+              Past drink window
+            </h2>
+            <span className="text-[12px] text-ink-muted">
+              {pastDrinkWindowWines.length} wine{pastDrinkWindowWines.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="rounded-md border border-border bg-surface p-lg">
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                    <th scope="col" className="pb-sm text-left font-semibold">Wine</th>
+                    <th scope="col" className="pb-sm text-right font-semibold">Vintage</th>
+                    <th scope="col" className="pb-sm text-right font-semibold">Window ended</th>
+                    <th scope="col" className="pb-sm text-right font-semibold">Stock</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pastDrinkWindowWines.map((w, i) => (
+                    <tr
+                      key={w.wine_id}
+                      className={`${i > 0 ? "border-t border-dashed border-border" : ""}`}
+                    >
+                      <td className="py-sm">
+                        <Link
+                          href={`/cellar?wine=${w.wine_id}`}
+                          className="font-medium text-ink hover:text-accent transition-colors"
+                        >
+                          {w.producer} {w.name}
+                        </Link>
+                        {w.bin_location && (
+                          <div className="mt-0.5 text-[11px] text-ink-muted">
+                            {w.bin_location}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-sm text-right font-mono text-ink-muted">
+                        {w.vintage ?? "—"}
+                      </td>
+                      <td className="py-sm text-right font-mono text-ink">
+                        {w.drink_window_end}
+                      </td>
+                      <td className="py-sm text-right font-mono text-ink">
+                        {w.bottle_count}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Pricing review */}
       {pricingAlerts.length > 0 && (
         <section className="mb-lg md:mb-xl" aria-labelledby="pricing-review-heading">
           <div className="mb-md flex flex-wrap items-baseline justify-between gap-sm">
@@ -355,15 +567,10 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {/* BND-040 follow-up — snoozed-alerts viewer. Audit-finding M2.
-          Renders only when there are active snoozes. Collapsed-by-default
-          card lets operators unsnooze early. */}
+      {/* Snoozed alerts */}
       {snoozedRows.length > 0 && (
         <section className="mb-lg md:mb-xl" aria-labelledby="snoozed-heading">
-          <h2
-            id="snoozed-heading"
-            className="sr-only"
-          >
+          <h2 id="snoozed-heading" className="sr-only">
             Snoozed alerts
           </h2>
           <SnoozedAlertsCard snoozed={snoozedRows} />
@@ -371,7 +578,7 @@ export default async function DashboardPage() {
       )}
 
       <div className="grid gap-md md:grid-cols-2">
-        {/* Hero metric — spans both columns */}
+        {/* Hero metric */}
         <div className="rounded-md border border-border bg-surface p-lg md:col-span-2 md:grid md:grid-cols-2 md:gap-lg md:p-xl">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
@@ -407,10 +614,6 @@ export default async function DashboardPage() {
                   Avg accuracy
                 </div>
                 {(() => {
-                  // Color-code the hero average using the same threshold
-                  // helper as the badges below (recent-activity rows,
-                  // scan detail header) so a glance at the dashboard
-                  // signals scan quality, not just the number.
                   if (allScans.length === 0) {
                     return (
                       <div className="mt-xs font-mono text-[20px] font-medium text-ink">
@@ -438,7 +641,7 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          {/* Sparkline — items per scan (recent 12 scans) */}
+          {/* Sparkline — items per scan */}
           <div className="mt-lg md:mt-0">
             <div className="mb-sm flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
               <span>Scan activity</span>
@@ -456,6 +659,81 @@ export default async function DashboardPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* BND-149 — Extraction accuracy KPI */}
+        <div className="rounded-md border border-border bg-surface p-lg">
+          <div className="mb-md flex items-center justify-between">
+            <h3 className="text-[15px] font-semibold text-ink">
+              Extraction accuracy
+            </h3>
+            <CheckCircle2
+              className={`h-5 w-5 shrink-0 ${accuracyColor(extractionAccuracyPct)}`}
+              strokeWidth={1.5}
+            />
+          </div>
+          {allScans.length === 0 ? (
+            <p className="text-[13px] text-ink-muted">No scans yet</p>
+          ) : (
+            <div>
+              <div className="flex items-baseline gap-xs">
+                <span
+                  className={`font-mono text-[36px] font-medium leading-none tracking-[-0.02em] ${accuracyColor(extractionAccuracyPct)}`}
+                >
+                  {extractionAccuracyPct}%
+                </span>
+                <span className="text-[12px] text-ink-muted">
+                  auto-accepted
+                </span>
+              </div>
+              <p className="mt-sm text-[12px] text-ink-subtle">
+                {totalItemCount} line items processed ·{" "}
+                {Math.round(totalAutoAcceptedFields)} auto-accepted
+              </p>
+              {latestScanAccuracy !== null && (
+                <div className="mt-md flex items-center gap-sm rounded-md bg-surface-muted px-sm py-sm">
+                  <Activity className="h-4 w-4 shrink-0 text-ink-subtle" strokeWidth={1.5} />
+                  <span className="text-[12px] text-ink-muted">
+                    Latest scan:{" "}
+                    <span className={`font-mono font-medium ${accuracyColor(latestScanAccuracy)}`}>
+                      {latestScanAccuracy}%
+                    </span>{" "}
+                    auto-accepted
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* BND-148 — Scan throughput */}
+        <div className="rounded-md border border-border bg-surface p-lg">
+          <div className="mb-md flex items-center justify-between">
+            <h3 className="text-[15px] font-semibold text-ink">
+              Scan throughput
+            </h3>
+            <History className="h-5 w-5 shrink-0 text-ink-subtle" strokeWidth={1.5} />
+          </div>
+          {throughputData.length === 0 ? (
+            <p className="text-[13px] text-ink-muted">No scan data yet</p>
+          ) : (
+            <div>
+              <div className="flex items-baseline gap-xs">
+                <span className="font-mono text-[36px] font-medium leading-none tracking-[-0.02em] text-ink">
+                  {avgScansPerWeek}
+                </span>
+                <span className="text-[12px] text-ink-muted">
+                  scans / week avg
+                </span>
+              </div>
+              <p className="mt-sm text-[12px] text-ink-subtle">
+                {allScans.length} total scans · last {totalWeeks} week{totalWeeks === 1 ? "" : "s"}
+              </p>
+              <div className="mt-lg">
+                <ThroughputBarChart data={throughputData} />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Spend by varietal */}
@@ -652,19 +930,6 @@ export default async function DashboardPage() {
   );
 }
 
-// BND-039 — drink-window alerts pipeline lives in
-// @/lib/drink-window/alerts (shared with /api/insights/drink-window-alerts).
-// Code-quality-review finding 5: a local copy here was bound to drift.
-
-/**
- * BND-040 follow-up — server-side fetch for currently-snoozed wines.
- * Mirrors the API route at /api/insights/snoozed but inline so the
- * server component doesn't have to do an extra round-trip.
- *
- * "Active snooze" = column non-null AND in the future. Past
- * timestamps mean the snooze already expired; the alert reappears
- * naturally without needing a list entry.
- */
 async function fetchSnoozedAlerts(
   supabase: NonNullable<Awaited<ReturnType<typeof getAuthContext>>>["supabase"],
   restaurantId: string,
@@ -722,11 +987,8 @@ async function fetchSnoozedAlerts(
 }
 
 function parseFirstName(email: string): string {
-  // Best-effort first name from email local-part. "devin@example.com" → "Devin"
-  // Falls back to empty string for non-name-shaped emails.
   const local = email.split("@")[0] ?? "";
   const cleaned = local.replace(/[._-]+/g, " ").split(" ")[0] ?? "";
   if (!cleaned) return "";
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
 }
-
