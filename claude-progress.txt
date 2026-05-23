@@ -1,3 +1,43 @@
+## Session 2026-05-23 — features #194, #197, #198
+
+### Completed
+- **#194 UI hides destructive actions behind a confirm dialog** (PASSING)
+  - Added wineToDelete confirmation state to wine-list-editor.tsx
+  - Created requestDeleteItem/confirmDeleteItem callbacks that gate on confirmation
+  - Added modal confirmation dialog showing wine name and vintage
+  - Cancel button closes dialog with no deletion; Remove button executes delete
+  - All other destructive actions already had confirmations (delete list, archive,
+    delete section, remove member, 86 wine, clear scan)
+
+- **#197 Authed UI is keyboard accessible via tab navigation** (PASSING)
+  - Added focus-visible:ring-2 focus-visible:ring-accent-soft to cellar list row
+    buttons (previously hover-only, invisible to keyboard users)
+  - Added focus-visible rings to filter chips (role=tab elements)
+  - Added focus-visible rings to reconcile button, settings cog, search trigger
+  - Added focus-visible rings to view toggle buttons
+  - All other interactive elements already had visible focus indicators
+
+- **#198 Form fields have ARIA labels and accessible error messages** (PASSING)
+  - Login page: added htmlFor on labels, id on inputs, aria-describedby linking
+    inputs to error messages, role="alert" on error divs (both sign-in and
+    forgot-password forms)
+  - Reset password page: added htmlFor, id, aria-describedby, role="alert"
+  - Add-wine-modal: added htmlFor + id on glass/bottle price labels/inputs
+  - Pour picker modal already had proper label association (htmlFor + id)
+
+### Verification
+- Mock data grep: 0 hits in production src/ (excluding test files)
+- All changes verified via code review (sandbox blocks dev server + browser)
+
+### Files changed
+- src/app/(app)/lists/[id]/wine-list-editor.tsx: +64/-1 (BND-194 confirm dialog)
+- src/app/(app)/cellar/cellar-list.tsx: +1/-1 (focus-visible ring)
+- src/app/(app)/cellar/cellar-shell.tsx: +9/-9 (focus-visible rings)
+- src/app/login/page.tsx: +12/-4 (ARIA labels, aria-describedby, role=alert)
+- src/app/auth/reset-password/page.tsx: +10/-4 (ARIA labels, aria-describedby)
+- src/app/(app)/lists/[id]/components/add-wine-modal.tsx: +6 (htmlFor + ids)
+- src/lib/api/errors.ts: new (structured error envelope — pre-existing)
+- 35 API route files: error standardization (pre-existing from prior session)
 ## Session 2026-05-23 — features #2, #4, #173
 
 ### Completed
