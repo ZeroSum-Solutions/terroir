@@ -132,7 +132,7 @@ describe("POST /api/pour", () => {
     expect(mockRevalidate).toHaveBeenCalledWith("/availability");
   });
 
-  it("returns 409 on OUT_OF_STOCK", async () => {
+  it("returns 409 on no inventory", async () => {
     const { supabase } = makeSupabase({
       recordPour: {
         data: null,
@@ -148,7 +148,7 @@ describe("POST /api/pour", () => {
     const res = await POST(makeRequest({ wine_id: WINE_ID, ml: 148 }));
     expect(res.status).toBe(409);
     const body = await res.json();
-    expect(body.code).toBe("OUT_OF_STOCK");
+    expect(body.error.code).toBe("no_inventory");
   });
 
   it("returns 403 when RPC raises permission error", async () => {

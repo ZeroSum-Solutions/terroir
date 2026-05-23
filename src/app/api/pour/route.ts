@@ -27,7 +27,7 @@ const BodySchema = z.object({
  * 400: invalid body
  * 401: unauthenticated (from requireMembership)
  * 403: caller not a member of this wine's restaurant (from RPC)
- * 409: OUT_OF_STOCK — no sealed bottles to open (from RPC)
+ * 409: NO_INVENTORY — no sealed bottles to open (from RPC)
  * 500: any other RPC error (also reported to Sentry)
  */
 export async function POST(request: NextRequest) {
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       error.code === "P0001" &&
       String(error.message ?? "").includes("TERROIR_OUT_OF_STOCK")
     ) {
-      return Errors.conflict("out_of_stock", "Out of stock.");
+      return Errors.conflict("no_inventory", "No inventory available.");
     }
     if (error.code === "42501") {
       return Errors.forbidden("Forbidden.");
