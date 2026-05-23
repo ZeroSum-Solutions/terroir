@@ -1,47 +1,49 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { ML_PER_OZ } from "@/lib/units";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 
-// Renamed from PourItem when this file moved into /cellar. Same shape —
-// the underlying RPC row shape `list_open_bottle_items` lives in
-// @/lib/wine-list/shapes.ts (DEBT-022).
 type PourItem = OpenBottleRow;
 
 const PRESETS_OZ = [1, 3, 5, 8];
 
 interface Props {
   item: PourItem | null;
+  defaultOz?: number;
   onCancel: () => void;
-  onConfirm: (ml: number) => void;
+  onConfirm: (ml: number, note?: string) => void;
 }
 
-/**
- * BND-038 picker modal. Opens on the picker-caret tap when a wine's
- * pour_size_mode = 'picker'. Four preset oz buttons + a custom numeric
- * input. Matches NoteModal's a11y contract from BND-037:
- * aria-labelledby, Escape to close, focus-trap within the dialog.
- */
-export function PourPickerModal({ item, onCancel, onConfirm }: Props) {
+export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props) {
   const [custom, setCustom] = useState("");
+  const [note, setNote] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
   const headingId = "pour-picker-heading";
 
+  useEffect(() => {
+    if (defaultOz != null && defaultOz > 0 && !custom) {
+      setCustom(String(defaultOz));
+    }
+  }, [defaultOz]);
+
   const handleCancel = () => {
     setCustom("");
+    setNote("");
     onCancel();
   };
 
   const handleConfirm = (ml: number) => {
+    const trimmed = note.trim();
     setCustom("");
-    onConfirm(ml);
+    setNote("");
+    onConfirm(ml, trimmed.length > 0 ? trimmed : undefined);
   };
 
   useFocusTrap({
     containerRef: dialogRef,
-    onEscape: onCancel,
+    onEscape: handleCancel,
     enabled: item !== null,
   });
 
@@ -53,6 +55,8 @@ export function PourPickerModal({ item, onCancel, onConfirm }: Props) {
     const ml = Math.max(1, Math.round(oz * ML_PER_OZ));
     handleConfirm(ml);
   };
+
+  const defaultMl = defaultOz != null ? Math.round(defaultOz * ML_PER_OZ) : null;
 
   return (
     <div
@@ -69,16 +73,23 @@ export function PourPickerModal({ item, onCancel, onConfirm }: Props) {
         <p className="mt-xs text-[12px] text-ink-muted">Pick a pour size</p>
 
         <div className="mt-md grid grid-cols-2 gap-xs">
-          {PRESETS_OZ.map((oz) => (
-            <button
-              key={oz}
-              type="button"
-              onClick={() => handleConfirm(Math.round(oz * ML_PER_OZ))}
-              className="h-[48px] rounded-sm border border-border bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
-            >
-              {oz} oz
-            </button>
-          ))}
+          {PRESETS_OZ.map((oz) => {
+            const ml = Math.round(oz * ML_PER_OZ);
+            const isDefault = defaultMl !== null && ml === defaultMl;
+            return (
+              <button
+                key={oz}
+                type="button"
+                onClick={() => handleConfirm(ml)}
+                className={isDefault
+                  ? "h-[48px] rounded-sm border-2 border-accent bg-accent-soft text-[14px] font-semibold text-accent hover:bg-accent-soft/70"
+                  : "h-[48px] rounded-sm border border-border bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
+                }
+              >
+                {oz} oz
+              </button>
+            );
+          })}
         </div>
 
         <div className="mt-md flex flex-wrap items-center gap-sm">
@@ -115,6 +126,25 @@ export function PourPickerModal({ item, onCancel, onConfirm }: Props) {
           >
             Pour
           </button>
+        </div>
+
+        {/* BND-127: Optional note field */}
+        <div className="mt-md">
+          <label
+            htmlFor="pour-picker-note"
+            className="text-[12px] text-ink-muted"
+          >
+            Note (optional)
+          </label>
+          <textarea
+            id="pour-picker-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={500}
+            rows={2}
+            placeholder="e.g., comp for VIP"
+            className="mt-xs w-full rounded-sm border border-border bg-surface px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+          />
         </div>
 
         <div className="mt-md flex justify-end">

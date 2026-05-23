@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { X, Wine, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, Undo2, Image as ImageIcon, Upload, Trash2, AlertTriangle } from "lucide-react";
+import { X, Wine, PowerOff, Edit3, Sparkles, Loader2, Undo2, Image as ImageIcon, Upload, Trash2, AlertTriangle } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { useToast } from "@/lib/toast";
 import { ML_PER_OZ } from "@/lib/units";
@@ -74,18 +74,21 @@ export function WineDetailDrawer({
     enabled: row !== null,
   });
 
+  // BND-126/127: doPour accepts optional note.
   const doPour = useCallback(
-    async (ml: number) => {
+    async (ml: number, note?: string) => {
       if (!row || !row.glass_pour_ml) return;
       setErrorMsg(null);
       setBusy(true);
       setLastPour(null);
 
       try {
+        const body: Record<string, unknown> = { wine_id: row.wine_id, ml, kind: "pour" };
+        if (note) body.note = note;
         const res = await fetch("/api/pour", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wine_id: row.wine_id, ml, kind: "pour" }),
+          body: JSON.stringify(body),
         });
         if (!res.ok) {
           const payload = (await res.json().catch(() => null)) as
@@ -472,33 +475,21 @@ export function WineDetailDrawer({
 
             {/* Quick actions */}
             <section aria-label="Actions" className="mt-md flex flex-col gap-sm">
-              {canPour && (
-                <div className="flex gap-xs">
-                  <button
-                    type="button"
-                    disabled={busy || outOfStock}
-                    onClick={() => row.glass_pour_ml && doPour(row.glass_pour_ml)}
-                    className={cn(
-                      "h-[56px] flex-1 rounded-sm bg-accent text-[15px] font-medium text-white transition-colors",
-                      "hover:bg-accent-hover disabled:opacity-60",
-                    )}
-                  >
-                    {outOfStock
-                      ? "Out of stock"
-                      : `Pour ${(row.glass_pour_ml! / ML_PER_OZ).toFixed(1)} oz`}
-                  </button>
-                  {row.pour_size_mode === "picker" && pickerItem && (
-                    <button
-                      type="button"
-                      onClick={() => setPickerOpen(true)}
-                      disabled={busy || outOfStock}
-                      aria-label="Pick a custom pour size"
-                      className="flex h-[56px] w-[56px] items-center justify-center rounded-sm border border-border bg-white text-ink-muted hover:bg-surface-muted disabled:opacity-60"
-                    >
-                      <ChevronDown className="h-5 w-5" strokeWidth={2} aria-hidden />
-                    </button>
+              {/* BND-126: Pour button always opens the picker modal for custom amount entry. */}
+              {canPour && pickerItem && (
+                <button
+                  type="button"
+                  disabled={busy || outOfStock}
+                  onClick={() => setPickerOpen(true)}
+                  className={cn(
+                    "h-[56px] w-full rounded-sm bg-accent text-[15px] font-medium text-white transition-colors",
+                    "hover:bg-accent-hover disabled:opacity-60",
                   )}
-                </div>
+                >
+                  {outOfStock
+                    ? "Out of stock"
+                    : `Pour ${(row.glass_pour_ml! / ML_PER_OZ).toFixed(1)} oz`}
+                </button>
               )}
 
               {/* BND-119: Undo last pour */}
@@ -627,14 +618,15 @@ export function WineDetailDrawer({
         </div>
       )}
 
-      {/* Pour picker modal */}
+      {/* Pour picker modal — BND-126/127 */}
       {pickerOpen && pickerItem && (
         <PourPickerModal
           item={pickerItem}
+          defaultOz={row?.glass_pour_ml ? row.glass_pour_ml / ML_PER_OZ : undefined}
           onCancel={() => setPickerOpen(false)}
-          onConfirm={(ml) => {
+          onConfirm={(ml, note) => {
             setPickerOpen(false);
-            doPour(ml);
+            doPour(ml, note);
           }}
         />
       )}
