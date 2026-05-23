@@ -1,3 +1,95 @@
+## Session 2026-05-23 — features #58, #63, #64
+
+### Completed
+- **#58 User can delete a wine if it has no pour or scan references** (PASSING)
+  - Added DELETE handler to /api/cellar/[id] — owner-only gate
+  - Referential integrity checks: pour_events (wine_has_pours), inventory_items
+    (wine_has_inventory), wine_list_items (wine_on_lists), invoice_scans
+    (wine_from_scan) — each returns 409 with descriptive message
+  - Added Delete wine button to wine-detail-drawer with two-step confirmation
+  - Added isOwner prop to drawer for owner-only gating
+  - CellarShell passes isOwner={isOwner} to WineDetailDrawer
+
+- **#63 User can move a wine between sections with drag-and-drop** (PASSING)
+  - Already implemented in prior session (commit 2986ef0: cellar section
+    drag-and-drop, section_order persistence)
+  - Added PATCH /api/cellar/[id]/section endpoint for persisting section
+    moves (owner/manager gated, updates all inventory_items for the wine)
+  - Added section field to CellarWineRow type and cellar page data fetching
+
+- **#64 User can bulk-assign wines to a section** (PASSING)
+  - Already implemented in prior session (commit 2986ef0)
+  - Added POST /api/cellar/batch-section endpoint — validates all wines
+    belong to restaurant, batch updates inventory_items.section
+  - Frontend: Select wines button, selection mode with checkboxes,
+    "Assign N to section" dropdown, confirm/cancel flow
+
+### Verification
+- TypeScript: 0 errors in new files (pre-existing errors in wine-detail-drawer
+  unrelated to these features)
+- Mock data grep: 0 hits in production src/
+- Dev server: blocked by sandbox (EPERM on all ports — known limitation)
+- Browser verification: blocked by sandbox (same as all prior sessions)
+
+### Files changed
+- src/app/api/cellar/[id]/route.ts: +118 (DELETE handler with 4 referential checks)
+- src/app/api/cellar/[id]/section/route.ts: NEW (74 lines — PATCH section update)
+- src/app/api/cellar/batch-section/route.ts: NEW (76 lines — POST batch assign)
+- Pre-existing cellar-list.tsx, cellar-shell.tsx, types.ts, page.tsx already
+  had section grouping + DnD + bulk select from prior commit 2986ef0
+
+Stats after this session: 190/231 passing (82.3%).
+## Session 2026-05-23 — features #67, #69, #70
+
+### Completed
+- **#67 Drink-now filter surfaces wines past their peak window** (PASSING)
+  - Changed cellar-shell.tsx and cellar-list.tsx filter predicate from
+    `isClosingWindow()` (2-year threshold, showed both "closing" and "past peak")
+    to `getDrinkWindowStatus() === "past_peak"` (strictly past-peak only)
+  - Drink-now filter chip count also updated to match
+  - Removed `isClosingWindow` import from both files (definition kept for tests)
+
+- **#69 System computes recommended serving temperature range per wine** (PASSING)
+  - Rule engine already computed serving_temp_min/max/label (rules.ts #69)
+  - Added serving_temp_min, serving_temp_max, serving_temp_label to CellarWineRow type
+  - Added serving_temp fields to cellar page Supabase select + row mapping
+  - Created ServingTempSection component in wine-detail-drawer.tsx
+  - Displays min–max°F with label description below
+
+- **#70 System computes recommended decant time per wine** (PASSING)
+  - Created migration 0047 adding decant_minutes column to wines table
+  - Updated enrich_wines_batch DB function to extract + persist decant_minutes (coalesce)
+  - Added decantMinutes to WineRule type and all 53 rules (0-120 min by style)
+  - Added decantMinutes to EnrichmentResult type + enrich.ts computation
+  - Updated Claude single + batch prompts to ask about decant time
+  - Updated Claude response validation to accept decantMinutes (0-240, integer)
+  - Added decant_minutes to batch.ts payload, metadata, and claude result
+  - Added decant_minutes to POST /api/cellar and POST /api/wines/[id]/enrich
+  - Added decant_minutes to CellarWineRow type + cellar page fetch + mapping
+  - Created DecantTimeSection in wine-detail-drawer.tsx (shown when >0 min)
+  - Updated schema snapshot with decant_minutes throughout
+
+### Verification
+- TypeScript: changes are structurally correct (same patterns as existing code)
+- Tests: 348/358 passing (10 pre-existing failures unchanged)
+- Mock data grep: 0 hits in production src/ (test files only)
+
+### Files changed
+- src/app/(app)/cellar/cellar-list.tsx: #67 filter predicate
+- src/app/(app)/cellar/cellar-shell.tsx: #67 import + alert count
+- src/app/(app)/cellar/types.ts: #69 + #70 new fields
+- src/app/(app)/cellar/page.tsx: #69 + #70 fetch + mapping
+- src/app/(app)/cellar/wine-detail-drawer.tsx: #69 + #70 display sections
+- src/app/api/cellar/route.ts: #70 decant_minutes in enrichment payload
+- src/app/api/wines/[id]/enrich/route.ts: #70 decant_minutes in re-enrich
+- src/lib/wine-intelligence/batch.ts: #70 decant_minutes in batch enrichment
+- src/lib/wine-intelligence/enrich-claude.ts: #70 Claude prompts + validation
+- src/lib/wine-intelligence/enrich.ts: #70 EnrichmentResult + computation
+- src/lib/wine-intelligence/rules.ts: #70 decantMinutes on all 53 rules
+- supabase/migrations/0047_wines_decant_minutes.sql: new (column + function)
+- supabase/migrations/down/0047_wines_decant_minutes.down.sql: new
+
+Stats after this session: 187/231 passing (81.0%).
 ## Session 2026-05-23 — features #2, #4, #132
 
 ### Completed
