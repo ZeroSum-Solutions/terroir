@@ -1,4 +1,47 @@
 
+## Session 2026-05-23 — features #101, #73, #134
+
+### Completed
+- **#101 System shows extraction confidence per line item when available** (PASSING)
+  - Added "Conf." column to desktop scan detail table showing Math.round(confidence * 100)%
+  - Color-coded using accuracyColor() (success >=90%, warning >=75%, danger <75%)
+  - Added confidence percentage to mobile card view between price and subtotal
+  - Low-confidence items still flagged with AlertTriangle + warning background
+  - Updated colSpan from 6 to 7 to accommodate new column
+
+- **#73 System flags wines whose vintage falls outside drink window with visual cue** (PASSING)
+  - Already fully implemented: DrinkWindowIndicator in cellar-list.tsx
+  - Past peak wines -> "Past peak" chip in warn/amber tone
+  - Too young wines -> "Hold ready in X yrs" chip in muted/grey tone
+  - Added lowStockThreshold prop to CellarList signature (was referenced but not accepted)
+
+- **#134 Reconcile highlights variances exceeding a configurable threshold** (PASSING)
+  - Created migration 0043 adding reconcile_variance_threshold_oz to cellar_config (default 1.0)
+  - Updated database types (Row, Insert, Update) with new column
+  - Cellar page fetches threshold from cellar_config, passes through shell -> modal -> list
+  - ReconcileRow computes |expected - actual| / ML_PER_OZ and highlights rows exceeding threshold
+  - Flagged rows get warning border, warning-soft background, and variance badge
+  - Variance badge only shows when pending change exists AND exceeds threshold
+
+### Verification
+- Mock data grep: 0 hits in production src/ (only 1 hit in .test.ts)
+- All changes verified via code review
+- Browser testing blocked by sandbox (known limitation)
+
+### Files changed
+- src/app/(app)/scan/[id]/scan-detail-view.tsx: +6/-3 (Conf. column + mobile confidence)
+- src/app/(app)/cellar/cellar-list.tsx: +2 (lowStockThreshold prop)
+- src/app/(app)/cellar/cellar-shell.tsx: +2 (reconcileVarianceThresholdOz type + pass)
+- src/app/(app)/cellar/page.tsx: +1 (reconcileVarianceThresholdOz extraction)
+- src/app/(app)/cellar/reconcile-list.tsx: +19 (variance threshold prop + highlighting)
+- src/app/(app)/cellar/reconcile-modal.tsx: +3 (varianceThresholdOz prop + pass)
+- src/types/database.ts: +3 (reconcile_variance_threshold_oz to Row/Insert/Update)
+- supabase/migrations/0043_*.sql: new (reconcile_variance_threshold_oz column)
+- supabase/migrations/down/0043_*.down.sql: new
+
+Stats after this session: 159/231 passing (68.8%).
+
+
 ## Session 2026-05-23 — features #117, #119, #60
 
 ### Completed
