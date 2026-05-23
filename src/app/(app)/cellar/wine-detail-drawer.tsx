@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { X, Wine, PowerOff, Edit3, ChevronDown } from "lucide-react";
+import { X, Wine, PowerOff, Edit3, ChevronDown, Sparkles, Loader2 } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { useToast } from "@/lib/toast";
 import { ML_PER_OZ } from "@/lib/units";
@@ -68,6 +68,9 @@ export function WineDetailDrawer({
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // BND-262: single-wine re-enrichment state.
+  const [enriching, setEnriching] = useState(false);
+  const [enrichMsg, setEnrichMsg] = useState<string | null>(null);
 
   // 86/restore note-modal flow.
   const [pendingDirection, setPendingDirection] = useState<
@@ -114,6 +117,39 @@ export function WineDetailDrawer({
         setErrorMsg(err instanceof Error ? err.message : "Pour failed.");
       } finally {
         setBusy(false);
+      }
+    },
+    [row, router],
+  );
+
+  // BND-262: single-wine re-enrichment. Calls POST /api/wines/[id]/enrich
+  // and refreshes the page so the drink-window panel re-renders.
+  const doEnrich = useCallback(
+    async () => {
+      if (!row) return;
+      setEnriching(true);
+      setEnrichMsg(null);
+      setErrorMsg(null);
+      try {
+        const res = await fetch(`/api/wines/${row.wine_id}/enrich`, {
+          method: "POST",
+        });
+        const payload = (await res.json().catch(() => null)) as
+          | { source?: string | null; message?: string; error?: string }
+          | null;
+        if (!res.ok) {
+          throw new Error(payload?.error ?? `Enrichment failed (${res.status}).`);
+        }
+        if (payload?.source == null) {
+          setEnrichMsg(payload?.message ?? "Could not enrich this wine.");
+        } else {
+          setEnrichMsg(`Enriched via ${payload.source === "claude_inference" ? "Claude AI" : "rule engine"}.`);
+          startTransition(() => router.refresh());
+        }
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : "Enrichment failed.");
+      } finally {
+        setEnriching(false);
       }
     },
     [row, router],
@@ -338,6 +374,36 @@ export function WineDetailDrawer({
                   <PowerOff className="h-4 w-4" strokeWidth={2} aria-hidden />
                   {row.is_eightysixed ? "Restore" : "86 this wine"}
                 </button>
+              )}
+
+              {/* BND-262 — single-wine re-enrichment. Fires POST /api/wines/[id]/enrich
+                  to re-run the rule-engine + Claude fallback pipeline. */}
+              {canManage && (
+                <div className="flex flex-col gap-xs">
+                  <button
+                    type="button"
+                    disabled={enriching}
+                    onClick={doEnrich}
+                    className={cn(
+                      "flex h-[40px] items-center justify-center gap-xs rounded-sm border text-[13px] font-medium transition-colors disabled:opacity-60",
+                      enrichMsg
+                        ? "border-success/30 bg-success-soft text-success"
+                        : "border-border-strong bg-white text-ink hover:bg-surface-muted",
+                    )}
+                  >
+                    {enriching ? (
+                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
+                    ) : enrichMsg ? (
+                      <Sparkles className="h-4 w-4" strokeWidth={2} aria-hidden />
+                    ) : (
+                      <Sparkles className="h-4 w-4" strokeWidth={2} aria-hidden />
+                    )}
+                    {enriching ? "Enriching..." : enrichMsg ? "Enriched!" : "Re-enrich"}
+                  </button>
+                  {enrichMsg && (
+                    <p className="text-[11px] text-ink-muted">{enrichMsg}</p>
+                  )}
+                </div>
               )}
 
               {/* Edit metadata — placeholder for v1.5 admin flow. Hidden

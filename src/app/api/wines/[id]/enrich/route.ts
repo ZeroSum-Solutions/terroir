@@ -9,19 +9,15 @@ import type { Json } from "@/types/database";
 export const runtime = "nodejs";
 
 /**
- * BND-039 — single-wine on-demand enrichment.
+ * BND-039 + BND-261 — single-wine on-demand enrichment.
  *
- * Powers the "Refresh drink window for this wine" action in the cellar
- * detail drawer. The bulk-enrich endpoint (`/api/wines/enrich`) runs the
- * same Tier 1 (rule engine) + Tier 2 (Claude fallback) pipeline but
- * iterates over many wines — this route does it for one.
+ * Powers the "Re-enrich" action in the cellar detail drawer. Runs
+ * Tier 1 (rule engine) + Tier 2 (Claude fallback) for a single wine.
  *
- * Always runs Claude when the rule engine misses, regardless of whether
- * Claude has been tried before. Owners use this when they want to retry
- * a previously-failed enrichment.
+ * BND-261: includes enrichment_metadata in the RPC payload so the
+ * per-wine provenance is tracked alongside the enrichment data.
  *
- * Owner+manager only via `requireMembership` (route-level), matching the
- * bulk endpoint.
+ * Owner+manager only via requireMembership.
  */
 export async function POST(
   _req: Request,
@@ -31,9 +27,6 @@ export async function POST(
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId, role } = auth;
 
-  // BND-039 — owner+manager only. Staff role can authenticate but
-  // cannot trigger billable Claude inference. Mirrors snooze-alert
-  // and the bulk enrich endpoint.
   if (role !== "owner" && role !== "manager") {
     return Errors.forbidden("Enriching wines requires owner or manager role.");
   }
@@ -76,6 +69,8 @@ export async function POST(
     serving_temp_label: ruleResult.servingTempLabel,
   };
 
+  let metadataSource = "rule_engine";
+
   // Tier 2 — Claude fallback when rule engine produced nothing useful.
   if (
     ruleResult.drinkWindowStart == null &&
@@ -91,6 +86,7 @@ export async function POST(
     });
     if (claudeResult && claudeResult.drinkWindowStart != null) {
       source = "claude_inference";
+      metadataSource = "claude_inference";
       payload = {
         id: wine.id,
         drink_window_start: claudeResult.drinkWindowStart,
@@ -98,7 +94,6 @@ export async function POST(
         peak_year: claudeResult.peakYear,
         rating_source: claudeResult.ratingSource,
         review_excerpt: claudeResult.reviewExcerpt,
-        // Don't overwrite serving_temp from Claude — it's not asked.
         serving_temp_min: null,
         serving_temp_max: null,
         serving_temp_label: null,
@@ -107,7 +102,6 @@ export async function POST(
   }
 
   if (source == null) {
-    // Genuinely couldn't enrich — caller should know vs silent success.
     return NextResponse.json(
       {
         wineId: wine.id,
@@ -118,6 +112,20 @@ export async function POST(
       { status: 200 },
     );
   }
+
+  // BND-261: attach enrichment_metadata to track provenance.
+  const enrichmentFields: string[] = [];
+  if (payload.drink_window_start != null || payload.drink_window_end != null) enrichmentFields.push("drink_window");
+  if (payload.serving_temp_min != null || payload.serving_temp_max != null || payload.serving_temp_label != null) enrichmentFields.push("serving_temp");
+  if (payload.peak_year != null) enrichmentFields.push("peak_year");
+  if (payload.rating_source != null) enrichmentFields.push("rating_source");
+  if (payload.review_excerpt != null) enrichmentFields.push("review_excerpt");
+
+  (payload as Record<string, unknown>).enrichment_metadata = {
+    source: metadataSource,
+    fields_enriched: enrichmentFields,
+    enriched_at: new Date().toISOString(),
+  };
 
   const { error: rpcError } = await supabase.rpc("enrich_wines_batch", {
     p_restaurant_id: restaurantId,
