@@ -12,6 +12,11 @@ import { EnrichCellarButton } from "./enrich-cellar-button";
 import { RefreshRetailButton } from "./refresh-retail-button";
 import { PricingReviewCard } from "./pricing-review-card";
 import { SnoozedAlertsCard, type SnoozedRow } from "./snoozed-alerts-card";
+import PourAnalyticsSection from "./pour-analytics-section";
+import DateRangeSelector, { dateRangeSince, dateRangeUntil, dateRangeLabel } from "./date-range-selector";
+
+type NullableDateRange = { range?: string; from?: string; to?: string };
+type SearchParams = Promise<NullableDateRange>;
 
 export const metadata: Metadata = { title: "Insights" };
 
@@ -266,21 +271,44 @@ function computeScanThroughput(
   });
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const sp = await searchParams;
   const auth = (await getAuthContext())!;
   const { supabase, restaurantId: rid, restaurantName, user, userRole } = auth;
 
+  // ── Date range from URL search params ──────────────────────────────
+  const range = sp.range ?? "all";
+  const rangeSince = dateRangeSince(range, sp.from);
+  const rangeUntil = dateRangeUntil(range, sp.to);
+  const activeRangeLabel = dateRangeLabel(range, sp.from, sp.to);
+
   const [drinkWindowAlerts, pricingAlerts, snoozedRows] = await Promise.all([
     fetchDrinkWindowAlerts(supabase, rid),
-    fetchPricingAlerts(supabase, rid).catch(() => []),
-    fetchSnoozedAlerts(supabase, rid).catch(() => [] as SnoozedRow[]),
+    fetchPricingAlerts(supabase, rid).catch(function () { return []; }),
+    fetchSnoozedAlerts(supabase, rid).catch(function () { return [] as SnoozedRow[]; }),
   ]);
   const firstName = parseFirstName(user.email ?? "") || "there";
   const canEnrich = userRole === "owner" || userRole === "manager";
 
-  const startOfMonth = new Date();
-  startOfMonth.setDate(1);
-  startOfMonth.setHours(0, 0, 0, 0);
+  // ── Build scan query, conditionally filtering by date range ─────────
+  let scanQuery = supabase
+    .from("invoice_scans")
+    .select(
+      "id, distributor_name, item_count, accuracy_score, created_at, final_line_items",
+    )
+    .eq("restaurant_id", rid)
+    .order("created_at", { ascending: false });
+
+  if (rangeSince) {
+    scanQuery = scanQuery.gte("created_at", rangeSince.toISOString());
+  }
+  if (rangeUntil) {
+    scanQuery = scanQuery.lte("created_at", rangeUntil.toISOString());
+  }
 
   const [
     { data: scans },
@@ -289,13 +317,7 @@ export default async function DashboardPage() {
     initPastDrinkWindow,
   ] =
     await Promise.all([
-      supabase
-        .from("invoice_scans")
-        .select(
-          "id, distributor_name, item_count, accuracy_score, created_at, final_line_items",
-        )
-        .eq("restaurant_id", rid)
-        .order("created_at", { ascending: false }),
+      scanQuery,
       supabase
         .from("inventory_items")
         .select("quantity, unit_cost, wine_id, wines(varietal)")
@@ -304,38 +326,34 @@ export default async function DashboardPage() {
         .from("inventory_items")
         .select("quantity, unit_cost, invoice_scan_id, invoice_scans!inner(distributor_name)")
         .eq("restaurant_id", rid),
-      fetchPastDrinkWindow(supabase, rid).catch(() => [] as PastDrinkWindowRow[]),
+      fetchPastDrinkWindow(supabase, rid).catch(function () { return [] as PastDrinkWindowRow[]; }),
     ]);
 
   const allScans = scans ?? [];
   const items = inventoryItems ?? [];
   const pastDrinkWindowWines: PastDrinkWindowRow[] = initPastDrinkWindow;
 
-  const monthScans = allScans.filter(
-    (s) => new Date(s.created_at) >= startOfMonth,
-  );
+  const scanCount = allScans.length;
+  const inventoryValue = items.reduce(function (s, i) { return s + i.quantity * i.unit_cost; }, 0);
+  const totalBottles = items.reduce(function (s, i) { return s + i.quantity; }, 0);
 
-  const inventoryValue = items.reduce((s, i) => s + i.quantity * i.unit_cost, 0);
-  const totalBottles = items.reduce((s, i) => s + i.quantity, 0);
-  const scanCount = monthScans.length;
-
-  // Varietal breakdown
+  // Varietal breakdown (current inventory — not time-filtered)
   const varietalMap = new Map<string, number>();
   for (const item of items) {
     const varietal =
       (item.wines as { varietal: string | null } | null)?.varietal ?? "Other";
     varietalMap.set(varietal, (varietalMap.get(varietal) ?? 0) + item.quantity * item.unit_cost);
   }
-  const varietalEntries = [...varietalMap.entries()].sort((a, b) => b[1] - a[1]);
+  const varietalEntries = [...varietalMap.entries()].sort(function (a, b) { return b[1] - a[1]; });
   const varietalBreakdown = varietalEntries.slice(0, 6);
   const varietalTotalAll =
-    varietalEntries.reduce((s, [, v]) => s + v, 0) || 1;
+    varietalEntries.reduce(function (s, _a) { var v = _a[1]; return s + v; }, 0) || 1;
   const otherVarietalCount = Math.max(
     0,
     varietalEntries.length - varietalBreakdown.length,
   );
 
-  // Distributor breakdown
+  // Distributor breakdown (filtered by date range via allScans)
   const distMap = new Map<string, { scans: number; spend: number }>();
   for (const scan of allScans) {
     const existing = distMap.get(scan.distributor_name) ?? { scans: 0, spend: 0 };
@@ -352,10 +370,10 @@ export default async function DashboardPage() {
   }
 
   const distTotalSpend =
-    [...distMap.values()].reduce((s, d) => s + d.spend, 0) || 1;
+    [...distMap.values()].reduce(function (s, d) { return s + d.spend; }, 0) || 1;
 
   const distributors = [...distMap.entries()]
-    .sort((a, b) => b[1].spend - a[1].spend)
+    .sort(function (a, b) { return b[1].spend - a[1].spend; })
     .slice(0, 5);
 
   // Recent activity
@@ -367,7 +385,7 @@ export default async function DashboardPage() {
   const avgScansPerWeek =
     totalWeeks > 0
       ? Math.round(
-          (throughputData.reduce((s, w) => s + w.count, 0) / totalWeeks) * 10,
+          (throughputData.reduce(function (s, w) { return s + w.count; }, 0) / totalWeeks) * 10,
         ) / 10
       : 0;
 
@@ -457,6 +475,11 @@ export default async function DashboardPage() {
             Export CSV
           </a>
         </div>
+
+        {/* Date range selector */}
+        <div className="mt-md">
+          <DateRangeSelector />
+        </div>
       </header>
 
       {/* Drink-window watch */}
@@ -477,13 +500,15 @@ export default async function DashboardPage() {
           </div>
           {drinkWindowAlerts.length > 0 && (
             <div className="flex flex-col gap-md">
-              {drinkWindowAlerts.map((alert) => (
-                <BriefingAlertCard
-                  key={alert.wine_id}
-                  alert={alert}
-                  firstName={firstName}
-                />
-              ))}
+              {drinkWindowAlerts.map(function (alert) {
+                return (
+                  <BriefingAlertCard
+                    key={alert.wine_id}
+                    alert={alert}
+                    firstName={firstName}
+                  />
+                );
+              })}
             </div>
           )}
           {canEnrich && (
@@ -521,35 +546,37 @@ export default async function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pastDrinkWindowWines.map((w, i) => (
-                    <tr
-                      key={w.wine_id}
-                      className={`${i > 0 ? "border-t border-dashed border-border" : ""}`}
-                    >
-                      <td className="py-sm">
-                        <Link
-                          href={`/cellar?wine=${w.wine_id}`}
-                          className="font-medium text-ink hover:text-accent transition-colors"
-                        >
-                          {w.producer} {w.name}
-                        </Link>
-                        {w.bin_location && (
-                          <div className="mt-0.5 text-[11px] text-ink-muted">
-                            {w.bin_location}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-sm text-right font-mono text-ink-muted">
-                        {w.vintage ?? "—"}
-                      </td>
-                      <td className="py-sm text-right font-mono text-ink">
-                        {w.drink_window_end}
-                      </td>
-                      <td className="py-sm text-right font-mono text-ink">
-                        {w.bottle_count}
-                      </td>
-                    </tr>
-                  ))}
+                  {pastDrinkWindowWines.map(function (w, i) {
+                    return (
+                      <tr
+                        key={w.wine_id}
+                        className={`${i > 0 ? "border-t border-dashed border-border" : ""}`}
+                      >
+                        <td className="py-sm">
+                          <Link
+                            href={`/cellar?wine=${w.wine_id}`}
+                            className="font-medium text-ink hover:text-accent transition-colors"
+                          >
+                            {w.producer} {w.name}
+                          </Link>
+                          {w.bin_location && (
+                            <div className="mt-0.5 text-[11px] text-ink-muted">
+                              {w.bin_location}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-sm text-right font-mono text-ink-muted">
+                          {w.vintage ?? "—"}
+                        </td>
+                        <td className="py-sm text-right font-mono text-ink">
+                          {w.drink_window_end}
+                        </td>
+                        <td className="py-sm text-right font-mono text-ink">
+                          {w.bottle_count}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -585,6 +612,11 @@ export default async function DashboardPage() {
         </section>
       )}
 
+      {/* Pour analytics (#144, #145, #146) */}
+      <div className="mb-lg md:mb-xl">
+        <PourAnalyticsSection />
+      </div>
+
       <div className="grid gap-md md:grid-cols-2">
         {/* Hero metric */}
         <div className="rounded-md border border-border bg-surface p-lg md:col-span-2 md:grid md:grid-cols-2 md:gap-lg md:p-xl">
@@ -597,7 +629,7 @@ export default async function DashboardPage() {
             </div>
             <div className="mt-sm text-[13px] text-ink-muted">
               at current cost · {scanCount} scan{scanCount === 1 ? "" : "s"}{" "}
-              this month
+              · {activeRangeLabel}
             </div>
 
             <div className="mt-lg grid grid-cols-3 gap-sm md:gap-md">
@@ -621,30 +653,29 @@ export default async function DashboardPage() {
                 <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
                   Avg accuracy
                 </div>
-                {(() => {
-                  if (allScans.length === 0) {
-                    return (
-                      <div className="mt-xs font-mono text-[20px] font-medium text-ink">
-                        —
-                      </div>
-                    );
-                  }
-                  const avgPct = Math.round(
-                    (allScans.reduce(
-                      (s, sc) => s + (sc.accuracy_score ?? 0),
-                      0,
-                    ) /
-                      allScans.length) *
-                      100,
-                  );
-                  return (
-                    <div
-                      className={`mt-xs font-mono text-[20px] font-medium ${accuracyColor(avgPct)}`}
-                    >
-                      {avgPct}%
+                {allScans.length === 0
+                  ? (
+                    <div className="mt-xs font-mono text-[20px] font-medium text-ink">
+                      —
                     </div>
-                  );
-                })()}
+                  )
+                  : (function () {
+                      const avgPct = Math.round(
+                        (allScans.reduce(
+                          function (s, sc) { return s + (sc.accuracy_score ?? 0); },
+                          0,
+                        ) /
+                          allScans.length) *
+                          100,
+                      );
+                      return (
+                        <div
+                          className={`mt-xs font-mono text-[20px] font-medium ${accuracyColor(avgPct)}`}
+                        >
+                          {avgPct}%
+                        </div>
+                      );
+                    })()}
               </div>
             </div>
           </div>
@@ -659,7 +690,7 @@ export default async function DashboardPage() {
                 data={allScans
                   .slice(0, 12)
                   .reverse()
-                  .map((s) => ({ value: s.item_count, date: s.created_at }))}
+                  .map(function (s) { return { value: s.item_count, date: s.created_at }; })}
               />
             ) : (
               <div className="flex h-[100px] items-center justify-center text-[13px] text-ink-subtle">
@@ -759,7 +790,9 @@ export default async function DashboardPage() {
           ) : (
             <>
               <div className="flex flex-col gap-sm">
-                {varietalBreakdown.map(([label, spend], i) => {
+                {varietalBreakdown.map(function (_a, i) {
+                  var label = _a[0];
+                  var spend = _a[1];
                   const pct = spend / varietalTotalAll;
                   return (
                     <div key={label} className="flex items-center gap-sm">
@@ -812,7 +845,9 @@ export default async function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {distributors.map(([name, data], i) => {
+                {distributors.map(function (_a, i) {
+                  var name = _a[0];
+                  var data = _a[1];
                   const pct = data.spend / distTotalSpend;
                   return (
                     <tr
@@ -878,14 +913,14 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <div>
-              {recentScans.map((scan, i) => {
+              {recentScans.map(function (scan, i) {
                 const relative = timeAgo(scan.created_at);
                 const lineItems = (scan.final_line_items ?? []) as Array<{
                   qty?: number;
                   unitCost?: number;
                 }>;
                 const scanTotal = lineItems.reduce(
-                  (sum, it) => sum + (it.qty ?? 0) * (it.unitCost ?? 0),
+                  function (sum, it) { return sum + (it.qty ?? 0) * (it.unitCost ?? 0); },
                   0,
                 );
                 return (
@@ -954,7 +989,7 @@ async function fetchSnoozedAlerts(
     );
 
   const rows: SnoozedRow[] = (wines ?? [])
-    .map((w) => {
+    .map(function (w) {
       const dw = w.alert_snoozed_until;
       const pr = w.pricing_dismissed_until;
       const dwActive = dw && new Date(dw).getTime() > Date.now();
@@ -969,9 +1004,9 @@ async function fetchSnoozedAlerts(
         pricingDismissedUntil: prActive ? pr : null,
       };
     })
-    .filter((r): r is SnoozedRow => r !== null);
+    .filter(function (r): r is SnoozedRow { return r !== null; });
 
-  rows.sort((a, b) => {
+  rows.sort(function (a, b) {
     const aSoon = Math.min(
       a.drinkWindowSnoozedUntil
         ? new Date(a.drinkWindowSnoozedUntil).getTime()

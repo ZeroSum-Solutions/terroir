@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { Wine, TrendingUp, DollarSign } from "lucide-react";
 
 type PourVolumeItem = {
@@ -34,13 +35,6 @@ type PourData = {
   topWinesByRevenue: TopRevenueItem[];
 };
 
-const RANGE_OPTIONS = [
-  { value: "7d", label: "Last 7 days" },
-  { value: "30d", label: "Last 30 days" },
-  { value: "90d", label: "Last 90 days" },
-  { value: "all", label: "All time" },
-] as const;
-
 function formatOz(oz: number): string {
   if (oz >= 1000) return (oz / 1000).toFixed(1) + "k oz";
   return oz.toFixed(1) + " oz";
@@ -62,44 +56,72 @@ function PourBar({ oz, maxOz }: { oz: number; maxOz: number }) {
   );
 }
 
+function ytdStart(): string {
+  const d = new Date();
+  d.setMonth(0, 1);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function PourAnalyticsSection() {
-  const [range, setRange] = useState<string>("30d");
+  const searchParams = useSearchParams();
+
+  // Derive range from URL search params
+  const range = searchParams.get("range") ?? "all";
+  const from = searchParams.get("from") ?? "";
+  const to = searchParams.get("to") ?? "";
+
   const [data, setData] = useState<PourData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async (r: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/insights/pour?range=${r}&topN=10`);
-      if (!res.ok) throw new Error("Failed to load pour data");
-      const json = await res.json();
-      setData(json);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchData = useCallback(
+    async function () {
+      setLoading(true);
+      setError(null);
 
-  useEffect(() => {
-    fetchData(range);
-  }, [range, fetchData]);
+      // Build API query params
+      const params = new URLSearchParams();
+      params.set("topN", "10");
+
+      if (range === "custom" && from && to) {
+        params.set("range", "custom");
+        params.set("from", from);
+        params.set("to", to);
+      } else if (range === "ytd") {
+        params.set("range", "custom");
+        params.set("from", ytdStart());
+        params.set("to", new Date().toISOString().slice(0, 10));
+      } else {
+        params.set("range", range);
+      }
+
+      try {
+        const res = await fetch("/api/insights/pour?" + params.toString());
+        if (!res.ok) throw new Error("Failed to load pour data");
+        const json = await res.json();
+        setData(json);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [range, from, to],
+  );
+
+  useEffect(
+    function () {
+      fetchData();
+    },
+    [fetchData],
+  );
 
   if (loading) {
     return (
       <section className="rounded-md border border-border bg-surface p-lg">
         <div className="mb-md flex items-center justify-between">
           <h2 className="text-[15px] font-semibold text-ink">Pour analytics</h2>
-          <div className="flex gap-xs">
-            {RANGE_OPTIONS.map((opt) => (
-              <span
-                key={opt.value}
-                className="h-[28px] w-[80px] animate-pulse rounded-sm bg-surface-muted"
-              />
-            ))}
-          </div>
         </div>
         <div className="grid gap-md md:grid-cols-2">
           <div className="h-[200px] animate-pulse rounded-md bg-surface-muted" />
@@ -121,15 +143,15 @@ export default function PourAnalyticsSection() {
   }
 
   const maxSectionOz = Math.max(
-    ...data.pourVolumeBySection.map((s) => s.oz),
+    ...data.pourVolumeBySection.map(function (s) { return s.oz; }),
     1,
   );
   const maxPourCount = Math.max(
-    ...data.topWinesByPours.map((w) => w.pour_count),
+    ...data.topWinesByPours.map(function (w) { return w.pour_count; }),
     1,
   );
   const maxRevenue = Math.max(
-    ...data.topWinesByRevenue.map((w) => w.revenue),
+    ...data.topWinesByRevenue.map(function (w) { return w.revenue; }),
     1,
   );
 
@@ -151,23 +173,6 @@ export default function PourAnalyticsSection() {
           <span className="font-mono text-[12px] text-ink-subtle">
             {data.totalPours} pour{data.totalPours === 1 ? "" : "s"}
           </span>
-        </div>
-        <div className="flex rounded-sm border border-border overflow-hidden" role="radiogroup" aria-label="Date range">
-          {RANGE_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              role="radio"
-              aria-checked={range === opt.value}
-              onClick={() => setRange(opt.value)}
-              className={`px-sm py-2xs text-[12px] font-medium transition-colors ${
-                range === opt.value
-                  ? "bg-accent text-white"
-                  : "text-ink-muted hover:bg-surface-muted"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
         </div>
       </div>
 
@@ -200,17 +205,19 @@ export default function PourAnalyticsSection() {
               </p>
             ) : (
               <div className="flex flex-col gap-xs">
-                {data.pourVolumeBySection.map((s) => (
-                  <div key={s.section} className="flex items-center gap-sm">
-                    <span className="w-[110px] shrink-0 truncate text-[13px] text-ink">
-                      {s.section}
-                    </span>
-                    <PourBar oz={s.oz} maxOz={maxSectionOz} />
-                    <span className="w-[60px] shrink-0 text-right font-mono text-[12px] text-ink-muted">
-                      {formatOz(s.oz)}
-                    </span>
-                  </div>
-                ))}
+                {data.pourVolumeBySection.map(function (s) {
+                  return (
+                    <div key={s.section} className="flex items-center gap-sm">
+                      <span className="w-[110px] shrink-0 truncate text-[13px] text-ink">
+                        {s.section}
+                      </span>
+                      <PourBar oz={s.oz} maxOz={maxSectionOz} />
+                      <span className="w-[60px] shrink-0 text-right font-mono text-[12px] text-ink-muted">
+                        {formatOz(s.oz)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -227,23 +234,25 @@ export default function PourAnalyticsSection() {
               <p className="text-[13px] text-ink-muted">No pour data</p>
             ) : (
               <div className="flex flex-col gap-xs">
-                {data.topWinesByPours.map((w, i) => (
-                  <div key={w.wine_id} className="flex items-center gap-sm">
-                    <span className="w-[18px] shrink-0 text-right font-mono text-[11px] text-ink-subtle">
-                      {i + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px] font-medium text-ink">
-                        {w.producer} {w.name}
-                        {w.vintage ? ` ${w.vintage}` : ""}
+                {data.topWinesByPours.map(function (w, i) {
+                  return (
+                    <div key={w.wine_id} className="flex items-center gap-sm">
+                      <span className="w-[18px] shrink-0 text-right font-mono text-[11px] text-ink-subtle">
+                        {i + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13px] font-medium text-ink">
+                          {w.producer} {w.name}
+                          {w.vintage ? " " + String(w.vintage) : ""}
+                        </div>
                       </div>
+                      <PourBar oz={w.pour_count} maxOz={maxPourCount} />
+                      <span className="w-[32px] shrink-0 text-right font-mono text-[12px] text-ink-muted">
+                        {w.pour_count}
+                      </span>
                     </div>
-                    <PourBar oz={w.pour_count} maxOz={maxPourCount} />
-                    <span className="w-[32px] shrink-0 text-right font-mono text-[12px] text-ink-muted">
-                      {w.pour_count}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -262,29 +271,31 @@ export default function PourAnalyticsSection() {
               </p>
             ) : (
               <div className="grid gap-xs md:grid-cols-2 md:gap-sm">
-                {data.topWinesByRevenue.map((w, i) => (
-                  <div
-                    key={w.wine_id}
-                    className="flex items-center gap-sm rounded-sm p-xs hover:bg-surface-muted/50"
-                  >
-                    <span className="w-[18px] shrink-0 text-right font-mono text-[11px] text-ink-subtle">
-                      {i + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px] font-medium text-ink">
-                        {w.producer} {w.name}
-                        {w.vintage ? ` ${w.vintage}` : ""}
+                {data.topWinesByRevenue.map(function (w, i) {
+                  return (
+                    <div
+                      key={w.wine_id}
+                      className="flex items-center gap-sm rounded-sm p-xs hover:bg-surface-muted/50"
+                    >
+                      <span className="w-[18px] shrink-0 text-right font-mono text-[11px] text-ink-subtle">
+                        {i + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13px] font-medium text-ink">
+                          {w.producer} {w.name}
+                          {w.vintage ? " " + String(w.vintage) : ""}
+                        </div>
+                        <div className="mt-2xs text-[12px] text-ink-muted">
+                          {w.pour_count} pour{w.pour_count === 1 ? "" : "s"}
+                        </div>
                       </div>
-                      <div className="mt-2xs text-[12px] text-ink-muted">
-                        {w.pour_count} pour{w.pour_count === 1 ? "" : "s"}
-                      </div>
+                      <PourBar oz={w.revenue} maxOz={maxRevenue} />
+                      <span className="w-[48px] shrink-0 text-right font-mono text-[13px] font-medium text-ink">
+                        {formatMoney(w.revenue)}
+                      </span>
                     </div>
-                    <PourBar oz={w.revenue} maxOz={maxRevenue} />
-                    <span className="w-[48px] shrink-0 text-right font-mono text-[13px] font-medium text-ink">
-                      {formatMoney(w.revenue)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

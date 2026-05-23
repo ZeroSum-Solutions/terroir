@@ -5,10 +5,11 @@ import { requireMembership } from "@/lib/api/auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const VALID_RANGES = new Set(["7d", "30d", "90d", "all"]);
+const VALID_RANGES = new Set(["7d", "30d", "90d", "all", "custom"]);
 
 /**
  * GET /api/insights/pour?range=30d&topN=10
+ * Also supports range=custom&from=YYYY-MM-DD&to=YYYY-MM-DD
  */
 export async function GET(request: NextRequest) {
   const auth = await requireMembership();
@@ -26,7 +27,20 @@ export async function GET(request: NextRequest) {
 
   try {
     let since: Date | null = null;
-    if (range !== "all") {
+    let until: Date | null = null;
+
+    if (range === "custom") {
+      const from = url.searchParams.get("from");
+      const to = url.searchParams.get("to");
+      if (from) {
+        since = new Date(from + "T00:00:00");
+        if (Number.isNaN(since.getTime())) since = null;
+      }
+      if (to) {
+        until = new Date(to + "T23:59:59.999");
+        if (Number.isNaN(until.getTime())) until = null;
+      }
+    } else if (range !== "all") {
       const days = parseInt(range.replace("d", ""), 10);
       since = new Date();
       since.setDate(since.getDate() - days);
@@ -42,6 +56,7 @@ export async function GET(request: NextRequest) {
       .order("occurred_at", { ascending: false });
 
     if (since) pourQuery.gte("occurred_at", since.toISOString());
+    if (until) pourQuery.lte("occurred_at", until.toISOString());
 
     const [
       { data: pourEventsRaw },
@@ -81,11 +96,15 @@ export async function GET(request: NextRequest) {
     }
 
     const pourVolumeBySection = Array.from(sectionMl.entries())
-      .map(([section, ml]) => ({
-        section,
-        oz: Math.round(ml * 0.033814 * 10) / 10,
-      }))
-      .sort((a, b) => b.oz - a.oz);
+      .map(function (_a) {
+        var section = _a[0];
+        var ml = _a[1];
+        return {
+          section: section,
+          oz: Math.round(ml * 0.033814 * 10) / 10,
+        };
+      })
+      .sort(function (a, b) { return b.oz - a.oz; });
 
     // --- Top wines by pour count ---
     const pourCountByWine = new Map<string, number>();
@@ -98,10 +117,12 @@ export async function GET(request: NextRequest) {
     }
 
     const topWinesByPours = Array.from(pourCountByWine.entries())
-      .sort((a, b) => b[1] - a[1])
+      .sort(function (a, b) { return b[1] - a[1]; })
       .slice(0, topN)
-      .map(([wineId, count]) => {
-        const wine = pourEvents.find((e) => e.wine_id === wineId);
+      .map(function (_a) {
+        var wineId = _a[0];
+        var count = _a[1];
+        const wine = pourEvents.find(function (e) { return e.wine_id === wineId; });
         const w = wine?.wines as
           | { name: string; producer: string; vintage: number | null }
           | undefined;
@@ -161,10 +182,12 @@ export async function GET(request: NextRequest) {
     }
 
     const topWinesByRevenue = Array.from(revenueByWine.entries())
-      .sort((a, b) => b[1] - a[1])
+      .sort(function (a, b) { return b[1] - a[1]; })
       .slice(0, topN)
-      .map(([wineId, revenue]) => {
-        const wine = pourEvents.find((e) => e.wine_id === wineId);
+      .map(function (_a) {
+        var wineId = _a[0];
+        var revenue = _a[1];
+        const wine = pourEvents.find(function (e) { return e.wine_id === wineId; });
         const w = wine?.wines as
           | { name: string; producer: string; vintage: number | null }
           | undefined;
@@ -181,7 +204,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       range,
       topN,
-      totalPours: pourEvents.filter((e) => e.kind === "pour").length,
+      totalPours: pourEvents.filter(function (e) { return e.kind === "pour"; }).length,
       pourVolumeBySection,
       topWinesByPours,
       topWinesByRevenue,
