@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { ArrowDown, ArrowUp, DollarSign, ScanLine, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { OverpaidFlagButton } from "@/components/overpaid-flag-button";
+import { SortControls } from "./sort-controls";
 import {
   ExportCsvButton,
   type PriceComparisonCsvRow,
@@ -74,7 +75,8 @@ type WineComparison = {
   flagged: boolean;
 };
 
-export default async function PriceComparisonPage() {
+export default async function PriceComparisonPage(p: any) {
+  const sp = await ((p.searchParams as any) ?? Promise.resolve({})); const sf = (sp as any).sort ?? null; const so = (sp as any).ord ?? (sf ? "desc" : null);
   const auth = (await getAuthContext())!; // AppLayout redirects when null
   const { supabase, restaurantId: rid } = auth;
 
@@ -183,10 +185,15 @@ export default async function PriceComparisonPage() {
     };
   });
 
-  // Comparable wines (2+ distributors) sort by potential dollar savings desc
+  // Comparable wines (2+ distributors) — default sort by potential dollar savings desc (BND-140)
   const comparable = comparisons
     .filter((c) => c.distributorCount >= 2)
     .sort((a, b) => {
+      if ((sp as any).sort === "variance") {
+        const va = a.variancePct ?? ((sp as any).ord === "asc" ? Infinity : -Infinity);
+        const vb = b.variancePct ?? ((sp as any).ord === "asc" ? Infinity : -Infinity);
+        if (va !== vb) return (sp as any).ord === "asc" ? va - vb : vb - va;
+      }
       if (b.potentialSavings !== a.potentialSavings) {
         return b.potentialSavings - a.potentialSavings;
       }
@@ -353,9 +360,10 @@ export default async function PriceComparisonPage() {
       {/* Comparable wines — multi-distributor */}
       {comparable.length > 0 && (
         <div className="mb-xl">
-          <h2 className="mb-md text-[15px] font-semibold text-ink">
-            Price comparisons
-          </h2>
+          <div className="mb-md flex items-center justify-between">
+            <h2 className="text-[15px] font-semibold text-ink">Price comparisons</h2>
+            <SortControls current={{ field: sf, dir: so }} />
+          </div>
 
           {/* Desktop table */}
           <div className="hidden md:block">
