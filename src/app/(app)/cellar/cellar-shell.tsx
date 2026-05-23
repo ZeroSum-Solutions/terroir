@@ -48,7 +48,7 @@ export function CellarShell({
 }: {
   rows: CellarWineRow[];
   reconcileItems: OpenBottleRow[];
-  cellarConfig: { id: string; rows: number; columns: number; name: string } | null;
+  cellarConfig: { id: string; rows: number; columns: number; name: string; lowStockThreshold: number } | null;
   gridData: Record<
     string,
     {
@@ -329,6 +329,7 @@ export function CellarShell({
           rows={rows}
           query={debouncedQuery}
           filter={filter}
+          lowStockThreshold={cellarConfig?.lowStockThreshold ?? 3}
           onSelectWine={(row) => setSelectedId(row.wine_id)}
           onResetFilters={() => {
             setFilter("all");

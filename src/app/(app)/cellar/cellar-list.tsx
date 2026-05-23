@@ -165,7 +165,7 @@ export function CellarList({
   return (
     <ul className="flex flex-col divide-y divide-border rounded-md border border-border bg-white">
       {filtered.map((row) => (
-        <CellarRow key={row.wine_id} row={row} onSelect={() => onSelectWine(row)} />
+        <CellarRow key={row.wine_id} row={row} lowStockThreshold={lowStockThreshold} onSelect={() => onSelectWine(row)} />
       ))}
     </ul>
   );
@@ -174,9 +174,11 @@ export function CellarList({
 function CellarRow({
   row,
   onSelect,
+  lowStockThreshold,
 }: {
   row: CellarWineRow;
   onSelect: () => void;
+  lowStockThreshold?: number;
 }) {
   const totalMl =
     row.size_ml === null
@@ -190,6 +192,8 @@ function CellarRow({
     row.open_remaining_ml !== null
       ? (row.open_remaining_ml / ML_PER_OZ).toFixed(1)
       : null;
+  const isLowStock = lowStockThreshold != null && row.sealed_count > 0 && row.sealed_count < lowStockThreshold && !row.is_eightysixed;
+  const isPeakWindow = row.peak_year != null && row.peak_year === new Date().getFullYear() && !row.is_eightysixed;
 
   // Stock chip choices map directly to spec §4 examples:
   //   ⚪ Open · 380ml · Bin C-4
@@ -232,6 +236,12 @@ function CellarRow({
             {/* Stock + drink-window + bin row */}
             <div className="mt-xs flex flex-wrap items-center gap-sm text-[12px] text-ink-muted">
               <Chip tone={chip.tone}>{chip.label}</Chip>
+              {isLowStock && (
+                <span className="inline-flex items-center rounded-full bg-warning-soft px-sm py-2xs text-[11px] font-medium text-warning">Low Stock</span>
+              )}
+              {isPeakWindow && (
+                <span className="inline-flex items-center rounded-full bg-accent-soft px-sm py-2xs text-[11px] font-medium text-accent">Peak Window</span>
+              )}
               {glassesLeft !== null && glassesLeft > 0 && !row.is_eightysixed && (
                 <span className="text-ink-muted">
                   ~{glassesLeft} glass{glassesLeft === 1 ? "" : "es"} left

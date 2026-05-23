@@ -270,6 +270,7 @@ export default async function CellarPage() {
               rows: configRow.rows,
               columns: configRow.columns,
               name: configRow.name,
+              lowStockThreshold: configRow.low_stock_threshold ?? 3,
             }
           : null
       }
