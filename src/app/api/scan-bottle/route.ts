@@ -1,10 +1,11 @@
 import * as Sentry from "@sentry/nextjs";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { z } from "zod";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAnthropicClient } from "@/lib/ai/anthropic-client";
 import { requireMembership } from "@/lib/api/auth";
-import { Errors } from "@/lib/api/errors";
+import { apiError, Errors } from "@/lib/api/errors";
 import { ParsedBottleLabelSchema } from "@/lib/scanner/bottle-schema";
 import { BOTTLE_SYSTEM_PROMPT } from "@/lib/scanner/bottle-system-prompt";
 import type { BottleScanResult } from "@/lib/scanner/types";
@@ -19,6 +20,10 @@ const ALLOWED_MIME = new Set([
   "image/webp",
 ]);
 
+const QrLookupSchema = z.object({
+  qr_payload: z.string().min(1, "qr_payload is required"),
+});
+
 // ARCH-016 / DEBT-016: prompt lives at src/lib/scanner/bottle-system-prompt.ts
 // so prompt engineering changes flow through one file (same pattern as
 // BND-027's invoice system-prompt extraction).
@@ -26,6 +31,46 @@ const ALLOWED_MIME = new Set([
 export async function POST(request: NextRequest) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
+
+  const { supabase, restaurantId } = auth;
+
+  // --- QR code lookup path ---
+  const contentType = request.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return Errors.badRequest("Invalid JSON body.");
+    }
+
+    const parsed = QrLookupSchema.safeParse(body);
+    if (!parsed.success) {
+      return Errors.badRequest("qr_payload is required.");
+    }
+
+    const { qr_payload } = parsed.data;
+
+    // Look up the wine by ID, scoped to the current restaurant
+    const { data: wine, error: dbErr } = await supabase
+      .from("wines")
+      .select("id, producer, name, vintage, varietal, region, country")
+      .eq("id", qr_payload)
+      .eq("restaurant_id", restaurantId)
+      .single();
+
+    if (dbErr || !wine) {
+      return apiError(
+        404,
+        "wine_not_found",
+        "No wine found for that QR code. It may belong to a different restaurant or have been deleted.",
+      );
+    }
+
+    return NextResponse.json(wine);
+  }
+
+  // --- Bottle label scanning path (existing) ---
 
   // BND-007: Anthropic client is a module-scoped singleton with
   // maxRetries: 2 and timeout: 100_000 pinned, keeping total latency
