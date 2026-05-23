@@ -1532,3 +1532,47 @@ Stats after this session: 216/231 passing (93.5%).
 - src/app/api/cellar/config/route.ts
 
 Stats: 220/231 passing (95.2%)
+
+## Session 2026-05-23 — features #144, #145, #146
+
+### Completed
+- **#144 Insights shows pour volume by section over selectable date range** (PASSING)
+  - Created GET /api/insights/pour endpoint aggregating pour_events by cellar section
+  - Date range selector with 7d/30d/90d/all options
+  - Bar chart visual showing oz poured per section with proportional bars
+  - Sections derived from inventory_items.section column
+
+- **#145 Insights shows top-N wines by pour count** (PASSING)
+  - Leaderboard of most-poured wines (default N=10)
+  - Ranked list with numbered positions, producer+name+vintage, pour count bars
+  - Same date range filter as #144
+
+- **#146 Insights shows top-N wines by revenue (price * pours)** (PASSING)
+  - Revenue computed as SUM(glass_price × (ml_delta / glass_pour_ml)) per wine
+  - Pricing sourced from wine_list_items (most recently updated, same pattern as cellar page)
+  - Revenue leaderboard with pour count and formatted dollar amounts
+  - Full-width grid display on desktop
+
+### Implementation details
+- New `PourAnalyticsSection` client component with:
+  - Skeleton loading states matching existing loading patterns
+  - Empty state with Wine icon and guidance text
+  - Toggle button date range selector (role=radiogroup, aria-checked)
+  - Responsive: stacked on mobile, 2-col + full-width on desktop
+- API endpoint fetches pour_events, inventory_items, and wine_list_items in parallel
+- Revenue excludes wines without by-the-glass pricing (glass_price + glass_pour_ml)
+- All pour filtering uses kind='pour' only, excluding new_bottle/finish_bottle/reconcile
+- Section attribution: first section found per wine_id from inventory_items
+
+### Verification
+- TypeScript: 0 new errors (114 pre-existing in other files)
+- Mock data grep: clean (only test files + comment)
+- Browser verification: blocked by sandbox (known limitation)
+- Code follows existing patterns (auth via requireMembership, Sentry error tracking, Supabase queries)
+
+### Files changed
+- NEW: src/app/api/insights/pour/route.ts (199 lines)
+- NEW: src/app/(app)/insights/pour-analytics-section.tsx (295 lines)
+- MODIFIED: src/app/(app)/insights/page.tsx (+11 lines: import + PourAnalyticsSection)
+
+Stats after this session: 225/231 passing (97.4%).
