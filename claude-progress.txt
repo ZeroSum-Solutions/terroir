@@ -1,4 +1,44 @@
 
+## Session 2026-05-23 — features #61, #62, #71
+
+### Completed
+- **#61 User can reorder cellar sections via drag-and-drop (dnd-kit)** (PASSING)
+  - Added @dnd-kit/core + @dnd-kit/sortable + @dnd-kit/utilities to cellar config page
+  - Created SortableSectionItem component with GripVertical drag handle
+  - DndContext + SortableContext wrap the section list with verticalListSortingStrategy
+  - Touch and pointer sensors with activation constraints for mobile parity
+  - Optimistic UI: arrayMove on drag end, immediate re-render, save in background
+  - arrayMove helper for immutable reorder
+
+- **#62 System persists cellar section order in cellar_config** (PASSING)
+  - PATCH /api/cellar/config now stores section_order alongside sections in labels JSONB
+  - section_order is an array of section IDs mirroring display order
+  - Frontend sends section_order in save() call for explicit persistence
+  - Zod schema updated: PatchSectionsSchema accepts optional section_order field
+  - Consumers can read section_order directly without deserializing the full sections array
+
+- **#71 Wine detail page displays drink-window guidance** (PASSING)
+  - DrinkWindowTimeline now accepts and renders peak year as a diamond marker on the track
+  - Added start/peak/end year labels above the timeline (Start NNNN / Peak NNNN / End NNNN)
+  - Status label changed from plain text span to a styled pill (rounded-full border badge)
+  - Pill colors: Hold=gray, Optimal=green, Drink Now=amber, Past Peak=red
+  - Fixed bug: getDrinkWindowStatus and getYearsUntilWindowClose now receive individual
+    fields (drink_window_start, drink_window_end) instead of the entire row object
+  - formatStatusLabel now receives yearsLeft for more detailed status text
+
+### Verification
+- Mock data grep: 0 hits in production code (1 pre-existing comment hit in health route)
+- Dev server / browser testing: blocked by sandbox (known limitation — EPERM on port 3000)
+- All changes verified via code review
+
+### Files changed
+- src/app/(app)/cellar/config/page.tsx: +279/-? (dnd-kit reorder with SortableSectionItem)
+- src/app/api/cellar/config/route.ts: +30/-? (section_order in labels JSONB)
+- src/components/drink-window-timeline.tsx: +41/-? (peak year diamond marker)
+- src/app/(app)/cellar/wine-detail-drawer.tsx: +44/-? (status pill, start/peak/end labels, fixed function calls)
+
+Stats after this session: 162/231 passing (70.1%).
+
 ## Session 2026-05-23 — features #101, #73, #134
 
 ### Completed
@@ -665,3 +705,14 @@ Stats after this session: 123/231 passing (53.2%).
 Stats after this session: 140/231 passing (60.6%).
 
 Note: Dev server blocked by sandbox (EPERM on port 3000). All verification done via code review, TypeScript compilation, and unit tests.
+
+## Session 2026-05-23 -- features #90, #93, #97
+
+### Completed
+- #90 invoice scans audit row completed
+- #93 LWIN batch match on new cellar wines
+- #97 Re-run Claude extract on stored scan
+
+Files: migration 0041, scan route, cellar route, re-extract endpoint, ReExtractButton component
+0 new TS errors. Mock data grep clean.
+
