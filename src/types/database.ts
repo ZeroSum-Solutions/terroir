@@ -34,8 +34,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          direction: string
           delta?: number | null
+          direction: string
           id?: string
           note?: string | null
           restaurant_id: string
@@ -44,8 +44,8 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          direction?: string
           delta?: number | null
+          direction?: string
           id?: string
           note?: string | null
           restaurant_id?: string
@@ -72,36 +72,36 @@ export type Database = {
       cellar_config: {
         Row: {
           columns: number
-          low_stock_threshold: number
-          reconcile_variance_threshold_oz: number
           created_at: string
           id: string
           labels: Json
+          low_stock_threshold: number
           name: string
+          reconcile_variance_threshold_oz: number
           restaurant_id: string
           rows: number
           updated_at: string
         }
         Insert: {
           columns?: number
-          low_stock_threshold?: number
-          reconcile_variance_threshold_oz?: number
           created_at?: string
           id?: string
           labels?: Json
+          low_stock_threshold?: number
           name?: string
+          reconcile_variance_threshold_oz?: number
           restaurant_id: string
           rows?: number
           updated_at?: string
         }
         Update: {
           columns?: number
-          low_stock_threshold?: number
-          reconcile_variance_threshold_oz?: number
           created_at?: string
           id?: string
           labels?: Json
+          low_stock_threshold?: number
           name?: string
+          reconcile_variance_threshold_oz?: number
           restaurant_id?: string
           rows?: number
           updated_at?: string
@@ -121,46 +121,46 @@ export type Database = {
           added_at: string
           added_via: Database["public"]["Enums"]["added_via"]
           bin_location: string | null
+          currency: string | null
+          format: string | null
           id: string
-          section: string | null
           invoice_scan_id: string | null
           quantity: number
           restaurant_id: string
+          section: string | null
           unit_cost: number
           updated_at: string
           wine_id: string
-          currency: string | null
-          format: string | null
         }
         Insert: {
           added_at?: string
           added_via?: Database["public"]["Enums"]["added_via"]
           bin_location?: string | null
-          section?: string | null
+          currency?: string | null
+          format?: string | null
           id?: string
           invoice_scan_id?: string | null
           quantity: number
           restaurant_id: string
+          section?: string | null
           unit_cost: number
           updated_at?: string
           wine_id: string
-          currency?: string | null
-          format?: string | null
         }
         Update: {
           added_at?: string
           added_via?: Database["public"]["Enums"]["added_via"]
           bin_location?: string | null
-          section?: string | null
+          currency?: string | null
+          format?: string | null
           id?: string
           invoice_scan_id?: string | null
           quantity?: number
           restaurant_id?: string
+          section?: string | null
           unit_cost?: number
           updated_at?: string
           wine_id?: string
-          currency?: string | null
-          format?: string | null
         }
         Relationships: [
           {
@@ -237,6 +237,7 @@ export type Database = {
           created_by: string | null
           distributor_name: string
           edits: Json
+          extra_image_paths: Json
           final_line_items: Json
           id: string
           invoice_date: string | null
@@ -245,7 +246,6 @@ export type Database = {
           ocr_text: Json | null
           parsed_line_items: Json
           raw_image_path: string | null
-          extra_image_paths: Json
           restaurant_id: string
           status: string
         }
@@ -255,6 +255,7 @@ export type Database = {
           created_by?: string | null
           distributor_name: string
           edits?: Json
+          extra_image_paths?: Json
           final_line_items: Json
           id?: string
           invoice_date?: string | null
@@ -263,7 +264,6 @@ export type Database = {
           ocr_text?: Json | null
           parsed_line_items: Json
           raw_image_path?: string | null
-          extra_image_paths?: Json
           restaurant_id: string
           status?: string
         }
@@ -273,6 +273,7 @@ export type Database = {
           created_by?: string | null
           distributor_name?: string
           edits?: Json
+          extra_image_paths?: Json
           final_line_items?: Json
           id?: string
           invoice_date?: string | null
@@ -281,7 +282,6 @@ export type Database = {
           ocr_text?: Json | null
           parsed_line_items?: Json
           raw_image_path?: string | null
-          extra_image_paths?: Json
           restaurant_id?: string
           status?: string
         }
@@ -546,61 +546,55 @@ export type Database = {
       }
       wine_list_items: {
         Row: {
+          blurb: string | null
           bottle_price: number | null
           created_at: string
           glass_pour_ml: number | null
           glass_price: number | null
+          hidden: boolean
           id: string
           is_available: boolean
-          hidden: boolean
           name_override: string | null
-          blurb: string | null
           position: number
           pour_size_mode: string
           section_id: string
           tasting_note: string | null
           updated_at: string
           wine_id: string
-          currency: string | null
-          format: string | null
         }
         Insert: {
+          blurb?: string | null
           bottle_price?: number | null
           created_at?: string
           glass_pour_ml?: number | null
           glass_price?: number | null
+          hidden?: boolean
           id?: string
           is_available?: boolean
-          hidden?: boolean
           name_override?: string | null
-          blurb?: string | null
           position?: number
           pour_size_mode?: string
           section_id: string
           tasting_note?: string | null
           updated_at?: string
           wine_id: string
-          currency?: string | null
-          format?: string | null
         }
         Update: {
+          blurb?: string | null
           bottle_price?: number | null
           created_at?: string
           glass_pour_ml?: number | null
           glass_price?: number | null
+          hidden?: boolean
           id?: string
           is_available?: boolean
-          hidden?: boolean
           name_override?: string | null
-          blurb?: string | null
           position?: number
           pour_size_mode?: string
           section_id?: string
           tasting_note?: string | null
           updated_at?: string
           wine_id?: string
-          currency?: string | null
-          format?: string | null
         }
         Relationships: [
           {
@@ -704,9 +698,10 @@ export type Database = {
       wines: {
         Row: {
           alert_snoozed_until: string | null
-          country: string | null
           colour: string | null
+          country: string | null
           created_at: string
+          decant_minutes: number | null
           drink_window_end: number | null
           drink_window_start: number | null
           eightysixed_at: string | null
@@ -717,7 +712,7 @@ export type Database = {
           is_eightysixed: boolean
           last_enriched_at: string | null
           lwin_id: string | null
-          manual_overrides: string[]
+          manual_overrides: string[] | null
           name: string
           overpaid_flag: boolean
           peak_year: number | null
@@ -735,7 +730,6 @@ export type Database = {
           retail_refreshed_at: string | null
           retail_retailer_count: number | null
           review_excerpt: string | null
-          decant_minutes: number | null
           serving_temp_label: string | null
           serving_temp_max: number | null
           serving_temp_min: number | null
@@ -747,9 +741,10 @@ export type Database = {
         }
         Insert: {
           alert_snoozed_until?: string | null
-          country?: string | null
           colour?: string | null
+          country?: string | null
           created_at?: string
+          decant_minutes?: number | null
           drink_window_end?: number | null
           drink_window_start?: number | null
           eightysixed_at?: string | null
@@ -760,7 +755,7 @@ export type Database = {
           is_eightysixed?: boolean
           last_enriched_at?: string | null
           lwin_id?: string | null
-          manual_overrides?: string[]
+          manual_overrides?: string[] | null
           name: string
           overpaid_flag?: boolean
           peak_year?: number | null
@@ -778,7 +773,6 @@ export type Database = {
           retail_refreshed_at?: string | null
           retail_retailer_count?: number | null
           review_excerpt?: string | null
-          decant_minutes?: number | null
           serving_temp_label?: string | null
           serving_temp_max?: number | null
           serving_temp_min?: number | null
@@ -790,9 +784,10 @@ export type Database = {
         }
         Update: {
           alert_snoozed_until?: string | null
-          country?: string | null
           colour?: string | null
+          country?: string | null
           created_at?: string
+          decant_minutes?: number | null
           drink_window_end?: number | null
           drink_window_start?: number | null
           eightysixed_at?: string | null
@@ -803,7 +798,7 @@ export type Database = {
           is_eightysixed?: boolean
           last_enriched_at?: string | null
           lwin_id?: string | null
-          manual_overrides?: string[]
+          manual_overrides?: string[] | null
           name?: string
           overpaid_flag?: boolean
           peak_year?: number | null
@@ -821,7 +816,6 @@ export type Database = {
           retail_refreshed_at?: string | null
           retail_retailer_count?: number | null
           review_excerpt?: string | null
-          decant_minutes?: number | null
           serving_temp_label?: string | null
           serving_temp_max?: number | null
           serving_temp_min?: number | null
@@ -846,6 +840,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_manual_overrides: {
+        Args: { p_fields: string[]; p_wine_id: string }
+        Returns: undefined
+      }
       cleanup_scan_idempotency: { Args: never; Returns: undefined }
       dismiss_pricing_alert: {
         Args: { p_days?: number; p_wine_id: string }
@@ -992,6 +990,7 @@ export type Database = {
         Args: { p_direction: string; p_note: string; p_wine_id: string }
         Returns: {
           created_at: string
+          delta: number | null
           direction: string
           id: string
           note: string | null
@@ -1011,6 +1010,25 @@ export type Database = {
       snooze_drink_window_alert: {
         Args: { p_days?: number; p_wine_id: string }
         Returns: string
+      }
+      undo_last_pour: {
+        Args: { p_wine_id: string }
+        Returns: {
+          closed_at: string | null
+          id: string
+          opened_at: string
+          opened_by: string | null
+          remaining_ml: number
+          restaurant_id: string
+          source_inventory_item_id: string | null
+          wine_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "open_bottles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       wine_published_list_slugs: {
         Args: { p_restaurant_id: string; p_wine_id: string }
