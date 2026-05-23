@@ -5,6 +5,7 @@ import {
   Camera,
   Check,
   Keyboard,
+  MapPin,
   ScanLine,
   Search,
   X,
@@ -26,6 +27,7 @@ type Phase =
   | "manual"
   | "matched"
   | "correcting"
+  | "location"
   | "confirmed"
   | "error"
   | "no-camera";
@@ -142,6 +144,9 @@ export default function ScanBottlePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<MatchedWine[]>([]);
   const [searching, setSearching] = useState(false);
+  const [section, setSection] = useState("");
+  const [binLocation, setBinLocation] = useState("");
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     if (typeof navigator === "undefined") return;
@@ -205,7 +210,42 @@ export default function ScanBottlePage() {
     setWine(null);
     setPayload(null);
     setManualCode("");
+    setSection("");
+    setBinLocation("");
+    setConfirming(false);
   }, []);
+
+  const handleConfirmLocation = useCallback(
+    async (e?: React.FormEvent) => {
+      e?.preventDefault();
+      if (!wine || !section.trim() || !binLocation.trim()) return;
+      setConfirming(true);
+      try {
+        const res = await fetch("/api/scan-bottle/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            wine_id: wine.id,
+            section: section.trim(),
+            bin_location: binLocation.trim(),
+          }),
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          throw new Error(body?.error ?? "Failed to record location.");
+        }
+        setPhase("confirmed");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to record bottle location.");
+        setPhase("error");
+      } finally {
+        setConfirming(false);
+      }
+    },
+    [wine, section, binLocation],
+  );
 
   return (
     <div className="mx-auto max-w-[480px]">
@@ -387,7 +427,11 @@ export default function ScanBottlePage() {
             </button>
             <button
               type="button"
-              onClick={() => setPhase("confirmed")}
+              onClick={() => {
+                setPhase("location");
+                setSection("");
+                setBinLocation("");
+              }}
               className="flex h-[44px] items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover"
             >
               <Check className="h-4 w-4" strokeWidth={2} />
@@ -473,6 +517,77 @@ export default function ScanBottlePage() {
         </div>
       )}
 
+      {phase === "location" && wine && (
+        <div className="space-y-md">
+          <div className="rounded-md border border-border bg-white p-md md:p-lg">
+            <div className="mb-md flex items-start justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                Bottle location
+              </span>
+              <span className="rounded-pill bg-accent-soft px-sm py-2xs text-[12px] font-medium text-accent">
+                {wine.producer} {wine.name}
+                {wine.vintage ? " " + wine.vintage : ""}
+              </span>
+            </div>
+            <form onSubmit={handleConfirmLocation} className="space-y-md">
+              <div>
+                <label
+                  htmlFor="bottle-section"
+                  className="mb-xs block text-[13px] font-medium text-ink"
+                >
+                  Section
+                </label>
+                <input
+                  id="bottle-section"
+                  type="text"
+                  autoComplete="off"
+                  autoFocus
+                  value={section}
+                  onChange={(e) => setSection(e.target.value)}
+                  placeholder='e.g. "Red Room", "Main Cellar"'
+                  className="w-full rounded-sm border border-border bg-white px-md py-sm text-[14px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="bottle-bin"
+                  className="mb-xs block text-[13px] font-medium text-ink"
+                >
+                  Bin location
+                </label>
+                <input
+                  id="bottle-bin"
+                  type="text"
+                  autoComplete="off"
+                  value={binLocation}
+                  onChange={(e) => setBinLocation(e.target.value)}
+                  placeholder='e.g. "A-12", "Shelf 3, Row 5"'
+                  className="w-full rounded-sm border border-border bg-white px-md py-sm text-[14px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-sm">
+                <button
+                  type="button"
+                  onClick={() => setPhase("matched")}
+                  className="flex h-[44px] items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
+                >
+                  <X className="h-4 w-4" strokeWidth={2} />
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={!section.trim() || !binLocation.trim() || confirming}
+                  className="flex h-[44px] items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                >
+                  <Check className="h-4 w-4" strokeWidth={2} />
+                  {confirming ? "Saving..." : "Save location"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {phase === "confirmed" && wine && (
         <div className="space-y-md">
           <div className="flex flex-col items-center gap-lg rounded-md border border-success/30 bg-success-soft/40 px-lg py-2xl text-center">
@@ -488,6 +603,14 @@ export default function ScanBottlePage() {
                 {wine.name}
                 {wine.vintage ? " (" + wine.vintage + ")" : ""}
               </p>
+              {(section || binLocation) && (
+                <p className="mt-sm inline-flex items-center gap-xs text-[12px] text-ink-subtle">
+                  <MapPin className="h-3 w-3" strokeWidth={2} />
+                  {section && <span>{section}</span>}
+                  {section && binLocation && <span>&middot;</span>}
+                  {binLocation && <span>{binLocation}</span>}
+                </p>
+              )}
             </div>
             <button
               type="button"

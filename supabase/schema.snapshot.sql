@@ -2448,3 +2448,8 @@ alter table public.restaurants
 -- BND-261: add enrichment_metadata jsonb column to wines for enrichment provenance tracking
 alter table public.wines
   add column if not exists enrichment_metadata jsonb;
+
+-- 0045_inventory_items_section.sql
+-- BND-109: add section column to inventory_items for bottle location tracking
+alter table public.inventory_items
+  add column if not exists section text;

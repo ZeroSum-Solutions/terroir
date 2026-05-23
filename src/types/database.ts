@@ -119,6 +119,7 @@ export type Database = {
           added_via: Database["public"]["Enums"]["added_via"]
           bin_location: string | null
           id: string
+          section: string | null
           invoice_scan_id: string | null
           quantity: number
           restaurant_id: string
@@ -130,6 +131,7 @@ export type Database = {
           added_at?: string
           added_via?: Database["public"]["Enums"]["added_via"]
           bin_location?: string | null
+          section?: string | null
           id?: string
           invoice_scan_id?: string | null
           quantity: number
@@ -142,6 +144,7 @@ export type Database = {
           added_at?: string
           added_via?: Database["public"]["Enums"]["added_via"]
           bin_location?: string | null
+          section?: string | null
           id?: string
           invoice_scan_id?: string | null
           quantity?: number
@@ -350,6 +353,7 @@ export type Database = {
       }
       open_bottles: {
         Row: {
+          closed_at: string | null
           id: string
           opened_at: string
           opened_by: string | null
@@ -359,6 +363,7 @@ export type Database = {
           wine_id: string
         }
         Insert: {
+          closed_at?: string | null
           id?: string
           opened_at?: string
           opened_by?: string | null
@@ -368,6 +373,7 @@ export type Database = {
           wine_id: string
         }
         Update: {
+          closed_at?: string | null
           id?: string
           opened_at?: string
           opened_by?: string | null
@@ -408,6 +414,7 @@ export type Database = {
           ml_delta: number
           note: string | null
           occurred_at: string
+          open_bottle_id: string | null
           restaurant_id: string
           wine_id: string
         }
@@ -418,6 +425,7 @@ export type Database = {
           ml_delta: number
           note?: string | null
           occurred_at?: string
+          open_bottle_id?: string | null
           restaurant_id: string
           wine_id: string
         }
@@ -428,10 +436,18 @@ export type Database = {
           ml_delta?: number
           note?: string | null
           occurred_at?: string
+          open_bottle_id?: string | null
           restaurant_id?: string
           wine_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "pour_events_open_bottle_id_fkey"
+            columns: ["open_bottle_id"]
+            isOneToOne: false
+            referencedRelation: "open_bottles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pour_events_restaurant_id_fkey"
             columns: ["restaurant_id"]
@@ -891,6 +907,7 @@ export type Database = {
       reconcile_open_bottle: {
         Args: { p_new_remaining_ml: number; p_note?: string; p_wine_id: string }
         Returns: {
+          closed_at: string | null
           id: string
           opened_at: string
           opened_by: string | null
@@ -918,6 +935,7 @@ export type Database = {
           p_wine_id: string
         }
         Returns: {
+          closed_at: string | null
           id: string
           opened_at: string
           opened_by: string | null
