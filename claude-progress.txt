@@ -1272,3 +1272,18 @@ Stats after this session: 196/231 passing (84.8%).
 - src/app/api/scan/route.test.ts: +69 (6 new tests)
 
 Stats after this session: 199/231 passing (86.1%).
+Session 2026-05-23 features 92 94 95
+
+Completed:
+92 format currency columns on inventory_items PASSING
+94 side by side scan review with image editable items PASSING
+95 edit line items before commit PASSING
+
+Migration 0049 adds format text and currency text
+Updated save-scan and commit endpoints
+Updated database types
+Fixed onUpdateSource destructuring bug
+Fixed scanner manual entry missing fields
+
+Mock data grep clean
+Stats 206 of 231 passing 89.2 percent
