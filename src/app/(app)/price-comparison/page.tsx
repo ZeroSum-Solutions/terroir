@@ -10,6 +10,9 @@ import {
 
 export const metadata: Metadata = { title: "Price comparison" };
 
+const VARIANCE_HIGHLIGHT_THRESHOLD =
+  parseFloat(process.env.PRICE_VARIANCE_HIGHLIGHT_THRESHOLD ?? "0.10") || 0.10;
+
 function formatPrice(n: number) {
   return "$" + n.toFixed(2);
 }
@@ -394,7 +397,9 @@ export default async function PriceComparisonPage() {
                       className={`border-t border-dashed border-border ${
                         price.unitCost === comp.cheapest
                           ? "bg-success-soft/40"
-                          : ""
+                          : comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD
+                            ? "bg-warning-soft/15"
+                            : ""
                       }`}
                     >
                       {i === 0 ? (
@@ -481,12 +486,12 @@ export default async function PriceComparisonPage() {
                       {i === 0 ? (
                         <td className="py-sm text-right align-top font-mono" rowSpan={distPrices.length}>
                           {comp.variancePct != null ? (
-                            comp.variancePct > 0.05 ? (
+                            comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD ? (
                               <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
                                 <TrendingUp className="h-3 w-3" strokeWidth={2.5} />
                                 +{formatPct(comp.variancePct)}
                               </span>
-                            ) : comp.variancePct < -0.05 ? (
+                            ) : comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD ? (
                               <span className="inline-flex items-center gap-xs rounded-pill bg-success-soft px-sm py-xs text-[11px] font-semibold text-success">
                                 <TrendingDown className="h-3 w-3" strokeWidth={2.5} />
                                 {formatPct(comp.variancePct)}
@@ -528,7 +533,11 @@ export default async function PriceComparisonPage() {
               return (
                 <div
                   key={comp.wine.id}
-                  className="rounded-md border border-border bg-surface p-md"
+                  className={`rounded-md border bg-surface p-md ${
+                    comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD
+                      ? "border-warning bg-warning-soft/10"
+                      : "border-border"
+                  }`}
                 >
                   <div className="mb-sm flex items-start justify-between">
                     <div className="flex items-start gap-xs min-w-0 flex-1">
@@ -575,7 +584,7 @@ export default async function PriceComparisonPage() {
                         <span className="font-mono text-[14px] font-medium text-ink-subtle tabular-nums">
                           {formatPrice(comp.marketPrice)}
                         </span>
-                        {comp.variancePct != null && Math.abs(comp.variancePct) > 0.05 && (
+                        {comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD && (
                           <span
                             className={`ml-sm rounded-pill px-sm py-2xs text-[11px] font-semibold ${
                               comp.variancePct > 0
@@ -649,7 +658,14 @@ export default async function PriceComparisonPage() {
                   const latest = pickMostRecent(comp.prices);
                   const latestDate = formatInvoiceDate(latest?.invoiceDate ?? null);
                   return (
-                    <tr key={comp.wine.id} className="border-t border-dashed border-border">
+                    <tr
+                      key={comp.wine.id}
+                      className={`border-t border-dashed border-border ${
+                        comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD
+                          ? "bg-warning-soft/15"
+                          : ""
+                      }`}
+                    >
                       <td className="px-md py-sm">
                         <div className="flex items-start gap-xs">
                           <Link
@@ -689,11 +705,11 @@ export default async function PriceComparisonPage() {
                       {/* BND-138: Variance */}
                       <td className="px-md py-sm text-right font-mono">
                         {comp.variancePct != null ? (
-                          comp.variancePct > 0.05 ? (
+                          comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD ? (
                             <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
                               +{formatPct(comp.variancePct)}
                             </span>
-                          ) : comp.variancePct < -0.05 ? (
+                          ) : comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD ? (
                             <span className="inline-flex items-center gap-xs rounded-pill bg-success-soft px-sm py-xs text-[11px] font-semibold text-success">
                               {formatPct(comp.variancePct)}
                             </span>
@@ -719,7 +735,11 @@ export default async function PriceComparisonPage() {
               return (
                 <div
                   key={comp.wine.id}
-                  className="rounded-md border border-border bg-surface p-md"
+                  className={`rounded-md border bg-surface p-md ${
+                    comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD
+                      ? "border-warning bg-warning-soft/10"
+                      : "border-border"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-sm">
                     <div className="flex items-start gap-xs min-w-0 flex-1">
@@ -752,7 +772,7 @@ export default async function PriceComparisonPage() {
                         <span className="font-mono text-[13px] text-ink-subtle tabular-nums">
                           {formatPrice(comp.marketPrice)}
                         </span>
-                        {comp.variancePct != null && Math.abs(comp.variancePct) > 0.05 && (
+                        {comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD && (
                           <span
                             className={`rounded-pill px-sm py-2xs text-[11px] font-semibold ${
                               comp.variancePct > 0
