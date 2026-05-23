@@ -1,3 +1,43 @@
+## Session 2026-05-23 — features #129, #130, #131
+
+### Completed
+- **#129 Reconcile lists every open bottle with tracked remaining volume** (PASSING)
+  - Added format badge (750ml, Half, Magnum, etc.) per bottle using size_ml
+  - Added opened_at date display with relative formatting (today, yesterday, Nd ago)
+  - Changed primary display from ml to oz: "Tracked: X.X oz" with ml detail
+  - Moved actual remaining input out of details/summary — always visible now
+  - Input accepts ml values with oz equivalent shown alongside
+
+- **#130 User can enter actual remaining volume for each open bottle** (PASSING)
+  - Number input with min=0, max=size_ml for bounded validation
+  - isNaN and negative values blocked in onChange handler
+  - Empty input defaults to 0 (consistent UX)
+  - Fraction quick-select buttons (Empty, 1/4, 1/2, 3/4, Full) retained
+
+- **#131 System computes variance and persists adjustments via reconcile_open_bottle** (PASSING)
+  - Variance computed per row as signed value (actual - tracked)
+  - Displayed as arrow + oz + direction text (e.g., down arrow 2.0 oz more than tracked)
+  - Flagged when |variance| > threshold with warning styling
+  - Migration 0046: added 'reconcile' to availability_events.direction check
+  - Migration 0046: added delta column to availability_events
+  - reconcile_open_bottle now inserts availability_events (direction=reconcile, delta=v_delta)
+  - Updated schema snapshot and database types
+
+### Verification
+- TypeScript: 0 new errors (11 pre-existing in unrelated files)
+- Mock data grep: 0 hits in production code (health/route.ts false positive)
+- Reconcile route tests: 6/7 passing (1 pre-existing EXCEEDS_SIZE code field test)
+- Full test suite: 347/358 passing (11 pre-existing failures, no new failures)
+
+### Files changed
+- NEW: supabase/migrations/0046_reconcile_availability_events.sql
+- NEW: supabase/migrations/down/0046_reconcile_availability_events.down.sql
+- MODIFIED: supabase/schema.snapshot.sql (+delta column, +reconcile direction, +0046 migration)
+- MODIFIED: src/types/database.ts (+delta to availability_events Row/Insert/Update)
+- MODIFIED: src/app/(app)/cellar/reconcile-list.tsx (+154/-68)
+
+Stats after this session: 177/231 passing (76.6%).
+
 ## Session 2026-05-23 -- features #55, #56, #57
 
 ### Completed
