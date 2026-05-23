@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, FileUp, ImageIcon, Wine } from "lucide-react";
+import { ArrowRight, Camera, FileUp, ImageIcon, Wine } from "lucide-react";
 import { Check, ListOrdered, ScanLine } from "lucide-react";
 import { useRef } from "react";
 import Link from "next/link";
@@ -18,9 +18,7 @@ function RecentScansList({ scans }: RecentScansListProps) {
   if (scans.length === 0) return null;
   return (
     <section className="mt-2xl">
-      <h3 className="mb-md text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
-        Recent scans
-      </h3>
+      <div className="mb-md flex items-center justify-between"><h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">Recent scans</h3><Link href="/scans" className="inline-flex items-center gap-xs text-[11px] font-medium text-ink-muted hover:text-accent">View all<ArrowRight className="h-3 w-3" strokeWidth={2} /></Link></div>
       <div className="grid grid-cols-1 gap-sm md:grid-cols-3 md:gap-md">
         {scans.map((s) => (
           <Link

@@ -1,14 +1,26 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import { AlertTriangle, ArrowLeft, Download, ExternalLink } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronDown, Download, ExternalLink, FileText, Package } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { accuracyColor } from "@/lib/scanner/accuracy-color";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
 import { LOW_CONFIDENCE_ITEM_THRESHOLD } from "@/lib/scanner/scoring";
 import type { LineItem } from "@/lib/scanner/types";
+import { cn } from "@/lib/utils";
+
+type InventoryItemRow = {
+  id: string;
+  wine_id: string;
+  quantity: number;
+  unit_cost: number | null;
+  added_at: string;
+  wine_name: string;
+  wine_producer: string;
+  wine_vintage: number | null;
+};
 
 interface ScanDetailViewProps {
   id: string;
@@ -20,6 +32,8 @@ interface ScanDetailViewProps {
   createdAt: string;
   items: LineItem[];
   hasImage: boolean;
+  ocrText: Record<string, unknown> | null;
+  inventoryItems: InventoryItemRow[];
 }
 
 function formatMoney(n: number) {
@@ -36,9 +50,12 @@ export function ScanDetailView({
   createdAt,
   items,
   hasImage,
+  ocrText,
+  inventoryItems,
 }: ScanDetailViewProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(hasImage);
+  const [ocrOpen, setOcrOpen] = useState(false);
 
   useEffect(() => {
     if (!hasImage) return;
@@ -58,10 +75,6 @@ export function ScanDetailView({
   }, [id, hasImage]);
 
   const total = items.reduce((s, it) => s + it.qty * it.unitCost, 0);
-  // Flag rows where the parser's self-reported confidence fell below the
-  // same threshold used by /api/scan to decide whether to recommend a
-  // manual review. Surfacing the count + per-row indicator lets buyers
-  // jump straight to the uncertain rows instead of re-reading every line.
   const flaggedCount = items.filter(
     (it) => it.confidence < LOW_CONFIDENCE_ITEM_THRESHOLD,
   ).length;
@@ -79,15 +92,17 @@ export function ScanDetailView({
     );
   }, [items, distributor, invoiceNumber, invoiceDate, createdAt]);
 
+  const hasOcr = ocrText && Object.keys(ocrText).length > 0;
+
   return (
     <section>
       <header className="mb-lg">
         <Link
-          href="/scan"
+          href="/scans"
           className="mb-md inline-flex items-center gap-xs text-[13px] text-ink-muted hover:text-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
-          Back to scanner
+          Back to scan history
         </Link>
         <div className="flex items-center justify-between gap-md">
           <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
@@ -167,6 +182,36 @@ export function ScanDetailView({
           </div>
         </div>
 
+        {/* OCR Text (if available) */}
+        {hasOcr && (
+          <div className="rounded-md border border-border bg-white md:col-span-2">
+            <button
+              type="button"
+              onClick={() => setOcrOpen(!ocrOpen)}
+              className="flex w-full items-center justify-between p-md text-left focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-inset"
+            >
+              <span className="flex items-center gap-sm text-[13px] font-medium text-ink">
+                <FileText className="h-4 w-4 text-ink-subtle" strokeWidth={1.75} />
+                OCR text
+              </span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 text-ink-subtle transition-transform",
+                  ocrOpen && "rotate-180",
+                )}
+                strokeWidth={2}
+              />
+            </button>
+            {ocrOpen && (
+              <div className="border-t border-border px-md pb-md pt-sm">
+                <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-ink-muted">
+                  {JSON.stringify(ocrText, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Invoice image */}
         {hasImage && (
           <div className="rounded-md border border-border bg-surface p-md md:sticky md:top-[72px] md:self-start">
@@ -179,12 +224,6 @@ export function ScanDetailView({
               </div>
             ) : imageUrl ? (
               <>
-                {/* The visible <Image> is capped at 60-70vh so it fits next to
-                    the line-items table, but buyers verifying scan accuracy
-                    often need to zoom into specific rows on the original.
-                    Wrapping the image in a same-tab-friendly anchor opens it
-                    at native resolution; the inline "Open full size" affordance
-                    below keeps the action keyboard-accessible. */}
                 <a
                   href={imageUrl}
                   target="_blank"
@@ -357,6 +396,100 @@ export function ScanDetailView({
             )}
           </div>
         </div>
+
+        {/* Resulting inventory items */}
+        {inventoryItems.length > 0 && (
+          <div className={hasImage ? "" : "md:col-span-2"}>
+            <div className="mb-md text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              Inventory created
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden md:block">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                    <th scope="col" className="pb-sm text-left font-semibold">Wine</th>
+                    <th scope="col" className="pb-sm text-left font-semibold">Producer</th>
+                    <th scope="col" className="pb-sm text-right font-semibold">Vintage</th>
+                    <th scope="col" className="pb-sm text-right font-semibold">Qty</th>
+                    <th scope="col" className="pb-sm text-right font-semibold">Unit cost</th>
+                    <th scope="col" className="pb-sm text-right font-semibold">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inventoryItems.map((ii, i) => (
+                    <tr
+                      key={ii.id}
+                      className={i > 0 ? "border-t border-dashed border-border" : ""}
+                    >
+                      <td className="py-sm font-medium text-ink">
+                        <Link
+                          href={`/cellar?wine=${ii.wine_id}`}
+                          className="text-ink hover:text-accent"
+                        >
+                          {ii.wine_name}
+                        </Link>
+                      </td>
+                      <td className="py-sm text-ink">{ii.wine_producer}</td>
+                      <td className="py-sm text-right font-mono text-ink">
+                        {ii.wine_vintage ?? "NV"}
+                      </td>
+                      <td className="py-sm text-right font-mono tabular text-ink">
+                        {ii.quantity}
+                      </td>
+                      <td className="py-sm text-right font-mono text-ink">
+                        {ii.unit_cost != null ? `$${formatMoney(ii.unit_cost)}` : "—"}
+                      </td>
+                      <td className="py-sm text-right font-mono font-medium text-ink">
+                        {ii.unit_cost != null
+                          ? `$${formatMoney(ii.quantity * ii.unit_cost)}`
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="flex flex-col gap-sm md:hidden">
+              {inventoryItems.map((ii) => (
+                <Link
+                  key={ii.id}
+                  href={`/cellar?wine=${ii.wine_id}`}
+                  className="rounded-md border border-border bg-white p-md hover:bg-[#FBFAF6]"
+                >
+                  <div className="flex items-start gap-md">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-surface-muted">
+                      <Package className="h-5 w-5 text-ink-subtle" strokeWidth={1.5} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[14px] font-medium text-ink">{ii.wine_name}</div>
+                      <div className="mt-2xs text-[13px] text-ink-muted">{ii.wine_producer}</div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="font-mono text-[14px] tabular text-ink">
+                        {ii.wine_vintage ?? "NV"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-sm flex items-center justify-between border-t border-dashed border-border pt-sm">
+                    <span className="font-mono text-[13px] tabular text-ink">
+                      {ii.quantity} ×{" "}
+                      {ii.unit_cost != null ? `$${formatMoney(ii.unit_cost)}` : "—"}
+                    </span>
+                    <span className="font-mono text-[13px] font-medium text-ink">
+                      {ii.unit_cost != null
+                        ? `$${formatMoney(ii.quantity * ii.unit_cost)}`
+                        : "—"}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
