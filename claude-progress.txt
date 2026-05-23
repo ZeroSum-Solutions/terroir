@@ -1,3 +1,48 @@
+## Session 2026-05-23 — features #85, #86, #87
+
+### Completed
+- **#85 System sends OCR text to Claude with structured-extraction system prompt** (PASSING)
+  - Updated system prompt in system-prompt.ts to include "structured JSON object" mention
+  - Verified anthropic-version header sent automatically by Anthropic SDK
+  - Verified system prompt contains required keywords: producer, vintage, line, JSON
+  - Verified model is current (claude-sonnet-4-6, not retired)
+
+- **#86 Claude returns a typed JSON list of line items** (PASSING)
+  - Added currency (ISO 4217 3-letter code) and format (bottle size) fields to ParsedLineItemSchema
+  - Updated LineItem type, ParsedLineItem type, and PersistedLineItemSchema
+  - Updated system prompt with currency and format extraction guidance
+  - Updated scan route to map currency and format from parsed output to line items
+  - Updated test fixtures with currency and format on all line items
+  - Bumped PERSISTED_SCAN_VERSION from 1 to 2
+
+- **#87 System validates Claude's response with Zod schema before any DB write** (PASSING)
+  - Added explicit Zod validation gate (ParsedInvoiceSchema.safeParse) in extractFromOcr
+  - Added validation_failed error code to AiExtractErrorCode enum
+  - Console.error logs ZodError details before throwing
+  - Added validation_failed to AI_STATUS mapping (422) in scan route
+  - Added validation_failed to Sentry capture condition for monitoring
+  - Fixed pre-existing mixed ?? and || operator parse error in scan route
+
+### Verification
+- All 44 scanner + scan route tests passing (6 test files, 0 failures)
+- Mock data grep: 0 hits in production code (only test files + legitimate Node.js comment)
+- Browser verification: blocked by sandbox (known limitation)
+- Code review confirms all feature requirements met
+
+### Files changed
+- src/lib/scanner/system-prompt.ts: +5/-1 (structured JSON mention, currency/format guidance)
+- src/lib/scanner/schema.ts: +18/-1 (currency, format fields, PERSISTED_SCAN_VERSION bump)
+- src/lib/scanner/types.ts: +2 (currency, format on LineItem)
+- src/lib/scanner/ai-extract.ts: +19/-1 (ZodError import, explicit safeParse validation gate)
+- src/lib/scanner/ai-extract.test.ts: +2 (currency/format in happyParse fixture)
+- src/lib/scanner/schema.test.ts: +2 (currency/format in test data)
+- src/app/api/scan/route.ts: +10/-5 (currency/format mapping, validation_failed status, ??/|| fix)
+- src/app/api/scan/route.test.ts: +18/-8 (supabase mock helper, fixed body.code assertion)
+- src/test/fixtures/invoices/scans.ts: +6 (currency/format on all line item fixtures)
+
+Stats after this session: 180/231 passing (77.9%).
+
+
 ## Session 2026-05-23 — features #114, #115, #116
 
 ### Completed
