@@ -381,6 +381,8 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
           region: "",
           qty: 1,
           unitCost: 0,
+          currency: null,
+          format: null,
           confidence: 1,
         },
       ],

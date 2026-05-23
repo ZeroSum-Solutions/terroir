@@ -93,6 +93,7 @@ interface ResultsViewProps {
 export function ResultsView({
   scan,
   onUpdate,
+  onUpdateSource,
   onRemove,
   onScanAnother,
   onExportCsv,

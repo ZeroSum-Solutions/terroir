@@ -257,6 +257,8 @@ async function saveScanOnce(opts: {
     invoice_scan_id: scanId,
     quantity: item.qty,
     unit_cost: item.unitCost,
+    format: item.format ?? null,
+    currency: item.currency ?? null,
     added_via: "invoice_scan" as const,
   }));
 

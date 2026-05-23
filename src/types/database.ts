@@ -129,6 +129,8 @@ export type Database = {
           unit_cost: number
           updated_at: string
           wine_id: string
+          currency: string | null
+          format: string | null
         }
         Insert: {
           added_at?: string
@@ -142,6 +144,8 @@ export type Database = {
           unit_cost: number
           updated_at?: string
           wine_id: string
+          currency?: string | null
+          format?: string | null
         }
         Update: {
           added_at?: string
@@ -155,6 +159,8 @@ export type Database = {
           unit_cost?: number
           updated_at?: string
           wine_id?: string
+          currency?: string | null
+          format?: string | null
         }
         Relationships: [
           {
@@ -555,6 +561,8 @@ export type Database = {
           tasting_note: string | null
           updated_at: string
           wine_id: string
+          currency: string | null
+          format: string | null
         }
         Insert: {
           bottle_price?: number | null
@@ -572,6 +580,8 @@ export type Database = {
           tasting_note?: string | null
           updated_at?: string
           wine_id: string
+          currency?: string | null
+          format?: string | null
         }
         Update: {
           bottle_price?: number | null
@@ -589,6 +599,8 @@ export type Database = {
           tasting_note?: string | null
           updated_at?: string
           wine_id?: string
+          currency?: string | null
+          format?: string | null
         }
         Relationships: [
           {
