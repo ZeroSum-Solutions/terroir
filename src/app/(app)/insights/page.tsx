@@ -13,7 +13,8 @@ import { RefreshRetailButton } from "./refresh-retail-button";
 import { PricingReviewCard } from "./pricing-review-card";
 import { SnoozedAlertsCard, type SnoozedRow } from "./snoozed-alerts-card";
 import PourAnalyticsSection from "./pour-analytics-section";
-import DateRangeSelector, { dateRangeSince, dateRangeUntil, dateRangeLabel } from "./date-range-selector";
+import DateRangeSelector from "./date-range-selector";
+import { dateRangeSince, dateRangeUntil, dateRangeLabel } from "./date-range";
 
 type NullableDateRange = { range?: string; from?: string; to?: string };
 type SearchParams = Promise<NullableDateRange>;
@@ -347,7 +348,7 @@ export default async function DashboardPage({
   const varietalEntries = [...varietalMap.entries()].sort(function (a, b) { return b[1] - a[1]; });
   const varietalBreakdown = varietalEntries.slice(0, 6);
   const varietalTotalAll =
-    varietalEntries.reduce(function (s, _a) { var v = _a[1]; return s + v; }, 0) || 1;
+    varietalEntries.reduce(function (s, _a) { const v = _a[1]; return s + v; }, 0) || 1;
   const otherVarietalCount = Math.max(
     0,
     varietalEntries.length - varietalBreakdown.length,
@@ -791,8 +792,8 @@ export default async function DashboardPage({
             <>
               <div className="flex flex-col gap-sm">
                 {varietalBreakdown.map(function (_a, i) {
-                  var label = _a[0];
-                  var spend = _a[1];
+                  const label = _a[0];
+                  const spend = _a[1];
                   const pct = spend / varietalTotalAll;
                   return (
                     <div key={label} className="flex items-center gap-sm">
@@ -846,8 +847,8 @@ export default async function DashboardPage({
               </thead>
               <tbody>
                 {distributors.map(function (_a, i) {
-                  var name = _a[0];
-                  var data = _a[1];
+                  const name = _a[0];
+                  const data = _a[1];
                   const pct = data.spend / distTotalSpend;
                   return (
                     <tr

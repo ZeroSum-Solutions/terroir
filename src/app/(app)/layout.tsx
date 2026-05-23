@@ -6,6 +6,7 @@ import { SettingsDropdown } from "./settings-dropdown";
 import { DesktopNavLinks, MobileNavLinks } from "./nav-links";
 import { Fab } from "./fab";
 import { ToastWrapper } from "./toast-wrapper";
+import { OnboardingModal } from "./onboarding-modal";
 
 export default async function AppLayout({
   children,
@@ -65,6 +66,11 @@ export default async function AppLayout({
           Speed-dial: tap "+" to reveal Scan / Pour / 86 / Voice (stub).
           Hidden on /scan (already a primary-action surface). */}
       <Fab />
+
+      {/* First-login onboarding — restaurant exists in auth but has no name yet. */}
+      {(restaurantName == null || restaurantName.trim() === "") && (
+        <OnboardingModal restaurantId={restaurantId} />
+      )}
     </div>
     </ToastWrapper>
     </RestaurantProvider>
