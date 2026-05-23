@@ -664,6 +664,7 @@ export type Database = {
           drink_window_start: number | null
           eightysixed_at: string | null
           eightysixed_by: string | null
+          enrichment_metadata: Json | null
           id: string
           is_eightysixed: boolean
           last_enriched_at: string | null
@@ -700,6 +701,7 @@ export type Database = {
           drink_window_start?: number | null
           eightysixed_at?: string | null
           eightysixed_by?: string | null
+          enrichment_metadata?: Json | null
           id?: string
           is_eightysixed?: boolean
           last_enriched_at?: string | null
@@ -736,6 +738,7 @@ export type Database = {
           drink_window_start?: number | null
           eightysixed_at?: string | null
           eightysixed_by?: string | null
+          enrichment_metadata?: Json | null
           id?: string
           is_eightysixed?: boolean
           last_enriched_at?: string | null

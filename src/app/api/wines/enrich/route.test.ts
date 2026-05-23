@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextResponse } from "next/server";
 
 /**
- * POST /api/wines/enrich tests (BND-031 + BND-039).
+ * POST /api/wines/enrich tests (BND-031 + BND-039 + BND-261).
  *
  * The route ships enrichments to the `enrich_wines_batch` RPC in a single
  * round-trip. BND-039 added:
@@ -10,17 +10,21 @@ import { NextResponse } from "next/server";
  *   • Claude inference fallback for wines the rule engine misses
  *   • backwards compatibility — old callers / payload shape still work
  *
+ * BND-261 added enrichment_metadata per wine in the payload:
+ *   • source: "rule_engine" or "claude_inference"
+ *   • fields_enriched: list of enriched field names
+ *   • enriched_at: ISO timestamp
+ *
  * Tests pin:
  *   1. Auth: 401 skips everything
  *   2. Fetch error: 500, no RPC call
- *   3. Happy path: rule-engine matches go in payload with new metadata fields
+ *   3. Happy path: rule-engine matches go in payload with enrichment_metadata
  *   4. Empty payload (no wines match any rule, Claude returns null): no RPC call
  *   5. RPC error → 500 with no LWIN fallback attempted
- *   6. Claude fallback: rule-engine misses are sent to Claude; successful
- *      Claude results are appended to the payload with rating_source='claude_inference'
+ *   6. Claude fallback: rule-engine misses are sent to Claude; results include
+ *      enrichment_metadata with source="claude_inference"
  *   7. Claude failures don't abort the batch — partial success is fine
  *   8. Backwards compat: existing callers without producer/name still work
- *      (the route now selects them, but the test fixture must include them)
  */
 
 const mockRequireMembership = vi.fn();
@@ -155,7 +159,7 @@ describe("POST /api/wines/enrich", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it("filters out wines with no matching rule and sends only enriched rows with new metadata fields", async () => {
+  it("includes enrichment_metadata in rule-engine payload (BND-261)", async () => {
     const wines: Wine[] = [
       { id: "w-1", producer: "Domaine X", name: "Pinot", varietal: "Pinot Noir", region: "Burgundy", country: "FR", vintage: 2019 },
       { id: "w-2", producer: "Obscure Co", name: "Mystery", varietal: "Obscure Grape", region: "Nowhere", country: null, vintage: null },
@@ -184,8 +188,8 @@ describe("POST /api/wines/enrich", () => {
     expect(body.total).toBe(3);
     expect(body.enriched).toBe(2);
     expect(body.ruleEnrichedCount).toBe(2);
-    expect(body.claudeAttemptedCount).toBe(1); // w-2 was sent to Claude
-    expect(body.claudeEnrichedCount).toBe(0); // mock returned null
+    expect(body.claudeAttemptedCount).toBe(1);
+    expect(body.claudeEnrichedCount).toBe(0);
 
     const enrichCall = rpcCalls.find((c) => c.fn === "enrich_wines_batch");
     expect(enrichCall).toBeDefined();
@@ -197,10 +201,23 @@ describe("POST /api/wines/enrich", () => {
     expect(args.p_enrichments[0].peak_year).toBe(2028);
     expect(args.p_enrichments[0].rating_source).toBe("rule_engine");
     expect(args.p_enrichments[0].review_excerpt).toBeNull();
+    // BND-261: enrichment_metadata is included
+    const meta0 = args.p_enrichments[0].enrichment_metadata as Record<string, unknown>;
+    expect(meta0).toBeDefined();
+    expect(meta0.source).toBe("rule_engine");
+    expect(meta0.fields_enriched).toEqual(
+      expect.arrayContaining(["drink_window", "serving_temp", "peak_year", "rating_source"]),
+    );
+    expect(meta0.enriched_at).toEqual(expect.any(String));
     expect(args.p_enrichments[1].id).toBe("w-3");
+    const meta1 = args.p_enrichments[1].enrichment_metadata as Record<string, unknown>;
+    expect(meta1.source).toBe("rule_engine");
+    expect(meta1.fields_enriched).toEqual(
+      expect.arrayContaining(["drink_window", "serving_temp", "peak_year", "rating_source"]),
+    );
   });
 
-  it("Claude fallback fills in rule-engine misses (BND-039)", async () => {
+  it("Claude fallback enrichment_metadata has source=claude_inference (BND-261)", async () => {
     const wines: Wine[] = [
       { id: "w-1", producer: "Krug", name: "Grande Cuvée", varietal: "Champagne Blend", region: "Champagne", country: "FR", vintage: 2008 },
     ];
@@ -239,6 +256,14 @@ describe("POST /api/wines/enrich", () => {
     );
     expect(args.p_enrichments[0].drink_window_start).toBe(2018);
     expect(args.p_enrichments[0].drink_window_end).toBe(2032);
+    // BND-261: Claude enrichment_metadata
+    const meta = args.p_enrichments[0].enrichment_metadata as Record<string, unknown>;
+    expect(meta).toBeDefined();
+    expect(meta.source).toBe("claude_inference");
+    expect(meta.fields_enriched).toEqual(
+      expect.arrayContaining(["drink_window", "rating_source", "review_excerpt"]),
+    );
+    expect(meta.enriched_at).toEqual(expect.any(String));
   });
 
   it("Claude failures don't abort the batch — partial success preferred", async () => {
@@ -286,6 +311,10 @@ describe("POST /api/wines/enrich", () => {
     const enrichCall = rpcCalls.find((c) => c.fn === "enrich_wines_batch");
     const args = enrichCall!.args as { p_enrichments: Array<Record<string, unknown>> };
     expect(args.p_enrichments).toHaveLength(2);
+    // Both enrichment payloads should have enrichment_metadata
+    for (const row of args.p_enrichments) {
+      expect(row.enrichment_metadata).toBeDefined();
+    }
   });
 
   it("skips the RPC entirely when no wine matches any rule and Claude returns null", async () => {

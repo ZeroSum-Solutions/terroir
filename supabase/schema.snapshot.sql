@@ -2443,3 +2443,8 @@ alter table public.wine_list_items
 alter table public.restaurants
   add column if not exists eightysix_strategy text not null default 'hide'
     check (eightysix_strategy in ('hide', 'mark'));
+
+-- 0037_wines_enrichment_metadata.sql
+-- BND-261: add enrichment_metadata jsonb column to wines for enrichment provenance tracking
+alter table public.wines
+  add column if not exists enrichment_metadata jsonb;

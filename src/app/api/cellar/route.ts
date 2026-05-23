@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { Errors } from "@/lib/api/errors";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/auth";
+import { enrichWine } from "@/lib/wine-intelligence/enrich";
 
 export const runtime = "nodejs";
 
@@ -17,12 +18,27 @@ const AddWineSchema = z.object({
   unit_cost: z.number().min(0).optional(),
 });
 
+function buildEnrichmentMetadata(result: ReturnType<typeof enrichWine>) {
+  const fields: string[] = [];
+  if (result.drinkWindowStart != null || result.drinkWindowEnd != null) fields.push("drink_window");
+  if (result.servingTempMin != null || result.servingTempMax != null || result.servingTempLabel != null) fields.push("serving_temp");
+  if (result.peakYear != null) fields.push("peak_year");
+  if (result.ratingSource != null) fields.push("rating_source");
+  if (result.reviewExcerpt != null) fields.push("review_excerpt");
+  return {
+    source: "rule_engine",
+    fields_enriched: fields,
+    enriched_at: new Date().toISOString(),
+  };
+}
+
 /**
  * POST /api/cellar — add a wine to the cellar inventory.
  *
- * Role-gated to any authenticated member (owner, manager, staff).
+ * Role-gated to owner/manager.
  * Creates the wine via find_or_create_wines_batch, inserts an
- * inventory_items row with added_via = "manual".
+ * inventory_items row with added_via = "manual", and triggers
+ * rule-engine enrichment for the new wine.
  */
 export async function POST(request: NextRequest) {
   const auth = await requireRole(["owner", "manager"]);
@@ -100,6 +116,34 @@ export async function POST(request: NextRequest) {
       },
     );
     return Errors.internal("Failed to add wine to inventory.");
+  }
+
+  // BND-261: trigger rule-engine enrichment for the newly imported wine.
+  // Fire-and-forget best-effort — enrichment failures do not block the
+  // response (the wine is already safely created).
+  try {
+    const result = enrichWine({ varietal: varietal ?? null, region: region ?? null, country: country ?? null, vintage: vintage ?? null });
+    if (result.drinkWindowStart != null || result.servingTempMin != null) {
+      const metadata = buildEnrichmentMetadata(result);
+      await supabase.rpc("enrich_wines_batch", {
+        p_restaurant_id: restaurantId,
+        p_enrichments: [{
+          id: wineId,
+          drink_window_start: result.drinkWindowStart,
+          drink_window_end: result.drinkWindowEnd,
+          peak_year: result.peakYear,
+          rating: null,
+          rating_source: result.ratingSource ?? null,
+          review_excerpt: result.reviewExcerpt ?? null,
+          serving_temp_min: result.servingTempMin,
+          serving_temp_max: result.servingTempMax,
+          serving_temp_label: result.servingTempLabel ?? null,
+          enrichment_metadata: metadata,
+        }],
+      });
+    }
+  } catch {
+    // Best-effort: don't fail the request if enrichment fails.
   }
 
   return NextResponse.json({

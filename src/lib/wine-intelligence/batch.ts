@@ -30,6 +30,12 @@ const CLAUDE_FALLBACK_MAX_PER_REQUEST = 50;
 // BND-039: Claude concurrency cap to avoid rate-limit spikes.
 const CLAUDE_CONCURRENCY = 5;
 
+type EnrichmentMetadata = {
+  source: string;
+  fields_enriched: string[];
+  enriched_at: string;
+};
+
 type EnrichmentPayloadRow = {
   id: string;
   drink_window_start: number | null;
@@ -40,7 +46,31 @@ type EnrichmentPayloadRow = {
   serving_temp_min: number | null;
   serving_temp_max: number | null;
   serving_temp_label: string | null;
+  enrichment_metadata: EnrichmentMetadata;
 };
+
+function buildMetadata(source: string, result: {
+  drinkWindowStart: number | null;
+  drinkWindowEnd: number | null;
+  peakYear: number | null;
+  ratingSource: string | null;
+  reviewExcerpt: string | null;
+  servingTempMin: number | null;
+  servingTempMax: number | null;
+  servingTempLabel: string | null;
+}): EnrichmentMetadata {
+  const fields: string[] = [];
+  if (result.drinkWindowStart != null || result.drinkWindowEnd != null) fields.push("drink_window");
+  if (result.servingTempMin != null || result.servingTempMax != null || result.servingTempLabel != null) fields.push("serving_temp");
+  if (result.peakYear != null) fields.push("peak_year");
+  if (result.ratingSource != null) fields.push("rating_source");
+  if (result.reviewExcerpt != null) fields.push("review_excerpt");
+  return {
+    source,
+    fields_enriched: fields,
+    enriched_at: new Date().toISOString(),
+  };
+}
 
 export type EnrichRestaurantBatchInput = {
   supabase: SupabaseClient<Database>;
@@ -117,6 +147,7 @@ export async function enrichRestaurantBatch(
       serving_temp_min: result.servingTempMin,
       serving_temp_max: result.servingTempMax,
       serving_temp_label: result.servingTempLabel,
+      enrichment_metadata: buildMetadata("rule_engine", result),
     });
   }
 
@@ -151,6 +182,7 @@ export async function enrichRestaurantBatch(
           serving_temp_min: null,
           serving_temp_max: null,
           serving_temp_label: null,
+          enrichment_metadata: buildMetadata("claude_inference", result),
         } satisfies EnrichmentPayloadRow;
       }),
     );
