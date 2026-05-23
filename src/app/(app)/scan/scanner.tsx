@@ -77,10 +77,12 @@ class ScanError extends Error {
   }
 }
 
-async function postScan(files: File[], signal: AbortSignal): Promise<Scan> {
+async function postScan(files: File[], signal: AbortSignal, key?: string | null): Promise<Scan> {
   const body = new FormData();
   files.forEach(function(f) { body.append("file", f); });
-  const res = await fetch("/api/scan", { method: "POST", body, signal });
+  const headers: Record<string, string> = {};
+  if (key) headers["Idempotency-Key"] = key;
+  const res = await fetch("/api/scan", { method: "POST", body, signal, headers });
   if (!res.ok) {
     const payload = (await res.json().catch(() => null)) as
       | { error?: string; code?: string; message?: string; rawText?: string }
@@ -110,6 +112,10 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   // instead of double-inserting inventory rows.
   const saveKeyRef = useRef<string | null>(null);
   const bottleSaveKeyRef = useRef<string | null>(null);
+  // BND-089: scan idempotency key — generated on first scan attempt, reused
+  // across retries. Cleared on success or 4xx validation error; held across
+  // 5xx / network failures so retry returns cached result.
+  const scanKeyRef = useRef<string | null>(null);
   const [savedResult, setSavedResult] = useState<{
     itemCount: number;
     wineCount: number;
@@ -176,10 +182,18 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     setStatus("processing");
     setError(null);
 
+    // BND-089: mint scanIdempotency key on first attempt, reuse on retry.
+    if (!scanKeyRef.current) {
+      scanKeyRef.current =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
     try {
-      const fresh = await postScan(files, ac.signal);
+      const fresh = await postScan(files, ac.signal, scanKeyRef.current);
       if (ac.signal.aborted) return;
       setProgress(100);
+      scanKeyRef.current = null; // 2xx → clear for next scan
       setScan(fresh);
       setOriginalItems([...fresh.items]);
       saveScan(fresh);
@@ -225,6 +239,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
 
   const startOver = useCallback(() => {
     abortRef.current?.abort();
+    scanKeyRef.current = null;
     saveScan(null);
     setScan(null);
     setBottleResult(null);
