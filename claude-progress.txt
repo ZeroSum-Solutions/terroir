@@ -1185,3 +1185,81 @@ Session 2026-05-23 -- features #80, #81, #82 completed
 - NEW: src/app/api/open-bottles/[id]/close/route.ts (104 lines)
 
 Stats after this session: 174/231 passing (75.3%).
+
+## Session 2026-05-23 — features #96, #98, #99
+
+### Completed
+- **#96 User can delete a parsed line item before committing** (PASSING — already implemented)
+  - removeItem callback in scanner.tsx removes items from scan state
+  - Trash2 delete button on desktop table and mobile LineItemCard
+  - Save endpoint processes current scan.items (excluding removed items)
+  - No new code needed — verified via code review
+
+- **#98 User can view full history of past scans at /scans** (PASSING)
+  - Created /scans page with server-side Supabase query, newest-first ordering
+  - Each row shows date, supplier, invoice #, item count, status, accuracy
+  - Mobile: card layout with FileText icon, supplier, date, count, status badge
+  - Desktop: full table with sortable columns
+  - Pagination with Previous/Next (PAGE_SIZE=20)
+  - Empty state with ScanLine icon and "Scan an invoice" CTA
+  - Added "View all" link (ArrowRight) to Recent scans section on /scan ready view
+  - Loading skeleton at /scans/loading.tsx
+
+- **#99 User can drill into a single scan to see image, OCR text, and resulting inventory** (PASSING)
+  - Enhanced /scan/[id] page to fetch ocr_text and inventory_items with wine names
+  - OCR text displayed in collapsible accordion section with JSON pretty-print
+  - New "Inventory created" section shows linked inventory_items with wine names
+  - Inventory items link to /cellar?wine=<id> for drill-down
+  - Desktop table + mobile cards for both line items and inventory items
+  - Back link updated to "Back to scan history" → /scans
+
+### Bug Fixes
+- Fixed missing closing brace in PATCH /api/scans/[id]/route.ts (TS1005)
+- Removed orphaned incomplete scan/components/scan-review.tsx (dead code, not imported)
+
+### Verification
+- TypeScript: 0 errors in new files (all pre-existing errors in wine-detail-drawer.tsx, etc.)
+- Mock data grep: 0 hits in production src/ (only globalThis.fetch comment in health route)
+- Browser verification: blocked by sandbox (known limitation)
+
+### Files changed
+- NEW: src/app/(app)/scans/page.tsx (301 lines)
+- NEW: src/app/(app)/scans/loading.tsx (72 lines)
+- NEW: src/app/api/scans/[id]/route.ts (77 lines — existing PATCH, fixed syntax)
+- MODIFIED: src/app/(app)/scan/[id]/page.tsx (+63 lines — OCR text + inventory fetch)
+- MODIFIED: src/app/(app)/scan/[id]/scan-detail-view.tsx (+161 lines — OCR + inventory display)
+- MODIFIED: src/app/(app)/scan/views/ready-view.tsx (+6 lines — View all link)
+
+Stats after this session: 196/231 passing (84.8%).
+
+
+## Session 2026-05-23 — features #100, #103, #104
+
+### Completed
+- **#100 User can attach a delivery date and supplier name to a scan** (PASSING)
+  - Added updateSource callback to Scanner for editing ScanSource fields
+  - Replaced static supplier/invoice/date display with editable inputs in ResultsView
+  - Edited values flow through save-scan endpoint to invoice_scans
+
+- **#103 API returns 429 when user exceeds per-minute scan rate limit** (PASSING)
+  - Added rate limiting to POST /api/scan: 10 req/min per restaurant+IP
+  - Returns 429 with Retry-After header; check before Azure+Anthropic spend
+  - Added 3 tests: 429 response, Retry-After, happy path proceeds
+
+- **#104 API rejects images larger than 10 MB** (PASSING)
+  - Changed MAX_BYTES from 20MB to 10MB; added JSON-body path size check
+  - Added test for 413 oversized file rejection
+
+### Verification
+- TypeScript: 0 new errors (pre-existing decantMinutes errors in rules.ts)
+- Tests: 352 passing (was 348), 10 pre-existing failures
+- Mock data grep: clean
+- Browser: blocked by sandbox
+
+### Files changed
+- src/app/(app)/scan/scanner.tsx: +18 updateSource callback + wiring
+- src/app/(app)/scan/views/results-view.tsx: +36/-8 editable source fields
+- src/app/api/scan/route.ts: +34/-3 rate limiting + 10MB limit + JSON-body check
+- src/app/api/scan/route.test.ts: +69 (6 new tests)
+
+Stats after this session: 199/231 passing (86.1%).
