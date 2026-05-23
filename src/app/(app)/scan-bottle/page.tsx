@@ -5,6 +5,7 @@ import {
   Camera,
   Check,
   Keyboard,
+  List,
   MapPin,
   ScanLine,
   Search,
@@ -22,6 +23,12 @@ type MatchedWine = {
   country: string | null;
 };
 
+type SessionScan = {
+  wine: MatchedWine;
+  section: string;
+  binLocation: string;
+};
+
 type Phase =
   | "scanning"
   | "manual"
@@ -30,7 +37,8 @@ type Phase =
   | "location"
   | "confirmed"
   | "error"
-  | "no-camera";
+  | "no-camera"
+  | "summary";
 
 function useQrScanner(
   videoRef: React.RefObject<HTMLVideoElement | null>,
@@ -148,10 +156,13 @@ export default function ScanBottlePage() {
   const [binLocation, setBinLocation] = useState("");
   const [confirming, setConfirming] = useState(false);
 
+  // BND-112: batch scanning session state
+  const [session, setSession] = useState<SessionScan[]>([]);
+
   useEffect(() => {
     if (typeof navigator === "undefined") return;
     navigator.mediaDevices
-      ?.getUserMedia({ video: { facingMode: "environment" } })
+      .getUserMedia({ video: { facingMode: "environment" } })
       .then((stream) => {
         stream.getTracks().forEach((t) => t.stop());
       })
@@ -236,6 +247,11 @@ export default function ScanBottlePage() {
           } | null;
           throw new Error(body?.error ?? "Failed to record location.");
         }
+        // BND-112: add confirmed bottle to session
+        setSession((prev) => [
+          ...prev,
+          { wine, section: section.trim(), binLocation: binLocation.trim() },
+        ]);
         setPhase("confirmed");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to record bottle location.");
@@ -247,16 +263,110 @@ export default function ScanBottlePage() {
     [wine, section, binLocation],
   );
 
+  const handleEndSession = useCallback(() => {
+    setPhase("summary");
+  }, []);
+
+  const handleNewSession = useCallback(() => {
+    setSession([]);
+    setPhase("scanning");
+    setError(null);
+    setWine(null);
+    setPayload(null);
+    setManualCode("");
+    setSection("");
+    setBinLocation("");
+    setConfirming(false);
+  }, []);
+
+  const showSessionBadge = session.length > 0;
+
   return (
     <div className="mx-auto max-w-[480px]">
       <header className="mb-lg md:mb-xl">
-        <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
-          Scan Bottle
-        </h1>
-        <p className="mt-xs text-[14px] text-ink-muted md:text-[15px]">
-          Scan a bottle&rsquo;s QR code to look up its wine.
-        </p>
+        <div className="flex items-center justify-between gap-sm">
+          <div>
+            <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
+              Scan Bottle
+            </h1>
+            <p className="mt-xs text-[14px] text-ink-muted md:text-[15px]">
+              Scan a bottle&rsquo;s QR code to look up its wine.
+            </p>
+          </div>
+          {showSessionBadge && phase !== "summary" && (
+            <div className="flex items-center gap-sm">
+              <span className="inline-flex items-center gap-xs rounded-pill bg-accent px-sm py-xs text-[13px] font-semibold text-white">
+                <List className="h-3.5 w-3.5" strokeWidth={2.5} />
+                {session.length} scanned
+              </span>
+              <button
+                type="button"
+                onClick={handleEndSession}
+                className="flex h-[36px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted transition-colors"
+              >
+                End session
+              </button>
+            </div>
+          )}
+        </div>
       </header>
+
+      {/* BND-112: Summary view showing all scanned bottles */}
+      {phase === "summary" && (
+        <div className="space-y-md">
+          <div className="rounded-md border border-border bg-white p-md md:p-lg">
+            <h2 className="font-serif text-[18px] text-ink">Session summary</h2>
+            <p className="mt-xs text-[13px] text-ink-muted">
+              {session.length} bottle{session.length !== 1 ? "s" : ""} scanned
+              in this session.
+            </p>
+          </div>
+
+          {session.length > 0 ? (
+            <ul className="divide-y divide-border rounded-md border border-border bg-white">
+              {session.map((scan, i) => (
+                <li key={i} className="px-md py-md">
+                  <div className="flex items-start justify-between gap-sm">
+                    <div className="min-w-0">
+                      <p className="font-serif text-[15px] font-medium text-ink truncate">
+                        {scan.wine.producer}
+                      </p>
+                      <p className="text-[14px] text-ink-muted truncate">
+                        {scan.wine.name}
+                        {scan.wine.vintage ? " (" + scan.wine.vintage + ")" : ""}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-pill bg-surface-muted px-sm py-2xs text-[11px] font-medium text-ink-subtle tabular">
+                      #{i + 1}
+                    </span>
+                  </div>
+                  <p className="mt-xs inline-flex items-center gap-xs text-[12px] text-ink-subtle">
+                    <MapPin className="h-3 w-3" strokeWidth={2} />
+                    {scan.section}{" "}
+                    <span aria-hidden>&middot;</span>{" "}
+                    {scan.binLocation}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="flex flex-col items-center gap-md rounded-md border border-border bg-white px-lg py-2xl text-center">
+              <p className="text-[14px] text-ink-muted">
+                No bottles were scanned in this session.
+              </p>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handleNewSession}
+            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover"
+          >
+            <Camera className="h-4 w-4" strokeWidth={2} />
+            Start new session
+          </button>
+        </div>
+      )}
 
       {phase === "scanning" && (
         <div className="space-y-md">
@@ -487,7 +597,7 @@ export default function ScanBottlePage() {
                     </div>
                     <span className="mt-0.5 shrink-0 text-[11px] text-ink-subtle">
                       {w.varietal}
-                      {w.varietal && w.region ? " · " : ""}
+                      {w.varietal && w.region ? " . " : ""}
                       {w.region}
                     </span>
                   </button>
@@ -612,14 +722,26 @@ export default function ScanBottlePage() {
                 </p>
               )}
             </div>
-            <button
-              type="button"
-              onClick={handleScanAgain}
-              className="flex h-[44px] items-center justify-center gap-sm rounded-sm bg-accent px-xl text-[14px] font-medium text-white hover:bg-accent-hover"
-            >
-              <Camera className="h-4 w-4" strokeWidth={2} />
-              Scan another bottle
-            </button>
+            <div className="flex w-full flex-col gap-sm">
+              <button
+                type="button"
+                onClick={handleScanAgain}
+                className="flex h-[44px] items-center justify-center gap-sm rounded-sm bg-accent px-xl text-[14px] font-medium text-white hover:bg-accent-hover"
+              >
+                <Camera className="h-4 w-4" strokeWidth={2} />
+                Scan another bottle
+              </button>
+              {session.length >= 1 && (
+                <button
+                  type="button"
+                  onClick={handleEndSession}
+                  className="flex h-[44px] items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
+                >
+                  <List className="h-4 w-4" strokeWidth={2} />
+                  End session ({session.length} scanned)
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

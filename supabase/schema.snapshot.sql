@@ -1377,6 +1377,41 @@ create trigger pour_events_trigger
   after insert on public.pour_events
   for each row execute function public.pour_events_maintain_open_bottle();
 
+-- BND-118: reverse trigger for pour_events delete
+
+create or replace function public.pour_events_reverse_open_bottle()
+returns trigger
+language plpgsql
+as $$
+begin
+  if OLD.kind = 'new_bottle' then
+    update public.open_bottles
+      set remaining_ml = 0,
+          closed_at = now()
+      where wine_id = OLD.wine_id
+        and restaurant_id = OLD.restaurant_id
+        and closed_at is null;
+  elsif OLD.kind in ('pour','spill','finish_bottle') then
+    update public.open_bottles
+      set remaining_ml = remaining_ml + OLD.ml_delta,
+          closed_at = null
+      where wine_id = OLD.wine_id
+        and restaurant_id = OLD.restaurant_id;
+  elsif OLD.kind = 'reconcile' then
+    update public.open_bottles
+      set remaining_ml = remaining_ml + OLD.ml_delta,
+          closed_at = null
+      where wine_id = OLD.wine_id
+        and restaurant_id = OLD.restaurant_id;
+  end if;
+  return OLD;
+end;
+$$;
+
+create trigger pour_events_delete_trigger
+  after delete on public.pour_events
+  for each row execute function public.pour_events_reverse_open_bottle();
+
 -- 5. RPC: record_pour -----------------------------------------------------
 
 create or replace function public.record_pour(

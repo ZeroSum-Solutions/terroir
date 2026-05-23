@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { X, Wine, PowerOff, Edit3, Sparkles, Loader2, Undo2, Image as ImageIcon, Upload, Trash2, AlertTriangle } from "lucide-react";
+import { X, Wine, PackageOpen, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, Undo2, Image as ImageIcon, Upload, Trash2, AlertTriangle } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { useToast } from "@/lib/toast";
 import { ML_PER_OZ } from "@/lib/units";
@@ -74,21 +74,52 @@ export function WineDetailDrawer({
     enabled: row !== null,
   });
 
-  // BND-126/127: doPour accepts optional note.
+  // BND-121: manually open a bottle without recording a pour
+  const [openBottleBusy, setOpenBottleBusy] = useState(false);
+
+  const doOpenBottle = useCallback(
+    async () => {
+      if (!row) return;
+      setErrorMsg(null);
+      setOpenBottleBusy(true);
+      try {
+        const res = await fetch("/api/open-bottles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wine_id: row.wine_id }),
+        });
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => null)) as
+            | { error?: { message?: string } }
+            | null;
+          throw new Error(
+            payload?.error?.message ?? `Failed to open bottle (${res.status}).`,
+          );
+        }
+        toast.success("Bottle opened");
+        startTransition(() => router.refresh());
+      } catch (err) {
+        toast.error("Open bottle failed");
+        setErrorMsg(err instanceof Error ? err.message : "Failed to open bottle.");
+      } finally {
+        setOpenBottleBusy(false);
+      }
+    },
+    [row, router],
+  );
+
   const doPour = useCallback(
-    async (ml: number, note?: string) => {
+    async (ml: number) => {
       if (!row || !row.glass_pour_ml) return;
       setErrorMsg(null);
       setBusy(true);
       setLastPour(null);
 
       try {
-        const body: Record<string, unknown> = { wine_id: row.wine_id, ml, kind: "pour" };
-        if (note) body.note = note;
         const res = await fetch("/api/pour", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ wine_id: row.wine_id, ml, kind: "pour" }),
         });
         if (!res.ok) {
           const payload = (await res.json().catch(() => null)) as
@@ -475,21 +506,45 @@ export function WineDetailDrawer({
 
             {/* Quick actions */}
             <section aria-label="Actions" className="mt-md flex flex-col gap-sm">
-              {/* BND-126: Pour button always opens the picker modal for custom amount entry. */}
-              {canPour && pickerItem && (
+              {/* BND-121: Manually open a bottle without recording a pour */}
+              {row.sealed_count > 0 && (
                 <button
                   type="button"
-                  disabled={busy || outOfStock}
-                  onClick={() => setPickerOpen(true)}
-                  className={cn(
-                    "h-[56px] w-full rounded-sm bg-accent text-[15px] font-medium text-white transition-colors",
-                    "hover:bg-accent-hover disabled:opacity-60",
-                  )}
+                  disabled={openBottleBusy}
+                  onClick={doOpenBottle}
+                  className="flex h-[48px] items-center justify-center gap-xs rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted transition-colors disabled:opacity-60"
                 >
-                  {outOfStock
-                    ? "Out of stock"
-                    : `Pour ${(row.glass_pour_ml! / ML_PER_OZ).toFixed(1)} oz`}
+                  <PackageOpen className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  {openBottleBusy ? "Opening..." : "Open bottle"}
                 </button>
+              )}
+              {canPour && (
+                <div className="flex gap-xs">
+                  <button
+                    type="button"
+                    disabled={busy || outOfStock}
+                    onClick={() => row.glass_pour_ml && doPour(row.glass_pour_ml)}
+                    className={cn(
+                      "h-[56px] flex-1 rounded-sm bg-accent text-[15px] font-medium text-white transition-colors",
+                      "hover:bg-accent-hover disabled:opacity-60",
+                    )}
+                  >
+                    {outOfStock
+                      ? "Out of stock"
+                      : `Pour ${(row.glass_pour_ml! / ML_PER_OZ).toFixed(1)} oz`}
+                  </button>
+                  {row.pour_size_mode === "picker" && pickerItem && (
+                    <button
+                      type="button"
+                      onClick={() => setPickerOpen(true)}
+                      disabled={busy || outOfStock}
+                      aria-label="Pick a custom pour size"
+                      className="flex h-[56px] w-[56px] items-center justify-center rounded-sm border border-border bg-white text-ink-muted hover:bg-surface-muted disabled:opacity-60"
+                    >
+                      <ChevronDown className="h-5 w-5" strokeWidth={2} aria-hidden />
+                    </button>
+                  )}
+                </div>
               )}
 
               {/* BND-119: Undo last pour */}
@@ -618,15 +673,14 @@ export function WineDetailDrawer({
         </div>
       )}
 
-      {/* Pour picker modal — BND-126/127 */}
+      {/* Pour picker modal */}
       {pickerOpen && pickerItem && (
         <PourPickerModal
           item={pickerItem}
-          defaultOz={row?.glass_pour_ml ? row.glass_pour_ml / ML_PER_OZ : undefined}
           onCancel={() => setPickerOpen(false)}
-          onConfirm={(ml, note) => {
+          onConfirm={(ml) => {
             setPickerOpen(false);
-            doPour(ml, note);
+            doPour(ml);
           }}
         />
       )}
