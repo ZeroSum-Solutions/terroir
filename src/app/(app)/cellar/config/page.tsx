@@ -2,13 +2,35 @@
 
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Pencil, Trash2, Check, X } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Check, X, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 
 type Section = { id: string; name: string };
 
 function generateId(): string {
   return crypto.randomUUID();
+}
+
+function arrayMove<T>(array: T[], from: number, to: number): T[] {
+  const result = [...array];
+  const [item] = result.splice(from, 1);
+  result.splice(to, 0, item);
+  return result;
 }
 
 export default function CellarConfigPage() {
@@ -20,17 +42,18 @@ export default function CellarConfigPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Inline rename state.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
 
-  // Delete confirmation.
   const [deleteTarget, setDeleteTarget] = useState<Section | null>(null);
 
-  // New section input.
   const [newName, setNewName] = useState("");
 
-  // Load existing sections from cellar_config.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
+
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/cellar/config");
@@ -58,7 +81,10 @@ export default function CellarConfigPage() {
         const res = await fetch("/api/cellar/config", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sections: updated }),
+          body: JSON.stringify({
+            sections: updated,
+            section_order: updated.map((s) => s.id),
+          }),
         });
         if (!res.ok) {
           const payload = await res.json().catch(() => null);
@@ -77,7 +103,6 @@ export default function CellarConfigPage() {
     [router],
   );
 
-  // Add a new section.
   const addSection = useCallback(() => {
     const name = newName.trim();
     if (!name) return;
@@ -86,13 +111,11 @@ export default function CellarConfigPage() {
     save(updated);
   }, [newName, sections, save]);
 
-  // Start inline rename.
   const startEdit = useCallback((section: Section) => {
     setEditingId(section.id);
     setEditName(section.name);
   }, []);
 
-  // Commit inline rename.
   const commitEdit = useCallback(
     (id: string) => {
       const name = editName.trim();
@@ -109,18 +132,32 @@ export default function CellarConfigPage() {
     [editName, sections, save],
   );
 
-  // Cancel inline rename.
   const cancelEdit = useCallback(() => {
     setEditingId(null);
   }, []);
 
-  // Delete a section.
   const confirmDelete = useCallback(() => {
     if (!deleteTarget) return;
     const updated = sections.filter((s) => s.id !== deleteTarget.id);
     setDeleteTarget(null);
     save(updated);
   }, [deleteTarget, sections, save]);
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+
+      const oldIndex = sections.findIndex((s) => s.id === active.id);
+      const newIndex = sections.findIndex((s) => s.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const reordered = arrayMove(sections, oldIndex, newIndex);
+      setSections(reordered);
+      save(reordered);
+    },
+    [sections, save],
+  );
 
   if (!loaded) {
     return (
@@ -132,7 +169,6 @@ export default function CellarConfigPage() {
 
   return (
     <div className="mx-auto max-w-lg px-md py-lg">
-      {/* Header */}
       <div className="mb-lg flex items-center gap-sm">
         <button
           type="button"
@@ -151,7 +187,6 @@ export default function CellarConfigPage() {
         </div>
       </div>
 
-      {/* Error banner */}
       {error && (
         <div
           role="alert"
@@ -161,82 +196,40 @@ export default function CellarConfigPage() {
         </div>
       )}
 
-      {/* Section list */}
       {sections.length > 0 ? (
-        <ul className="mb-lg divide-y divide-border rounded-md border border-border bg-white">
-          {sections.map((section) => (
-            <li
-              key={section.id}
-              className="flex items-center justify-between px-md py-sm"
-            >
-              {editingId === section.id ? (
-                <div className="flex flex-1 items-center gap-xs">
-                  <input
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitEdit(section.id);
-                      if (e.key === "Escape") cancelEdit();
-                    }}
-                    className="flex-1 rounded-sm border border-border px-xs py-1 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-accent-soft"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={() => commitEdit(section.id)}
-                    disabled={!editName.trim()}
-                    aria-label="Save rename"
-                    className="flex h-8 w-8 items-center justify-center rounded-sm text-success hover:bg-success-soft disabled:opacity-40"
-                  >
-                    <Check className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={cancelEdit}
-                    aria-label="Cancel rename"
-                    className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted"
-                  >
-                    <X className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <span className="text-[14px] font-medium text-ink">
-                    {section.name}
-                  </span>
-                  <div className="flex items-center gap-2xs">
-                    <button
-                      type="button"
-                      onClick={() => startEdit(section)}
-                      disabled={busy}
-                      aria-label={`Rename ${section.name}`}
-                      className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted disabled:opacity-40"
-                    >
-                      <Pencil className="h-4 w-4" strokeWidth={2} aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(section)}
-                      disabled={busy}
-                      aria-label={`Delete ${section.name}`}
-                      className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-muted hover:bg-danger-soft hover:text-danger disabled:opacity-40"
-                    >
-                      <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
-                    </button>
-                  </div>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={sections.map((s) => s.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="mb-lg divide-y divide-border rounded-md border border-border bg-white">
+              {sections.map((section) => (
+                <SortableSectionItem
+                  key={section.id}
+                  section={section}
+                  editingId={editingId}
+                  editName={editName}
+                  busy={busy}
+                  onStartEdit={startEdit}
+                  onChangeEditName={setEditName}
+                  onCommitEdit={commitEdit}
+                  onCancelEdit={cancelEdit}
+                  onDelete={setDeleteTarget}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       ) : (
         <p className="mb-lg rounded-md border border-border bg-surface-muted px-md py-lg text-center text-[14px] text-ink-muted">
           No sections yet. Add your first one below.
         </p>
       )}
 
-      {/* Add new section */}
       <div className="flex gap-xs">
         <input
           type="text"
@@ -263,7 +256,6 @@ export default function CellarConfigPage() {
         </button>
       </div>
 
-      {/* Delete confirmation modal */}
       {deleteTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
@@ -307,5 +299,126 @@ export default function CellarConfigPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function SortableSectionItem({
+  section,
+  editingId,
+  editName,
+  busy,
+  onStartEdit,
+  onChangeEditName,
+  onCommitEdit,
+  onCancelEdit,
+  onDelete,
+}: {
+  section: Section;
+  editingId: string | null;
+  editName: string;
+  busy: boolean;
+  onStartEdit: (s: Section) => void;
+  onChangeEditName: (v: string) => void;
+  onCommitEdit: (id: string) => void;
+  onCancelEdit: () => void;
+  onDelete: (s: Section) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: section.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+    position: "relative",
+    zIndex: isDragging ? 1 : undefined,
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "flex items-center justify-between px-md py-sm",
+        isDragging && "bg-surface-muted shadow-md rounded-md",
+      )}
+    >
+      {editingId === section.id ? (
+        <div className="flex flex-1 items-center gap-xs">
+          <input
+            type="text"
+            value={editName}
+            onChange={(e) => onChangeEditName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onCommitEdit(section.id);
+              if (e.key === "Escape") onCancelEdit();
+            }}
+            className="flex-1 rounded-sm border border-border px-xs py-1 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-accent-soft"
+            autoFocus
+          />
+          <button
+            type="button"
+            onClick={() => onCommitEdit(section.id)}
+            disabled={!editName.trim()}
+            aria-label="Save rename"
+            className="flex h-8 w-8 items-center justify-center rounded-sm text-success hover:bg-success-soft disabled:opacity-40"
+          >
+            <Check className="h-4 w-4" strokeWidth={2} aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={onCancelEdit}
+            aria-label="Cancel rename"
+            className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted"
+          >
+            <X className="h-4 w-4" strokeWidth={2} aria-hidden />
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-sm min-w-0">
+            <button
+              type="button"
+              {...attributes}
+              {...listeners}
+              aria-label={`Drag to reorder ${section.name}`}
+              className="flex h-8 w-6 shrink-0 items-center justify-center cursor-grab active:cursor-grabbing text-ink-subtle hover:text-ink-muted touch:min-h-[44px] touch:min-w-[44px]"
+            >
+              <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
+            </button>
+
+            <span className="text-[14px] font-medium text-ink truncate">
+              {section.name}
+            </span>
+          </div>
+          <div className="flex items-center gap-2xs shrink-0">
+            <button
+              type="button"
+              onClick={() => onStartEdit(section)}
+              disabled={busy}
+              aria-label={`Rename ${section.name}`}
+              className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted disabled:opacity-40"
+            >
+              <Pencil className="h-4 w-4" strokeWidth={2} aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(section)}
+              disabled={busy}
+              aria-label={`Delete ${section.name}`}
+              className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-muted hover:bg-danger-soft hover:text-danger disabled:opacity-40"
+            >
+              <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
+            </button>
+          </div>
+        </>
+      )}
+    </li>
   );
 }

@@ -19,6 +19,9 @@ const SectionSchema = z.object({
 
 const PatchSectionsSchema = z.object({
   sections: z.array(SectionSchema),
+  // BND-062 — explicit section_order for querying order without
+  // deserializing the full sections array.
+  section_order: z.array(z.string()).optional(),
 });
 
 export async function GET() {
@@ -83,11 +86,15 @@ export async function POST(request: NextRequest) {
 /**
  * PATCH /api/cellar/config
  *
- * BND-060. Updates the sections array stored in cellar_config.labels.
- * Sections define named groupings for organizing the cellar (e.g.,
- * "Reds by Region", "Cult Cabs").
+ * BND-060 + BND-062. Updates the sections array and section_order stored
+ * in cellar_config.labels. Sections define named groupings for organizing
+ * the cellar (e.g., "Reds by Region", "Cult Cabs").
  *
- * Body: { sections: Array<{ id: string, name: string }> }
+ * BND-062 adds section_order — an array of section IDs that mirrors the
+ * display order. Consumers can read section_order directly instead of
+ * extracting ids from the sections array.
+ *
+ * Body: { sections: Array<{ id: string, name: string }>, section_order?: string[] }
  */
 export async function PATCH(request: NextRequest) {
   const auth = await requireMembership();
@@ -106,7 +113,7 @@ export async function PATCH(request: NextRequest) {
     return Errors.validation(parsed.error.issues, "Invalid sections.");
   }
 
-  const { sections } = parsed.data;
+  const { sections, section_order } = parsed.data;
 
   // Fetch existing config to read the current labels.
   const { data: existing } = await supabase
@@ -125,7 +132,10 @@ export async function PATCH(request: NextRequest) {
         name: "Main Cellar",
         rows: 10,
         columns: 10,
-        labels: { sections },
+        labels: {
+          sections,
+          section_order: section_order ?? sections.map((s) => s.id),
+        },
       })
       .select("*")
       .single();
@@ -142,9 +152,13 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(config);
   }
 
-  // Merge sections into existing labels.
+  // BND-062 — merge sections AND section_order into existing labels.
   const currentLabels = (existing.labels as Record<string, unknown>) ?? {};
-  const updatedLabels = { ...currentLabels, sections };
+  const updatedLabels = {
+    ...currentLabels,
+    sections,
+    section_order: section_order ?? sections.map((s) => s.id),
+  };
 
   const { data: config, error } = await supabase
     .from("cellar_config")

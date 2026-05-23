@@ -571,14 +571,29 @@ function PricingSection({
 }
 
 /**
- * BND-039 — DrinkWindowSection. Renders the timeline + critic citation +
- * key dates for wines that have been enriched with drink-window data.
- * Maps peak_year to a diamond marker and drink_window_start/end to a
- * horizontal bar.
+ * BND-039 + BND-071 — DrinkWindowSection. Renders the timeline + status
+ * pill + critic citation + start/peak/end year labels for wines that have
+ * been enriched with drink-window data.
  */
 function DrinkWindowSection({ row }: { row: CellarWineRow }) {
-  const status = getDrinkWindowStatus(row as any);
-  const yearsLeft = getYearsUntilWindowClose(row as any);
+  const status = getDrinkWindowStatus(row.drink_window_start, row.drink_window_end);
+  const yearsLeft = getYearsUntilWindowClose(row.drink_window_end);
+
+  // BND-071 — status pill color mapping.
+  const pillStyle = (() => {
+    switch (status) {
+      case "hold":
+        return "bg-surface-muted text-ink-muted border-border";
+      case "optimal":
+        return "bg-success-soft text-success border-success/30";
+      case "drink_now":
+        return "bg-warning-soft text-warning border-warning/30";
+      case "past_peak":
+        return "bg-danger-soft text-danger border-danger/30";
+      default:
+        return "bg-surface-muted text-ink-muted border-border";
+    }
+  })();
 
   return (
     <section
@@ -587,15 +602,28 @@ function DrinkWindowSection({ row }: { row: CellarWineRow }) {
     >
       <h3 className="text-[13px] font-semibold text-ink mb-sm">Drink window</h3>
 
+      {/* BND-071 — start / peak / end year labels above the timeline. */}
+      <div className="mb-xs flex items-center justify-between text-[11px] font-mono text-ink-subtle">
+        <span>Start {row.drink_window_start}</span>
+        {row.peak_year != null && (
+          <span className="text-accent font-medium">Peak {row.peak_year}</span>
+        )}
+        <span>End {row.drink_window_end}</span>
+      </div>
+
       <DrinkWindowTimeline
         start={row.drink_window_start as number}
         end={row.drink_window_end as number}
         peak={row.peak_year as number | undefined}
-        status={status}
       />
 
       <div className="mt-sm flex items-center justify-between text-[12px]">
-        <span className="text-ink-muted">{formatStatusLabel(status)}</span>
+        {/* BND-071 — status pill replacing plain span. */}
+        <span
+          className={`inline-flex items-center rounded-full border px-sm py-2xs text-[11px] font-semibold ${pillStyle}`}
+        >
+          {formatStatusLabel(status, yearsLeft)}
+        </span>
         {yearsLeft !== null && (
           <span className="text-ink-subtle">
             {yearsLeft >= 0

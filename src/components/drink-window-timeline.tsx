@@ -17,6 +17,8 @@
  *
  * Pure presentational, no client-side interactivity. CSS-only — no JS,
  * respects `prefers-reduced-motion` (no transitions to animate anyway).
+ *
+ * BND-071 — peak year diamond marker added to the timeline.
  */
 
 import { getMarkerPosition } from "@/lib/drink-window/status";
@@ -26,6 +28,7 @@ export type DrinkWindowTimelineSize = "mini" | "full";
 export function DrinkWindowTimeline({
   start,
   end,
+  peak,
   currentYear = new Date().getFullYear(),
   size = "full",
   showAxis = true,
@@ -33,6 +36,7 @@ export function DrinkWindowTimeline({
 }: {
   start: number | null;
   end: number | null;
+  peak?: number | undefined;
   currentYear?: number;
   size?: DrinkWindowTimelineSize;
   showAxis?: boolean;
@@ -42,6 +46,12 @@ export function DrinkWindowTimeline({
 
   const markerPct = getMarkerPosition(start, end, currentYear);
   const isMini = size === "mini";
+
+  // BND-071 — compute peak year position as percentage along the timeline.
+  const peakPct =
+    peak != null && start !== end
+      ? Math.max(0, Math.min(100, ((peak - start) / (end - start)) * 100))
+      : null;
 
   // Heights tuned to mock proportions:
   //   mini: total 40px wrapper, 4px track, marker height 8px
@@ -67,12 +77,7 @@ export function DrinkWindowTimeline({
         </div>
       )}
 
-      {/* 3-zone track. Single gradient — the gradient describes the
-          full Hold→Optimal→Past arc; we don't need three explicit
-          divs because we only ever care about the "Optimal" zone for
-          a wine that has a known window. The HOLD/PAST zones at the
-          extremes get visually faded because the gradient transitions
-          from grey-cream-amber-faded-brown across 0-100%. */}
+      {/* 3-zone track. */}
       <div
         className={`absolute inset-x-0 ${trackTopOffset} ${trackHeight} overflow-hidden rounded-full`}
         style={{
@@ -80,6 +85,30 @@ export function DrinkWindowTimeline({
             "linear-gradient(90deg, #E3EFE8 0%, #FBF3DC 60%, #F2D896 88%, #E8DCD0 100%)",
         }}
       />
+
+      {/* BND-071 — peak year diamond marker on the track. */}
+      {peakPct != null && !isMini && (
+        <div
+          className={`absolute ${trackTopOffset} flex items-center justify-center`}
+          style={{
+            left: `${peakPct}%`,
+            transform: "translateX(-50%)",
+            width: "10px",
+            height: trackHeight === "h-[4px]" ? "4px" : "14px",
+            zIndex: 2,
+          }}
+        >
+          <div
+            className="rotate-45 border border-ink-subtle"
+            style={{
+              width: "8px",
+              height: "8px",
+              background: "var(--color-accent)",
+              opacity: 0.7,
+            }}
+          />
+        </div>
+      )}
 
       {/* Optional zone label centered over track */}
       {showZoneLabel && !isMini && (
