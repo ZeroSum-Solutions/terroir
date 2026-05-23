@@ -227,37 +227,45 @@ async function fetchPastDrinkWindow(
 // ── Scan throughput type (#148) ───────────────────────────────────────
 type ThroughputWeek = { weekLabel: string; count: number };
 
+/** Get the Monday of the ISO week for a given date. */
+function getMonday(d: Date): Date {
+  const day = d.getDay(); // 0=Sun
+  const diff = day === 0 ? -6 : 1 - day; // Monday offset
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diff);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
 function computeScanThroughput(
   scans: Array<{ created_at: string }>,
   weekCount: number = 12,
 ): ThroughputWeek[] {
-  // Group scans by ISO week
-  const weekMap = new Map<string, number>();
+  // Group scans by ISO week (Monday of each week)
+  const weekMap = new Map<number, number>();
 
   for (const s of scans) {
     const d = new Date(s.created_at);
     if (Number.isNaN(d.getTime())) continue;
-    // ISO week label: e.g. "Jan 5"
-    const weekLabel = d.toLocaleDateString(undefined, {
+    const monday = getMonday(d);
+    weekMap.set(monday.getTime(), (weekMap.get(monday.getTime()) ?? 0) + 1);
+  }
+
+  // Convert to array, sort by Monday timestamp, take latest N weeks
+  const sorted = [...weekMap.entries()]
+    .sort(([a], [b]) => a - b)
+    .slice(-weekCount);
+
+  return sorted.map(([ts, count]) => {
+    const monday = new Date(ts);
+    const weekLabel = monday.toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
     });
-    weekMap.set(weekLabel, (weekMap.get(weekLabel) ?? 0) + 1);
-  }
-
-  // Take the latest `weekCount` weeks in chronological order
-  const entries = [...weekMap.entries()];
-  const sorted = entries
-    .map(([label, count]) => {
-      // Parse the label back to a Date for sorting
-      const parsed = new Date(label);
-      return { label, count, ts: Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime() };
-    })
-    .sort((a, b) => a.ts - b.ts)
-    .slice(-weekCount);
-
-  return sorted.map((s) => ({ weekLabel: s.label, count: s.count }));
+    return { weekLabel, count };
+  });
 }
+
 export default async function DashboardPage() {
   const auth = (await getAuthContext())!;
   const { supabase, restaurantId: rid, restaurantName, user, userRole } = auth;
