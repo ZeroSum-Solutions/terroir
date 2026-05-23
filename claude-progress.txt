@@ -1,3 +1,12 @@
+## Session 2026-05-23 -- features #105, #110, #111
+
+### Completed
+- #105 API rejects file types other than jpeg, png, heic, and pdf (PASSING)
+- #110 System creates inventory_items row for new bottle scans (PASSING)
+- #111 System rejects cross-tenant QR codes with 403 (PASSING)
+
+Stats: 202/231 passing (87.4%).
+
 ## Session 2026-05-23 — features #88, #89, #91
 
 ### Completed
