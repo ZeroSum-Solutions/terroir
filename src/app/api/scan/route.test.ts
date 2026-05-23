@@ -168,7 +168,30 @@ describe("POST /api/scan", () => {
     expect(azure.analyzeInvoice).not.toHaveBeenCalled();
   });
 
-  it("returns 400 on an empty file (size === 0)", async () => {
+  it("returns 413 when the file exceeds 10 MB", async () => {
+    auth.requireMembership.mockResolvedValue({
+      supabase: makeSupabase(),
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+
+    // Create a Buffer whose byte length is > 10 MB so File.size reflects reality
+    var buf = Buffer.alloc(11 * 1024 * 1024, 65); // 11 MB of "A"
+    var bigFile = new File([buf], "big.jpg", { type: "image/jpeg" });
+    var fd = new FormData();
+    fd.append("file", bigFile);
+
+    var res = await POST(makeFormRequest(fd));
+
+    expect(res.status).toBe(413);
+    var body = await res.json();
+    expect(body.error).toContain("10 MB");
+    // Azure DI must not be called for oversized uploads
+    expect(azure.analyzeInvoice).not.toHaveBeenCalled();
+  });
+
+    it("returns 400 on an empty file (size === 0)", async () => {
     auth.requireMembership.mockResolvedValue({
       supabase: makeSupabase(),
       user: { id: "u1" },

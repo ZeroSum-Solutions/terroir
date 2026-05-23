@@ -45,7 +45,7 @@ function clientIp(request: NextRequest): string {
   return request.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
-const MAX_BYTES = 20 * 1024 * 1024;
+const MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MIME = new Set([
   "image/jpeg", "image/png", "image/heic", "image/heif", "application/pdf",
 ]);
@@ -255,6 +255,8 @@ export async function POST(request: NextRequest) {
     const mimeType = ext === "pdf" ? "application/pdf" : ext === "png" ? "image/png" : "image/jpeg";
     const fileBuffer = Buffer.from(await fileData.arrayBuffer());
 
+    if (fileBuffer.length > MAX_BYTES) return json({ error: "File exceeds 10 MB." }, 413);
+
     // Create invoice_scans row BEFORE the idempotency handler so the scanId
     // is stable. On replay the handler won't run, so the row is harmless.
     const { data: invoiceScan, error: insertError } = await supabase
@@ -303,7 +305,7 @@ export async function POST(request: NextRequest) {
   var file = files[0];
   if (!(file instanceof File)) return json({ error: "Invalid file." }, 400);
   if (file.size === 0) return json({ error: "Empty file." }, 400);
-  if (file.size > MAX_BYTES) return json({ error: "File exceeds 20 MB." }, 413);
+  if (file.size > MAX_BYTES) return json({ error: "File exceeds 10 MB." }, 413);
   if (!ALLOWED_MIME.has(file.type)) return json({ error: "Unsupported file type: " + (file.type || "unknown") + "." }, 415);
 
   var fileBuffer = Buffer.from(new Uint8Array(await file.arrayBuffer()));
