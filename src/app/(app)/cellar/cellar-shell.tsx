@@ -207,7 +207,7 @@ export function CellarShell({
             type="button"
             onClick={() => setSearchOpen(true)}
             aria-label="Search wines"
-            className="flex h-9 w-9 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted md:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft md:hidden"
           >
             <Search className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
@@ -236,7 +236,7 @@ export function CellarShell({
               type="button"
               onClick={() => setSettingsOpen(true)}
               aria-label="Cellar settings"
-              className="flex h-9 w-9 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted"
+              className="flex h-9 w-9 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
             >
               <Settings className="h-5 w-5" strokeWidth={2} aria-hidden />
             </button>
@@ -281,7 +281,7 @@ export function CellarShell({
                 "inline-flex h-[32px] shrink-0 items-center gap-xs rounded-full border px-md text-[12px] font-medium transition-colors",
                 filter === c.id
                   ? "border-accent bg-accent text-white"
-                  : "border-border bg-white text-ink-muted hover:bg-surface-muted",
+                  : "border-border bg-white text-ink-muted hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft",
               )}
             >
               {c.label}
@@ -307,7 +307,7 @@ export function CellarShell({
         <button
           type="button"
           onClick={() => setReconcileOpen(true)}
-          className="mb-md flex h-[40px] w-full items-center justify-center rounded-sm border border-border-strong bg-white text-[13px] font-medium text-ink hover:bg-surface-muted md:w-auto md:px-md"
+          className="mb-md flex h-[40px] w-full items-center justify-center rounded-sm border border-border-strong bg-white text-[13px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft md:w-auto md:px-md"
         >
           Reconcile {reconcileItems.length} open bottle
           {reconcileItems.length === 1 ? "" : "s"} →
@@ -477,7 +477,7 @@ function ViewToggleButton({
       className={cn(
         "flex h-9 w-9 items-center justify-center text-ink-muted transition-colors",
         active && "bg-accent-soft text-accent",
-        !active && "hover:bg-surface-muted",
+        !active && "hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft",
       )}
     >
       <Icon className="h-4 w-4" strokeWidth={2} aria-hidden />

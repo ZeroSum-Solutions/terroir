@@ -247,6 +247,9 @@ export function WineListEditor({
   // BND-163: delete confirmation state
   const [deleteTarget, setDeleteTarget] = useState<Section | null>(null);
 
+  // BND-194: delete wine item confirmation state
+  const [wineToDelete, setWineToDelete] = useState<ListItem | null>(null);
+
   const currentSection = useMemo(
     () => sections.find((s) => s.id === activeSection),
     [sections, activeSection],
@@ -455,6 +458,17 @@ export function WineListEditor({
     },
     [router],
   );
+
+  var requestDeleteItem = useCallback(function(item) {
+    setWineToDelete(item);
+  }, []);
+
+  var confirmDeleteItem = useCallback(async function() {
+    var target = wineToDelete;
+    if (!target) return;
+    setWineToDelete(null);
+    await deleteItem(target.id);
+  }, [wineToDelete, deleteItem]);
 
   const updateItemPrice = useCallback(
     async (
@@ -854,7 +868,7 @@ export function WineListEditor({
                       <SortableWineRow
                         key={item.id}
                         item={item}
-                        onDelete={deleteItem}
+                        onDelete={requestDeleteItem}
                         onPriceChange={updateItemPrice}
                         onPourChange={updateItemPour}
                         onNameChange={updateItemName}
@@ -884,6 +898,54 @@ export function WineListEditor({
           </div>
         )}
       </div>
+
+            {/* Delete wine confirmation dialog (BND-194) */}
+      {wineToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-md">
+          <div className="w-full max-w-sm rounded-lg border border-border bg-white shadow-xl">
+            <div className="px-lg py-lg">
+              <div className="flex items-start justify-between">
+                <h3 className="font-serif text-[18px] font-medium text-ink">
+                  Remove wine
+                </h3>
+                <button
+                  type="button"
+                  onClick={function() { setWineToDelete(null); }}
+                  className="rounded-sm p-1 text-ink-subtle hover:text-ink"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" strokeWidth={2} />
+                </button>
+              </div>
+              <p className="mt-sm text-[14px] text-ink-muted leading-relaxed">
+                Remove{" "}
+                <strong className="text-ink">{wineToDelete.wines.producer}, {wineToDelete.wines.name}</strong>
+                {wineToDelete.wines.vintage && <span> ({wineToDelete.wines.vintage})</span>}
+                {" "}from this wine list?
+              </p>
+              <p className="mt-xs text-[13px] text-ink-subtle">
+                The wine will remain in your cellar inventory.
+              </p>
+              <div className="mt-lg flex justify-end gap-sm">
+                <button
+                  type="button"
+                  onClick={function() { setWineToDelete(null); }}
+                  className="rounded-sm border border-border px-md py-1.5 text-[13px] font-medium text-ink-muted hover:bg-surface-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteItem}
+                  className="rounded-sm bg-danger px-md py-1.5 text-[13px] font-medium text-white hover:bg-danger-hover"
+                >
+                  Remove wine
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation dialog (BND-163) */}
       {deleteTarget && (

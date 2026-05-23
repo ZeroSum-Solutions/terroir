@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
+import { Errors } from "@/lib/api/errors";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/auth";
 
@@ -32,15 +33,12 @@ export async function POST(request: NextRequest) {
   try {
     raw = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   const parsed = AddWineSchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid input.", issues: parsed.error.issues },
-      { status: 400 },
-    );
+    return Errors.validation(parsed.error.issues, "Invalid input.");
   }
 
   const { name, producer, vintage, varietal, region, country, quantity, unit_cost } =
@@ -74,10 +72,7 @@ export async function POST(request: NextRequest) {
         extra: { restaurantId, name, producer },
       },
     );
-    return NextResponse.json(
-      { error: "Failed to create wine." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to create wine.");
   }
 
   const wineId = (wineIdArray as string[])[0];
@@ -104,10 +99,7 @@ export async function POST(request: NextRequest) {
         extra: { restaurantId, wineId },
       },
     );
-    return NextResponse.json(
-      { error: "Failed to add wine to inventory." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to add wine to inventory.");
   }
 
   return NextResponse.json({

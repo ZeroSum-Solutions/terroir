@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 import {
   resolveMarkupTarget,
   resolvePourCostTarget,
@@ -41,7 +42,7 @@ export async function GET(
 
   const { id } = await ctx.params;
   if (!id) {
-    return NextResponse.json({ error: "wine id required" }, { status: 400 });
+    return Errors.badRequest("wine id required");
   }
 
   const url = new URL(req.url);
@@ -62,7 +63,7 @@ export async function GET(
       .eq("restaurant_id", restaurantId)
       .single();
     if (wineErr || !wine) {
-      return NextResponse.json({ error: "Wine not found." }, { status: 404 });
+      return Errors.notFound("Wine");
     }
 
     // Pull restaurant defaults.
@@ -130,9 +131,6 @@ export async function GET(
       tags: { surface: "wines-pricing-suggestion", phase: "fetch" },
       extra: { wineId: id, restaurantId },
     });
-    return NextResponse.json(
-      { error: "Failed to compute suggestion." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to compute suggestion.");
   }
 }

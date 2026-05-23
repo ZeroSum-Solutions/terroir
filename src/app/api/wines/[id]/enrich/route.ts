@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 import { enrichWine, type RatingSource } from "@/lib/wine-intelligence/enrich";
 import { enrichWineWithClaude } from "@/lib/wine-intelligence/enrich-claude";
 import type { Json } from "@/types/database";
@@ -34,15 +35,12 @@ export async function POST(
   // cannot trigger billable Claude inference. Mirrors snooze-alert
   // and the bulk enrich endpoint.
   if (role !== "owner" && role !== "manager") {
-    return NextResponse.json(
-      { error: "Enriching wines requires owner or manager role." },
-      { status: 403 },
-    );
+    return Errors.forbidden("Enriching wines requires owner or manager role.");
   }
 
   const { id } = await ctx.params;
   if (!id) {
-    return NextResponse.json({ error: "wine id required" }, { status: 400 });
+    return Errors.badRequest("wine id required");
   }
 
   // Tenant-scoped fetch (defense-in-depth alongside RLS).
@@ -54,7 +52,7 @@ export async function POST(
     .single();
 
   if (fetchError || !wine) {
-    return NextResponse.json({ error: "Wine not found." }, { status: 404 });
+    return Errors.notFound("Wine");
   }
 
   // Tier 1 — rule engine.
@@ -131,10 +129,7 @@ export async function POST(
       tags: { surface: "wines-enrich-single", phase: "enrich_wines_batch-rpc" },
       extra: { wineId: wine.id, restaurantId, source },
     });
-    return NextResponse.json(
-      { error: "Failed to write enrichment." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to write enrichment.");
   }
 
   return NextResponse.json({

@@ -4,6 +4,7 @@ import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
 import { revalidateAutoEightysixedWines } from "@/lib/api/auto-eightysix-revalidation";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -38,15 +39,12 @@ export async function POST(request: NextRequest) {
   try {
     raw = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   const parsed = BodySchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid body.", issues: parsed.error.issues },
-      { status: 400 },
-    );
+    return Errors.validation(parsed.error.issues, "Invalid body.");
   }
   const { wine_id, ml, kind, note } = parsed.data;
 
@@ -71,20 +69,17 @@ export async function POST(request: NextRequest) {
       error.code === "P0001" &&
       String(error.message ?? "").includes("TERROIR_OUT_OF_STOCK")
     ) {
-      return NextResponse.json(
-        { error: "Out of stock.", code: "OUT_OF_STOCK" },
-        { status: 409 },
-      );
+      return Errors.conflict("out_of_stock", "Out of stock.");
     }
     if (error.code === "42501") {
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      return Errors.forbidden("Forbidden.");
     }
     console.error("record_pour failed:", error);
     Sentry.captureException(error, {
       tags: { surface: "pour", phase: "record_pour-rpc" },
       extra: { wine_id, ml, kind },
     });
-    return NextResponse.json({ error: "Pour failed." }, { status: 500 });
+    return Errors.internal("Pour failed.");
   }
 
   // Revalidate /availability so the 86 UI sees fresh state.

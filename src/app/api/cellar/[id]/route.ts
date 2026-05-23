@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireRole } from "@/lib/api/auth";
 import { z } from "zod";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -32,23 +33,17 @@ export async function PATCH(
   try {
     raw = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   const parsed = EditInventorySchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid input.", issues: parsed.error.issues },
-      { status: 400 },
-    );
+    return Errors.validation(parsed.error.issues, "Invalid input.");
   }
 
   const updates = parsed.data;
   if (Object.keys(updates).length === 0) {
-    return NextResponse.json(
-      { error: "No valid fields to update." },
-      { status: 400 },
-    );
+    return Errors.badRequest("No valid fields to update.");
   }
 
   // Defense-in-depth: scope by restaurant_id so a cross-tenant
@@ -68,14 +63,11 @@ export async function PATCH(
       tags: { surface: "cellar", phase: "edit-inventory" },
       extra: { restaurantId, inventory_item_id: id },
     });
-    return NextResponse.json({ error: "Update failed." }, { status: 500 });
+    return Errors.internal("Update failed.");
   }
 
   if (!data) {
-    return NextResponse.json(
-      { error: "Inventory item not found." },
-      { status: 404 },
-    );
+    return Errors.notFound("Inventory item");
   }
 
   return NextResponse.json(data);

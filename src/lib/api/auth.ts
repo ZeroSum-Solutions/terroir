@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Errors } from "@/lib/api/errors";
 import { createClient } from "@/lib/supabase/server";
 import { resolveActiveMembership } from "@/lib/api/resolve-active-membership";
 import type { Database } from "@/types/database";
@@ -24,7 +25,7 @@ export async function requireAuth(): Promise<AuthResult | NextResponse> {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return Errors.unauthorized();
   }
 
   return { supabase, user };
@@ -50,10 +51,7 @@ export async function requireMembership(): Promise<
   const membership = await resolveActiveMembership(supabase, user.id);
 
   if (!membership) {
-    return NextResponse.json(
-      { error: "No restaurant membership found." },
-      { status: 403 },
-    );
+    return Errors.forbidden("No restaurant membership found.");
   }
 
   return {
@@ -70,10 +68,7 @@ export async function requireOwner(): Promise<MembershipResult | NextResponse> {
   if (result instanceof NextResponse) return result;
 
   if (result.role !== "owner") {
-    return NextResponse.json(
-      { error: "Owner access required." },
-      { status: 403 },
-    );
+    return Errors.forbidden("Owner access required.");
   }
 
   return result;
@@ -92,10 +87,7 @@ export async function requireRole(
   if (result instanceof NextResponse) return result;
 
   if (!roles.includes(result.role)) {
-    return NextResponse.json(
-      { error: `Role ${roles.join(" or ")} required.` },
-      { status: 403 },
-    );
+    return Errors.forbidden(`Role ${roles.join(" or ")} required.`);
   }
 
   return result;

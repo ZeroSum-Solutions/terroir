@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import puppeteer from "puppeteer";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 import { renderWineListSections } from "@/lib/wine-list/render";
 import type { WineListSectionEmbed } from "@/lib/wine-list/shapes";
 import { renderTemplate } from "@/lib/wine-list/templates";
@@ -22,11 +23,11 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   if (!body.listId) {
-    return NextResponse.json({ error: "listId is required." }, { status: 400 });
+    return Errors.badRequest("listId is required.");
   }
 
   // Fetch list with sections, items, and wines
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (fetchError || !list) {
-    return NextResponse.json({ error: "Wine list not found." }, { status: 404 });
+    return Errors.notFound("Wine list");
   }
 
   const restaurantName =
@@ -112,10 +113,7 @@ export async function POST(request: NextRequest) {
     Sentry.captureException(err, {
       tags: { surface: "pdf", phase: "puppeteer-render" },
     });
-    return NextResponse.json(
-      { error: "PDF generation failed.", code: "pdf_generation_failed" },
-      { status: 500 },
-    );
+    return Errors.internal("PDF generation failed.");
   } finally {
     await browser?.close();
   }

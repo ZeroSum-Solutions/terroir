@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import * as Sentry from "@sentry/nextjs";
+import { Errors } from "@/lib/api/errors";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
 import { revalidateAutoEightysixedWines } from "@/lib/api/auto-eightysix-revalidation";
@@ -47,15 +48,12 @@ export async function POST(request: NextRequest) {
   try {
     raw = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   const parsed = BodySchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid body.", issues: parsed.error.issues },
-      { status: 400 },
-    );
+    return Errors.validation(parsed.error.issues, "Invalid body.");
   }
 
   // ARCH-023: capture timestamp BEFORE the batch write so we can
@@ -75,23 +73,20 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     if (error.code === "42501") {
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      return Errors.forbidden("Forbidden.");
     }
     if (error.code === "P0002") {
       // "new_remaining_ml exceeds bottle size" — caller sent a bad
       // value. Surface as 400 so the UI can show "that's more than a
       // 750ml bottle can hold."
-      return NextResponse.json(
-        { error: "new_remaining_ml exceeds bottle size.", code: "EXCEEDS_SIZE" },
-        { status: 400 },
-      );
+      return Errors.badRequest("new_remaining_ml exceeds bottle size.");
     }
     console.error("reconcile_open_bottles_batch failed:", error);
     Sentry.captureException(error, {
       tags: { surface: "reconcile", phase: "reconcile_open_bottles_batch-rpc" },
       extra: { entry_count: parsed.data.entries.length },
     });
-    return NextResponse.json({ error: "Reconcile failed." }, { status: 500 });
+    return Errors.internal("Reconcile failed.");
   }
 
   revalidatePath("/availability");

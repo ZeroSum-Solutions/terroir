@@ -217,7 +217,7 @@ function CellarRow({
       <button
         type="button"
         onClick={onSelect}
-        className="w-full px-md py-md text-left transition-colors hover:bg-surface-muted/40"
+        className="w-full px-md py-md text-left transition-colors hover:bg-surface-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-inset rounded-sm"
       >
         <div className="flex items-start justify-between gap-md">
           <div className="min-w-0 flex-1">

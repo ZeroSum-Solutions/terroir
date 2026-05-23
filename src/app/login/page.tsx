@@ -125,25 +125,27 @@ export default async function LoginPage({
           </div>
         ) : isForgotPassword ? (
           <form action={sendPasswordReset} className="flex flex-col gap-md">
-            <label className="flex flex-col gap-xs">
+            <label htmlFor="reset-email" className="flex flex-col gap-xs">
               <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
                 Work email
               </span>
               <input
+                id="reset-email"
                 type="email"
                 name="email"
                 autoComplete="email"
                 required
+                aria-describedby={error ? "reset-error" : undefined}
                 placeholder="you@restaurant.com…"
                 className="h-[38px] rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
               />
             </label>
             {error && (
-              <div className="text-[13px] text-danger">{error}</div>
+              <div id="reset-error" role="alert" className="text-[13px] text-danger">{error}</div>
             )}
             <button
               type="submit"
-              className="flex h-[38px] items-center justify-center rounded-sm bg-accent px-md text-[14px] font-medium text-white transition-colors hover:bg-accent-hover"
+              className="flex h-[38px] items-center justify-center rounded-sm bg-accent px-md text-[14px] font-medium text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
             >
               Send reset link
             </button>
@@ -157,21 +159,23 @@ export default async function LoginPage({
         ) : (
           <form action={sendMagicLink} className="flex flex-col gap-md">
             <input type="hidden" name="next" value={next ?? "/"} />
-            <label className="flex flex-col gap-xs">
+            <label htmlFor="login-email" className="flex flex-col gap-xs">
               <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
                 Work email
               </span>
               <input
+                id="login-email"
                 type="email"
                 name="email"
                 autoComplete="email"
                 required
+                aria-describedby={error ? "login-error" : undefined}
                 placeholder="you@restaurant.com…"
                 className="h-[38px] rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
               />
             </label>
             {error && (
-              <div className="text-[13px] text-danger">{error}</div>
+              <div id="login-error" role="alert" className="text-[13px] text-danger">{error}</div>
             )}
             <MagicLinkSubmit />
             <a

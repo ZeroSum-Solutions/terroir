@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
+import { Errors } from "@/lib/api/errors";
 import { requireMembership } from "@/lib/api/auth";
 
 export const runtime = "nodejs";
@@ -35,15 +36,12 @@ export async function POST(request: NextRequest) {
   try {
     raw = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   const parsed = CellarConfigSchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid input." },
-      { status: 400 },
-    );
+    return Errors.badRequest(parsed.error.issues[0]?.message ?? "Invalid input.");
   }
 
   const body = parsed.data;
@@ -67,10 +65,7 @@ export async function POST(request: NextRequest) {
       tags: { surface: "cellar-config", phase: "insert" },
       extra: { restaurantId, rows, columns },
     });
-    return NextResponse.json(
-      { error: "Failed to create cellar configuration." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to create cellar configuration.");
   }
 
   return NextResponse.json(config);

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireRole } from "@/lib/api/auth";
 import { areAllOwnWineListItems } from "@/lib/api/wine-list-scope";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -24,22 +25,16 @@ export async function PATCH(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   if (!Array.isArray(body.orderedIds) || body.orderedIds.length === 0) {
-    return NextResponse.json(
-      { error: "orderedIds array is required." },
-      { status: 400 },
-    );
+    return Errors.badRequest("orderedIds array is required.");
   }
 
   // ARCH-014: reject the batch if any id is cross-tenant (or missing).
   if (!(await areAllOwnWineListItems(supabase, body.orderedIds, restaurantId))) {
-    return NextResponse.json(
-      { error: "One or more items not found." },
-      { status: 404 },
-    );
+    return Errors.notFound("One or more items");
   }
 
   const { error } = await supabase.rpc("reorder_wine_list_items", {
@@ -52,7 +47,7 @@ export async function PATCH(request: NextRequest) {
       tags: { surface: "wine-list-items", phase: "reorder-rpc" },
       extra: { restaurantId, itemCount: body.orderedIds.length },
     });
-    return NextResponse.json({ error: "Reorder failed." }, { status: 500 });
+    return Errors.internal("Reorder failed.");
   }
 
   return NextResponse.json({ ok: true });

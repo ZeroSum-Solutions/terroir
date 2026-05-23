@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireOwner } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -22,15 +23,12 @@ export async function POST(request: NextRequest) {
   try {
     raw = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   const parsed = InviteSchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid input." },
-      { status: 400 },
-    );
+    return Errors.badRequest(parsed.error.issues[0]?.message ?? "Invalid input.");
   }
 
   const email = parsed.data.email; // already trimmed + lowercased by Zod schema
@@ -56,10 +54,7 @@ export async function POST(request: NextRequest) {
         extra: { restaurantId, role },
       },
     );
-    return NextResponse.json(
-      { error: "Failed to create invitation." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to create invitation.");
   }
 
   // Build the invite URL

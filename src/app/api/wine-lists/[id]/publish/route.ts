@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireRole } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -38,7 +39,7 @@ export async function POST(
     .single();
 
   if (fetchError || !list) {
-    return NextResponse.json({ error: "Wine list not found." }, { status: 404 });
+    return Errors.notFound("Wine list");
   }
 
   // Determine slug — in priority order:
@@ -59,7 +60,7 @@ export async function POST(
   if (customSlug) {
     const error = validateSlug(customSlug);
     if (error) {
-      return NextResponse.json({ error }, { status: 422 });
+      return Errors.unprocessable("invalid_slug", error);
     }
     const trimmed = customSlug.trim().toLowerCase();
     // Check uniqueness within the same restaurant (BND-156: slugs are
@@ -72,10 +73,10 @@ export async function POST(
       .neq("id", id)
       .maybeSingle();
     if (existing) {
-      return NextResponse.json(
-        { error: "This slug is already in use by another list in your restaurant.", code: "slug_collision" },
-        { status: 409 },
-      );
+      return Errors.conflict(
+          "slug_collision",
+          "This slug is already in use by another list in your restaurant.",
+        );
     }
     slug = trimmed;
   }
@@ -110,7 +111,7 @@ export async function POST(
       tags: { surface: "wine-list", phase: "publish" },
       extra: { restaurantId, list_id: id },
     });
-    return NextResponse.json({ error: "Publish failed." }, { status: 500 });
+    return Errors.internal("Publish failed.");
   }
 
   return NextResponse.json({ slug });
@@ -134,7 +135,7 @@ export async function DELETE(
     .single();
 
   if (fetchError || !list) {
-    return NextResponse.json({ error: "Wine list not found." }, { status: 404 });
+    return Errors.notFound("Wine list");
   }
 
   const { error: updateError } = await supabase
@@ -152,7 +153,7 @@ export async function DELETE(
       tags: { surface: "wine-list", phase: "unpublish" },
       extra: { restaurantId, list_id: id },
     });
-    return NextResponse.json({ error: "Unpublish failed." }, { status: 500 });
+    return Errors.internal("Unpublish failed.");
   }
 
   return NextResponse.json({ ok: true });

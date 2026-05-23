@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,10 +42,7 @@ export async function GET(
       .single();
 
     if (error || !list) {
-      return NextResponse.json(
-        { error: "Wine list not found." },
-        { status: 404 },
-      );
+      return Errors.notFound("Wine list");
     }
 
     type RawSection = {
@@ -111,9 +109,6 @@ export async function GET(
       tags: { surface: "wine-list", phase: "csv-export" },
       extra: { restaurantId, listId: id },
     });
-    return NextResponse.json(
-      { error: "Failed to generate CSV export." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to generate CSV export.");
   }
 }

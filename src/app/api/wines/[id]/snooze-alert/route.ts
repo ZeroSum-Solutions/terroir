@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -27,15 +28,12 @@ export async function POST(
   const { supabase, restaurantId, role } = auth;
 
   if (role !== "owner" && role !== "manager") {
-    return NextResponse.json(
-      { error: "Snoozing alerts requires owner or manager role." },
-      { status: 403 },
-    );
+    return Errors.forbidden("Snoozing alerts requires owner or manager role.");
   }
 
   const { id } = await ctx.params;
   if (!id) {
-    return NextResponse.json({ error: "wine id required" }, { status: 400 });
+    return Errors.badRequest("wine id required");
   }
 
   // Optional body: { days: number }. Defaults to 30 (RPC default).
@@ -73,10 +71,10 @@ export async function POST(
       tags: { surface: "wines-snooze", phase: "wine-fetch" },
       extra: { wineId: id, restaurantId },
     });
-    return NextResponse.json({ error: "Lookup failed." }, { status: 500 });
+    return Errors.internal("Lookup failed.");
   }
   if (!wine) {
-    return NextResponse.json({ error: "Wine not found." }, { status: 404 });
+    return Errors.notFound("Wine");
   }
 
   // Unsnooze path — direct UPDATE to NULL. The RPC always sets a
@@ -92,10 +90,7 @@ export async function POST(
         tags: { surface: "wines-snooze", phase: "clear" },
         extra: { wineId: id, restaurantId },
       });
-      return NextResponse.json(
-        { error: "Failed to clear snooze." },
-        { status: 500 },
-      );
+      return Errors.internal("Failed to clear snooze.");
     }
     return NextResponse.json({ wineId: id, snoozedUntil: null, days: 0 });
   }
@@ -110,10 +105,7 @@ export async function POST(
       tags: { surface: "wines-snooze", phase: "rpc" },
       extra: { wineId: id, restaurantId, days },
     });
-    return NextResponse.json(
-      { error: "Failed to snooze alert." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to snooze alert.");
   }
 
   return NextResponse.json({

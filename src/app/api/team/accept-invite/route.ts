@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { rateLimit } from "@/lib/api/rate-limit";
+import { Errors } from "@/lib/api/errors";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return Errors.unauthorized();
   }
 
   // BND-013: rate-limit authed users before we touch the DB. The key is
@@ -43,11 +44,8 @@ export async function POST(request: NextRequest) {
   );
   if (!limit.ok) {
     return NextResponse.json(
-      { error: "Too many invitation attempts. Try again later." },
-      {
-        status: 429,
-        headers: { "Retry-After": String(limit.retryAfterSeconds) },
-      },
+      { error: { code: "rate_limited", message: "Too many invitation attempts. Try again later." } },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
     );
   }
 
@@ -55,14 +53,11 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   if (!body.token) {
-    return NextResponse.json(
-      { error: "Invitation token is required." },
-      { status: 400 },
-    );
+    return Errors.badRequest("Invitation token is required.");
   }
 
   // Find the invitation
@@ -73,10 +68,7 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (findError || !invitation) {
-    return NextResponse.json(
-      { error: "Invalid or expired invitation." },
-      { status: 404 },
-    );
+    return Errors.notFound("Invalid or expired invitation.");
   }
 
   // BND-011: email-binding enforcement. Mismatch returns the same opaque
@@ -85,24 +77,15 @@ export async function POST(request: NextRequest) {
   const inviteeEmail = invitation.email?.trim().toLowerCase();
   const userEmail = user.email?.trim().toLowerCase();
   if (!inviteeEmail || !userEmail || inviteeEmail !== userEmail) {
-    return NextResponse.json(
-      { error: "Invalid or expired invitation." },
-      { status: 404 },
-    );
+    return Errors.notFound("Invalid or expired invitation.");
   }
 
   if (invitation.accepted_at) {
-    return NextResponse.json(
-      { error: "This invitation has already been used." },
-      { status: 400 },
-    );
+    return Errors.badRequest("This invitation has already been used.");
   }
 
   if (new Date(invitation.expires_at) < new Date()) {
-    return NextResponse.json(
-      { error: "This invitation has expired." },
-      { status: 400 },
-    );
+    return Errors.badRequest("This invitation has expired.");
   }
 
   // Check if user already has a membership for this restaurant
@@ -147,10 +130,7 @@ export async function POST(request: NextRequest) {
         invitationId: invitation.id,
       },
     });
-    return NextResponse.json(
-      { error: "Failed to join restaurant." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to join restaurant.");
   }
 
   // Mark invitation as accepted

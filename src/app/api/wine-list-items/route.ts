@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/auth";
 import { isOwnWineListSection } from "@/lib/api/wine-list-scope";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -23,15 +24,14 @@ export async function POST(request: NextRequest) {
   try {
     raw = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   const parsed = AddItemSchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid input." },
-      { status: 400 },
-    );
+    return Errors.badRequest(
+        parsed.error.issues[0]?.message ?? "Invalid input.",
+      );
   }
 
   const body = parsed.data;
@@ -41,10 +41,7 @@ export async function POST(request: NextRequest) {
   // section_id could attempt to insert into it and rely on RLS
   // alone to block.
   if (!(await isOwnWineListSection(supabase, body.section_id, restaurantId))) {
-    return NextResponse.json(
-      { error: "Section not found." },
-      { status: 404 },
-    );
+    return Errors.notFound("Section");
   }
 
   // Get the max position in this section
@@ -83,7 +80,7 @@ export async function POST(request: NextRequest) {
         },
       },
     );
-    return NextResponse.json({ error: "Failed to add wine." }, { status: 500 });
+    return Errors.internal("Failed to add wine.");
   }
 
   return NextResponse.json({ id: item.id });

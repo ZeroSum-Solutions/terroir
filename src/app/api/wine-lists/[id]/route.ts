@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireRole } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,7 @@ export async function PATCH(
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   // Only allow updating safe fields (name, template, slug, archived)
@@ -52,22 +53,16 @@ export async function PATCH(
   if (typeof body.slug === "string") {
     const trimmed = body.slug.trim().toLowerCase();
     if (!trimmed) {
-      return NextResponse.json(
-        { error: "Slug must not be empty." },
-        { status: 422 },
-      );
+      return Errors.unprocessable("invalid_slug", "Slug must not be empty.");
     }
     if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(trimmed)) {
-      return NextResponse.json(
-        { error: "Slug must contain only lowercase letters, numbers, and hyphens." },
-        { status: 422 },
-      );
+      return Errors.unprocessable(
+          "invalid_slug",
+          "Slug must contain only lowercase letters, numbers, and hyphens.",
+        );
     }
     if (trimmed.length > 50) {
-      return NextResponse.json(
-        { error: "Slug must be 50 characters or fewer." },
-        { status: 422 },
-      );
+      return Errors.unprocessable("invalid_slug", "Slug must be 50 characters or fewer.");
     }
     // Check slug uniqueness within the same restaurant (BND-156: slugs are
     // scoped per-restaurant; two restaurants can each have "dinner").
@@ -79,16 +74,16 @@ export async function PATCH(
       .neq("id", id)
       .maybeSingle();
     if (existing) {
-      return NextResponse.json(
-        { error: "This slug is already in use by another list in your restaurant.", code: "slug_collision" },
-        { status: 409 },
-      );
+      return Errors.conflict(
+          "slug_collision",
+          "This slug is already in use by another list in your restaurant.",
+        );
     }
     allowed.slug = trimmed;
   }
 
   if (Object.keys(allowed).length === 0) {
-    return NextResponse.json({ error: "No valid fields to update." }, { status: 400 });
+    return Errors.badRequest("No valid fields to update.");
   }
 
   const { data, error } = await supabase
@@ -104,11 +99,11 @@ export async function PATCH(
       tags: { surface: "wine-list", phase: "update" },
       extra: { restaurantId, list_id: id },
     });
-    return NextResponse.json({ error: "Update failed." }, { status: 500 });
+    return Errors.internal("Update failed.");
   }
 
   if (!data || data.length === 0) {
-    return NextResponse.json({ error: "Wine list not found." }, { status: 404 });
+    return Errors.notFound("Wine list");
   }
 
   return NextResponse.json({ ok: true });
@@ -136,24 +131,24 @@ export async function DELETE(
     // PGRST116 = "No rows returned" — surface as 404. Any other error is
     // a server-side failure (e.g. connection drop, constraint violation).
     if ((fetchError as { code?: string }).code === "PGRST116") {
-      return NextResponse.json({ error: "Wine list not found." }, { status: 404 });
+      return Errors.notFound("Wine list");
     }
     console.error("wine_lists pre-delete fetch failed:", fetchError);
     Sentry.captureException(fetchError, {
       tags: { surface: "wine-list", phase: "delete-fetch" },
       extra: { restaurantId, list_id: id },
     });
-    return NextResponse.json({ error: "Delete failed." }, { status: 500 });
+    return Errors.internal("Delete failed.");
   }
   if (!list) {
-    return NextResponse.json({ error: "Wine list not found." }, { status: 404 });
+    return Errors.notFound("Wine list");
   }
 
   if (!list.archived) {
-    return NextResponse.json(
-      { error: "Active lists must be archived before they can be deleted.", code: "must_archive_first" },
-      { status: 409 },
-    );
+    return Errors.conflict(
+        "must_archive_first",
+        "Active lists must be archived before they can be deleted.",
+      );
   }
 
   // Cascade delete: fetch section IDs, delete items, then sections, then the list.
@@ -168,7 +163,7 @@ export async function DELETE(
       tags: { surface: "wine-list", phase: "delete-sections-fetch" },
       extra: { restaurantId, list_id: id },
     });
-    return NextResponse.json({ error: "Delete failed." }, { status: 500 });
+    return Errors.internal("Delete failed.");
   }
 
   const sectionIds = sections.map((s) => s.id);
@@ -185,7 +180,7 @@ export async function DELETE(
         tags: { surface: "wine-list", phase: "delete-items" },
         extra: { restaurantId, list_id: id },
       });
-      return NextResponse.json({ error: "Delete failed." }, { status: 500 });
+      return Errors.internal("Delete failed.");
     }
   }
 
@@ -200,7 +195,7 @@ export async function DELETE(
       tags: { surface: "wine-list", phase: "delete-sections" },
       extra: { restaurantId, list_id: id },
     });
-    return NextResponse.json({ error: "Delete failed." }, { status: 500 });
+    return Errors.internal("Delete failed.");
   }
 
   const { data, error } = await supabase
@@ -216,11 +211,11 @@ export async function DELETE(
       tags: { surface: "wine-list", phase: "delete" },
       extra: { restaurantId, list_id: id },
     });
-    return NextResponse.json({ error: "Delete failed." }, { status: 500 });
+    return Errors.internal("Delete failed.");
   }
 
   if (!data || data.length === 0) {
-    return NextResponse.json({ error: "Wine list not found." }, { status: 404 });
+    return Errors.notFound("Wine list");
   }
 
   return NextResponse.json({ ok: true });

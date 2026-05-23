@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
 import { isOwnWineListItem } from "@/lib/api/wine-list-scope";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,7 @@ export async function DELETE(
   // caller's restaurant before mutating. RLS still gates at the DB
   // level; this is application-layer defense-in-depth.
   if (!(await isOwnWineListItem(supabase, id, restaurantId))) {
-    return NextResponse.json({ error: "Item not found." }, { status: 404 });
+    return Errors.notFound("Item");
   }
 
   const { error } = await supabase
@@ -35,7 +36,7 @@ export async function DELETE(
       tags: { surface: "wine-list-items", phase: "delete" },
       extra: { restaurantId, item_id: id },
     });
-    return NextResponse.json({ error: "Delete failed." }, { status: 500 });
+    return Errors.internal("Delete failed.");
   }
 
   return NextResponse.json({ ok: true });
@@ -78,24 +79,21 @@ export async function PATCH(
   try {
     raw = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   const parsed = PatchSchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid body.", issues: parsed.error.issues },
-      { status: 400 },
-    );
+    return Errors.validation(parsed.error.issues, "Invalid body.");
   }
 
   if (Object.keys(parsed.data).length === 0) {
-    return NextResponse.json({ error: "No valid fields." }, { status: 400 });
+    return Errors.badRequest("No valid fields.");
   }
 
   // ARCH-014: verify ownership before update.
   if (!(await isOwnWineListItem(supabase, id, restaurantId))) {
-    return NextResponse.json({ error: "Item not found." }, { status: 404 });
+    return Errors.notFound("Item");
   }
 
   const { error } = await supabase
@@ -109,7 +107,7 @@ export async function PATCH(
       tags: { surface: "wine-list-items", phase: "update" },
       extra: { restaurantId, item_id: id },
     });
-    return NextResponse.json({ error: "Update failed." }, { status: 500 });
+    return Errors.internal("Update failed.");
   }
 
   return NextResponse.json({ ok: true });

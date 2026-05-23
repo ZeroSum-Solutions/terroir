@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -20,15 +21,12 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
   const { lwin_id, display_name, producer, varietal, region, country } = body;
 
   if (!display_name || !lwin_id) {
-    return NextResponse.json(
-      { error: "Missing required fields." },
-      { status: 400 },
-    );
+    return Errors.badRequest("Missing required fields.");
   }
 
   const { data: wineIds, error } = await supabase.rpc(
@@ -58,10 +56,7 @@ export async function POST(request: NextRequest) {
         extra: { restaurantId, lwin_id, display_name },
       },
     );
-    return NextResponse.json(
-      { error: "Failed to create wine." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to create wine.");
   }
 
   const wineId = (wineIds as string[])[0];

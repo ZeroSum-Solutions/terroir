@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -21,15 +22,12 @@ export async function POST(
   const { supabase, restaurantId, role } = auth;
 
   if (role !== "owner" && role !== "manager") {
-    return NextResponse.json(
-      { error: "Dismissing pricing alerts requires owner or manager role." },
-      { status: 403 },
-    );
+    return Errors.forbidden("Dismissing pricing alerts requires owner or manager role.");
   }
 
   const { id } = await ctx.params;
   if (!id) {
-    return NextResponse.json({ error: "wine id required" }, { status: 400 });
+    return Errors.badRequest("wine id required");
   }
 
   // Optional body: { days: number }. Default 30, max 365.
@@ -63,10 +61,10 @@ export async function POST(
       tags: { surface: "wines-dismiss-pricing", phase: "wine-fetch" },
       extra: { wineId: id, restaurantId },
     });
-    return NextResponse.json({ error: "Lookup failed." }, { status: 500 });
+    return Errors.internal("Lookup failed.");
   }
   if (!wine) {
-    return NextResponse.json({ error: "Wine not found." }, { status: 404 });
+    return Errors.notFound("Wine");
   }
 
   // Unsnooze path — direct UPDATE to NULL.
@@ -81,10 +79,7 @@ export async function POST(
         tags: { surface: "wines-dismiss-pricing", phase: "clear" },
         extra: { wineId: id, restaurantId },
       });
-      return NextResponse.json(
-        { error: "Failed to clear dismissal." },
-        { status: 500 },
-      );
+      return Errors.internal("Failed to clear dismissal.");
     }
     return NextResponse.json({ wineId: id, dismissedUntil: null, days: 0 });
   }
@@ -99,10 +94,7 @@ export async function POST(
       tags: { surface: "wines-dismiss-pricing", phase: "rpc" },
       extra: { wineId: id, restaurantId, days },
     });
-    return NextResponse.json(
-      { error: "Failed to dismiss alert." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to dismiss alert.");
   }
 
   return NextResponse.json({

@@ -4,6 +4,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAnthropicClient } from "@/lib/ai/anthropic-client";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 import { ParsedBottleLabelSchema } from "@/lib/scanner/bottle-schema";
 import { BOTTLE_SYSTEM_PROMPT } from "@/lib/scanner/bottle-system-prompt";
 import type { BottleScanResult } from "@/lib/scanner/types";
@@ -39,40 +40,28 @@ export async function POST(request: NextRequest) {
       tags: { surface: "scanner", phase: "client-init" },
       extra: {},
     });
-    return NextResponse.json(
-      { error: "Server not configured: ANTHROPIC_API_KEY missing." },
-      { status: 500 },
-    );
+    return Errors.internal("Server not configured: ANTHROPIC_API_KEY missing.");
   }
 
   let formData: FormData;
   try {
     formData = await request.formData();
   } catch {
-    return NextResponse.json({ error: "Invalid form data." }, { status: 400 });
+    return Errors.badRequest("Invalid form data.");
   }
 
   const file = formData.get("file");
   if (!(file instanceof File)) {
-    return NextResponse.json(
-      { error: "Attach a photo under the 'file' field." },
-      { status: 400 },
-    );
+    return Errors.badRequest("Attach a photo under the 'file' field.");
   }
   if (file.size === 0) {
-    return NextResponse.json({ error: "Empty file." }, { status: 400 });
+    return Errors.badRequest("Empty file.");
   }
   if (file.size > MAX_BYTES) {
-    return NextResponse.json(
-      { error: "File exceeds 20 MB." },
-      { status: 413 },
-    );
+    return Errors.tooLarge("File exceeds 20 MB.");
   }
   if (!ALLOWED_MIME.has(file.type)) {
-    return NextResponse.json(
-      { error: `Unsupported file type: ${file.type || "unknown"}. Use JPEG or PNG.` },
-      { status: 415 },
-    );
+    return Errors.unsupportedMediaType(`Unsupported file type: ${file.type || "unknown"}. Use JPEG or PNG.`);
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -111,10 +100,7 @@ export async function POST(request: NextRequest) {
 
     const parsed = response.parsed_output;
     if (!parsed) {
-      return NextResponse.json(
-        { error: "Could not identify the wine from this photo. Try a clearer photo of the label." },
-        { status: 422 },
-      );
+      return Errors.unprocessable("parse_failed", "Could not identify the wine from this photo. Try a clearer photo of the label.");
     }
 
     const result: BottleScanResult = {
@@ -132,31 +118,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof Anthropic.RateLimitError) {
-      return NextResponse.json(
-        { error: "Rate limited. Wait a minute and try again." },
-        { status: 429 },
-      );
+      return Errors.rateLimited("Rate limited. Wait a minute and try again.");
     }
     if (error instanceof Anthropic.BadRequestError) {
-      return NextResponse.json(
-        { error: "Could not process this photo. Try a different angle or better lighting." },
-        { status: 400 },
-      );
+      return Errors.badRequest("Could not process this photo. Try a different angle or better lighting.");
     }
     if (error instanceof Anthropic.APIError) {
-      return NextResponse.json(
-        { error: "The AI service encountered an error. Please try again." },
-        { status: 502 },
-      );
+      return Errors.badGateway("The AI service encountered an error. Please try again.");
     }
     console.error("scan-bottle failed:", error);
     Sentry.captureException(error, {
       tags: { surface: "scanner", phase: "claude-call" },
       extra: { file_size: file.size, file_type: file.type },
     });
-    return NextResponse.json(
-      { error: "Something went wrong identifying the wine." },
-      { status: 500 },
-    );
+    return Errors.internal("Something went wrong identifying the wine.");
   }
 }

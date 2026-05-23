@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 import { fetchRetailPrices } from "@/lib/wine-intelligence/wine-searcher";
 
 export const runtime = "nodejs";
@@ -29,10 +30,7 @@ export async function POST() {
   const { supabase, restaurantId, role } = auth;
 
   if (role !== "owner" && role !== "manager") {
-    return NextResponse.json(
-      { error: "Refreshing retail data requires owner or manager role." },
-      { status: 403 },
-    );
+    return Errors.forbidden("Refreshing retail data requires owner or manager role.");
   }
 
   // Audit-finding M1: surface configuration status so the
@@ -70,7 +68,7 @@ export async function POST() {
       tags: { surface: "wines-refresh-batch", phase: "fetch" },
       extra: { restaurantId },
     });
-    return NextResponse.json({ error: "Lookup failed." }, { status: 500 });
+    return Errors.internal("Lookup failed.");
   }
 
   const eligible = (wines ?? []).filter(

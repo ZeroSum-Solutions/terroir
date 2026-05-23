@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireAuth, requireOwner } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 import { setActiveRestaurant } from "@/lib/api/active-restaurant";
 
 export const runtime = "nodejs";
@@ -25,10 +26,7 @@ export async function GET(
     .maybeSingle();
 
   if (!membership) {
-    return NextResponse.json(
-      { error: "Not a member of this restaurant." },
-      { status: 403 },
-    );
+    return Errors.forbidden("Not a member of this restaurant.");
   }
 
   const restaurant = membership.restaurants as { name: string } | null;
@@ -51,7 +49,7 @@ export async function PUT(
 
   const result = await setActiveRestaurant(supabase, user.id, id);
   if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: 403 });
+    return Errors.forbidden(result.error);
   }
   return NextResponse.json({ ok: true, restaurantId: id });
 }
@@ -80,26 +78,23 @@ export async function PATCH(
   const { supabase, restaurantId } = auth;
 
   if (id !== restaurantId) {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    return Errors.forbidden("Forbidden.");
   }
 
   let raw: unknown;
   try {
     raw = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   const parsed = PatchSchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid body.", issues: parsed.error.issues },
-      { status: 400 },
-    );
+    return Errors.validation(parsed.error.issues, "Invalid body.");
   }
 
   if (Object.keys(parsed.data).length === 0) {
-    return NextResponse.json({ error: "No valid fields." }, { status: 400 });
+    return Errors.badRequest("No valid fields.");
   }
 
   const { error } = await supabase
@@ -113,7 +108,7 @@ export async function PATCH(
       tags: { surface: "restaurant", phase: "update" },
       extra: { restaurantId, id },
     });
-    return NextResponse.json({ error: "Update failed." }, { status: 500 });
+    return Errors.internal("Update failed.");
   }
 
   return NextResponse.json({ ok: true });
@@ -129,7 +124,7 @@ export async function DELETE(
   const { supabase, restaurantId } = auth;
 
   if (id !== restaurantId) {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    return Errors.forbidden("Forbidden.");
   }
 
   const { error } = await supabase
@@ -143,10 +138,7 @@ export async function DELETE(
       tags: { surface: "restaurant", phase: "delete" },
       extra: { restaurantId },
     });
-    return NextResponse.json(
-      { error: "Failed to delete restaurant." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to delete restaurant.");
   }
 
   return NextResponse.json({ ok: true });

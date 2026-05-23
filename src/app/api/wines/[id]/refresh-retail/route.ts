@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 import { fetchRetailPrices } from "@/lib/wine-intelligence/wine-searcher";
 
 export const runtime = "nodejs";
@@ -24,15 +25,12 @@ export async function POST(
   const { supabase, restaurantId, role } = auth;
 
   if (role !== "owner" && role !== "manager") {
-    return NextResponse.json(
-      { error: "Refreshing retail data requires owner or manager role." },
-      { status: 403 },
-    );
+    return Errors.forbidden("Refreshing retail data requires owner or manager role.");
   }
 
   const { id } = await ctx.params;
   if (!id) {
-    return NextResponse.json({ error: "wine id required" }, { status: 400 });
+    return Errors.badRequest("wine id required");
   }
 
   // Pull wine row (LWIN + invoice cost for sanity-check).
@@ -44,7 +42,7 @@ export async function POST(
     .single();
 
   if (fetchErr || !wine) {
-    return NextResponse.json({ error: "Wine not found." }, { status: 404 });
+    return Errors.notFound("Wine");
   }
 
   if (!wine.lwin_id) {
@@ -107,7 +105,7 @@ export async function POST(
       tags: { surface: "wines-refresh-retail", phase: "db-write" },
       extra: { wineId: id, restaurantId },
     });
-    return NextResponse.json({ error: "Failed to write retail data." }, { status: 500 });
+    return Errors.internal("Failed to write retail data.");
   }
 
   return NextResponse.json({

@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { Errors } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { requireMembership } from "@/lib/api/auth";
 
@@ -22,10 +23,7 @@ export async function GET() {
       tags: { surface: "cellar", phase: "grid-list-rpc" },
       extra: { restaurant_id: restaurantId },
     });
-    return NextResponse.json(
-      { error: "Failed to fetch grid data." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to fetch grid data.");
   }
 
   // Group by bin_location

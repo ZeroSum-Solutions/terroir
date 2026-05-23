@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/auth";
 import { DEFAULT_SECTIONS } from "@/lib/wine-list/types";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -20,15 +21,14 @@ export async function POST(request: NextRequest) {
   try {
     raw = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   const parsed = CreateListSchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid input." },
-      { status: 400 },
-    );
+    return Errors.badRequest(
+        parsed.error.issues[0]?.message ?? "Invalid input.",
+      );
   }
 
   const { name, description } = parsed.data;
@@ -54,10 +54,7 @@ export async function POST(request: NextRequest) {
       tags: { surface: "wine-lists", phase: "wine_lists-insert" },
       extra: { restaurantId },
     });
-    return NextResponse.json(
-      { error: "Failed to create wine list." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to create wine list.");
   }
 
   // Create default sections
@@ -85,10 +82,7 @@ export async function POST(request: NextRequest) {
       .delete()
       .eq("id", list.id)
       .eq("restaurant_id", restaurantId);
-    return NextResponse.json(
-      { error: "Failed to create sections." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to create sections.");
   }
 
   return NextResponse.json({ id: list.id });

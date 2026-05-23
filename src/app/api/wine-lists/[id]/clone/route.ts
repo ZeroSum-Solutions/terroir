@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireRole } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -31,7 +32,7 @@ export async function POST(
     .single();
 
   if (fetchError || !sourceList) {
-    return NextResponse.json({ error: "Wine list not found." }, { status: 404 });
+    return Errors.notFound("Wine list");
   }
 
   // 2. Fetch source sections and items
@@ -47,7 +48,7 @@ export async function POST(
       tags: { surface: "wine-lists", phase: "clone-sections-fetch" },
       extra: { restaurantId, list_id: id },
     });
-    return NextResponse.json({ error: "Clone failed." }, { status: 500 });
+    return Errors.internal("Clone failed.");
   }
 
   // 3. Create the clone list (unpublished, no slug)
@@ -71,7 +72,7 @@ export async function POST(
       tags: { surface: "wine-lists", phase: "clone-create" },
       extra: { restaurantId, source_id: id },
     });
-    return NextResponse.json({ error: "Clone failed." }, { status: 500 });
+    return Errors.internal("Clone failed.");
   }
 
   // 4. Clone sections and items
@@ -94,7 +95,7 @@ export async function POST(
       });
       // Clean up partial clone
       await supabase.from("wine_lists").delete().eq("id", cloneList.id).eq("restaurant_id", restaurantId);
-      return NextResponse.json({ error: "Clone failed." }, { status: 500 });
+      return Errors.internal("Clone failed.");
     }
 
     // Clone items within this section
@@ -124,7 +125,7 @@ export async function POST(
         });
         // Clean up partial clone
         await supabase.from("wine_lists").delete().eq("id", cloneList.id).eq("restaurant_id", restaurantId);
-        return NextResponse.json({ error: "Clone failed." }, { status: 500 });
+        return Errors.internal("Clone failed.");
       }
     }
   }

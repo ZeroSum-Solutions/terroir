@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -23,7 +24,7 @@ export async function GET(
     .single();
 
   if (!scan?.raw_image_path) {
-    return NextResponse.json({ error: "No image found." }, { status: 404 });
+    return Errors.notFound("Scan image");
   }
 
   const { data: signed, error } = await supabase.storage
@@ -36,10 +37,7 @@ export async function GET(
       tags: { surface: "scanner", phase: "fetch-storage" },
       extra: { scan_id: id },
     });
-    return NextResponse.json(
-      { error: "Failed to generate image URL." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to generate image URL.");
   }
 
   return NextResponse.json({ url: signed.signedUrl });

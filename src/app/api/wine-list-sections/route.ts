@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -28,15 +29,12 @@ export async function POST(request: NextRequest) {
   try {
     raw = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   const parsed = BodySchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid body.", issues: parsed.error.issues },
-      { status: 400 },
-    );
+    return Errors.validation(parsed.error.issues, "Invalid body.");
   }
   const { wine_list_id, name } = parsed.data;
 
@@ -57,10 +55,10 @@ export async function POST(request: NextRequest) {
       tags: { surface: "wine-list-sections", phase: "owner-check" },
       extra: { restaurantId, wine_list_id },
     });
-    return NextResponse.json({ error: "Lookup failed." }, { status: 500 });
+    return Errors.internal("Lookup failed.");
   }
   if (!ownerCheck) {
-    return NextResponse.json({ error: "Wine list not found." }, { status: 404 });
+    return Errors.notFound("Wine list");
   }
 
   // Assign position = current count (0-indexed). Race-unsafe under
@@ -78,7 +76,7 @@ export async function POST(request: NextRequest) {
       tags: { surface: "wine-list-sections", phase: "count" },
       extra: { restaurantId, wine_list_id },
     });
-    return NextResponse.json({ error: "Count failed." }, { status: 500 });
+    return Errors.internal("Count failed.");
   }
 
   const position = count ?? 0;
@@ -95,7 +93,7 @@ export async function POST(request: NextRequest) {
       tags: { surface: "wine-list-sections", phase: "insert" },
       extra: { restaurantId, wine_list_id, position },
     });
-    return NextResponse.json({ error: "Insert failed." }, { status: 500 });
+    return Errors.internal("Insert failed.");
   }
 
   return NextResponse.json(inserted, { status: 201 });

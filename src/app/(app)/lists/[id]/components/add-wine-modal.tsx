@@ -490,7 +490,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
 
             <div className="mt-md grid grid-cols-2 gap-md">
               <div>
-                <label className="mb-xs block text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+                <label htmlFor="add-wine-glass-price" className="mb-xs block text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
                   Glass price
                 </label>
                 <div className="relative">
@@ -500,6 +500,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                   <input
                     type="text"
                     inputMode="decimal"
+                    id="add-wine-glass-price"
                     value={glassPrice}
                     onChange={(e) => setGlassPrice(e.target.value)}
                     placeholder="—"
@@ -508,7 +509,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                 </div>
               </div>
               <div>
-                <label className="mb-xs block text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+                <label htmlFor="add-wine-bottle-price" className="mb-xs block text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
                   Bottle price
                 </label>
                 <div className="relative">
@@ -518,6 +519,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                   <input
                     type="text"
                     inputMode="decimal"
+                    id="add-wine-bottle-price"
                     value={bottlePrice}
                     onChange={(e) => setBottlePrice(e.target.value)}
                     placeholder="—"

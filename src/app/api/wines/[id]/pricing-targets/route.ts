@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -39,34 +40,28 @@ export async function PATCH(
   const { supabase, restaurantId, role } = auth;
 
   if (role !== "owner" && role !== "manager") {
-    return NextResponse.json(
-      { error: "Setting pricing targets requires owner or manager role." },
-      { status: 403 },
-    );
+    return Errors.forbidden("Setting pricing targets requires owner or manager role.");
   }
 
   const { id } = await ctx.params;
   if (!id) {
-    return NextResponse.json({ error: "wine id required" }, { status: 400 });
+    return Errors.badRequest("wine id required");
   }
 
   let raw: unknown;
   try {
     raw = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   const parsed = PatchSchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid body.", issues: parsed.error.issues },
-      { status: 400 },
-    );
+    return Errors.validation(parsed.error.issues, "Invalid body.");
   }
 
   if (Object.keys(parsed.data).length === 0) {
-    return NextResponse.json({ error: "No valid fields." }, { status: 400 });
+    return Errors.badRequest("No valid fields.");
   }
 
   // Build update payload — only include fields that were sent.
@@ -97,10 +92,10 @@ export async function PATCH(
       tags: { surface: "wines-pricing-targets", phase: "update" },
       extra: { wineId: id, restaurantId },
     });
-    return NextResponse.json({ error: "Update failed." }, { status: 500 });
+    return Errors.internal("Update failed.");
   }
   if (!data) {
-    return NextResponse.json({ error: "Wine not found." }, { status: 404 });
+    return Errors.notFound("Wine");
   }
 
   return NextResponse.json({

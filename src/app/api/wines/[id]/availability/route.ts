@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -40,15 +41,12 @@ export async function PATCH(
   try {
     raw = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return Errors.badRequest("Invalid JSON.");
   }
 
   const parsed = BodySchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid body.", issues: parsed.error.issues },
-      { status: 400 },
-    );
+    return Errors.validation(parsed.error.issues, "Invalid body.");
   }
   const { direction, note } = parsed.data;
 
@@ -68,10 +66,10 @@ export async function PATCH(
       tags: { surface: "availability", phase: "scope-check" },
       extra: { wineId: id, restaurantId },
     });
-    return NextResponse.json({ error: "Lookup failed." }, { status: 500 });
+    return Errors.internal("Lookup failed.");
   }
   if (!scope) {
-    return NextResponse.json({ error: "Wine not found." }, { status: 404 });
+    return Errors.notFound("Wine");
   }
 
   // The generator emits `p_note: string` (not `string | null`) because it
@@ -92,7 +90,7 @@ export async function PATCH(
       tags: { surface: "availability", phase: "set_wine_availability-rpc" },
       extra: { wineId: id, restaurantId, direction },
     });
-    return NextResponse.json({ error: "Update failed." }, { status: 500 });
+    return Errors.internal("Update failed.");
   }
 
   // SETOF → empty array when the wine was already in target state
