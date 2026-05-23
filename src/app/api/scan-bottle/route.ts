@@ -51,22 +51,30 @@ export async function POST(request: NextRequest) {
 
     const { qr_payload } = parsed.data;
 
-    // Look up the wine by ID, scoped to the current restaurant
-    const { data: wine, error: dbErr } = await supabase
+    // BND-111: look up wine globally first, then reject cross-tenant with 403.
+    const { data: globalWine, error: globalErr } = await supabase
       .from("wines")
-      .select("id, producer, name, vintage, varietal, region, country")
+      .select("id, producer, name, vintage, varietal, region, country, restaurant_id")
       .eq("id", qr_payload)
-      .eq("restaurant_id", restaurantId)
-      .single();
+      .maybeSingle();
 
-    if (dbErr || !wine) {
+    if (globalErr || !globalWine) {
       return apiError(
         404,
         "wine_not_found",
-        "No wine found for that QR code. It may belong to a different restaurant or have been deleted.",
+        "No wine found for that QR code. It may have been deleted.",
       );
     }
 
+    if (globalWine.restaurant_id !== restaurantId) {
+      return apiError(
+        403,
+        "cross_tenant_qr",
+        "This QR code belongs to a different restaurant.",
+      );
+    }
+
+    var { restaurant_id: _rid, ...wine } = globalWine;
     return NextResponse.json(wine);
   }
 
