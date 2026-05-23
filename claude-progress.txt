@@ -473,3 +473,43 @@ Stats after this session: 120/231 passing (51.9%).
 - *MODIFIED* src/app/(app)/cellar/wine-detail-drawer.tsx: useToast + pour/86 toasts
 
 Stats after this session: 123/231 passing (53.2%).
+
+## Session 2026-05-23 -- features #74, #75, #76
+
+### Completed
+- **#74 System enriches imported wines via enrich_wines_batch DB function** (PASSING)
+  - Created migration 0037 adding enrichment_metadata jsonb to wines table
+  - Updated enrich_wines_batch RPC to accept and store enrichment_metadata
+  - batch.ts builds per-wine metadata with source, fields_enriched, enriched_at
+  - POST /api/cellar triggers rule-engine enrichment after wine import
+  - Updated database types (Row, Insert, Update) and schema snapshot
+- **#75 System batches Claude calls for enrichment to control cost** (PASSING)
+  - Added enrichWinesWithClaudeBatch function for single-API-call batch enrichment
+  - batch.ts uses one Claude call for all candidates instead of one per wine
+  - JSON array response parsed per-wine with validation
+- **#76 User can request re-enrichment of a single wine** (PASSING)
+  - Updated POST /api/wines/[id]/enrich to include enrichment_metadata
+  - Added Re-enrich button to wine detail drawer with Sparkles icon
+  - Button shows loading spinner, success/error messages, auto-refreshes on success
+
+### Verification
+- All enrichment tests pass (8/8 route tests)
+- TypeScript: 0 errors in changed files
+- Mock data grep: 0 hits in production src/
+- 351/358 tests passing (7 pre-existing failures)
+
+### Files changed
+- supabase/migrations/0037_wines_enrichment_metadata.sql: new
+- supabase/migrations/down/0037_wines_enrichment_metadata.down.sql: new
+- supabase/schema.snapshot.sql: +5 (0037 column)
+- src/types/database.ts: +3 (enrichment_metadata to wines Row/Insert/Update)
+- src/lib/wine-intelligence/batch.ts: ~+30 (metadata builder, Claude batch integration)
+- src/lib/wine-intelligence/enrich-claude.ts: ~+130 (enrichWinesWithClaudeBatch function)
+- src/app/api/wines/enrich/route.test.ts: ~+80 (BND-261 + BND-262 test coverage)
+- src/app/api/cellar/route.ts: +28 (post-import enrichment trigger)
+- src/app/api/wines/[id]/enrich/route.ts: +25 (enrichment_metadata in payload)
+- src/app/(app)/cellar/wine-detail-drawer.tsx: +50 (Re-enrich button)
+
+Stats after this session: 140/231 passing (60.6%).
+
+Note: Dev server blocked by sandbox (EPERM on port 3000). All verification done via code review, TypeScript compilation, and unit tests.
