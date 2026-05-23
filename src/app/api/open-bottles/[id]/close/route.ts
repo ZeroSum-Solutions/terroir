@@ -9,8 +9,10 @@ export const runtime = "nodejs";
 /**
  * POST /api/open-bottles/[id]/close
  *
- * BND-122. Closes an open bottle: sets closed_at and remaining_ml to 0,
- * and inserts a pour_event with kind='finish_bottle' for the audit trail.
+ * BND-122 / ARCH-038. Closes an open bottle via record_pour RPC.
+ * Calls record_pour with kind=spill and ml=remaining_ml, which drains
+ * the bottle and triggers closed_at=now() via the DB trigger.
+ * Direct INSERT/UPDATE on pour_events and open_bottles is blocked by RLS.
  *
  * Auth: any member (staff+) can close bottles.
  *
@@ -28,7 +30,7 @@ export async function POST(
 ) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId, user } = auth;
+  const { supabase, restaurantId } = auth;
   const { id } = await params;
 
   // Fetch the bottle to verify it exists, is open, and belongs to this restaurant
@@ -53,40 +55,24 @@ export async function POST(
   const remainingMl = bottle.remaining_ml;
   const closedAt = new Date().toISOString();
 
-  // Update the open bottle: set remaining to 0 and close it
-  const { error: updateError } = await supabase
-    .from("open_bottles")
-    .update({ remaining_ml: 0, closed_at: closedAt })
-    .eq("id", id);
-
-  if (updateError) {
-    console.error("Failed to close bottle:", updateError);
-    Sentry.captureException(updateError, {
-      tags: { surface: "open-bottles", phase: "close" },
-      extra: { bottle_id: id },
-    });
-    return Errors.internal("Failed to close bottle.");
-  }
-
-  // Insert audit event: finish_bottle with the discard delta
-  const { error: eventError } = await supabase.from("pour_events").insert({
-    wine_id: bottle.wine_id,
-    restaurant_id: restaurantId,
-    open_bottle_id: id,
-    ml_delta: -remainingMl,
-    kind: "finish_bottle",
-    actor_user_id: user.id,
-    note: "Bottle closed (discard remaining)",
-    occurred_at: closedAt,
+  // ARCH-038: Use record_pour RPC (SECURITY DEFINER write path).
+  // Direct INSERT/UPDATE on pour_events and open_bottles is blocked by RLS.
+  // Calling with kind=spill and ml=remainingMl drains the bottle,
+  // which triggers closed_at=now() via pour_events_maintain_open_bottle.
+  const { error: pourError } = await supabase.rpc("record_pour", {
+    p_wine_id: bottle.wine_id,
+    p_ml: remainingMl,
+    p_kind: "spill",
+    p_note: "Bottle closed (discard remaining)",
   });
 
-  if (eventError) {
-    console.error("Failed to record discard event:", eventError);
-    Sentry.captureException(eventError, {
-      tags: { surface: "open-bottles", phase: "close-event" },
+  if (pourError) {
+    console.error("Failed to close bottle via record_pour:", pourError);
+    Sentry.captureException(pourError, {
+      tags: { surface: "open-bottles", phase: "close" },
       extra: { bottle_id: id, wine_id: bottle.wine_id },
     });
-    // Non-fatal: bottle is already closed
+    return Errors.internal("Failed to close bottle.");
   }
 
   revalidatePath("/cellar/open");
