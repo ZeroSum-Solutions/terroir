@@ -57,6 +57,8 @@ vi.mock("@/lib/scanner/azure", () => ({
   analyzeInvoice: (...args: unknown[]) => azure.analyzeInvoice(...args),
 }));
 
+function makeSupabase() { return { from: vi.fn().mockReturnThis(), insert: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: { id: "scan-1" }, error: null }), update: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), storage: { from: vi.fn().mockReturnThis(), download: vi.fn().mockRejectedValue(new Error("not found")), upload: vi.fn().mockResolvedValue({ error: null }) }, rpc: vi.fn(), catch: vi.fn().mockReturnThis() }; }
+
 const { POST } = await import("./route");
 // Reset the Anthropic singleton between tests so the env-var missing
 // scenario is order-independent.
@@ -129,7 +131,7 @@ describe("POST /api/scan", () => {
 
   it("returns 400 when the form has no file under the 'file' field", async () => {
     auth.requireMembership.mockResolvedValue({
-      supabase: {},
+      supabase: makeSupabase(),
       user: { id: "u1" },
       restaurantId: "restaurant-A",
       role: "owner",
@@ -144,7 +146,7 @@ describe("POST /api/scan", () => {
 
   it("returns 415 when the file mime type is not in the allow-list", async () => {
     auth.requireMembership.mockResolvedValue({
-      supabase: {},
+      supabase: makeSupabase(),
       user: { id: "u1" },
       restaurantId: "restaurant-A",
       role: "owner",
@@ -162,7 +164,7 @@ describe("POST /api/scan", () => {
 
   it("returns 400 on an empty file (size === 0)", async () => {
     auth.requireMembership.mockResolvedValue({
-      supabase: {},
+      supabase: makeSupabase(),
       user: { id: "u1" },
       restaurantId: "restaurant-A",
       role: "owner",
@@ -181,7 +183,7 @@ describe("POST /api/scan", () => {
   it("returns 500 when ANTHROPIC_API_KEY is missing (singleton throws)", async () => {
     delete process.env.ANTHROPIC_API_KEY;
     auth.requireMembership.mockResolvedValue({
-      supabase: {},
+      supabase: makeSupabase(),
       user: { id: "u1" },
       restaurantId: "restaurant-A",
       role: "owner",
@@ -199,7 +201,7 @@ describe("POST /api/scan", () => {
 
   it("returns 502 when Azure OCR throws (and never reaches Anthropic)", async () => {
     auth.requireMembership.mockResolvedValue({
-      supabase: {},
+      supabase: makeSupabase(),
       user: { id: "u1" },
       restaurantId: "restaurant-A",
       role: "owner",
@@ -219,7 +221,7 @@ describe("POST /api/scan", () => {
 
   it("maps an Anthropic APIError to a 502 with the raw OCR text for manual fallback", async () => {
     auth.requireMembership.mockResolvedValue({
-      supabase: {},
+      supabase: makeSupabase(),
       user: { id: "u1" },
       restaurantId: "restaurant-A",
       role: "owner",
@@ -242,7 +244,7 @@ describe("POST /api/scan", () => {
 
   it("returns a structured Scan when both upstreams succeed", async () => {
     auth.requireMembership.mockResolvedValue({
-      supabase: {},
+      supabase: makeSupabase(),
       user: { id: "u1" },
       restaurantId: "restaurant-A",
       role: "owner",
@@ -271,7 +273,7 @@ describe("POST /api/scan", () => {
 
   it("returns 422 no_wines_extracted when Claude returns empty line items", async () => {
     auth.requireMembership.mockResolvedValue({
-      supabase: {},
+      supabase: makeSupabase(),
       user: { id: "u1" },
       restaurantId: "restaurant-A",
       role: "owner",

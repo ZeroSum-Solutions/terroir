@@ -25,10 +25,13 @@ Parsing guidelines:
 - "Varietal" means the grape, not the country. Infer it from the wine name + region if not explicitly printed (e.g., a wine from Pauillac is Cabernet Sauvignon-based / "Bordeaux Blend").
 - "Region" is the wine region, not the country or continent (Burgundy, not France; Piedmont, not Italy).
 
+- Currency is the 3-letter ISO currency code (e.g., USD, EUR, GBP). Default to USD if not specified. Use null if ambiguous.
+- Format is the bottle size (e.g., 750ml, 1.5L, 375ml, 3L). Default to 750ml if not specified. Use null if the invoice does not indicate a bottle size.
+
 Confidence scoring:
 - 0.95-1.0: clean typed print, all fields unambiguous
 - 0.75-0.94: slight ambiguity but reasonable to proceed without review
 - 0.50-0.74: needs human review; list ambiguous fields in lowFields
 - Below 0.50: guessed significant fields
 
-Return every wine line on the invoice, in the order it appears.`;
+Return every wine line on the invoice as a structured JSON object, in the order it appears.`;

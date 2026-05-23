@@ -29,6 +29,8 @@ describe("PersistedScanSchema", () => {
           region: "Burgundy",
           qty: 6,
           unitCost: 85.5,
+          currency: "USD",
+          format: "750ml",
           confidence: 0.92,
         },
       ],

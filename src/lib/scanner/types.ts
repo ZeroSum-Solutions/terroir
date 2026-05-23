@@ -16,6 +16,8 @@ export type LineItem = {
   region: string;
   qty: number;
   unitCost: number;
+  currency: string | null;
+  format: string | null;
   confidence: number;
   lowFields?: LineItemField[];
 };

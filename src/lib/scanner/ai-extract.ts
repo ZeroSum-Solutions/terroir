@@ -18,6 +18,7 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { ZodError } from "zod";
 import { getAnthropicClient } from "@/lib/ai/anthropic-client";
 import {
   ParsedInvoiceSchema,
@@ -32,6 +33,7 @@ export type { ParsedInvoice, ParsedLineItem };
 export type AiExtractErrorCode =
   | "not_configured"
   | "parse_failed"
+  | "validation_failed"
   | "rate_limited"
   | "bad_input"
   | "upstream_error"
@@ -141,5 +143,20 @@ export async function extractFromOcr(ocr: OcrResult): Promise<ParsedInvoice> {
       "Could not structure the invoice. Use the raw text below to enter wines manually.",
     );
   }
-  return parsed;
+
+  // BND-0087: Explicit Zod validation defense-in-depth gate before any DB write.
+  // The SDK messages.parse() already validates against the schema, but an explicit
+  // safeParse ensures malformed output is caught and logged before it reaches the DB.
+  const validation = ParsedInvoiceSchema.safeParse(parsed);
+  if (!validation.success) {
+    console.error(
+      "[ai-extract] Zod validation failed for Claude response:",
+      validation.error.format(),
+    );
+    throw new AiExtractError(
+      "validation_failed",
+      "The AI response did not match the expected format. Please try again.",
+    );
+  }
+  return validation.data;
 }

@@ -71,6 +71,8 @@ function happyParse() {
           region: "Willamette Valley",
           qty: 6,
           unitCost: 32.5,
+          currency: "USD",
+          format: "750ml",
           confidence: 0.92,
           lowFields: [],
         },

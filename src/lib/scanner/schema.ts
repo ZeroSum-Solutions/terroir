@@ -14,6 +14,8 @@ export const LineItemFieldSchema = z.enum([
   "region",
   "qty",
   "unitCost",
+  "currency",
+  "format",
 ]);
 
 export const ParsedLineItemSchema = z.object({
@@ -44,6 +46,18 @@ export const ParsedLineItemSchema = z.object({
     .number()
     .describe(
       "Unit cost per bottle in US dollars. Numeric only, no currency symbol. If the invoice prints a European comma decimal, convert to a period.",
+    ),
+  currency: z
+    .string()
+    .nullable()
+    .describe(
+      "3-letter ISO currency code (e.g., USD, EUR, GBP). Default to USD if not specified. Use null if ambiguous.",
+    ),
+  format: z
+    .string()
+    .nullable()
+    .describe(
+      "Bottle size (e.g., 750ml, 1.5L, 375ml, 3L). Default to 750ml if not specified. Use null if the invoice does not indicate a bottle size.",
     ),
   confidence: z
     .number()
@@ -92,7 +106,7 @@ export type ParsedLineItem = z.infer<typeof ParsedLineItemSchema>;
  * incompatibly. The next load will detect the mismatch and drop the
  * stale state — acceptable because in-flight scans are ephemeral.
  */
-export const PERSISTED_SCAN_VERSION = 1;
+export const PERSISTED_SCAN_VERSION = 2;
 
 const PersistedLineItemSchema = z.object({
   id: z.string(),
@@ -103,6 +117,8 @@ const PersistedLineItemSchema = z.object({
   region: z.string(),
   qty: z.number(),
   unitCost: z.number(),
+  currency: z.string().nullable(),
+  format: z.string().nullable(),
   confidence: z.number(),
   lowFields: z.array(LineItemFieldSchema).optional(),
 });

@@ -28,7 +28,7 @@ const ALLOWED_MIME = new Set([
 ]);
 const OCR_STATUS = { not_configured: 500, empty_text: 422, upstream_error: 502 } as const;
 const AI_STATUS = {
-  not_configured: 500, parse_failed: 422, rate_limited: 429,
+  not_configured: 500, parse_failed: 422, validation_failed: 422, rate_limited: 429,
   bad_input: 400, upstream_error: 502, unknown: 500,
 } as const;
 
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
         id: `${parsedAt}-${idx}`,
         name: item.name, producer: item.producer, vintage: item.vintage,
         varietal: item.varietal, region: item.region, qty: item.qty,
-        unitCost: item.unitCost, confidence: item.confidence,
+        unitCost: item.unitCost, currency: item.currency ?? null, format: item.format ?? null, confidence: item.confidence,
         lowFields: item.lowFields.length > 0 ? item.lowFields : undefined,
       }));
 
@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
       // Same pattern: only capture failures that indicate an external
       // problem worth paging on (upstream / parse_failed). Skip rate
       // limits and bad_input — those are expected operational signals.
-      if (e.code === "upstream_error" || e.code === "parse_failed") {
+      if (e.code === "upstream_error" || e.code === "parse_failed" || e.code === "validation_failed") {
         Sentry.captureException(e, {
           tags: { stage: "ai-extract", code: e.code },
           extra: { rawTextLen: ocr.rawText.length },
@@ -281,7 +281,7 @@ export async function POST(request: NextRequest) {
     id: `${parsedAt}-${idx}`,
     name: item.name, producer: item.producer, vintage: item.vintage,
     varietal: item.varietal, region: item.region, qty: item.qty,
-    unitCost: item.unitCost, confidence: item.confidence,
+    unitCost: item.unitCost, currency: item.currency ?? null, format: item.format ?? null, confidence: item.confidence,
     lowFields: item.lowFields.length > 0 ? item.lowFields : undefined,
   }));
 
@@ -289,7 +289,7 @@ export async function POST(request: NextRequest) {
   const quality = scoreItems(items);
   await supabase.from("invoice_scans").update({
     distributor_name: parsed.distributor ?? ocr.vendorName ?? "Unknown",
-    invoice_number: parsed.invoiceNumber ?? ocr.invoiceNumber || null,
+    invoice_number: (parsed.invoiceNumber ?? ocr.invoiceNumber) || null,
     invoice_date: parsed.invoiceDate ?? ocr.invoiceDate ?? parsedAt.slice(0, 10),
     ocr_text: JSON.parse(JSON.stringify(ocr)),
     parsed_line_items: JSON.parse(JSON.stringify(parsed.lineItems)),
