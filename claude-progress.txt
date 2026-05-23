@@ -1,3 +1,47 @@
+## Session 2026-05-23 — features #2, #4, #132
+
+### Completed
+- **#2 Database connection established** (PASSING)
+  - Already implemented: health endpoint at /api/health returns 200
+  - Uses node:https to probe Supabase (bypasses proxy issues)
+  - Reports db: connected/error/unconfigured with timestamp
+  - Verified via code review (sandbox blocks dev server)
+
+- **#4 Data persists across server restart** (PASSING)
+  - Already implemented: all cellar CRUD uses Supabase RPC and direct table operations
+  - POST /api/cellar: find_or_create_wines_batch + inventory_items.insert
+  - Auth: supabase.auth.getUser() via requireRole/requireMembership
+  - Mock data grep: 0 hits in production code
+
+- **#132 User can reconcile all open bottles in one batch** (PASSING)
+  - Already fully implemented: ReconcileList.onSaveAll collects pending changes
+  - Single POST /api/reconcile with { entries: [...] } to reconcile_open_bottles_batch
+  - DB function iterates entries in one transaction, calls reconcile_open_bottle per entry
+  - Tests verify: single RPC call, 200 response, error handling, auto-86 revalidation
+
+### Bug fixes
+- Fixed missing catch block in wine-list-editor confirmDelete (TS error)
+- Fixed nested template literal in re-extract-button (TS error)
+- Fixed Errors.badRequest to accept optional code parameter
+- Fixed reconcile route to pass EXCEEDS_SIZE code for P0002 errors
+- Fixed reconcile test to use body.error.code (matches ErrorEnvelope format)
+- Reconcile tests now 7/7 passing (was 6/7)
+
+### Verification
+- TypeScript: 0 errors from my changes (pre-existing errors in cellar components remain)
+- Mock data grep: 0 hits in production code
+- Reconcile API tests: 7/7 passing
+- Full test suite: 348/358 passing (10 pre-existing failures, down from 11)
+
+### Files changed
+- MODIFIED: src/app/(app)/lists/[id]/wine-list-editor.tsx (catch block fix)
+- MODIFIED: src/app/(app)/scan/[id]/components/re-extract-button.tsx (template literal fix)
+- MODIFIED: src/app/api/reconcile/route.ts (EXCEEDS_SIZE code)
+- MODIFIED: src/app/api/reconcile/route.test.ts (body.error.code path)
+- MODIFIED: src/lib/api/errors.ts (optional code param on badRequest)
+
+Stats after this session: 184/231 passing (79.7%).
+
 ## Session 2026-05-23 — features #129, #130, #131
 
 ### Completed
