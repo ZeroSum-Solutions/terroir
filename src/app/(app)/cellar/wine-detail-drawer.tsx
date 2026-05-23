@@ -4,6 +4,7 @@ import { useRef, useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { X, Wine, PowerOff, Edit3, ChevronDown } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
+import { useToast } from "@/lib/toast";
 import { ML_PER_OZ } from "@/lib/units";
 // Re-imported for clarity — used by both DrinkWindowSection (BND-039) and
 // PricingSection (BND-040). Reviewer-find I4: don't hand-code 0.0338 next
@@ -61,6 +62,7 @@ export function WineDetailDrawer({
   const dialogRef = useRef<HTMLDivElement>(null);
   const headingId = "wine-detail-heading";
   const [, startTransition] = useTransition();
+  const toast = useToast();
 
   // Pour-side local state. Only relevant when row.glass_pour_ml is set.
   const [busy, setBusy] = useState(false);
@@ -105,8 +107,10 @@ export function WineDetailDrawer({
             | null;
           throw new Error(payload?.error ?? `Request failed (${res.status}).`);
         }
+        toast.success("Glass poured");
         startTransition(() => router.refresh());
       } catch (err) {
+        toast.error("Pour failed");
         setErrorMsg(err instanceof Error ? err.message : "Pour failed.");
       } finally {
         setBusy(false);
@@ -133,8 +137,10 @@ export function WineDetailDrawer({
           | null;
         throw new Error(payload?.error ?? `Request failed (${res.status}).`);
       }
+      toast.success(direction === "eightysixed" ? "Marked as 86'd" : "Restored");
       startTransition(() => router.refresh());
     } catch (err) {
+      toast.error("Toggle failed");
       setErrorMsg(err instanceof Error ? err.message : "Toggle failed.");
     } finally {
       setBusy(false);

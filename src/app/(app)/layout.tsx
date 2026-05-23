@@ -5,6 +5,7 @@ import { RestaurantProvider } from "@/lib/context/restaurant";
 import { SettingsDropdown } from "./settings-dropdown";
 import { DesktopNavLinks, MobileNavLinks } from "./nav-links";
 import { Fab } from "./fab";
+import { ToastWrapper } from "./toast-wrapper";
 
 export default async function AppLayout({
   children,
@@ -18,6 +19,7 @@ export default async function AppLayout({
 
   return (
     <RestaurantProvider restaurantId={restaurantId} restaurantName={restaurantName} userRole={userRole}>
+      <ToastWrapper>
     <div className="flex min-h-screen flex-col bg-surface">
       {/* Top bar — minimal on mobile, full nav on md+ */}
       <header className="sticky top-0 z-10 flex h-14 items-center border-b border-border bg-surface/95 px-md backdrop-blur-sm md:h-16 md:px-lg">
@@ -64,6 +66,7 @@ export default async function AppLayout({
           Hidden on /scan (already a primary-action surface). */}
       <Fab />
     </div>
+    </ToastWrapper>
     </RestaurantProvider>
   );
 }
