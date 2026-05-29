@@ -41,9 +41,20 @@ describe("timeAgo", () => {
     expect(timeAgo(isoAgo(6 * 24 * 60 * 60_000))).toBe("6d ago");
   });
 
-  it("uses weeks at 7+ days", () => {
+  it("uses weeks between 1w and 4w", () => {
     expect(timeAgo(isoAgo(7 * 24 * 60 * 60_000))).toBe("1w ago");
     expect(timeAgo(isoAgo(30 * 24 * 60 * 60_000))).toBe("4w ago");
+  });
+
+  it("uses months at 5+ weeks up to under a year", () => {
+    expect(timeAgo(isoAgo(35 * 24 * 60 * 60_000))).toBe("1mo ago");
+    expect(timeAgo(isoAgo(180 * 24 * 60 * 60_000))).toBe("6mo ago");
+    expect(timeAgo(isoAgo(360 * 24 * 60 * 60_000))).toBe("12mo ago");
+  });
+
+  it("uses years at 365+ days", () => {
+    expect(timeAgo(isoAgo(365 * 24 * 60 * 60_000))).toBe("1y ago");
+    expect(timeAgo(isoAgo(2 * 365 * 24 * 60 * 60_000))).toBe("2y ago");
   });
 });
 

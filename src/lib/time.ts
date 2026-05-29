@@ -5,8 +5,9 @@
  * — a small but jarring UX glitch the moment after an action completes.
  *
  * Buckets: < 60s "Just now", < 60m "{n}m ago", < 24h "{n}h ago",
- * < 7d "{n}d ago", else "{n}w ago". Future-dated input is clamped to
- * "Just now" rather than rendering negative numbers.
+ * < 7d "{n}d ago", < 5w "{n}w ago", < 12mo "{n}mo ago", else "{n}y ago".
+ * Future-dated input is clamped to "Just now" rather than rendering
+ * negative numbers.
  */
 export function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -18,7 +19,10 @@ export function timeAgo(iso: string): string {
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
   const weeks = Math.floor(days / 7);
-  return `${weeks}w ago`;
+  if (weeks < 5) return `${weeks}w ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  const years = Math.floor(days / 365);
+  return `${years}y ago`;
 }
 
 /**
