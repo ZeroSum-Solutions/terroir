@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getAuthContext } from "@/lib/auth-context";
 import { ArrowLeft, ChevronLeft, ChevronRight, FileText, ScanLine } from "lucide-react";
+import { ExportCsvButton } from "./export-csv-button";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -152,11 +153,14 @@ export default async function ScansPage({
       </Link>
       <div className="flex items-center justify-between gap-md">
         <h1 className="font-serif text-[22px] text-ink md:text-[28px]">Scan history</h1>
-        {rows.length > 0 && (
-          <span className="rounded-pill bg-surface-muted px-sm py-xs text-[11px] font-medium uppercase tracking-[0.06em] text-ink-subtle">
-            {offset + 1}–{offset + rows.length} of {total}
-          </span>
-        )}
+        <div className="flex items-center gap-sm">
+          {rows.length > 0 && (
+            <span className="rounded-pill bg-surface-muted px-sm py-xs text-[11px] font-medium uppercase tracking-[0.06em] text-ink-subtle">
+              {offset + 1}–{offset + rows.length} of {total}
+            </span>
+          )}
+          <ExportCsvButton rows={rows} />
+        </div>
       </div>
       {filterChips}
     </header>
