@@ -83,6 +83,7 @@ export default async function ScansPage({
     .from("invoice_scans")
     .select(
       "id, distributor_name, invoice_number, invoice_date, status, item_count, accuracy_score, created_at",
+      { count: "exact" },
     )
     .eq("restaurant_id", restaurantId);
 
@@ -90,9 +91,9 @@ export default async function ScansPage({
     query = query.eq("status", status);
   }
 
-  const { data: scans, error } = await query
+  const { data: scans, error, count } = await query
     .order("created_at", { ascending: false })
-    .range(offset, offset + PAGE_SIZE);
+    .range(offset, offset + PAGE_SIZE - 1);
 
   if (error) {
     console.error("Failed to load scan history:", error);
@@ -103,8 +104,10 @@ export default async function ScansPage({
     );
   }
 
-  const hasMore = scans.length > PAGE_SIZE;
-  const rows: ScanRow[] = hasMore ? scans.slice(0, PAGE_SIZE) : scans;
+  const total = count ?? scans.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rows: ScanRow[] = scans;
+  const hasMore = page < totalPages;
 
   const filterChips = (
     <div
@@ -146,7 +149,7 @@ export default async function ScansPage({
         <h1 className="font-serif text-[22px] text-ink md:text-[28px]">Scan history</h1>
         {rows.length > 0 && (
           <span className="rounded-pill bg-surface-muted px-sm py-xs text-[11px] font-medium uppercase tracking-[0.06em] text-ink-subtle">
-            {rows.length} of {hasMore ? "many" : rows.length}
+            {offset + 1}–{offset + rows.length} of {total}
           </span>
         )}
       </div>
@@ -345,7 +348,7 @@ export default async function ScansPage({
           </span>
         )}
         <span className="px-sm text-[13px] tabular text-ink-muted">
-          Page {page}
+          Page {page} of {totalPages}
         </span>
         {hasMore ? (
           <Link
