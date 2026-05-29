@@ -21,7 +21,27 @@ type ScanRow = {
   created_at: string;
 };
 
-type SearchParams = Promise<{ page?: string }>;
+type StatusFilter = "all" | "committed" | "pending";
+
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "committed", label: "Committed" },
+  { value: "pending", label: "Pending" },
+];
+
+function parseStatus(raw: string | undefined): StatusFilter {
+  if (raw === "committed" || raw === "pending") return raw;
+  return "all";
+}
+
+function buildQuery(params: { page?: number; status?: StatusFilter }) {
+  const parts: string[] = [];
+  if (params.page && params.page > 1) parts.push(`page=${params.page}`);
+  if (params.status && params.status !== "all") parts.push(`status=${params.status}`);
+  return parts.length ? `?${parts.join("&")}` : "";
+}
+
+type SearchParams = Promise<{ page?: string; status?: string }>;
 
 function statusLabel(status: string) {
   switch (status) {
@@ -53,17 +73,24 @@ export default async function ScansPage({
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
   const offset = (page - 1) * PAGE_SIZE;
+  const status = parseStatus(sp.status);
 
   const auth = await getAuthContext();
   if (!auth) return null;
   const { supabase, restaurantId } = auth;
 
-  const { data: scans, error } = await supabase
+  let query = supabase
     .from("invoice_scans")
     .select(
       "id, distributor_name, invoice_number, invoice_date, status, item_count, accuracy_score, created_at",
     )
-    .eq("restaurant_id", restaurantId)
+    .eq("restaurant_id", restaurantId);
+
+  if (status !== "all") {
+    query = query.eq("status", status);
+  }
+
+  const { data: scans, error } = await query
     .order("created_at", { ascending: false })
     .range(offset, offset + PAGE_SIZE);
 
@@ -79,25 +106,78 @@ export default async function ScansPage({
   const hasMore = scans.length > PAGE_SIZE;
   const rows: ScanRow[] = hasMore ? scans.slice(0, PAGE_SIZE) : scans;
 
+  const filterChips = (
+    <div
+      role="radiogroup"
+      aria-label="Filter scans by status"
+      className="mt-md flex flex-wrap gap-xs"
+    >
+      {STATUS_FILTERS.map((f) => {
+        const active = status === f.value;
+        return (
+          <Link
+            key={f.value}
+            href={`/scans${buildQuery({ status: f.value })}`}
+            role="radio"
+            aria-checked={active}
+            className={`inline-flex h-8 items-center rounded-pill border px-md text-[12px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 ${
+              active
+                ? "border-ink bg-ink text-white"
+                : "border-border-strong bg-white text-ink-muted hover:bg-surface-muted"
+            }`}
+          >
+            {f.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+
+  const headerBlock = (
+    <header className="mb-lg">
+      <Link
+        href="/scan"
+        className="mb-md inline-flex items-center gap-xs text-[13px] text-ink-muted hover:text-ink"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
+        Back to scanner
+      </Link>
+      <div className="flex items-center justify-between gap-md">
+        <h1 className="font-serif text-[22px] text-ink md:text-[28px]">Scan history</h1>
+        {rows.length > 0 && (
+          <span className="rounded-pill bg-surface-muted px-sm py-xs text-[11px] font-medium uppercase tracking-[0.06em] text-ink-subtle">
+            {rows.length} of {hasMore ? "many" : rows.length}
+          </span>
+        )}
+      </div>
+      {filterChips}
+    </header>
+  );
+
   if (rows.length === 0 && page === 1) {
+    const emptyCopy =
+      status === "pending"
+        ? {
+            title: "No pending scans",
+            body: "All caught up — every scan has been committed to inventory.",
+          }
+        : status === "committed"
+          ? {
+              title: "No committed scans yet",
+              body: "Scans show up here once they've been committed to inventory.",
+            }
+          : {
+              title: "No scans yet",
+              body: "Photograph an invoice to start building your inventory.",
+            };
+
     return (
       <section>
-        <header className="mb-lg">
-          <Link
-            href="/scan"
-            className="mb-md inline-flex items-center gap-xs text-[13px] text-ink-muted hover:text-ink"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
-            Back to scanner
-          </Link>
-          <h1 className="font-serif text-[22px] text-ink md:text-[28px]">Scan history</h1>
-        </header>
+        {headerBlock}
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <ScanLine className="mb-md h-12 w-12 text-ink-subtle" strokeWidth={1.5} />
-          <p className="text-[15px] font-medium text-ink">No scans yet</p>
-          <p className="mt-xs text-[14px] text-ink-muted">
-            Photograph an invoice to start building your inventory.
-          </p>
+          <p className="text-[15px] font-medium text-ink">{emptyCopy.title}</p>
+          <p className="mt-xs text-[14px] text-ink-muted">{emptyCopy.body}</p>
           <Link
             href="/scan"
             className="mt-lg inline-flex h-11 items-center gap-sm rounded-sm bg-accent px-lg text-[14px] font-medium text-white hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2"
@@ -111,21 +191,7 @@ export default async function ScansPage({
 
   return (
     <section>
-      <header className="mb-lg">
-        <Link
-          href="/scan"
-          className="mb-md inline-flex items-center gap-xs text-[13px] text-ink-muted hover:text-ink"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
-          Back to scanner
-        </Link>
-        <div className="flex items-center justify-between gap-md">
-          <h1 className="font-serif text-[22px] text-ink md:text-[28px]">Scan history</h1>
-          <span className="rounded-pill bg-surface-muted px-sm py-xs text-[11px] font-medium uppercase tracking-[0.06em] text-ink-subtle">
-            {rows.length} of {hasMore ? "many" : rows.length}
-          </span>
-        </div>
-      </header>
+      {headerBlock}
 
       {/* Desktop table */}
       <div className="hidden overflow-hidden rounded-md border border-border md:block">
@@ -266,7 +332,7 @@ export default async function ScansPage({
       >
         {page > 1 ? (
           <Link
-            href={`/scans?page=${page - 1}`}
+            href={`/scans${buildQuery({ page: page - 1, status })}`}
             className="inline-flex h-10 items-center gap-xs rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2"
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={2} />
@@ -283,7 +349,7 @@ export default async function ScansPage({
         </span>
         {hasMore ? (
           <Link
-            href={`/scans?page=${page + 1}`}
+            href={`/scans${buildQuery({ page: page + 1, status })}`}
             className="inline-flex h-10 items-center gap-xs rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2"
           >
             Next
