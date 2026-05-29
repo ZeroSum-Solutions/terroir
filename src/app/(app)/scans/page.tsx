@@ -97,9 +97,26 @@ export default async function ScansPage({
     query = query.eq("status", status);
   }
 
-  const { data: scans, error, count } = await query
-    .order("created_at", { ascending: false })
-    .range(offset, offset + PAGE_SIZE - 1);
+  const statusCountQuery = (s: Exclude<StatusFilter, "all">) =>
+    supabase
+      .from("invoice_scans")
+      .select("id", { count: "exact", head: true })
+      .eq("restaurant_id", restaurantId)
+      .eq("status", s);
+
+  const [scansRes, completeRes, processingRes, failedRes] = await Promise.all([
+    query.order("created_at", { ascending: false }).range(offset, offset + PAGE_SIZE - 1),
+    statusCountQuery("complete"),
+    statusCountQuery("processing"),
+    statusCountQuery("failed"),
+  ]);
+  const { data: scans, error, count } = scansRes;
+
+  const statusCounts: Record<Exclude<StatusFilter, "all">, number> = {
+    complete: completeRes.count ?? 0,
+    processing: processingRes.count ?? 0,
+    failed: failedRes.count ?? 0,
+  };
 
   if (error) {
     console.error("Failed to load scan history:", error);
@@ -123,19 +140,32 @@ export default async function ScansPage({
     >
       {STATUS_FILTERS.map((f) => {
         const active = status === f.value;
+        const countForChip =
+          f.value === "all"
+            ? statusCounts.complete + statusCounts.processing + statusCounts.failed
+            : statusCounts[f.value];
         return (
           <Link
             key={f.value}
             href={`/scans${buildQuery({ status: f.value })}`}
             role="radio"
             aria-checked={active}
-            className={`inline-flex h-8 items-center rounded-pill border px-md text-[12px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 ${
+            aria-label={`${f.label} (${countForChip})`}
+            className={`inline-flex h-8 items-center gap-xs rounded-pill border px-md text-[12px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 ${
               active
                 ? "border-ink bg-ink text-white"
                 : "border-border-strong bg-white text-ink-muted hover:bg-surface-muted"
             }`}
           >
-            {f.label}
+            <span>{f.label}</span>
+            <span
+              aria-hidden
+              className={`tabular text-[11px] ${
+                active ? "text-white/70" : "text-ink-subtle"
+              }`}
+            >
+              {countForChip}
+            </span>
           </Link>
         );
       })}
