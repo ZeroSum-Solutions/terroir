@@ -21,16 +21,17 @@ type ScanRow = {
   created_at: string;
 };
 
-type StatusFilter = "all" | "committed" | "pending";
+type StatusFilter = "all" | "complete" | "processing" | "failed";
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "committed", label: "Committed" },
-  { value: "pending", label: "Pending" },
+  { value: "complete", label: "Complete" },
+  { value: "processing", label: "Processing" },
+  { value: "failed", label: "Failed" },
 ];
 
 function parseStatus(raw: string | undefined): StatusFilter {
-  if (raw === "committed" || raw === "pending") return raw;
+  if (raw === "complete" || raw === "processing" || raw === "failed") return raw;
   return "all";
 }
 
@@ -45,10 +46,12 @@ type SearchParams = Promise<{ page?: string; status?: string }>;
 
 function statusLabel(status: string) {
   switch (status) {
-    case "committed":
-      return "Committed";
-    case "pending":
-      return "Pending";
+    case "complete":
+      return "Complete";
+    case "processing":
+      return "Processing";
+    case "failed":
+      return "Failed";
     default:
       return status.charAt(0).toUpperCase() + status.slice(1);
   }
@@ -56,10 +59,12 @@ function statusLabel(status: string) {
 
 function statusBadge(status: string) {
   switch (status) {
-    case "committed":
+    case "complete":
       return "bg-success-soft text-success";
-    case "pending":
+    case "processing":
       return "bg-warning-soft text-warning";
+    case "failed":
+      return "bg-danger-soft text-danger";
     default:
       return "bg-surface-muted text-ink-muted";
   }
@@ -159,20 +164,25 @@ export default async function ScansPage({
 
   if (rows.length === 0 && page === 1) {
     const emptyCopy =
-      status === "pending"
+      status === "processing"
         ? {
-            title: "No pending scans",
-            body: "All caught up — every scan has been committed to inventory.",
+            title: "No scans in progress",
+            body: "Nothing is being extracted right now. Photograph an invoice to start a new scan.",
           }
-        : status === "committed"
+        : status === "complete"
           ? {
-              title: "No committed scans yet",
-              body: "Scans show up here once they've been committed to inventory.",
+              title: "No completed scans yet",
+              body: "Scans show up here once OCR finishes successfully.",
             }
-          : {
-              title: "No scans yet",
-              body: "Photograph an invoice to start building your inventory.",
-            };
+          : status === "failed"
+            ? {
+                title: "No failed scans",
+                body: "Nice — every scan has extracted cleanly.",
+              }
+            : {
+                title: "No scans yet",
+                body: "Photograph an invoice to start building your inventory.",
+              };
 
     return (
       <section>
