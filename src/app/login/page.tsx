@@ -110,16 +110,28 @@ export default async function LoginPage({
         </div>
 
         {reset_done === "1" ? (
-          <div className="rounded-md border border-success/30 bg-success-soft p-lg text-[14px] text-success">
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-md border border-success/30 bg-success-soft p-lg text-[14px] text-success"
+          >
             Password updated. Sign in with a magic link or your new password.
           </div>
         ) : sent ? (
-          <div className="rounded-md border border-success/30 bg-success-soft p-lg text-[14px] text-success">
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-md border border-success/30 bg-success-soft p-lg text-[14px] text-success"
+          >
             Check <span className="font-medium">{sent}</span> for a sign-in link.
             You can close this tab.
           </div>
         ) : reset === "1" ? (
-          <div className="rounded-md border border-success/30 bg-success-soft p-lg text-[14px] text-success">
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-md border border-success/30 bg-success-soft p-lg text-[14px] text-success"
+          >
             If that email is registered, we&rsquo;ve sent a password reset link.
             Check your inbox.
           </div>
