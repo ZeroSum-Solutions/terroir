@@ -57,3 +57,8 @@ scripts/lwin.csv
 
 .playwright-cli/
 .playwright/
+# agent/build runtime artifacts (2026-06-04)
+.claude/handoffs/
+.zeroforge-debris/
+.zeroforge/
+supabase/.temp/
