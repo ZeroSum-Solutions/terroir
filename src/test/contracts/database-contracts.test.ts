@@ -50,5 +50,18 @@ describe("database security contracts", () => {
     expect(schema).not.toContain('create policy "members can insert pour_events"');
     expect(schema).not.toContain('create policy "members can update open_bottles"');
   });
-});
 
+  it("keeps retryable job records scoped by restaurant membership", () => {
+    expect(schema).toContain("create table public.background_jobs");
+    expect(schema).toContain(
+      "job_type in ('invoice_ocr', 'wine_enrichment', 'wine_list_pdf')",
+    );
+    expect(schema).toContain(
+      "status in ('queued', 'processing', 'retrying', 'succeeded', 'failed', 'cancelled')",
+    );
+    expect(schema).toContain('create policy "members can read background jobs"');
+    expect(schema).toContain('create policy "members can create own background jobs"');
+    expect(schema).not.toContain('create policy "members can update background jobs"');
+    expect(schema).not.toContain('create policy "members can delete background jobs"');
+  });
+});
