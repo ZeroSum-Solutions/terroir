@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:contracts": "vitest run src/test/contracts src/lib/api/errors.contract.test.ts",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "snapshot": "node scripts/build-schema-snapshot.mjs",

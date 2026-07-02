@@ -4,14 +4,16 @@
 #   1. typecheck    (tsc --noEmit)
 #   2. lint         (next lint / eslint)
 #   3. unit tests   (vitest run)
-#   4. schema drift (supabase/schema.snapshot.sql must equal a fresh
+#   4. contract tests (DB security/API envelopes)
+#   5. schema drift (supabase/schema.snapshot.sql must equal a fresh
 #                    concatenation of supabase/migrations/*.sql)
-#   5. types drift  (src/types/database.ts must equal the live schema's
+#   6. types drift  (src/types/database.ts must equal the live schema's
 #                    current generated types) — skipped when
 #                    SUPABASE_ACCESS_TOKEN is not set (fork PRs etc.)
-#   6. downs check  (every forward migration from 0011 onward has a
+#   7. downs check  (every forward migration from 0011 onward has a
 #                    paired supabase/migrations/down/*.down.sql file —
 #                    INT-006)
+#   8. local seed dry-run (sanitized production-like fixtures still build)
 #
 # The schema-drift step turns "someone added a migration but forgot to
 # update the snapshot" into a hard failure. To regenerate the snapshot
@@ -73,6 +75,9 @@ jobs:
       - name: Test
         run: pnpm run test
 
+      - name: Contract tests
+        run: pnpm run test:contracts
+
       - name: Schema drift check
         # Regenerate the snapshot and diff against the committed one.
         # Any change means a migration was added without running
@@ -92,3 +97,8 @@ jobs:
         # paired .down.sql sibling. Catches PRs that add a forward
         # migration without writing its rollback.
         run: pnpm run downs:check
+
+      - name: Local Supabase seed dry-run
+        # Builds sanitized, production-like fixture data and prints counts.
+        # No database writes happen without --confirm.
+        run: pnpm run supabase:seed:local
