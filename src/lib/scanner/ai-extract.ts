@@ -18,7 +18,6 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { ZodError } from "zod";
 import { getAnthropicClient } from "@/lib/ai/anthropic-client";
 import {
   ParsedInvoiceSchema,

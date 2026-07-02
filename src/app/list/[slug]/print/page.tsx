@@ -4,13 +4,24 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { renderWineListSections, type EightysixStrategy } from "@/lib/wine-list/render";
 import type { WineListSectionEmbed } from "@/lib/wine-list/shapes";
+import {
+  getSupabasePublicConfig,
+  isProductionRuntime,
+  requireSupabasePublicConfig,
+} from "@/lib/supabase/config";
 import { cn } from "@/lib/utils";
 
 /** Anon client for public pages — respects RLS, no auth session needed. */
 function createAnonClient() {
+  const config = isProductionRuntime()
+    ? requireSupabasePublicConfig()
+    : getSupabasePublicConfig();
+
+  if (!config) return null;
+
   return createSupabaseClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    config.url,
+    config.publishableKey,
   );
 }
 
@@ -27,6 +38,8 @@ export async function generateMetadata({
   if (!slug || slug.length < 3) return { title: "Print · Wine List" };
 
   const supabase = createAnonClient();
+  if (!supabase) return { title: "Print · Wine List" };
+
   const { data: list } = await supabase
     .from("wine_lists")
     .select("name, restaurants(name)")
@@ -57,6 +70,7 @@ export default async function PrintWineListPage({
   if (!slug || slug.length < 3) notFound();
 
   const supabase = createAnonClient();
+  if (!supabase) notFound();
 
   const { data: list, error } = await supabase
     .from("wine_lists")
@@ -97,9 +111,15 @@ export default async function PrintWineListPage({
     } | null;
   };
 
-  const visibleSections = (list.wine_list_sections ?? []).map(function (section) {
-    const items = section.wine_list_items as any[];
-    return { ...section, wine_list_items: items.filter(function (item: any) { return !item.hidden; }) };
+  const visibleSections = (
+    (list.wine_list_sections ?? []) as WineListSectionEmbed<PublicWineItem>[]
+  ).map(function (section) {
+    return {
+      ...section,
+      wine_list_items: section.wine_list_items.filter(function (item) {
+        return !item.hidden;
+      }),
+    };
   });
   const sections = renderWineListSections(
     visibleSections as unknown as WineListSectionEmbed<PublicWineItem>[],

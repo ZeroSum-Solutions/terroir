@@ -239,7 +239,7 @@ describe("POST /api/pdf", () => {
 
     expect(res.status).toBe(500);
     const body = await res.json();
-    expect(body.code).toBe("pdf_generation_failed");
+    expect(body.error.code).toBe("pdf_generation_failed");
     // Even though rendering failed, we must close the browser.
     expect(mockClose).toHaveBeenCalled();
   });

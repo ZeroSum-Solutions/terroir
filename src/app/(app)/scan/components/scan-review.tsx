@@ -8,11 +8,9 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { accuracyColor } from "@/lib/scanner/accuracy-color";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
-import { LOW_CONFIDENCE_ITEM_THRESHOLD } from "@/lib/scanner/scoring";
 import { SCORED_FIELDS } from "@/lib/scanner/scored-fields";
 import type { LineItem, LineItemField } from "@/lib/scanner/types";
-import { cn } from "@/lib/utils";
-import { formatMoney, MoneyInput, QtyStepper, TextInput, VintageInput } from "./field-inputs";
+import { MoneyInput, QtyStepper, TextInput, VintageInput } from "./field-inputs";
 import { LineItemCard } from "./line-item-card";
 
 interface ScanReviewProps {
@@ -52,10 +50,6 @@ export function ScanReview({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(hasImage);
 
-  useEffect(() => {
-    setItems(initialItems);
-    setEdits({});
-  }, [initialItems]);
   useEffect(() => {
     if (!hasImage) return;
     fetch(`/api/scans/${id}/image`)
@@ -151,6 +145,8 @@ export function ScanReview({
   const isEdited = (it: LineItem, field: LineItemField) =>
     edits[`${it.id}:${field}`] === true;
 
+  const displayedAccuracy = accuracy ?? acc;
+
   const handleExportCsv = useCallback(() => {
     if (items.length === 0) return;
     downloadCsv(
@@ -209,11 +205,15 @@ export function ScanReview({
             </div>
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">Accuracy</div>
-              <div className={`mt-xs font-mono text-[14px] ${acc != null ? accuracyColor(acc) : "text-ink"}`}>{acc != null ? `${acc}%` : "—"}</div>
+              <div className={`mt-xs font-mono text-[14px] ${displayedAccuracy != null ? accuracyColor(displayedAccuracy) : "text-ink"}`}>
+                {displayedAccuracy != null ? `${displayedAccuracy}%` : "—"}
+              </div>
             </div>
           </div>
           <div className="mt-md flex flex-wrap items-center gap-md border-t border-dashed border-border pt-md text-[13px] text-ink-muted">
             <span>{itemCount} wines</span>
+            <span aria-hidden className="text-ink-subtle">·</span>
+            <span>{bottles} bottles</span>
             <span aria-hidden className="text-ink-subtle">·</span>
             <span className="font-mono">${formatMoneyLocal(total)}</span>
             {lowC > 0 && (

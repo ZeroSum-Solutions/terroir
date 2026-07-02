@@ -75,8 +75,20 @@ type WineComparison = {
   flagged: boolean;
 };
 
-export default async function PriceComparisonPage(p: any) {
-  const sp = await ((p.searchParams as any) ?? Promise.resolve({})); const sf = (sp as any).sort ?? null; const so = (sp as any).ord ?? (sf ? "desc" : null);
+type SearchParams = Promise<{
+  sort?: string | string[];
+  ord?: string | string[];
+}>;
+
+export default async function PriceComparisonPage({
+  searchParams,
+}: {
+  searchParams?: SearchParams;
+}) {
+  const sp = (await searchParams) ?? {};
+  const sf = typeof sp.sort === "string" ? sp.sort : null;
+  const so =
+    sp.ord === "asc" || sp.ord === "desc" ? sp.ord : sf ? "desc" : null;
   const auth = (await getAuthContext())!; // AppLayout redirects when null
   const { supabase, restaurantId: rid } = auth;
 
@@ -189,10 +201,10 @@ export default async function PriceComparisonPage(p: any) {
   const comparable = comparisons
     .filter((c) => c.distributorCount >= 2)
     .sort((a, b) => {
-      if ((sp as any).sort === "variance") {
-        const va = a.variancePct ?? ((sp as any).ord === "asc" ? Infinity : -Infinity);
-        const vb = b.variancePct ?? ((sp as any).ord === "asc" ? Infinity : -Infinity);
-        if (va !== vb) return (sp as any).ord === "asc" ? va - vb : vb - va;
+      if (sf === "variance") {
+        const va = a.variancePct ?? (so === "asc" ? Infinity : -Infinity);
+        const vb = b.variancePct ?? (so === "asc" ? Infinity : -Infinity);
+        if (va !== vb) return so === "asc" ? va - vb : vb - va;
       }
       if (b.potentialSavings !== a.potentialSavings) {
         return b.potentialSavings - a.potentialSavings;

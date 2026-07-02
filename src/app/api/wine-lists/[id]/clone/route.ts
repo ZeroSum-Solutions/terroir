@@ -7,6 +7,25 @@ export const runtime = "nodejs";
 
 type Params = Promise<{ id: string }>;
 
+type SourceItem = {
+  id: string;
+  wine_id: string;
+  bottle_price: number | null;
+  glass_price: number | null;
+  glass_pour_ml: number | null;
+  pour_size_mode: string | null;
+  position: number;
+  is_available: boolean | null;
+  tasting_note: string | null;
+};
+
+type SourceSection = {
+  id: string;
+  name: string;
+  position: number;
+  wine_list_items?: SourceItem[];
+};
+
 /**
  * POST /api/wine-lists/[id]/clone
  *
@@ -76,7 +95,7 @@ export async function POST(
   }
 
   // 4. Clone sections and items
-  for (const section of sourceSections) {
+  for (const section of sourceSections as SourceSection[]) {
     const { data: newSection, error: sectionInsertError } = await supabase
       .from("wine_list_sections")
       .insert({
@@ -99,9 +118,9 @@ export async function POST(
     }
 
     // Clone items within this section
-    const items = (section as any).wine_list_items as any[] | undefined;
+    const items = section.wine_list_items;
     if (items && items.length > 0) {
-      const itemInserts = items.map((item: any) => ({
+      const itemInserts = items.map((item) => ({
         section_id: newSection.id,
         wine_id: item.wine_id,
         bottle_price: item.bottle_price,
@@ -109,7 +128,7 @@ export async function POST(
         glass_pour_ml: item.glass_pour_ml,
         pour_size_mode: item.pour_size_mode ?? "bottle_only",
         position: item.position,
-        is_available: item.is_available,
+        is_available: item.is_available ?? true,
         tasting_note: item.tasting_note,
       }));
 

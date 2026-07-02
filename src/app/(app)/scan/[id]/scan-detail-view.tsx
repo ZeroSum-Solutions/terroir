@@ -4,7 +4,7 @@ import * as Sentry from "@sentry/nextjs";
 import { AlertTriangle, ArrowLeft, ChevronDown, Download, ExternalLink, FileText, Package } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { accuracyColor } from "@/lib/scanner/accuracy-color";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
 import { LOW_CONFIDENCE_ITEM_THRESHOLD } from "@/lib/scanner/scoring";

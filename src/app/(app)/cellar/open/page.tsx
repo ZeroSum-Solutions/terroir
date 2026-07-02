@@ -44,6 +44,7 @@ export default async function OpenBottlesPage() {
   }
 
   const openBottles = (bottles ?? []) as unknown as OBRow[];
+  const renderedAtMs = new Date().getTime();
 
   return (
     <section>
@@ -94,7 +95,7 @@ export default async function OpenBottlesPage() {
                   : 0;
               const openedDate = new Date(bottle.opened_at);
               const daysOpen = Math.floor(
-                (Date.now() - openedDate.getTime()) / (1000 * 60 * 60 * 24),
+                (renderedAtMs - openedDate.getTime()) / (1000 * 60 * 60 * 24),
               );
               const openedLabel =
                 daysOpen === 0

@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { Errors } from "@/lib/api/errors";
 import { requireMembership } from "@/lib/api/auth";
+import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
 
@@ -16,12 +17,14 @@ const SectionSchema = z.object({
   id: z.string(),
   name: z.string().min(1).max(100),
 });
+type Section = z.infer<typeof SectionSchema>;
 
 const PourDefaultSchema = z.object({
   size_ml: z.number().int().positive(),
   colour: z.string().min(1).max(50),
   default_oz: z.number().positive(),
 });
+type PourDefault = z.infer<typeof PourDefaultSchema>;
 
 const PatchSectionsSchema = z.object({
   sections: z.array(SectionSchema).optional(),
@@ -137,10 +140,14 @@ export async function PATCH(request: NextRequest) {
 
   if (!existing) {
     // No config yet — create one with the provided data.
-    const createLabels: Record<string, unknown> = {} as Record<string, unknown>;
+    const createLabels: {
+      sections?: Section[];
+      section_order?: string[];
+      pour_defaults?: PourDefault[];
+    } = {};
     if (sections) {
       createLabels.sections = sections;
-      createLabels.section_order = section_order ?? (sections as any[]).map((s: any) => s.id);
+      createLabels.section_order = section_order ?? sections.map((s) => s.id);
     }
     if (pour_defaults) {
       createLabels.pour_defaults = pour_defaults;
@@ -152,7 +159,7 @@ export async function PATCH(request: NextRequest) {
         name: "Main Cellar",
         rows: 10,
         columns: 10,
-        labels: createLabels as any,
+        labels: createLabels as Json,
       })
       .select("*")
       .single();
@@ -184,7 +191,7 @@ export async function PATCH(request: NextRequest) {
 
   const { data: config, error } = await supabase
     .from("cellar_config")
-    .update({ labels: updatedLabels as any })
+    .update({ labels: updatedLabels as Json })
     .eq("id", existing.id)
     .select("*")
     .single();

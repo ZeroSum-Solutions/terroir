@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { NextResponse } from "next/server";
 import { notFound, redirect } from "next/navigation";
 import { requireMembership } from "@/lib/api/auth";
-import { WineListEditor } from "./wine-list-editor";
+import {
+  WineListEditor,
+  type WineListEditorSection,
+} from "./wine-list-editor";
+import type { WineList } from "@/lib/wine-list/types";
 
 export const metadata: Metadata = { title: "Edit list" };
 
@@ -40,7 +44,7 @@ export default async function WineListEditorPage({
   if (error || !list) notFound();
 
   // Sort sections by position, items by position within each section
-  const sections = ((list.wine_list_sections ?? []) as Array<{
+  const sections: WineListEditorSection[] = ((list.wine_list_sections ?? []) as Array<{
     id: string;
     name: string;
     position: number;
@@ -62,6 +66,9 @@ export default async function WineListEditorPage({
       // read sites are migrated too.
       created_at: string;
       updated_at: string;
+      name_override?: string | null;
+      blurb?: string | null;
+      hidden?: boolean | null;
       wines: {
         id: string;
         name: string;
@@ -86,12 +93,22 @@ export default async function WineListEditorPage({
     .sort((a, b) => a.position - b.position)
     .map((s) => ({
       ...s,
-      wine_list_items: [...(s.wine_list_items ?? [])].map((item) => ({ ...item, name_override: ((item as Record<string, unknown>).name_override as string | null) ?? null, blurb: ((item as Record<string, unknown>).blurb as string | null) ?? null, hidden: ((item as Record<string, unknown>).hidden as boolean) ?? false })).sort(
+      wine_list_items: [...(s.wine_list_items ?? [])].map((item) => ({
+        ...item,
+        name_override: item.name_override ?? null,
+        blurb: item.blurb ?? null,
+        hidden: item.hidden ?? false,
+      })).sort(
         (a, b) => a.position - b.position,
       ),
     }));
 
   const { wine_list_sections: _, ...listMeta } = list;
 
-  return <WineListEditor list={listMeta} sections={sections as any} />;
+  return (
+    <WineListEditor
+      list={listMeta as Omit<WineList, "wine_list_sections">}
+      sections={sections}
+    />
+  );
 }

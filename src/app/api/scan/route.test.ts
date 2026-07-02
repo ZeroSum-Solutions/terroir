@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { OK_OCR } from "@/test/mocks/azure";
 import { makeParsedInvoice, makeEmptyParsedInvoice } from "@/test/fixtures/invoices/scans";
 
@@ -75,8 +75,7 @@ function makeFormRequest(formData: FormData) {
   return new Request("http://localhost/api/scan", {
     method: "POST",
     body: formData,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  }) as any;
+  }) as unknown as NextRequest;
 }
 
 function pdfFile() {
@@ -188,7 +187,7 @@ describe("POST /api/scan", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ imagePath: "restaurant-A/scan-1/image.gif" }),
-    }) as any;
+    }) as unknown as NextRequest;
 
     const rs = await POST(rq);
     expect(rs.status).toBe(415);

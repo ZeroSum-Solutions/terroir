@@ -43,7 +43,7 @@ import { AddWineModal } from "./components/add-wine-modal";
 import { PublishModal } from "./components/publish-modal";
 import { TemplatePicker } from "./components/template-picker";
 
-type Wine = {
+export type WineListEditorWine = {
   id: string;
   name: string;
   producer: string;
@@ -57,7 +57,7 @@ type Wine = {
   serving_temp_label?: string | null;
 };
 
-type ListItem = {
+export type WineListEditorItem = {
   id: string;
   section_id: string;
   wine_id: string;
@@ -70,15 +70,15 @@ type ListItem = {
   name_override: string | null;
   blurb: string | null;
   hidden: boolean;
-  wines: Wine;
+  wines: WineListEditorWine;
 };
 
-type Section = {
+export type WineListEditorSection = {
   id: string;
   name: string;
   position: number;
   wine_list_id: string;
-  wine_list_items: ListItem[];
+  wine_list_items: WineListEditorItem[];
 };
 
 // BND-161: inline-rename input overlay.
@@ -87,7 +87,6 @@ function SortableSectionButton({
   section,
   isActive,
   onSelect,
-  onRename,
   onDelete,
   editingId,
   editName,
@@ -97,11 +96,10 @@ function SortableSectionButton({
   onEditCancel,
   editRef,
 }: {
-  section: Section;
+  section: WineListEditorSection;
   isActive: boolean;
   onSelect: () => void;
-  onRename: (id: string) => void;
-  onDelete: (section: Section) => void;
+  onDelete: (section: WineListEditorSection) => void;
   editingId: string | null;
   editName: string;
   onEditStart: (id: string, name: string) => void;
@@ -223,7 +221,7 @@ export function WineListEditor({
   sections: initialSections,
 }: {
   list: Omit<WineList, "wine_list_sections">;
-  sections: Section[];
+  sections: WineListEditorSection[];
 }) {
   const router = useRouter();
   const [sections, setSections] = useState(initialSections);
@@ -246,10 +244,12 @@ export function WineListEditor({
   }, [editingSectionId]);
 
   // BND-163: delete confirmation state
-  const [deleteTarget, setDeleteTarget] = useState<Section | null>(null);
+  const [deleteTarget, setDeleteTarget] =
+    useState<WineListEditorSection | null>(null);
 
   // BND-194: delete wine item confirmation state
-  const [wineToDelete, setWineToDelete] = useState<ListItem | null>(null);
+  const [wineToDelete, setWineToDelete] =
+    useState<WineListEditorItem | null>(null);
 
   const currentSection = useMemo(
     () => sections.find((s) => s.id === activeSection),
@@ -502,7 +502,7 @@ export function WineListEditor({
     [router],
   );
 
-  const requestDeleteItem = useCallback(function(item: ListItem) {
+  const requestDeleteItem = useCallback(function(item: WineListEditorItem) {
     setWineToDelete(item);
   }, []);
 
@@ -818,7 +818,6 @@ export function WineListEditor({
                     section={s}
                     isActive={activeSection === s.id}
                     onSelect={() => setActiveSection(s.id)}
-                    onRename={() => {}}
                     onDelete={setDeleteTarget}
                     editingId={editingSectionId}
                     editName={editSectionName}

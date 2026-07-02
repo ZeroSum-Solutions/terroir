@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Wine, TrendingUp, DollarSign } from "lucide-react";
 
@@ -75,46 +75,52 @@ export default function PourAnalyticsSection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(
-    async function () {
-      setLoading(true);
-      setError(null);
-
-      // Build API query params
-      const params = new URLSearchParams();
-      params.set("topN", "10");
-
-      if (range === "custom" && from && to) {
-        params.set("range", "custom");
-        params.set("from", from);
-        params.set("to", to);
-      } else if (range === "ytd") {
-        params.set("range", "custom");
-        params.set("from", ytdStart());
-        params.set("to", new Date().toISOString().slice(0, 10));
-      } else {
-        params.set("range", range);
-      }
-
-      try {
-        const res = await fetch("/api/insights/pour?" + params.toString());
-        if (!res.ok) throw new Error("Failed to load pour data");
-        const json = await res.json();
-        setData(json);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unknown error");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [range, from, to],
-  );
-
   useEffect(
     function () {
-      fetchData();
+      let cancelled = false;
+
+      async function fetchData() {
+        await Promise.resolve();
+        if (cancelled) return;
+        setLoading(true);
+        setError(null);
+
+        // Build API query params
+        const params = new URLSearchParams();
+        params.set("topN", "10");
+
+        if (range === "custom" && from && to) {
+          params.set("range", "custom");
+          params.set("from", from);
+          params.set("to", to);
+        } else if (range === "ytd") {
+          params.set("range", "custom");
+          params.set("from", ytdStart());
+          params.set("to", new Date().toISOString().slice(0, 10));
+        } else {
+          params.set("range", range);
+        }
+
+        try {
+          const res = await fetch("/api/insights/pour?" + params.toString());
+          if (!res.ok) throw new Error("Failed to load pour data");
+          const json = await res.json();
+          if (!cancelled) setData(json);
+        } catch (err) {
+          if (!cancelled) {
+            setError(err instanceof Error ? err.message : "Unknown error");
+          }
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      }
+
+      void fetchData();
+      return function () {
+        cancelled = true;
+      };
     },
-    [fetchData],
+    [range, from, to],
   );
 
   if (loading) {

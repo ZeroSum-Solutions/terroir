@@ -89,7 +89,7 @@ describe("GET /api/restaurant/[id]", () => {
     const res = await GET({} as NextRequest, { params });
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error).toBe("Not a member of this restaurant.");
+    expect(body.error.message).toBe("Not a member of this restaurant.");
   });
 
   it("401s when user is not authenticated", async () => {

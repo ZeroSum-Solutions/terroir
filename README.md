@@ -36,6 +36,11 @@ pnpm exec tsc --noEmit   # type-check
 pnpm run snapshot        # regenerate supabase/schema.snapshot.sql after a new migration
 ```
 
+For a sanitized local Supabase dataset, see
+[`docs/LOCAL-SUPABASE.md`](docs/LOCAL-SUPABASE.md). The seed script defaults to
+dry-run and refuses non-local Supabase URLs unless explicitly overridden for
+approved staging.
+
 ## Deploy
 
 The target is [Railway](https://railway.app/). `railway.toml` at the repo root declares the start command and the healthcheck path; Railway's Railpack builder auto-detects Node, pnpm, and Puppeteer's Chromium deps. Health check lives at `GET /api/health`.

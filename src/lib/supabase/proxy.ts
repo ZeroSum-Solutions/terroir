@@ -1,6 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
+import {
+  getSupabasePublicConfig,
+  isProductionRuntime,
+} from "@/lib/supabase/config";
 
 const PUBLIC_PATHS = [
   "/login",
@@ -17,6 +21,13 @@ function isPublic(pathname: string) {
   );
 }
 
+function redirectToLogin(request: NextRequest) {
+  const url = request.nextUrl.clone();
+  url.pathname = "/login";
+  url.searchParams.set("next", request.nextUrl.pathname);
+  return NextResponse.redirect(url);
+}
+
 /**
  * Runs in proxy.ts. Refreshes the Supabase session on every request
  * and redirects unauthenticated users hitting protected routes to /login.
@@ -26,10 +37,19 @@ function isPublic(pathname: string) {
  */
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
+  const { pathname } = request.nextUrl;
+  const config = getSupabasePublicConfig();
+
+  if (!config) {
+    if (isProductionRuntime()) {
+      return new NextResponse("Service unavailable.", { status: 503 });
+    }
+    return isPublic(pathname) ? response : redirectToLogin(request);
+  }
 
   const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    config.url,
+    config.publishableKey,
     {
       cookies: {
         getAll() {
@@ -53,13 +73,8 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
-
   if (!user && !isPublic(pathname)) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("next", pathname);
-    return NextResponse.redirect(url);
+    return redirectToLogin(request);
   }
 
   if (user && pathname === "/login") {

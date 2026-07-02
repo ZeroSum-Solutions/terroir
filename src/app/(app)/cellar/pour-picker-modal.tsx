@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState } from "react";
 import { ML_PER_OZ } from "@/lib/units";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
@@ -17,26 +17,20 @@ interface Props {
 }
 
 export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props) {
-  const [custom, setCustom] = useState("");
+  const [custom, setCustom] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
   const headingId = "pour-picker-heading";
 
-  useEffect(() => {
-    if (defaultOz != null && defaultOz > 0 && !custom) {
-      setCustom(String(defaultOz));
-    }
-  }, [defaultOz]);
-
   const handleCancel = () => {
-    setCustom("");
+    setCustom(null);
     setNote("");
     onCancel();
   };
 
   const handleConfirm = (ml: number) => {
     const trimmed = note.trim();
-    setCustom("");
+    setCustom(null);
     setNote("");
     onConfirm(ml, trimmed.length > 0 ? trimmed : undefined);
   };
@@ -49,8 +43,11 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
 
   if (!item) return null;
 
+  const customValue =
+    custom ?? (defaultOz != null && defaultOz > 0 ? String(defaultOz) : "");
+
   const submitCustom = () => {
-    const oz = Number(custom);
+    const oz = Number(customValue);
     if (!Number.isFinite(oz) || oz <= 0) return;
     const ml = Math.max(1, Math.round(oz * ML_PER_OZ));
     handleConfirm(ml);
@@ -107,7 +104,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
             max="40"
             inputMode="decimal"
             autoFocus
-            value={custom}
+            value={customValue}
             onChange={(e) => setCustom(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -120,7 +117,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
           />
           <button
             type="button"
-            disabled={!custom || Number(custom) <= 0}
+            disabled={!customValue || Number(customValue) <= 0}
             onClick={submitCustom}
             className="h-[38px] rounded-sm bg-accent px-md text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-40"
           >

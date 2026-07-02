@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
-import { enrichWine, type RatingSource } from "@/lib/wine-intelligence/enrich";
+import { enrichWine } from "@/lib/wine-intelligence/enrich";
 import { enrichWineWithClaude } from "@/lib/wine-intelligence/enrich-claude";
 import type { Json } from "@/types/database";
 

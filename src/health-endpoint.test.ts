@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
+import { GET } from "@/app/api/health/route";
 
 describe("GET /api/health", () => {
   it("returns HTTP 200 with database status indicator", async () => {
-    const res = await fetch("http://localhost:3000/api/health");
+    const res = await GET();
     expect(res.status).toBe(200);
 
     const body = await res.json();

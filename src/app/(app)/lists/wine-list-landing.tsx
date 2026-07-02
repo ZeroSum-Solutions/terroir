@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Archive,
@@ -463,13 +464,13 @@ export function WineListLanding({
               <p className="mt-xs text-[13px] text-ink-muted">
                 Restore them or create a new one.
               </p>
-              <a
+              <Link
                 href="/lists?show_archived=1"
                 className="mt-lg inline-flex h-[38px] items-center gap-sm rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted"
               >
                 <Archive className="h-4 w-4" strokeWidth={2} />
                 Show archived lists
-              </a>
+              </Link>
             </div>
           )}
         </>

@@ -176,8 +176,6 @@ create table public.wines (
   varietal       text,
   region         text,
   country        text,
-  tasting_notes  text,
-  hero_image_url text,
   size_ml        int         not null default 750,
   lwin_id        text,
   created_at     timestamptz not null default now(),
@@ -300,11 +298,9 @@ create table public.wine_lists (
   id                uuid        primary key default gen_random_uuid(),
   restaurant_id     uuid        not null references public.restaurants(id) on delete cascade,
   name              text        not null,
-  description       text,
   template          text        not null default 'classic',
   slug              text,
   is_published      boolean     not null default false,
-  archived          boolean     not null default false,
   last_published_at timestamptz,
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()
@@ -404,11 +400,7 @@ create table public.wine_list_items (
   glass_price   numeric(10,2),
   bottle_price  numeric(10,2),
   tasting_note  text,
-  hidden        boolean       not null default false,
-  name_override text,
-  blurb         text,
   is_available  boolean       not null default true,
-  hidden        boolean       not null default false,
   created_at    timestamptz   not null default now(),
   updated_at    timestamptz   not null default now()
 );
@@ -573,8 +565,6 @@ alter table public.wines
   add column serving_temp_min   int,
   add column serving_temp_max   int,
   add column serving_temp_label text;
-alter table public.wines
-  add column decant_minutes      int;
 
 -------------------------------------------------------------------------------
 -- lwin_catalog — Liv-ex LWIN reference data for matching and enrichment
@@ -1086,8 +1076,7 @@ begin
       (e->>'drink_window_end')::int      as drink_window_end,
       (e->>'serving_temp_min')::int      as serving_temp_min,
       (e->>'serving_temp_max')::int      as serving_temp_max,
-      (e->>'serving_temp_label')         as serving_temp_label,
-      (e->>'decant_minutes')::int          as decant_minutes
+      (e->>'serving_temp_label')         as serving_temp_label
     from jsonb_array_elements(p_enrichments) as e
   )
   update public.wines w
@@ -1096,8 +1085,7 @@ begin
     drink_window_end   = u.drink_window_end,
     serving_temp_min   = u.serving_temp_min,
     serving_temp_max   = u.serving_temp_max,
-    serving_temp_label = u.serving_temp_label,
-    decant_minutes      = u.decant_minutes
+    serving_temp_label = u.serving_temp_label
   from u
   where w.id = u.id
     and w.restaurant_id = p_restaurant_id;
@@ -1151,11 +1139,10 @@ create table public.availability_events (
   id              uuid primary key default gen_random_uuid(),
   wine_id         uuid not null references public.wines(id) on delete cascade,
   restaurant_id   uuid not null references public.restaurants(id) on delete cascade,
-  direction       text not null check (direction in ('eightysixed', 'restored', 'reconcile')),
+  direction       text not null check (direction in ('eightysixed', 'restored')),
   user_id         uuid references auth.users(id),
   note            text,
   created_at      timestamptz not null default now()
-  delta           int,
 );
 
 create index availability_events_wine_idx
@@ -1376,41 +1363,6 @@ $$;
 create trigger pour_events_trigger
   after insert on public.pour_events
   for each row execute function public.pour_events_maintain_open_bottle();
-
--- BND-118: reverse trigger for pour_events delete
-
-create or replace function public.pour_events_reverse_open_bottle()
-returns trigger
-language plpgsql
-as $$
-begin
-  if OLD.kind = 'new_bottle' then
-    update public.open_bottles
-      set remaining_ml = 0,
-          closed_at = now()
-      where wine_id = OLD.wine_id
-        and restaurant_id = OLD.restaurant_id
-        and closed_at is null;
-  elsif OLD.kind in ('pour','spill','finish_bottle') then
-    update public.open_bottles
-      set remaining_ml = remaining_ml + OLD.ml_delta,
-          closed_at = null
-      where wine_id = OLD.wine_id
-        and restaurant_id = OLD.restaurant_id;
-  elsif OLD.kind = 'reconcile' then
-    update public.open_bottles
-      set remaining_ml = remaining_ml + OLD.ml_delta,
-          closed_at = null
-      where wine_id = OLD.wine_id
-        and restaurant_id = OLD.restaurant_id;
-  end if;
-  return OLD;
-end;
-$$;
-
-create trigger pour_events_delete_trigger
-  after delete on public.pour_events
-  for each row execute function public.pour_events_reverse_open_bottle();
 
 -- 5. RPC: record_pour -----------------------------------------------------
 
@@ -2232,8 +2184,7 @@ begin
       (e->>'review_excerpt')             as review_excerpt,
       (e->>'serving_temp_min')::int      as serving_temp_min,
       (e->>'serving_temp_max')::int      as serving_temp_max,
-      (e->>'serving_temp_label')         as serving_temp_label,
-      (e->>'decant_minutes')::int          as decant_minutes
+      (e->>'serving_temp_label')         as serving_temp_label
     from jsonb_array_elements(p_enrichments) as e
   )
   update public.wines w
@@ -2247,7 +2198,6 @@ begin
     serving_temp_min   = coalesce(u.serving_temp_min,   w.serving_temp_min),
     serving_temp_max   = coalesce(u.serving_temp_max,   w.serving_temp_max),
     serving_temp_label = coalesce(u.serving_temp_label, w.serving_temp_label),
-    decant_minutes      = coalesce(u.decant_minutes,      w.decant_minutes),
     last_enriched_at   = now()
   from u
   where w.id = u.id
@@ -2443,14 +2393,18 @@ END $$;
 
 ALTER TABLE public.invitations
   ALTER COLUMN email SET NOT NULL;
--- 0028_wine_lists_description.sql
+
+-- === 0028_wine_lists_description.sql ===
 -- Add description column to wine_lists for feature #153
 alter table public.wine_lists
-  add column if not exists description text;
+  add column description text;
 
+-- === 0029_public_restaurant_read.sql ===
 -- 0029_public_restaurant_read.sql
 -- Allow anonymous (public) users to read restaurant names when they have
--- published wine lists.
+-- published wine lists. This enables the /list/[slug] SSR page to display
+-- the restaurant name via the anon key nested embed (restaurants(name)).
+
 create policy "public can read restaurants with published lists"
   on public.restaurants for select to anon
   using (
@@ -2462,41 +2416,863 @@ create policy "public can read restaurants with published lists"
     )
   );
 
--- 0030_wine_lists_archived.sql
+-- Also create a down migration
+
+-- === 0030_wine_lists_archived.sql ===
 -- Add archived column to wine_lists for feature #158
 alter table public.wine_lists
-  add column if not exists archived boolean not null default false;
+  add column archived boolean not null default false;
 
--- 0031_wine_list_items_name_override.sql
+-- === 0031_wine_list_items_name_override.sql ===
 -- BND-169: add name_override column to wine_list_items
 alter table public.wine_list_items
   add column if not exists name_override text;
 
--- 0032_wine_list_items_blurb.sql
+-- === 0032_wine_list_items_blurb.sql ===
 -- BND-170: add blurb column to wine_list_items for custom per-item text
 alter table public.wine_list_items
   add column if not exists blurb text;
 
--- 0033_wine_list_items_hidden.sql
+-- === 0033_wine_list_items_hidden.sql ===
 -- BND-171: add hidden column to wine_list_items to exclude from public views
 alter table public.wine_list_items
   add column if not exists hidden boolean not null default false;
 
+-- === 0034_eightysix_strategy.sql ===
 -- 0034_eightysix_strategy.sql
--- BND-173: add eightysix_strategy column to restaurants for 86'd wine display control
+-- Add eightysix_strategy column to restaurants to control how 86d wines
+-- appear on published wine lists:
+--   'hide' (default) -- 86d wines are removed from /list/[slug]
+--   'mark'           -- 86d wines are shown with gray/strikethrough styling
+
 alter table public.restaurants
-  add column if not exists eightysix_strategy text not null default 'hide'
-    check (eightysix_strategy in ('hide', 'mark'));
+  add column eightysix_strategy text not null default 'hide'
+  check (eightysix_strategy in ('hide', 'mark'));
 
--- 0037_wines_enrichment_metadata.sql
--- BND-261: add enrichment_metadata jsonb column to wines for enrichment provenance tracking
-alter table public.wines
-  add column if not exists enrichment_metadata jsonb;
+-- === 0035_restaurant_logo_url.sql ===
+-- 0035_restaurant_logo_url.sql
+-- Add logo_url column to restaurants
 
--- 0045_inventory_items_section.sql
--- BND-109: add section column to inventory_items for bottle location tracking
+alter table public.restaurants
+  add column logo_url text;
+
+-- === 0036_cellar_config_low_stock_threshold.sql ===
+alter table public.cellar_config add column low_stock_threshold integer not null default 3;
+-- === 0037_wines_enrichment_metadata.sql ===
+-- BND-261 (feature #74) enrichment_metadata on wines.
+--
+-- Adds a jsonb column to track per-wine enrichment provenance.
+-- Updates enrich_wines_batch to accept and store enrichment_metadata.
+
+ALTER TABLE public.wines
+  ADD COLUMN enrichment_metadata jsonb;
+
+COMMENT ON COLUMN public.wines.enrichment_metadata IS
+  'Per-wine enrichment provenance: { source, fields_enriched, enriched_at }. Set by enrich_wines_batch.';
+
+create or replace function public.enrich_wines_batch(
+  p_restaurant_id uuid,
+  p_enrichments   jsonb
+) returns int
+language plpgsql
+security invoker
+as $$
+declare
+  v_count int;
+begin
+  if p_enrichments is null or jsonb_typeof(p_enrichments) <> 'array' or jsonb_array_length(p_enrichments) = 0 then
+    return 0;
+  end if;
+
+  with u as (
+    select
+      (e->>'id')::uuid                  as id,
+      (e->>'drink_window_start')::int    as drink_window_start,
+      (e->>'drink_window_end')::int      as drink_window_end,
+      (e->>'peak_year')::int             as peak_year,
+      (e->>'rating')::int                as rating,
+      (e->>'rating_source')              as rating_source,
+      (e->>'review_excerpt')             as review_excerpt,
+      (e->>'serving_temp_min')::int      as serving_temp_min,
+      (e->>'serving_temp_max')::int      as serving_temp_max,
+      (e->>'serving_temp_label')         as serving_temp_label,
+      (e->'enrichment_metadata')         as enrichment_metadata
+    from jsonb_array_elements(p_enrichments) as e
+  )
+  update public.wines w
+  set
+    drink_window_start = coalesce(u.drink_window_start, w.drink_window_start),
+    drink_window_end   = coalesce(u.drink_window_end,   w.drink_window_end),
+    peak_year          = coalesce(u.peak_year,          w.peak_year),
+    rating             = coalesce(u.rating,             w.rating),
+    rating_source      = coalesce(u.rating_source,      w.rating_source),
+    review_excerpt     = coalesce(u.review_excerpt,     w.review_excerpt),
+    serving_temp_min   = coalesce(u.serving_temp_min,   w.serving_temp_min),
+    serving_temp_max   = coalesce(u.serving_temp_max,   w.serving_temp_max),
+    serving_temp_label = coalesce(u.serving_temp_label, w.serving_temp_label),
+    last_enriched_at   = now(),
+    enrichment_metadata = coalesce(u.enrichment_metadata, w.enrichment_metadata)
+  from u
+  where w.id = u.id
+    and w.restaurant_id = p_restaurant_id;
+
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+
+comment on function public.enrich_wines_batch(uuid, jsonb) is
+  'BND-031 BND-039 BND-261: atomic batch enrichment with provenance. Returns rows updated.';
+
+-- === 0038.sql ===
+-- 0038_pour_events_open_bottle_id.sql -- BND-117, BND-119
+-- Adds open_bottle_id to pour_events for direct bottle-to-events linkage.
+-- This enables undo-last-pour by finding the most recent pour_event
+-- for a specific open bottle and reversing it.
+--
+-- Also updates record_pour and reconcile_open_bottle RPCs to populate
+-- the new column.
+
+-- 1. Add open_bottle_id column
+
+alter table public.pour_events
+  add column open_bottle_id uuid references public.open_bottles(id) on delete set null;
+
+comment on column public.pour_events.open_bottle_id is
+  'The open_bottle this event was recorded against. NULL for new_bottle events.';
+
+create index pour_events_open_bottle_occurred_idx
+  on public.pour_events (open_bottle_id, occurred_at desc);
+
+-- 2. Replace record_pour to populate open_bottle_id
+
+create or replace function public.record_pour(
+  p_wine_id uuid,
+  p_ml      int,
+  p_kind    text default 'pour',
+  p_note    text default null
+) returns public.open_bottles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_restaurant_id  uuid;
+  v_size_ml        int;
+  v_current        public.open_bottles%rowtype;
+  v_open_bottle_id uuid;
+  v_sealed_item    public.inventory_items%rowtype;
+  v_user           uuid := auth.uid();
+begin
+  if p_ml is null or p_ml <= 0 then
+    raise exception 'p_ml must be positive';
+  end if;
+  if p_kind not in ('pour','spill') then
+    raise exception 'p_kind must be pour or spill';
+  end if;
+
+  select restaurant_id, size_ml into v_restaurant_id, v_size_ml
+    from public.wines where id = p_wine_id;
+  if v_restaurant_id is null then
+    raise exception 'wine not found';
+  end if;
+
+  if not public.is_member_with_role(v_restaurant_id, 'staff') then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  select * into v_current
+    from public.open_bottles
+    where wine_id = p_wine_id and restaurant_id = v_restaurant_id
+    for update;
+
+  if not found then
+    -- No open bottle: need to open one from sealed stock.
+    select * into v_sealed_item
+      from public.inventory_items
+      where wine_id = p_wine_id
+        and restaurant_id = v_restaurant_id
+        and quantity > 0
+      order by added_at asc
+      limit 1
+      for update skip locked;
+
+    if not found then
+      raise exception 'TERROIR_OUT_OF_STOCK' using errcode = 'P0001';
+    end if;
+
+    update public.inventory_items
+      set quantity = quantity - 1
+      where id = v_sealed_item.id;
+
+    insert into public.pour_events
+      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note)
+    values
+      (p_wine_id, v_restaurant_id, -v_size_ml, 'new_bottle', v_user, p_note);
+
+    select * into v_current
+      from public.open_bottles
+      where wine_id = p_wine_id and restaurant_id = v_restaurant_id;
+
+    v_open_bottle_id := v_current.id;
+  else
+    v_open_bottle_id := v_current.id;
+  end if;
+
+  if v_current.remaining_ml >= p_ml then
+    insert into public.pour_events
+      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note, open_bottle_id)
+    values
+      (p_wine_id, v_restaurant_id, p_ml, p_kind, v_user, p_note, v_open_bottle_id);
+  else
+    -- Overage: finish current, open next, pour the full amount.
+    insert into public.pour_events
+      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note, open_bottle_id)
+    values
+      (p_wine_id, v_restaurant_id, v_current.remaining_ml, 'finish_bottle', v_user, p_note, v_open_bottle_id);
+
+    select * into v_sealed_item
+      from public.inventory_items
+      where wine_id = p_wine_id
+        and restaurant_id = v_restaurant_id
+        and quantity > 0
+      order by added_at asc
+      limit 1
+      for update skip locked;
+
+    if not found then
+      raise exception 'TERROIR_OUT_OF_STOCK' using errcode = 'P0001';
+    end if;
+
+    update public.inventory_items
+      set quantity = quantity - 1
+      where id = v_sealed_item.id;
+
+    insert into public.pour_events
+      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note)
+    values
+      (p_wine_id, v_restaurant_id, -v_size_ml, 'new_bottle', v_user, p_note);
+
+    -- Capture the new bottle id for the actual pour event.
+    select * into v_current
+      from public.open_bottles
+      where wine_id = p_wine_id and restaurant_id = v_restaurant_id;
+
+    insert into public.pour_events
+      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note, open_bottle_id)
+    values
+      (p_wine_id, v_restaurant_id, p_ml, p_kind, v_user, p_note, v_current.id);
+  end if;
+
+  select * into v_current
+    from public.open_bottles
+    where wine_id = p_wine_id and restaurant_id = v_restaurant_id;
+  return v_current;
+end;
+$$;
+
+grant execute on function public.record_pour(uuid, int, text, text) to authenticated;
+
+-- 3. Replace reconcile_open_bottle to populate open_bottle_id
+
+create or replace function public.reconcile_open_bottle(
+  p_wine_id          uuid,
+  p_new_remaining_ml int,
+  p_note             text default null
+) returns public.open_bottles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_restaurant_id uuid;
+  v_size_ml       int;
+  v_current       public.open_bottles%rowtype;
+  v_delta         int;
+  v_user          uuid := auth.uid();
+begin
+  if p_new_remaining_ml < 0 then
+    raise exception 'p_new_remaining_ml must be >= 0';
+  end if;
+
+  select restaurant_id, size_ml into v_restaurant_id, v_size_ml
+    from public.wines where id = p_wine_id;
+  if v_restaurant_id is null then
+    raise exception 'wine not found';
+  end if;
+
+  if p_new_remaining_ml > v_size_ml then
+    raise exception 'p_new_remaining_ml exceeds bottle size (%)', v_size_ml
+      using errcode = 'P0002';
+  end if;
+
+  if not public.is_member_with_role(v_restaurant_id, 'manager') then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  select * into v_current
+    from public.open_bottles
+    where wine_id = p_wine_id and restaurant_id = v_restaurant_id
+    for update;
+
+  if not found then
+    raise exception 'no open bottle for this wine';
+  end if;
+
+  v_delta := v_current.remaining_ml - p_new_remaining_ml;
+
+  if v_delta = 0 then
+    return v_current;
+  end if;
+
+  insert into public.pour_events
+    (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note, open_bottle_id)
+  values
+    (p_wine_id, v_restaurant_id, v_delta, 'reconcile', v_user, p_note, v_current.id);
+
+  select * into v_current
+    from public.open_bottles
+    where wine_id = p_wine_id and restaurant_id = v_restaurant_id;
+  return v_current;
+end;
+$$;
+
+grant execute on function public.reconcile_open_bottle(uuid, int, text) to authenticated;
+
+-- 4. Replace reconcile_open_bottles_batch
+
+create or replace function public.reconcile_open_bottles_batch(
+  p_entries jsonb
+) returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_entry jsonb;
+  v_count int := 0;
+begin
+  if jsonb_typeof(p_entries) <> 'array' then
+    raise exception 'p_entries must be a JSON array';
+  end if;
+
+  for v_entry in select value from jsonb_array_elements(p_entries)
+  loop
+    perform public.reconcile_open_bottle(
+      (v_entry->>'wine_id')::uuid,
+      (v_entry->>'new_remaining_ml')::int,
+      v_entry->>'note'
+    );
+    v_count := v_count + 1;
+  end loop;
+
+  return v_count;
+end;
+$$;
+
+grant execute on function public.reconcile_open_bottles_batch(jsonb) to authenticated;
+
+-- === 0039_invoice_scans_status.sql ===
+-- 0039_invoice_scans_status.sql -- BND-083
+-- Adds status column to invoice_scans for async OCR processing tracking.
+-- Status values: processing, complete, failed
+
+alter table public.invoice_scans
+  add column status text not null default 'processing';
+
+comment on column public.invoice_scans.status is
+  E'OCR processing status: processing, complete, or failed.';
+
+create index invoice_scans_status_idx
+  on public.invoice_scans (status);
+-- === 0040_undo_last_pour.sql ===
+-- 0040_undo_last_pour.sql -- BND-119
+-- RPC to undo the most recent pour/spill event for a wine.
+-- Deletes the latest pour_events row (kind=pour or spill) and adjusts
+-- open_bottles.remaining_ml accordingly. Also inserts an availability_events
+-- row to capture the undo action.
+
+create or replace function public.undo_last_pour(
+  p_wine_id uuid
+) returns public.open_bottles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_restaurant_id uuid;
+  v_event         public.pour_events%rowtype;
+  v_current       public.open_bottles%rowtype;
+  v_user          uuid := auth.uid();
+begin
+  -- Auth check: must be a member of this wine's restaurant.
+  select restaurant_id into v_restaurant_id
+    from public.wines where id = p_wine_id;
+  if v_restaurant_id is null then
+    raise exception 'wine not found';
+  end if;
+
+  if not public.is_member_with_role(v_restaurant_id, 'staff') then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  -- Find the most recent pour or spill event for this wine
+  -- that has an open_bottle_id (i.e., was recorded against a specific bottle).
+  select * into v_event
+    from public.pour_events
+    where wine_id = p_wine_id
+      and restaurant_id = v_restaurant_id
+      and kind in ('pour', 'spill')
+      and open_bottle_id is not null
+    order by occurred_at desc
+    limit 1
+    for update;
+
+  if not found then
+    raise exception 'no recent pour to undo';
+  end if;
+
+  -- Lock the current open_bottles row.
+  select * into v_current
+    from public.open_bottles
+    where wine_id = p_wine_id and restaurant_id = v_restaurant_id
+    for update;
+
+  -- Restore the remaining_ml by adding back the poured amount.
+  if v_current.id is not null then
+    update public.open_bottles
+      set remaining_ml = remaining_ml + v_event.ml_delta
+      where id = v_current.id;
+  else
+    -- The bottle was finished; recreate the open_bottles row.
+    -- remaining_ml is the ml that was poured (returned to the bottle).
+    insert into public.open_bottles
+      (wine_id, restaurant_id, remaining_ml, opened_by)
+    values
+      (p_wine_id, v_restaurant_id, v_event.ml_delta, v_event.actor_user_id);
+  end if;
+
+  -- Delete the pour event (the undo action).
+  delete from public.pour_events
+    where id = v_event.id;
+
+  -- Insert an availability event to record the undo.
+  insert into public.availability_events
+    (wine_id, restaurant_id, direction, user_id, note)
+  values
+    (p_wine_id, v_restaurant_id, 'restored', v_user, 'undo pour: ' || v_event.ml_delta || 'ml restored');
+
+  -- Return the updated open_bottles row.
+  select * into v_current
+    from public.open_bottles
+    where wine_id = p_wine_id and restaurant_id = v_restaurant_id;
+  return v_current;
+end;
+$$;
+
+grant execute on function public.undo_last_pour(uuid) to authenticated;
+
+-- === 0041_invoice_scans_ocr_created_by.sql ===
+-- 0041_invoice_scans_ocr_created_by.sql -- BND-090
+-- Adds ocr_text (jsonb) and created_by (uuid) to invoice_scans
+-- for full scan audit trail with OCR metadata and user attribution.
+
+alter table public.invoice_scans
+  add column ocr_text jsonb,
+  add column created_by uuid;
+
+comment on column public.invoice_scans.ocr_text is
+  E'Raw OCR result from Azure Document Intelligence stored as JSON.';
+
+comment on column public.invoice_scans.created_by is
+  E'User who initiated the scan (references auth.users).';
+
+-- === 0042_invoice_scans_multi_page.sql ===
+-- 0042_invoice_scans_multi_page.sql -- BND-081
+alter table public.invoice_scans
+  add column extra_image_paths jsonb not null default '[]'::jsonb;
+
+-- === 0043_cellar_config_reconcile_variance_threshold.sql ===
+-- 0043_cellar_config_reconcile_variance_threshold.sql
+-- BND-134: Add reconcile_variance_threshold_oz to cellar_config so
+-- restaurants can control when variance highlighting fires during
+-- end-of-shift reconciliation. Default 1.0 oz strikes a balance
+-- between noise (0.1 oz differences on every bottle) and insensitivity
+-- (missing real discrepancies).
+--
+-- Variance = |expected_ml - actual_ml| / ML_PER_OZ (29.5735).
+-- Rows with variance > threshold render in a warning color.
+
+ALTER TABLE cellar_config
+  ADD COLUMN reconcile_variance_threshold_oz numeric NOT NULL DEFAULT 1.0;
+
+COMMENT ON COLUMN cellar_config.reconcile_variance_threshold_oz IS
+  'Variance (oz) above which reconcile rows are visually flagged as suspicious.';
+
+-- === 0044_open_bottles_closed_at.sql ===
+-- 0044_open_bottles_closed_at.sql -- BND-114, BND-116
+-- Adds closed_at to open_bottles so finished bottles persist with a
+-- timestamp instead of being deleted. Enables audit trail for bottle
+-- lifecycle: opened_at → closed_at.
+--
+-- Also updates pour_events_maintain_open_bottle trigger to set closed_at
+-- instead of deleting drained rows, and resets closed_at when a
+-- replacement bottle is opened.
+
+-- 1. Add closed_at column
+
+alter table public.open_bottles
+  add column closed_at timestamptz;
+
+comment on column public.open_bottles.closed_at is
+  'When this bottle was finished (remaining_ml dropped to 0). NULL = bottle is still active.';
+
+-- 2. Replace trigger: set closed_at instead of deleting drained rows
+
+create or replace function public.pour_events_maintain_open_bottle()
+returns trigger
+language plpgsql
+as $$
+begin
+  if NEW.kind = 'new_bottle' then
+    -- ml_delta for new_bottle is negative = -size_ml; insert/replace open_bottles.
+    -- Reset closed_at to null since this is a fresh bottle.
+    insert into public.open_bottles
+      (wine_id, restaurant_id, remaining_ml, opened_by, closed_at)
+    values
+      (NEW.wine_id, NEW.restaurant_id, -NEW.ml_delta, NEW.actor_user_id, null)
+    on conflict (wine_id, restaurant_id)
+    do update set
+      remaining_ml = -NEW.ml_delta,
+      opened_at = now(),
+      opened_by = NEW.actor_user_id,
+      closed_at = null;
+
+  elsif NEW.kind in ('pour','spill','finish_bottle') then
+    -- Positive ml_delta: subtract from remaining.
+    update public.open_bottles
+      set remaining_ml = greatest(0, remaining_ml - NEW.ml_delta)
+      where wine_id = NEW.wine_id and restaurant_id = NEW.restaurant_id;
+    -- If we drained it, close the bottle instead of deleting.
+    update public.open_bottles
+      set closed_at = now()
+      where wine_id = NEW.wine_id and restaurant_id = NEW.restaurant_id
+        and remaining_ml = 0
+        and closed_at is null;
+
+  elsif NEW.kind = 'reconcile' then
+    -- Signed ml_delta: positive reduces, negative increases.
+    update public.open_bottles
+      set remaining_ml = greatest(0, remaining_ml - NEW.ml_delta)
+      where wine_id = NEW.wine_id and restaurant_id = NEW.restaurant_id;
+    -- Close if reconciled to zero.
+    update public.open_bottles
+      set closed_at = now()
+      where wine_id = NEW.wine_id and restaurant_id = NEW.restaurant_id
+        and remaining_ml = 0
+        and closed_at is null;
+  end if;
+  return NEW;
+end;
+$$;
+-- 3. Replace record_pour RPC with open_bottle_id + closed_at awareness.
+-- The query for existing open bottle now filters for closed_at IS NULL
+-- so finished bottles are ignored when looking for the active one.
+
+create or replace function public.record_pour(
+  p_wine_id uuid,
+  p_ml      int,
+  p_kind    text default 'pour',
+  p_note    text default null
+) returns public.open_bottles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_restaurant_id  uuid;
+  v_size_ml        int;
+  v_current        public.open_bottles%rowtype;
+  v_open_bottle_id uuid;
+  v_sealed_item    public.inventory_items%rowtype;
+  v_user           uuid := auth.uid();
+begin
+  if p_ml is null or p_ml <= 0 then
+    raise exception 'p_ml must be positive';
+  end if;
+  if p_kind not in ('pour','spill') then
+    raise exception 'p_kind must be pour or spill';
+  end if;
+
+  select restaurant_id, size_ml into v_restaurant_id, v_size_ml
+    from public.wines where id = p_wine_id;
+  if v_restaurant_id is null then
+    raise exception 'wine not found';
+  end if;
+
+  if not public.is_member_with_role(v_restaurant_id, 'staff') then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  -- Only consider active (non-closed) bottles.
+  select * into v_current
+    from public.open_bottles
+    where wine_id = p_wine_id and restaurant_id = v_restaurant_id
+      and closed_at is null
+    for update;
+
+  if not found then
+    -- No open bottle: need to open one from sealed stock.
+    select * into v_sealed_item
+      from public.inventory_items
+      where wine_id = p_wine_id
+        and restaurant_id = v_restaurant_id
+        and quantity > 0
+      order by added_at asc
+      limit 1
+      for update skip locked;
+
+    if not found then
+      raise exception 'TERROIR_OUT_OF_STOCK' using errcode = 'P0001';
+    end if;
+
+    update public.inventory_items
+      set quantity = quantity - 1
+      where id = v_sealed_item.id;
+
+    insert into public.pour_events
+      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note)
+    values
+      (p_wine_id, v_restaurant_id, -v_size_ml, 'new_bottle', v_user, p_note);
+
+    select * into v_current
+      from public.open_bottles
+      where wine_id = p_wine_id and restaurant_id = v_restaurant_id;
+
+    v_open_bottle_id := v_current.id;
+  else
+    v_open_bottle_id := v_current.id;
+  end if;
+
+  if v_current.remaining_ml >= p_ml then
+    insert into public.pour_events
+      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note, open_bottle_id)
+    values
+      (p_wine_id, v_restaurant_id, p_ml, p_kind, v_user, p_note, v_open_bottle_id);
+  else
+    -- Overage: finish current, open next, pour the full amount.
+    insert into public.pour_events
+      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note, open_bottle_id)
+    values
+      (p_wine_id, v_restaurant_id, v_current.remaining_ml, 'finish_bottle', v_user, p_note, v_open_bottle_id);
+
+    select * into v_sealed_item
+      from public.inventory_items
+      where wine_id = p_wine_id
+        and restaurant_id = v_restaurant_id
+        and quantity > 0
+      order by added_at asc
+      limit 1
+      for update skip locked;
+
+    if not found then
+      raise exception 'TERROIR_OUT_OF_STOCK' using errcode = 'P0001';
+    end if;
+
+    update public.inventory_items
+      set quantity = quantity - 1
+      where id = v_sealed_item.id;
+
+    insert into public.pour_events
+      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note)
+    values
+      (p_wine_id, v_restaurant_id, -v_size_ml, 'new_bottle', v_user, p_note);
+
+    select * into v_current
+      from public.open_bottles
+      where wine_id = p_wine_id and restaurant_id = v_restaurant_id;
+
+    insert into public.pour_events
+      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note, open_bottle_id)
+    values
+      (p_wine_id, v_restaurant_id, p_ml, p_kind, v_user, p_note, v_current.id);
+  end if;
+
+  select * into v_current
+    from public.open_bottles
+    where wine_id = p_wine_id and restaurant_id = v_restaurant_id;
+  return v_current;
+end;
+$$;
+
+grant execute on function public.record_pour(uuid, int, text, text) to authenticated;
+
+
+-- 4. Replace reconcile_open_bottle to filter for active bottles only
+
+create or replace function public.reconcile_open_bottle(
+  p_wine_id          uuid,
+  p_new_remaining_ml int,
+  p_note             text default null
+) returns public.open_bottles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_restaurant_id uuid;
+  v_size_ml       int;
+  v_current       public.open_bottles%rowtype;
+  v_delta         int;
+  v_user          uuid := auth.uid();
+begin
+  if p_new_remaining_ml < 0 then
+    raise exception 'p_new_remaining_ml must be >= 0';
+  end if;
+
+  select restaurant_id, size_ml into v_restaurant_id, v_size_ml
+    from public.wines where id = p_wine_id;
+  if v_restaurant_id is null then
+    raise exception 'wine not found';
+  end if;
+
+  if p_new_remaining_ml > v_size_ml then
+    raise exception 'p_new_remaining_ml exceeds bottle size (%)', v_size_ml
+      using errcode = 'P0002';
+  end if;
+
+  if not public.is_member_with_role(v_restaurant_id, 'manager') then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  -- Only reconcile active (non-closed) bottles.
+  select * into v_current
+    from public.open_bottles
+    where wine_id = p_wine_id and restaurant_id = v_restaurant_id
+      and closed_at is null
+    for update;
+
+  if not found then
+    raise exception 'no open bottle for this wine';
+  end if;
+
+  v_delta := v_current.remaining_ml - p_new_remaining_ml;
+
+  if v_delta = 0 then
+    return v_current;
+  end if;
+
+  insert into public.pour_events
+    (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note, open_bottle_id)
+  values
+    (p_wine_id, v_restaurant_id, v_delta, 'reconcile', v_user, p_note, v_current.id);
+
+  select * into v_current
+    from public.open_bottles
+    where wine_id = p_wine_id and restaurant_id = v_restaurant_id;
+  return v_current;
+end;
+$$;
+
+grant execute on function public.reconcile_open_bottle(uuid, int, text) to authenticated;
+
+-- 5. Replace reconcile_open_bottles_batch
+
+create or replace function public.reconcile_open_bottles_batch(
+  p_entries jsonb
+) returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_entry jsonb;
+  v_count int := 0;
+begin
+  if jsonb_typeof(p_entries) <> 'array' then
+    raise exception 'p_entries must be a JSON array';
+  end if;
+
+  for v_entry in select value from jsonb_array_elements(p_entries)
+  loop
+    perform public.reconcile_open_bottle(
+      (v_entry->>'wine_id')::uuid,
+      (v_entry->>'new_remaining_ml')::int,
+      v_entry->>'note'
+    );
+    v_count := v_count + 1;
+  end loop;
+
+  return v_count;
+end;
+$$;
+
+grant execute on function public.reconcile_open_bottles_batch(jsonb) to authenticated;
+
+
+-- 6. Replace list_open_bottle_items to exclude closed bottles
+
+create or replace function public.list_open_bottle_items(
+  p_restaurant_id uuid
+) returns table (
+  wine_list_item_id  uuid,
+  glass_pour_ml      int,
+  pour_size_mode     text,
+  wine_id            uuid,
+  name               text,
+  producer           text,
+  vintage            int,
+  size_ml            int,
+  open_remaining_ml  int,
+  opened_at          timestamptz,
+  sealed_count       bigint
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    wli.id as wine_list_item_id,
+    wli.glass_pour_ml,
+    wli.pour_size_mode,
+    w.id as wine_id,
+    w.name,
+    w.producer,
+    w.vintage,
+    w.size_ml,
+    ob.remaining_ml as open_remaining_ml,
+    ob.opened_at,
+    coalesce((
+      select sum(quantity)::bigint from public.inventory_items ii
+      where ii.wine_id = w.id and ii.restaurant_id = p_restaurant_id
+    ), 0) as sealed_count
+  from public.wine_list_items wli
+  join public.wine_list_sections s on s.id = wli.section_id
+  join public.wine_lists wl        on wl.id = s.wine_list_id
+  join public.wines w              on w.id = wli.wine_id
+  left join public.open_bottles ob on ob.wine_id = w.id
+                                    and ob.restaurant_id = p_restaurant_id
+                                    and ob.closed_at is null
+  where wl.restaurant_id = p_restaurant_id
+    and wli.glass_pour_ml is not null
+    and public.is_member(p_restaurant_id)
+  order by w.producer, w.name;
+$$;
+
+grant execute on function public.list_open_bottle_items(uuid) to authenticated;
+
+-- === 0045_inventory_items_section.sql ===
+-- 0044_inventory_items_section.sql -- BND-109
+-- Adds section column to inventory_items for bottle location tracking.
+
 alter table public.inventory_items
   add column if not exists section text;
+
+comment on column public.inventory_items.section is
+  E'Cellar section where the bottle is stored (e.g., "Red Room", "Main Cellar").';
+
+-- === 0046_reconcile_availability_events.sql ===
 -- 0046_reconcile_availability_events.sql -- BND-129/130/131
 -- Three changes for the reconcile feature set:
 --
@@ -2604,6 +3380,83 @@ $$;
 
 grant execute on function public.reconcile_open_bottle(uuid, int, text) to authenticated;
 
+-- === 0046_wines_tasting_notes_hero_image.sql ===
+-- 0046_wines_tasting_notes_hero_image.sql
+-- BND-055 + BND-056 + BND-057: add tasting_notes and hero_image_url
+-- to the wines table.
+
+alter table public.wines
+  add column if not exists tasting_notes text,
+  add column if not exists hero_image_url text;
+
+-- === 0047_wines_decant_minutes.sql ===
+-- 0047_wines_decant_minutes.sql
+-- BND-070: Add decant_minutes column to wines table and update
+-- enrich_wines_batch to handle the new column.
+
+-- 1. Add the column
+ALTER TABLE wines
+  ADD COLUMN decant_minutes integer;
+
+COMMENT ON COLUMN wines.decant_minutes IS
+  'BND-070 — recommended decant time in minutes. NULL when not applicable or not yet enriched.';
+
+-- 2. Update enrich_wines_batch to extract and persist decant_minutes
+CREATE OR REPLACE FUNCTION public.enrich_wines_batch(
+  p_restaurant_id uuid,
+  p_enrichments   jsonb
+) RETURNS int
+LANGUAGE plpgsql
+SECURITY INVOKER
+AS $$
+DECLARE
+  v_count int;
+BEGIN
+  IF p_enrichments IS NULL OR jsonb_typeof(p_enrichments) <> 'array' OR jsonb_array_length(p_enrichments) = 0 THEN
+    RETURN 0;
+  END IF;
+
+  WITH u AS (
+    SELECT
+      (e->>'id')::uuid                  AS id,
+      (e->>'drink_window_start')::int    AS drink_window_start,
+      (e->>'drink_window_end')::int      AS drink_window_end,
+      (e->>'peak_year')::int             AS peak_year,
+      (e->>'rating')::numeric            AS rating,
+      (e->>'rating_source')              AS rating_source,
+      (e->>'review_excerpt')             AS review_excerpt,
+      (e->>'serving_temp_min')::int      AS serving_temp_min,
+      (e->>'serving_temp_max')::int      AS serving_temp_max,
+      (e->>'serving_temp_label')         AS serving_temp_label,
+      (e->>'decant_minutes')::int        AS decant_minutes,
+      (e->>'enrichment_metadata')::jsonb AS enrichment_metadata
+    FROM jsonb_array_elements(p_enrichments) AS e
+  )
+  UPDATE public.wines w
+  SET
+    drink_window_start = coalesce(u.drink_window_start, w.drink_window_start),
+    drink_window_end   = coalesce(u.drink_window_end,   w.drink_window_end),
+    peak_year          = coalesce(u.peak_year,          w.peak_year),
+    rating             = coalesce(u.rating,             w.rating),
+    rating_source      = coalesce(u.rating_source,      w.rating_source),
+    review_excerpt     = coalesce(u.review_excerpt,     w.review_excerpt),
+    serving_temp_min   = coalesce(u.serving_temp_min,   w.serving_temp_min),
+    serving_temp_max   = coalesce(u.serving_temp_max,   w.serving_temp_max),
+    serving_temp_label = coalesce(u.serving_temp_label, w.serving_temp_label),
+    decant_minutes     = coalesce(u.decant_minutes,     w.decant_minutes),
+    enrichment_metadata = coalesce(u.enrichment_metadata, w.enrichment_metadata),
+    last_enriched_at   = now()
+  FROM u
+  WHERE w.id = u.id
+    AND w.restaurant_id = p_restaurant_id;
+
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END;
+$$;
+
+COMMENT ON FUNCTION public.enrich_wines_batch(uuid, jsonb) IS
+  'BND-031/BND-039/BND-070: atomic batch enrichment of wines including decant time. Returns the number of rows updated.';
 
 -- === 0048_wines_manual_overrides.sql ===
 -- 0048_wines_manual_overrides.sql
@@ -2718,20 +3571,195 @@ $func$;
 COMMENT ON FUNCTION public.enrich_wines_batch(uuid, jsonb) IS
   'BND-031/BND-039/BND-070/BND-277/BND-278: atomic batch enrichment with manual-override gating.';
 
-
 -- === 0049_inventory_items_format_currency.sql ===
+-- 0049_inventory_items_format_currency.sql
 -- Add format and currency columns to inventory_items for invoice scan data fidelity.
 
 alter table public.inventory_items
   add column if not exists format   text,
   add column if not exists currency text;
 
-
 -- === 0049_wines_colour.sql ===
-ALTER TABLE public.wines ADD COLUMN IF NOT EXISTS colour text;
+-- 0049_wines_colour.sql
+-- BND-277: Add colour column to wines and update enrich_wines_batch
+-- to extract and persist colour from LWIN catalog fallback enrichments.
 
+-- 1. Add colour column
+ALTER TABLE public.wines ADD COLUMN colour text;
+
+-- 2. Add manual_overrides column
+
+COMMENT ON COLUMN public.wines.colour IS 'BND-277 -- wine colour populated via LWIN catalog fallback.';
+
+-- 3. Add manual_overrides column
+ALTER TABLE public.wines
+  ADD COLUMN manual_overrides text[] DEFAULT '{}';
+
+COMMENT ON COLUMN public.wines.manual_overrides IS
+  'BND-277/BND-278 -- manually overridden enrichable field categories (e.g., drink_window, region, varietal, country). Enrichment skips these fields.';
+
+-- 4. Create add_manual_overrides RPC
+CREATE OR REPLACE FUNCTION public.add_manual_overrides(
+  p_wine_id uuid,
+  p_fields  text[]
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY INVOKER
+AS $func$
+BEGIN
+  UPDATE public.wines
+  SET manual_overrides = array(
+    SELECT DISTINCT unnest(array_cat(manual_overrides, p_fields))
+  )
+  WHERE id = p_wine_id;
+END;
+$func$;
+
+COMMENT ON FUNCTION public.add_manual_overrides(uuid, text[]) IS
+  'BND-277/BND-278: merge field category overrides. Idempotent.';
+
+
+CREATE OR REPLACE FUNCTION public.enrich_wines_batch(
+  p_restaurant_id uuid,
+  p_enrichments   jsonb
+) RETURNS int
+LANGUAGE plpgsql
+SECURITY INVOKER
+AS $func$
+DECLARE
+  v_count int;
+BEGIN
+  IF p_enrichments IS NULL OR jsonb_typeof(p_enrichments) <> 'array' OR jsonb_array_length(p_enrichments) = 0 THEN
+    RETURN 0;
+  END IF;
+
+  WITH u AS (
+    SELECT
+      (e->>'id')::uuid                  AS id,
+      (e->>'drink_window_start')::int    AS drink_window_start,
+      (e->>'drink_window_end')::int      AS drink_window_end,
+      (e->>'peak_year')::int             AS peak_year,
+      (e->>'rating')::numeric            AS rating,
+      (e->>'rating_source')              AS rating_source,
+      (e->>'review_excerpt')             AS review_excerpt,
+      (e->>'serving_temp_min')::int      AS serving_temp_min,
+      (e->>'serving_temp_max')::int      AS serving_temp_max,
+      (e->>'serving_temp_label')         AS serving_temp_label,
+      (e->>'decant_minutes')::int        AS decant_minutes,
+      (e->>'region')                     AS region,
+      (e->>'country')                    AS country,
+      (e->>'varietal')                   AS varietal,
+      (e->>'colour')                     AS colour,
+      (e->>'enrichment_metadata')::jsonb AS enrichment_metadata
+    FROM jsonb_array_elements(p_enrichments) AS e
+  )
+  UPDATE public.wines w
+  SET
+    drink_window_start = CASE
+      WHEN 'drink_window' = ANY(w.manual_overrides) THEN w.drink_window_start
+      ELSE coalesce(u.drink_window_start, w.drink_window_start)
+    END,
+    drink_window_end   = CASE
+      WHEN 'drink_window' = ANY(w.manual_overrides) THEN w.drink_window_end
+      ELSE coalesce(u.drink_window_end, w.drink_window_end)
+    END,
+    peak_year          = CASE
+      WHEN 'drink_window' = ANY(w.manual_overrides) THEN w.peak_year
+      ELSE coalesce(u.peak_year, w.peak_year)
+    END,
+    region             = CASE
+      WHEN 'region' = ANY(w.manual_overrides) THEN w.region
+      ELSE coalesce(u.region, w.region)
+    END,
+    country            = CASE
+      WHEN 'country' = ANY(w.manual_overrides) THEN w.country
+      ELSE coalesce(u.country, w.country)
+    END,
+    varietal           = CASE
+      WHEN 'varietal' = ANY(w.manual_overrides) THEN w.varietal
+      ELSE coalesce(u.varietal, w.varietal)
+    END,
+    colour             = CASE
+      WHEN 'colour' = ANY(w.manual_overrides) THEN w.colour
+      ELSE coalesce(u.colour, w.colour)
+    END,
+    rating             = coalesce(u.rating,             w.rating),
+    rating_source      = coalesce(u.rating_source,      w.rating_source),
+    review_excerpt     = coalesce(u.review_excerpt,     w.review_excerpt),
+    serving_temp_min   = coalesce(u.serving_temp_min,   w.serving_temp_min),
+    serving_temp_max   = coalesce(u.serving_temp_max,   w.serving_temp_max),
+    serving_temp_label = coalesce(u.serving_temp_label, w.serving_temp_label),
+    decant_minutes     = coalesce(u.decant_minutes,     w.decant_minutes),
+    enrichment_metadata = coalesce(u.enrichment_metadata, w.enrichment_metadata),
+    last_enriched_at   = now()
+  FROM u
+  WHERE w.id = u.id
+    AND w.restaurant_id = p_restaurant_id;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END;
+$func$;
+
+COMMENT ON FUNCTION public.enrich_wines_batch(uuid, jsonb) IS
+  'BND-031/BND-039/BND-070/BND-277/BND-278: atomic batch enrichment with colour support and manual-override gating.';
+
+-- === 0050_pour_events_delete_trigger.sql ===
+-- 0050_pour_events_delete_trigger.sql -- BND-118
+-- Adds an AFTER DELETE trigger on pour_events that reverses the
+-- effect of the insert trigger, maintaining open_bottles.remaining_ml
+-- consistency when pour_events rows are removed.
+--
+-- The insert trigger (pour_events_maintain_open_bottle) updates
+-- open_bottles on INSERT. This delete trigger reverses those
+-- state changes on DELETE.
+
+-- 1. Create the delete trigger function
+
+create or replace function public.pour_events_reverse_open_bottle()
+returns trigger
+language plpgsql
+as $$
+begin
+  if OLD.kind = 'new_bottle' then
+    -- new_bottle insert created or reset an open_bottles row.
+    -- On delete, close the bottle since the opening event is removed.
+    update public.open_bottles
+      set remaining_ml = 0,
+          closed_at = now()
+      where wine_id = OLD.wine_id
+        and restaurant_id = OLD.restaurant_id
+        and closed_at is null;
+
+  elsif OLD.kind in ('pour','spill','finish_bottle') then
+    -- pour/spill/finish_bottle subtracted ml_delta from remaining_ml.
+    -- On delete, add it back. Also clear closed_at if the bottle
+    -- was drained by this event.
+    update public.open_bottles
+      set remaining_ml = remaining_ml + OLD.ml_delta,
+          closed_at = null
+      where wine_id = OLD.wine_id
+        and restaurant_id = OLD.restaurant_id;
+
+  elsif OLD.kind = 'reconcile' then
+    -- reconcile subtracts (remaining - new_remaining) = delta from open.
+    -- Reverse: add the delta back.
+    update public.open_bottles
+      set remaining_ml = remaining_ml + OLD.ml_delta,
+          closed_at = null
+      where wine_id = OLD.wine_id
+        and restaurant_id = OLD.restaurant_id;
+  end if;
+  return OLD;
+end;
+$$;
+
+-- 2. Attach the AFTER DELETE trigger
+
+create trigger pour_events_delete_trigger
+  after delete on public.pour_events
+  for each row execute function public.pour_events_reverse_open_bottle();
 
 -- === 0051_wines_overpaid_flag.sql ===
+-- 0051_wines_overpaid_flag.sql
 -- BND-139: overpaid_flag column for flagging wines for follow-up on /price-comparison
-
 alter table public.wines add column overpaid_flag boolean not null default false;

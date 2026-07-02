@@ -98,7 +98,7 @@ export async function PATCH(
 
   const { error } = await supabase
     .from("wine_list_items")
-    .update(parsed.data as any)
+    .update(parsed.data)
     .eq("id", id);
 
   if (error) {

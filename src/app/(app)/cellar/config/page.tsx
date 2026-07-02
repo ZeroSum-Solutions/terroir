@@ -54,24 +54,32 @@ export default function CellarConfigPage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch("/api/cellar/config");
-      if (!res.ok) throw new Error("Failed to load config.");
-      const config = await res.json();
-      if (config?.labels?.sections && Array.isArray(config.labels.sections)) {
-        setSections(config.labels.sections);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load.");
-    } finally {
-      setLoaded(true);
-    }
-  }, []);
-
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+
+    async function loadConfig() {
+      try {
+        const res = await fetch("/api/cellar/config");
+        if (!res.ok) throw new Error("Failed to load config.");
+        const config = await res.json();
+        if (cancelled) return;
+        if (config?.labels?.sections && Array.isArray(config.labels.sections)) {
+          setSections(config.labels.sections);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load.");
+        }
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    }
+
+    void loadConfig();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const save = useCallback(
     async (updated: Section[]) => {

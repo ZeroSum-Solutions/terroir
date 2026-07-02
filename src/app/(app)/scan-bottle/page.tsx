@@ -40,6 +40,12 @@ type Phase =
   | "no-camera"
   | "summary";
 
+type BarcodeDetectorConstructor = new (options?: {
+  formats?: string[];
+}) => {
+  detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>>;
+};
+
 function useQrScanner(
   videoRef: React.RefObject<HTMLVideoElement | null>,
   active: boolean,
@@ -57,7 +63,10 @@ function useQrScanner(
 
     if ("BarcodeDetector" in window) {
       try {
-        detector = new (window as any).BarcodeDetector({
+        const BarcodeDetector =
+          (window as Window & { BarcodeDetector: BarcodeDetectorConstructor })
+            .BarcodeDetector;
+        detector = new BarcodeDetector({
           formats: ["qr_code"],
         });
       } catch {

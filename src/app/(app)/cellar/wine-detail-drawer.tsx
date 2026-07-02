@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useState, useTransition, useCallback } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { X, Wine, PackageOpen, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, Undo2, Image as ImageIcon, Upload, Trash2, AlertTriangle } from "lucide-react";
+import { X, Wine, PackageOpen, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, Undo2, Upload, Trash2 } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { useToast } from "@/lib/toast";
 import { ML_PER_OZ } from "@/lib/units";
@@ -55,7 +56,6 @@ export function WineDetailDrawer({
   const [enrichMsg, setEnrichMsg] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // BND-119: track last pour for undo.
@@ -105,7 +105,7 @@ export function WineDetailDrawer({
         setOpenBottleBusy(false);
       }
     },
-    [row, router],
+    [row, router, toast],
   );
 
   const doPour = useCallback(
@@ -137,7 +137,7 @@ export function WineDetailDrawer({
         setBusy(false);
       }
     },
-    [row, router],
+    [row, router, toast],
   );
 
   // BND-119: undo the most recent pour.
@@ -168,7 +168,7 @@ export function WineDetailDrawer({
         setBusy(false);
       }
     },
-    [row, lastPour, router],
+    [row, lastPour, router, toast],
   );
 
   const doEnrich = useCallback(
@@ -212,7 +212,6 @@ export function WineDetailDrawer({
       const file = e.target.files?.[0];
       if (!file || !row) return;
       setUploading(true);
-      setUploadMsg(null);
       setErrorMsg(null);
       try {
         const formData = new FormData();
@@ -285,7 +284,7 @@ export function WineDetailDrawer({
         setBusy(false);
       }
     },
-    [row, router, onClose],
+    [row, router, onClose, toast],
   );
 
   const onConfirm86 = async (note: string | undefined) => {
@@ -394,9 +393,12 @@ export function WineDetailDrawer({
             {row.hero_image_url && (
               <section aria-label="Hero image" className="mb-md">
                 <div className="relative rounded-md overflow-hidden border border-border bg-surface-muted">
-                  <img
+                  <Image
                     src={row.hero_image_url}
                     alt={`${row.producer} ${row.name}`}
+                    width={800}
+                    height={384}
+                    unoptimized
                     className="w-full h-48 object-cover"
                   />
                   {canManage && (

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 /**
  * /api/wine-lists/[id] route tests.
@@ -37,8 +37,8 @@ let fromCallCount = 0;
 // Per-call response overrides
 type CallOverride = {
   table?: string;
-  data?: any;
-  error?: { message: string } | null;
+  data?: Row | Row[] | { id: string; archived: boolean } | null;
+  error?: { message: string; code?: string } | null;
 };
 let callOverrides: CallOverride[] = [];
 
@@ -46,7 +46,7 @@ function makeSupabase(rows: Row[]) {
   fromCallCount = 0;
 
   return {
-    from: (table: string) => {
+    from: (_table: string) => {
       const callIdx = fromCallCount++;
       const override = callOverrides[callIdx];
 
@@ -66,8 +66,8 @@ function makeSupabase(rows: Row[]) {
           if (override?.data !== undefined) return { data: override.data, error: null };
           const matched = rows.filter((r) =>
             queryFilters.every(([col, val, op]) => {
-              if (op === "neq") return (r as any)[col] !== val;
-              return (r as any)[col] === val;
+              if (op === "neq") return (r as Record<string, unknown>)[col] !== val;
+              return (r as Record<string, unknown>)[col] === val;
             }),
           );
           return { data: matched.length > 0 ? matched[0] : null, error: null };
@@ -77,8 +77,8 @@ function makeSupabase(rows: Row[]) {
           if (override?.data !== undefined) return { data: override.data, error: null };
           const matched = rows.filter((r) =>
             queryFilters.every(([col, val, op]) => {
-              if (op === "neq") return (r as any)[col] !== val;
-              return (r as any)[col] === val;
+              if (op === "neq") return (r as Record<string, unknown>)[col] !== val;
+              return (r as Record<string, unknown>)[col] === val;
             }),
           );
           if (matched.length === 0) return { data: null, error: { message: "not found", code: "PGRST116" } };
@@ -87,13 +87,15 @@ function makeSupabase(rows: Row[]) {
         order: () => queryChain,
         // Support `await supabase.from(...).select(...).eq(...)` — the
         // query chain is thenable so it acts like a Promise<{ data, error }>.
-        then: (resolve: (value: { data: any[] | null; error: any }) => void) => {
+        then: (resolve: (value: { data: Row[] | null; error: CallOverride["error"] }) => void) => {
           if (override?.error) return resolve({ data: null, error: override.error });
-          if (override?.data !== undefined) return resolve({ data: override.data, error: null });
+          if (Array.isArray(override?.data)) {
+            return resolve({ data: override.data, error: null });
+          }
           const matched = rows.filter((r) =>
             queryFilters.every(([col, val, op]) => {
-              if (op === "neq") return (r as any)[col] !== val;
-              return (r as any)[col] === val;
+              if (op === "neq") return (r as Record<string, unknown>)[col] !== val;
+              return (r as Record<string, unknown>)[col] === val;
             }),
           );
           resolve({ data: matched, error: null });
@@ -145,15 +147,13 @@ function patchRequest(body: unknown) {
     method: "PATCH",
     body: JSON.stringify(body),
     headers: { "Content-Type": "application/json" },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  }) as any;
+  }) as unknown as NextRequest;
 }
 
 function deleteRequest() {
   return new Request("http://localhost/api/wine-lists/list-a", {
     method: "DELETE",
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  }) as any;
+  }) as unknown as NextRequest;
 }
 
 describe("PATCH /api/wine-lists/[id]", () => {
@@ -230,8 +230,7 @@ describe("PATCH /api/wine-lists/[id]", () => {
       method: "PATCH",
       body: "{not json",
       headers: { "Content-Type": "application/json" },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    }) as any;
+    }) as unknown as NextRequest;
     const res = await PATCH(req, { params: Promise.resolve({ id: "list-a" }) });
     expect(res.status).toBe(400);
   });
@@ -327,7 +326,7 @@ describe("PATCH /api/wine-lists/[id]", () => {
     });
     expect(res.status).toBe(409);
     const body = await res.json();
-    expect(body.code).toBe("slug_collision");
+    expect(body.error.code).toBe("slug_collision");
   });
 
   it("allows same slug in a different restaurant (BND-156 scoping)", async () => {
@@ -422,7 +421,7 @@ describe("DELETE /api/wine-lists/[id]", () => {
     });
     expect(res.status).toBe(409);
     const body = await res.json();
-    expect(body.code).toBe("must_archive_first");
+    expect(body.error.code).toBe("must_archive_first");
   });
 
   it("returns 200 for a same-restaurant delete of an archived list (BND-159)", async () => {

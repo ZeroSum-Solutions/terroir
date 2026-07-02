@@ -56,7 +56,7 @@ type ClaudeResponse = {
   drinkWindowEnd: number | null;
   peakYear: number | null;
   reviewExcerpt: string | null;
-  decantMinutes: number | null;
+  decantMinutes?: number | null;
 };
 
 // ── Single-wine (backwards compat) ──
@@ -269,7 +269,7 @@ export async function enrichWinesWithClaudeBatch(
       servingTempMin: null,
       servingTempMax: null,
       servingTempLabel: null,
-      decantMinutes: null,
+      decantMinutes: parsed.decantMinutes ?? null,
     });
   }
 
@@ -347,7 +347,7 @@ function validateClaudeResponse(r: unknown): r is ClaudeResponse {
 
   const hasField = (k: string) => Object.prototype.hasOwnProperty.call(obj, k);
   if (!hasField("drinkWindowStart") || !hasField("drinkWindowEnd")) return false;
-  if (!hasField("peakYear") || !hasField("reviewExcerpt") || !hasField("decantMinutes")) return false;
+  if (!hasField("peakYear") || !hasField("reviewExcerpt")) return false;
 
   // All-null is valid (the unknown-wine branch).
   if (
@@ -356,7 +356,12 @@ function validateClaudeResponse(r: unknown): r is ClaudeResponse {
     obj.peakYear === null
   ) {
     return (obj.reviewExcerpt === null || typeof obj.reviewExcerpt === "string") &&
-      (obj.decantMinutes === null || (typeof obj.decantMinutes === "number" && Number.isInteger(obj.decantMinutes) && obj.decantMinutes >= 0));
+      (!hasField("decantMinutes") ||
+        obj.decantMinutes === null ||
+        (typeof obj.decantMinutes === "number" &&
+          Number.isInteger(obj.decantMinutes) &&
+          obj.decantMinutes >= 0 &&
+          obj.decantMinutes <= 240));
   }
 
   // Otherwise all year fields must be valid integers in range.
@@ -377,6 +382,7 @@ function validateClaudeResponse(r: unknown): r is ClaudeResponse {
     return false;
   }
   if (
+    hasField("decantMinutes") &&
     obj.decantMinutes !== null &&
     (typeof obj.decantMinutes !== "number" || !Number.isInteger(obj.decantMinutes) || obj.decantMinutes < 0 || obj.decantMinutes > 240)
   ) {
