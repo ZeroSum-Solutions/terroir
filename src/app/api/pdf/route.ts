@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import * as Sentry from "@sentry/nextjs";
-import puppeteer from "puppeteer";
+import {
+  generateWineListPdf,
+  WineListPdfGenerationError,
+  WineListPdfNotFoundError,
+} from "@/domains/wine-lists/wine-list-pdf-service";
 import { requireMembership } from "@/lib/api/auth";
 import { apiError, Errors } from "@/lib/api/errors";
-import { renderWineListSections } from "@/lib/wine-list/render";
-import type { WineListSectionEmbed } from "@/lib/wine-list/shapes";
-import { renderTemplate } from "@/lib/wine-list/templates";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -30,91 +30,28 @@ export async function POST(request: NextRequest) {
     return Errors.badRequest("listId is required.");
   }
 
-  // Fetch list with sections, items, and wines
-  const { data: list, error: fetchError } = await supabase
-    .from("wine_lists")
-    .select(
-      "name, template, restaurant_id, restaurants(name), wine_list_sections(name, position, wine_list_items(position, glass_price, bottle_price, tasting_note, name_override, wines(name, producer, vintage, varietal, region, is_eightysixed)))",
-    )
-    .eq("id", body.listId)
-    .eq("restaurant_id", restaurantId)
-    .single();
-
-  if (fetchError || !list) {
-    return Errors.notFound("Wine list");
-  }
-
-  const restaurantName =
-    (list.restaurants as { name: string } | null)?.name ?? "";
-
-  type PdfWineListItem = {
-    position: number;
-    glass_price: number | null;
-    bottle_price: number | null;
-    tasting_note: string | null;
-    name_override: string | null;    wines: {
-      name: string;
-      producer: string;
-      vintage: number | null;
-      varietal: string | null;
-      region: string | null;
-      is_eightysixed: boolean;
-    } | null;
-  };
-
-  // DEBT-013: shared WineListSectionEmbed<TItem> generic.
-  // ARCH-020: shared renderWineListSections() filter + sort pipeline —
-  // identical rules to the public /list/[slug] page. One function,
-  // one source of truth for "what a customer actually sees."
-  const sections = renderWineListSections(
-    (list.wine_list_sections ?? []) as unknown as WineListSectionEmbed<PdfWineListItem>[],
-  );
-
-  const template = body.template ?? list.template ?? "classic";
-  const html = renderTemplate(template, {
-    name: list.name,
-    restaurantName,
-    sections,
-  });
-
-  // Render PDF with Puppeteer.
-  //
-  // BND-004: waitUntil was previously 'networkidle0' with no timeout, which
-  // waited indefinitely for external font fetches. Combined with templates
-  // that have since been switched to system font stacks (no external
-  // requests), 'domcontentloaded' is correct here — the HTML is passed via
-  // setContent so there is nothing to network-idle on — and the explicit
-  // timeouts bound the worst case.
-  let browser;
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
-    const page = await browser.newPage();
-    await page.setContent(html, {
-      waitUntil: "domcontentloaded",
-      timeout: 20_000,
-    });
-    const pdf = await page.pdf({
-      format: "Letter",
-      printBackground: true,
-      timeout: 30_000,
+    const result = await generateWineListPdf({
+      supabase,
+      restaurantId,
+      listId: body.listId,
+      template: body.template,
     });
 
-    return new NextResponse(Buffer.from(pdf), {
+    const pdfBody = new Uint8Array(result.pdf).buffer;
+    return new NextResponse(pdfBody, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${list.name.replace(/[^a-zA-Z0-9 ]/g, "")}.pdf"`,
+        "Content-Disposition": `inline; filename="${result.filename}"`,
       },
     });
-  } catch (err) {
-    console.error("PDF generation failed:", err);
-    Sentry.captureException(err, {
-      tags: { surface: "pdf", phase: "puppeteer-render" },
-    });
-    return apiError(500, "pdf_generation_failed", "PDF generation failed.");
-  } finally {
-    await browser?.close();
+  } catch (error) {
+    if (error instanceof WineListPdfNotFoundError) {
+      return Errors.notFound("Wine list");
+    }
+    if (error instanceof WineListPdfGenerationError) {
+      return apiError(500, "pdf_generation_failed", "PDF generation failed.");
+    }
+    throw error;
   }
 }
