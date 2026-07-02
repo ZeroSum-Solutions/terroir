@@ -1,10 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
-import * as Sentry from "@sentry/nextjs";
 import { Errors } from "@/lib/api/errors";
 import { z } from "zod";
+import {
+  ReconcileExceedsSizeError,
+  ReconcileForbiddenError,
+  ReconcileRpcError,
+  reconcileOpenBottles,
+} from "@/domains/cellar/reconcile-service";
 import { requireRole } from "@/lib/api/auth";
-import { revalidateAutoEightysixedWines } from "@/lib/api/auto-eightysix-revalidation";
 
 export const runtime = "nodejs";
 
@@ -57,53 +60,26 @@ export async function POST(request: NextRequest) {
     return Errors.validation(parsed.error.issues, "Invalid body.");
   }
 
-  // ARCH-023: capture timestamp BEFORE the batch write so we can
-  // detect auto-86 events inserted by the pour_events trigger (each
-  // reconcile entry creates a pour_event that can cascade through
-  // the auto-86 trigger).
-  const sinceTs = new Date().toISOString();
-
-  // Send entries as a JSON array to the batch RPC. The RPC iterates
-  // inside one transaction and returns the count on success.
-  const { data, error } = await supabase.rpc(
-    "reconcile_open_bottles_batch",
-    {
-      p_entries: parsed.data.entries as unknown as import("@/types/database").Json,
-    },
-  );
-
-  if (error) {
-    if (error.code === "42501") {
+  try {
+    const updated = await reconcileOpenBottles({
+      supabase,
+      restaurantId,
+      entries: parsed.data.entries,
+    });
+    return NextResponse.json({ updated });
+  } catch (error) {
+    if (error instanceof ReconcileForbiddenError) {
       return Errors.forbidden("Forbidden.");
     }
-    if (error.code === "P0002") {
+    if (error instanceof ReconcileExceedsSizeError) {
       // "new_remaining_ml exceeds bottle size" — caller sent a bad
       // value. Surface as 400 so the UI can show "that's more than a
       // 750ml bottle can hold."
       return Errors.badRequest("new_remaining_ml exceeds bottle size.", undefined, "EXCEEDS_SIZE");
     }
-    console.error("reconcile_open_bottles_batch failed:", error);
-    Sentry.captureException(error, {
-      tags: { surface: "reconcile", phase: "reconcile_open_bottles_batch-rpc" },
-      extra: { entry_count: parsed.data.entries.length },
-    });
-    return Errors.internal("Reconcile failed.");
+    if (error instanceof ReconcileRpcError) {
+      return Errors.internal("Reconcile failed.");
+    }
+    throw error;
   }
-
-  revalidatePath("/availability");
-
-  // ARCH-023: if any entry's pour_event cascaded into an auto-86
-  // via the migration-0021 trigger, revalidate every published
-  // /list/[slug] that references it.
-  const touchedWineIds = Array.from(
-    new Set(parsed.data.entries.map((e) => e.wine_id)),
-  );
-  await revalidateAutoEightysixedWines({
-    supabase,
-    restaurantId,
-    touchedWineIds,
-    sinceTs,
-  });
-
-  return NextResponse.json({ updated: (data as number) ?? 0 });
 }

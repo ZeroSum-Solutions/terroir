@@ -1,9 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
-import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
+import {
+  PourForbiddenError,
+  PourNoInventoryError,
+  PourRpcError,
+  recordPour,
+} from "@/domains/pours/pour-service";
 import { requireMembership } from "@/lib/api/auth";
-import { revalidateAutoEightysixedWines } from "@/lib/api/auto-eightysix-revalidation";
 import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
@@ -48,51 +51,26 @@ export async function POST(request: NextRequest) {
   }
   const { wine_id, ml, kind, note } = parsed.data;
 
-  // ARCH-023: capture timestamp BEFORE the write so we can detect
-  // an auto-86 event inserted by the pour_events trigger. The
-  // revalidation after the write queries availability_events for
-  // rows newer than this.
-  const sinceTs = new Date().toISOString();
-
-  // The generator emits p_kind/p_note as `string` (not `string | null`)
-  // because SQL DEFAULTs don't translate to TS nullability. Cast for
-  // runtime; Postgres accepts NULL. Same pattern as the availability PATCH.
-  const { data, error } = await supabase.rpc("record_pour", {
-    p_wine_id: wine_id,
-    p_ml: ml,
-    p_kind: kind,
-    p_note: (note ?? null) as unknown as string,
-  });
-
-  if (error) {
-    if (
-      error.code === "P0001" &&
-      String(error.message ?? "").includes("TERROIR_OUT_OF_STOCK")
-    ) {
+  try {
+    const openBottle = await recordPour({
+      supabase,
+      restaurantId,
+      wineId: wine_id,
+      ml,
+      kind,
+      note,
+    });
+    return NextResponse.json({ open_bottle: openBottle });
+  } catch (error) {
+    if (error instanceof PourNoInventoryError) {
       return Errors.conflict("no_inventory", "No inventory available.");
     }
-    if (error.code === "42501") {
+    if (error instanceof PourForbiddenError) {
       return Errors.forbidden("Forbidden.");
     }
-    console.error("record_pour failed:", error);
-    Sentry.captureException(error, {
-      tags: { surface: "pour", phase: "record_pour-rpc" },
-      extra: { wine_id, ml, kind },
-    });
-    return Errors.internal("Pour failed.");
+    if (error instanceof PourRpcError) {
+      return Errors.internal("Pour failed.");
+    }
+    throw error;
   }
-
-  // Revalidate /availability so the 86 UI sees fresh state.
-  revalidatePath("/availability");
-
-  // ARCH-023: if the pour trigger auto-86'd this wine, revalidate
-  // every published /list/[slug] that references it. Best-effort.
-  await revalidateAutoEightysixedWines({
-    supabase,
-    restaurantId,
-    touchedWineIds: [wine_id],
-    sinceTs,
-  });
-
-  return NextResponse.json({ open_bottle: data });
 }
