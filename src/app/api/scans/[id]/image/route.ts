@@ -1,5 +1,9 @@
-import * as Sentry from "@sentry/nextjs";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  getScanImageUrl,
+  ScanImageNotFoundError,
+  ScanImageStorageError,
+} from "@/domains/scanning/scan-image-service";
 import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 
@@ -16,29 +20,20 @@ export async function GET(
   const { supabase, restaurantId } = auth;
   const { id } = await params;
 
-  const { data: scan } = await supabase
-    .from("invoice_scans")
-    .select("raw_image_path")
-    .eq("id", id)
-    .eq("restaurant_id", restaurantId)
-    .single();
-
-  if (!scan?.raw_image_path) {
-    return Errors.notFound("Scan image");
-  }
-
-  const { data: signed, error } = await supabase.storage
-    .from("invoice-images")
-    .createSignedUrl(scan.raw_image_path, 3600);
-
-  if (error || !signed?.signedUrl) {
-    console.error("fetch-storage failed:", error);
-    Sentry.captureException(error ?? new Error("No signed URL returned"), {
-      tags: { surface: "scanner", phase: "fetch-storage" },
-      extra: { scan_id: id },
+  try {
+    const url = await getScanImageUrl({
+      supabase,
+      restaurantId,
+      scanId: id,
     });
-    return Errors.internal("Failed to generate image URL.");
+    return NextResponse.json({ url });
+  } catch (error) {
+    if (error instanceof ScanImageNotFoundError) {
+      return Errors.notFound("Scan image");
+    }
+    if (error instanceof ScanImageStorageError) {
+      return Errors.internal("Failed to generate image URL.");
+    }
+    throw error;
   }
-
-  return NextResponse.json({ url: signed.signedUrl });
 }
