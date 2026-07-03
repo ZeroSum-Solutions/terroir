@@ -1,9 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
-import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
+import {
+  PourForbiddenError,
+  PourNotFoundError,
+  PourRpcError,
+  undoLastPour,
+} from "@/domains/pours/pour-service";
 import { requireMembership } from "@/lib/api/auth";
-import { revalidateAutoEightysixedWines } from "@/lib/api/auto-eightysix-revalidation";
 import { Errors } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
@@ -45,35 +48,23 @@ export async function POST(request: NextRequest) {
   }
   const { wine_id } = parsed.data;
 
-  const sinceTs = new Date().toISOString();
-
-  const { data, error } = await supabase.rpc("undo_last_pour", {
-    p_wine_id: wine_id,
-  });
-
-  if (error) {
-    if (error.message?.includes("no recent pour to undo")) {
+  try {
+    const openBottle = await undoLastPour({
+      supabase,
+      restaurantId,
+      wineId: wine_id,
+    });
+    return NextResponse.json({ open_bottle: openBottle });
+  } catch (error) {
+    if (error instanceof PourNotFoundError) {
       return Errors.notFound("Pour to undo");
     }
-    if (error.code === "42501") {
+    if (error instanceof PourForbiddenError) {
       return Errors.forbidden("Forbidden.");
     }
-    console.error("undo_last_pour failed:", error);
-    Sentry.captureException(error, {
-      tags: { surface: "pour", phase: "undo_last_pour-rpc" },
-      extra: { wine_id },
-    });
-    return Errors.internal("Undo failed.");
+    if (error instanceof PourRpcError) {
+      return Errors.internal("Undo failed.");
+    }
+    throw error;
   }
-
-  revalidatePath("/availability");
-
-  await revalidateAutoEightysixedWines({
-    supabase,
-    restaurantId,
-    touchedWineIds: [wine_id],
-    sinceTs,
-  });
-
-  return NextResponse.json({ open_bottle: data });
 }
