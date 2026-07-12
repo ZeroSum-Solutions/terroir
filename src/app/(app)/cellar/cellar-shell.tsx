@@ -12,6 +12,7 @@ import { WineDetailDrawer } from "./wine-detail-drawer";
 import { ReconcileModal } from "./reconcile-modal";
 import { AutoEightysixModal } from "./auto-eightysix-modal";
 import { CellarGridView, CellarSetup } from "./cellar-grid";
+import { resolveCellarNavigationIntent } from "./cellar-navigation";
 
 type CellarSection = { id: string; name: string };
 
@@ -65,8 +66,11 @@ export function CellarShell({
   const searchParams = useSearchParams();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const [initialMode] = useState(() => searchParams.get("mode") ?? "");
-  const [initialWineId] = useState(() => searchParams.get("wine") ?? "");
+  const mode = searchParams.get("mode");
+  const wineId = searchParams.get("wine");
+
+  const [initialMode] = useState(() => mode ?? "");
+  const [initialWineId] = useState(() => wineId ?? "");
 
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -98,17 +102,28 @@ export function CellarShell({
   const isOwner = role === "owner";
 
   useEffect(() => {
-    if (!initialMode && !initialWineId) return;
-    if (initialMode === "pour" || initialMode === "eightysix") {
-      requestAnimationFrame(() => searchInputRef.current?.focus());
-    }
+    const intent = resolveCellarNavigationIntent(
+      mode,
+      wineId,
+      new Set(rows.map((row) => row.wine_id)),
+    );
+    if (!intent.shouldConsumeParams) return;
+
     const params = new URLSearchParams(searchParams.toString());
     params.delete("mode");
     params.delete("wine");
     const next = params.toString();
-    router.replace(next ? `/cellar?${next}` : "/cellar", { scroll: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const frame = requestAnimationFrame(() => {
+      if (intent.filter) setFilter(intent.filter);
+      if (intent.selectedWineId) setSelectedId(intent.selectedWineId);
+      if (intent.shouldFocusSearch) setSearchOpen(true);
+      router.replace(next ? `/cellar?${next}` : "/cellar", { scroll: false });
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [mode, wineId, rows, router, searchParams]);
 
   useEffect(() => {
     function handleSlash(e: KeyboardEvent) {
