@@ -86,7 +86,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     id: `${parsedAt}-${idx}`,
     name: item.name, producer: item.producer, vintage: item.vintage,
     varietal: item.varietal, region: item.region, qty: item.qty,
-    unitCost: item.unitCost, confidence: item.confidence,
+    unitCost: item.unitCost,
+    currency: item.currency ?? null,
+    format: item.format ?? null,
+    confidence: item.confidence,
     lowFields: item.lowFields.length > 0 ? item.lowFields : undefined,
   })) as LineItem[];
 
