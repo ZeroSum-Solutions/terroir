@@ -1,0 +1,354 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://terroir.local/schemas/api-route-reconciliation.v1.schema.json",
+  "title": "Terroir API route reconciliation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "inventorySchemaVersion",
+    "sourceInventory",
+    "featureLedger",
+    "completionPlan",
+    "summary",
+    "planLeaves",
+    "concreteRequirements",
+    "discoveredClassifications",
+    "crossCuttingRequirements"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "inventorySchemaVersion": {
+      "const": 1
+    },
+    "sourceInventory": {
+      "const": "docs/api-route-inventory.json"
+    },
+    "featureLedger": {
+      "const": "docs/feature-ledger.json"
+    },
+    "completionPlan": {
+      "const": "docs/plans/2026-07-20-terroir-completion-spec.md"
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    },
+    "planLeaves": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/planLeaf"
+      }
+    },
+    "concreteRequirements": {
+      "type": "array",
+      "minItems": 32,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/concreteRequirement"
+      }
+    },
+    "discoveredClassifications": {
+      "type": "array",
+      "minItems": 77,
+      "maxItems": 77,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/discoveredClassification"
+      }
+    },
+    "crossCuttingRequirements": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/crossCuttingRequirement"
+      }
+    }
+  },
+  "$defs": {
+    "method": {
+      "enum": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "HEAD",
+        "OPTIONS"
+      ]
+    },
+    "operationId": {
+      "type": "string",
+      "pattern": "^api:(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS):/api(?:/[^/]+)*$"
+    },
+    "routePath": {
+      "type": "string",
+      "pattern": "^/api(?:/(?!\\.{1,2}(?:/|$))[^/]+)*$"
+    },
+    "concreteRequirementId": {
+      "type": "string",
+      "pattern": "^TER-CF-(18[0-9]|19[0-9]|20[0-9]|21[01])$"
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "activeRequirementCount",
+        "concreteRequirementCount",
+        "exactDiscoveredCount",
+        "plannedPromiseCount",
+        "extensionDiscoveredCount",
+        "crossCuttingRequirementCount",
+        "ter020LeafCount"
+      ],
+      "properties": {
+        "activeRequirementCount": {
+          "const": 269
+        },
+        "concreteRequirementCount": {
+          "const": 32
+        },
+        "exactDiscoveredCount": {
+          "const": 17
+        },
+        "plannedPromiseCount": {
+          "const": 15
+        },
+        "extensionDiscoveredCount": {
+          "const": 60
+        },
+        "crossCuttingRequirementCount": {
+          "const": 6
+        },
+        "ter020LeafCount": {
+          "const": 8
+        }
+      }
+    },
+    "planLeaf": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "heading"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "TER-020Aa",
+            "TER-020Ab",
+            "TER-020Ac",
+            "TER-020B",
+            "TER-020C",
+            "TER-020D",
+            "TER-020E",
+            "TER-020F"
+          ]
+        },
+        "heading": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "concreteRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirementId",
+        "method",
+        "path",
+        "operationId",
+        "realization",
+        "implementationLeaf"
+      ],
+      "properties": {
+        "requirementId": {
+          "$ref": "#/$defs/concreteRequirementId"
+        },
+        "method": {
+          "$ref": "#/$defs/method"
+        },
+        "path": {
+          "$ref": "#/$defs/routePath"
+        },
+        "operationId": {
+          "$ref": "#/$defs/operationId"
+        },
+        "realization": {
+          "enum": [
+            "discovered_exact_path",
+            "planned_exact_path"
+          ]
+        },
+        "implementationLeaf": {
+          "oneOf": [
+            {
+              "const": "TER-020E"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "realization": {
+                "const": "discovered_exact_path"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "implementationLeaf": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "implementationLeaf": {
+                "const": "TER-020E"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "semanticAliasContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirementId",
+        "relationship",
+        "note"
+      ],
+      "properties": {
+        "requirementId": {
+          "$ref": "#/$defs/concreteRequirementId"
+        },
+        "relationship": {
+          "enum": [
+            "path_variant",
+            "partial_projection",
+            "specialized_export"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "discoveredClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operationId",
+        "classification",
+        "concreteRequirementId",
+        "semanticAliasContext"
+      ],
+      "properties": {
+        "operationId": {
+          "$ref": "#/$defs/operationId"
+        },
+        "classification": {
+          "enum": [
+            "exact",
+            "extension"
+          ]
+        },
+        "concreteRequirementId": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/concreteRequirementId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "semanticAliasContext": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/semanticAliasContext"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "classification": {
+                "const": "exact"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "concreteRequirementId": {
+                "$ref": "#/$defs/concreteRequirementId"
+              },
+              "semanticAliasContext": {
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "concreteRequirementId": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "crossCuttingRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirementId",
+        "scope",
+        "ownerLeaf"
+      ],
+      "properties": {
+        "requirementId": {
+          "enum": [
+            "TER-CF-212",
+            "TER-CF-213",
+            "TER-CF-214",
+            "TER-CF-215",
+            "TER-CF-216",
+            "TER-CF-217"
+          ]
+        },
+        "scope": {
+          "enum": [
+            "write_operations",
+            "all_operations"
+          ]
+        },
+        "ownerLeaf": {
+          "enum": [
+            "TER-020B",
+            "TER-020C",
+            "TER-020D"
+          ]
+        }
+      }
+    }
+  }
+}
