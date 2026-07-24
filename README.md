@@ -32,9 +32,18 @@ pnpm start               # serve the production build locally
 pnpm lint                # ESLint
 pnpm test                # Vitest unit + route tests
 pnpm test:e2e            # Playwright end-to-end
+pnpm verify:feature-ledger # verify the authoritative feature ledger
 pnpm exec tsc --noEmit   # type-check
 pnpm run snapshot        # regenerate supabase/schema.snapshot.sql after a new migration
 ```
+
+[`app_spec.txt`](app_spec.txt) is the source requirement inventory.
+[`docs/feature-ledger.json`](docs/feature-ledger.json) is the sole authoritative
+completion and status ledger for all 269 active core requirements.
+[`claude-progress.txt`](claude-progress.txt) is historical evidence only and does
+not determine completion status. Run `pnpm verify:feature-ledger` after changing
+the ledger or its source requirements; CI runs the same verification before the
+typecheck, lint, and test gates.
 
 For a sanitized local Supabase dataset, see
 [`docs/LOCAL-SUPABASE.md`](docs/LOCAL-SUPABASE.md). The seed script defaults to
