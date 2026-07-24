@@ -87,6 +87,16 @@ async function postOpenBottle(request: NextRequest) {
     );
   }
 
+  // Resolve the active-bottle write path before mutating sealed inventory.
+  const { data: existingBottle, error: existingError } = await supabase
+    .from("open_bottles")
+    .select("id, closed_at")
+    .eq("wine_id", wine_id)
+    .eq("restaurant_id", restaurantId)
+    .is("closed_at", null)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
   // Decrement sealed inventory
   const { error: decErr } = await supabase
     .from("inventory_items")
@@ -101,16 +111,6 @@ async function postOpenBottle(request: NextRequest) {
     });
     return Errors.internal("Failed to open bottle.");
   }
-
-  // Check if there's already an active open bottle
-  const { data: existingBottle, error: existingError } = await supabase
-    .from("open_bottles")
-    .select("id, closed_at")
-    .eq("wine_id", wine_id)
-    .eq("restaurant_id", restaurantId)
-    .is("closed_at", null)
-    .maybeSingle();
-  if (existingError) throw existingError;
 
   if (existingBottle) {
     // There's already an open bottle — just replace it with the new one

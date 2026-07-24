@@ -272,6 +272,11 @@ describe("POST /api/open-bottles", () => {
     await expectGeneric500(await POST(request()));
     expect(
       supabase.calls.some(
+        (call) => call.table === "inventory_items" && call.method === "update",
+      ),
+    ).toBe(false);
+    expect(
+      supabase.calls.some(
         (call) => call.table === "open_bottles" && call.method === "update",
       ),
     ).toBe(false);
