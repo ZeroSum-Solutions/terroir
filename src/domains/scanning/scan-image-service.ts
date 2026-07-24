@@ -35,14 +35,20 @@ export async function getScanImageUrl(
 ): Promise<string> {
   const { supabase, restaurantId, scanId } = input;
 
-  const { data: scan } = await supabase
+  const { data: scan, error: fetchError } = await supabase
     .from("invoice_scans")
     .select("raw_image_path")
     .eq("id", scanId)
     .eq("restaurant_id", restaurantId)
     .single();
 
-  if (!scan?.raw_image_path) {
+  if (fetchError && (fetchError as { code?: string }).code !== "PGRST116") {
+    throw fetchError;
+  }
+  if (
+    !scan?.raw_image_path ||
+    !scan.raw_image_path.startsWith(`${restaurantId}/`)
+  ) {
     throw new ScanImageNotFoundError();
   }
 

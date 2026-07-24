@@ -5,7 +5,9 @@ export type LineItemField =
   | "varietal"
   | "region"
   | "qty"
-  | "unitCost";
+  | "unitCost"
+  | "currency"
+  | "format";
 
 export type LineItem = {
   id: string;

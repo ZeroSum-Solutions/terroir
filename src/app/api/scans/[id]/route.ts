@@ -1,77 +1,63 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { z } from "zod";
-import { getAuthContext } from "@/lib/auth-context";
-import { Errors } from "@/lib/api/errors";
+import { requireMembership } from "@/lib/api/auth";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseJson, parseParams } from "@/lib/api/validation";
+import {
+  ScanIdParamsSchema,
+  UpdateScanBodySchema,
+} from "@/lib/scanner/request-schemas";
+import { SCORED_FIELDS } from "@/lib/scanner/scored-fields";
 import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
-
-const LineItemSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  producer: z.string(),
-  vintage: z.number().nullable(),
-  varietal: z.string(),
-  region: z.string(),
-  qty: z.number().int().min(1),
-  unitCost: z.number().min(0),
-  currency: z.string().nullable(),
-  format: z.string().nullable(),
-  confidence: z.number(),
-});
-
-const PatchSchema = z.object({
-  items: z.array(LineItemSchema).min(1),
-  edits: z.record(z.string(), z.boolean()),
-});
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params;
+  return withApiHandler(async () => {
+    const auth = await requireMembership();
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  const auth = await getAuthContext();
-  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { supabase, restaurantId } = auth;
+    const parsedParams = await parseParams(params, ScanIdParamsSchema);
+    if (!parsedParams.ok) return parsedParams.response;
+    const { id } = parsedParams.data;
 
-  const { data: scan, error: fetchErr } = await supabase
-    .from("invoice_scans")
-    .select("id, restaurant_id")
-    .eq("id", id)
-    .eq("restaurant_id", restaurantId)
-    .single();
+    const parsed = await parseJson(request, UpdateScanBodySchema);
+    if (!parsed.ok) return parsed.response;
+    const { items, edits } = parsed.data;
 
-  if (fetchErr || !scan) {
-    return NextResponse.json({ error: "Scan not found." }, { status: 404 });
-  }
+    const { data: scan, error: fetchError } = await supabase
+      .from("invoice_scans")
+      .select("id")
+      .eq("id", id)
+      .eq("restaurant_id", restaurantId)
+      .single();
+    if (fetchError && (fetchError as { code?: string }).code !== "PGRST116") {
+      throw fetchError;
+    }
+    if (!scan) return NextResponse.json(
+      { error: { code: "not_found", message: "Scan not found." } },
+      { status: 404 },
+    );
 
-  let raw: unknown;
-  try {
-    raw = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
+    const { error: updateError } = await supabase
+      .from("invoice_scans")
+      .update({
+        final_line_items: JSON.parse(JSON.stringify(items)) as Json,
+        edits: JSON.parse(JSON.stringify(edits)) as Json,
+        item_count: items.length,
+        accuracy_score: Math.max(
+          0,
+          (items.length * SCORED_FIELDS.length - Object.keys(edits).length) /
+            (items.length * SCORED_FIELDS.length),
+        ),
+      })
+      .eq("id", id)
+      .eq("restaurant_id", restaurantId);
+    if (updateError) throw updateError;
 
-  const parsed = PatchSchema.safeParse(raw);
-  if (!parsed.success) {
-    return Errors.validation(parsed.error.issues, "Invalid input.");
-  }
-
-  const { items, edits } = parsed.data;
-
-  const { error: updateErr } = await supabase
-    .from("invoice_scans")
-    .update({
-      final_line_items: JSON.parse(JSON.stringify(items)) as Json,
-      edits: JSON.parse(JSON.stringify(edits)) as Json,
-    })
-    .eq("id", id);
-
-  if (updateErr) {
-    console.error("Failed to update scan line items:", updateErr);
-    return Errors.internal("Failed to save edits.");
-  }
-
-  return NextResponse.json({ success: true, itemCount: items.length });
+    return NextResponse.json({ success: true, itemCount: items.length });
+  });
 }

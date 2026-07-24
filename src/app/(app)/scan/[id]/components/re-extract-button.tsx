@@ -3,6 +3,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { RefreshCw } from "lucide-react";
 import { useCallback, useState } from "react";
+import { readApiError } from "@/lib/api/client-error";
 
 interface ReExtractButtonProps {
   scanId: string;
@@ -19,7 +20,9 @@ export function ReExtractButton({ scanId }: ReExtractButtonProps) {
       const res = await fetch(`/api/scans/${scanId}/re-extract`, { method: "POST" });
       if (!res.ok) {
         const body = await res.json();
-        throw new Error(body.error || `Re-extraction failed (${res.status})`);
+        throw new Error(
+          readApiError(body, `Re-extraction failed (${res.status})`).message,
+        );
       }
       window.location.reload();
     } catch (e) {

@@ -8,6 +8,8 @@ const LineItemFieldSchema = z.enum([
   "region",
   "qty",
   "unitCost",
+  "currency",
+  "format",
 ]);
 
 export const InvoicePathBodySchema = z.object({
@@ -41,7 +43,7 @@ export const SaveBottleScanBodySchema = z.object({
   }),
 });
 
-const ScanLineItemSchema = z.object({
+export const ScanLineItemSchema = z.object({
   id: z.string(),
   name: z.string(),
   producer: z.string(),
@@ -54,6 +56,34 @@ const ScanLineItemSchema = z.object({
   format: z.string().nullable().optional(),
   confidence: z.number().min(0).max(1),
   lowFields: z.array(LineItemFieldSchema).optional(),
+});
+
+export const ScanIdParamsSchema = z.object({
+  id: z.string().uuid("id must be a valid UUID"),
+});
+
+export const ScanLineItemsSchema = z.array(ScanLineItemSchema).min(1);
+
+export const UpdateScanBodySchema = z.object({
+  items: ScanLineItemsSchema,
+  edits: z.record(z.string(), z.literal(true)),
+});
+
+export const StoredOcrSchema = z.object({
+  rawText: z.string().trim().min(1),
+  vendorName: z.string().optional(),
+  invoiceNumber: z.string().optional(),
+  invoiceDate: z.string().optional(),
+  tables: z
+    .array(
+      z.object({
+        description: z.string(),
+        quantity: z.number().nullable().optional(),
+        unitPrice: z.number().nullable().optional(),
+        amount: z.number().nullable().optional(),
+      }),
+    )
+    .default([]),
 });
 
 const ScanSchema = z.object({

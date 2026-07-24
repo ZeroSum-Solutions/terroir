@@ -13,9 +13,11 @@ vi.mock("@sentry/nextjs", () => ({
 const { GET } = await import("./route");
 
 type ScanRow = { raw_image_path: string | null };
+const SCAN_ID = "11111111-1111-4111-8111-111111111111";
 
 function makeSupabase(opts: {
   scan: ScanRow | null;
+  fetchError?: { code?: string; message: string } | null;
   signedUrl?: string;
   signedError?: { message: string } | null;
 }) {
@@ -37,7 +39,7 @@ function makeSupabase(opts: {
       single: () =>
         Promise.resolve({
           data: table === "invoice_scans" ? opts.scan : null,
-          error: null,
+          error: opts.fetchError ?? null,
         }),
     };
     return chain;
@@ -49,7 +51,7 @@ function makeSupabase(opts: {
   };
 }
 
-function makeContext(id = "scan-1") {
+function makeContext(id = SCAN_ID) {
   return { params: Promise.resolve({ id }) };
 }
 
@@ -68,7 +70,7 @@ describe("GET /api/scans/[id]/image", () => {
 
   it("returns a signed invoice image URL", async () => {
     const { supabase, createSignedUrl, storageFrom } = makeSupabase({
-      scan: { raw_image_path: "r-A/scan-1/page-1.png" },
+      scan: { raw_image_path: `r-A/${SCAN_ID}.png` },
       signedUrl: "https://signed.example/scan-1",
     });
     mockRequireMembership.mockResolvedValue({
@@ -85,7 +87,7 @@ describe("GET /api/scans/[id]/image", () => {
       url: "https://signed.example/scan-1",
     });
     expect(storageFrom).toHaveBeenCalledWith("invoice-images");
-    expect(createSignedUrl).toHaveBeenCalledWith("r-A/scan-1/page-1.png", 3600);
+    expect(createSignedUrl).toHaveBeenCalledWith(`r-A/${SCAN_ID}.png`, 3600);
   });
 
   it("404s when the scan has no image path", async () => {
@@ -105,9 +107,45 @@ describe("GET /api/scans/[id]/image", () => {
     expect(createSignedUrl).not.toHaveBeenCalled();
   });
 
+  it("404s when the stored path is outside the current tenant prefix", async () => {
+    const { supabase, createSignedUrl } = makeSupabase({
+      scan: { raw_image_path: `r-B/${SCAN_ID}.png` },
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "staff",
+    });
+
+    const res = await GET({} as NextRequest, makeContext());
+
+    expect(res.status).toBe(404);
+    expect(createSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("500s when the scan lookup provider fails", async () => {
+    const { supabase, createSignedUrl } = makeSupabase({
+      scan: null,
+      fetchError: { code: "XX000", message: "private database detail" },
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "staff",
+    });
+
+    const res = await GET({} as NextRequest, makeContext());
+
+    expect(res.status).toBe(500);
+    expect(JSON.stringify(await res.json())).not.toContain("private");
+    expect(createSignedUrl).not.toHaveBeenCalled();
+  });
+
   it("500s when storage cannot create a signed URL", async () => {
     const { supabase } = makeSupabase({
-      scan: { raw_image_path: "r-A/scan-1/page-1.png" },
+      scan: { raw_image_path: `r-A/${SCAN_ID}.png` },
       signedError: { message: "storage unavailable" },
     });
     mockRequireMembership.mockResolvedValue({

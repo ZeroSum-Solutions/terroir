@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { accuracyColor } from "@/lib/scanner/accuracy-color";
+import { readApiError } from "@/lib/api/client-error";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
 import { SCORED_FIELDS } from "@/lib/scanner/scored-fields";
 import type { LineItem, LineItemField } from "@/lib/scanner/types";
@@ -98,7 +99,7 @@ export function ScanReview({
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error || "Save failed");
+        throw new Error(readApiError(err, "Save failed").message);
       }
       setSaveMsg("Edits saved.");
       router.refresh();
@@ -116,7 +117,7 @@ export function ScanReview({
       const res = await fetch(`/api/scans/${id}/commit`, { method: "POST" });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error || "Commit failed");
+        throw new Error(readApiError(err, "Commit failed").message);
       }
       const result = await res.json();
       setCommitOk(true);

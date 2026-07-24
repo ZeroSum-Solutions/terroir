@@ -1,93 +1,111 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { getAuthContext } from "@/lib/auth-context";
+import { z } from "zod";
+import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseParams } from "@/lib/api/validation";
+import {
+  ScanIdParamsSchema,
+  ScanLineItemsSchema,
+} from "@/lib/scanner/request-schemas";
 
 export const runtime = "nodejs";
+
+function reportBestEffort(error: unknown) {
+  try {
+    Sentry.captureException(error);
+  } catch {}
+}
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params;
+  return withApiHandler(async () => {
+    const auth = await requireMembership();
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  const auth = await getAuthContext();
-  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { supabase, restaurantId } = auth;
+    const parsedParams = await parseParams(params, ScanIdParamsSchema);
+    if (!parsedParams.ok) return parsedParams.response;
+    const { id } = parsedParams.data;
 
-  const { data: scan, error: fetchErr } = await supabase
-    .from("invoice_scans")
-    .select("id, final_line_items, restaurant_id")
-    .eq("id", id)
-    .eq("restaurant_id", restaurantId)
-    .single();
+    const { data: scan, error: fetchError } = await supabase
+      .from("invoice_scans")
+      .select("id, final_line_items")
+      .eq("id", id)
+      .eq("restaurant_id", restaurantId)
+      .single();
+    if (fetchError && (fetchError as { code?: string }).code !== "PGRST116") {
+      throw fetchError;
+    }
+    if (!scan) return Errors.notFound("Scan");
 
-  if (fetchErr || !scan) {
-    return NextResponse.json({ error: "Scan not found." }, { status: 404 });
-  }
+    const parsedItems = ScanLineItemsSchema.safeParse(scan.final_line_items);
+    if (!parsedItems.success) {
+      return Errors.badRequest("Scan has no valid line items to commit.");
+    }
+    const items = parsedItems.data;
 
-  const items = (scan.final_line_items ?? []) as Array<Record<string, unknown>>;
-  if (!Array.isArray(items) || items.length === 0) {
-    return NextResponse.json({ error: "No line items to commit." }, { status: 400 });
-  }
-
-  const winesPayload = items.map(function(it) {
-    return {
-      name: (it.name as string) || "",
-      producer: (it.producer as string) || "",
-      vintage: (it.vintage as number) ?? null,
-      varietal: (it.varietal as string) || null,
-      region: (it.region as string) || null,
+    const winesPayload = items.map((item) => ({
+      name: item.name,
+      producer: item.producer,
+      vintage: item.vintage,
+      varietal: item.varietal || null,
+      region: item.region || null,
       country: null,
       size_ml: 750,
-    };
-  });
+    }));
+    const { data: wineIdArray, error: batchError } = await supabase.rpc(
+      "find_or_create_wines_batch",
+      { p_restaurant_id: restaurantId, p_wines: winesPayload },
+    );
+    if (batchError) throw batchError;
+    const parsedWineIds = z
+      .array(z.string().uuid())
+      .length(items.length)
+      .safeParse(wineIdArray);
+    if (!parsedWineIds.success) {
+      throw new Error("find_or_create_wines_batch returned invalid IDs");
+    }
+    const wineIds = parsedWineIds.data;
 
-  const { data: wineIdArray, error: batchError } = await supabase.rpc(
-    "find_or_create_wines_batch",
-    { p_restaurant_id: restaurantId, p_wines: winesPayload },
-  );
-
-  if (batchError || !wineIdArray) {
-    console.error("find_or_create_wines_batch failed:", batchError);
-    return Errors.internal("Failed to create wines.");
-  }
-
-  const wineIds = wineIdArray as string[];
-
-  const inventoryInserts = items.map(function(it, idx) {
-    return {
-      wine_id: wineIds[idx],
+    const inventoryInserts = items.map((item, index) => ({
+      wine_id: wineIds[index],
       restaurant_id: restaurantId,
       invoice_scan_id: id,
-      quantity: (it.qty as number) || 1,
-      unit_cost: (it.unitCost as number) || 0,
-      format: (it.format as string) || null,
-      currency: (it.currency as string) || null,
+      quantity: item.qty,
+      unit_cost: item.unitCost,
+      format: item.format ?? null,
+      currency: item.currency ?? null,
       added_via: "invoice_scan" as const,
-    };
-  });
+    }));
+    const { error: inventoryError } = await supabase
+      .from("inventory_items")
+      .insert(inventoryInserts);
+    if (inventoryError) {
+      Sentry.captureException(inventoryError, {
+        tags: { surface: "scan-commit", phase: "inventory_items-insert" },
+        extra: { restaurantId, scanId: id, rowCount: inventoryInserts.length },
+      });
+      throw inventoryError;
+    }
 
-  const { error: inventoryError } = await supabase
-    .from("inventory_items")
-    .insert(inventoryInserts);
+    try {
+      void Promise.resolve(
+        supabase.rpc("match_lwin_batch", { p_wine_ids: wineIds }),
+      ).then(({ error }) => {
+        if (error) reportBestEffort(error);
+      }).catch(reportBestEffort);
+    } catch (error) {
+      reportBestEffort(error);
+    }
 
-  if (inventoryError) {
-    console.error("inventory_items insert failed:", inventoryError);
-    Sentry.captureException(inventoryError, {
-      tags: { surface: "scan-commit", phase: "inventory_items-insert" },
-      extra: { restaurantId, scanId: id, rowCount: inventoryInserts.length },
+    return NextResponse.json({
+      scanId: id,
+      itemCount: items.length,
+      wineCount: new Set(wineIds).size,
     });
-    return Errors.internal("Failed to create inventory items.");
-  }
-
-  supabase.rpc("match_lwin_batch", { p_wine_ids: wineIds }).then(
-    function(r) { if (r.error) console.error("LWIN match failed:", r.error); }
-  );
-
-  return NextResponse.json({
-    scanId: id,
-    itemCount: items.length,
-    wineCount: new Set(wineIds).size,
   });
 }
