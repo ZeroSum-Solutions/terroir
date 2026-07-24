@@ -15,9 +15,21 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { readApiError } from "@/lib/api/client-error";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { TimeAgo } from "@/components/time-ago";
 import type { WineListWithCount } from "@/lib/wine-list/types";
+
+async function responseError(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  try {
+    return readApiError(await response.json(), fallback).message;
+  } catch {
+    return fallback;
+  }
+}
 
 export function WineListLanding({
   lists,
@@ -78,11 +90,8 @@ export function WineListLanding({
           body: JSON.stringify({ archived: willArchive }),
         });
         if (!res.ok) {
-          const body = (await res.json()) as { error?: unknown };
           throw new Error(
-            typeof body.error === "string"
-              ? body.error
-              : `Couldn't ${action} wine list.`,
+            await responseError(res, `Couldn't ${action} wine list.`),
           );
         }
         router.refresh();
@@ -118,14 +127,9 @@ export function WineListLanding({
           method: "DELETE",
         });
         if (!res.ok) {
-          let serverMessage: string | undefined;
-          try {
-            const body = (await res.json()) as { error?: unknown };
-            if (typeof body.error === "string") serverMessage = body.error;
-          } catch {
-            // non-JSON body — fall through to generic message
-          }
-          throw new Error(serverMessage ?? "Couldn't delete wine list.");
+          throw new Error(
+            await responseError(res, "Couldn't delete wine list."),
+          );
         }
         router.refresh();
       } catch (err) {
@@ -152,11 +156,8 @@ export function WineListLanding({
           method: "POST",
         });
         if (!res.ok) {
-          const body = (await res.json()) as { error?: unknown };
           throw new Error(
-            typeof body.error === "string"
-              ? body.error
-              : "Clone failed. Please try again.",
+            await responseError(res, "Clone failed. Please try again."),
           );
         }
         const { id } = (await res.json()) as { id: string };
@@ -190,11 +191,19 @@ export function WineListLanding({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error("Failed to create wine list");
+      if (!res.ok) {
+        throw new Error(
+          await responseError(res, "Couldn't create wine list."),
+        );
+      }
       const { id } = (await res.json()) as { id: string };
       router.push(`/lists/${id}`);
-    } catch {
-      setCreateError("Couldn't create wine list. Please try again.");
+    } catch (error) {
+      setCreateError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Couldn't create wine list. Please try again.",
+      );
       setCreating(false);
     }
   }, [newName, newDescription, router]);

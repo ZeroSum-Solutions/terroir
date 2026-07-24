@@ -744,11 +744,21 @@ export function WineListEditor({
 
   const updateTemplate = useCallback(
     async (template: Template) => {
-      await fetch(`/api/wine-lists/${list.id}`, {
+      const res = await fetch(`/api/wine-lists/${list.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ template }),
       });
+      if (!res.ok) {
+        setErrorToast(
+          await responseError(
+            res,
+            "Failed to update template. Please try again.",
+          ),
+        );
+        setTimeout(() => setErrorToast(null), 4000);
+        return;
+      }
       startTransition(() => router.refresh());
     },
     [list.id, router],

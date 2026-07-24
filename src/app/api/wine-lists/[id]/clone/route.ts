@@ -1,14 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
-import * as Sentry from "@sentry/nextjs";
 import { requireRole } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseParams } from "@/lib/api/validation";
+import { WineListIdParamsSchema } from "@/lib/api/wine-list-lifecycle-schemas";
 
 export const runtime = "nodejs";
 
 type Params = Promise<{ id: string }>;
 
 type SourceItem = {
-  id: string;
   wine_id: string;
   bottle_price: number | null;
   glass_price: number | null;
@@ -17,137 +18,121 @@ type SourceItem = {
   position: number;
   is_available: boolean | null;
   tasting_note: string | null;
+  name_override: string | null;
+  blurb: string | null;
+  hidden: boolean | null;
 };
 
 type SourceSection = {
-  id: string;
   name: string;
   position: number;
   wine_list_items?: SourceItem[];
 };
 
-/**
- * POST /api/wine-lists/[id]/clone
- *
- * Clones an existing wine list — name, description, template, sections, and
- * items — into a new, unpublished list. The clone name appends " (copy)" to
- * the original name. Pricing, positioning, and wine references are preserved.
- */
 export async function POST(
   _request: NextRequest,
   { params }: { params: Params },
 ) {
-  const { id } = await params;
-  const auth = await requireRole(["owner", "manager"]);
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireRole(["owner", "manager"]);
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  // 1. Fetch the source list (scope by restaurant_id + id)
-  const { data: sourceList, error: fetchError } = await supabase
-    .from("wine_lists")
-    .select("name, description, template")
-    .eq("id", id)
-    .eq("restaurant_id", restaurantId)
-    .single();
+    const parsedParams = await parseParams(params, WineListIdParamsSchema);
+    if (!parsedParams.ok) return parsedParams.response;
+    const { id } = parsedParams.data;
 
-  if (fetchError || !sourceList) {
-    return Errors.notFound("Wine list");
-  }
+    const { data: sourceList, error: fetchError } = await supabase
+      .from("wine_lists")
+      .select("name, description, template")
+      .eq("id", id)
+      .eq("restaurant_id", restaurantId)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!sourceList) return Errors.notFound("Wine list");
 
-  // 2. Fetch source sections and items
-  const { data: sourceSections, error: sectionsError } = await supabase
-    .from("wine_list_sections")
-    .select("id, name, position, wine_list_items(id, wine_id, bottle_price, glass_price, glass_pour_ml, pour_size_mode, position, is_available, tasting_note)")
-    .eq("wine_list_id", id)
-    .order("position");
-
-  if (sectionsError || !sourceSections) {
-    console.error("clone: fetch sections failed:", sectionsError);
-    Sentry.captureException(sectionsError ?? new Error("sections null without error"), {
-      tags: { surface: "wine-lists", phase: "clone-sections-fetch" },
-      extra: { restaurantId, list_id: id },
-    });
-    return Errors.internal("Clone failed.");
-  }
-
-  // 3. Create the clone list (unpublished, no slug)
-  const cloneName = `${sourceList.name} (copy)`;
-  const { data: cloneList, error: createError } = await supabase
-    .from("wine_lists")
-    .insert({
-      name: cloneName,
-      description: sourceList.description,
-      template: sourceList.template ?? "classic",
-      restaurant_id: restaurantId,
-      is_published: false,
-      archived: false,
-    })
-    .select("id")
-    .single();
-
-  if (createError || !cloneList) {
-    console.error("clone: create list failed:", createError);
-    Sentry.captureException(createError ?? new Error("clone null without error"), {
-      tags: { surface: "wine-lists", phase: "clone-create" },
-      extra: { restaurantId, source_id: id },
-    });
-    return Errors.internal("Clone failed.");
-  }
-
-  // 4. Clone sections and items
-  for (const section of sourceSections as SourceSection[]) {
-    const { data: newSection, error: sectionInsertError } = await supabase
+    const { data: sourceSections, error: sectionsError } = await supabase
       .from("wine_list_sections")
+      .select(
+        "name, position, wine_list_items(wine_id, bottle_price, glass_price, glass_pour_ml, pour_size_mode, position, is_available, tasting_note, name_override, blurb, hidden)",
+      )
+      .eq("wine_list_id", id)
+      .order("position");
+    if (sectionsError) throw sectionsError;
+    if (!sourceSections) {
+      throw new Error("clone source sections returned no rows");
+    }
+
+    const { data: cloneList, error: createError } = await supabase
+      .from("wine_lists")
       .insert({
-        wine_list_id: cloneList.id,
-        name: section.name,
-        position: section.position,
+        name: `${sourceList.name} (copy)`,
+        description: sourceList.description,
+        template: sourceList.template ?? "classic",
+        restaurant_id: restaurantId,
+        is_published: false,
+        archived: false,
+        slug: null,
       })
       .select("id")
       .single();
-
-    if (sectionInsertError || !newSection) {
-      console.error("clone: insert section failed:", sectionInsertError);
-      Sentry.captureException(sectionInsertError ?? new Error("section null"), {
-        tags: { surface: "wine-lists", phase: "clone-section-insert" },
-        extra: { restaurantId, clone_id: cloneList.id, section_name: section.name },
-      });
-      // Clean up partial clone
-      await supabase.from("wine_lists").delete().eq("id", cloneList.id).eq("restaurant_id", restaurantId);
-      return Errors.internal("Clone failed.");
+    if (createError || !cloneList) {
+      throw createError ?? new Error("clone list insert returned no row");
     }
 
-    // Clone items within this section
-    const items = section.wine_list_items;
-    if (items && items.length > 0) {
-      const itemInserts = items.map((item) => ({
-        section_id: newSection.id,
-        wine_id: item.wine_id,
-        bottle_price: item.bottle_price,
-        glass_price: item.glass_price,
-        glass_pour_ml: item.glass_pour_ml,
-        pour_size_mode: item.pour_size_mode ?? "bottle_only",
-        position: item.position,
-        is_available: item.is_available ?? true,
-        tasting_note: item.tasting_note,
-      }));
+    const cleanupClone = async () => {
+      const { data: removed, error } = await supabase
+        .from("wine_lists")
+        .delete()
+        .eq("id", cloneList.id)
+        .eq("restaurant_id", restaurantId)
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!removed) throw new Error("failed to remove partial wine-list clone");
+    };
 
+    for (const section of sourceSections as SourceSection[]) {
+      const { data: newSection, error: sectionInsertError } = await supabase
+        .from("wine_list_sections")
+        .insert({
+          wine_list_id: cloneList.id,
+          name: section.name,
+          position: section.position,
+        })
+        .select("id")
+        .single();
+      if (sectionInsertError || !newSection) {
+        await cleanupClone();
+        throw sectionInsertError ?? new Error("clone section insert returned no row");
+      }
+
+      const items = section.wine_list_items ?? [];
+      if (items.length === 0) continue;
       const { error: itemsError } = await supabase
         .from("wine_list_items")
-        .insert(itemInserts);
-
+        .insert(
+          items.map((item) => ({
+            section_id: newSection.id,
+            wine_id: item.wine_id,
+            bottle_price: item.bottle_price,
+            glass_price: item.glass_price,
+            glass_pour_ml: item.glass_pour_ml,
+            pour_size_mode: item.pour_size_mode ?? "bottle_only",
+            position: item.position,
+            is_available: item.is_available ?? true,
+            tasting_note: item.tasting_note,
+            name_override: item.name_override,
+            blurb: item.blurb,
+            hidden: item.hidden ?? false,
+          })),
+        );
       if (itemsError) {
-        console.error("clone: insert items failed:", itemsError);
-        Sentry.captureException(itemsError, {
-          tags: { surface: "wine-lists", phase: "clone-items-insert" },
-          extra: { restaurantId, clone_id: cloneList.id, section_id: newSection.id, item_count: items.length },
-        });
-        // Clean up partial clone
-        await supabase.from("wine_lists").delete().eq("id", cloneList.id).eq("restaurant_id", restaurantId);
-        return Errors.internal("Clone failed.");
+        await cleanupClone();
+        throw itemsError;
       }
     }
-  }
 
-  return NextResponse.json({ id: cloneList.id });
+    return NextResponse.json({ id: cloneList.id });
+  });
 }

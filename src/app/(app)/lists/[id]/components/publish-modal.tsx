@@ -1,7 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { readApiError } from "@/lib/api/client-error";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
+
+async function responseError(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  try {
+    return readApiError(await response.json(), fallback).message;
+  } catch {
+    return fallback;
+  }
+}
 
 interface QrCodeProps {
   url: string;
@@ -65,14 +77,16 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
       if (res.ok) {
+        const data = await res.json();
         setSlug((data as { slug: string }).slug);
         setSlugInput((data as { slug: string }).slug);
         setPublished(true);
       } else {
-        setSlugError((data as { error?: string }).error ?? "Publish failed.");
+        setSlugError(await responseError(res, "Publish failed."));
       }
+    } catch {
+      setSlugError("Publish failed. Please try again.");
     } finally {
       setPublishing(false);
     }
@@ -80,6 +94,7 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
 
   const unpublish = useCallback(async () => {
     setPublishing(true);
+    setSlugError(null);
     try {
       const res = await fetch(`/api/wine-lists/${listId}/publish`, {
         method: "DELETE",
@@ -88,7 +103,11 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
         setPublished(false);
         setSlug("");
         setSlugInput("");
+      } else {
+        setSlugError(await responseError(res, "Unpublish failed."));
       }
+    } catch {
+      setSlugError("Unpublish failed. Please try again.");
     } finally {
       setPublishing(false);
     }
@@ -118,9 +137,10 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
         setSlugSuccess(true);
         setTimeout(() => setSlugSuccess(false), 2000);
       } else {
-        const data = await res.json();
-        setSlugError((data as { error?: string }).error ?? "Failed to update slug.");
+        setSlugError(await responseError(res, "Failed to update slug."));
       }
+    } catch {
+      setSlugError("Failed to update slug. Please try again.");
     } finally {
       setPublishing(false);
     }

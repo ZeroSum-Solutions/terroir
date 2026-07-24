@@ -25,8 +25,8 @@ type Row = { id: string; restaurant_id: string; slug?: string; archived?: boolea
  * Supports these chain patterns:
  * - Query chain: .select("cols").eq().eq().neq().maybeSingle() → { data: row|null, error }
  * - Query chain: .select("cols").eq().eq().single() → { data: row|null, error }
- * - Mutation chain: .update(p).eq().eq().select("cols") → filters rows, returns matched
- * - Mutation chain: .delete().eq().eq().select("cols") → filters rows, returns matched
+ * - Mutation chain: .update(p).eq().eq().select("cols").maybeSingle()
+ * - Mutation chain: .delete().eq().eq().select("cols").maybeSingle()
  *
  * For multiple from() calls, tracks a counter and returns data from per-call config.
  */
@@ -104,6 +104,19 @@ function makeSupabase(rows: Row[]) {
 
       // --- Mutation chain (update/delete-first pattern) ---
       const mutFilters: Array<[string, string]> = [];
+      const mutationResult = async () => {
+        if (override?.error) return { data: null, error: override.error };
+        if (override?.data !== undefined) return { data: override.data, error: null };
+        if (selectError) return { data: null, error: selectError };
+        const matched = rows.filter((r) =>
+          mutFilters.every(([col, val]) => {
+            if (col === "id") return r.id === val;
+            if (col === "restaurant_id") return r.restaurant_id === val;
+            return true;
+          }),
+        );
+        return { data: matched.length > 0 ? matched[0] : null, error: null };
+      };
       const mutChain = {
         update: (payload: Record<string, unknown>) => {
           lastUpdatePayload = payload;
@@ -115,19 +128,7 @@ function makeSupabase(rows: Row[]) {
           return mutChain;
         },
         in: (_col: string, _vals: unknown) => mutChain,
-        select: async (_cols?: string) => {
-          if (override?.error) return { data: null, error: override.error };
-          if (override?.data !== undefined) return { data: override.data, error: null };
-          if (selectError) return { data: null, error: selectError };
-          const matched = rows.filter((r) =>
-            mutFilters.every(([col, val]) => {
-              if (col === "id") return r.id === val;
-              if (col === "restaurant_id") return r.restaurant_id === val;
-              return true;
-            }),
-          );
-          return { data: matched, error: null };
-        },
+        select: (_cols?: string) => ({ maybeSingle: mutationResult }),
       };
 
       return {
@@ -143,7 +144,7 @@ function makeSupabase(rows: Row[]) {
 }
 
 function patchRequest(body: unknown) {
-  return new Request("http://localhost/api/wine-lists/list-a", {
+  return new Request("http://localhost/api/wine-lists/11111111-1111-4111-8111-111111111111", {
     method: "PATCH",
     body: JSON.stringify(body),
     headers: { "Content-Type": "application/json" },
@@ -151,7 +152,7 @@ function patchRequest(body: unknown) {
 }
 
 function deleteRequest() {
-  return new Request("http://localhost/api/wine-lists/list-a", {
+  return new Request("http://localhost/api/wine-lists/11111111-1111-4111-8111-111111111111", {
     method: "DELETE",
   }) as unknown as NextRequest;
 }
@@ -166,7 +167,7 @@ describe("PATCH /api/wine-lists/[id]", () => {
 
   it("returns 404 when the target list belongs to a different restaurant (RLS-bypassed mock)", async () => {
     const supabase = makeSupabase([
-      { id: "list-a", restaurant_id: "restaurant-B" },
+      { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "restaurant-B" },
     ]);
     mockRequireRole.mockResolvedValue({
       supabase,
@@ -175,7 +176,7 @@ describe("PATCH /api/wine-lists/[id]", () => {
     });
 
     const res = await PATCH(patchRequest({ name: "renamed" }), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res).toBeInstanceOf(NextResponse);
     expect(res.status).toBe(404);
@@ -183,7 +184,7 @@ describe("PATCH /api/wine-lists/[id]", () => {
 
   it("returns 200 for a same-restaurant update", async () => {
     const supabase = makeSupabase([
-      { id: "list-a", restaurant_id: "restaurant-A" },
+      { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "restaurant-A" },
     ]);
     mockRequireRole.mockResolvedValue({
       supabase,
@@ -192,7 +193,7 @@ describe("PATCH /api/wine-lists/[id]", () => {
     });
 
     const res = await PATCH(patchRequest({ name: "renamed" }), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
@@ -205,7 +206,7 @@ describe("PATCH /api/wine-lists/[id]", () => {
       user: { id: "u1" },
     });
     const res = await PATCH(patchRequest({}), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(400);
   });
@@ -215,7 +216,7 @@ describe("PATCH /api/wine-lists/[id]", () => {
       NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
     );
     const res = await PATCH(patchRequest({ name: "x" }), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(401);
   });
@@ -226,18 +227,18 @@ describe("PATCH /api/wine-lists/[id]", () => {
       restaurantId: "restaurant-A",
       user: { id: "u1" },
     });
-    const req = new Request("http://localhost/api/wine-lists/list-a", {
+    const req = new Request("http://localhost/api/wine-lists/11111111-1111-4111-8111-111111111111", {
       method: "PATCH",
       body: "{not json",
       headers: { "Content-Type": "application/json" },
     }) as unknown as NextRequest;
-    const res = await PATCH(req, { params: Promise.resolve({ id: "list-a" }) });
+    const res = await PATCH(req, { params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }) });
     expect(res.status).toBe(400);
   });
 
-  it("filters unsafe fields from the update payload (only allows name + template + slug + archived)", async () => {
+  it("rejects unsafe and unknown update fields", async () => {
     const supabase = makeSupabase([
-      { id: "list-a", restaurant_id: "restaurant-A" },
+      { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "restaurant-A" },
     ]);
     mockRequireRole.mockResolvedValue({
       supabase,
@@ -247,27 +248,20 @@ describe("PATCH /api/wine-lists/[id]", () => {
     const res = await PATCH(
       patchRequest({
         name: "clean",
-        template: "elegant",
+        template: "modern",
         slug: "my-custom-slug",
         is_published: true,
         restaurant_id: "restaurant-B",
       }),
-      { params: Promise.resolve({ id: "list-a" }) },
+      { params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }) },
     );
-    expect(res.status).toBe(200);
-    // Critical: only the allowlisted fields made it to the UPDATE payload.
-    expect(lastUpdatePayload).toEqual({
-      name: "clean",
-      template: "elegant",
-      slug: "my-custom-slug",
-    });
-    expect(lastUpdatePayload).not.toHaveProperty("is_published");
-    expect(lastUpdatePayload).not.toHaveProperty("restaurant_id");
+    expect(res.status).toBe(400);
+    expect(lastUpdatePayload).toBeNull();
   });
 
   it("rejects empty slug with 422", async () => {
     const supabase = makeSupabase([
-      { id: "list-a", restaurant_id: "restaurant-A" },
+      { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "restaurant-A" },
     ]);
     mockRequireRole.mockResolvedValue({
       supabase,
@@ -275,14 +269,14 @@ describe("PATCH /api/wine-lists/[id]", () => {
       user: { id: "u1" },
     });
     const res = await PATCH(patchRequest({ slug: "   " }), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(422);
   });
 
   it("rejects invalid slug characters with 422", async () => {
     const supabase = makeSupabase([
-      { id: "list-a", restaurant_id: "restaurant-A" },
+      { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "restaurant-A" },
     ]);
     mockRequireRole.mockResolvedValue({
       supabase,
@@ -290,14 +284,14 @@ describe("PATCH /api/wine-lists/[id]", () => {
       user: { id: "u1" },
     });
     const res = await PATCH(patchRequest({ slug: "My Bad Slug!" }), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(422);
   });
 
   it("rejects slug that is too long with 422", async () => {
     const supabase = makeSupabase([
-      { id: "list-a", restaurant_id: "restaurant-A" },
+      { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "restaurant-A" },
     ]);
     mockRequireRole.mockResolvedValue({
       supabase,
@@ -306,15 +300,15 @@ describe("PATCH /api/wine-lists/[id]", () => {
     });
     const res = await PATCH(
       patchRequest({ slug: "a".repeat(51) }),
-      { params: Promise.resolve({ id: "list-a" }) },
+      { params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }) },
     );
     expect(res.status).toBe(422);
   });
 
   it("returns 409 with code slug_collision on same-restaurant slug conflict (BND-156)", async () => {
     const supabase = makeSupabase([
-      { id: "list-a", restaurant_id: "restaurant-A" },
-      { id: "list-b", restaurant_id: "restaurant-A", slug: "taken-slug" },
+      { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "restaurant-A" },
+      { id: "22222222-2222-4222-8222-222222222222", restaurant_id: "restaurant-A", slug: "taken-slug" },
     ]);
     mockRequireRole.mockResolvedValue({
       supabase,
@@ -322,19 +316,20 @@ describe("PATCH /api/wine-lists/[id]", () => {
       user: { id: "u1" },
     });
     const res = await PATCH(patchRequest({ slug: "taken-slug" }), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe("slug_collision");
   });
 
-  it("allows same slug in a different restaurant (BND-156 scoping)", async () => {
-    // list-b in restaurant-B has slug "dinner". list-a in restaurant-A
-    // wants "dinner" — should be allowed because slugs are scoped per-restaurant.
+  it("does not treat another tenant's row as an API precheck collision", async () => {
+    // The database currently has a global unique slug index. This test only
+    // verifies that the tenant-scoped precheck does not disclose foreign rows;
+    // a database 23505 is mapped to slug_collision below.
     const supabase = makeSupabase([
-      { id: "list-a", restaurant_id: "restaurant-A" },
-      { id: "list-b", restaurant_id: "restaurant-B", slug: "dinner" },
+      { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "restaurant-A" },
+      { id: "22222222-2222-4222-8222-222222222222", restaurant_id: "restaurant-B", slug: "dinner" },
     ]);
     mockRequireRole.mockResolvedValue({
       supabase,
@@ -342,15 +337,36 @@ describe("PATCH /api/wine-lists/[id]", () => {
       user: { id: "u1" },
     });
     const res = await PATCH(patchRequest({ slug: "dinner" }), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(200);
     expect(lastUpdatePayload).toHaveProperty("slug", "dinner");
   });
 
+  it("maps a database uniqueness race to slug_collision", async () => {
+    callOverrides = [
+      { data: null, error: null },
+      { data: null, error: { message: "duplicate", code: "23505" } },
+    ];
+    mockRequireRole.mockResolvedValue({
+      supabase: makeSupabase([]),
+      restaurantId: "restaurant-A",
+      user: { id: "u1" },
+    });
+
+    const res = await PATCH(patchRequest({ slug: "dinner" }), {
+      params: Promise.resolve({
+        id: "11111111-1111-4111-8111-111111111111",
+      }),
+    });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("slug_collision");
+  });
+
   it("accepts valid slug with 200", async () => {
     const supabase = makeSupabase([
-      { id: "list-a", restaurant_id: "restaurant-A" },
+      { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "restaurant-A" },
     ]);
     mockRequireRole.mockResolvedValue({
       supabase,
@@ -358,7 +374,7 @@ describe("PATCH /api/wine-lists/[id]", () => {
       user: { id: "u1" },
     });
     const res = await PATCH(patchRequest({ slug: "spring-2026" }), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(200);
     expect(lastUpdatePayload).toHaveProperty("slug", "spring-2026");
@@ -368,13 +384,13 @@ describe("PATCH /api/wine-lists/[id]", () => {
     selectError = { message: "constraint violation" };
     mockRequireRole.mockResolvedValue({
       supabase: makeSupabase([
-        { id: "list-a", restaurant_id: "restaurant-A" },
+        { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "restaurant-A" },
       ]),
       restaurantId: "restaurant-A",
       user: { id: "u1" },
     });
     const res = await PATCH(patchRequest({ name: "x" }), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(500);
   });
@@ -390,7 +406,7 @@ describe("DELETE /api/wine-lists/[id]", () => {
 
   it("returns 404 when the target list belongs to a different restaurant (RLS-bypassed mock)", async () => {
     const supabase = makeSupabase([
-      { id: "list-a", restaurant_id: "restaurant-B" },
+      { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "restaurant-B" },
     ]);
     mockRequireRole.mockResolvedValue({
       supabase,
@@ -399,7 +415,7 @@ describe("DELETE /api/wine-lists/[id]", () => {
     });
 
     const res = await DELETE(deleteRequest(), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(404);
   });
@@ -407,7 +423,7 @@ describe("DELETE /api/wine-lists/[id]", () => {
   it("returns 409 with code must_archive_first when list is not archived (BND-159)", async () => {
     // First from() call: fetch the list to check archived status
     callOverrides = [
-      { data: { id: "list-a", archived: false }, error: null },
+      { data: { id: "11111111-1111-4111-8111-111111111111", archived: false }, error: null },
     ];
     const supabase = makeSupabase([]);
     mockRequireRole.mockResolvedValue({
@@ -417,7 +433,7 @@ describe("DELETE /api/wine-lists/[id]", () => {
     });
 
     const res = await DELETE(deleteRequest(), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(409);
     const body = await res.json();
@@ -426,17 +442,13 @@ describe("DELETE /api/wine-lists/[id]", () => {
 
   it("returns 200 for a same-restaurant delete of an archived list (BND-159)", async () => {
     // First from() call: fetch the list (archived=true)
-    // Second from() call: wine_list_items delete
-    // Third from() call: wine_list_sections delete
-    // Fourth from() call: wine_lists delete
+    // The second call deletes the parent; existing foreign keys cascade.
     callOverrides = [
-      { data: { id: "list-a", archived: true }, error: null },
-      { data: [], error: null },
-      { data: [], error: null },
-      { data: [{ id: "list-a", restaurant_id: "restaurant-A" }], error: null },
+      { data: { id: "11111111-1111-4111-8111-111111111111", archived: true }, error: null },
+      { data: { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "restaurant-A" }, error: null },
     ];
     const supabase = makeSupabase([
-      { id: "list-a", restaurant_id: "restaurant-A", archived: true },
+      { id: "11111111-1111-4111-8111-111111111111", restaurant_id: "restaurant-A", archived: true },
     ]);
     mockRequireRole.mockResolvedValue({
       supabase,
@@ -445,7 +457,7 @@ describe("DELETE /api/wine-lists/[id]", () => {
     });
 
     const res = await DELETE(deleteRequest(), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
@@ -456,7 +468,7 @@ describe("DELETE /api/wine-lists/[id]", () => {
       NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
     );
     const res = await DELETE(deleteRequest(), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(401);
   });
@@ -471,7 +483,7 @@ describe("DELETE /api/wine-lists/[id]", () => {
       user: { id: "u1" },
     });
     const res = await DELETE(deleteRequest(), {
-      params: Promise.resolve({ id: "list-a" }),
+      params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(500);
   });
