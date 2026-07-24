@@ -1,0 +1,310 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://terroir.local/schemas/api-route-inventory.v1.schema.json",
+  "title": "Terroir API route inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatorVersion",
+    "sourceRoot",
+    "routeFileCount",
+    "discoveredOperationCount",
+    "discoveredOperations",
+    "plannedOperations"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "generatorVersion": {
+      "const": 1
+    },
+    "sourceRoot": {
+      "const": "src/app/api"
+    },
+    "routeFileCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "discoveredOperationCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "discoveredOperations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/discoveredOperation"
+      }
+    },
+    "plannedOperations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/plannedOperation"
+      }
+    }
+  },
+  "$defs": {
+    "method": {
+      "enum": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "HEAD",
+        "OPTIONS"
+      ]
+    },
+    "operationId": {
+      "type": "string",
+      "pattern": "^api:(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS):/api(?:/[^/]+)*$"
+    },
+    "routePath": {
+      "type": "string",
+      "pattern": "^/api(?:/(?!\\.{1,2}(?:/|$))[^/]+)*$"
+    },
+    "discoveredOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operationId",
+        "method",
+        "path",
+        "source"
+      ],
+      "properties": {
+        "operationId": {
+          "$ref": "#/$defs/operationId"
+        },
+        "method": {
+          "$ref": "#/$defs/method"
+        },
+        "path": {
+          "$ref": "#/$defs/routePath"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "properties": {
+                  "exportKind": {
+                    "enum": [
+                      "function-declaration",
+                      "variable-declaration"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "oneOf": [
+              {
+                "properties": {
+                  "method": {
+                    "const": "GET"
+                  },
+                  "source": {
+                    "properties": {
+                      "localName": {
+                        "const": "GET"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "method": {
+                    "const": "POST"
+                  },
+                  "source": {
+                    "properties": {
+                      "localName": {
+                        "const": "POST"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "method": {
+                    "const": "PUT"
+                  },
+                  "source": {
+                    "properties": {
+                      "localName": {
+                        "const": "PUT"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "method": {
+                    "const": "PATCH"
+                  },
+                  "source": {
+                    "properties": {
+                      "localName": {
+                        "const": "PATCH"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "method": {
+                    "const": "DELETE"
+                  },
+                  "source": {
+                    "properties": {
+                      "localName": {
+                        "const": "DELETE"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "method": {
+                    "const": "HEAD"
+                  },
+                  "source": {
+                    "properties": {
+                      "localName": {
+                        "const": "HEAD"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "method": {
+                    "const": "OPTIONS"
+                  },
+                  "source": {
+                    "properties": {
+                      "localName": {
+                        "const": "OPTIONS"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "exportKind",
+        "localName",
+        "moduleSpecifier"
+      ],
+      "properties": {
+        "file": {
+          "type": "string",
+          "pattern": "^src/app/api(?:/[^/]+)*/route\\.ts$"
+        },
+        "exportKind": {
+          "enum": [
+            "function-declaration",
+            "variable-declaration",
+            "named-export",
+            "named-reexport"
+          ]
+        },
+        "localName": {
+          "type": "string",
+          "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$"
+        },
+        "moduleSpecifier": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^\\.\\.?/"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "exportKind": {
+                "const": "named-reexport"
+              }
+            },
+            "required": [
+              "exportKind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "moduleSpecifier": {
+                "type": "string",
+                "pattern": "^\\.\\.?/"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "moduleSpecifier": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "plannedOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operationId",
+        "method",
+        "path",
+        "sourceRequirementIds"
+      ],
+      "properties": {
+        "operationId": {
+          "$ref": "#/$defs/operationId"
+        },
+        "method": {
+          "$ref": "#/$defs/method"
+        },
+        "path": {
+          "$ref": "#/$defs/routePath"
+        },
+        "sourceRequirementIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^TER-CF-[0-9]{3}$"
+          }
+        }
+      }
+    }
+  }
+}

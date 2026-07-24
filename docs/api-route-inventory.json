@@ -1,0 +1,857 @@
+{
+  "schemaVersion": 1,
+  "generatorVersion": 1,
+  "sourceRoot": "src/app/api",
+  "routeFileCount": 65,
+  "discoveredOperationCount": 77,
+  "discoveredOperations": [
+    {
+      "operationId": "api:POST:/api/cellar",
+      "method": "POST",
+      "path": "/api/cellar",
+      "source": {
+        "file": "src/app/api/cellar/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/cellar/{param}",
+      "method": "PATCH",
+      "path": "/api/cellar/[id]",
+      "source": {
+        "file": "src/app/api/cellar/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:DELETE:/api/cellar/{param}",
+      "method": "DELETE",
+      "path": "/api/cellar/[id]",
+      "source": {
+        "file": "src/app/api/cellar/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "DELETE",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/cellar/{param}/section",
+      "method": "PATCH",
+      "path": "/api/cellar/[id]/section",
+      "source": {
+        "file": "src/app/api/cellar/[id]/section/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/cellar/batch-section",
+      "method": "POST",
+      "path": "/api/cellar/batch-section",
+      "source": {
+        "file": "src/app/api/cellar/batch-section/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/cellar/config",
+      "method": "GET",
+      "path": "/api/cellar/config",
+      "source": {
+        "file": "src/app/api/cellar/config/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/cellar/config",
+      "method": "POST",
+      "path": "/api/cellar/config",
+      "source": {
+        "file": "src/app/api/cellar/config/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/cellar/config",
+      "method": "PATCH",
+      "path": "/api/cellar/config",
+      "source": {
+        "file": "src/app/api/cellar/config/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/cellar/grid",
+      "method": "GET",
+      "path": "/api/cellar/grid",
+      "source": {
+        "file": "src/app/api/cellar/grid/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/dev-login",
+      "method": "GET",
+      "path": "/api/dev-login",
+      "source": {
+        "file": "src/app/api/dev-login/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/export/toast-csv",
+      "method": "GET",
+      "path": "/api/export/toast-csv",
+      "source": {
+        "file": "src/app/api/export/toast-csv/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/health",
+      "method": "GET",
+      "path": "/api/health",
+      "source": {
+        "file": "src/app/api/health/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/insights",
+      "method": "GET",
+      "path": "/api/insights",
+      "source": {
+        "file": "src/app/api/insights/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/insights/csv",
+      "method": "GET",
+      "path": "/api/insights/csv",
+      "source": {
+        "file": "src/app/api/insights/csv/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/insights/drink-window-alerts",
+      "method": "GET",
+      "path": "/api/insights/drink-window-alerts",
+      "source": {
+        "file": "src/app/api/insights/drink-window-alerts/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/insights/pour",
+      "method": "GET",
+      "path": "/api/insights/pour",
+      "source": {
+        "file": "src/app/api/insights/pour/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/insights/pricing-review",
+      "method": "GET",
+      "path": "/api/insights/pricing-review",
+      "source": {
+        "file": "src/app/api/insights/pricing-review/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/insights/snoozed",
+      "method": "GET",
+      "path": "/api/insights/snoozed",
+      "source": {
+        "file": "src/app/api/insights/snoozed/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/inventory/save-bottle-scan",
+      "method": "POST",
+      "path": "/api/inventory/save-bottle-scan",
+      "source": {
+        "file": "src/app/api/inventory/save-bottle-scan/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/inventory/save-scan",
+      "method": "POST",
+      "path": "/api/inventory/save-scan",
+      "source": {
+        "file": "src/app/api/inventory/save-scan/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/open-bottles",
+      "method": "POST",
+      "path": "/api/open-bottles",
+      "source": {
+        "file": "src/app/api/open-bottles/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/open-bottles/{param}/close",
+      "method": "POST",
+      "path": "/api/open-bottles/[id]/close",
+      "source": {
+        "file": "src/app/api/open-bottles/[id]/close/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/pdf",
+      "method": "POST",
+      "path": "/api/pdf",
+      "source": {
+        "file": "src/app/api/pdf/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/pour",
+      "method": "POST",
+      "path": "/api/pour",
+      "source": {
+        "file": "src/app/api/pour/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/pour/undo",
+      "method": "POST",
+      "path": "/api/pour/undo",
+      "source": {
+        "file": "src/app/api/pour/undo/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/reconcile",
+      "method": "POST",
+      "path": "/api/reconcile",
+      "source": {
+        "file": "src/app/api/reconcile/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/restaurant/{param}",
+      "method": "GET",
+      "path": "/api/restaurant/[id]",
+      "source": {
+        "file": "src/app/api/restaurant/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PUT:/api/restaurant/{param}",
+      "method": "PUT",
+      "path": "/api/restaurant/[id]",
+      "source": {
+        "file": "src/app/api/restaurant/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PUT",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/restaurant/{param}",
+      "method": "PATCH",
+      "path": "/api/restaurant/[id]",
+      "source": {
+        "file": "src/app/api/restaurant/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:DELETE:/api/restaurant/{param}",
+      "method": "DELETE",
+      "path": "/api/restaurant/[id]",
+      "source": {
+        "file": "src/app/api/restaurant/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "DELETE",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/scan",
+      "method": "POST",
+      "path": "/api/scan",
+      "source": {
+        "file": "src/app/api/scan/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/scan-bottle",
+      "method": "POST",
+      "path": "/api/scan-bottle",
+      "source": {
+        "file": "src/app/api/scan-bottle/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/scan-bottle/confirm",
+      "method": "POST",
+      "path": "/api/scan-bottle/confirm",
+      "source": {
+        "file": "src/app/api/scan-bottle/confirm/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/scans/{param}",
+      "method": "PATCH",
+      "path": "/api/scans/[id]",
+      "source": {
+        "file": "src/app/api/scans/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/scans/{param}/commit",
+      "method": "POST",
+      "path": "/api/scans/[id]/commit",
+      "source": {
+        "file": "src/app/api/scans/[id]/commit/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/scans/{param}/image",
+      "method": "GET",
+      "path": "/api/scans/[id]/image",
+      "source": {
+        "file": "src/app/api/scans/[id]/image/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/scans/{param}/re-extract",
+      "method": "POST",
+      "path": "/api/scans/[id]/re-extract",
+      "source": {
+        "file": "src/app/api/scans/[id]/re-extract/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/team/accept-invite",
+      "method": "POST",
+      "path": "/api/team/accept-invite",
+      "source": {
+        "file": "src/app/api/team/accept-invite/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/team/invite",
+      "method": "POST",
+      "path": "/api/team/invite",
+      "source": {
+        "file": "src/app/api/team/invite/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:DELETE:/api/team/invite/{param}",
+      "method": "DELETE",
+      "path": "/api/team/invite/[id]",
+      "source": {
+        "file": "src/app/api/team/invite/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "DELETE",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/team/invite/{param}/resend",
+      "method": "POST",
+      "path": "/api/team/invite/[id]/resend",
+      "source": {
+        "file": "src/app/api/team/invite/[id]/resend/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/team/members",
+      "method": "GET",
+      "path": "/api/team/members",
+      "source": {
+        "file": "src/app/api/team/members/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/team/members/{param}",
+      "method": "PATCH",
+      "path": "/api/team/members/[id]",
+      "source": {
+        "file": "src/app/api/team/members/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:DELETE:/api/team/members/{param}",
+      "method": "DELETE",
+      "path": "/api/team/members/[id]",
+      "source": {
+        "file": "src/app/api/team/members/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "DELETE",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wine-list-items",
+      "method": "POST",
+      "path": "/api/wine-list-items",
+      "source": {
+        "file": "src/app/api/wine-list-items/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/wine-list-items/{param}",
+      "method": "PATCH",
+      "path": "/api/wine-list-items/[id]",
+      "source": {
+        "file": "src/app/api/wine-list-items/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:DELETE:/api/wine-list-items/{param}",
+      "method": "DELETE",
+      "path": "/api/wine-list-items/[id]",
+      "source": {
+        "file": "src/app/api/wine-list-items/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "DELETE",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/wine-list-items/reorder",
+      "method": "PATCH",
+      "path": "/api/wine-list-items/reorder",
+      "source": {
+        "file": "src/app/api/wine-list-items/reorder/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wine-list-sections",
+      "method": "POST",
+      "path": "/api/wine-list-sections",
+      "source": {
+        "file": "src/app/api/wine-list-sections/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/wine-list-sections/{param}",
+      "method": "PATCH",
+      "path": "/api/wine-list-sections/[id]",
+      "source": {
+        "file": "src/app/api/wine-list-sections/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:DELETE:/api/wine-list-sections/{param}",
+      "method": "DELETE",
+      "path": "/api/wine-list-sections/[id]",
+      "source": {
+        "file": "src/app/api/wine-list-sections/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "DELETE",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/wine-list-sections/reorder",
+      "method": "PATCH",
+      "path": "/api/wine-list-sections/reorder",
+      "source": {
+        "file": "src/app/api/wine-list-sections/reorder/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wine-lists",
+      "method": "POST",
+      "path": "/api/wine-lists",
+      "source": {
+        "file": "src/app/api/wine-lists/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/wine-lists/{param}",
+      "method": "PATCH",
+      "path": "/api/wine-lists/[id]",
+      "source": {
+        "file": "src/app/api/wine-lists/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:DELETE:/api/wine-lists/{param}",
+      "method": "DELETE",
+      "path": "/api/wine-lists/[id]",
+      "source": {
+        "file": "src/app/api/wine-lists/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "DELETE",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wine-lists/{param}/clone",
+      "method": "POST",
+      "path": "/api/wine-lists/[id]/clone",
+      "source": {
+        "file": "src/app/api/wine-lists/[id]/clone/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/wine-lists/{param}/csv",
+      "method": "GET",
+      "path": "/api/wine-lists/[id]/csv",
+      "source": {
+        "file": "src/app/api/wine-lists/[id]/csv/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wine-lists/{param}/publish",
+      "method": "POST",
+      "path": "/api/wine-lists/[id]/publish",
+      "source": {
+        "file": "src/app/api/wine-lists/[id]/publish/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:DELETE:/api/wine-lists/{param}/publish",
+      "method": "DELETE",
+      "path": "/api/wine-lists/[id]/publish",
+      "source": {
+        "file": "src/app/api/wine-lists/[id]/publish/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "DELETE",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/wines/{param}",
+      "method": "PATCH",
+      "path": "/api/wines/[id]",
+      "source": {
+        "file": "src/app/api/wines/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/wines/{param}/availability",
+      "method": "PATCH",
+      "path": "/api/wines/[id]/availability",
+      "source": {
+        "file": "src/app/api/wines/[id]/availability/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wines/{param}/dismiss-pricing-alert",
+      "method": "POST",
+      "path": "/api/wines/[id]/dismiss-pricing-alert",
+      "source": {
+        "file": "src/app/api/wines/[id]/dismiss-pricing-alert/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wines/{param}/enrich",
+      "method": "POST",
+      "path": "/api/wines/[id]/enrich",
+      "source": {
+        "file": "src/app/api/wines/[id]/enrich/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wines/{param}/image",
+      "method": "POST",
+      "path": "/api/wines/[id]/image",
+      "source": {
+        "file": "src/app/api/wines/[id]/image/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:DELETE:/api/wines/{param}/image",
+      "method": "DELETE",
+      "path": "/api/wines/[id]/image",
+      "source": {
+        "file": "src/app/api/wines/[id]/image/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "DELETE",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wines/{param}/overpaid",
+      "method": "POST",
+      "path": "/api/wines/[id]/overpaid",
+      "source": {
+        "file": "src/app/api/wines/[id]/overpaid/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/wines/{param}/pricing-suggestion",
+      "method": "GET",
+      "path": "/api/wines/[id]/pricing-suggestion",
+      "source": {
+        "file": "src/app/api/wines/[id]/pricing-suggestion/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/wines/{param}/pricing-targets",
+      "method": "PATCH",
+      "path": "/api/wines/[id]/pricing-targets",
+      "source": {
+        "file": "src/app/api/wines/[id]/pricing-targets/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wines/{param}/refresh-retail",
+      "method": "POST",
+      "path": "/api/wines/[id]/refresh-retail",
+      "source": {
+        "file": "src/app/api/wines/[id]/refresh-retail/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wines/{param}/snooze-alert",
+      "method": "POST",
+      "path": "/api/wines/[id]/snooze-alert",
+      "source": {
+        "file": "src/app/api/wines/[id]/snooze-alert/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/wines/availability",
+      "method": "GET",
+      "path": "/api/wines/availability",
+      "source": {
+        "file": "src/app/api/wines/availability/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wines/create-from-lwin",
+      "method": "POST",
+      "path": "/api/wines/create-from-lwin",
+      "source": {
+        "file": "src/app/api/wines/create-from-lwin/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wines/enrich",
+      "method": "POST",
+      "path": "/api/wines/enrich",
+      "source": {
+        "file": "src/app/api/wines/enrich/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/wines/lwin-search",
+      "method": "GET",
+      "path": "/api/wines/lwin-search",
+      "source": {
+        "file": "src/app/api/wines/lwin-search/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/wines/price-comparison",
+      "method": "GET",
+      "path": "/api/wines/price-comparison",
+      "source": {
+        "file": "src/app/api/wines/price-comparison/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wines/refresh-retail-batch",
+      "method": "POST",
+      "path": "/api/wines/refresh-retail-batch",
+      "source": {
+        "file": "src/app/api/wines/refresh-retail-batch/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/wines/search",
+      "method": "GET",
+      "path": "/api/wines/search",
+      "source": {
+        "file": "src/app/api/wines/search/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    }
+  ],
+  "plannedOperations": []
+}
