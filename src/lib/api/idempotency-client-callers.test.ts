@@ -51,4 +51,69 @@ describe("high-risk idempotency clients", () => {
     expect(invitePage).toContain('url: "/api/team/accept-invite"');
     expect(invitePage).toContain('canRetry ? "Try again" : "Go to login"');
   });
+
+  it("keeps restaurant onboarding name retries in one guarded field slot", () => {
+    const onboarding = source("src/app/(app)/onboarding-modal.tsx");
+
+    expect(onboarding).toContain("createIdempotentCommandStore");
+    expect(onboarding).toContain("if (savingRef.current) return");
+    expect(onboarding).toContain("savingRef.current = true");
+    expect(onboarding).toContain(
+      "slot: `restaurant:${restaurantId}:name`",
+    );
+    expect(onboarding).toContain(
+      "url: `/api/restaurant/${restaurantId}`",
+    );
+    expect(onboarding).toContain("readApiError(");
+  });
+
+  it("uses guarded per-field slots for restaurant auto-86 settings", () => {
+    const autoEightysix = source(
+      "src/app/(app)/cellar/auto-eightysix-panel.tsx",
+    );
+
+    expect(autoEightysix).toContain("createIdempotentCommandStore");
+    expect(autoEightysix.match(/if \(savingRef\.current\) return/g)).toHaveLength(
+      3,
+    );
+    expect(autoEightysix).toContain(
+      "`restaurant:${restaurantId}:auto_eightysix_from_inventory`",
+    );
+    expect(autoEightysix).toContain(
+      "`restaurant:${restaurantId}:eightysix_ml_threshold`",
+    );
+    expect(autoEightysix).toContain(
+      "`restaurant:${restaurantId}:eightysix_strategy`",
+    );
+    expect(autoEightysix).toContain("readApiError(");
+    expect(autoEightysix).toContain("setEnabled(initialEnabled)");
+    expect(autoEightysix).toContain("setThresholdMl(initialThreshold)");
+    expect(autoEightysix).toContain(
+      "setEightysixStrategy(initialStrategy)",
+    );
+    expect(autoEightysix.match(/router\.refresh\(\)/g)).toHaveLength(2);
+  });
+
+  it("uses guarded per-field slots for restaurant pricing targets", () => {
+    const pricing = source(
+      "src/app/(app)/cellar/pricing-targets-panel.tsx",
+    );
+
+    expect(pricing).toContain("createIdempotentCommandStore");
+    expect(pricing.match(/if \(savingRef\.current\) return/g)).toHaveLength(2);
+    expect(pricing).toContain(
+      "`restaurant:${restaurantId}:default_target_pour_cost_pct`",
+    );
+    expect(pricing).toContain(
+      "`restaurant:${restaurantId}:default_target_markup_ratio`",
+    );
+    expect(pricing).toContain("readApiError(");
+    expect(pricing).toContain(
+      "initialPourCost ?? DEFAULT_TARGET_POUR_COST_PCT",
+    );
+    expect(pricing).toContain(
+      "initialMarkup ?? DEFAULT_TARGET_MARKUP_RATIO",
+    );
+    expect(pricing.match(/router\.refresh\(\)/g)).toHaveLength(2);
+  });
 });

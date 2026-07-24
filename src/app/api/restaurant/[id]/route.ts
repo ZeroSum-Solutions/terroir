@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth, requireOwner } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseJson, parseParams } from "@/lib/api/validation";
 import { setActiveRestaurant } from "@/lib/api/active-restaurant";
 
@@ -101,13 +102,23 @@ export async function PATCH(
       return Errors.badRequest("No valid fields.");
     }
 
-    const { error } = await supabase
-      .from("restaurants")
-      .update(parsed.data)
-      .eq("id", id);
-    if (error) throw error;
+    return idempotentMutationResponse({
+      request,
+      supabase,
+      restaurantId,
+      operationId: "api:PATCH:/api/restaurant/{param}",
+      payload: { id, ...parsed.data },
+      releaseOnError: false,
+      handler: async () => {
+        const { error } = await supabase
+          .from("restaurants")
+          .update(parsed.data)
+          .eq("id", id);
+        if (error) throw error;
 
-    return NextResponse.json({ ok: true });
+        return { status: 200, body: { ok: true } };
+      },
+    });
   });
 }
 

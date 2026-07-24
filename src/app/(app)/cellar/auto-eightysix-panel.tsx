@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { readApiError } from "@/lib/api/client-error";
+import { createIdempotentCommandStore } from "@/lib/api/idempotency-client";
 import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
 
@@ -18,9 +20,9 @@ interface Props {
  * (hide vs mark) for public wine lists. PATCHes /api/restaurant/[id] with
  * whichever field(s) changed.
  *
- * Optimistic UX: flip local state immediately; revert on error. No
- * router.refresh() because the panel's state is self-contained —
- * toggling doesn't change what wines render in the list below.
+ * Optimistic UX: flip local state immediately, provisionally revert on
+ * error, then reconcile from refreshed server props because an interrupted
+ * response may still have committed.
  */
 export function AutoEightysixPanel({
   restaurantId,
@@ -34,43 +36,77 @@ export function AutoEightysixPanel({
   const [eightysixStrategy, setEightysixStrategy] = useState(initialStrategy);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [commands] = useState(() => createIdempotentCommandStore());
   const [, startTransition] = useTransition();
+  const [serverValues, setServerValues] = useState(() => ({
+    enabled: initialEnabled,
+    thresholdMl: initialThreshold,
+    eightysixStrategy: initialStrategy,
+  }));
+  if (
+    serverValues.enabled !== initialEnabled ||
+    serverValues.thresholdMl !== initialThreshold ||
+    serverValues.eightysixStrategy !== initialStrategy
+  ) {
+    setServerValues({
+      enabled: initialEnabled,
+      thresholdMl: initialThreshold,
+      eightysixStrategy: initialStrategy,
+    });
+    setEnabled(initialEnabled);
+    setThresholdMl(initialThreshold);
+    setEightysixStrategy(initialStrategy);
+  }
 
-  const patch = async (body: {
-    auto_eightysix_from_inventory?: boolean;
-    eightysix_ml_threshold?: number;
-    eightysix_strategy?: "hide" | "mark";
-  }) => {
+  const patch = async (
+    slot: string,
+    body: {
+      auto_eightysix_from_inventory?: boolean;
+      eightysix_ml_threshold?: number;
+      eightysix_strategy?: "hide" | "mark";
+    },
+  ) => {
     setError(null);
     setSaving(true);
     try {
-      const res = await fetch(`/api/restaurant/${restaurantId}`, {
+      const { response, data } = await commands.json<unknown>({
+        slot,
+        url: `/api/restaurant/${restaurantId}`,
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        json: body,
       });
-      if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(payload?.error ?? `Request failed (${res.status}).`);
+      if (!response.ok) {
+        throw new Error(
+          readApiError(
+            data,
+            `Request failed (${response.status}).`,
+          ).message,
+        );
       }
       // Re-render server component so revalidated auto-86s land in the list
       // and public lists reflect the strategy change.
       startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
+      startTransition(() => router.refresh());
       throw e;
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
 
   const onToggle = async (next: boolean) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
     const prev = enabled;
     setEnabled(next);
     try {
-      await patch({ auto_eightysix_from_inventory: next });
+      await patch(
+        `restaurant:${restaurantId}:auto_eightysix_from_inventory`,
+        { auto_eightysix_from_inventory: next },
+      );
     } catch {
       setEnabled(prev); // revert
     }
@@ -80,20 +116,30 @@ export function AutoEightysixPanel({
   // issue a PATCH per keystroke.
   const onThresholdCommit = async (value: number) => {
     if (!Number.isFinite(value) || value < 0 || value === thresholdMl) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     const prev = thresholdMl;
     setThresholdMl(value);
     try {
-      await patch({ eightysix_ml_threshold: value });
+      await patch(
+        `restaurant:${restaurantId}:eightysix_ml_threshold`,
+        { eightysix_ml_threshold: value },
+      );
     } catch {
       setThresholdMl(prev); // revert
     }
   };
 
   const onStrategyChange = async (next: "hide" | "mark") => {
+    if (savingRef.current) return;
+    savingRef.current = true;
     const prev = eightysixStrategy;
     setEightysixStrategy(next);
     try {
-      await patch({ eightysix_strategy: next });
+      await patch(
+        `restaurant:${restaurantId}:eightysix_strategy`,
+        { eightysix_strategy: next },
+      );
     } catch {
       setEightysixStrategy(prev); // revert
     }
@@ -138,6 +184,7 @@ export function AutoEightysixPanel({
           <label className="flex items-center gap-xs text-[13px] text-ink-muted">
             Threshold
             <input
+              key={thresholdMl}
               type="number"
               min={0}
               max={5000}

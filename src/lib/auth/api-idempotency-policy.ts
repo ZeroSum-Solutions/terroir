@@ -32,6 +32,23 @@ export type ApiIdempotencyImplementation = {
  * hash call, binary mode, and caller evidence.
  */
 export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
+  "api:PATCH:/api/restaurant/{param}": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "retry-stable",
+      sources: [
+        "src/app/(app)/onboarding-modal.tsx",
+        "src/app/(app)/cellar/auto-eightysix-panel.tsx",
+        "src/app/(app)/cellar/pricing-targets-panel.tsx",
+      ],
+    },
+  },
   "api:POST:/api/inventory/save-bottle-scan": {
     boundary: { kind: "generic-wrapper", count: 1 },
     identity: {

@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { readApiError } from "@/lib/api/client-error";
+import { createIdempotentCommandStore } from "@/lib/api/idempotency-client";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_TARGET_MARKUP_RATIO,
@@ -42,33 +44,62 @@ export function PricingTargetsPanel({
   );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [commands] = useState(() => createIdempotentCommandStore());
   const [, startTransition] = useTransition();
+  const resolvedInitialPourCost =
+    initialPourCost ?? DEFAULT_TARGET_POUR_COST_PCT;
+  const resolvedInitialMarkup =
+    initialMarkup ?? DEFAULT_TARGET_MARKUP_RATIO;
+  const [serverValues, setServerValues] = useState(() => ({
+    pourCostPct: resolvedInitialPourCost,
+    markupRatio: resolvedInitialMarkup,
+  }));
+  if (
+    serverValues.pourCostPct !== resolvedInitialPourCost ||
+    serverValues.markupRatio !== resolvedInitialMarkup
+  ) {
+    setServerValues({
+      pourCostPct: resolvedInitialPourCost,
+      markupRatio: resolvedInitialMarkup,
+    });
+    setPourCostPct(resolvedInitialPourCost);
+    setMarkupRatio(resolvedInitialMarkup);
+  }
 
-  const patch = async (body: {
-    default_target_pour_cost_pct?: number;
-    default_target_markup_ratio?: number;
-  }) => {
+  const patch = async (
+    slot: string,
+    body: {
+      default_target_pour_cost_pct?: number;
+      default_target_markup_ratio?: number;
+    },
+  ) => {
     setError(null);
     setSaving(true);
     try {
-      const res = await fetch(`/api/restaurant/${restaurantId}`, {
+      const { response, data } = await commands.json<unknown>({
+        slot,
+        url: `/api/restaurant/${restaurantId}`,
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        json: body,
       });
-      if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(payload?.error ?? `Request failed (${res.status}).`);
+      if (!response.ok) {
+        throw new Error(
+          readApiError(
+            data,
+            `Request failed (${response.status}).`,
+          ).message,
+        );
       }
       // Re-render server components so the new targets propagate to the
       // cellar drawer + insights pricing review immediately.
       startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
+      startTransition(() => router.refresh());
       throw e;
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -76,10 +107,15 @@ export function PricingTargetsPanel({
   const onPourCostCommit = async (value: number) => {
     if (!Number.isFinite(value) || value <= 0 || value >= 100) return;
     if (value === pourCostPct) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     const prev = pourCostPct;
     setPourCostPct(value);
     try {
-      await patch({ default_target_pour_cost_pct: value });
+      await patch(
+        `restaurant:${restaurantId}:default_target_pour_cost_pct`,
+        { default_target_pour_cost_pct: value },
+      );
     } catch {
       setPourCostPct(prev);
     }
@@ -88,10 +124,15 @@ export function PricingTargetsPanel({
   const onMarkupCommit = async (value: number) => {
     if (!Number.isFinite(value) || value < 1 || value > 10) return;
     if (value === markupRatio) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     const prev = markupRatio;
     setMarkupRatio(value);
     try {
-      await patch({ default_target_markup_ratio: value });
+      await patch(
+        `restaurant:${restaurantId}:default_target_markup_ratio`,
+        { default_target_markup_ratio: value },
+      );
     } catch {
       setMarkupRatio(prev);
     }
@@ -123,6 +164,7 @@ export function PricingTargetsPanel({
           </span>
           <div className="flex items-center gap-xs">
             <input
+              key={pourCostPct}
               type="number"
               min={1}
               max={99}
@@ -149,6 +191,7 @@ export function PricingTargetsPanel({
           </span>
           <div className="flex items-center gap-xs">
             <input
+              key={markupRatio}
               type="number"
               min={1}
               max={10}

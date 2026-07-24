@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextResponse, type NextRequest } from "next/server";
+import { createIdempotencyRequestHash } from "@/lib/api/idempotency";
 
 const mockRequireOwner = vi.fn();
 const mockRequireAuth = vi.fn();
@@ -14,13 +15,45 @@ vi.mock("@/lib/api/active-restaurant", () => ({
 
 const { PATCH, GET, PUT, DELETE } = await import("./route");
 
-/**
- * Simple mock for PATCH — tracks update payloads, returns null error.
- */
-function makeSupabase(updateError: unknown = null) {
+type ClaimRow = {
+  outcome:
+    | "claimed"
+    | "replay"
+    | "in_progress"
+    | "mismatch"
+    | "expired"
+    | "outcome_unknown";
+  response_status: number | null;
+  response_body: unknown;
+  response_headers: Record<string, string> | null;
+};
+
+function makeSupabase(
+  updateError: unknown = null,
+  claimRow: ClaimRow = {
+    outcome: "claimed",
+    response_status: null,
+    response_body: null,
+    response_headers: null,
+  },
+) {
   const updates: Array<Record<string, unknown>> = [];
+  const rpc = vi.fn(async (operation: string) => {
+    if (operation === "claim_api_idempotency") {
+      return { data: [claimRow], error: null };
+    }
+    if (
+      operation === "complete_api_idempotency" ||
+      operation === "release_api_idempotency" ||
+      operation === "fail_api_idempotency"
+    ) {
+      return { data: true, error: null };
+    }
+    throw new Error(`Unexpected RPC ${operation}`);
+  });
   return {
     _updates: updates,
+    rpc,
     from: (_t: string) => ({
       update: (row: Record<string, unknown>) => {
         updates.push(row);
@@ -70,15 +103,19 @@ function makeSupabaseForDelete(deleteError: unknown = null) {
   };
 }
 
-function makeReq(body: unknown): NextRequest {
+function makeReq(body: unknown, key?: string): NextRequest {
   return new Request(`http://localhost/api/restaurant/${R}`, {
     method: "PATCH",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(key ? { "Idempotency-Key": key } : {}),
+    },
     body: JSON.stringify(body),
   }) as NextRequest;
 }
 
 const R = "11111111-1111-4111-8111-111111111111";
+const KEY = "22222222-2222-4222-8222-222222222222";
 const params = Promise.resolve({ id: R });
 
 describe("GET /api/restaurant/[id]", () => {
@@ -212,6 +249,24 @@ describe("PATCH /api/restaurant/[id]", () => {
     expect(sup._updates[0]).toMatchObject({ name: "New name" });
   });
 
+  it("preserves exact no-key response compatibility without idempotency RPCs", async () => {
+    const sup = makeSupabase();
+    mockRequireOwner.mockResolvedValue({
+      supabase: sup,
+      restaurantId: R,
+      user: { id: "u-1" },
+      role: "owner",
+    });
+
+    const res = await PATCH(makeReq({ name: "New name" }), { params });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(res.headers.get("Idempotency-Replayed")).toBeNull();
+    expect(sup._updates).toEqual([{ name: "New name" }]);
+    expect(sup.rpc).not.toHaveBeenCalled();
+  });
+
   // BND-037b: the three new cases
   it("accepts auto_eightysix_from_inventory toggle", async () => {
     const sup = makeSupabase();
@@ -269,6 +324,111 @@ describe("PATCH /api/restaurant/[id]", () => {
     });
   });
 
+  it("rejects a malformed key before mutation or claim", async () => {
+    const sup = makeSupabase();
+    mockRequireOwner.mockResolvedValue({
+      supabase: sup,
+      restaurantId: R,
+      user: { id: "u-1" },
+      role: "owner",
+    });
+
+    const res = await PATCH(makeReq({ name: "New name" }, "bad key!"), {
+      params,
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "invalid_idempotency_key",
+        message: "Invalid Idempotency-Key.",
+      },
+    });
+    expect(sup._updates).toEqual([]);
+    expect(sup.rpc).not.toHaveBeenCalled();
+  });
+
+  it("claims, hashes validated params and body, updates once, and completes", async () => {
+    const sup = makeSupabase();
+    mockRequireOwner.mockResolvedValue({
+      supabase: sup,
+      restaurantId: R,
+      user: { id: "u-1" },
+      role: "owner",
+    });
+
+    const res = await PATCH(
+      makeReq(
+        {
+          eightysix_strategy: "mark",
+          auto_eightysix_from_inventory: true,
+        },
+        KEY,
+      ),
+      { params },
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Idempotency-Replayed")).toBe("false");
+    expect(await res.json()).toEqual({ ok: true });
+    expect(sup._updates).toEqual([
+      {
+        auto_eightysix_from_inventory: true,
+        eightysix_strategy: "mark",
+      },
+    ]);
+    expect(sup.rpc).toHaveBeenNthCalledWith(
+      1,
+      "claim_api_idempotency",
+      {
+        p_restaurant_id: R,
+        p_operation_id: "api:PATCH:/api/restaurant/{param}",
+        p_idempotency_key: KEY,
+        p_request_hash: createIdempotencyRequestHash({
+          id: R,
+          auto_eightysix_from_inventory: true,
+          eightysix_strategy: "mark",
+        }),
+      },
+    );
+    expect(sup.rpc).toHaveBeenNthCalledWith(
+      2,
+      "complete_api_idempotency",
+      expect.objectContaining({
+        p_restaurant_id: R,
+        p_operation_id: "api:PATCH:/api/restaurant/{param}",
+        p_idempotency_key: KEY,
+        p_response_status: 200,
+        p_response_body: { ok: true },
+      }),
+    );
+  });
+
+  it("replays a completed response without updating the restaurant", async () => {
+    const sup = makeSupabase(null, {
+      outcome: "replay",
+      response_status: 200,
+      response_body: { ok: true },
+      response_headers: {},
+    });
+    mockRequireOwner.mockResolvedValue({
+      supabase: sup,
+      restaurantId: R,
+      user: { id: "u-1" },
+      role: "owner",
+    });
+
+    const res = await PATCH(makeReq({ name: "New name" }, KEY), {
+      params,
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await res.json()).toEqual({ ok: true });
+    expect(sup._updates).toEqual([]);
+    expect(sup.rpc).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects negative threshold", async () => {
     const sup = makeSupabase();
     mockRequireOwner.mockResolvedValue({
@@ -308,10 +468,12 @@ describe("PATCH /api/restaurant/[id]", () => {
       role: "owner",
     });
     const res = await PATCH(
-      makeReq({ auto_eightysix_from_inventory: true }),
+      makeReq({ auto_eightysix_from_inventory: true }, KEY),
       { params },
     );
     expect(res.status).toBe(403);
+    expect(sup._updates).toEqual([]);
+    expect(sup.rpc).not.toHaveBeenCalled();
   });
 
   it("403s when caller is not owner (forwarded from requireOwner)", async () => {
@@ -324,6 +486,31 @@ describe("PATCH /api/restaurant/[id]", () => {
     );
     expect(res.status).toBe(403);
   });
+
+  it.each([
+    ["invalid params", Promise.resolve({ id: "not-a-uuid" }), { name: "Valid" }],
+    ["invalid body", params, { name: "" }],
+    ["empty body", params, {}],
+  ] as const)(
+    "rejects %s before an idempotency claim or mutation",
+    async (_label, candidateParams, body) => {
+      const sup = makeSupabase();
+      mockRequireOwner.mockResolvedValue({
+        supabase: sup,
+        restaurantId: R,
+        user: { id: "u-1" },
+        role: "owner",
+      });
+
+      const res = await PATCH(makeReq(body, KEY), {
+        params: candidateParams,
+      });
+
+      expect(res.status).toBe(400);
+      expect(sup._updates).toEqual([]);
+      expect(sup.rpc).not.toHaveBeenCalled();
+    },
+  );
 
   it("redacts update provider failures", async () => {
     const sup = makeSupabase({ message: "private update detail" });

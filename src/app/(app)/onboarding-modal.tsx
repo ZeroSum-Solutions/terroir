@@ -2,6 +2,8 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { readApiError } from "@/lib/api/client-error";
+import { createIdempotentCommandStore } from "@/lib/api/idempotency-client";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 
 export function OnboardingModal({
@@ -12,26 +14,42 @@ export function OnboardingModal({
   const router = useRouter();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+  const [commands] = useState(() => createIdempotentCommandStore());
   const trapRef = useRef<HTMLDivElement>(null);
   useFocusTrap({ containerRef: trapRef, onEscape: () => router.refresh() });
 
   const submit = useCallback(async () => {
+    if (savingRef.current) return;
     const trimmed = name.trim();
     if (!trimmed) return;
+    savingRef.current = true;
+    setError(null);
     setSaving(true);
     try {
-      const res = await fetch(`/api/restaurant/${restaurantId}`, {
+      const { response, data } = await commands.json<unknown>({
+        slot: `restaurant:${restaurantId}:name`,
+        url: `/api/restaurant/${restaurantId}`,
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmed }),
+        json: { name: trimmed },
       });
-      if (res.ok) {
-        router.refresh();
+      if (!response.ok) {
+        throw new Error(
+          readApiError(
+            data,
+            `Failed to save restaurant name (${response.status}).`,
+          ).message,
+        );
       }
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Save failed.");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
-  }, [name, restaurantId, router]);
+  }, [commands, name, restaurantId, router]);
 
   return (
     <div
@@ -68,6 +86,11 @@ export function OnboardingModal({
             {saving ? "Saving..." : "Continue"}
           </button>
         </div>
+        {error && (
+          <p className="mt-sm text-[13px] text-danger" role="alert">
+            {error}
+          </p>
+        )}
       </div>
     </div>
   );
