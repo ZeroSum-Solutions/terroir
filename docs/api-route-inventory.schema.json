@@ -92,6 +92,7 @@
           "if": {
             "properties": {
               "source": {
+                "type": "object",
                 "properties": {
                   "exportKind": {
                     "enum": [
@@ -111,6 +112,7 @@
                     "const": "GET"
                   },
                   "source": {
+                    "type": "object",
                     "properties": {
                       "localName": {
                         "const": "GET"
@@ -125,6 +127,7 @@
                     "const": "POST"
                   },
                   "source": {
+                    "type": "object",
                     "properties": {
                       "localName": {
                         "const": "POST"
@@ -139,6 +142,7 @@
                     "const": "PUT"
                   },
                   "source": {
+                    "type": "object",
                     "properties": {
                       "localName": {
                         "const": "PUT"
@@ -153,6 +157,7 @@
                     "const": "PATCH"
                   },
                   "source": {
+                    "type": "object",
                     "properties": {
                       "localName": {
                         "const": "PATCH"
@@ -167,6 +172,7 @@
                     "const": "DELETE"
                   },
                   "source": {
+                    "type": "object",
                     "properties": {
                       "localName": {
                         "const": "DELETE"
@@ -181,6 +187,7 @@
                     "const": "HEAD"
                   },
                   "source": {
+                    "type": "object",
                     "properties": {
                       "localName": {
                         "const": "HEAD"
@@ -195,6 +202,7 @@
                     "const": "OPTIONS"
                   },
                   "source": {
+                    "type": "object",
                     "properties": {
                       "localName": {
                         "const": "OPTIONS"

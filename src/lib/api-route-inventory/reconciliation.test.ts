@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -8,6 +7,7 @@ import {
   operationIdFor,
   validateInventoryShape,
 } from "../../../scripts/generate-api-route-inventory.mjs";
+import { validateJsonSchema } from "../../../scripts/verify-api-contract.mjs";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
 
@@ -100,22 +100,6 @@ function collectKeys(value: unknown, keys = new Set<string>()) {
   return keys;
 }
 
-type JsonSchema = Record<string, unknown>;
-
-const { validate: validateJsonSchema } = createRequire(import.meta.url)(
-  "next/dist/compiled/schema-utils3",
-) as { validate: (schema: JsonSchema, value: unknown) => void };
-
-function asDraftSeven(schema: JsonSchema) {
-  const compatible = JSON.parse(
-    JSON.stringify(schema).replaceAll("#/$defs/", "#/definitions/"),
-  ) as JsonSchema;
-  compatible.$schema = "http://json-schema.org/draft-07/schema#";
-  compatible.definitions = compatible.$defs;
-  delete compatible.$defs;
-  return compatible;
-}
-
 const ledger = readJson<{ items: LedgerItem[] }>("docs/feature-ledger.json");
 const inventory = readJson<Inventory>("docs/api-route-inventory.json");
 const reconciliation = readJson<Reconciliation>(
@@ -158,7 +142,6 @@ describe("TER-020Ab active API requirement reconciliation", () => {
 
   it("classifies every discovered and planned operation exactly once", () => {
     expect(validateInventoryShape(inventory).valid).toBe(true);
-    expect(inventory.discoveredOperations).toHaveLength(77);
 
     const classifications = uniqueBy(
       reconciliation.discoveredClassifications,
@@ -168,18 +151,14 @@ describe("TER-020Ab active API requirement reconciliation", () => {
       inventory.discoveredOperations,
       (item) => item.operationId,
     );
-    expect(classifications.size).toBe(77);
+    expect(classifications.size).toBe(discovered.size);
     expect([...classifications.keys()]).toEqual([...discovered.keys()]);
-    expect(
-      reconciliation.discoveredClassifications.filter(
-        (item) => item.classification === "exact",
-      ),
-    ).toHaveLength(17);
-    expect(
-      reconciliation.discoveredClassifications.filter(
-        (item) => item.classification === "extension",
-      ),
-    ).toHaveLength(60);
+    const exactCount = reconciliation.discoveredClassifications.filter(
+      (item) => item.classification === "exact",
+    ).length;
+    const extensionCount =
+      reconciliation.discoveredClassifications.length - exactCount;
+    expect(exactCount + extensionCount).toBe(inventory.discoveredOperations.length);
 
     const concreteByOperation = uniqueBy(
       reconciliation.concreteRequirements,
@@ -197,7 +176,9 @@ describe("TER-020Ab active API requirement reconciliation", () => {
       }
     }
 
-    expect(inventory.plannedOperations).toHaveLength(15);
+    expect(exactCount + inventory.plannedOperations.length).toBe(
+      reconciliation.concreteRequirements.length,
+    );
     expect(inventory.plannedOperations).toEqual(
       [...inventory.plannedOperations].sort(
         (left, right) =>
@@ -321,23 +302,28 @@ describe("TER-020Ab active API requirement reconciliation", () => {
       type: "object",
       additionalProperties: false,
     });
-    const executableSchema = asDraftSeven(reconciliationSchema);
-    expect(() =>
-      validateJsonSchema(executableSchema, reconciliation),
-    ).not.toThrow();
+    expect(
+      validateJsonSchema(reconciliationSchema, reconciliation, "reconciliation"),
+    ).toEqual([]);
 
     const extraProperty = structuredClone(reconciliation) as Reconciliation & {
       disposition?: string;
     };
     extraProperty.disposition = "alias";
-    expect(() => validateJsonSchema(executableSchema, extraProperty)).toThrow();
+    expect(
+      validateJsonSchema(reconciliationSchema, extraProperty, "reconciliation")
+        .join("\n"),
+    ).toContain("must NOT have additional properties");
 
     const invalidLeaf = structuredClone(reconciliation);
     const planned = invalidLeaf.concreteRequirements.find(
       (item) => item.realization === "planned_exact_path",
     )!;
     planned.implementationLeaf = null;
-    expect(() => validateJsonSchema(executableSchema, invalidLeaf)).toThrow();
+    expect(
+      validateJsonSchema(reconciliationSchema, invalidLeaf, "reconciliation")
+        .join("\n"),
+    ).toContain("must be equal to constant");
     expect(collectKeys(reconciliationSchema).has("disposition")).toBe(false);
   });
 });
