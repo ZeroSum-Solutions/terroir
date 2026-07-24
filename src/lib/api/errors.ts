@@ -9,53 +9,74 @@ export interface ErrorEnvelope {
   };
 }
 
+export type ApiErrorInit = Omit<ResponseInit, "status">;
+
 export function apiError(
   status: number,
   code: string,
   message: string,
   details?: unknown,
+  init?: ApiErrorInit,
 ): NextResponse<ErrorEnvelope> {
   const body: ErrorEnvelope = { error: { code, message } };
   if (details !== undefined) {
     (body.error as Record<string, unknown>).details = details;
   }
-  return NextResponse.json(body, { status });
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json");
+  headers.delete("Content-Length");
+  return NextResponse.json(body, { ...init, headers, status });
 }
 
 export const Errors = {
-  unauthorized: () =>
-    apiError(401, "unauthorized", "Unauthorized"),
+  unauthorized: (init?: ApiErrorInit) =>
+    apiError(401, "unauthorized", "Unauthorized", undefined, init),
 
-  forbidden: (message = "Forbidden") =>
-    apiError(403, "forbidden", message),
+  forbidden: (message = "Forbidden", init?: ApiErrorInit) =>
+    apiError(403, "forbidden", message, undefined, init),
 
-  notFound: (resource = "Resource") =>
-    apiError(404, "not_found", resource + " not found."),
+  notFound: (resource = "Resource", init?: ApiErrorInit) =>
+    apiError(404, "not_found", resource + " not found.", undefined, init),
 
-  badRequest: (message: string, details?: unknown, code?: string) =>
-    apiError(400, code ?? "bad_request", message, details),
+  badRequest: (
+    message: string,
+    details?: unknown,
+    code?: string,
+    init?: ApiErrorInit,
+  ) => apiError(400, code ?? "bad_request", message, details, init),
 
-  validation: (issues: ZodIssue[], message = "Invalid input.") =>
-    apiError(400, "validation_error", message, issues),
+  validation: (
+    issues: ZodIssue[],
+    message = "Invalid input.",
+    init?: ApiErrorInit,
+  ) => apiError(400, "validation_error", message, issues, init),
 
-  conflict: (code: string, message: string) =>
-    apiError(409, code, message),
+  conflict: (code: string, message: string, init?: ApiErrorInit) =>
+    apiError(409, code, message, undefined, init),
 
-  unprocessable: (code: string, message: string) =>
-    apiError(422, code, message),
+  unprocessable: (code: string, message: string, init?: ApiErrorInit) =>
+    apiError(422, code, message, undefined, init),
 
-  tooLarge: (message = "File exceeds maximum size.") =>
-    apiError(413, "too_large", message),
+  tooLarge: (
+    message = "File exceeds maximum size.",
+    init?: ApiErrorInit,
+  ) => apiError(413, "too_large", message, undefined, init),
 
-  unsupportedMediaType: (message: string) =>
-    apiError(415, "unsupported_media_type", message),
+  unsupportedMediaType: (message: string, init?: ApiErrorInit) =>
+    apiError(415, "unsupported_media_type", message, undefined, init),
 
-  rateLimited: (message = "Rate limited.") =>
-    apiError(429, "rate_limited", message),
+  rateLimited: (message = "Rate limited.", init?: ApiErrorInit) =>
+    apiError(429, "rate_limited", message, undefined, init),
 
-  internal: (message = "Internal server error.") =>
-    apiError(500, "internal_error", message),
+  internal: (message = "Internal server error.", init?: ApiErrorInit) =>
+    apiError(500, "internal_error", message, undefined, init),
 
-  badGateway: (message = "Upstream service error.") =>
-    apiError(502, "bad_gateway", message),
+  badGateway: (message = "Upstream service error.", init?: ApiErrorInit) =>
+    apiError(502, "bad_gateway", message, undefined, init),
+
+  invalidJson: (init?: ApiErrorInit) =>
+    apiError(400, "invalid_json", "Invalid JSON.", undefined, init),
+
+  invalidFormData: (init?: ApiErrorInit) =>
+    apiError(400, "invalid_form_data", "Invalid form data.", undefined, init),
 };
