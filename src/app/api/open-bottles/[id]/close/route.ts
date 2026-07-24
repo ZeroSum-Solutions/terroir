@@ -29,8 +29,7 @@ const ParamsSchema = z.strictObject({ id: z.string().uuid() });
  * 200: { closed: { id, wine_id, closed_at } }
  * 400: invalid bottle id
  * 401: unauthenticated
- * 403: bottle not in caller's restaurant
- * 404: bottle not found
+ * 404: bottle missing or outside the active restaurant (opaque)
  * 409: already closed
  * 500: unhandled failure
  */

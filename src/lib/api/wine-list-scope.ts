@@ -15,10 +15,9 @@ type Client = SupabaseClient<Database>;
  * owned by restaurantId. The join goes
  * wine_list_items -> wine_list_sections -> wine_lists.
  *
- * Returns false on any error (including the common "not found" path
- * from .single() when the item doesn't exist). Callers should treat
- * false as "reject the mutation" — distinguishing "not found" from
- * "owned by another tenant" would leak tenant existence.
+ * Returns false for a missing row or a row outside the active tenant.
+ * Provider failures are thrown so callers do not misreport outages as
+ * authorization or not-found responses.
  */
 export async function isOwnWineListItem(
   supabase: Client,
@@ -31,7 +30,9 @@ export async function isOwnWineListItem(
     .eq("id", itemId)
     .single();
 
-  if (error || !data) return false;
+  if (error?.code === "PGRST116") return false;
+  if (error) throw error;
+  if (!data) return false;
 
   // PostgREST nests the join result; grab the restaurant_id out.
   type JoinShape = {
@@ -58,7 +59,9 @@ export async function isOwnWineListSection(
     .eq("id", sectionId)
     .single();
 
-  if (error || !data) return false;
+  if (error?.code === "PGRST116") return false;
+  if (error) throw error;
+  if (!data) return false;
 
   type JoinShape = { wine_lists: { restaurant_id: string } };
   const resolved = data as unknown as JoinShape;
@@ -82,7 +85,8 @@ export async function areAllOwnWineListItems(
     .select("id, wine_list_sections!inner(wine_lists!inner(restaurant_id))")
     .in("id", itemIds);
 
-  if (error || !data) return false;
+  if (error) throw error;
+  if (!data) return false;
   if (data.length !== itemIds.length) return false;
 
   type JoinShape = {

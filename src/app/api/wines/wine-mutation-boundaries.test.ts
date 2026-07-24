@@ -7,6 +7,7 @@ const auth = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/auth", () => ({
+  requireCapability: (...args: unknown[]) => auth.requireRole(...args),
   requireMembership: (...args: unknown[]) =>
     auth.requireMembership(...args),
   requireRole: (...args: unknown[]) => auth.requireRole(...args),
@@ -73,7 +74,7 @@ const operations = [
   },
   {
     name: "POST dismiss pricing",
-    auth: "membership",
+    auth: "role",
     call: (params: Promise<{ id: string }>) =>
       DISMISS(
         request(`/api/wines/${VALID_ID}/dismiss-pricing-alert`, "POST", {}),
@@ -82,7 +83,7 @@ const operations = [
   },
   {
     name: "POST overpaid",
-    auth: "membership",
+    auth: "role",
     call: (params: Promise<{ id: string }>) =>
       OVERPAID(request(`/api/wines/${VALID_ID}/overpaid`, "POST"), {
         params,
@@ -90,7 +91,7 @@ const operations = [
   },
   {
     name: "PATCH pricing targets",
-    auth: "membership",
+    auth: "role",
     call: (params: Promise<{ id: string }>) =>
       TARGETS(
         request(`/api/wines/${VALID_ID}/pricing-targets`, "PATCH", {
@@ -101,7 +102,7 @@ const operations = [
   },
   {
     name: "POST snooze alert",
-    auth: "membership",
+    auth: "role",
     call: (params: Promise<{ id: string }>) =>
       SNOOZE(
         request(`/api/wines/${VALID_ID}/snooze-alert`, "POST", {}),
@@ -221,7 +222,7 @@ describe("wine mutation request boundaries", () => {
       const from = vi.fn(() => {
         throw new Error("database must not run");
       });
-      auth.requireMembership.mockResolvedValue({
+      auth.requireRole.mockResolvedValue({
         supabase: { from, rpc: vi.fn() },
         restaurantId: "22222222-2222-4222-8222-222222222222",
         role: "owner",

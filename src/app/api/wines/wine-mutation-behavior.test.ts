@@ -9,6 +9,7 @@ const sentry = vi.hoisted(() => ({ captureException: vi.fn() }));
 const cache = vi.hoisted(() => ({ revalidatePath: vi.fn() }));
 
 vi.mock("@/lib/api/auth", () => ({
+  requireCapability: (...args: unknown[]) => auth.requireRole(...args),
   requireMembership: (...args: unknown[]) =>
     auth.requireMembership(...args),
   requireRole: (...args: unknown[]) => auth.requireRole(...args),
@@ -101,19 +102,6 @@ function setRoleAuth(
 ) {
   const supabase = makeSupabase(dbPlans, rpcPlans);
   auth.requireRole.mockResolvedValue({
-    supabase: supabase.client,
-    restaurantId: RESTAURANT_ID,
-    role: "owner",
-  });
-  return supabase;
-}
-
-function setMembershipAuth(
-  dbPlans: DbPlan[],
-  rpcPlans: RpcPlan[] = [],
-) {
-  const supabase = makeSupabase(dbPlans, rpcPlans);
-  auth.requireMembership.mockResolvedValue({
     supabase: supabase.client,
     restaurantId: RESTAURANT_ID,
     role: "owner",
@@ -298,7 +286,7 @@ describe("wine mutation behavior", () => {
   });
 
   it("does not report a cleared pricing dismissal after a zero-row race", async () => {
-    setMembershipAuth([
+    setRoleAuth([
       { table: "wines", data: { id: WINE_ID } },
       { table: "wines", data: null },
     ]);
@@ -314,7 +302,7 @@ describe("wine mutation behavior", () => {
   });
 
   it("does not report an overpaid toggle after a zero-row race", async () => {
-    const supabase = setMembershipAuth([
+    const supabase = setRoleAuth([
       {
         table: "wines",
         data: { id: WINE_ID, overpaid_flag: false },
@@ -339,7 +327,7 @@ describe("wine mutation behavior", () => {
   });
 
   it("rejects a snooze RPC success without a timestamp", async () => {
-    setMembershipAuth(
+    setRoleAuth(
       [{ table: "wines", data: { id: WINE_ID } }],
       [{ fn: "snooze_drink_window_alert", data: null }],
     );
@@ -353,7 +341,7 @@ describe("wine mutation behavior", () => {
   });
 
   it("distinguishes pricing-target provider failure from missing wine", async () => {
-    setMembershipAuth([
+    setRoleAuth([
       { table: "wines", error: { message: "provider unavailable" } },
     ]);
 

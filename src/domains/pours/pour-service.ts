@@ -54,6 +54,7 @@ export async function recordPour(input: RecordPourInput) {
   const sinceTs = new Date().toISOString();
 
   const { data, error } = await supabase.rpc("record_pour", {
+    p_restaurant_id: restaurantId,
     p_wine_id: wineId,
     p_ml: ml,
     p_kind: kind,
@@ -66,6 +67,12 @@ export async function recordPour(input: RecordPourInput) {
       String(error.message ?? "").includes("TERROIR_OUT_OF_STOCK")
     ) {
       throw new PourNoInventoryError();
+    }
+    if (
+      error.code === "P0001" &&
+      error.message?.trim().toLowerCase() === "wine not found"
+    ) {
+      throw new PourNotFoundError("Wine not found.");
     }
     if (error.code === "42501") {
       throw new PourForbiddenError();
@@ -101,11 +108,16 @@ export async function undoLastPour(input: UndoLastPourInput) {
   const sinceTs = new Date().toISOString();
 
   const { data, error } = await supabase.rpc("undo_last_pour", {
+    p_restaurant_id: restaurantId,
     p_wine_id: wineId,
   });
 
   if (error) {
-    if (error.message?.includes("no recent pour to undo")) {
+    const message = error.message?.trim().toLowerCase();
+    if (
+      error.code === "P0001" &&
+      (message === "no recent pour to undo" || message === "wine not found")
+    ) {
       throw new PourNotFoundError("Pour to undo not found.");
     }
     if (error.code === "42501") {
@@ -144,6 +156,7 @@ export async function closeOpenBottle(input: CloseOpenBottleInput) {
     .from("open_bottles")
     .select("id, wine_id, remaining_ml, closed_at, restaurant_id")
     .eq("id", bottleId)
+    .eq("restaurant_id", restaurantId)
     .single();
 
   if (
@@ -157,7 +170,7 @@ export async function closeOpenBottle(input: CloseOpenBottleInput) {
   }
 
   if (bottle.restaurant_id !== restaurantId) {
-    throw new PourForbiddenError();
+    throw new PourNotFoundError("Bottle not found.");
   }
 
   if (bottle.closed_at) {
@@ -166,6 +179,7 @@ export async function closeOpenBottle(input: CloseOpenBottleInput) {
 
   const closedAt = new Date().toISOString();
   const { error: pourError } = await supabase.rpc("record_pour", {
+    p_restaurant_id: restaurantId,
     p_wine_id: bottle.wine_id,
     p_ml: bottle.remaining_ml,
     p_kind: "spill",

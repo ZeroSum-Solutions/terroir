@@ -106,6 +106,7 @@ function buildMetadata(source: string, result: {
  */
 async function lwinEnrichFallback(
   supabase: SupabaseClient<Database>,
+  restaurantId: string,
   wines: Array<{ id: string; producer: string; name: string }>,
 ): Promise<EnrichmentPayloadRow[]> {
   if (wines.length === 0) return [];
@@ -116,7 +117,8 @@ async function lwinEnrichFallback(
   const { data: matches, error: matchError } = await supabase.rpc(
     "match_lwin_batch",
     {
-    p_wine_ids: wineIds,
+      p_restaurant_id: restaurantId,
+      p_wine_ids: wineIds,
     },
   );
   if (matchError) {
@@ -328,7 +330,11 @@ export async function enrichRestaurantBatch(
   }
 
   // BND-277 — Tier 3 (LWIN catalog fallback, free, best-effort).
-  const lwinFallbackResults = await lwinEnrichFallback(supabase, claudeNullResults);
+  const lwinFallbackResults = await lwinEnrichFallback(
+    supabase,
+    restaurantId,
+    claudeNullResults,
+  );
 
   const payload = [...ruleEnriched, ...claudeResults, ...lwinFallbackResults];
 
@@ -370,7 +376,8 @@ export async function enrichRestaurantBatch(
     const { data: matches, error: matchError } = await supabase.rpc(
       "match_lwin_batch",
       {
-      p_wine_ids: unmatchedIds,
+        p_restaurant_id: restaurantId,
+        p_wine_ids: unmatchedIds,
       },
     );
     if (matchError) {

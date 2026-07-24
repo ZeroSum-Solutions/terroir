@@ -17,6 +17,7 @@ const providers = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/auth", () => ({
+  requireCapability: (...args: unknown[]) => auth.requireRole(...args),
   requireMembership: (...args: unknown[]) =>
     auth.requireMembership(...args),
   requireRole: (...args: unknown[]) => auth.requireRole(...args),
@@ -98,7 +99,7 @@ function watchedParams(id = VALID_ID) {
 const dynamicOperations = [
   {
     name: "POST single enrichment",
-    auth: "membership",
+    auth: "role",
     call: (params: Promise<{ id: string }>) =>
       ENRICH_ONE({} as Request, { params }),
   },
@@ -116,7 +117,7 @@ const dynamicOperations = [
   },
   {
     name: "POST single retail refresh",
-    auth: "membership",
+    auth: "role",
     call: (params: Promise<{ id: string }>) =>
       REFRESH_ONE({} as Request, { params }),
   },
@@ -183,7 +184,7 @@ describe("wine provider mutation request boundaries", () => {
     const rpc = vi.fn(() => {
       throw new Error("database must not run");
     });
-    auth.requireMembership.mockResolvedValue({
+    auth.requireRole.mockResolvedValue({
       supabase: { from: vi.fn(), rpc },
       restaurantId: "22222222-2222-4222-8222-222222222222",
     });
@@ -201,11 +202,12 @@ describe("wine provider mutation request boundaries", () => {
   });
 
   it("POST batch enrichment returns a nested role denial", async () => {
-    auth.requireMembership.mockResolvedValue({
-      supabase: {},
-      restaurantId: "22222222-2222-4222-8222-222222222222",
-      role: "staff",
-    });
+    auth.requireRole.mockResolvedValue(
+      NextResponse.json(
+        { error: { code: "forbidden", message: "Forbidden" } },
+        { status: 403 },
+      ),
+    );
 
     const response = await ENRICH_BATCH();
 
@@ -216,7 +218,7 @@ describe("wine provider mutation request boundaries", () => {
   });
 
   it("POST batch enrichment redacts an unexpected dependency throw", async () => {
-    auth.requireMembership.mockResolvedValue({
+    auth.requireRole.mockResolvedValue({
       supabase: {},
       restaurantId: "22222222-2222-4222-8222-222222222222",
       role: "owner",
@@ -237,7 +239,7 @@ describe("wine provider mutation request boundaries", () => {
     const from = vi.fn(() => {
       throw new Error("provider secret");
     });
-    auth.requireMembership.mockResolvedValue({
+    auth.requireRole.mockResolvedValue({
       supabase: { from },
       restaurantId: "22222222-2222-4222-8222-222222222222",
       role: "owner",

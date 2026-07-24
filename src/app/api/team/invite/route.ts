@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireOwner } from "@/lib/api/auth";
+import { requireCapability } from "@/lib/api/auth";
 import { withApiHandler } from "@/lib/api/handler";
 import { CreateInviteBodySchema } from "@/lib/api/team-schemas";
 import { parseJson } from "@/lib/api/validation";
@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   return withApiHandler(async () => {
-    const auth = await requireOwner();
+    const auth = await requireCapability("team:invite-manage");
     if (auth instanceof NextResponse) return auth;
     const { supabase, user, restaurantId } = auth;
 

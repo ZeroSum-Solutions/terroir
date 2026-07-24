@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { Errors } from "@/lib/api/errors";
-import { requireMembership } from "@/lib/api/auth";
+import { requireCapability, requireMembership } from "@/lib/api/auth";
 import { withApiHandler } from "@/lib/api/handler";
 import type { Json } from "@/types/database";
 
@@ -62,7 +62,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireMembership();
+  return withApiHandler(() => createCellarConfig(request));
+}
+
+async function createCellarConfig(request: NextRequest) {
+  const auth = await requireCapability("cellar:manage");
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
@@ -119,7 +123,11 @@ export async function POST(request: NextRequest) {
  * Body: { sections: Array<{ id: string, name: string }>, section_order?: string[] }
  */
 export async function PATCH(request: NextRequest) {
-  const auth = await requireMembership();
+  return withApiHandler(() => updateCellarConfig(request));
+}
+
+async function updateCellarConfig(request: NextRequest) {
+  const auth = await requireCapability("cellar:manage");
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 

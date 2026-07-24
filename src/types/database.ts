@@ -61,10 +61,81 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "availability_events_wine_id_fkey"
-            columns: ["wine_id"]
+            foreignKeyName: "availability_events_wine_tenant_fkey"
+            columns: ["wine_id", "restaurant_id"]
             isOneToOne: false
             referencedRelation: "wines"
+            referencedColumns: ["id", "restaurant_id"]
+          },
+        ]
+      }
+      background_jobs: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          created_by: string | null
+          error_code: string | null
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          job_type: string
+          max_attempts: number
+          metadata: Json
+          restaurant_id: string
+          result: Json
+          run_after: string
+          started_at: string | null
+          status: string
+          subject_id: string | null
+          subject_table: string | null
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          created_by?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          job_type: string
+          max_attempts?: number
+          metadata?: Json
+          restaurant_id: string
+          result?: Json
+          run_after?: string
+          started_at?: string | null
+          status?: string
+          subject_id?: string | null
+          subject_table?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          created_by?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          job_type?: string
+          max_attempts?: number
+          metadata?: Json
+          restaurant_id?: string
+          result?: Json
+          run_after?: string
+          started_at?: string | null
+          status?: string
+          subject_id?: string | null
+          subject_table?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "background_jobs_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
             referencedColumns: ["id"]
           },
         ]
@@ -164,13 +235,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "inventory_items_invoice_scan_id_fkey"
-            columns: ["invoice_scan_id"]
-            isOneToOne: false
-            referencedRelation: "invoice_scans"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "inventory_items_restaurant_id_fkey"
             columns: ["restaurant_id"]
             isOneToOne: false
@@ -178,11 +242,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "inventory_items_wine_id_fkey"
-            columns: ["wine_id"]
+            foreignKeyName: "inventory_items_scan_tenant_fkey"
+            columns: ["invoice_scan_id", "restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_scans"
+            referencedColumns: ["id", "restaurant_id"]
+          },
+          {
+            foreignKeyName: "inventory_items_wine_tenant_fkey"
+            columns: ["wine_id", "restaurant_id"]
             isOneToOne: false
             referencedRelation: "wines"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "restaurant_id"]
           },
         ]
       }
@@ -400,18 +471,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "open_bottles_source_inventory_item_id_fkey"
-            columns: ["source_inventory_item_id"]
+            foreignKeyName: "open_bottles_source_inventory_tenant_fkey"
+            columns: ["source_inventory_item_id", "wine_id", "restaurant_id"]
             isOneToOne: false
             referencedRelation: "inventory_items"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "wine_id", "restaurant_id"]
           },
           {
-            foreignKeyName: "open_bottles_wine_id_fkey"
-            columns: ["wine_id"]
-            isOneToOne: false
+            foreignKeyName: "open_bottles_wine_tenant_fkey"
+            columns: ["wine_id", "restaurant_id"]
+            isOneToOne: true
             referencedRelation: "wines"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "restaurant_id"]
           },
         ]
       }
@@ -451,11 +522,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "pour_events_open_bottle_id_fkey"
-            columns: ["open_bottle_id"]
+            foreignKeyName: "pour_events_open_bottle_tenant_fkey"
+            columns: ["open_bottle_id", "wine_id", "restaurant_id"]
             isOneToOne: false
             referencedRelation: "open_bottles"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "wine_id", "restaurant_id"]
           },
           {
             foreignKeyName: "pour_events_restaurant_id_fkey"
@@ -465,11 +536,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "pour_events_wine_id_fkey"
-            columns: ["wine_id"]
+            foreignKeyName: "pour_events_wine_tenant_fkey"
+            columns: ["wine_id", "restaurant_id"]
             isOneToOne: false
             referencedRelation: "wines"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "restaurant_id"]
           },
         ]
       }
@@ -940,7 +1011,7 @@ export type Database = {
         }[]
       }
       match_lwin_batch: {
-        Args: { p_wine_ids: string[] }
+        Args: { p_restaurant_id: string; p_wine_ids: string[] }
         Returns: {
           lwin_id: string
           score: number
@@ -948,7 +1019,12 @@ export type Database = {
         }[]
       }
       reconcile_open_bottle: {
-        Args: { p_new_remaining_ml: number; p_note?: string; p_wine_id: string }
+        Args: {
+          p_new_remaining_ml: number
+          p_note?: string
+          p_restaurant_id: string
+          p_wine_id: string
+        }
         Returns: {
           closed_at: string | null
           id: string
@@ -967,7 +1043,7 @@ export type Database = {
         }
       }
       reconcile_open_bottles_batch: {
-        Args: { p_entries: Json }
+        Args: { p_entries: Json; p_restaurant_id: string }
         Returns: number
       }
       record_pour: {
@@ -975,6 +1051,7 @@ export type Database = {
           p_kind?: string
           p_ml: number
           p_note?: string
+          p_restaurant_id: string
           p_wine_id: string
         }
         Returns: {
@@ -1024,7 +1101,7 @@ export type Database = {
         Returns: string
       }
       undo_last_pour: {
-        Args: { p_wine_id: string }
+        Args: { p_restaurant_id: string; p_wine_id: string }
         Returns: {
           closed_at: string | null
           id: string

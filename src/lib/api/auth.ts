@@ -2,10 +2,16 @@ import { NextResponse } from "next/server";
 import { Errors } from "@/lib/api/errors";
 import { createClient } from "@/lib/supabase/server";
 import { resolveActiveMembership } from "@/lib/api/resolve-active-membership";
+import {
+  hasCapability,
+  type Capability,
+  type MembershipRole,
+} from "@/lib/auth/capabilities";
 import type { Database } from "@/types/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-type MembershipRole = "owner" | "manager" | "staff";
+import {
+  isAuthSessionMissingError,
+  type SupabaseClient,
+} from "@supabase/supabase-js";
 
 export type AuthResult = {
   supabase: SupabaseClient<Database>;
@@ -22,7 +28,10 @@ export async function requireAuth(): Promise<AuthResult | NextResponse> {
   const supabase = await createClient();
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
+
+  if (error && !isAuthSessionMissingError(error)) throw error;
 
   if (!user) {
     return Errors.unauthorized();
@@ -88,6 +97,23 @@ export async function requireRole(
 
   if (!roles.includes(result.role)) {
     return Errors.forbidden(`Role ${roles.join(" or ")} required.`);
+  }
+
+  return result;
+}
+
+/**
+ * Returns the active membership when its role owns the named product
+ * capability. Prefer this over route-local role comparisons.
+ */
+export async function requireCapability(
+  capability: Capability,
+): Promise<MembershipResult | NextResponse> {
+  const result = await requireMembership();
+  if (result instanceof NextResponse) return result;
+
+  if (!hasCapability(result.role, capability)) {
+    return Errors.forbidden(`Capability ${capability} required.`);
   }
 
   return result;

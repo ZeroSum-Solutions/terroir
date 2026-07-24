@@ -18,6 +18,13 @@ export class ReconcileExceedsSizeError extends Error {
   }
 }
 
+export class ReconcileNotFoundError extends Error {
+  constructor() {
+    super("Open bottle not found.");
+    this.name = "ReconcileNotFoundError";
+  }
+}
+
 export class ReconcileRpcError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message);
@@ -47,6 +54,7 @@ export async function reconcileOpenBottles(
   const { data, error } = await supabase.rpc(
     "reconcile_open_bottles_batch",
     {
+      p_restaurant_id: restaurantId,
       p_entries: entries as unknown as Json,
     },
   );
@@ -57,6 +65,14 @@ export async function reconcileOpenBottles(
     }
     if (error.code === "P0002") {
       throw new ReconcileExceedsSizeError();
+    }
+    const message = error.message?.trim().toLowerCase();
+    if (
+      error.code === "P0001" &&
+      (message === "wine not found" ||
+        message === "no open bottle for this wine")
+    ) {
+      throw new ReconcileNotFoundError();
     }
     console.error("reconcile_open_bottles_batch failed:", error);
     Sentry.captureException(error, {
@@ -78,4 +94,3 @@ export async function reconcileOpenBottles(
 
   return (data as number) ?? 0;
 }
-

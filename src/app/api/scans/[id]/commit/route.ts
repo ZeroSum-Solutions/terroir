@@ -94,7 +94,10 @@ export async function POST(
 
     try {
       void Promise.resolve(
-        supabase.rpc("match_lwin_batch", { p_wine_ids: wineIds }),
+        supabase.rpc("match_lwin_batch", {
+          p_restaurant_id: restaurantId,
+          p_wine_ids: wineIds,
+        }),
       ).then(({ error }) => {
         if (error) reportBestEffort(error);
       }).catch(reportBestEffort);

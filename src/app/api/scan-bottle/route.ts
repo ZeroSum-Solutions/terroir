@@ -5,7 +5,7 @@ import { z } from "zod";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAnthropicClient } from "@/lib/ai/anthropic-client";
 import { requireMembership } from "@/lib/api/auth";
-import { apiError, Errors } from "@/lib/api/errors";
+import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import {
   fileField,
@@ -52,31 +52,19 @@ async function postBottleScan(request: NextRequest) {
     if (!parsed.ok) return parsed.response;
     const { qr_payload } = parsed.data;
 
-    // BND-111: look up wine globally first, then reject cross-tenant with 403.
-    const { data: globalWine, error: globalErr } = await supabase
+    const { data: scopedWine, error: scopedError } = await supabase
       .from("wines")
       .select("id, producer, name, vintage, varietal, region, country, restaurant_id")
       .eq("id", qr_payload)
+      .eq("restaurant_id", restaurantId)
       .maybeSingle();
 
-    if (globalErr) throw globalErr;
-    if (!globalWine) {
-      return apiError(
-        404,
-        "wine_not_found",
-        "No wine found for that QR code. It may have been deleted.",
-      );
+    if (scopedError) throw scopedError;
+    if (!scopedWine || scopedWine.restaurant_id !== restaurantId) {
+      return Errors.notFound("Wine");
     }
 
-    if (globalWine.restaurant_id !== restaurantId) {
-      return apiError(
-        403,
-        "cross_tenant_qr",
-        "This QR code belongs to a different restaurant.",
-      );
-    }
-
-    const { restaurant_id: _rid, ...wine } = globalWine;
+    const { restaurant_id: _rid, ...wine } = scopedWine;
     return NextResponse.json(wine);
   }
 

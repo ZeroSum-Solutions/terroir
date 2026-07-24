@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireOwner } from "@/lib/api/auth";
+import { requireCapability } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { TeamIdParamsSchema } from "@/lib/api/team-schemas";
@@ -15,15 +15,15 @@ type Params = Promise<{ id: string }>;
  * original. The old invitation row remains valid and must be explicitly
  * revoked via DELETE /api/team/invite/[id] if no longer needed.
  *
- * Owner-only. Returns 404 if the invitation doesn't exist (or belongs to
- * another restaurant), 400 if it has already been accepted.
+ * Owner/manager-only. Returns 404 if the invitation doesn't exist (or
+ * belongs to another restaurant), 400 if it has already been accepted.
  */
 export async function POST(
   request: NextRequest,
   { params }: { params: Params },
 ) {
   return withApiHandler(async () => {
-    const auth = await requireOwner();
+    const auth = await requireCapability("team:invite-manage");
     if (auth instanceof NextResponse) return auth;
     const { supabase, user, restaurantId } = auth;
     const parsedParams = await parseParams(params, TeamIdParamsSchema);

@@ -42,9 +42,7 @@ export async function POST(request: NextRequest) {
         );
       }
       if (error.message === "cellar_inventory_missing") {
-        return Errors.badRequest(
-          "One or more selected wines have no inventory record.",
-        );
+        return Errors.notFound("Inventory item");
       }
       if (
         error.message === "cellar_batch_invalid_size" ||

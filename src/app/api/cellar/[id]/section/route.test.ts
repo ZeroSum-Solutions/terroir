@@ -18,12 +18,24 @@ function request(body: unknown): NextRequest {
   }) as unknown as NextRequest;
 }
 
-function makeSupabase(
-  updateResult: {
+function makeSupabase(options: {
+  wineLookup?: {
+    data: Record<string, unknown> | null;
+    error: { code?: string; message?: string } | null;
+  };
+  updateResult?: {
     data: Array<{ id: string }> | null;
     error: { message?: string } | null;
-  } = { data: [{ id: "inventory-a" }], error: null },
-) {
+  };
+} = {}) {
+  const wineLookup = options.wineLookup ?? {
+    data: { id: WINE_ID },
+    error: null,
+  };
+  const updateResult = options.updateResult ?? {
+    data: [{ id: "inventory-a" }],
+    error: null,
+  };
   const calls: Array<{ method: string; args: unknown[] }> = [];
   const from = vi.fn((table: string) => {
     calls.push({ method: "from", args: [table] });
@@ -39,7 +51,7 @@ function makeSupabase(
                   args: [nextColumn, nextValue],
                 });
                 return {
-                  single: async () => ({ data: { id: WINE_ID }, error: null }),
+                  single: async () => wineLookup,
                 };
               },
             };
@@ -204,7 +216,9 @@ describe("PATCH /api/cellar/[id]/section", () => {
   });
 
   it("returns 404 when the wine has no inventory record to move", async () => {
-    const supabase = makeSupabase({ data: [], error: null });
+    const supabase = makeSupabase({
+      updateResult: { data: [], error: null },
+    });
     allow(supabase);
 
     const response = await PATCH(request({ section: "Reserve" }), {
@@ -222,8 +236,10 @@ describe("PATCH /api/cellar/[id]/section", () => {
 
   it("returns 500 when the inventory update fails", async () => {
     const supabase = makeSupabase({
-      data: null,
-      error: { message: "provider unavailable" },
+      updateResult: {
+        data: null,
+        error: { message: "provider unavailable" },
+      },
     });
     allow(supabase);
 
@@ -236,6 +252,47 @@ describe("PATCH /api/cellar/[id]/section", () => {
       error: {
         code: "internal_error",
         message: "Failed to update section.",
+      },
+    });
+  });
+
+  it("returns 404 when the tenant-scoped wine is missing", async () => {
+    const supabase = makeSupabase({
+      wineLookup: {
+        data: null,
+        error: { code: "PGRST116", message: "no rows" },
+      },
+    });
+    allow(supabase);
+
+    const response = await PATCH(request({ section: "Reds" }), {
+      params: Promise.resolve({ id: WINE_ID }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: { code: "not_found", message: "Wine not found." },
+    });
+  });
+
+  it("returns 500 when the wine lookup provider fails", async () => {
+    const supabase = makeSupabase({
+      wineLookup: {
+        data: null,
+        error: { code: "08006", message: "connection failure" },
+      },
+    });
+    allow(supabase);
+
+    const response = await PATCH(request({ section: "Reds" }), {
+      params: Promise.resolve({ id: WINE_ID }),
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "internal_error",
+        message: "Failed to find wine.",
       },
     });
   });

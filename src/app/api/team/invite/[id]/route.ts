@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireOwner } from "@/lib/api/auth";
+import { requireCapability } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { TeamIdParamsSchema } from "@/lib/api/team-schemas";
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 type Params = Promise<{ id: string }>;
 
 /**
- * Revoke a pending invitation. Owner-only. Scoped to the active
+ * Revoke a pending invitation. Owner/manager-only. Scoped to the active
  * restaurant so an owner of restaurant A can't delete an invitation
  * belonging to restaurant B even if they guessed the id.
  *
@@ -24,7 +24,7 @@ export async function DELETE(
   { params }: { params: Params },
 ) {
   return withApiHandler(async () => {
-    const auth = await requireOwner();
+    const auth = await requireCapability("team:invite-manage");
     if (auth instanceof NextResponse) return auth;
     const { supabase, restaurantId } = auth;
     const parsedParams = await parseParams(params, TeamIdParamsSchema);

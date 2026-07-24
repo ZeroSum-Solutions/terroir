@@ -41,12 +41,21 @@ export async function PATCH(
     const { section } = parsed.data;
 
     // Verify the wine belongs to this restaurant
-    const { data: wine } = await supabase
+    const { data: wine, error: wineError } = await supabase
       .from("wines")
       .select("id")
       .eq("id", wineId)
       .eq("restaurant_id", restaurantId)
       .single();
+
+    if (wineError && wineError.code !== "PGRST116") {
+      console.error("wines lookup failed:", wineError);
+      Sentry.captureException(wineError, {
+        tags: { surface: "cellar", phase: "find-wine-for-section" },
+        extra: { restaurantId, wineId, section },
+      });
+      return Errors.internal("Failed to find wine.");
+    }
 
     if (!wine) {
       return Errors.notFound("Wine");

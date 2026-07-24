@@ -55,7 +55,7 @@ export async function PATCH(
       .select("id, quantity, unit_cost, bin_location")
       .single();
 
-    if (error) {
+    if (error && error.code !== "PGRST116") {
       console.error("inventory_items update failed:", error);
       Sentry.captureException(error, {
         tags: { surface: "cellar", phase: "edit-inventory" },
@@ -94,12 +94,21 @@ export async function DELETE(
     const { id: wineId } = parsedParams.data;
 
     // Verify the wine belongs to this restaurant
-    const { data: wine } = await supabase
+    const { data: wine, error: wineError } = await supabase
       .from("wines")
       .select("id, name, producer, vintage")
       .eq("id", wineId)
       .eq("restaurant_id", restaurantId)
       .single();
+
+    if (wineError && wineError.code !== "PGRST116") {
+      console.error("wines lookup failed:", wineError);
+      Sentry.captureException(wineError, {
+        tags: { surface: "cellar", phase: "find-wine-for-delete" },
+        extra: { restaurantId, wineId },
+      });
+      return Errors.internal("Failed to find wine.");
+    }
 
     if (!wine) {
       return Errors.notFound("Wine");

@@ -80,12 +80,14 @@ function makeSupabase(options: {
       return {
         select: (...args: unknown[]) => {
           track(table, "select", args);
-          return {
+          const chain = {
             eq: (...eqArgs: unknown[]) => {
               track(table, "eq", eqArgs);
-              return { single: async () => wine };
+              return chain;
             },
+            single: async () => wine,
           };
+          return chain;
         },
       };
     }
@@ -226,6 +228,32 @@ describe("POST /api/open-bottles", () => {
     allow(supabase);
 
     await expectGeneric500(await POST(request()));
+  });
+
+  it("returns the same opaque 404 for a foreign wine", async () => {
+    const supabase = makeSupabase({
+      wine: {
+        data: {
+          id: WINE_ID,
+          restaurant_id: "restaurant-b",
+          size_ml: 750,
+        },
+        error: null,
+      },
+    });
+    allow(supabase);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: { code: "not_found", message: "Wine not found." },
+    });
+    expect(supabase.calls).toContainEqual({
+      table: "wines",
+      method: "eq",
+      args: ["restaurant_id", "restaurant-a"],
+    });
   });
 
   it("keeps missing sealed stock distinct from a provider failure", async () => {

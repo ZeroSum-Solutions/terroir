@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireMembership } from "@/lib/api/auth";
+import { requireCapability } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { parseParams } from "@/lib/api/validation";
@@ -12,7 +12,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   return withApiHandler(async () => {
-    const auth = await requireMembership();
+    const auth = await requireCapability("wine:manage");
     if (auth instanceof NextResponse) return auth;
     const { supabase, restaurantId } = auth;
 

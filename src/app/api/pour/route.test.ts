@@ -111,7 +111,7 @@ describe("POST /api/pour", () => {
   });
 
   it("returns 200 + open_bottle on happy path", async () => {
-    const { supabase } = makeSupabase({
+    const { supabase, calls } = makeSupabase({
       recordPour: {
         data: {
           wine_id: WINE_ID,
@@ -131,6 +131,13 @@ describe("POST /api/pour", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.open_bottle.remaining_ml).toBe(602);
+    expect(calls).toContainEqual({
+      fn: "record_pour",
+      args: expect.objectContaining({
+        p_restaurant_id: "r-A",
+        p_wine_id: WINE_ID,
+      }),
+    });
     expect(mockRevalidate).toHaveBeenCalledWith("/availability");
   });
 
@@ -153,6 +160,28 @@ describe("POST /api/pour", () => {
     expect(body.error.code).toBe("no_inventory");
   });
 
+  it("returns 404 when the target wine is missing", async () => {
+    const { supabase } = makeSupabase({
+      recordPour: {
+        data: null,
+        error: { code: "P0001", message: "wine not found" },
+      },
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "staff",
+    });
+
+    const res = await POST(makeRequest({ wine_id: WINE_ID, ml: 148 }));
+
+    expect(res.status).toBe(404);
+    await expect(res.json()).resolves.toEqual({
+      error: { code: "not_found", message: "Wine not found." },
+    });
+  });
+
   it("returns 403 when RPC raises permission error", async () => {
     const { supabase } = makeSupabase({
       recordPour: {
@@ -168,6 +197,28 @@ describe("POST /api/pour", () => {
     });
     const res = await POST(makeRequest({ wine_id: WINE_ID, ml: 148 }));
     expect(res.status).toBe(403);
+  });
+
+  it("returns 500 for an unknown provider failure", async () => {
+    const { supabase } = makeSupabase({
+      recordPour: {
+        data: null,
+        error: { code: "P0001", message: "unexpected provider failure" },
+      },
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "staff",
+    });
+
+    const res = await POST(makeRequest({ wine_id: WINE_ID, ml: 148 }));
+
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual({
+      error: { code: "internal_error", message: "Pour failed." },
+    });
   });
 
   // ARCH-023: auto-86 revalidation

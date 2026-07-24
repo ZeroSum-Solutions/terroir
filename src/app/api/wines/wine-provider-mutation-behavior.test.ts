@@ -9,6 +9,8 @@ const providers = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/auth", () => ({
+  requireCapability: (...args: unknown[]) =>
+    auth.requireMembership(...args),
   requireMembership: (...args: unknown[]) =>
     auth.requireMembership(...args),
 }));

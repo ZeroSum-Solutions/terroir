@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 
 const mockRequireOwner = vi.fn();
 vi.mock("@/lib/api/auth", () => ({
+  requireCapability: (...args: unknown[]) => mockRequireOwner(...args),
   requireOwner: (...args: unknown[]) => mockRequireOwner(...args),
 }));
 
@@ -151,7 +152,7 @@ describe("POST /api/team/invite", () => {
     );
   });
 
-  it("forwards 403 when caller is not owner", async () => {
+  it("forwards 403 when caller cannot manage invitations", async () => {
     const { NextResponse } = await import("next/server");
     mockRequireOwner.mockResolvedValue(
       NextResponse.json({ error: "Owner access required." }, { status: 403 }),

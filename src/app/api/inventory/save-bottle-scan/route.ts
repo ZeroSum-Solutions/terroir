@@ -124,7 +124,10 @@ async function saveBottleOnce(opts: {
   // the dashboards can separate "inventory save failed" (500 to
   // user) from "LWIN sidecar degraded" (silent, background).
   supabase
-    .rpc("match_lwin_batch", { p_wine_ids: [wineId] })
+    .rpc("match_lwin_batch", {
+      p_restaurant_id: restaurantId,
+      p_wine_ids: [wineId],
+    })
     .then(({ error: lwinError }) => {
       if (lwinError) {
         console.error("LWIN match failed:", lwinError);

@@ -26,9 +26,10 @@ import { NextResponse } from "next/server";
  *   7. Claude failures return all-null, partial batch enrichment still works
  */
 
-const mockRequireMembership = vi.fn();
+const mockRequireCapability = vi.fn();
 vi.mock("@/lib/api/auth", () => ({
-  requireMembership: (...args: unknown[]) => mockRequireMembership(...args),
+  requireCapability: (...args: unknown[]) =>
+    mockRequireCapability(...args),
 }));
 
 const mockEnrichWine = vi.fn();
@@ -121,8 +122,8 @@ describe("POST /api/wines/enrich", () => {
     mockEnrichWinesWithClaudeBatch.mockResolvedValue([]);
   });
 
-  it("401s when requireMembership returns a NextResponse", async () => {
-    mockRequireMembership.mockResolvedValue(
+  it("401s when requireCapability returns a NextResponse", async () => {
+    mockRequireCapability.mockResolvedValue(
       NextResponse.json({ error: "Unauthorized." }, { status: 401 }),
     );
     const res = await POST();
@@ -131,14 +132,9 @@ describe("POST /api/wines/enrich", () => {
   });
 
   it("403s when role is staff (BND-039 — enrichment burns Anthropic spend; owner+manager only)", async () => {
-    const { supabase } = buildSupabase({
-      winesResult: { data: [], error: null },
-    });
-    mockRequireMembership.mockResolvedValue({
-      supabase,
-      restaurantId: "r-1",
-      role: "staff",
-    });
+    mockRequireCapability.mockResolvedValue(
+      NextResponse.json({ error: "Forbidden." }, { status: 403 }),
+    );
     const res = await POST();
     expect(res.status).toBe(403);
     expect(mockEnrichWine).not.toHaveBeenCalled();
@@ -149,7 +145,7 @@ describe("POST /api/wines/enrich", () => {
     const { supabase, rpc } = buildSupabase({
       winesResult: { data: null, error: { message: "DB down" } },
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
+    mockRequireCapability.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
     const res = await POST();
     expect(res.status).toBe(500);
     expect(rpc).not.toHaveBeenCalled();
@@ -178,7 +174,7 @@ describe("POST /api/wines/enrich", () => {
       winesResult: { data: wines, error: null },
       rpcEnrichResult: { data: 2, error: null },
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
+    mockRequireCapability.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
     const res = await POST();
     expect(res.status).toBe(200);
@@ -243,7 +239,7 @@ describe("POST /api/wines/enrich", () => {
       winesResult: { data: wines, error: null },
       rpcEnrichResult: { data: 2, error: null },
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
+    mockRequireCapability.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
     const res = await POST();
     expect(res.status).toBe(200);
@@ -308,7 +304,7 @@ describe("POST /api/wines/enrich", () => {
       winesResult: { data: wines, error: null },
       rpcEnrichResult: { data: 2, error: null },
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
+    mockRequireCapability.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
     const res = await POST();
     expect(res.status).toBe(200);
@@ -339,7 +335,7 @@ describe("POST /api/wines/enrich", () => {
     const { supabase, rpcCalls } = buildSupabase({
       winesResult: { data: wines, error: null },
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
+    mockRequireCapability.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
     const res = await POST();
     expect(res.status).toBe(200);
@@ -361,7 +357,7 @@ describe("POST /api/wines/enrich", () => {
       winesResult: { data: wines, error: null },
       rpcEnrichResult: { data: null, error: { message: "constraint" } },
     });
-    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
+    mockRequireCapability.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
     const res = await POST();
     expect(res.status).toBe(500);

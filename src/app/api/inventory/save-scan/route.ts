@@ -271,7 +271,10 @@ async function saveScanOnce(opts: {
   // surfaces. Still fire-and-forget — the main save has succeeded.
   const wineIdStrings = wineIdArray as string[];
   supabase
-    .rpc("match_lwin_batch", { p_wine_ids: wineIdStrings })
+    .rpc("match_lwin_batch", {
+      p_restaurant_id: restaurantId,
+      p_wine_ids: wineIdStrings,
+    })
     .then(({ data, error: lwinError }) => {
       if (lwinError) {
         console.error("LWIN batch match failed:", lwinError);

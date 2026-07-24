@@ -19,7 +19,16 @@ function request(body: unknown): NextRequest {
   }) as unknown as NextRequest;
 }
 
-function makeSupabase() {
+function makeSupabase(options: {
+  inventoryUpdate?: {
+    data: Record<string, unknown> | null;
+    error: { code?: string; message?: string } | null;
+  };
+  wineLookup?: {
+    data: Record<string, unknown> | null;
+    error: { code?: string; message?: string } | null;
+  };
+} = {}) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   const from = vi.fn((table: string) => {
     calls.push({ method: "from", args: [table] });
@@ -40,15 +49,16 @@ function makeSupabase() {
                     select: (columns: string) => {
                       calls.push({ method: "select", args: [columns] });
                       return {
-                        single: async () => ({
-                          data: {
-                            id: INVENTORY_ID,
-                            quantity: payload.quantity,
-                            unit_cost: null,
-                            bin_location: payload.bin_location,
+                        single: async () =>
+                          options.inventoryUpdate ?? {
+                            data: {
+                              id: INVENTORY_ID,
+                              quantity: payload.quantity,
+                              unit_cost: null,
+                              bin_location: payload.bin_location,
+                            },
+                            error: null,
                           },
-                          error: null,
-                        }),
                       };
                     },
                   };
@@ -73,7 +83,8 @@ function makeSupabase() {
                     args: [nextColumn, nextValue],
                   });
                   return {
-                    single: async () => ({ data: null, error: null }),
+                    single: async () =>
+                      options.wineLookup ?? { data: null, error: null },
                   };
                 },
               };
@@ -191,6 +202,50 @@ describe("PATCH /api/cellar/[id]", () => {
       args: ["restaurant_id", "restaurant-a"],
     });
   });
+
+  it("returns 404 when the tenant-scoped inventory item is missing", async () => {
+    const supabase = makeSupabase({
+      inventoryUpdate: {
+        data: null,
+        error: { code: "PGRST116", message: "no rows" },
+      },
+    });
+    allow(supabase);
+
+    const response = await PATCH(request({ quantity: 2 }), {
+      params: Promise.resolve({ id: INVENTORY_ID }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "not_found",
+        message: "Inventory item not found.",
+      },
+    });
+  });
+
+  it("returns 500 when the inventory update provider fails", async () => {
+    const supabase = makeSupabase({
+      inventoryUpdate: {
+        data: null,
+        error: { code: "08006", message: "connection failure" },
+      },
+    });
+    allow(supabase);
+
+    const response = await PATCH(request({ quantity: 2 }), {
+      params: Promise.resolve({ id: INVENTORY_ID }),
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "internal_error",
+        message: "Update failed.",
+      },
+    });
+  });
 });
 
 describe("DELETE /api/cellar/[id]", () => {
@@ -242,6 +297,28 @@ describe("DELETE /api/cellar/[id]", () => {
     expect(supabase.calls).toContainEqual({
       method: "eq",
       args: ["restaurant_id", "restaurant-a"],
+    });
+  });
+
+  it("returns 500 when the tenant-scoped wine lookup provider fails", async () => {
+    const supabase = makeSupabase({
+      wineLookup: {
+        data: null,
+        error: { code: "08006", message: "connection failure" },
+      },
+    });
+    allow(supabase);
+
+    const response = await DELETE({} as NextRequest, {
+      params: Promise.resolve({ id: WINE_ID }),
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "internal_error",
+        message: "Failed to find wine.",
+      },
     });
   });
 });

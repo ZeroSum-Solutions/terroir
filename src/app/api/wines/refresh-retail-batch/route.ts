@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { requireMembership } from "@/lib/api/auth";
-import { Errors } from "@/lib/api/errors";
+import { requireCapability } from "@/lib/api/auth";
 import { withApiHandler } from "@/lib/api/handler";
 import { fetchRetailPrices } from "@/lib/wine-intelligence/wine-searcher";
 
@@ -27,15 +26,9 @@ const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
 
 export async function POST() {
   return withApiHandler(async () => {
-    const auth = await requireMembership();
+    const auth = await requireCapability("wine:manage");
     if (auth instanceof NextResponse) return auth;
-    const { supabase, restaurantId, role } = auth;
-
-    if (role !== "owner" && role !== "manager") {
-      return Errors.forbidden(
-        "Refreshing retail data requires owner or manager role.",
-      );
-    }
+    const { supabase, restaurantId } = auth;
 
     // Audit-finding M1: surface configuration status so the
     // RefreshRetailButton can stop reporting "0 wines refreshed" silently

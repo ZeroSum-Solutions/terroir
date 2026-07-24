@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
+import { AuthSessionMissingError } from "@supabase/supabase-js";
 
 // Mock the supabase server client. The membership query now uses
 // .select().eq().order().order() → thenable, so the builder returns a
@@ -42,9 +43,13 @@ vi.mock("next/headers", () => ({
 }));
 
 // Import AFTER mocks
-const { requireAuth, requireMembership, requireOwner, requireRole } = await import(
-  "./auth"
-);
+const {
+  requireAuth,
+  requireCapability,
+  requireMembership,
+  requireOwner,
+  requireRole,
+} = await import("./auth");
 const { signActiveRestaurantCookie } = await import("./active-restaurant");
 
 function withMemberships(memberships: Array<{ restaurant_id: string; role: string }>) {
@@ -60,6 +65,18 @@ function withMemberships(memberships: Array<{ restaurant_id: string; role: strin
   });
 }
 
+function withMembershipError(error: unknown) {
+  mockOrderFinal.mockImplementation(() => ({
+    order: () => ({
+      order: () =>
+        Promise.resolve({
+          data: null,
+          error,
+        } satisfies MembershipsPayload),
+    }),
+  }));
+}
+
 describe("requireAuth", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -71,6 +88,28 @@ describe("requireAuth", () => {
     const result = await requireAuth();
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(401);
+  });
+
+  it("returns 401 for Supabase's ordinary missing-session error", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: null },
+      error: new AuthSessionMissingError(),
+    });
+
+    const result = await requireAuth();
+
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(401);
+  });
+
+  it("throws authentication provider failures instead of reporting a false 401", async () => {
+    const providerError = { message: "authentication provider unavailable" };
+    mockGetUser.mockResolvedValue({
+      data: { user: null },
+      error: providerError,
+    });
+
+    await expect(requireAuth()).rejects.toBe(providerError);
   });
 
   it("returns auth result with user when authenticated", async () => {
@@ -95,6 +134,14 @@ describe("requireMembership", () => {
     const result = await requireMembership();
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(403);
+  });
+
+  it("throws membership provider failures instead of reporting a false 403", async () => {
+    const providerError = { message: "membership provider unavailable" };
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    withMembershipError(providerError);
+
+    await expect(requireMembership()).rejects.toBe(providerError);
   });
 
   it("returns the sole membership when the user belongs to one restaurant", async () => {
@@ -217,5 +264,44 @@ describe("requireRole", () => {
     const result = await requireRole(["owner", "manager"]);
     expect(result).not.toBeInstanceOf(NextResponse);
     expect((result as { role: string }).role).toBe("owner");
+  });
+});
+
+describe("requireCapability", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCookieGet.mockReturnValue(undefined);
+  });
+
+  it("returns 401 before capability evaluation when there is no user", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null } });
+
+    const result = await requireCapability("wine:manage");
+
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(401);
+  });
+
+  it("returns 403 when the active role lacks the capability", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    withMemberships([{ restaurant_id: "r1", role: "staff" }]);
+
+    const result = await requireCapability("wine:manage");
+
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(403);
+  });
+
+  it("returns the active membership when the role has the capability", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    withMemberships([{ restaurant_id: "r1", role: "manager" }]);
+
+    const result = await requireCapability("wine:manage");
+
+    expect(result).not.toBeInstanceOf(NextResponse);
+    expect(result).toMatchObject({
+      restaurantId: "r1",
+      role: "manager",
+    });
   });
 });

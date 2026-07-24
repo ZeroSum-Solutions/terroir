@@ -26,7 +26,7 @@ export async function GET() {
     // BND-013: the `token` column used to be returned verbatim, which meant any
     // team member with read access to this endpoint could see every pending
     // invite token. Token is intentionally dropped from the select list here;
-    // the owner-only `/api/team/invite` endpoint is the only way to obtain a
+    // `/api/team/invite` is the only way to obtain a
     // token (it's also the endpoint used to re-send invites, since each POST
     // creates a fresh row with a fresh token).
     const { data: rawInvitations, error: invitationsError } = await supabase

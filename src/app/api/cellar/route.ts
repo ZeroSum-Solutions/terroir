@@ -144,7 +144,7 @@ async function runBestEffortLwinMatch(input: {
   try {
     const { data: lwinMatches, error: lwinError } = await supabase.rpc(
       "match_lwin_batch",
-      { p_wine_ids: [wineId] },
+      { p_restaurant_id: restaurantId, p_wine_ids: [wineId] },
     );
     if (lwinError) {
       captureBestEffortError(lwinError, "match-lwin", {

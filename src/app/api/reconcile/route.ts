@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   ReconcileExceedsSizeError,
   ReconcileForbiddenError,
+  ReconcileNotFoundError,
   ReconcileRpcError,
   reconcileOpenBottles,
 } from "@/domains/cellar/reconcile-service";
@@ -43,6 +44,7 @@ const BodySchema = z.object({
  * 400: invalid body / empty entries / > 100 entries / remaining_ml > size_ml
  * 401: unauthenticated (from requireRole)
  * 403: role mismatch (staff rejected at endpoint; manager/owner required)
+ * 404: a target wine or active bottle does not exist
  * 500: unhandled RPC failure
  */
 export async function POST(request: NextRequest) {
@@ -75,6 +77,9 @@ async function postReconcile(request: NextRequest) {
       // value. Surface as 400 so the UI can show "that's more than a
       // 750ml bottle can hold."
       return Errors.badRequest("new_remaining_ml exceeds bottle size.", undefined, "EXCEEDS_SIZE");
+    }
+    if (error instanceof ReconcileNotFoundError) {
+      return Errors.notFound("Open bottle");
     }
     if (error instanceof ReconcileRpcError) {
       return Errors.internal("Reconcile failed.");

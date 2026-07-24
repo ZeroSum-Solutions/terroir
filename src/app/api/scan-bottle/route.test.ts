@@ -27,15 +27,17 @@ type Wine = {
 
 function makeSupabase(result: { data: Wine | null; error: unknown }) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
+  const query = {
+    eq: (...eqArgs: unknown[]) => {
+      calls.push({ method: "eq", args: eqArgs });
+      return query;
+    },
+    maybeSingle: async () => result,
+  };
   const from = vi.fn(() => ({
     select: (...args: unknown[]) => {
       calls.push({ method: "select", args });
-      return {
-        eq: (...eqArgs: unknown[]) => {
-          calls.push({ method: "eq", args: eqArgs });
-          return { maybeSingle: async () => result };
-        },
-      };
+      return query;
     },
   }));
   return { from, calls };
@@ -77,7 +79,7 @@ describe("POST /api/scan-bottle", () => {
     expect(supabase.from).not.toHaveBeenCalled();
   });
 
-  it("returns wine_not_found for a missing QR wine", async () => {
+  it("returns an opaque not-found response for a missing QR wine", async () => {
     const supabase = makeSupabase({ data: null, error: null });
     allow(supabase);
 
@@ -86,8 +88,8 @@ describe("POST /api/scan-bottle", () => {
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({
       error: {
-        code: "wine_not_found",
-        message: "No wine found for that QR code. It may have been deleted.",
+        code: "not_found",
+        message: "Wine not found.",
       },
     });
   });
@@ -112,7 +114,7 @@ describe("POST /api/scan-bottle", () => {
     expect(text).not.toContain("super-secret");
   });
 
-  it("preserves the known-foreign QR response", async () => {
+  it("returns the same opaque response for a known foreign QR wine", async () => {
     const supabase = makeSupabase({
       data: {
         id: WINE_ID,
@@ -130,12 +132,16 @@ describe("POST /api/scan-bottle", () => {
 
     const response = await POST(qrRequest(WINE_ID));
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(404);
     expect(await response.json()).toEqual({
       error: {
-        code: "cross_tenant_qr",
-        message: "This QR code belongs to a different restaurant.",
+        code: "not_found",
+        message: "Wine not found.",
       },
+    });
+    expect(supabase.calls).toContainEqual({
+      method: "eq",
+      args: ["restaurant_id", "restaurant-a"],
     });
   });
 

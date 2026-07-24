@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { isAuthSessionMissingError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { resolveActiveMembership } from "@/lib/api/resolve-active-membership";
 
@@ -17,8 +18,10 @@ export const getAuthContext = cache(async () => {
   const supabase = await createClient();
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
 
+  if (error && !isAuthSessionMissingError(error)) throw error;
   if (!user) return null;
 
   const membership = await resolveActiveMembership(supabase, user.id);

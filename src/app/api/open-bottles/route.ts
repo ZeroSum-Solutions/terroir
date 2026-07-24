@@ -26,8 +26,7 @@ const BodySchema = z.object({
  * 201: { open_bottle: { id, wine_id, remaining_ml, opened_at } }
  * 400: invalid body
  * 401: unauthenticated
- * 403: wine not in caller's restaurant
- * 404: wine not found
+ * 404: wine missing or outside the active restaurant (opaque)
  * 409: no_sealed_stock — no sealed inventory to open
  * 500: unhandled failure
  */
@@ -51,6 +50,7 @@ async function postOpenBottle(request: NextRequest) {
     .from("wines")
     .select("id, restaurant_id, size_ml")
     .eq("id", wine_id)
+    .eq("restaurant_id", restaurantId)
     .single();
 
   if (wineErr && (wineErr as { code?: string }).code !== "PGRST116") {
@@ -61,7 +61,7 @@ async function postOpenBottle(request: NextRequest) {
   }
 
   if (wine.restaurant_id !== restaurantId) {
-    return Errors.forbidden("Forbidden.");
+    return Errors.notFound("Wine");
   }
 
   const sizeMl = wine.size_ml ?? 750;

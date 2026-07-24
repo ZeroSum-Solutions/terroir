@@ -409,7 +409,13 @@ describe("cellar collection behavior", () => {
       }),
     );
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "not_found",
+        message: "Inventory item not found.",
+      },
+    });
     expect(supabase.rpc).toHaveBeenCalledTimes(1);
   });
 

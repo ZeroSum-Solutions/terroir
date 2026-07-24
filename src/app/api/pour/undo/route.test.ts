@@ -86,7 +86,7 @@ describe("POST /api/pour/undo", () => {
     });
     expect(calls).toContainEqual({
       fn: "undo_last_pour",
-      args: { p_wine_id: WINE_ID },
+      args: { p_restaurant_id: "r-A", p_wine_id: WINE_ID },
     });
     expect(mockRevalidate).toHaveBeenCalledWith("/availability");
   });
@@ -110,6 +110,28 @@ describe("POST /api/pour/undo", () => {
     expect(res.status).toBe(404);
   });
 
+  it("returns 404 when the target wine is missing", async () => {
+    const { supabase } = makeSupabase({
+      undo: {
+        data: null,
+        error: { code: "P0001", message: "wine not found" },
+      },
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "staff",
+    });
+
+    const res = await POST(makeRequest({ wine_id: WINE_ID }));
+
+    expect(res.status).toBe(404);
+    await expect(res.json()).resolves.toEqual({
+      error: { code: "not_found", message: "Pour to undo not found." },
+    });
+  });
+
   it("returns 403 when the RPC raises permission error", async () => {
     const { supabase } = makeSupabase({
       undo: {
@@ -127,5 +149,27 @@ describe("POST /api/pour/undo", () => {
     const res = await POST(makeRequest({ wine_id: WINE_ID }));
 
     expect(res.status).toBe(403);
+  });
+
+  it("returns 500 for an unknown provider failure", async () => {
+    const { supabase } = makeSupabase({
+      undo: {
+        data: null,
+        error: { code: "P0001", message: "unexpected provider failure" },
+      },
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "staff",
+    });
+
+    const res = await POST(makeRequest({ wine_id: WINE_ID }));
+
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual({
+      error: { code: "internal_error", message: "Undo failed." },
+    });
   });
 });

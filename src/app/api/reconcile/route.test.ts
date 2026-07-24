@@ -143,6 +143,10 @@ describe("POST /api/reconcile", () => {
     expect(
       calls.filter((c) => c.fn === "reconcile_open_bottles_batch"),
     ).toHaveLength(1);
+    expect(calls).toContainEqual({
+      fn: "reconcile_open_bottles_batch",
+      args: expect.objectContaining({ p_restaurant_id: "r-A" }),
+    });
     expect(mockRevalidate).toHaveBeenCalledWith("/availability");
   });
 
@@ -193,6 +197,61 @@ describe("POST /api/reconcile", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error.code).toBe("EXCEEDS_SIZE");
+  });
+
+  it.each(["wine not found", "no open bottle for this wine"])(
+    "returns 404 when the RPC reports a missing reconcile target: %s",
+    async (message) => {
+      const { supabase } = makeSupabase({
+        reconcile: {
+          data: null,
+          error: { code: "P0001", message },
+        },
+      });
+      mockRequireRole.mockResolvedValue({
+        supabase,
+        restaurantId: "r-A",
+        user: { id: "u-1" },
+        role: "manager",
+      });
+
+      const res = await POST(
+        makeRequest({
+          entries: [{ wine_id: UUID_A, new_remaining_ml: 375 }],
+        }),
+      );
+
+      expect(res.status).toBe(404);
+      await expect(res.json()).resolves.toEqual({
+        error: { code: "not_found", message: "Open bottle not found." },
+      });
+    },
+  );
+
+  it("returns 500 for an unknown provider failure", async () => {
+    const { supabase } = makeSupabase({
+      reconcile: {
+        data: null,
+        error: { code: "P0001", message: "unexpected provider failure" },
+      },
+    });
+    mockRequireRole.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "manager",
+    });
+
+    const res = await POST(
+      makeRequest({
+        entries: [{ wine_id: UUID_A, new_remaining_ml: 375 }],
+      }),
+    );
+
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual({
+      error: { code: "internal_error", message: "Reconcile failed." },
+    });
   });
 
   // ARCH-023: auto-86 revalidation across a batch

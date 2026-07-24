@@ -34,18 +34,18 @@ function makeSupabase(opts: {
     }
     return Promise.resolve({ data: null, error: null });
   });
-  const from = vi.fn(() => ({
-    select: () => ({
-      eq: () => ({
-        single: () =>
-          Promise.resolve({
-            data: opts.bottle,
-            error: opts.fetchError ?? null,
-          }),
+  const bottleQuery = {
+    eq: vi.fn(() => bottleQuery),
+    single: () =>
+      Promise.resolve({
+        data: opts.bottle,
+        error: opts.fetchError ?? null,
       }),
-    }),
+  };
+  const from = vi.fn(() => ({
+    select: () => bottleQuery,
   }));
-  return { supabase: { rpc, from }, rpc };
+  return { supabase: { rpc, from }, rpc, bottleQuery };
 }
 
 const BOTTLE_ID = "b1b2c3d4-e5f6-4789-8abc-def012345678";
@@ -93,6 +93,7 @@ describe("POST /api/open-bottles/[id]/close", () => {
       closed: { id: BOTTLE_ID, wine_id: WINE_ID },
     });
     expect(rpc).toHaveBeenCalledWith("record_pour", {
+      p_restaurant_id: "r-A",
       p_wine_id: WINE_ID,
       p_ml: 125,
       p_kind: "spill",
@@ -160,8 +161,8 @@ describe("POST /api/open-bottles/[id]/close", () => {
     expect(text).not.toContain("super-secret");
   });
 
-  it("returns 403 when the bottle belongs to another restaurant", async () => {
-    const { supabase } = makeSupabase({
+  it("returns the same opaque 404 when the bottle belongs to another restaurant", async () => {
+    const { supabase, bottleQuery } = makeSupabase({
       bottle: {
         id: BOTTLE_ID,
         wine_id: WINE_ID,
@@ -179,7 +180,8 @@ describe("POST /api/open-bottles/[id]/close", () => {
 
     const res = await POST({} as NextRequest, makeContext());
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
+    expect(bottleQuery.eq).toHaveBeenCalledWith("restaurant_id", "r-A");
   });
 
   it("returns 409 when the bottle is already closed", async () => {

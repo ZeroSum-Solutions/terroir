@@ -11,8 +11,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { readActiveRestaurantFromCookie } from "@/lib/api/active-restaurant";
+import type { MembershipRole } from "@/lib/auth/capabilities";
 
-export type MembershipRole = "owner" | "manager" | "staff";
+export type { MembershipRole } from "@/lib/auth/capabilities";
 
 export type ResolvedMembership = {
   restaurantId: string;
@@ -44,7 +45,8 @@ export async function resolveActiveMembership(
     .order("created_at", { ascending: false })
     .order("id", { ascending: false });
 
-  if (error || !memberships || memberships.length === 0) return null;
+  if (error) throw error;
+  if (!memberships || memberships.length === 0) return null;
 
   const memberIds = memberships.map((m) => m.restaurant_id);
   const activeId = await readActiveRestaurantFromCookie(memberIds);

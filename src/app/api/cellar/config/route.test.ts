@@ -1,16 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
+const mockRequireCapability = vi.fn();
 const mockRequireMembership = vi.fn();
 const mockCaptureException = vi.fn();
 vi.mock("@/lib/api/auth", () => ({
+  requireCapability: (...args: unknown[]) => mockRequireCapability(...args),
   requireMembership: (...args: unknown[]) => mockRequireMembership(...args),
 }));
 vi.mock("@sentry/nextjs", () => ({
   captureException: (...args: unknown[]) => mockCaptureException(...args),
 }));
 
-const { GET } = await import("./route");
+const { GET, PATCH, POST } = await import("./route");
 
 function makeSupabase(result: { data: unknown; error: unknown }) {
   const maybeSingle = vi.fn(async () => result);
@@ -96,4 +98,42 @@ describe("GET /api/cellar/config", () => {
       extra: { restaurantId: "restaurant-a" },
     });
   });
+});
+
+describe.each([
+  {
+    method: "POST",
+    call: () =>
+      POST(
+        new NextRequest("http://localhost/api/cellar/config", {
+          method: "POST",
+          body: "{malformed",
+        }),
+      ),
+  },
+  {
+    method: "PATCH",
+    call: () =>
+      PATCH(
+        new NextRequest("http://localhost/api/cellar/config", {
+          method: "PATCH",
+          body: "{malformed",
+        }),
+      ),
+  },
+])("$method /api/cellar/config", ({ call }) => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it.each([401, 403])(
+    "returns capability denial before reading the body (%s)",
+    async (status) => {
+      const denial = NextResponse.json({ error: "denied" }, { status });
+      mockRequireCapability.mockResolvedValue(denial);
+
+      const response = await call();
+
+      expect(response).toBe(denial);
+      expect(mockRequireCapability).toHaveBeenCalledWith("cellar:manage");
+    },
+  );
 });

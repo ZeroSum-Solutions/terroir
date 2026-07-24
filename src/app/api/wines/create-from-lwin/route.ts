@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { requireMembership } from "@/lib/api/auth";
+import { requireCapability } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { parseJson } from "@/lib/api/validation";
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   return withApiHandler(async () => {
-    const auth = await requireMembership();
+    const auth = await requireCapability("wine:manage");
     if (auth instanceof NextResponse) return auth;
     const { supabase, restaurantId } = auth;
 
