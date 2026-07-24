@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextResponse, type NextRequest } from "next/server";
+import { createIdempotencyRequestHash } from "@/lib/api/idempotency";
 
 const mockRequireRole = vi.fn();
 vi.mock("@/lib/api/auth", () => ({
@@ -10,11 +11,29 @@ const { PATCH, DELETE } = await import("./route");
 
 const INVENTORY_ID = "a1b2c3d4-e5f6-4789-8abc-def012345678";
 const WINE_ID = "b1b2c3d4-e5f6-4789-8abc-def012345678";
+const KEY = "cellar-item-command-key-0001";
+const RESTAURANT_ID = "restaurant-a";
 
-function request(body: unknown): NextRequest {
+type ClaimRow = {
+  outcome:
+    | "claimed"
+    | "replay"
+    | "in_progress"
+    | "mismatch"
+    | "expired"
+    | "outcome_unknown";
+  response_status: number | null;
+  response_body: unknown;
+  response_headers: Record<string, string> | null;
+};
+
+function request(body: unknown, key?: string): NextRequest {
   return new Request(`http://localhost/api/cellar/${INVENTORY_ID}`, {
     method: "PATCH",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(key ? { "Idempotency-Key": key } : {}),
+    },
     body: typeof body === "string" ? body : JSON.stringify(body),
   }) as unknown as NextRequest;
 }
@@ -28,8 +47,28 @@ function makeSupabase(options: {
     data: Record<string, unknown> | null;
     error: { code?: string; message?: string } | null;
   };
+  claimRow?: ClaimRow;
 } = {}) {
+  const claimRow = options.claimRow ?? {
+    outcome: "claimed",
+    response_status: null,
+    response_body: null,
+    response_headers: null,
+  };
   const calls: Array<{ method: string; args: unknown[] }> = [];
+  const rpc = vi.fn(async (operation: string) => {
+    if (operation === "claim_api_idempotency") {
+      return { data: [claimRow], error: null };
+    }
+    if (
+      operation === "complete_api_idempotency" ||
+      operation === "fail_api_idempotency" ||
+      operation === "release_api_idempotency"
+    ) {
+      return { data: true, error: null };
+    }
+    throw new Error(`Unexpected RPC ${operation}`);
+  });
   const from = vi.fn((table: string) => {
     calls.push({ method: "from", args: [table] });
     if (table === "inventory_items") {
@@ -54,7 +93,7 @@ function makeSupabase(options: {
                             data: {
                               id: INVENTORY_ID,
                               quantity: payload.quantity,
-                              unit_cost: null,
+                              unit_cost: payload.unit_cost ?? null,
                               bin_location: payload.bin_location,
                             },
                             error: null,
@@ -95,13 +134,13 @@ function makeSupabase(options: {
     }
     throw new Error(`Unexpected table: ${table}`);
   });
-  return { from, calls };
+  return { from, calls, rpc };
 }
 
 function allow(supabase: ReturnType<typeof makeSupabase>) {
   mockRequireRole.mockResolvedValue({
     supabase,
-    restaurantId: "restaurant-a",
+    restaurantId: RESTAURANT_ID,
     user: { id: "user-a" },
     role: "owner",
   });
@@ -134,6 +173,7 @@ describe("PATCH /api/cellar/[id]", () => {
     expect(response.status).toBe(401);
     expect(text).not.toHaveBeenCalled();
     expect(supabase.from).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid UUID before business database access", async () => {
@@ -146,6 +186,7 @@ describe("PATCH /api/cellar/[id]", () => {
 
     await expectValidationError(response, ["id"]);
     expect(supabase.from).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
   it("rejects malformed JSON before business database access", async () => {
@@ -161,6 +202,7 @@ describe("PATCH /api/cellar/[id]", () => {
       error: { code: "invalid_json", message: "Invalid JSON." },
     });
     expect(supabase.from).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
   it("rejects invalid known fields before business database access", async () => {
@@ -173,6 +215,169 @@ describe("PATCH /api/cellar/[id]", () => {
 
     await expectValidationError(response, ["quantity"]);
     expect(supabase.from).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("rejects an empty normalized update before an idempotency claim", async () => {
+    const supabase = makeSupabase();
+    allow(supabase);
+
+    const response = await PATCH(
+      request({ ignored_client_field: true }, KEY),
+      { params: Promise.resolve({ id: INVENTORY_ID }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "bad_request",
+        message: "No valid fields to update.",
+      },
+    });
+    expect(supabase.from).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("preserves the exact keyless response without idempotency RPCs", async () => {
+    const supabase = makeSupabase();
+    allow(supabase);
+
+    const response = await PATCH(
+      request({ quantity: 4, bin_location: "  A-2  " }),
+      { params: Promise.resolve({ id: INVENTORY_ID }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Idempotency-Replayed")).toBeNull();
+    expect(await response.json()).toEqual({
+      id: INVENTORY_ID,
+      quantity: 4,
+      unit_cost: null,
+      bin_location: "A-2",
+    });
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed key before a claim or inventory update", async () => {
+    const supabase = makeSupabase();
+    allow(supabase);
+
+    const response = await PATCH(
+      request({ quantity: 4 }, "bad key!"),
+      { params: Promise.resolve({ id: INVENTORY_ID }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "invalid_idempotency_key",
+        message: "Invalid Idempotency-Key.",
+      },
+    });
+    expect(supabase.from).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("claims the canonical normalized command, updates once, and completes", async () => {
+    const supabase = makeSupabase();
+    allow(supabase);
+
+    const response = await PATCH(
+      request(
+        {
+          quantity: 4,
+          unit_cost: 18.5,
+          bin_location: "  A-2  ",
+          ignored_client_field: true,
+        },
+        KEY,
+      ),
+      { params: Promise.resolve({ id: INVENTORY_ID }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Idempotency-Replayed")).toBe("false");
+    expect(supabase.rpc).toHaveBeenNthCalledWith(
+      1,
+      "claim_api_idempotency",
+      {
+        p_restaurant_id: RESTAURANT_ID,
+        p_operation_id: "api:PATCH:/api/cellar/{param}",
+        p_idempotency_key: KEY,
+        p_request_hash: createIdempotencyRequestHash({
+          id: INVENTORY_ID,
+          quantity: 4,
+          unit_cost: 18.5,
+          bin_location: "A-2",
+        }),
+      },
+    );
+    expect(
+      supabase.calls.filter((call) => call.method === "update"),
+    ).toEqual([
+      {
+        method: "update",
+        args: [
+          {
+            quantity: 4,
+            unit_cost: 18.5,
+            bin_location: "A-2",
+          },
+        ],
+      },
+    ]);
+    expect(supabase.rpc).toHaveBeenNthCalledWith(
+      2,
+      "complete_api_idempotency",
+      expect.objectContaining({
+        p_restaurant_id: RESTAURANT_ID,
+        p_operation_id: "api:PATCH:/api/cellar/{param}",
+        p_idempotency_key: KEY,
+        p_response_status: 200,
+        p_response_body: {
+          id: INVENTORY_ID,
+          quantity: 4,
+          unit_cost: 18.5,
+          bin_location: "A-2",
+        },
+      }),
+    );
+  });
+
+  it("replays a completed response without another inventory update", async () => {
+    const replayBody = {
+      id: INVENTORY_ID,
+      quantity: 4,
+      unit_cost: 18.5,
+      bin_location: "A-2",
+    };
+    const supabase = makeSupabase({
+      claimRow: {
+        outcome: "replay",
+        response_status: 200,
+        response_body: replayBody,
+        response_headers: {},
+      },
+    });
+    allow(supabase);
+
+    const response = await PATCH(
+      request(
+        {
+          quantity: 4,
+          unit_cost: 18.5,
+          bin_location: "A-2",
+        },
+        KEY,
+      ),
+      { params: Promise.resolve({ id: INVENTORY_ID }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await response.json()).toEqual(replayBody);
+    expect(supabase.from).not.toHaveBeenCalled();
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
   });
 
   it("preserves stripping of unknown keys and tenant-scoped updates", async () => {
@@ -199,7 +404,7 @@ describe("PATCH /api/cellar/[id]", () => {
     });
     expect(supabase.calls).toContainEqual({
       method: "eq",
-      args: ["restaurant_id", "restaurant-a"],
+      args: ["restaurant_id", RESTAURANT_ID],
     });
   });
 
@@ -223,6 +428,45 @@ describe("PATCH /api/cellar/[id]", () => {
         message: "Inventory item not found.",
       },
     });
+    expect(response.headers.get("Idempotency-Replayed")).toBeNull();
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("completes a deterministic tenant-scoped 404 for keyed replay", async () => {
+    const supabase = makeSupabase({
+      inventoryUpdate: {
+        data: null,
+        error: { code: "PGRST116", message: "no rows" },
+      },
+    });
+    allow(supabase);
+
+    const response = await PATCH(request({ quantity: 2 }, KEY), {
+      params: Promise.resolve({ id: INVENTORY_ID }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("Idempotency-Replayed")).toBe("false");
+    expect(await response.json()).toEqual({
+      error: {
+        code: "not_found",
+        message: "Inventory item not found.",
+      },
+    });
+    expect(supabase.rpc).toHaveBeenNthCalledWith(
+      2,
+      "complete_api_idempotency",
+      expect.objectContaining({
+        p_operation_id: "api:PATCH:/api/cellar/{param}",
+        p_response_status: 404,
+        p_response_body: {
+          error: {
+            code: "not_found",
+            message: "Inventory item not found.",
+          },
+        },
+      }),
+    );
   });
 
   it("returns 500 when the inventory update provider fails", async () => {
@@ -245,6 +489,39 @@ describe("PATCH /api/cellar/[id]", () => {
         message: "Update failed.",
       },
     });
+    expect(response.headers.get("Idempotency-Replayed")).toBeNull();
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when a keyed inventory update provider call fails", async () => {
+    const supabase = makeSupabase({
+      inventoryUpdate: {
+        data: null,
+        error: { code: "08006", message: "connection failure" },
+      },
+    });
+    allow(supabase);
+
+    const response = await PATCH(request({ quantity: 2 }, KEY), {
+      params: Promise.resolve({ id: INVENTORY_ID }),
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "internal_error",
+        message: "Internal server error.",
+      },
+    });
+    expect(supabase.rpc).toHaveBeenNthCalledWith(
+      2,
+      "fail_api_idempotency",
+      expect.objectContaining({
+        p_restaurant_id: RESTAURANT_ID,
+        p_operation_id: "api:PATCH:/api/cellar/{param}",
+        p_idempotency_key: KEY,
+      }),
+    );
   });
 });
 

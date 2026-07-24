@@ -32,6 +32,19 @@ export type ApiIdempotencyImplementation = {
  * hash call, binary mode, and caller evidence.
  */
 export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
+  "api:PATCH:/api/cellar/{param}": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "no-first-party-caller",
+      sources: [],
+    },
+  },
   "api:PATCH:/api/cellar/{param}/section": {
     boundary: { kind: "generic-wrapper", count: 1 },
     identity: {

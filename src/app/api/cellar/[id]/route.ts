@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/api/auth";
 import { z } from "zod";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseJson, parseParams } from "@/lib/api/validation";
 
 export const runtime = "nodejs";
@@ -17,6 +18,15 @@ const EditInventorySchema = z.object({
   unit_cost: z.number().min(0).optional(),
   bin_location: z.string().trim().max(50).nullable().optional(),
 });
+
+type EditInventoryMutationBody =
+  | {
+      id: string;
+      quantity: number;
+      unit_cost: number | null;
+      bin_location: string | null;
+    }
+  | { error: { code: string; message: string } };
 
 /**
  * PATCH /api/cellar/[id] — edit an inventory item.
@@ -44,31 +54,61 @@ export async function PATCH(
       return Errors.badRequest("No valid fields to update.");
     }
 
-    // Defense-in-depth: scope by restaurant_id so a cross-tenant
-    // inventory item id returns 404 instead of mutating another
-    // restaurant's inventory.
-    const { data, error } = await supabase
-      .from("inventory_items")
-      .update(updates)
-      .eq("id", id)
-      .eq("restaurant_id", restaurantId)
-      .select("id, quantity, unit_cost, bin_location")
-      .single();
+    const hasIdempotencyKey =
+      request.headers.get("Idempotency-Key") !== null;
 
-    if (error && error.code !== "PGRST116") {
-      console.error("inventory_items update failed:", error);
-      Sentry.captureException(error, {
-        tags: { surface: "cellar", phase: "edit-inventory" },
-        extra: { restaurantId, inventory_item_id: id },
-      });
-      return Errors.internal("Update failed.");
-    }
+    return idempotentMutationResponse<EditInventoryMutationBody>({
+      request,
+      supabase,
+      restaurantId,
+      operationId: "api:PATCH:/api/cellar/{param}",
+      payload: { id, ...updates },
+      releaseOnError: false,
+      handler: async () => {
+        // Defense-in-depth: scope by restaurant_id so a cross-tenant
+        // inventory item id returns 404 instead of mutating another
+        // restaurant's inventory.
+        const { data, error } = await supabase
+          .from("inventory_items")
+          .update(updates)
+          .eq("id", id)
+          .eq("restaurant_id", restaurantId)
+          .select("id, quantity, unit_cost, bin_location")
+          .single();
 
-    if (!data) {
-      return Errors.notFound("Inventory item");
-    }
+        if (error && error.code !== "PGRST116") {
+          console.error("inventory_items update failed:", error);
+          Sentry.captureException(error, {
+            tags: { surface: "cellar", phase: "edit-inventory" },
+            extra: { restaurantId, inventory_item_id: id },
+          });
+          if (hasIdempotencyKey) throw error;
+          return {
+            status: 500,
+            body: {
+              error: {
+                code: "internal_error",
+                message: "Update failed.",
+              },
+            },
+          };
+        }
 
-    return NextResponse.json(data);
+        if (!data) {
+          return {
+            status: 404,
+            body: {
+              error: {
+                code: "not_found",
+                message: "Inventory item not found.",
+              },
+            },
+          };
+        }
+
+        return { status: 200, body: data };
+      },
+    });
   });
 }
 
