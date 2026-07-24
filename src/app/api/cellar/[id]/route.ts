@@ -3,10 +3,14 @@ import * as Sentry from "@sentry/nextjs";
 import { requireRole } from "@/lib/api/auth";
 import { z } from "zod";
 import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseJson, parseParams } from "@/lib/api/validation";
 
 export const runtime = "nodejs";
 
 type Params = Promise<{ id: string }>;
+
+const ParamsSchema = z.strictObject({ id: z.string().uuid() });
 
 const EditInventorySchema = z.object({
   quantity: z.number().int().min(0).optional(),
@@ -24,53 +28,48 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Params },
 ) {
-  const { id } = await params;
-  const auth = await requireRole(["owner", "manager"]);
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireRole(["owner", "manager"]);
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  let raw: unknown;
-  try {
-    raw = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
+    const parsedParams = await parseParams(params, ParamsSchema);
+    if (!parsedParams.ok) return parsedParams.response;
+    const { id } = parsedParams.data;
 
-  const parsed = EditInventorySchema.safeParse(raw);
-  if (!parsed.success) {
-    return Errors.validation(parsed.error.issues, "Invalid input.");
-  }
+    const parsed = await parseJson(request, EditInventorySchema);
+    if (!parsed.ok) return parsed.response;
+    const updates = parsed.data;
+    if (Object.keys(updates).length === 0) {
+      return Errors.badRequest("No valid fields to update.");
+    }
 
-  const updates = parsed.data;
-  if (Object.keys(updates).length === 0) {
-    return Errors.badRequest("No valid fields to update.");
-  }
+    // Defense-in-depth: scope by restaurant_id so a cross-tenant
+    // inventory item id returns 404 instead of mutating another
+    // restaurant's inventory.
+    const { data, error } = await supabase
+      .from("inventory_items")
+      .update(updates)
+      .eq("id", id)
+      .eq("restaurant_id", restaurantId)
+      .select("id, quantity, unit_cost, bin_location")
+      .single();
 
-  // Defense-in-depth: scope by restaurant_id so a cross-tenant
-  // inventory item id returns 404 instead of mutating another
-  // restaurant's inventory.
-  const { data, error } = await supabase
-    .from("inventory_items")
-    .update(updates)
-    .eq("id", id)
-    .eq("restaurant_id", restaurantId)
-    .select("id, quantity, unit_cost, bin_location")
-    .single();
+    if (error) {
+      console.error("inventory_items update failed:", error);
+      Sentry.captureException(error, {
+        tags: { surface: "cellar", phase: "edit-inventory" },
+        extra: { restaurantId, inventory_item_id: id },
+      });
+      return Errors.internal("Update failed.");
+    }
 
-  if (error) {
-    console.error("inventory_items update failed:", error);
-    Sentry.captureException(error, {
-      tags: { surface: "cellar", phase: "edit-inventory" },
-      extra: { restaurantId, inventory_item_id: id },
-    });
-    return Errors.internal("Update failed.");
-  }
+    if (!data) {
+      return Errors.notFound("Inventory item");
+    }
 
-  if (!data) {
-    return Errors.notFound("Inventory item");
-  }
-
-  return NextResponse.json(data);
+    return NextResponse.json(data);
+  });
 }
 
 /**
@@ -85,108 +84,113 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Params },
 ) {
-  const { id: wineId } = await params;
-  const auth = await requireRole(["owner"]);
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireRole(["owner"]);
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  // Verify the wine belongs to this restaurant
-  const { data: wine } = await supabase
-    .from("wines")
-    .select("id, name, producer, vintage")
-    .eq("id", wineId)
-    .eq("restaurant_id", restaurantId)
-    .single();
+    const parsedParams = await parseParams(params, ParamsSchema);
+    if (!parsedParams.ok) return parsedParams.response;
+    const { id: wineId } = parsedParams.data;
 
-  if (!wine) {
-    return Errors.notFound("Wine");
-  }
+    // Verify the wine belongs to this restaurant
+    const { data: wine } = await supabase
+      .from("wines")
+      .select("id, name, producer, vintage")
+      .eq("id", wineId)
+      .eq("restaurant_id", restaurantId)
+      .single();
 
-  // Check referential integrity — pour_events FK is ON DELETE RESTRICT
-  const { count: pourCount, error: pourErr } = await supabase
-    .from("pour_events")
-    .select("*", { count: "exact", head: true })
-    .eq("wine_id", wineId);
+    if (!wine) {
+      return Errors.notFound("Wine");
+    }
 
-  if (pourErr) {
-    console.error("pour_events check failed:", pourErr);
-    return Errors.internal("Failed to check pour history.");
-  }
-  if (pourCount != null && pourCount > 0) {
-    return Errors.conflict(
-      "wine_has_pours",
-      `Cannot delete "${wine.producer} ${wine.name}" — it has ${pourCount} pour event${pourCount === 1 ? "" : "s"}.`,
-    );
-  }
+    // Check referential integrity — pour_events FK is ON DELETE RESTRICT
+    const { count: pourCount, error: pourErr } = await supabase
+      .from("pour_events")
+      .select("*", { count: "exact", head: true })
+      .eq("wine_id", wineId);
 
-  // Check inventory_items — FK is ON DELETE RESTRICT
-  const { count: invCount, error: invErr } = await supabase
-    .from("inventory_items")
-    .select("*", { count: "exact", head: true })
-    .eq("wine_id", wineId);
+    if (pourErr) {
+      console.error("pour_events check failed:", pourErr);
+      return Errors.internal("Failed to check pour history.");
+    }
+    if (pourCount != null && pourCount > 0) {
+      return Errors.conflict(
+        "wine_has_pours",
+        `Cannot delete "${wine.producer} ${wine.name}" — it has ${pourCount} pour event${pourCount === 1 ? "" : "s"}.`,
+      );
+    }
 
-  if (invErr) {
-    console.error("inventory_items check failed:", invErr);
-    return Errors.internal("Failed to check inventory.");
-  }
-  if (invCount != null && invCount > 0) {
-    return Errors.conflict(
-      "wine_has_inventory",
-      `Cannot delete "${wine.producer} ${wine.name}" — it has ${invCount} inventory item${invCount === 1 ? "" : "s"}. 86 the wine instead.`,
-    );
-  }
+    // Check inventory_items — FK is ON DELETE RESTRICT
+    const { count: invCount, error: invErr } = await supabase
+      .from("inventory_items")
+      .select("*", { count: "exact", head: true })
+      .eq("wine_id", wineId);
 
-  // Check wine_list_items — FK is ON DELETE RESTRICT
-  const { count: wliCount, error: wliErr } = await supabase
-    .from("wine_list_items")
-    .select("*", { count: "exact", head: true })
-    .eq("wine_id", wineId);
+    if (invErr) {
+      console.error("inventory_items check failed:", invErr);
+      return Errors.internal("Failed to check inventory.");
+    }
+    if (invCount != null && invCount > 0) {
+      return Errors.conflict(
+        "wine_has_inventory",
+        `Cannot delete "${wine.producer} ${wine.name}" — it has ${invCount} inventory item${invCount === 1 ? "" : "s"}. 86 the wine instead.`,
+      );
+    }
 
-  if (wliErr) {
-    console.error("wine_list_items check failed:", wliErr);
-    return Errors.internal("Failed to check wine list references.");
-  }
-  if (wliCount != null && wliCount > 0) {
-    return Errors.conflict(
-      "wine_on_lists",
-      `Cannot delete "${wine.producer} ${wine.name}" — it appears on ${wliCount} wine list${wliCount === 1 ? "" : "s"}. Remove it from lists first.`,
-    );
-  }
+    // Check wine_list_items — FK is ON DELETE RESTRICT
+    const { count: wliCount, error: wliErr } = await supabase
+      .from("wine_list_items")
+      .select("*", { count: "exact", head: true })
+      .eq("wine_id", wineId);
 
-  // Check invoice_scans for scan line items referencing this wine.
-  const { data: scanRefs, error: scanErr } = await supabase
-    .from("invoice_scans")
-    .select("id")
-    .eq("restaurant_id", restaurantId)
-    .contains("parsed_line_items", JSON.stringify([{ name: wine.name }]));
+    if (wliErr) {
+      console.error("wine_list_items check failed:", wliErr);
+      return Errors.internal("Failed to check wine list references.");
+    }
+    if (wliCount != null && wliCount > 0) {
+      return Errors.conflict(
+        "wine_on_lists",
+        `Cannot delete "${wine.producer} ${wine.name}" — it appears on ${wliCount} wine list${wliCount === 1 ? "" : "s"}. Remove it from lists first.`,
+      );
+    }
 
-  if (scanErr) {
-    console.error("invoice_scans check failed:", scanErr);
-    return Errors.internal("Failed to check scan references.");
-  }
-  if (scanRefs && scanRefs.length > 0) {
-    return Errors.conflict(
-      "wine_from_scan",
-      `Cannot delete "${wine.producer} ${wine.name}" — it was imported via ${scanRefs.length} invoice scan${scanRefs.length === 1 ? "" : "s"}. Remove the scan record first.`,
-    );
-  }
+    // Check invoice_scans for scan line items referencing this wine.
+    const { data: scanRefs, error: scanErr } = await supabase
+      .from("invoice_scans")
+      .select("id")
+      .eq("restaurant_id", restaurantId)
+      .contains("parsed_line_items", JSON.stringify([{ name: wine.name }]));
 
-  // All checks passed — delete the wine. CASCADE deletes open_bottles
-  // and availability_events automatically.
-  const { error: deleteErr } = await supabase
-    .from("wines")
-    .delete()
-    .eq("id", wineId)
-    .eq("restaurant_id", restaurantId);
+    if (scanErr) {
+      console.error("invoice_scans check failed:", scanErr);
+      return Errors.internal("Failed to check scan references.");
+    }
+    if (scanRefs && scanRefs.length > 0) {
+      return Errors.conflict(
+        "wine_from_scan",
+        `Cannot delete "${wine.producer} ${wine.name}" — it was imported via ${scanRefs.length} invoice scan${scanRefs.length === 1 ? "" : "s"}. Remove the scan record first.`,
+      );
+    }
 
-  if (deleteErr) {
-    console.error("wines delete failed:", deleteErr);
-    Sentry.captureException(deleteErr, {
-      tags: { surface: "cellar", phase: "delete-wine" },
-      extra: { restaurantId, wineId },
-    });
-    return Errors.internal("Failed to delete wine.");
-  }
+    // All checks passed — delete the wine. CASCADE deletes open_bottles
+    // and availability_events automatically.
+    const { error: deleteErr } = await supabase
+      .from("wines")
+      .delete()
+      .eq("id", wineId)
+      .eq("restaurant_id", restaurantId);
 
-  return NextResponse.json({ deleted: true });
+    if (deleteErr) {
+      console.error("wines delete failed:", deleteErr);
+      Sentry.captureException(deleteErr, {
+        tags: { surface: "cellar", phase: "delete-wine" },
+        extra: { restaurantId, wineId },
+      });
+      return Errors.internal("Failed to delete wine.");
+    }
+
+    return NextResponse.json({ deleted: true });
+  });
 }

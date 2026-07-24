@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { Errors } from "@/lib/api/errors";
 import { requireMembership } from "@/lib/api/auth";
+import { withApiHandler } from "@/lib/api/handler";
 import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
@@ -35,18 +36,29 @@ const PatchSectionsSchema = z.object({
 });
 
 export async function GET() {
-  const auth = await requireMembership();
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireMembership();
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  const { data: config } = await supabase
-    .from("cellar_config")
-    .select("*")
-    .eq("restaurant_id", restaurantId)
-    .limit(1)
-    .single();
+    const { data: config, error } = await supabase
+      .from("cellar_config")
+      .select("*")
+      .eq("restaurant_id", restaurantId)
+      .limit(1)
+      .maybeSingle();
 
-  return NextResponse.json(config ?? null);
+    if (error) {
+      console.error("cellar_config fetch failed:", error);
+      Sentry.captureException(error, {
+        tags: { surface: "cellar-config", phase: "fetch" },
+        extra: { restaurantId },
+      });
+      return Errors.internal("Failed to fetch cellar configuration.");
+    }
+
+    return NextResponse.json(config);
+  });
 }
 
 export async function POST(request: NextRequest) {
