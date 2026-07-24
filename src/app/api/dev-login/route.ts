@@ -10,9 +10,10 @@ import { isValidTemporaryBypassToken } from "@/lib/auth/temporary-bypass";
  * Claude Code's preview sandbox (which blocks external-origin redirects).
  *
  * In development, DEV_BYPASS_EMAIL enables the route. In production, it is
- * unavailable unless both TEMP_AUTH_BYPASS_EMAIL and a secret
- * TEMP_AUTH_BYPASS_TOKEN are explicitly configured. Never use NEXT_PUBLIC_
- * for either value: Next.js inlines that prefix into the client bundle.
+ * unavailable unless TEMP_AUTH_BYPASS_EMAIL, TEMP_AUTH_BYPASS_TOKEN_SHA256,
+ * and TEMP_AUTH_BYPASS_EXPIRES_AT are explicitly configured. Never use
+ * NEXT_PUBLIC_ for these values: Next.js inlines that prefix into the client
+ * bundle.
  */
 export const runtime = "nodejs";
 
@@ -25,7 +26,8 @@ export async function GET(request: NextRequest) {
   if (
     isProduction &&
     !isValidTemporaryBypassToken(
-      process.env.TEMP_AUTH_BYPASS_TOKEN,
+      process.env.TEMP_AUTH_BYPASS_TOKEN_SHA256,
+      process.env.TEMP_AUTH_BYPASS_EXPIRES_AT,
       request.nextUrl.searchParams.get("token"),
     )
   ) {
