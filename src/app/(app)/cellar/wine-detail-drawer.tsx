@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { X, Wine, PackageOpen, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, Undo2, Upload, Trash2 } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
+import { readApiError } from "@/lib/api/client-error";
 import { useToast } from "@/lib/toast";
 import { ML_PER_OZ } from "@/lib/units";
 import { cn } from "@/lib/utils";
@@ -300,10 +301,12 @@ export function WineDetailDrawer({
         body: JSON.stringify({ direction, note }),
       });
       if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(payload?.error ?? `Request failed (${res.status}).`);
+        throw new Error(
+          readApiError(
+            await res.json().catch(() => null),
+            `Request failed (${res.status}).`,
+          ).message,
+        );
       }
       toast.success(direction === "eightysixed" ? "Marked as 86'd" : "Restored");
       startTransition(() => router.refresh());

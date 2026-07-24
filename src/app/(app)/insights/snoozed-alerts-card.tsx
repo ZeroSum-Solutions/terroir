@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, RotateCcw, Clock, DollarSign } from "lucide-react";
+import { readApiError } from "@/lib/api/client-error";
 import { cn } from "@/lib/utils";
 
 /**
@@ -54,10 +55,12 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
         body: JSON.stringify({ days: 0 }),
       });
       if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(payload?.error ?? `Failed (${res.status}).`);
+        throw new Error(
+          readApiError(
+            await res.json().catch(() => null),
+            `Failed (${res.status}).`,
+          ).message,
+        );
       }
       startTransition(() => router.refresh());
     } catch (err) {

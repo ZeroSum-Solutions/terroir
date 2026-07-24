@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, RotateCcw } from "lucide-react";
+import { readApiError } from "@/lib/api/client-error";
 import { cn } from "@/lib/utils";
 
 /**
@@ -73,10 +74,12 @@ export function PricingTargetOverride({
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(payload?.error ?? `Save failed (${res.status}).`);
+        throw new Error(
+          readApiError(
+            await res.json().catch(() => null),
+            `Save failed (${res.status}).`,
+          ).message,
+        );
       }
       startTransition(() => router.refresh());
     } catch (e) {

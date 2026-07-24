@@ -1,116 +1,75 @@
 import { NextResponse } from "next/server";
-import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseJson, parseParams } from "@/lib/api/validation";
+import {
+  AlertDaysBodySchema,
+  WineIdParamsSchema,
+} from "@/lib/api/wine-mutation-schemas";
 
 export const runtime = "nodejs";
 
-/**
- * BND-039 — POST /api/wines/[id]/snooze-alert
- *
- * Snooze the drink-window briefing alert for a wine. Default 30 days,
- * configurable via JSON body `{ days: number }`.
- *
- * Auth: owner+manager only (architect-review finding 1 — this is a
- * deliberate API-layer gate, not a SECURITY DEFINER trigger pattern,
- * because snooze is UX state not security-critical: worst case is
- * staff hides their own alert dashboard, not a data-leak path).
- *
- * Calls `snooze_drink_window_alert` RPC (added in migration 0025) which
- * returns the timestamp the snooze runs until.
- */
 export async function POST(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> },
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireMembership();
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId, role } = auth;
-
-  if (role !== "owner" && role !== "manager") {
-    return Errors.forbidden("Snoozing alerts requires owner or manager role.");
-  }
-
-  const { id } = await ctx.params;
-  if (!id) {
-    return Errors.badRequest("wine id required");
-  }
-
-  // Optional body: { days: number }. Defaults to 30 (RPC default).
-  // Cap at 365 to avoid "snooze forever" bugs.
-  // Audit-finding M2: days=0 is the unsnooze signal — clears
-  // alert_snoozed_until so the alert reappears immediately. Wires
-  // the SnoozedAlertsCard "Unsnooze" action.
-  let days = 30;
-  let unsnooze = false;
-  try {
-    const body = await req.json().catch(() => ({}));
-    if (typeof body?.days === "number" && Number.isFinite(body.days)) {
-      if (body.days === 0) {
-        unsnooze = true;
-      } else {
-        days = Math.max(1, Math.min(365, Math.round(body.days)));
-      }
+  return withApiHandler(async () => {
+    const auth = await requireMembership();
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId, role } = auth;
+    if (role !== "owner" && role !== "manager") {
+      return Errors.forbidden(
+        "Snoozing alerts requires owner or manager role.",
+      );
     }
-  } catch {
-    // No body / non-JSON → use default. Not an error.
-  }
 
-  // Tenant-scope check before invoking the RPC. The RPC itself doesn't
-  // filter by restaurant_id (matches Supabase RLS pattern), so we
-  // verify ownership here.
-  const { data: wine, error: fetchErr } = await supabase
-    .from("wines")
-    .select("id")
-    .eq("id", id)
-    .eq("restaurant_id", restaurantId)
-    .maybeSingle();
-
-  if (fetchErr) {
-    Sentry.captureException(fetchErr, {
-      tags: { surface: "wines-snooze", phase: "wine-fetch" },
-      extra: { wineId: id, restaurantId },
+    const parsedParams = await parseParams(params, WineIdParamsSchema);
+    if (!parsedParams.ok) return parsedParams.response;
+    const parsedBody = await parseJson(request, AlertDaysBodySchema, {
+      allowEmpty: true,
     });
-    return Errors.internal("Lookup failed.");
-  }
-  if (!wine) {
-    return Errors.notFound("Wine");
-  }
+    if (!parsedBody.ok) return parsedBody.response;
+    const { id } = parsedParams.data;
+    const days = parsedBody.data.days ?? 30;
 
-  // Unsnooze path — direct UPDATE to NULL. The RPC always sets a
-  // future timestamp; we want to clear, which the RPC can't express.
-  if (unsnooze) {
-    const { error: clearErr } = await supabase
+    const { data: wine, error: fetchError } = await supabase
       .from("wines")
-      .update({ alert_snoozed_until: null })
+      .select("id")
       .eq("id", id)
-      .eq("restaurant_id", restaurantId);
-    if (clearErr) {
-      Sentry.captureException(clearErr, {
-        tags: { surface: "wines-snooze", phase: "clear" },
-        extra: { wineId: id, restaurantId },
+      .eq("restaurant_id", restaurantId)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!wine) return Errors.notFound("Wine");
+
+    if (days === 0) {
+      const { data: cleared, error } = await supabase
+        .from("wines")
+        .update({ alert_snoozed_until: null })
+        .eq("id", id)
+        .eq("restaurant_id", restaurantId)
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!cleared) return Errors.notFound("Wine");
+      return NextResponse.json({
+        wineId: id,
+        snoozedUntil: null,
+        days,
       });
-      return Errors.internal("Failed to clear snooze.");
     }
-    return NextResponse.json({ wineId: id, snoozedUntil: null, days: 0 });
-  }
 
-  const { data: until, error: rpcError } = await supabase.rpc(
-    "snooze_drink_window_alert",
-    { p_wine_id: id, p_days: days },
-  );
+    const { data: until, error } = await supabase.rpc(
+      "snooze_drink_window_alert",
+      { p_wine_id: id, p_days: days },
+    );
+    if (error) throw error;
+    if (!until) throw new Error("snooze alert RPC returned no timestamp");
 
-  if (rpcError) {
-    Sentry.captureException(rpcError, {
-      tags: { surface: "wines-snooze", phase: "rpc" },
-      extra: { wineId: id, restaurantId, days },
+    return NextResponse.json({
+      wineId: id,
+      snoozedUntil: until,
+      days,
     });
-    return Errors.internal("Failed to snooze alert.");
-  }
-
-  return NextResponse.json({
-    wineId: id,
-    snoozedUntil: until,
-    days,
   });
 }

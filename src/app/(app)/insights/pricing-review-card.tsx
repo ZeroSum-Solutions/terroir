@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, X } from "lucide-react";
+import { readApiError } from "@/lib/api/client-error";
 import { cn } from "@/lib/utils";
 import {
   formatPricingStatusLabel,
@@ -49,10 +50,12 @@ export function PricingReviewCard({
         body: JSON.stringify({ days: 30 }),
       });
       if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(payload?.error ?? `Failed (${res.status}).`);
+        throw new Error(
+          readApiError(
+            await res.json().catch(() => null),
+            `Failed (${res.status}).`,
+          ).message,
+        );
       }
       startTransition(() => router.refresh());
     } catch (err) {

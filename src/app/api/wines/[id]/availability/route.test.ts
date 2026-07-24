@@ -73,14 +73,14 @@ function makeSupabase(opts: {
 }
 
 function patchRequest(body: unknown): NextRequest {
-  return new Request("http://localhost/api/wines/w-1/availability", {
+  return new Request("http://localhost/api/wines/11111111-1111-4111-8111-111111111111/availability", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: typeof body === "string" ? body : JSON.stringify(body),
   }) as unknown as NextRequest;
 }
 
-const WINE_PARAMS = () => ({ params: Promise.resolve({ id: "w-1" }) });
+const WINE_PARAMS = () => ({ params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }) });
 
 describe("PATCH /api/wines/[id]/availability", () => {
   beforeEach(() => {
@@ -114,7 +114,7 @@ describe("PATCH /api/wines/[id]/availability", () => {
 
   it("400 on invalid JSON", async () => {
     const { supabase } = makeSupabase({
-      wineRows: [{ id: "w-1", restaurant_id: "r-A" }],
+      wineRows: [{ id: "11111111-1111-4111-8111-111111111111", restaurant_id: "r-A" }],
       rpcResult: { data: [], error: null },
     });
     mockRequireRole.mockResolvedValue({
@@ -134,7 +134,7 @@ describe("PATCH /api/wines/[id]/availability", () => {
 
   it("400 on missing direction", async () => {
     const { supabase } = makeSupabase({
-      wineRows: [{ id: "w-1", restaurant_id: "r-A" }],
+      wineRows: [{ id: "11111111-1111-4111-8111-111111111111", restaurant_id: "r-A" }],
       rpcResult: { data: [], error: null },
     });
     mockRequireRole.mockResolvedValue({
@@ -149,7 +149,7 @@ describe("PATCH /api/wines/[id]/availability", () => {
 
   it("400 on invalid direction value", async () => {
     const { supabase } = makeSupabase({
-      wineRows: [{ id: "w-1", restaurant_id: "r-A" }],
+      wineRows: [{ id: "11111111-1111-4111-8111-111111111111", restaurant_id: "r-A" }],
       rpcResult: { data: [], error: null },
     });
     mockRequireRole.mockResolvedValue({
@@ -167,7 +167,7 @@ describe("PATCH /api/wines/[id]/availability", () => {
 
   it("404 when wine belongs to another restaurant (RLS-bypassed mock)", async () => {
     const { supabase } = makeSupabase({
-      wineRows: [{ id: "w-1", restaurant_id: "r-OTHER" }],
+      wineRows: [{ id: "11111111-1111-4111-8111-111111111111", restaurant_id: "r-OTHER" }],
       rpcResult: { data: [], error: null },
     });
     mockRequireRole.mockResolvedValue({
@@ -185,7 +185,7 @@ describe("PATCH /api/wines/[id]/availability", () => {
 
   it("200 {changed:false} when RPC returns empty set (idempotent no-op)", async () => {
     const { supabase, calls } = makeSupabase({
-      wineRows: [{ id: "w-1", restaurant_id: "r-A" }],
+      wineRows: [{ id: "11111111-1111-4111-8111-111111111111", restaurant_id: "r-A" }],
       rpcResult: { data: [], error: null },
       publishedLists: [],
     });
@@ -202,15 +202,16 @@ describe("PATCH /api/wines/[id]/availability", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.changed).toBe(false);
-    expect(calls.rpc).toHaveLength(1);
+    expect(calls.rpc).toHaveLength(2);
     expect(calls.rpc[0].fn).toBe("set_wine_availability");
+    expect(calls.rpc[1].fn).toBe("wine_published_list_slugs");
     expect(mockRevalidatePath).not.toHaveBeenCalled();
   });
 
   it("200 {changed:true, event} on happy path and revalidates each affected published list", async () => {
     const event: RpcEventRow = {
       id: "ev-1",
-      wine_id: "w-1",
+      wine_id: "11111111-1111-4111-8111-111111111111",
       restaurant_id: "r-A",
       direction: "eightysixed",
       user_id: "u-1",
@@ -218,7 +219,7 @@ describe("PATCH /api/wines/[id]/availability", () => {
       created_at: "2026-04-21T19:00:00Z",
     };
     const { supabase, calls } = makeSupabase({
-      wineRows: [{ id: "w-1", restaurant_id: "r-A" }],
+      wineRows: [{ id: "11111111-1111-4111-8111-111111111111", restaurant_id: "r-A" }],
       rpcResult: { data: [event], error: null },
       // ARCH-019: RPC-backed revalidation returns only non-null slugs
       // (filter lives in SQL now).
@@ -251,14 +252,14 @@ describe("PATCH /api/wines/[id]/availability", () => {
 
     expect(calls.rpc[0].fn).toBe("set_wine_availability");
     expect(calls.rpc[0].args).toEqual({
-      p_wine_id: "w-1",
+      p_wine_id: "11111111-1111-4111-8111-111111111111",
       p_direction: "eightysixed",
       p_note: "last bottle just poured",
     });
     // Second RPC call is the revalidation query.
     expect(calls.rpc[1].fn).toBe("wine_published_list_slugs");
     expect(calls.rpc[1].args).toEqual({
-      p_wine_id: "w-1",
+      p_wine_id: "11111111-1111-4111-8111-111111111111",
       p_restaurant_id: "r-A",
     });
 
@@ -269,7 +270,7 @@ describe("PATCH /api/wines/[id]/availability", () => {
 
   it("500 on RPC error", async () => {
     const { supabase } = makeSupabase({
-      wineRows: [{ id: "w-1", restaurant_id: "r-A" }],
+      wineRows: [{ id: "11111111-1111-4111-8111-111111111111", restaurant_id: "r-A" }],
       rpcResult: { data: null, error: { message: "boom" } },
     });
     mockRequireRole.mockResolvedValue({
