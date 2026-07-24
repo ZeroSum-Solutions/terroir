@@ -2,6 +2,7 @@
 
 import { Check } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { readApiError } from "@/lib/api/client-error";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
 import {
   PERSISTED_SCAN_VERSION,
@@ -84,15 +85,11 @@ async function postScan(files: File[], signal: AbortSignal, key?: string | null)
   if (key) headers["Idempotency-Key"] = key;
   const res = await fetch("/api/scan", { method: "POST", body, signal, headers });
   if (!res.ok) {
-    const payload = (await res.json().catch(() => null)) as
-      | { error?: string; code?: string; message?: string; rawText?: string }
-      | null;
-    // BND-088: prefer { code, message } envelope for AiExtractError,
-    // fall back to legacy { error } for OCR and other error types.
-    throw new ScanError(
-      payload?.message ?? payload?.error ?? `Scan failed (${res.status})`,
-      payload?.rawText,
+    const failure = readApiError(
+      await res.json().catch(() => null),
+      `Scan failed (${res.status})`,
     );
+    throw new ScanError(failure.message, failure.rawText);
   }
   return (await res.json()) as Scan;
 }
@@ -334,10 +331,12 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
           saveKeyRef.current = null;
         }
-        const payload = (await res.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(payload?.error ?? `Save failed (${res.status})`);
+        throw new Error(
+          readApiError(
+            await res.json().catch(() => null),
+            `Save failed (${res.status})`,
+          ).message,
+        );
       }
       const result = (await res.json()) as {
         scanId: string;
@@ -414,10 +413,12 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       });
       if (ac.signal.aborted) return;
       if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(payload?.error ?? `Scan failed (${res.status})`);
+        throw new Error(
+          readApiError(
+            await res.json().catch(() => null),
+            `Scan failed (${res.status})`,
+          ).message,
+        );
       }
       const result = (await res.json()) as BottleScanResult;
       setProgress(100);
@@ -463,10 +464,12 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
           if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
             bottleSaveKeyRef.current = null;
           }
-          const payload = (await res.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          throw new Error(payload?.error ?? `Save failed (${res.status})`);
+          throw new Error(
+            readApiError(
+              await res.json().catch(() => null),
+              `Save failed (${res.status})`,
+            ).message,
+          );
         }
         bottleSaveKeyRef.current = null;
         setBottleResult(null);

@@ -6,8 +6,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAnthropicClient } from "@/lib/ai/anthropic-client";
 import { requireMembership } from "@/lib/api/auth";
 import { apiError, Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import {
+  fileField,
+  parseJson,
+  parseMultipart,
+} from "@/lib/api/validation";
 import { ParsedBottleLabelSchema } from "@/lib/scanner/bottle-schema";
 import { BOTTLE_SYSTEM_PROMPT } from "@/lib/scanner/bottle-system-prompt";
+import { QrLookupBodySchema } from "@/lib/scanner/request-schemas";
 import type { BottleScanResult } from "@/lib/scanner/types";
 
 export const runtime = "nodejs";
@@ -20,15 +27,17 @@ const ALLOWED_MIME = new Set([
   "image/webp",
 ]);
 
-const QrLookupSchema = z.object({
-  qr_payload: z.string().min(1, "qr_payload is required"),
-});
+const BottlePhotoSchema = z.object({ file: fileField });
 
 // ARCH-016 / DEBT-016: prompt lives at src/lib/scanner/bottle-system-prompt.ts
 // so prompt engineering changes flow through one file (same pattern as
 // BND-027's invoice system-prompt extraction).
 
 export async function POST(request: NextRequest) {
+  return withApiHandler(() => postBottleScan(request));
+}
+
+async function postBottleScan(request: NextRequest) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
 
@@ -37,18 +46,10 @@ export async function POST(request: NextRequest) {
   // --- QR code lookup path ---
   const contentType = request.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return Errors.badRequest("Invalid JSON body.");
-    }
-
-    const parsed = QrLookupSchema.safeParse(body);
-    if (!parsed.success) {
-      return Errors.badRequest("qr_payload is required.");
-    }
-
+    const parsed = await parseJson(request, QrLookupBodySchema, {
+      message: "Invalid body.",
+    });
+    if (!parsed.ok) return parsed.response;
     const { qr_payload } = parsed.data;
 
     // BND-111: look up wine globally first, then reject cross-tenant with 403.
@@ -58,7 +59,8 @@ export async function POST(request: NextRequest) {
       .eq("id", qr_payload)
       .maybeSingle();
 
-    if (globalErr || !globalWine) {
+    if (globalErr) throw globalErr;
+    if (!globalWine) {
       return apiError(
         404,
         "wine_not_found",
@@ -85,28 +87,11 @@ export async function POST(request: NextRequest) {
   // under the `maxDuration = 60` ceiling declared on this route. That
   // 60s is the bound on a single bottle-label Claude call; Railway
   // itself has no hard request timeout so the ceiling is ours to set.
-  let anthropic: Anthropic;
-  try {
-    anthropic = getAnthropicClient();
-  } catch (err) {
-    Sentry.captureException(err, {
-      tags: { surface: "scanner", phase: "client-init" },
-      extra: {},
-    });
-    return Errors.internal("Server not configured: ANTHROPIC_API_KEY missing.");
-  }
-
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch {
-    return Errors.badRequest("Invalid form data.");
-  }
-
-  const file = formData.get("file");
-  if (!(file instanceof File)) {
-    return Errors.badRequest("Attach a photo under the 'file' field.");
-  }
+  const parsed = await parseMultipart(request, BottlePhotoSchema, {
+    message: "Invalid body.",
+  });
+  if (!parsed.ok) return parsed.response;
+  const file = parsed.data.file;
   if (file.size === 0) {
     return Errors.badRequest("Empty file.");
   }
@@ -117,6 +102,7 @@ export async function POST(request: NextRequest) {
     return Errors.unsupportedMediaType(`Unsupported file type: ${file.type || "unknown"}. Use JPEG or PNG.`);
   }
 
+  const anthropic: Anthropic = getAnthropicClient();
   const bytes = new Uint8Array(await file.arrayBuffer());
   const base64 = Buffer.from(bytes).toString("base64");
 

@@ -165,7 +165,7 @@ describe("POST /api/scan", () => {
     const res = await POST(makeFormRequest(fd));
     expect(res.status).toBe(415);
     const body415 = await res.json();
-    expect(body415.code).toBe("unsupported_type");
+    expect(body415.error.code).toBe("unsupported_media_type");
     expect(azure.analyzeInvoice).not.toHaveBeenCalled();
   });
 
@@ -192,9 +192,81 @@ describe("POST /api/scan", () => {
     const rs = await POST(rq);
     expect(rs.status).toBe(415);
     const bd = await rs.json();
-    expect(bd.code).toBe("unsupported_type");
+    expect(bd.error.code).toBe("unsupported_media_type");
+    expect(s.storage.from("invoice-images").download).not.toHaveBeenCalled();
     expect(azure.analyzeInvoice).not.toHaveBeenCalled();
     expect(anthropic.parse).not.toHaveBeenCalled();
+  });
+
+  it("returns a fixed 404 for a missing stored image", async () => {
+    const s = makeSupabase();
+    s.storage.from("invoice-images").download = vi.fn().mockResolvedValue({
+      data: null,
+      error: {
+        statusCode: "404",
+        message: "super-secret storage object details",
+      },
+    });
+    auth.requireMembership.mockResolvedValue({
+      supabase: s,
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+
+    const res = await POST(
+      new Request("http://localhost/api/scan", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          imagePath: "restaurant-A/scan-1/image.jpg",
+        }),
+      }) as unknown as NextRequest,
+    );
+    const text = await res.text();
+
+    expect(res.status).toBe(404);
+    expect(JSON.parse(text)).toEqual({
+      error: { code: "not_found", message: "Image not found." },
+    });
+    expect(text).not.toContain("super-secret");
+  });
+
+  it("redacts a stored-image provider failure", async () => {
+    const s = makeSupabase();
+    s.storage.from("invoice-images").download = vi.fn().mockResolvedValue({
+      data: null,
+      error: {
+        statusCode: "500",
+        message: "super-secret storage outage",
+      },
+    });
+    auth.requireMembership.mockResolvedValue({
+      supabase: s,
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+
+    const res = await POST(
+      new Request("http://localhost/api/scan", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          imagePath: "restaurant-A/scan-1/image.jpg",
+        }),
+      }) as unknown as NextRequest,
+    );
+    const text = await res.text();
+
+    expect(res.status).toBe(500);
+    expect(JSON.parse(text)).toEqual({
+      error: {
+        code: "internal_error",
+        message: "Internal server error.",
+      },
+    });
+    expect(text).not.toContain("super-secret");
   });
 
   it("returns 413 when the file exceeds 10 MB", async () => {
@@ -215,7 +287,7 @@ describe("POST /api/scan", () => {
 
     expect(res.status).toBe(413);
     const body = await res.json();
-    expect(body.error).toContain("10 MB");
+    expect(body.error.message).toContain("10 MB");
     // Azure DI must not be called for oversized uploads
     expect(azure.analyzeInvoice).not.toHaveBeenCalled();
   });
@@ -251,6 +323,12 @@ describe("POST /api/scan", () => {
 
     const res = await POST(makeFormRequest(fd));
     expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "internal_error",
+        message: "Internal server error.",
+      },
+    });
     // Route abandons the request before touching Azure.
     expect(azure.analyzeInvoice).not.toHaveBeenCalled();
   });
@@ -273,7 +351,10 @@ describe("POST /api/scan", () => {
 
     expect(res.status).toBe(502);
     const body = await res.json();
-    expect(body.error).toContain("Azure unavailable");
+    expect(body).toEqual({
+      error: { code: "bad_gateway", message: "Upstream service error." },
+    });
+    expect(JSON.stringify(body)).not.toContain("Azure unavailable");
     expect(anthropic.parse).not.toHaveBeenCalled();
   });
 
@@ -295,7 +376,8 @@ describe("POST /api/scan", () => {
     expect(res.status).toBe(502);
     const body = await res.json();
     // The route promises a manual-entry fallback — rawText must come back.
-    expect(body.rawText).toBe(OK_OCR.rawText);
+    expect(body.error.details.rawText).toBe(OK_OCR.rawText);
+    expect(body.error.message).toBe("Upstream service error.");
   });
 
   // ── Happy path ────────────────────────────────────────────────────────
@@ -329,6 +411,83 @@ describe("POST /api/scan", () => {
     expect(body.rawText).toBe(OK_OCR.rawText);
   });
 
+  it("preserves repeated multipart files for multi-page invoices", async () => {
+    const supabase = makeSupabase();
+    auth.requireMembership.mockResolvedValue({
+      supabase,
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+    azure.analyzeInvoice.mockResolvedValue(OK_OCR);
+    anthropic.parse.mockResolvedValue(makeParsedInvoice());
+    const fd = new FormData();
+    fd.append(
+      "file",
+      new File(["page one"], "page-1.jpg", { type: "image/jpeg" }),
+    );
+    fd.append(
+      "file",
+      new File(["page two"], "page-2.png", { type: "image/png" }),
+    );
+
+    const res = await POST(makeFormRequest(fd));
+
+    expect(res.status).toBe(200);
+    expect(supabase.storage.upload).toHaveBeenCalledTimes(2);
+  });
+
+  it("stores HEIC pages with their real extension", async () => {
+    const supabase = makeSupabase();
+    auth.requireMembership.mockResolvedValue({
+      supabase,
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+    azure.analyzeInvoice.mockResolvedValue(OK_OCR);
+    anthropic.parse.mockResolvedValue(makeParsedInvoice());
+    const fd = new FormData();
+    fd.append(
+      "file",
+      new File(["heic"], "invoice.heic", { type: "image/heic" }),
+    );
+
+    const res = await POST(makeFormRequest(fd));
+
+    expect(res.status).toBe(200);
+    expect(supabase.storage.upload).toHaveBeenCalledWith(
+      expect.stringMatching(/\.heic$/),
+      expect.any(Buffer),
+      expect.objectContaining({ contentType: "image/heic" }),
+    );
+  });
+
+  it("keeps a successful scan successful when best-effort upload rejects", async () => {
+    const supabase = makeSupabase();
+    supabase.storage.upload.mockRejectedValue(
+      new Error("super-secret storage outage"),
+    );
+    auth.requireMembership.mockResolvedValue({
+      supabase,
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+    azure.analyzeInvoice.mockResolvedValue(OK_OCR);
+    anthropic.parse.mockResolvedValue(makeParsedInvoice());
+    const fd = new FormData();
+    fd.append("file", pdfFile());
+
+    const res = await POST(makeFormRequest(fd));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      scanId: "scan-1",
+      items: expect.any(Array),
+    });
+  });
+
   it("returns 422 no_wines_extracted when Claude returns empty line items", async () => {
     auth.requireMembership.mockResolvedValue({
       supabase: makeSupabase(),
@@ -346,9 +505,9 @@ describe("POST /api/scan", () => {
 
     expect(res.status).toBe(422);
     const body = await res.json();
-    expect(body.code).toBe("no_wines_extracted");
-    expect(body.message).toBeTruthy();
-    expect(body.rawText).toBe(OK_OCR.rawText);
+    expect(body.error.code).toBe("no_wines_extracted");
+    expect(body.error.message).toBeTruthy();
+    expect(body.error.details.rawText).toBe(OK_OCR.rawText);
   });
   // ── Rate limiting ──────────────────────────────────────────────────────
 
@@ -368,7 +527,13 @@ describe("POST /api/scan", () => {
 
     expect(res.status).toBe(429);
     const body = await res.json();
-    expect(body.error).toBeTruthy();
+    expect(body).toEqual({
+      error: {
+        code: "rate_limited",
+        message:
+          "Too many scan requests. Please wait before scanning again.",
+      },
+    });
   });
 
   it("returns a Retry-After header when returning 429", async () => {

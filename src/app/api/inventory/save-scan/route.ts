@@ -1,21 +1,30 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
 import {
   isValidIdempotencyKey,
   withIdempotency,
 } from "@/lib/api/idempotency";
+import { withApiHandler } from "@/lib/api/handler";
+import { apiResultResponse } from "@/lib/api/result-response";
+import {
+  fileField,
+  parseJson,
+  parseMultipart,
+} from "@/lib/api/validation";
+import { SaveInvoiceScanBodySchema } from "@/lib/scanner/request-schemas";
 import { SCORED_FIELDS } from "@/lib/scanner/scored-fields";
 import type { LineItem, Scan } from "@/lib/scanner/types";
 import type { Database, Json } from "@/types/database";
 
 export const runtime = "nodejs";
 
-type SaveScanBody = {
-  scan: Scan;
-  originalItems: LineItem[];
-};
+const SaveScanMultipartSchema = z.object({
+  data: z.string(),
+  file: fileField.optional(),
+});
 
 /**
  * Compute accuracy as the fraction of scorable fields that were NOT edited.
@@ -48,6 +57,10 @@ function parseInvoiceDate(raw: string): string | null {
 }
 
 export async function POST(request: NextRequest) {
+  return withApiHandler(() => postInvoiceInventorySave(request));
+}
+
+async function postInvoiceInventorySave(request: NextRequest) {
   // ── Auth ──────────────────────────────────────────────────────────
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
@@ -60,55 +73,30 @@ export async function POST(request: NextRequest) {
 
   const contentType = request.headers.get("content-type") ?? "";
   if (contentType.includes("multipart/form-data")) {
-    let formData: FormData;
-    try {
-      formData = await request.formData();
-    } catch {
-      return NextResponse.json(
-        { error: "Invalid form data." },
-        { status: 400 },
-      );
-    }
-    try {
-      const raw = formData.get("data");
-      if (typeof raw !== "string") throw new Error("missing data field");
-      const body = JSON.parse(raw) as SaveScanBody;
-      scan = body.scan;
-      originalItems = body.originalItems;
-    } catch {
-      return NextResponse.json(
-        { error: "Invalid JSON in data field." },
-        { status: 400 },
-      );
-    }
-    const f = formData.get("file");
-    if (f instanceof File && f.size > 0) file = f;
+    const parsedMultipart = await parseMultipart(
+      request,
+      SaveScanMultipartSchema,
+      { message: "Invalid body." },
+    );
+    if (!parsedMultipart.ok) return parsedMultipart.response;
+    const parsedBody = await parseJson(
+      new Request("http://localhost/api/inventory/save-scan/data", {
+        method: "POST",
+        body: parsedMultipart.data.data,
+      }),
+      SaveInvoiceScanBodySchema,
+      { message: "Invalid body." },
+    );
+    if (!parsedBody.ok) return parsedBody.response;
+    ({ scan, originalItems } = parsedBody.data);
+    const parsedFile = parsedMultipart.data.file;
+    if (parsedFile && parsedFile.size > 0) file = parsedFile;
   } else {
-    let body: SaveScanBody;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json(
-        { error: "Invalid JSON body." },
-        { status: 400 },
-      );
-    }
-    scan = body.scan;
-    originalItems = body.originalItems;
-  }
-
-  if (!scan?.source || !Array.isArray(scan.items) || scan.items.length === 0) {
-    return NextResponse.json(
-      { error: "Request must include a scan with at least one item." },
-      { status: 400 },
-    );
-  }
-
-  if (!Array.isArray(originalItems)) {
-    return NextResponse.json(
-      { error: "Request must include originalItems array." },
-      { status: 400 },
-    );
+    const parsedBody = await parseJson(request, SaveInvoiceScanBodySchema, {
+      message: "Invalid body.",
+    });
+    if (!parsedBody.ok) return parsedBody.response;
+    ({ scan, originalItems } = parsedBody.data);
   }
 
   // ── Idempotency (BND-006) ────────────────────────────────────────
@@ -132,7 +120,7 @@ export async function POST(request: NextRequest) {
     }),
   });
 
-  return NextResponse.json(result.body, { status: result.status });
+  return apiResultResponse(result);
 }
 
 /** The real save work. Extracted so `withIdempotency` can wrap it. */

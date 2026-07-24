@@ -134,6 +134,16 @@ function makeJsonRequest(body: unknown) {
   }) as any;
 }
 
+function makeMultipartRequest(entries: Array<[string, string | File]>) {
+  const form = new FormData();
+  for (const [key, value] of entries) form.append(key, value);
+  return new Request("http://localhost/api/inventory/save-scan", {
+    method: "POST",
+    body: form,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  }) as any;
+}
+
 function authedAsA() {
   mockRequireMembership.mockResolvedValue({
     supabase: buildSupabaseStub(),
@@ -231,6 +241,75 @@ describe("POST /api/inventory/save-scan", () => {
     expect(calls.rpc).toHaveLength(0);
   });
 
+  it("rejects invalid nested line-item fields before persistence", async () => {
+    authedAsA();
+    const scan = makeScan({
+      items: [makeLineItem({ qty: 1.5 })],
+    });
+
+    const res = await POST(
+      makeJsonRequest({ scan, originalItems: scan.items }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: {
+        code: "validation_error",
+        details: expect.arrayContaining([
+          expect.objectContaining({
+            path: ["scan", "items", 0, "qty"],
+          }),
+        ]),
+      },
+    });
+    expect(calls.rpc).toHaveLength(0);
+  });
+
+  it("rejects duplicate multipart data fields", async () => {
+    authedAsA();
+    const scan = makeScan();
+    const data = JSON.stringify({ scan, originalItems: scan.items });
+
+    const res = await POST(
+      makeMultipartRequest([
+        ["data", data],
+        ["data", data],
+      ]),
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: {
+        code: "validation_error",
+        details: [{ path: ["data"] }],
+      },
+    });
+    expect(calls.rpc).toHaveLength(0);
+  });
+
+  it("rejects duplicate multipart file fields", async () => {
+    authedAsA();
+    const scan = makeScan();
+    const data = JSON.stringify({ scan, originalItems: scan.items });
+
+    const res = await POST(
+      makeMultipartRequest([
+        ["data", data],
+        ["file", new File(["one"], "one.jpg", { type: "image/jpeg" })],
+        ["file", new File(["two"], "two.jpg", { type: "image/jpeg" })],
+      ]),
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: {
+        code: "validation_error",
+        details: [{ path: ["file"] }],
+      },
+    });
+    expect(calls.rpc).toHaveLength(0);
+  });
+
   // ── Happy path ────────────────────────────────────────────────────────
 
   it("returns the scanId and counts on success", async () => {
@@ -250,7 +329,35 @@ describe("POST /api/inventory/save-scan", () => {
     // The route went all the way through: wines RPC + inventory insert.
     expect(
       calls.rpc.find((c) => c.fn === "find_or_create_wines_batch"),
-    ).toBeTruthy();
+    ).toEqual({
+      fn: "find_or_create_wines_batch",
+      args: expect.objectContaining({ p_restaurant_id: "restaurant-A" }),
+    });
+    expect(calls.inventoryInserts).toHaveLength(1);
+    expect(calls.inventoryInserts[0]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ restaurant_id: "restaurant-A" }),
+      ]),
+    );
+  });
+
+  it("preserves multipart save success", async () => {
+    authedAsA();
+    const scan = makeScan();
+
+    const res = await POST(
+      makeMultipartRequest([
+        ["data", JSON.stringify({ scan, originalItems: scan.items })],
+        ["file", new File(["invoice"], "invoice.jpg", { type: "image/jpeg" })],
+      ]),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      scanId: "scan-123",
+      itemCount: 2,
+      wineCount: 2,
+    });
     expect(calls.inventoryInserts).toHaveLength(1);
   });
 
@@ -269,6 +376,12 @@ describe("POST /api/inventory/save-scan", () => {
     );
 
     expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "internal_error",
+        message: "Internal server error.",
+      },
+    });
     // No wines RPC, no inventory insert.
     expect(calls.rpc).toHaveLength(0);
     expect(calls.inventoryInserts).toHaveLength(0);
@@ -287,6 +400,12 @@ describe("POST /api/inventory/save-scan", () => {
     );
 
     expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "internal_error",
+        message: "Internal server error.",
+      },
+    });
     // The route must delete the invoice_scans row we just inserted to
     // avoid stranding a parent row with no children.
     expect(calls.deleteInvoiceScanCalled).toBe(true);
@@ -305,6 +424,12 @@ describe("POST /api/inventory/save-scan", () => {
     );
 
     expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "internal_error",
+        message: "Internal server error.",
+      },
+    });
     // Wines were created, but inventory failed — clean up the parent row.
     expect(calls.inventoryInserts).toHaveLength(1);
     expect(calls.deleteInvoiceScanCalled).toBe(true);
