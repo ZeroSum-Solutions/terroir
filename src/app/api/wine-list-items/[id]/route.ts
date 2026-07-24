@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
-import { requireMembership } from "@/lib/api/auth";
+import { requireRole } from "@/lib/api/auth";
 import { isOwnWineListItem } from "@/lib/api/wine-list-scope";
 import { Errors } from "@/lib/api/errors";
 
@@ -14,7 +14,7 @@ export async function DELETE(
   { params }: { params: Params },
 ) {
   const { id } = await params;
-  const auth = await requireMembership();
+  const auth = await requireRole(["owner", "manager"]);
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
@@ -71,7 +71,7 @@ export async function PATCH(
   { params }: { params: Params },
 ) {
   const { id } = await params;
-  const auth = await requireMembership();
+  const auth = await requireRole(["owner", "manager"]);
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
