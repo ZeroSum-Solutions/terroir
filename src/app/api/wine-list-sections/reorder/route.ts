@@ -1,53 +1,69 @@
 import { NextResponse, type NextRequest } from "next/server";
-import * as Sentry from "@sentry/nextjs";
 import { requireRole } from "@/lib/api/auth";
-import { isOwnWineListSection } from "@/lib/api/wine-list-scope";
 import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseJson } from "@/lib/api/validation";
+import { ReorderWineListSectionsBodySchema } from "@/lib/api/wine-list-section-schemas";
 
 export const runtime = "nodejs";
 
-// BND-162: atomic reorder of sections. Accepts orderedIds array and
-// updates each section's position. Uses a DB function for atomicity.
+type SectionScope = {
+  id: string;
+  wine_list_id: string;
+  wine_lists: { restaurant_id: string } | Array<{ restaurant_id: string }>;
+};
+
+function restaurantIdFor(section: SectionScope): string | undefined {
+  const parent = Array.isArray(section.wine_lists)
+    ? section.wine_lists[0]
+    : section.wine_lists;
+  return parent?.restaurant_id;
+}
+
 export async function PATCH(request: NextRequest) {
-  const auth = await requireRole(["owner", "manager"]);
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireRole(["owner", "manager"]);
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  let body: { orderedIds: string[] };
-  try {
-    body = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
+    const parsed = await parseJson(request, ReorderWineListSectionsBodySchema);
+    if (!parsed.ok) return parsed.response;
+    const { orderedIds } = parsed.data;
 
-  if (!Array.isArray(body.orderedIds) || body.orderedIds.length === 0) {
-    return Errors.badRequest("orderedIds array is required.");
-  }
-
-  // Verify every section belongs to a list owned by this restaurant.
-  for (const id of body.orderedIds) {
-    if (!(await isOwnWineListSection(supabase, id, restaurantId))) {
+    const { data, error: lookupError } = await supabase
+      .from("wine_list_sections")
+      .select("id, wine_list_id, wine_lists!inner(restaurant_id)")
+      .in("id", orderedIds);
+    if (lookupError) throw lookupError;
+    const sections = (data ?? []) as unknown as SectionScope[];
+    if (
+      sections.length !== orderedIds.length ||
+      sections.some((section) => restaurantIdFor(section) !== restaurantId)
+    ) {
       return Errors.notFound("One or more sections");
     }
-  }
 
-  // Update positions. Section counts are small (< 20 typically) so
-  // sequential updates are fine; the UI will refresh on failure.
-  for (let i = 0; i < body.orderedIds.length; i++) {
-    const { error } = await supabase
-      .from("wine_list_sections")
-      .update({ position: i })
-      .eq("id", body.orderedIds[i]);
-
-    if (error) {
-      console.error("wine_list_sections reorder failed:", error);
-      Sentry.captureException(error, {
-        tags: { surface: "wine-list-sections", phase: "reorder" },
-        extra: { restaurantId, sectionId: body.orderedIds[i], position: i },
-      });
-      return Errors.internal("Reorder failed.");
+    const wineListId = sections[0].wine_list_id;
+    if (sections.some((section) => section.wine_list_id !== wineListId)) {
+      return Errors.badRequest(
+        "All sections must belong to the same wine list.",
+      );
     }
-  }
 
-  return NextResponse.json({ ok: true });
+    // TER-020B keeps the existing sequential update behavior. The checked
+    // row result prevents false success if a section is concurrently removed.
+    for (const [position, id] of orderedIds.entries()) {
+      const { data: updated, error } = await supabase
+        .from("wine_list_sections")
+        .update({ position })
+        .eq("id", id)
+        .eq("wine_list_id", wineListId)
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!updated) return Errors.notFound("Section");
+    }
+
+    return NextResponse.json({ ok: true });
+  });
 }

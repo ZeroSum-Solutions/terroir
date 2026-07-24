@@ -36,6 +36,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
+import { readApiError } from "@/lib/api/client-error";
 import type { WineList } from "@/lib/wine-list/types";
 import { type Template } from "@/lib/wine-list/types";
 import { SortableWineRow } from "./components/wine-row";
@@ -80,6 +81,17 @@ export type WineListEditorSection = {
   wine_list_id: string;
   wine_list_items: WineListEditorItem[];
 };
+
+async function responseError(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  try {
+    return readApiError(await response.json(), fallback).message;
+  } catch {
+    return fallback;
+  }
+}
 
 // BND-161: inline-rename input overlay.
 // BND-162: sortable section sidebar button.
@@ -293,6 +305,10 @@ export function WineListEditor({
 
     if (!res.ok) {
       startTransition(() => router.refresh());
+      setErrorToast(
+        await responseError(res, "Failed to rename section. Please try again."),
+      );
+      setTimeout(() => setErrorToast(null), 4000);
     }
   }, [editingSectionId, editSectionName, router]);
 
@@ -327,6 +343,13 @@ export function WineListEditor({
 
       if (!res.ok) {
         startTransition(() => router.refresh());
+        setErrorToast(
+          await responseError(
+            res,
+            "Failed to delete section. Please try again.",
+          ),
+        );
+        setTimeout(() => setErrorToast(null), 4000);
         setDeletingSection(false);
       }
     } catch {
@@ -375,8 +398,12 @@ export function WineListEditor({
       });
 
       if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-        window.alert(payload?.error ?? `Failed to add section (${res.status}).`);
+        window.alert(
+          await responseError(
+            res,
+            `Failed to add section (${res.status}).`,
+          ),
+        );
         return;
       }
 
@@ -424,7 +451,12 @@ export function WineListEditor({
       // Rollback on failure
       if (!res.ok) {
         setSections(previous.map((s, i) => ({ ...s, position: i })));
-        setErrorToast("Failed to reorder sections. Please try again.");
+        setErrorToast(
+          await responseError(
+            res,
+            "Failed to reorder sections. Please try again.",
+          ),
+        );
         setTimeout(() => setErrorToast(null), 4000);
       }
     },

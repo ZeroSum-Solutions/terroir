@@ -1,88 +1,116 @@
 import { NextResponse, type NextRequest } from "next/server";
-import * as Sentry from "@sentry/nextjs";
-import { z } from "zod";
 import { requireRole } from "@/lib/api/auth";
-import { isOwnWineListSection } from "@/lib/api/wine-list-scope";
 import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseJson, parseParams } from "@/lib/api/validation";
+import {
+  RenameWineListSectionBodySchema,
+  WineListSectionIdParamsSchema,
+} from "@/lib/api/wine-list-section-schemas";
 
 export const runtime = "nodejs";
 
 type Params = Promise<{ id: string }>;
+type SectionScope = {
+  id: string;
+  wine_list_id: string;
+  wine_lists: { restaurant_id: string } | Array<{ restaurant_id: string }>;
+};
 
-const PatchSchema = z
-  .object({
-    name: z.string().trim().min(1).max(120),
-  })
-  .strict();
+function belongsToRestaurant(
+  section: SectionScope,
+  restaurantId: string,
+): boolean {
+  const parent = Array.isArray(section.wine_lists)
+    ? section.wine_lists[0]
+    : section.wine_lists;
+  return parent?.restaurant_id === restaurantId;
+}
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Params },
 ) {
-  const { id } = await params;
-  const auth = await requireRole(["owner", "manager"]);
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireRole(["owner", "manager"]);
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  let raw: unknown;
-  try {
-    raw = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
+    const parsedParams = await parseParams(
+      params,
+      WineListSectionIdParamsSchema,
+    );
+    if (!parsedParams.ok) return parsedParams.response;
+    const parsedBody = await parseJson(
+      request,
+      RenameWineListSectionBodySchema,
+      { message: "Invalid body." },
+    );
+    if (!parsedBody.ok) return parsedBody.response;
 
-  const parsed = PatchSchema.safeParse(raw);
-  if (!parsed.success) {
-    return Errors.validation(parsed.error.issues, "Invalid body.");
-  }
+    const { id } = parsedParams.data;
+    const { data, error: lookupError } = await supabase
+      .from("wine_list_sections")
+      .select("id, wine_list_id, wine_lists!inner(restaurant_id)")
+      .eq("id", id)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    const target = data as unknown as SectionScope | null;
+    if (!target || !belongsToRestaurant(target, restaurantId)) {
+      return Errors.notFound("Section");
+    }
 
-  if (!(await isOwnWineListSection(supabase, id, restaurantId))) {
-    return Errors.notFound("Section");
-  }
+    const { data: updated, error } = await supabase
+      .from("wine_list_sections")
+      .update({ name: parsedBody.data.name })
+      .eq("id", id)
+      .eq("wine_list_id", target.wine_list_id)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (!updated) return Errors.notFound("Section");
 
-  const { error } = await supabase
-    .from("wine_list_sections")
-    .update({ name: parsed.data.name })
-    .eq("id", id);
-
-  if (error) {
-    console.error("wine_list_sections update failed:", error);
-    Sentry.captureException(error, {
-      tags: { surface: "wine-list-sections", phase: "update" },
-      extra: { restaurantId, section_id: id },
-    });
-    return Errors.internal("Update failed.");
-  }
-
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true });
+  });
 }
 
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Params },
 ) {
-  const { id } = await params;
-  const auth = await requireRole(["owner", "manager"]);
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireRole(["owner", "manager"]);
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  if (!(await isOwnWineListSection(supabase, id, restaurantId))) {
-    return Errors.notFound("Section");
-  }
+    const parsedParams = await parseParams(
+      params,
+      WineListSectionIdParamsSchema,
+    );
+    if (!parsedParams.ok) return parsedParams.response;
+    const { id } = parsedParams.data;
 
-  const { error } = await supabase
-    .from("wine_list_sections")
-    .delete()
-    .eq("id", id);
+    const { data, error: lookupError } = await supabase
+      .from("wine_list_sections")
+      .select("id, wine_list_id, wine_lists!inner(restaurant_id)")
+      .eq("id", id)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    const target = data as unknown as SectionScope | null;
+    if (!target || !belongsToRestaurant(target, restaurantId)) {
+      return Errors.notFound("Section");
+    }
 
-  if (error) {
-    console.error("wine_list_sections delete failed:", error);
-    Sentry.captureException(error, {
-      tags: { surface: "wine-list-sections", phase: "delete" },
-      extra: { restaurantId, section_id: id },
-    });
-    return Errors.internal("Delete failed.");
-  }
+    const { data: removed, error } = await supabase
+      .from("wine_list_sections")
+      .delete()
+      .eq("id", id)
+      .eq("wine_list_id", target.wine_list_id)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (!removed) return Errors.notFound("Section");
 
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true });
+  });
 }
