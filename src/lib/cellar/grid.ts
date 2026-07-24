@@ -112,23 +112,29 @@ async function fetchGridRows(
   restaurantId: string,
 ): Promise<{ rows: GridRow[]; truncated: boolean }> {
   const rows: GridRow[] = [];
+  let afterId: string | null = null;
 
-  for (let offset = 0; offset < MAX_CELLAR_GRID_ROWS; offset += PAGE_SIZE) {
+  while (rows.length < MAX_CELLAR_GRID_ROWS) {
+    const limit = Math.min(
+      PAGE_SIZE,
+      MAX_CELLAR_GRID_ROWS - rows.length,
+    );
     const page = await fetchGridPage(
       supabase,
       restaurantId,
-      offset,
-      Math.min(offset + PAGE_SIZE - 1, MAX_CELLAR_GRID_ROWS - 1),
+      afterId,
+      limit,
     );
     rows.push(...page);
-    if (page.length < PAGE_SIZE) return { rows, truncated: false };
+    if (page.length < limit) return { rows, truncated: false };
+    afterId = page.at(-1)!.id;
   }
 
   const overflow = await fetchGridPage(
     supabase,
     restaurantId,
-    MAX_CELLAR_GRID_ROWS,
-    MAX_CELLAR_GRID_ROWS,
+    afterId,
+    1,
   );
   return { rows, truncated: overflow.length > 0 };
 }
@@ -136,18 +142,22 @@ async function fetchGridRows(
 async function fetchGridPage(
   supabase: SupabaseClient<Database>,
   restaurantId: string,
-  from: number,
-  to: number,
+  afterId: string | null,
+  limit: number,
 ): Promise<GridRow[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("inventory_items")
     .select(
       "id, bin_location, quantity, wines(id, name, producer, vintage)",
     )
     .eq("restaurant_id", restaurantId)
-    .not("bin_location", "is", null)
+    .not("bin_location", "is", null);
+  if (afterId !== null) {
+    query = query.gt("id", afterId);
+  }
+  const { data, error } = await query
     .order("id", { ascending: true })
-    .range(from, to);
+    .limit(limit);
   if (error) throw error;
   return (data ?? []) as GridRow[];
 }

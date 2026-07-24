@@ -51,6 +51,7 @@ function makeSupabase(dbPlans: DbPlan[], rpcPlans: RpcPlan[] = []) {
     payload?: unknown;
     filters: Array<[string, unknown]>;
     ranges: Array<[number, number]>;
+    limits: number[];
   }> = [];
   const rpc = vi.fn(async (fn: string, args: unknown) => {
     const plan = rpcPlans.shift();
@@ -72,12 +73,14 @@ function makeSupabase(dbPlans: DbPlan[], rpcPlans: RpcPlan[] = []) {
       action: "query",
       filters: [],
       ranges: [],
+      limits: [],
     } as {
       table: string;
       action: "query" | "insert" | "update";
       payload?: unknown;
       filters: Array<[string, unknown]>;
       ranges: Array<[number, number]>;
+      limits: number[];
     };
     calls.push(call);
     const result = () => ({
@@ -108,8 +111,15 @@ function makeSupabase(dbPlans: DbPlan[], rpcPlans: RpcPlan[] = []) {
         call.filters.push([column, [operator, value]]);
         return chain;
       },
+      gt: (column: string, value: unknown) => {
+        call.filters.push([column, [">", value]]);
+        return chain;
+      },
       order: () => chain,
-      limit: () => chain,
+      limit: (value: number) => {
+        call.limits.push(value);
+        return chain;
+      },
       range: (fromIndex: number, toIndex: number) => {
         call.ranges.push([fromIndex, toIndex]);
         return chain;
@@ -568,6 +578,7 @@ describe("cellar collection behavior", () => {
       {
         table: "inventory_items",
         data: [
+          ...filler,
           gridRow(),
           gridRow({
             id: "55555555-5555-4555-8555-555555555555",
@@ -582,7 +593,6 @@ describe("cellar collection behavior", () => {
               },
             ],
           }),
-          ...filler,
         ],
       },
       {
@@ -642,22 +652,26 @@ describe("cellar collection behavior", () => {
         totalBottles: 4,
       },
     });
-    expect(supabase.calls.map((call) => call.ranges)).toEqual([
-      [[0, 999]],
-      [[1000, 1999]],
+    expect(supabase.calls.map((call) => call.limits)).toEqual([
+      [1000],
+      [1000],
+    ]);
+    expect(supabase.calls.map((call) => call.ranges)).toEqual([[], []]);
+    expect(supabase.calls[1]?.filters).toContainEqual([
+      "id",
+      [">", "55555555-5555-4555-8555-555555555555"],
     ]);
   });
 
   it("accepts exactly 10,000 grid rows after checking for overflow", async () => {
-    const fullPage = Array.from({ length: 1000 }, (_, index) =>
-      gridRow({
-        id: `${String(index + 1).padStart(8, "0")}-9999-4999-8999-999999999999`,
-      }),
-    );
     const supabase = allowMembership([
-      ...Array.from({ length: 10 }, () => ({
+      ...Array.from({ length: 10 }, (_, pageIndex) => ({
         table: "inventory_items",
-        data: fullPage,
+        data: Array.from({ length: 1000 }, (_, index) =>
+          gridRow({
+            id: `${String(pageIndex * 1000 + index + 1).padStart(8, "0")}-9999-4999-8999-999999999999`,
+          }),
+        ),
       })),
       { table: "inventory_items", data: [] },
     ]);
@@ -665,15 +679,23 @@ describe("cellar collection behavior", () => {
     const response = await GRID();
 
     expect(response.status).toBe(200);
-    expect(supabase.calls.at(-1)?.ranges).toEqual([[10_000, 10_000]]);
+    expect(supabase.calls.at(-1)?.ranges).toEqual([]);
+    expect(supabase.calls.at(-1)?.limits).toEqual([1]);
+    expect(supabase.calls.at(-1)?.filters).toContainEqual([
+      "id",
+      [">", "00010000-9999-4999-8999-999999999999"],
+    ]);
   });
 
   it("rejects a grid that exceeds the honest 10,000-row cap", async () => {
-    const fullPage = Array.from({ length: 1000 }, () => gridRow());
     allowMembership([
-      ...Array.from({ length: 10 }, () => ({
+      ...Array.from({ length: 10 }, (_, pageIndex) => ({
         table: "inventory_items",
-        data: fullPage,
+        data: Array.from({ length: 1000 }, (_, index) =>
+          gridRow({
+            id: `${String(pageIndex * 1000 + index + 1).padStart(8, "0")}-8888-4888-8888-888888888888`,
+          }),
+        ),
       })),
       { table: "inventory_items", data: [gridRow()] },
     ]);

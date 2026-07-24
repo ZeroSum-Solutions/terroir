@@ -13,7 +13,7 @@ type Params = Promise<{ id: string }>;
 const ParamsSchema = z.strictObject({ id: z.string().uuid() });
 
 const SectionSchema = z.object({
-  section: z.string().trim().min(1).max(100),
+  section: z.string().trim().min(1).max(100).nullable(),
 });
 
 /**
@@ -53,11 +53,12 @@ export async function PATCH(
     }
 
     // Update all inventory_items for this wine
-    const { error } = await supabase
+    const { data: updatedRows, error } = await supabase
       .from("inventory_items")
       .update({ section })
       .eq("wine_id", wineId)
-      .eq("restaurant_id", restaurantId);
+      .eq("restaurant_id", restaurantId)
+      .select("id");
 
     if (error) {
       console.error("inventory_items section update failed:", error);
@@ -66,6 +67,10 @@ export async function PATCH(
         extra: { restaurantId, wineId, section },
       });
       return Errors.internal("Failed to update section.");
+    }
+
+    if (!updatedRows?.length) {
+      return Errors.notFound("Inventory");
     }
 
     return NextResponse.json({ wine_id: wineId, section });

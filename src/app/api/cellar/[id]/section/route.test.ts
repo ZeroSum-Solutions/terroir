@@ -18,7 +18,12 @@ function request(body: unknown): NextRequest {
   }) as unknown as NextRequest;
 }
 
-function makeSupabase() {
+function makeSupabase(
+  updateResult: {
+    data: Array<{ id: string }> | null;
+    error: { message?: string } | null;
+  } = { data: [{ id: "inventory-a" }], error: null },
+) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   const from = vi.fn((table: string) => {
     calls.push({ method: "from", args: [table] });
@@ -46,20 +51,17 @@ function makeSupabase() {
       return {
         update: (payload: Record<string, unknown>) => {
           calls.push({ method: "update", args: [payload] });
-          return {
+          const chain = {
             eq: (column: string, value: string) => {
               calls.push({ method: "eq", args: [column, value] });
-              return {
-                eq: async (nextColumn: string, nextValue: string) => {
-                  calls.push({
-                    method: "eq",
-                    args: [nextColumn, nextValue],
-                  });
-                  return { error: null };
-                },
-              };
+              return chain;
+            },
+            select: async (...args: unknown[]) => {
+              calls.push({ method: "select", args });
+              return updateResult;
             },
           };
+          return chain;
         },
       };
     }
@@ -175,6 +177,66 @@ describe("PATCH /api/cellar/[id]/section", () => {
     expect(supabase.calls.filter((call) => call.method === "eq")).toContainEqual({
       method: "eq",
       args: ["restaurant_id", "restaurant-a"],
+    });
+    expect(supabase.calls).toContainEqual({
+      method: "select",
+      args: ["id"],
+    });
+  });
+
+  it("clears the section when a wine is dropped into uncategorized", async () => {
+    const supabase = makeSupabase();
+    allow(supabase);
+
+    const response = await PATCH(request({ section: null }), {
+      params: Promise.resolve({ id: WINE_ID }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      wine_id: WINE_ID,
+      section: null,
+    });
+    expect(supabase.calls).toContainEqual({
+      method: "update",
+      args: [{ section: null }],
+    });
+  });
+
+  it("returns 404 when the wine has no inventory record to move", async () => {
+    const supabase = makeSupabase({ data: [], error: null });
+    allow(supabase);
+
+    const response = await PATCH(request({ section: "Reserve" }), {
+      params: Promise.resolve({ id: WINE_ID }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "not_found",
+        message: "Inventory not found.",
+      },
+    });
+  });
+
+  it("returns 500 when the inventory update fails", async () => {
+    const supabase = makeSupabase({
+      data: null,
+      error: { message: "provider unavailable" },
+    });
+    allow(supabase);
+
+    const response = await PATCH(request({ section: "Reserve" }), {
+      params: Promise.resolve({ id: WINE_ID }),
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "internal_error",
+        message: "Failed to update section.",
+      },
     });
   });
 });

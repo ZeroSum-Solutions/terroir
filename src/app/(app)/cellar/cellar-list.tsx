@@ -9,6 +9,7 @@ import {
   closestCenter,
   PointerSensor,
   TouchSensor,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -19,6 +20,14 @@ import {
   assignCellarWineSections,
   CellarBatchSectionError,
 } from "@/lib/cellar/batch-section";
+import {
+  cellarSectionDropId,
+  cellarWineDragId,
+  isCellarSectionAssignable,
+  parseCellarSectionDropId,
+  parseCellarWineDragId,
+  UNCATEGORIZED_SECTION_KEY,
+} from "@/lib/cellar/sections";
 import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
 import { useToast } from "@/lib/toast";
@@ -156,15 +165,21 @@ export function CellarList({
       groups.set(s.name, { name: s.name, wines: [] });
     }
     // Always have uncategorized at the end
-    groups.set("__uncategorized__", { name: "Uncategorized", wines: [] });
+    groups.set(UNCATEGORIZED_SECTION_KEY, {
+      name: "Uncategorized",
+      wines: [],
+    });
 
     for (const wine of filtered) {
-      const key = wine.section && sectionMap.has(wine.section) ? wine.section : "__uncategorized__";
+      const key =
+        wine.section && sectionMap.has(wine.section)
+          ? wine.section
+          : UNCATEGORIZED_SECTION_KEY;
       const group = groups.get(key);
       if (group) {
         group.wines.push(wine);
       } else {
-        groups.get("__uncategorized__")!.wines.push(wine);
+        groups.get(UNCATEGORIZED_SECTION_KEY)!.wines.push(wine);
       }
     }
 
@@ -184,25 +199,29 @@ export function CellarList({
       const { active, over } = event;
       if (!over || active.id === over.id) return;
 
-      const wineId = String(active.id);
-      const targetSection = String(over.id); // over.id is the section key
-
-      if (targetSection.startsWith("wine-")) return; // dropped on another wine, not a section
+      const wineId = parseCellarWineDragId(String(active.id));
+      if (!wineId) return;
 
       // Find current section for this wine
       const wine = rows.find((r) => r.wine_id === wineId);
-      if (!wine) return;
-      if (wine.section === targetSection.replace("section-", "")) return;
+      if (!wine || !isCellarSectionAssignable(wine)) return;
 
-      // Optimistic update: update the wine's section locally
-      wine.section = targetSection === "section-__uncategorized__" ? null : targetSection.replace("section-", "");
+      const directTarget = parseCellarSectionDropId(String(over.id));
+      const nestedTarget = over.data.current?.section;
+      const targetSection =
+        directTarget !== undefined
+          ? directTarget
+          : typeof nestedTarget === "string" || nestedTarget === null
+            ? nestedTarget
+            : undefined;
+      if (targetSection === undefined || wine.section === targetSection) return;
 
       // Persist via API
       try {
         const res = await fetch(`/api/cellar/${wineId}/section`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ section: wine.section ?? sections?.find((s) => s.name === wine.section)?.name ?? "" }),
+          body: JSON.stringify({ section: targetSection }),
         });
         if (!res.ok) {
           throw new Error(`Failed (${res.status})`);
@@ -212,7 +231,7 @@ export function CellarList({
         toast.error("Failed to move wine");
       }
     },
-    [rows, sections, router, toast],
+    [rows, router, toast],
   );
 
   // BND-064: bulk assign selected wines to a section
@@ -472,15 +491,22 @@ function SectionGroup({
   selectedIds: Set<string>;
   onToggleSelect: (wineId: string) => void;
 }) {
-  const dropId = `section-${sectionKey}`;
+  const section = sectionKey === UNCATEGORIZED_SECTION_KEY ? null : sectionKey;
+  const { isOver, setNodeRef } = useDroppable({
+    id: cellarSectionDropId(sectionKey),
+    data: { section },
+  });
 
   return (
-    <div className="rounded-md border border-border bg-white overflow-hidden">
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "rounded-md border border-border bg-white overflow-hidden",
+        isOver && "border-accent ring-2 ring-accent/20",
+      )}
+    >
       {/* Section header — acts as drop target */}
-      <div
-        id={dropId}
-        className="flex items-center gap-sm px-md py-sm bg-surface-muted border-b border-border"
-      >
+      <div className="flex items-center gap-sm px-md py-sm bg-surface-muted border-b border-border">
         <h3 className="text-[13px] font-semibold text-ink">{sectionName}</h3>
         <span className="inline-flex items-center rounded-full bg-accent-soft px-sm py-2xs text-[11px] font-medium text-accent">
           {wines.length}
@@ -499,6 +525,7 @@ function SectionGroup({
               selectMode={selectMode}
               selected={selectedIds.has(row.wine_id)}
               onToggleSelect={() => onToggleSelect(row.wine_id)}
+              section={section}
             />
           ))}
         </div>
@@ -521,6 +548,7 @@ function DraggableWineRow({
   selectMode,
   selected,
   onToggleSelect,
+  section,
 }: {
   row: CellarWineRow;
   lowStockThreshold?: number;
@@ -528,9 +556,15 @@ function DraggableWineRow({
   selectMode: boolean;
   selected: boolean;
   onToggleSelect: () => void;
+  section: string | null;
 }) {
+  const assignable = isCellarSectionAssignable(row);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: row.wine_id });
+    useSortable({
+      id: cellarWineDragId(row.wine_id),
+      disabled: !assignable,
+      data: { section },
+    });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -554,7 +588,7 @@ function DraggableWineRow({
         selected={selected}
         onToggleSelect={onToggleSelect}
         dragHandle={
-          !selectMode
+          !selectMode && assignable
             ? { attributes: { ...attributes }, listeners: { ...listeners } }
             : undefined
         }
