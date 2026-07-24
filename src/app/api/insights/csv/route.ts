@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,30 +26,42 @@ function formatMoney(n: number): string {
  * and varietal breakdown sections.
  */
 export async function GET() {
+  return withApiHandler(getInsightsCsv);
+}
+
+async function getInsightsCsv() {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
   try {
     // Fetch the same data as the insights page
-    const [{ data: scans }, { data: inventoryItems }, { data: scanItems }] =
-      await Promise.all([
-        supabase
-          .from("invoice_scans")
-          .select(
-            "id, distributor_name, item_count, accuracy_score, created_at, final_line_items",
-          )
-          .eq("restaurant_id", restaurantId)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("inventory_items")
-          .select("quantity, unit_cost, wine_id, wines(varietal)")
-          .eq("restaurant_id", restaurantId),
-        supabase
-          .from("inventory_items")
-          .select("quantity, unit_cost, invoice_scan_id, invoice_scans!inner(distributor_name)")
-          .eq("restaurant_id", restaurantId),
-      ]);
+    const [
+      { data: scans, error: scansError },
+      { data: inventoryItems, error: inventoryError },
+      { data: scanItems, error: scanItemsError },
+    ] = await Promise.all([
+      supabase
+        .from("invoice_scans")
+        .select(
+          "id, distributor_name, item_count, accuracy_score, created_at, final_line_items",
+        )
+        .eq("restaurant_id", restaurantId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("inventory_items")
+        .select("quantity, unit_cost, wine_id, wines(varietal)")
+        .eq("restaurant_id", restaurantId),
+      supabase
+        .from("inventory_items")
+        .select(
+          "quantity, unit_cost, invoice_scan_id, invoice_scans!inner(distributor_name)",
+        )
+        .eq("restaurant_id", restaurantId),
+    ]);
+    if (scansError) throw scansError;
+    if (inventoryError) throw inventoryError;
+    if (scanItemsError) throw scanItemsError;
 
     const allScans = scans ?? [];
     const items = inventoryItems ?? [];
@@ -165,9 +179,6 @@ export async function GET() {
       tags: { surface: "insights", phase: "csv-export" },
       extra: { restaurantId },
     });
-    return NextResponse.json(
-      { error: "Failed to generate CSV export." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to generate CSV export.");
   }
 }

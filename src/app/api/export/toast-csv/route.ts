@@ -1,21 +1,27 @@
 import { NextResponse } from "next/server";
 import { requireMembership } from "@/lib/api/auth";
+import { withApiHandler } from "@/lib/api/handler";
 import { generateToastCsv } from "@/lib/export/toast-csv";
 
 export const runtime = "nodejs";
 
 export async function GET() {
+  return withApiHandler(getToastCsv);
+}
+
+async function getToastCsv() {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
   // Fetch wines with their latest wine list prices (if any)
-  const { data: wines } = await supabase
+  const { data: wines, error: winesError } = await supabase
     .from("wines")
     .select("id, name, producer, vintage, varietal")
     .eq("restaurant_id", restaurantId)
     .order("producer")
     .order("name");
+  if (winesError) throw winesError;
 
   if (!wines || wines.length === 0) {
     const emptyCsv = generateToastCsv([]);
@@ -29,10 +35,11 @@ export async function GET() {
 
   // Get wine list item prices for these wines
   const wineIds = wines.map((w) => w.id);
-  const { data: listItems } = await supabase
+  const { data: listItems, error: listItemsError } = await supabase
     .from("wine_list_items")
     .select("wine_id, bottle_price")
     .in("wine_id", wineIds);
+  if (listItemsError) throw listItemsError;
 
   // Map wine_id to best bottle_price (highest, since that's the menu price)
   const priceMap = new Map<string, number>();

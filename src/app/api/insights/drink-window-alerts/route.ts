@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
 import { fetchDrinkWindowAlerts } from "@/lib/drink-window/alerts";
 
 export const runtime = "nodejs";
@@ -15,6 +17,10 @@ export const dynamic = "force-dynamic";
  * direct call in insights/page.tsx (code-quality-review finding 5).
  */
 export async function GET() {
+  return withApiHandler(getDrinkWindowAlerts);
+}
+
+async function getDrinkWindowAlerts() {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
@@ -27,9 +33,6 @@ export async function GET() {
       tags: { surface: "insights-drink-alerts", phase: "fetch" },
       extra: { restaurantId },
     });
-    return NextResponse.json(
-      { error: "Failed to fetch alerts." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to fetch alerts.");
   }
 }
