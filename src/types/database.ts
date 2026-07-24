@@ -1043,6 +1043,21 @@ export type Database = {
       cleanup_api_idempotency: { Args: never; Returns: number }
       cleanup_api_rate_limit_buckets: { Args: never; Returns: number }
       cleanup_scan_idempotency: { Args: never; Returns: undefined }
+      close_open_bottle_idempotent: {
+        Args: {
+          p_bottle_id: string
+          p_expected_opened_at: string
+          p_idempotency_key?: string
+          p_request_hash?: string
+          p_restaurant_id: string
+        }
+        Returns: {
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
       complete_api_idempotency: {
         Args: {
           p_idempotency_key: string

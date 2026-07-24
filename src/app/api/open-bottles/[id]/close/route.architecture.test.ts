@@ -9,11 +9,12 @@ const routeSource = readFileSync(
 );
 
 describe("/api/open-bottles/[id]/close architecture boundary", () => {
-  it("keeps transactional RPC and revalidation orchestration out of the route", () => {
-    expect(routeSource).toContain("@/domains/pours/pour-service");
-    expect(routeSource).not.toContain("@sentry/nextjs");
-    expect(routeSource).not.toContain("next/cache");
-    expect(routeSource).not.toContain(".rpc(");
+  it("uses one dedicated idempotent RPC without the generic wrapper", () => {
+    expect(routeSource).toContain("close_open_bottle_idempotent");
+    expect(routeSource).toContain("p_idempotency_key");
+    expect(routeSource).toContain("p_request_hash");
+    expect(routeSource).toContain("createIdempotencyRequestHash");
+    expect(routeSource).not.toContain("withIdempotency");
+    expect(routeSource).not.toContain("@/domains/pours/pour-service");
   });
 });
-

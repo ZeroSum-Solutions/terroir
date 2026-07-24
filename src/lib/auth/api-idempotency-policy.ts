@@ -141,6 +141,25 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       ],
     },
   },
+  "api:POST:/api/open-bottles/{param}/close": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "close_open_bottle_idempotent",
+    },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "close_open_bottle_idempotent",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/cellar/open/close-button.tsx"],
+    },
+  },
   "api:POST:/api/scan": {
     boundary: { kind: "generic-wrapper", count: 2 },
     identity: {

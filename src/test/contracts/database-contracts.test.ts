@@ -52,6 +52,14 @@ const atomicOpenBottleIdempotency = readFileSync(
   "utf8",
 );
 
+const atomicCloseBottleIdempotency = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../supabase/migrations/0059_close_open_bottle_idempotency.sql",
+  ),
+  "utf8",
+);
+
 describe("database security contracts", () => {
   it("keeps public wine-list read policies explicit and narrow", () => {
     for (const table of [
@@ -244,6 +252,7 @@ describe("database security contracts", () => {
       "reconcile_open_bottle",
       "reconcile_open_bottles_batch",
       "match_lwin_batch",
+      "close_open_bottle_idempotent",
     ]);
     const calls = collectProductionRpcCalls(
       resolve(process.cwd(), "src"),
@@ -422,6 +431,36 @@ describe("database security contracts", () => {
     );
     expect(atomicOpenBottleIdempotency).toContain(
       "grant execute on function public.open_bottle_from_inventory_idempotent(\n  uuid,\n  uuid,\n  text,\n  text\n) to authenticated;",
+    );
+  });
+
+  it("commits exact-generation bottle closes with their stored response", () => {
+    expect(atomicCloseBottleIdempotency).toMatch(
+      /close_open_bottle_idempotent\([\s\S]*?security definer[\s\S]*?set search_path = ''/,
+    );
+    expect(atomicCloseBottleIdempotency).toContain(
+      "public.is_member_with_role(p_restaurant_id, 'staff')",
+    );
+    expect(atomicCloseBottleIdempotency).toMatch(
+      /from public\.wines[\s\S]*?for update;[\s\S]*?from public\.open_bottles[\s\S]*?for update;/,
+    );
+    expect(atomicCloseBottleIdempotency).toMatch(
+      /v_bottle\.opened_at <> p_expected_opened_at[\s\S]*?v_bottle\.closed_at is not null/,
+    );
+    expect(atomicCloseBottleIdempotency).toMatch(
+      /insert into public\.pour_events[\s\S]*?v_bottle\.remaining_ml[\s\S]*?'spill'[\s\S]*?v_user_id[\s\S]*?'Bottle closed \(discard remaining\)'[\s\S]*?v_bottle\.id/,
+    );
+    expect(atomicCloseBottleIdempotency).toMatch(
+      /pg_advisory_xact_lock\([\s\S]*?insert into public\.api_idempotency[\s\S]*?insert into public\.pour_events[\s\S]*?update public\.api_idempotency[\s\S]*?state = 'completed'/,
+    );
+    expect(atomicCloseBottleIdempotency).toContain(
+      "'api:POST:/api/open-bottles/{param}/close'",
+    );
+    expect(atomicCloseBottleIdempotency).toContain(
+      "revoke all on function public.close_open_bottle_idempotent(\n  uuid,\n  uuid,\n  timestamptz,\n  text,\n  text\n) from anon;",
+    );
+    expect(atomicCloseBottleIdempotency).toContain(
+      "grant execute on function public.close_open_bottle_idempotent(\n  uuid,\n  uuid,\n  timestamptz,\n  text,\n  text\n) to authenticated;",
     );
   });
 

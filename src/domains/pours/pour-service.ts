@@ -25,13 +25,6 @@ export class PourNotFoundError extends Error {
   }
 }
 
-export class PourAlreadyClosedError extends Error {
-  constructor() {
-    super("Bottle is already closed.");
-    this.name = "PourAlreadyClosedError";
-  }
-}
-
 export class PourRpcError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message);
@@ -141,65 +134,4 @@ export async function undoLastPour(input: UndoLastPourInput) {
   });
 
   return data;
-}
-
-export type CloseOpenBottleInput = {
-  supabase: SupabaseClient<Database>;
-  restaurantId: string;
-  bottleId: string;
-};
-
-export async function closeOpenBottle(input: CloseOpenBottleInput) {
-  const { supabase, restaurantId, bottleId } = input;
-
-  const { data: bottle, error: fetchError } = await supabase
-    .from("open_bottles")
-    .select("id, wine_id, remaining_ml, closed_at, restaurant_id")
-    .eq("id", bottleId)
-    .eq("restaurant_id", restaurantId)
-    .single();
-
-  if (
-    fetchError &&
-    (fetchError as { code?: string }).code !== "PGRST116"
-  ) {
-    throw fetchError;
-  }
-  if (!bottle) {
-    throw new PourNotFoundError("Bottle not found.");
-  }
-
-  if (bottle.restaurant_id !== restaurantId) {
-    throw new PourNotFoundError("Bottle not found.");
-  }
-
-  if (bottle.closed_at) {
-    throw new PourAlreadyClosedError();
-  }
-
-  const closedAt = new Date().toISOString();
-  const { error: pourError } = await supabase.rpc("record_pour", {
-    p_restaurant_id: restaurantId,
-    p_wine_id: bottle.wine_id,
-    p_ml: bottle.remaining_ml,
-    p_kind: "spill",
-    p_note: "Bottle closed (discard remaining)",
-  });
-
-  if (pourError) {
-    console.error("Failed to close bottle via record_pour:", pourError);
-    Sentry.captureException(pourError, {
-      tags: { surface: "open-bottles", phase: "close" },
-      extra: { bottle_id: bottleId, wine_id: bottle.wine_id },
-    });
-    throw new PourRpcError("Failed to close bottle.", { cause: pourError });
-  }
-
-  revalidatePath("/cellar/open");
-
-  return {
-    id: bottle.id,
-    wine_id: bottle.wine_id,
-    closed_at: closedAt,
-  };
 }

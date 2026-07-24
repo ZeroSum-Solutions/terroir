@@ -40,6 +40,31 @@ describe("high-risk idempotency clients", () => {
     );
   });
 
+  it("closes one exact bottle generation with a persistent guarded slot", () => {
+    const closeButton = source(
+      "src/app/(app)/cellar/open/close-button.tsx",
+    );
+    const openPage = source(
+      "src/app/(app)/cellar/open/page.tsx",
+    );
+
+    expect(closeButton).toContain("createIdempotentCommandStore");
+    expect(closeButton).toContain(
+      'createSessionCommandPersistence("terroir:close-bottle")',
+    );
+    expect(closeButton).toContain("slot: `close:${bottleId}`");
+    expect(closeButton).toContain(
+      "url: `/api/open-bottles/${bottleId}/close`",
+    );
+    expect(closeButton).toContain(
+      "expected_opened_at: normalizeIsoUtcTimestamp(openedAt)",
+    );
+    expect(closeButton).toContain("if (closingRef.current) return");
+    expect(openPage.match(/openedAt=\{bottle\.opened_at\}/g)).toHaveLength(
+      2,
+    );
+  });
+
   it("persists one invitation key across remounts and transient failures", () => {
     const invitePage = source("src/app/invite/[token]/page.tsx");
 
