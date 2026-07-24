@@ -110,7 +110,22 @@ describe("setActiveRestaurant", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = mockSupabase(null) as any;
     const result = await setActiveRestaurant(supabase, "u1", "r-sneaky");
-    expect(result.ok).toBe(false);
+    expect(result).toEqual({ ok: false, reason: "not_member" });
+    expect(mockCookieSet).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes membership provider failures", async () => {
+    const error = { message: "private provider detail" };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = mockSupabase(null, error) as any;
+
+    const result = await setActiveRestaurant(supabase, "u1", "r1");
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "provider_error",
+      cause: error,
+    });
     expect(mockCookieSet).not.toHaveBeenCalled();
   });
 

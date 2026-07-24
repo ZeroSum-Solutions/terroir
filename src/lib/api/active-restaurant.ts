@@ -81,7 +81,11 @@ export async function setActiveRestaurant(
   supabase: SupabaseClient<Database>,
   userId: string,
   restaurantId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true }
+  | { ok: false; reason: "not_member" }
+  | { ok: false; reason: "provider_error"; cause: unknown }
+> {
   const { data, error } = await supabase
     .from("memberships")
     .select("restaurant_id")
@@ -89,9 +93,9 @@ export async function setActiveRestaurant(
     .eq("restaurant_id", restaurantId)
     .limit(1)
     .maybeSingle();
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, reason: "provider_error", cause: error };
   if (!data) {
-    return { ok: false, error: "Not a member of this restaurant." };
+    return { ok: false, reason: "not_member" };
   }
 
   const store = await cookies();
