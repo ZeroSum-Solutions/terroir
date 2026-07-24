@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextResponse } from "next/server";
 import { __resetRateLimitForTests } from "@/lib/api/rate-limit";
 
 /**
@@ -11,21 +12,24 @@ import { __resetRateLimitForTests } from "@/lib/api/rate-limit";
  */
 
 const mockGetUser = vi.fn();
+const mockRequireAuth = vi.fn();
 const mockFromInvitations = vi.fn();
 const mockFromMemberships = vi.fn();
 
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: async () => ({
-    auth: { getUser: () => mockGetUser() },
-    from: (table: string) => {
-      if (table === "invitations") return mockFromInvitations();
-      if (table === "memberships") return mockFromMemberships();
-      throw new Error(`unexpected table: ${table}`);
-    },
-  }),
+vi.mock("@/lib/api/auth", () => ({
+  requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
 }));
 
 const { POST } = await import("./route");
+const VALID_TOKEN = "a".repeat(48);
+
+const supabase = {
+  from: (table: string) => {
+    if (table === "invitations") return mockFromInvitations();
+    if (table === "memberships") return mockFromMemberships();
+    throw new Error(`unexpected table: ${table}`);
+  },
+};
 
 function makeJsonRequest(body: unknown, headers: Record<string, string> = {}) {
   return new Request("http://localhost/api/team/accept-invite", {
@@ -42,6 +46,18 @@ describe("POST /api/team/accept-invite", () => {
     __resetRateLimitForTests();
 
     mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
+    mockRequireAuth.mockImplementation(async () => {
+      const {
+        data: { user },
+      } = await mockGetUser();
+      if (!user) {
+        return NextResponse.json(
+          { error: { code: "unauthorized", message: "Unauthorized" } },
+          { status: 401 },
+        );
+      }
+      return { supabase, user };
+    });
 
     // Default: invite not found, so every pre-rate-limit test returns 404
     // via the DB path.
@@ -70,12 +86,14 @@ describe("POST /api/team/accept-invite", () => {
 
     // 10 attempts: all should reach the DB (→ 404), not be rate-limited.
     for (let i = 0; i < 10; i++) {
-      const res = await POST(makeJsonRequest({ token: "bad" }, headers));
+      const res = await POST(makeJsonRequest({ token: VALID_TOKEN }, headers));
       expect(res.status).not.toBe(429);
     }
 
     // 11th: rate-limited.
-    const blocked = await POST(makeJsonRequest({ token: "bad" }, headers));
+    const blocked = await POST(
+      makeJsonRequest({ token: VALID_TOKEN }, headers),
+    );
     expect(blocked.status).toBe(429);
     const retryAfter = blocked.headers.get("Retry-After");
     expect(retryAfter).toBeTruthy();
@@ -88,7 +106,10 @@ describe("POST /api/team/accept-invite", () => {
     // rate-limit bucket is only consumed for authed callers.
     for (let i = 0; i < 20; i++) {
       const res = await POST(
-        makeJsonRequest({ token: "x" }, { "x-forwarded-for": "9.9.9.9" }),
+        makeJsonRequest(
+          { token: VALID_TOKEN },
+          { "x-forwarded-for": "9.9.9.9" },
+        ),
       );
       expect(res.status).toBe(401);
     }
@@ -100,14 +121,16 @@ describe("POST /api/team/accept-invite", () => {
     // User A burns through their 10.
     mockGetUser.mockResolvedValue({ data: { user: { id: "user-A" } } });
     for (let i = 0; i < 10; i++) {
-      await POST(makeJsonRequest({ token: "bad" }, headers));
+      await POST(makeJsonRequest({ token: VALID_TOKEN }, headers));
     }
-    const aBlocked = await POST(makeJsonRequest({ token: "bad" }, headers));
+    const aBlocked = await POST(
+      makeJsonRequest({ token: VALID_TOKEN }, headers),
+    );
     expect(aBlocked.status).toBe(429);
 
     // User B on the same IP still has a full budget.
     mockGetUser.mockResolvedValue({ data: { user: { id: "user-B" } } });
-    const bFirst = await POST(makeJsonRequest({ token: "bad" }, headers));
+    const bFirst = await POST(makeJsonRequest({ token: VALID_TOKEN }, headers));
     expect(bFirst.status).not.toBe(429);
   });
 });
@@ -131,6 +154,18 @@ describe("POST /api/team/accept-invite — email binding", () => {
     mockGetUser.mockResolvedValue({
       data: { user: { id: "user-1", email: "alice@example.com" } },
     });
+    mockRequireAuth.mockImplementation(async () => {
+      const {
+        data: { user },
+      } = await mockGetUser();
+      if (!user) {
+        return NextResponse.json(
+          { error: { code: "unauthorized", message: "Unauthorized" } },
+          { status: 401 },
+        );
+      }
+      return { supabase, user };
+    });
 
     mockFromInvitations.mockReturnValue({
       select: () => ({
@@ -149,7 +184,13 @@ describe("POST /api/team/accept-invite — email binding", () => {
         }),
       }),
       // also stub .update() in case we ever reach it (we shouldn't on mismatch)
-      update: () => ({ eq: async () => ({ error: null }) }),
+      update: () => ({
+        eq: () => ({
+          select: () => ({
+            maybeSingle: async () => ({ data: { id: "inv-1" }, error: null }),
+          }),
+        }),
+      }),
     });
 
     mockFromMemberships.mockReturnValue({
@@ -168,7 +209,7 @@ describe("POST /api/team/accept-invite — email binding", () => {
 
   it("returns 404 on email mismatch (opaque, matches token-not-found)", async () => {
     const res = await POST(
-      makeJsonRequest({ token: "valid-token" }, { "x-forwarded-for": "1.1.1.1" }),
+      makeJsonRequest({ token: VALID_TOKEN }, { "x-forwarded-for": "1.1.1.1" }),
     );
     expect(res.status).toBe(404);
     expect(membershipInsert).not.toHaveBeenCalled();
@@ -191,11 +232,17 @@ describe("POST /api/team/accept-invite — email binding", () => {
           }),
         }),
       }),
-      update: () => ({ eq: async () => ({ error: null }) }),
+      update: () => ({
+        eq: () => ({
+          select: () => ({
+            maybeSingle: async () => ({ data: { id: "inv-2" }, error: null }),
+          }),
+        }),
+      }),
     });
 
     const res = await POST(
-      makeJsonRequest({ token: "valid-token" }, { "x-forwarded-for": "2.2.2.2" }),
+      makeJsonRequest({ token: VALID_TOKEN }, { "x-forwarded-for": "2.2.2.2" }),
     );
     expect(res.status).toBe(404);
     expect(membershipInsert).not.toHaveBeenCalled();
@@ -218,13 +265,96 @@ describe("POST /api/team/accept-invite — email binding", () => {
           }),
         }),
       }),
-      update: () => ({ eq: async () => ({ error: null }) }),
+      update: () => ({
+        eq: () => ({
+          select: () => ({
+            maybeSingle: async () => ({ data: { id: "inv-3" }, error: null }),
+          }),
+        }),
+      }),
     });
 
     const res = await POST(
-      makeJsonRequest({ token: "valid-token" }, { "x-forwarded-for": "3.3.3.3" }),
+      makeJsonRequest({ token: VALID_TOKEN }, { "x-forwarded-for": "3.3.3.3" }),
     );
     expect(res.status).toBe(200);
     expect(membershipInsert).toHaveBeenCalled();
+  });
+
+  it("redacts invitation lookup provider failures instead of reporting not found", async () => {
+    mockFromInvitations.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          single: async () => ({
+            data: null,
+            error: new Error("provider secret"),
+          }),
+        }),
+      }),
+    });
+
+    const res = await POST(
+      makeJsonRequest({ token: VALID_TOKEN }, { "x-forwarded-for": "4.4.4.4" }),
+    );
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body).toEqual({
+      error: { code: "internal_error", message: "Internal server error." },
+    });
+    expect(JSON.stringify(body)).not.toContain("provider secret");
+  });
+
+  it("does not report success when the acceptance update affects no row", async () => {
+    mockFromInvitations.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          single: async () => ({
+            data: {
+              id: "inv-raced",
+              restaurant_id: "rest-1",
+              role: "staff",
+              email: "alice@example.com",
+              expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+              accepted_at: null,
+            },
+            error: null,
+          }),
+        }),
+      }),
+      update: () => ({
+        eq: () => ({
+          select: () => ({
+            maybeSingle: async () => ({ data: null, error: null }),
+          }),
+        }),
+      }),
+    });
+    mockFromMemberships.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            limit: () => ({
+              single: async () => ({
+                data: { id: "membership-existing" },
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const res = await POST(
+      makeJsonRequest({ token: VALID_TOKEN }, { "x-forwarded-for": "5.5.5.5" }),
+    );
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      error: {
+        code: "not_found",
+        message: "Invalid or expired invitation.",
+      },
+    });
   });
 });

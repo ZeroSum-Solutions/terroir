@@ -1,6 +1,9 @@
-import * as Sentry from "@sentry/nextjs";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireOwner } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { TeamIdParamsSchema } from "@/lib/api/team-schemas";
+import { parseParams } from "@/lib/api/validation";
 
 export const runtime = "nodejs";
 
@@ -19,62 +22,43 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Params },
 ) {
-  const { id } = await params;
-  const auth = await requireOwner();
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, user, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireOwner();
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, user, restaurantId } = auth;
+    const parsedParams = await parseParams(params, TeamIdParamsSchema);
+    if (!parsedParams.ok) return parsedParams.response;
+    const { id } = parsedParams.data;
 
-  // Fetch the original invitation
-  const { data: original } = await supabase
-    .from("invitations")
-    .select("id, email, role, accepted_at")
-    .eq("id", id)
-    .eq("restaurant_id", restaurantId)
-    .maybeSingle();
+    const { data: original, error: fetchError } = await supabase
+      .from("invitations")
+      .select("id, email, role, accepted_at")
+      .eq("id", id)
+      .eq("restaurant_id", restaurantId)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!original) return Errors.notFound("Invitation");
+    if (original.accepted_at) {
+      return Errors.badRequest(
+        "Invitation already accepted. No need to resend.",
+      );
+    }
 
-  if (!original) {
-    return NextResponse.json(
-      { error: "Invitation not found." },
-      { status: 404 },
-    );
-  }
+    const { data: invitation, error } = await supabase
+      .from("invitations")
+      .insert({
+        restaurant_id: restaurantId,
+        email: original.email,
+        role: original.role,
+        invited_by: user.id,
+      })
+      .select("id, token, role, email, expires_at, created_at")
+      .single();
+    if (error || !invitation) {
+      throw error ?? new Error("invitation resend returned no row");
+    }
 
-  if (original.accepted_at) {
-    return NextResponse.json(
-      { error: "Invitation already accepted. No need to resend." },
-      { status: 400 },
-    );
-  }
-
-  // Create a fresh invitation with the same email + role
-  const { data: invitation, error } = await supabase
-    .from("invitations")
-    .insert({
-      restaurant_id: restaurantId,
-      email: original.email,
-      role: original.role,
-      invited_by: user.id,
-    })
-    .select("id, token, role, email, expires_at, created_at")
-    .single();
-
-  if (error || !invitation) {
-    console.error("invitation resend insert failed:", error);
-    Sentry.captureException(
-      error ?? new Error("invitation resend insert returned null"),
-      {
-        tags: { surface: "team-invite", phase: "resend-insert" },
-        extra: { restaurantId, originalId: id },
-      },
-    );
-    return NextResponse.json(
-      { error: "Failed to resend invitation." },
-      { status: 500 },
-    );
-  }
-
-  const origin = request.headers.get("origin") ?? request.nextUrl.origin;
-  const inviteUrl = `${origin}/invite/${invitation.token}`;
-
-  return NextResponse.json({ ...invitation, inviteUrl });
+    const inviteUrl = `${request.nextUrl.origin}/invite/${invitation.token}`;
+    return NextResponse.json({ ...invitation, inviteUrl });
+  });
 }

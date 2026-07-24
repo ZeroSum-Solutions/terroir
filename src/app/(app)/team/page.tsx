@@ -6,20 +6,28 @@ export const metadata: Metadata = { title: "Team" };
 
 export default async function TeamPage() {
   const auth = (await getAuthContext())!; // AppLayout redirects when null
-  const { supabase, restaurantId, restaurantName } = auth;
+  const { supabase, restaurantId, restaurantName, userRole } = auth;
+
+  const membersQuery = supabase
+    .from("memberships")
+    .select("id, user_id, role, created_at")
+    .eq("restaurant_id", restaurantId)
+    .order("created_at");
+  const invitationsQuery =
+    userRole === "owner"
+      ? supabase
+          .from("invitations")
+          .select(
+            "id, token, role, email, expires_at, accepted_at, created_at",
+          )
+          .eq("restaurant_id", restaurantId)
+          .is("accepted_at", null)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] });
 
   const [{ data: members }, { data: invitations }] = await Promise.all([
-    supabase
-      .from("memberships")
-      .select("id, user_id, role, created_at")
-      .eq("restaurant_id", restaurantId)
-      .order("created_at"),
-    supabase
-      .from("invitations")
-      .select("id, token, role, email, expires_at, accepted_at, created_at")
-      .eq("restaurant_id", restaurantId)
-      .is("accepted_at", null)
-      .order("created_at", { ascending: false }),
+    membersQuery,
+    invitationsQuery,
   ]);
 
   const pendingInvitations = (invitations ?? []).map((inv) => ({

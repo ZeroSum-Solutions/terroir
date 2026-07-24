@@ -1,6 +1,9 @@
-import * as Sentry from "@sentry/nextjs";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireOwner } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { TeamIdParamsSchema } from "@/lib/api/team-schemas";
+import { parseParams } from "@/lib/api/validation";
 
 export const runtime = "nodejs";
 
@@ -20,49 +23,38 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Params },
 ) {
-  const { id } = await params;
-  const auth = await requireOwner();
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireOwner();
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
+    const parsedParams = await parseParams(params, TeamIdParamsSchema);
+    if (!parsedParams.ok) return parsedParams.response;
+    const { id } = parsedParams.data;
 
-  const { data: target } = await supabase
-    .from("invitations")
-    .select("id, accepted_at")
-    .eq("id", id)
-    .eq("restaurant_id", restaurantId)
-    .maybeSingle();
+    const { data: target, error: fetchError } = await supabase
+      .from("invitations")
+      .select("id, accepted_at")
+      .eq("id", id)
+      .eq("restaurant_id", restaurantId)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!target) return Errors.notFound("Invitation");
+    if (target.accepted_at) {
+      return Errors.badRequest(
+        "Invitation already accepted. Remove the member instead.",
+      );
+    }
 
-  if (!target) {
-    return NextResponse.json(
-      { error: "Invitation not found." },
-      { status: 404 },
-    );
-  }
+    const { data: revoked, error } = await supabase
+      .from("invitations")
+      .delete()
+      .eq("id", id)
+      .eq("restaurant_id", restaurantId)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (!revoked) return Errors.notFound("Invitation");
 
-  if (target.accepted_at) {
-    return NextResponse.json(
-      { error: "Invitation already accepted. Remove the member instead." },
-      { status: 400 },
-    );
-  }
-
-  const { error } = await supabase
-    .from("invitations")
-    .delete()
-    .eq("id", id)
-    .eq("restaurant_id", restaurantId);
-
-  if (error) {
-    console.error("invitation-delete failed:", error);
-    Sentry.captureException(error, {
-      tags: { surface: "team-invite", phase: "delete" },
-      extra: { invitation_id: id, restaurantId },
-    });
-    return NextResponse.json(
-      { error: "Failed to revoke invitation." },
-      { status: 500 },
-    );
-  }
-
-  return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true });
+  });
 }

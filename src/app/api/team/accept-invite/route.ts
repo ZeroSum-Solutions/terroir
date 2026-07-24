@@ -1,8 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import * as Sentry from "@sentry/nextjs";
+import { requireAuth } from "@/lib/api/auth";
 import { rateLimit } from "@/lib/api/rate-limit";
-import { Errors } from "@/lib/api/errors";
-import { createClient } from "@/lib/supabase/server";
+import { apiError, Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseJson } from "@/lib/api/validation";
+import { AcceptInviteBodySchema } from "@/lib/api/team-schemas";
 
 export const runtime = "nodejs";
 
@@ -25,123 +27,91 @@ function clientIp(request: NextRequest): string {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  return withApiHandler(async () => {
+    const auth = await requireAuth();
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, user } = auth;
 
-  if (!user) {
-    return Errors.unauthorized();
-  }
-
-  // BND-013: rate-limit authed users before we touch the DB. The key is
-  // `${ip}:${user.id}` so a single user can't brute-force tokens from one
-  // IP, and a single IP can't brute-force across many throwaway accounts.
-  const limit = rateLimit(
-    `accept-invite:${clientIp(request)}:${user.id}`,
-    ACCEPT_INVITE_LIMIT,
-    ACCEPT_INVITE_WINDOW_MS,
-  );
-  if (!limit.ok) {
-    return NextResponse.json(
-      { error: { code: "rate_limited", message: "Too many invitation attempts. Try again later." } },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+    const limit = rateLimit(
+      `accept-invite:${clientIp(request)}:${user.id}`,
+      ACCEPT_INVITE_LIMIT,
+      ACCEPT_INVITE_WINDOW_MS,
     );
-  }
+    if (!limit.ok) {
+      return Errors.rateLimited(
+        "Too many invitation attempts. Try again later.",
+        { headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+      );
+    }
 
-  let body: { token?: string };
-  try {
-    body = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
+    const parsed = await parseJson(request, AcceptInviteBodySchema);
+    if (!parsed.ok) return parsed.response;
 
-  if (!body.token) {
-    return Errors.badRequest("Invitation token is required.");
-  }
+    const { data: invitation, error: findError } = await supabase
+      .from("invitations")
+      .select("id, restaurant_id, role, email, expires_at, accepted_at")
+      .eq("token", parsed.data.token)
+      .single();
+    if (findError && (findError as { code?: string }).code !== "PGRST116") {
+      throw findError;
+    }
+    const invalidInvitation = () =>
+      apiError(404, "not_found", "Invalid or expired invitation.");
+    if (!invitation) return invalidInvitation();
 
-  // Find the invitation
-  const { data: invitation, error: findError } = await supabase
-    .from("invitations")
-    .select("id, restaurant_id, role, email, expires_at, accepted_at")
-    .eq("token", body.token)
-    .single();
+    const inviteeEmail = invitation.email?.trim().toLowerCase();
+    const userEmail = user.email?.trim().toLowerCase();
+    if (!inviteeEmail || !userEmail || inviteeEmail !== userEmail) {
+      return invalidInvitation();
+    }
+    if (invitation.accepted_at) {
+      return Errors.badRequest("This invitation has already been used.");
+    }
+    if (new Date(invitation.expires_at) < new Date()) {
+      return Errors.badRequest("This invitation has expired.");
+    }
 
-  if (findError || !invitation) {
-    return Errors.notFound("Invalid or expired invitation.");
-  }
+    const { data: existingMembership, error: membershipLookupError } =
+      await supabase
+        .from("memberships")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("restaurant_id", invitation.restaurant_id)
+        .limit(1)
+        .single();
+    if (
+      membershipLookupError &&
+      (membershipLookupError as { code?: string }).code !== "PGRST116"
+    ) {
+      throw membershipLookupError;
+    }
 
-  // BND-011: email-binding enforcement. Mismatch returns the same opaque
-  // 404 used for token-not-found so a brute-forcer can't distinguish
-  // "valid token, wrong user" from "no such token".
-  const inviteeEmail = invitation.email?.trim().toLowerCase();
-  const userEmail = user.email?.trim().toLowerCase();
-  if (!inviteeEmail || !userEmail || inviteeEmail !== userEmail) {
-    return Errors.notFound("Invalid or expired invitation.");
-  }
+    if (!existingMembership) {
+      const { error: membershipError } = await supabase
+        .from("memberships")
+        .insert({
+          user_id: user.id,
+          restaurant_id: invitation.restaurant_id,
+          role: invitation.role,
+        });
+      if (membershipError) throw membershipError;
+    }
 
-  if (invitation.accepted_at) {
-    return Errors.badRequest("This invitation has already been used.");
-  }
-
-  if (new Date(invitation.expires_at) < new Date()) {
-    return Errors.badRequest("This invitation has expired.");
-  }
-
-  // Check if user already has a membership for this restaurant
-  const { data: existingMembership } = await supabase
-    .from("memberships")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("restaurant_id", invitation.restaurant_id)
-    .limit(1)
-    .single();
-
-  if (existingMembership) {
-    // Mark invitation as accepted but don't create a duplicate membership
-    await supabase
+    const { data: acceptedInvitation, error: acceptanceError } = await supabase
       .from("invitations")
       .update({ accepted_at: new Date().toISOString() })
-      .eq("id", invitation.id);
+      .eq("id", invitation.id)
+      .select("id")
+      .maybeSingle();
+    if (acceptanceError) throw acceptanceError;
+    if (!acceptedInvitation) return invalidInvitation();
 
     return NextResponse.json({
       success: true,
-      message: "You are already a member of this restaurant.",
+      ...(existingMembership
+        ? { message: "You are already a member of this restaurant." }
+        : { role: invitation.role }),
       restaurantId: invitation.restaurant_id,
     });
-  }
-
-  // Create the membership
-  const { error: membershipError } = await supabase
-    .from("memberships")
-    .insert({
-      user_id: user.id,
-      restaurant_id: invitation.restaurant_id,
-      role: invitation.role,
-    });
-
-  if (membershipError) {
-    console.error("membership insert failed:", membershipError);
-    Sentry.captureException(membershipError, {
-      tags: { surface: "team-accept-invite", phase: "membership-insert" },
-      extra: {
-        userId: user.id,
-        restaurantId: invitation.restaurant_id,
-        invitationId: invitation.id,
-      },
-    });
-    return Errors.internal("Failed to join restaurant.");
-  }
-
-  // Mark invitation as accepted
-  await supabase
-    .from("invitations")
-    .update({ accepted_at: new Date().toISOString() })
-    .eq("id", invitation.id);
-
-  return NextResponse.json({
-    success: true,
-    restaurantId: invitation.restaurant_id,
-    role: invitation.role,
   });
 }

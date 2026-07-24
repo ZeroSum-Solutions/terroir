@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Check, Loader2, X } from "lucide-react";
+import { readApiError } from "@/lib/api/client-error";
 
 export default function AcceptInvitePage() {
   const params = useParams<{ token: string }>();
@@ -36,7 +37,7 @@ export default function AcceptInvitePage() {
           return;
         }
         setStatus("error");
-        setMessage(data.error ?? "Failed to accept invitation.");
+        setMessage(readApiError(data, "Failed to accept invitation.").message);
       }
     }
 
@@ -48,14 +49,21 @@ export default function AcceptInvitePage() {
       <div className="w-full max-w-sm rounded-md border border-border bg-surface p-lg text-center">
         {status === "loading" && (
           <>
-            <Loader2 className="mx-auto h-8 w-8 animate-spin text-accent" aria-hidden="true" />
+            <Loader2
+              className="mx-auto h-8 w-8 animate-spin text-accent"
+              aria-hidden="true"
+            />
             <p className="mt-md text-[15px] text-ink">Joining restaurant...</p>
           </>
         )}
         {status === "success" && (
           <>
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success-soft">
-              <Check className="h-6 w-6 text-success" strokeWidth={2.5} aria-hidden="true" />
+              <Check
+                className="h-6 w-6 text-success"
+                strokeWidth={2.5}
+                aria-hidden="true"
+              />
             </div>
             <p className="mt-md text-[15px] font-medium text-ink">{message}</p>
             <p className="mt-xs text-[13px] text-ink-muted">
@@ -66,7 +74,11 @@ export default function AcceptInvitePage() {
         {status === "error" && (
           <>
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-error/10">
-              <X className="h-6 w-6 text-error" strokeWidth={2.5} aria-hidden="true" />
+              <X
+                className="h-6 w-6 text-error"
+                strokeWidth={2.5}
+                aria-hidden="true"
+              />
             </div>
             <p className="mt-md text-[15px] font-medium text-ink">{message}</p>
             <button

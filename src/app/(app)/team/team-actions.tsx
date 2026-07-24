@@ -1,10 +1,19 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, Copy, Link2, Loader2, RefreshCw, Trash2, X } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Link2,
+  Loader2,
+  RefreshCw,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { TimeAgo } from "@/components/time-ago";
+import { readApiError } from "@/lib/api/client-error";
 
 type Member = {
   id: string;
@@ -73,17 +82,16 @@ export function TeamActions({
         body: JSON.stringify({ email, role: inviteRole }),
       });
       if (!res.ok) {
-        let serverMessage: string | undefined;
+        let serverMessage = "Failed to create invite";
         try {
-          const body = (await res.json()) as { error?: unknown };
-          if (typeof body.error === "string") serverMessage = body.error;
+          serverMessage = readApiError(await res.json(), serverMessage).message;
         } catch {
           // non-JSON body — fall through to status-based message
         }
         throw new Error(
           res.status === 403
             ? "Only owners can create invite links."
-            : serverMessage ?? "Failed to create invite",
+            : serverMessage,
         );
       }
       const invite = await res.json();
@@ -124,10 +132,7 @@ export function TeamActions({
     fallback: string,
   ): Promise<string> => {
     try {
-      const body = (await res.json()) as { error?: unknown };
-      if (typeof body.error === "string" && body.error.length > 0) {
-        return body.error;
-      }
+      return readApiError(await res.json(), fallback).message;
     } catch {
       // non-JSON body — fall through to fallback
     }
@@ -143,7 +148,10 @@ export function TeamActions({
     });
     if (!res.ok) {
       setMemberActionError(
-        await extractServerError(res, "Couldn't update role. Please try again."),
+        await extractServerError(
+          res,
+          "Couldn't update role. Please try again.",
+        ),
       );
       return;
     }
@@ -157,7 +165,10 @@ export function TeamActions({
     });
     if (!res.ok) {
       setMemberActionError(
-        await extractServerError(res, "Couldn't remove member. Please try again."),
+        await extractServerError(
+          res,
+          "Couldn't remove member. Please try again.",
+        ),
       );
       return;
     }
@@ -244,9 +255,7 @@ export function TeamActions({
               <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
                 <th className="px-md py-sm text-left font-semibold">User</th>
                 <th className="px-md py-sm text-left font-semibold">Role</th>
-                <th className="px-md py-sm text-right font-semibold">
-                  Joined
-                </th>
+                <th className="px-md py-sm text-right font-semibold">Joined</th>
                 {isOwner && (
                   <th className="w-[48px] px-sm py-sm font-semibold" />
                 )}
@@ -296,7 +305,11 @@ export function TeamActions({
                           }}
                           className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-subtle hover:bg-surface-muted hover:text-danger"
                         >
-                          <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                          <Trash2
+                            className="h-3.5 w-3.5"
+                            strokeWidth={2}
+                            aria-hidden="true"
+                          />
                         </button>
                       )}
                     </td>
@@ -389,9 +402,17 @@ export function TeamActions({
                               className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
                             >
                               {justCopied ? (
-                                <Check className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                                <Check
+                                  className="h-3.5 w-3.5"
+                                  strokeWidth={2}
+                                  aria-hidden
+                                />
                               ) : (
-                                <Copy className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                                <Copy
+                                  className="h-3.5 w-3.5"
+                                  strokeWidth={2}
+                                  aria-hidden
+                                />
                               )}
                               {justCopied ? "Copied" : "Copy link"}
                             </button>
@@ -401,7 +422,11 @@ export function TeamActions({
                               aria-label={`Resend invitation for ${inv.email ?? "invitation"}`}
                               className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
                             >
-                              <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                              <RefreshCw
+                                className="h-3.5 w-3.5"
+                                strokeWidth={2}
+                                aria-hidden
+                              />
                               Resend
                             </button>
                             <button
@@ -418,7 +443,11 @@ export function TeamActions({
                               aria-label={`Revoke invitation for ${inv.email ?? "invitation"}`}
                               className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-sm border border-border-strong bg-white text-ink-subtle hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
                             >
-                              <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                              <Trash2
+                                className="h-3.5 w-3.5"
+                                strokeWidth={2}
+                                aria-hidden
+                              />
                             </button>
                           </div>
                         </td>
@@ -511,8 +540,8 @@ function InviteModal({
           Invite team member
         </h3>
         <p className="mt-xs text-[13px] text-ink-muted">
-          Create a shareable link. Anyone with the link can join your
-          restaurant as the selected role.
+          Create a shareable link. Anyone with the link can join your restaurant
+          as the selected role.
         </p>
 
         {!inviteUrl ? (
@@ -595,10 +624,7 @@ function InviteModal({
                 className="flex h-[38px] items-center gap-xs rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
               >
                 {creating && (
-                  <Loader2
-                    className="h-4 w-4 animate-spin"
-                    strokeWidth={2}
-                  />
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
                 )}
                 Generate link
               </button>
@@ -647,9 +673,10 @@ function InviteModal({
  * Used to colour-code the Pending invitations table so operators can
  * see at a glance which links are still usable.
  */
-function describeExpiry(
-  expiresAt: string,
-): { status: "expired" | "soon" | "ok"; label: string } {
+function describeExpiry(expiresAt: string): {
+  status: "expired" | "soon" | "ok";
+  label: string;
+} {
   const ms = new Date(expiresAt).getTime() - Date.now();
   if (ms <= 0) return { status: "expired", label: "Expired" };
 

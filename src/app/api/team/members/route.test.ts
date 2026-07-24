@@ -17,8 +17,13 @@ vi.mock("@/lib/api/auth", () => ({
 const { GET } = await import("./route");
 
 type MembershipsPayload = {
-  data: Array<{ id: string; user_id: string; role: string; created_at: string }>;
-  error: null;
+  data: Array<{
+    id: string;
+    user_id: string;
+    role: string;
+    created_at: string;
+  }>;
+  error: unknown;
 };
 type InvitationsPayload = {
   data: Array<{
@@ -29,7 +34,7 @@ type InvitationsPayload = {
     accepted_at: string | null;
     created_at: string;
   }>;
-  error: null;
+  error: unknown;
 };
 
 function walkForTokenKey(value: unknown, path = "$"): string[] {
@@ -181,5 +186,29 @@ describe("GET /api/team/members", () => {
     for (const inv of body.invitations) {
       expect(inv.has_pending_invite).toBe(true);
     }
+  });
+
+  it("redacts membership provider failures instead of returning an empty roster", async () => {
+    const supabase = buildSupabase({
+      memberships: {
+        data: [],
+        error: new Error("provider secret"),
+      },
+      invitations: { data: [], error: null },
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-1",
+      user: { id: "u1" },
+    });
+
+    const res = await GET();
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body).toEqual({
+      error: { code: "internal_error", message: "Internal server error." },
+    });
+    expect(JSON.stringify(body)).not.toContain("provider secret");
   });
 });

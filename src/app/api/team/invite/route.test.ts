@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { type NextRequest } from "next/server";
+import { NextRequest } from "next/server";
 
 const mockRequireOwner = vi.fn();
 vi.mock("@/lib/api/auth", () => ({
@@ -50,12 +50,15 @@ function makeSupabase() {
   };
 }
 
-function makeReq(body: unknown): NextRequest {
-  return {
-    json: async () => body,
-    headers: new Headers({ origin: "http://localhost:3000" }),
-    nextUrl: { origin: "http://localhost:3000" },
-  } as unknown as NextRequest;
+function makeReq(body: unknown, origin = "http://localhost:3000"): NextRequest {
+  return new NextRequest("http://localhost:3000/api/team/invite", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin,
+    },
+    body: JSON.stringify(body),
+  });
 }
 
 describe("POST /api/team/invite", () => {
@@ -79,7 +82,7 @@ describe("POST /api/team/invite", () => {
     const body = await res.json();
     expect(body.email).toBe("alice@example.com");
     expect(body.role).toBe("manager");
-    expect(body.inviteUrl).toContain("/invite/tok-1");
+    expect(body.inviteUrl).toBe("http://localhost:3000/invite/tok-1");
     expect(sup._inserts[0]).toMatchObject({
       restaurant_id: RID,
       email: "alice@example.com",
@@ -128,6 +131,24 @@ describe("POST /api/team/invite", () => {
     const res = await POST(makeReq({ email: "Alice@Example.com  " }));
     expect(res.status).toBe(200);
     expect(sup._inserts[0]).toMatchObject({ email: "alice@example.com" });
+  });
+
+  it("ignores an untrusted Origin header when building the invitation URL", async () => {
+    const sup = makeSupabase();
+    mockRequireOwner.mockResolvedValue({
+      supabase: sup,
+      restaurantId: RID,
+      user: { id: "u-1" },
+      role: "owner",
+    });
+
+    const res = await POST(
+      makeReq({ email: "alice@example.com" }, "https://evil.example"),
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).inviteUrl).toBe(
+      "http://localhost:3000/invite/tok-1",
+    );
   });
 
   it("forwards 403 when caller is not owner", async () => {
