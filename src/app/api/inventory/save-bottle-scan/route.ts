@@ -2,7 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 import {
+  createIdempotencyRequestHash,
   isValidIdempotencyKey,
   withIdempotency,
 } from "@/lib/api/idempotency";
@@ -44,12 +46,20 @@ async function postBottleInventorySave(request: NextRequest) {
 
   // ── Idempotency (BND-006) ────────────────────────────────────────
   const rawKey = request.headers.get("Idempotency-Key");
-  const key = isValidIdempotencyKey(rawKey) ? rawKey : null;
+  if (rawKey !== null && !isValidIdempotencyKey(rawKey)) {
+    return Errors.badRequest(
+      "Invalid Idempotency-Key.",
+      undefined,
+      "invalid_idempotency_key",
+    );
+  }
 
   const result = await withIdempotency({
     supabase,
     restaurantId,
-    key,
+    operationId: "api:POST:/api/inventory/save-bottle-scan",
+    key: rawKey,
+    requestHash: createIdempotencyRequestHash(body),
     handler: async () =>
       saveBottleOnce({ supabase, restaurantId, wine: body.wine }),
   });

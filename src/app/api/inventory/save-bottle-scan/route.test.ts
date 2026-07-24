@@ -6,6 +6,7 @@ vi.mock("@/lib/api/auth", () => ({
   requireMembership: (...args: unknown[]) => mockRequireMembership(...args),
 }));
 vi.mock("@/lib/api/idempotency", () => ({
+  createIdempotencyRequestHash: () => "a".repeat(64),
   isValidIdempotencyKey: () => false,
   withIdempotency: async (options: {
     handler: () => Promise<{ status: number; body: unknown }>;

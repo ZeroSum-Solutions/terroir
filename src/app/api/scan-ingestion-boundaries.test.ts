@@ -6,6 +6,8 @@ const mockRateLimit = vi.fn();
 const mockAssertInvoiceExtractionConfigured = vi.fn();
 const mockProcessInvoiceScanOnce = vi.fn();
 const mockWithIdempotency = vi.fn();
+const mockIsValidIdempotencyKey = vi.fn();
+const mockCreateIdempotencyRequestHash = vi.fn();
 
 vi.mock("@/lib/api/auth", () => ({
   requireMembership: (...args: unknown[]) => mockRequireMembership(...args),
@@ -22,7 +24,10 @@ vi.mock("@/domains/scanning/invoice-scan-service", () => ({
     mockProcessInvoiceScanOnce(...args),
 }));
 vi.mock("@/lib/api/idempotency", () => ({
-  isValidIdempotencyKey: () => false,
+  createIdempotencyRequestHash: (...args: unknown[]) =>
+    mockCreateIdempotencyRequestHash(...args),
+  isValidIdempotencyKey: (...args: unknown[]) =>
+    mockIsValidIdempotencyKey(...args),
   withIdempotency: (...args: unknown[]) => mockWithIdempotency(...args),
 }));
 vi.mock("@/lib/ai/anthropic-client", () => ({
@@ -77,6 +82,8 @@ describe("scan ingestion API boundaries", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRateLimit.mockReturnValue({ ok: true });
+    mockIsValidIdempotencyKey.mockReturnValue(true);
+    mockCreateIdempotencyRequestHash.mockReturnValue("a".repeat(64));
     mockWithIdempotency.mockImplementation(
       async (options: {
         handler: () => Promise<{ status: number; body: unknown }>;
@@ -210,6 +217,76 @@ describe("scan ingestion API boundaries", () => {
     expect(download).not.toHaveBeenCalled();
     expect(from).not.toHaveBeenCalled();
     expect(mockAssertInvoiceExtractionConfigured).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed Idempotency-Key before reading scan input", async () => {
+    mockRequireMembership.mockResolvedValue({
+      supabase: {},
+      user: { id: "user-a" },
+      restaurantId: "restaurant-a",
+      role: "owner",
+    });
+    mockIsValidIdempotencyKey.mockReturnValue(false);
+
+    const response = await scanInvoice(
+      new Request("http://localhost/api/scan", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "bad key!",
+        },
+        body: "{}",
+      }) as unknown as NextRequest,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "invalid_idempotency_key",
+        message: "Invalid Idempotency-Key.",
+      },
+    });
+    expect(mockWithIdempotency).not.toHaveBeenCalled();
+  });
+
+  it("scopes a JSON scan key to its operation and request hash", async () => {
+    mockRequireMembership.mockResolvedValue({
+      supabase: {},
+      user: { id: "user-a" },
+      restaurantId: "restaurant-a",
+      role: "owner",
+    });
+    mockWithIdempotency.mockResolvedValue({
+      status: 200,
+      body: { scanId: "cached-scan" },
+      replayed: true,
+    });
+
+    const response = await scanInvoice(
+      new Request("http://localhost/api/scan", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "client-retry-0001",
+        },
+        body: JSON.stringify({
+          imagePath: "restaurant-a/cached-scan/invoice.jpg",
+        }),
+      }) as unknown as NextRequest,
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockCreateIdempotencyRequestHash).toHaveBeenCalledWith({
+      imagePath: "restaurant-a/cached-scan/invoice.jpg",
+    });
+    expect(mockWithIdempotency).toHaveBeenCalledWith(
+      expect.objectContaining({
+        restaurantId: "restaurant-a",
+        operationId: "api:POST:/api/scan",
+        key: "client-retry-0001",
+        requestHash: "a".repeat(64),
+      }),
+    );
   });
 
   it("rejects foreign JSON storage paths before provider access", async () => {

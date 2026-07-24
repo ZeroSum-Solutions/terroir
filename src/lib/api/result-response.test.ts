@@ -12,6 +12,25 @@ describe("apiResultResponse", () => {
     expect(await response.json()).toEqual({ id: "created" });
   });
 
+  it("preserves explicit idempotency and retry headers", () => {
+    const response = apiResultResponse({
+      status: 409,
+      body: {
+        error: {
+          code: "idempotency_in_progress",
+          message: "Still in progress.",
+        },
+      },
+      headers: {
+        "Idempotency-Replayed": "false",
+        "Retry-After": "1",
+      },
+    });
+
+    expect(response.headers.get("Idempotency-Replayed")).toBe("false");
+    expect(response.headers.get("Retry-After")).toBe("1");
+  });
+
   it("normalizes legacy validation failures", async () => {
     const response = apiResultResponse({
       status: 409,

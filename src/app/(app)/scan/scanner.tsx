@@ -3,6 +3,10 @@
 import { Check } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  readApiErrorCode,
+  shouldRetainIdempotencyKey,
+} from "@/lib/api/idempotency-client";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
 import {
   PERSISTED_SCAN_VERSION,
@@ -71,9 +75,18 @@ function saveScan(scan: Scan | null) {
 }
 
 class ScanError extends Error {
+  status: number;
+  code: string | null;
   rawText?: string;
-  constructor(message: string, rawText?: string) {
+  constructor(
+    message: string,
+    status: number,
+    code: string | null,
+    rawText?: string,
+  ) {
     super(message);
+    this.status = status;
+    this.code = code;
     this.rawText = rawText;
   }
 }
@@ -85,11 +98,17 @@ async function postScan(files: File[], signal: AbortSignal, key?: string | null)
   if (key) headers["Idempotency-Key"] = key;
   const res = await fetch("/api/scan", { method: "POST", body, signal, headers });
   if (!res.ok) {
+    const payload = await res.json().catch(() => null);
     const failure = readApiError(
-      await res.json().catch(() => null),
+      payload,
       `Scan failed (${res.status})`,
     );
-    throw new ScanError(failure.message, failure.rawText);
+    throw new ScanError(
+      failure.message,
+      res.status,
+      readApiErrorCode(payload),
+      failure.rawText,
+    );
   }
   return (await res.json()) as Scan;
 }
@@ -113,6 +132,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   // across retries. Cleared on success or 4xx validation error; held across
   // 5xx / network failures so retry returns cached result.
   const scanKeyRef = useRef<string | null>(null);
+  const scanInputRef = useRef<string | null>(null);
   const [savedResult, setSavedResult] = useState<{
     itemCount: number;
     wineCount: number;
@@ -179,7 +199,17 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     setStatus("processing");
     setError(null);
 
-    // BND-089: mint scanIdempotency key on first attempt, reuse on retry.
+    const inputFingerprint = files
+      .map((file) =>
+        [file.name, file.size, file.type, file.lastModified].join(":"),
+      )
+      .join("|");
+    if (scanInputRef.current !== inputFingerprint) {
+      scanKeyRef.current = null;
+      scanInputRef.current = inputFingerprint;
+    }
+
+    // BND-089: mint one key per logical file selection and reuse on retry.
     if (!scanKeyRef.current) {
       scanKeyRef.current =
         typeof crypto !== "undefined" && crypto.randomUUID
@@ -191,12 +221,20 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       if (ac.signal.aborted) return;
       setProgress(100);
       scanKeyRef.current = null; // 2xx → clear for next scan
+      scanInputRef.current = null;
       setScan(fresh);
       setOriginalItems([...fresh.items]);
       saveScan(fresh);
       setStatus(fresh.quality?.manualFallbackTriggered ? "review" : "results");
     } catch (err) {
       if (ac.signal.aborted) return;
+      if (
+        err instanceof ScanError &&
+        !shouldRetainIdempotencyKey(err.status, err.code)
+      ) {
+        scanKeyRef.current = null;
+        scanInputRef.current = null;
+      }
       const message = err instanceof Error ? err.message : "Scan failed.";
       setError(message);
       setRawText(err instanceof ScanError ? err.rawText ?? null : null);
@@ -325,15 +363,18 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         body,
       });
       if (!res.ok) {
-        // Validation errors (4xx except 408/429) mean the request is
-        // structurally broken — a retry with the same key would just
-        // replay the same error. Reset so the user can fix and resend.
-        if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+        const payload = await res.json().catch(() => null);
+        if (
+          !shouldRetainIdempotencyKey(
+            res.status,
+            readApiErrorCode(payload),
+          )
+        ) {
           saveKeyRef.current = null;
         }
         throw new Error(
           readApiError(
-            await res.json().catch(() => null),
+            payload,
             `Save failed (${res.status})`,
           ).message,
         );
@@ -461,12 +502,18 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
           body: JSON.stringify({ wine }),
         });
         if (!res.ok) {
-          if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+          const payload = await res.json().catch(() => null);
+          if (
+            !shouldRetainIdempotencyKey(
+              res.status,
+              readApiErrorCode(payload),
+            )
+          ) {
             bottleSaveKeyRef.current = null;
           }
           throw new Error(
             readApiError(
-              await res.json().catch(() => null),
+              payload,
               `Save failed (${res.status})`,
             ).message,
           );

@@ -130,11 +130,34 @@ describe("API authorization manifest", () => {
     expect(API_ABUSE_POLICY["api:GET:/api/health"]).toEqual({
       access: "public",
       rateLimit: "platform-health",
+      idempotency: "none",
     });
     expect(API_ABUSE_POLICY["api:GET:/api/dev-login"]).toEqual({
       access: "public",
       rateLimit: "public-bootstrap",
+      idempotency: "none",
     });
+  });
+
+  it("classifies the exact idempotency support set", () => {
+    const none = Object.entries(API_ABUSE_POLICY)
+      .filter(([, policy]) => policy.idempotency === "none")
+      .map(([operationId]) => operationId)
+      .sort();
+    const supported = Object.entries(API_ABUSE_POLICY)
+      .filter(([, policy]) => policy.idempotency === "supported")
+      .map(([operationId]) => operationId)
+      .sort();
+
+    expect(none).toHaveLength(33);
+    expect(supported).toHaveLength(59);
+    expect(none).toContain("api:POST:/api/pdf");
+    expect(
+      none.filter((operationId) => !operationId.startsWith("api:GET:")),
+    ).toEqual(["api:POST:/api/pdf"]);
+    expect(
+      supported.some((operationId) => operationId.startsWith("api:GET:")),
+    ).toBe(false);
   });
 
   it("keeps every discovered route aligned with its declared risk class", () => {

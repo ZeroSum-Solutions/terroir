@@ -7,10 +7,12 @@ export type ApiAbusePolicy =
   | {
       access: "public";
       rateLimit: "platform-health" | "public-bootstrap";
+      idempotency: "none";
     }
   | {
       access: "authenticated";
       rateLimit: ApiRateLimitClass;
+      idempotency: "none" | "supported";
     };
 
 export const PLANNED_API_OPERATION_IDS = [
@@ -60,22 +62,41 @@ export const API_ABUSE_POLICY = Object.fromEntries(
 
 function classifyOperation(operationId: OperationId): ApiAbusePolicy {
   if (operationId === "api:GET:/api/health") {
-    return { access: "public", rateLimit: "platform-health" };
+    return {
+      access: "public",
+      rateLimit: "platform-health",
+      idempotency: "none",
+    };
   }
   if (operationId === "api:GET:/api/dev-login") {
-    return { access: "public", rateLimit: "public-bootstrap" };
+    return {
+      access: "public",
+      rateLimit: "public-bootstrap",
+      idempotency: "none",
+    };
   }
 
+  const method = operationId.split(":")[1];
+  const idempotency =
+    method === "GET" || operationId === "api:POST:/api/pdf"
+      ? "none"
+      : "supported";
   const override = (
     RATE_LIMIT_OVERRIDES as Partial<
       Record<OperationId, ApiRateLimitClass>
     >
   )[operationId];
-  if (override) return { access: "authenticated", rateLimit: override };
+  if (override) {
+    return {
+      access: "authenticated",
+      rateLimit: override,
+      idempotency,
+    };
+  }
 
-  const method = operationId.split(":")[1];
   return {
     access: "authenticated",
     rateLimit: method === "GET" ? "standard" : "mutation",
+    idempotency,
   };
 }

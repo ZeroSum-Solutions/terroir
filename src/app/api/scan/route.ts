@@ -17,7 +17,11 @@ import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { rateLimit } from "@/lib/api/rate-limit";
 import { requireMembership } from "@/lib/api/auth";
-import { withIdempotency, isValidIdempotencyKey } from "@/lib/api/idempotency";
+import {
+  createIdempotencyRequestHash,
+  isValidIdempotencyKey,
+  withIdempotency,
+} from "@/lib/api/idempotency";
 import { apiResultResponse } from "@/lib/api/result-response";
 import {
   fileField,
@@ -104,7 +108,13 @@ async function postInvoiceScan(request: NextRequest) {
 
   // BND-089: extract idempotency key before any processing.
   const rawKey = request.headers.get("Idempotency-Key");
-  const idempotencyKey = isValidIdempotencyKey(rawKey) ? rawKey : null;
+  if (rawKey !== null && !isValidIdempotencyKey(rawKey)) {
+    return Errors.badRequest(
+      "Invalid Idempotency-Key.",
+      undefined,
+      "invalid_idempotency_key",
+    );
+  }
 
   // ── JSON body path (BND-083: storage-path based submission) ─────────
   const reqContentType = request.headers.get("content-type") ?? "";
@@ -152,7 +162,9 @@ async function postInvoiceScan(request: NextRequest) {
     const result = await withIdempotency({
       supabase,
       restaurantId,
-      key: idempotencyKey,
+      operationId: "api:POST:/api/scan",
+      key: rawKey,
+      requestHash: createIdempotencyRequestHash({ imagePath }),
       handler: async () => {
         // Avoid storage, database, and OCR work entirely on idempotency replay.
         assertInvoiceExtractionConfigured();
@@ -235,27 +247,42 @@ async function postInvoiceScan(request: NextRequest) {
       );
     }
   }
+  const fileBuffers = await Promise.all(
+    files.map(async (pageFile) =>
+      Buffer.from(new Uint8Array(await pageFile.arrayBuffer())),
+    ),
+  );
   const file = files[0];
-
-  // Preflight Anthropic config before Azure processing.
-  assertInvoiceExtractionConfigured();
-
-  const fileBuffer = Buffer.from(new Uint8Array(await file.arrayBuffer()));
+  const fileBuffer = fileBuffers[0];
 
   // BND-089: wrap the scan in idempotency so retries return the cached
   // result without re-running Azure OCR or Claude extraction.
   const result = await withIdempotency({
     supabase,
     restaurantId,
-    key: idempotencyKey,
-    handler: () =>
-      processInvoiceScanOnce({
+    operationId: "api:POST:/api/scan",
+    key: rawKey,
+    requestHash: createIdempotencyRequestHash(
+      {
+        files: files.map((pageFile) => ({
+          size: pageFile.size,
+          type: pageFile.type,
+        })),
+      },
+      ...fileBuffers,
+    ),
+    handler: () => {
+      // A completed replay must not depend on current provider configuration.
+      // Fresh work still checks Anthropic before starting Azure processing.
+      assertInvoiceExtractionConfigured();
+      return processInvoiceScanOnce({
         supabase,
         restaurantId,
         userId: user.id,
         fileBuffer,
         mimeType: file.type,
-      }),
+      });
+    },
   });
 
   // BND-080/BND-081: upload images to Supabase Storage under restaurant
@@ -276,9 +303,7 @@ async function postInvoiceScan(request: NextRequest) {
             const pageTag = files.length !== 1 ? "_page" + pageIdx : "";
             const pagePath =
               restaurantId + "/" + scanId + pageTag + "." + pageExt;
-            const pageBuf = Buffer.from(
-              new Uint8Array(await pageFile.arrayBuffer()),
-            );
+            const pageBuf = fileBuffers[pageIdx - 1];
             const pageRes = await supabase.storage
               .from("invoice-images")
               .upload(pagePath, pageBuf, {

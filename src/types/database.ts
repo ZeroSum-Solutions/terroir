@@ -21,6 +21,59 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_idempotency: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          idempotency_key: string
+          operation_id: string
+          request_hash: string
+          response_body: Json | null
+          response_headers: Json | null
+          response_status: number | null
+          restaurant_id: string
+          state: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          idempotency_key: string
+          operation_id: string
+          request_hash: string
+          response_body?: Json | null
+          response_headers?: Json | null
+          response_status?: number | null
+          restaurant_id: string
+          state?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          idempotency_key?: string
+          operation_id?: string
+          request_hash?: string
+          response_body?: Json | null
+          response_headers?: Json | null
+          response_status?: number | null
+          restaurant_id?: string
+          state?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_idempotency_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       api_rate_limit_buckets: {
         Row: {
           bucket_key: string
@@ -960,8 +1013,35 @@ export type Database = {
         Args: { p_restaurant_id: string; p_wine_ids: string[] }
         Returns: string[]
       }
+      claim_api_idempotency: {
+        Args: {
+          p_idempotency_key: string
+          p_operation_id: string
+          p_request_hash: string
+          p_restaurant_id: string
+        }
+        Returns: {
+          outcome: string
+          response_body: Json
+          response_headers: Json
+          response_status: number
+        }[]
+      }
+      cleanup_api_idempotency: { Args: never; Returns: number }
       cleanup_api_rate_limit_buckets: { Args: never; Returns: number }
       cleanup_scan_idempotency: { Args: never; Returns: undefined }
+      complete_api_idempotency: {
+        Args: {
+          p_idempotency_key: string
+          p_operation_id: string
+          p_request_hash: string
+          p_response_body: Json
+          p_response_headers: Json
+          p_response_status: number
+          p_restaurant_id: string
+        }
+        Returns: boolean
+      }
       consume_api_rate_limit: {
         Args: { p_risk_class: string }
         Returns: {
@@ -971,6 +1051,15 @@ export type Database = {
           reset_at: string
           retry_after_seconds: number
         }[]
+      }
+      fail_api_idempotency: {
+        Args: {
+          p_idempotency_key: string
+          p_operation_id: string
+          p_request_hash: string
+          p_restaurant_id: string
+        }
+        Returns: boolean
       }
       dismiss_pricing_alert: {
         Args: { p_days?: number; p_wine_id: string }
@@ -1003,6 +1092,15 @@ export type Database = {
         Args: {
           r_id: string
           required: Database["public"]["Enums"]["membership_role"]
+        }
+        Returns: boolean
+      }
+      release_api_idempotency: {
+        Args: {
+          p_idempotency_key: string
+          p_operation_id: string
+          p_request_hash: string
+          p_restaurant_id: string
         }
         Returns: boolean
       }

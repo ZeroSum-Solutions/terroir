@@ -28,6 +28,14 @@ const apiRateLimits = readFileSync(
   "utf8",
 );
 
+const apiIdempotency = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../supabase/migrations/0056_api_idempotency.sql",
+  ),
+  "utf8",
+);
+
 describe("database security contracts", () => {
   it("keeps public wine-list read policies explicit and narrow", () => {
     for (const table of [
@@ -292,6 +300,67 @@ describe("database security contracts", () => {
     );
     expect(apiRateLimits).toMatch(
       /v_allowed :=[\s\S]*?v_global_count <= v_global_limit[\s\S]*?and v_class_count <= v_class_limit/,
+    );
+  });
+
+  it("keeps request idempotency server-owned and caller-bound", () => {
+    expect(apiIdempotency).toContain(
+      "primary key (user_id, idempotency_key)",
+    );
+    expect(apiIdempotency).toContain(
+      "revoke all on table public.api_idempotency from authenticated;",
+    );
+    expect(apiIdempotency).toContain(
+      "v_user_id uuid := auth.uid();",
+    );
+    expect(apiIdempotency).toMatch(
+      /v_claim\.restaurant_id <> p_restaurant_id[\s\S]*?v_claim\.operation_id <> p_operation_id[\s\S]*?v_claim\.request_hash <> p_request_hash[\s\S]*?'mismatch'/,
+    );
+    expect(apiIdempotency).toMatch(
+      /from public\.memberships[\s\S]*?memberships\.restaurant_id = p_restaurant_id[\s\S]*?memberships\.user_id = v_user_id/,
+    );
+  });
+
+  it("keeps every idempotency transition behind a hardened RPC", () => {
+    for (const signature of [
+      "claim_api_idempotency(\n  uuid,\n  text,\n  text,\n  text\n)",
+      "complete_api_idempotency(\n  uuid,\n  text,\n  text,\n  text,\n  integer,\n  jsonb,\n  jsonb\n)",
+      "fail_api_idempotency(\n  uuid,\n  text,\n  text,\n  text\n)",
+      "release_api_idempotency(\n  uuid,\n  text,\n  text,\n  text\n)",
+    ]) {
+      expect(apiIdempotency).toContain(
+        `revoke all on function public.${signature} from anon;`,
+      );
+      expect(apiIdempotency).toContain(
+        `grant execute on function public.${signature} to authenticated;`,
+      );
+    }
+
+    expect(
+      apiIdempotency.match(/security definer/g)?.length,
+    ).toBeLessThanOrEqual(
+      apiIdempotency.match(/set search_path = ''/g)?.length ?? 0,
+    );
+    expect(apiIdempotency).toContain(
+      "grant execute on function public.cleanup_api_idempotency()\n  to service_role;",
+    );
+    expect(apiIdempotency).toContain(
+      "revoke all on function public.cleanup_api_idempotency()\n  from authenticated;",
+    );
+  });
+
+  it("retains ambiguous and expired idempotency outcomes safely", () => {
+    expect(apiIdempotency).toContain(
+      "state in ('in_progress', 'completed', 'failed_unknown')",
+    );
+    expect(apiIdempotency).toMatch(
+      /v_claim\.updated_at < clock_timestamp\(\) - interval '24 hours'[\s\S]*?'expired'/,
+    );
+    expect(apiIdempotency).toMatch(
+      /v_claim\.state = 'failed_unknown'[\s\S]*?'outcome_unknown'/,
+    );
+    expect(apiIdempotency).toContain(
+      "where updated_at < clock_timestamp() - interval '25 hours';",
     );
   });
 });

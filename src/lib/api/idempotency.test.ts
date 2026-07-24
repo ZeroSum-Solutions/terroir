@@ -1,311 +1,491 @@
-/**
- * Unit tests for `withIdempotency` and `isValidIdempotencyKey` (BND-006).
- *
- * The helper talks to Supabase but we don't need a real database —
- * every code path is a sequence of query-builder calls, so we fake
- * the client with a query-log + scripted error/return values.
- */
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  IDEMPOTENCY_TTL_MS,
-  isValidIdempotencyKey,
-  withIdempotency,
-} from "./idempotency";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 
-/** Minimal in-memory scan_idempotency table for tests. */
-type Row = {
-  key: string;
-  restaurant_id: string;
-  response_status: number | null;
-  response_body: unknown;
-  created_at: string;
-};
+const sentry = vi.hoisted(() => ({
+  captureException: vi.fn(),
+}));
 
-/** Build a fake Supabase client that speaks just enough of the builder API. */
-function makeFakeClient(initialRows: Row[] = []) {
-  const rows: Row[] = [...initialRows];
-  const events: string[] = [];
+vi.mock("@sentry/nextjs", () => sentry);
 
-  /** A lightweight "select / update / delete" chain. */
-  function chain(op: "select" | "update" | "delete", row?: Partial<Row>) {
-    const filters: Record<string, string> = {};
-    const api = {
-      eq(col: string, val: string) {
-        filters[col] = val;
-        return api;
-      },
-      async maybeSingle() {
-        const found = rows.find(
-          (r) => r.key === filters.key && r.restaurant_id === filters.restaurant_id,
-        );
-        events.push(`select ${filters.key}`);
-        return { data: found ?? null, error: null };
-      },
-      // For update/delete we defer the work until the caller awaits the chain.
-      then<A>(resolve: (v: { error: null }) => A) {
-        if (op === "update" && row) {
-          const found = rows.find(
-            (r) =>
-              r.key === filters.key && r.restaurant_id === filters.restaurant_id,
-          );
-          if (found) Object.assign(found, row);
-          events.push(`update ${filters.key}`);
-        } else if (op === "delete") {
-          const idx = rows.findIndex(
-            (r) =>
-              r.key === filters.key && r.restaurant_id === filters.restaurant_id,
-          );
-          if (idx >= 0) rows.splice(idx, 1);
-          events.push(`delete ${filters.key}`);
-        }
-        return Promise.resolve({ error: null }).then(resolve);
-      },
-    };
-    return api;
-  }
+import {
+  createIdempotencyRequestHash,
+  isValidIdempotencyKey,
+  withIdempotency,
+} from "./idempotency";
 
-  const client = {
-    from(table: string) {
-      if (table !== "scan_idempotency") {
-        throw new Error(`unexpected table ${table}`);
-      }
-      return {
-        async insert(payload: Omit<Row, "created_at"> & { created_at?: string }) {
-          const exists = rows.some(
-            (r) =>
-              r.key === payload.key &&
-              r.restaurant_id === payload.restaurant_id,
-          );
-          if (exists) {
-            events.push(`insert-conflict ${payload.key}`);
-            return { error: { code: "23505" } };
-          }
-          rows.push({
-            key: payload.key,
-            restaurant_id: payload.restaurant_id,
-            response_status: payload.response_status ?? null,
-            response_body: payload.response_body ?? null,
-            created_at: payload.created_at ?? new Date().toISOString(),
-          });
-          events.push(`insert ${payload.key}`);
-          return { error: null };
-        },
-        select(_cols: string) {
-          return chain("select");
-        },
-        update(row: Partial<Row>) {
-          return chain("update", row);
-        },
-        delete() {
-          return chain("delete");
-        },
-      };
-    },
-  };
+const KEY = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+const HASH = createIdempotencyRequestHash({ quantity: 2, wineId: "wine-a" });
+const BASE_OPTIONS = {
+  restaurantId: "restaurant-a",
+  operationId: "api:POST:/api/pour",
+  key: KEY,
+  requestHash: HASH,
+} as const;
 
+type RpcResult = { data: unknown; error: unknown };
+
+function clientWithRpc(
+  implementation: (
+    operation: string,
+    args: Record<string, unknown>,
+  ) => Promise<RpcResult>,
+) {
+  const rpc = vi.fn(implementation);
   return {
-    client: client as unknown as SupabaseClient<Database>,
-    rows,
-    events,
+    client: { rpc } as unknown as SupabaseClient<Database>,
+    rpc,
   };
 }
 
-const KEY_A = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
-const RESTAURANT = "rest-1";
+function claimRow(
+  outcome:
+    | "claimed"
+    | "replay"
+    | "in_progress"
+    | "mismatch"
+    | "expired"
+    | "outcome_unknown",
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    outcome,
+    response_status: null,
+    response_body: null,
+    response_headers: null,
+    ...overrides,
+  };
+}
+
+function successfulClient() {
+  return clientWithRpc(async (operation) => {
+    if (operation === "claim_api_idempotency") {
+      return { data: [claimRow("claimed")], error: null };
+    }
+    if (
+      operation === "complete_api_idempotency" ||
+      operation === "release_api_idempotency" ||
+      operation === "fail_api_idempotency"
+    ) {
+      return { data: true, error: null };
+    }
+    throw new Error(`Unexpected RPC ${operation}`);
+  });
+}
 
 describe("isValidIdempotencyKey", () => {
-  it("accepts a well-formed UUID string", () => {
-    expect(isValidIdempotencyKey(KEY_A)).toBe(true);
+  it("accepts UUID and opaque URL-safe keys", () => {
+    expect(isValidIdempotencyKey(KEY)).toBe(true);
+    expect(isValidIdempotencyKey("client_retry-0001")).toBe(true);
   });
-  it("accepts an opaque token with underscores/dashes", () => {
-    expect(isValidIdempotencyKey("abc_DEF-123xyz")).toBe(true);
-  });
-  it("rejects null / undefined / non-strings", () => {
+
+  it("rejects missing, short, oversized, and unsafe keys", () => {
     expect(isValidIdempotencyKey(null)).toBe(false);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(isValidIdempotencyKey(undefined as any)).toBe(false);
-  });
-  it("rejects strings that are too short or too long", () => {
-    expect(isValidIdempotencyKey("1234567")).toBe(false); // 7 chars
+    expect(isValidIdempotencyKey("1234567")).toBe(false);
     expect(isValidIdempotencyKey("x".repeat(129))).toBe(false);
+    expect(isValidIdempotencyKey("same key!")).toBe(false);
   });
-  it("rejects keys with illegal characters", () => {
-    expect(isValidIdempotencyKey("hello world!")).toBe(false);
-    expect(isValidIdempotencyKey("key/with/slashes")).toBe(false);
+});
+
+describe("createIdempotencyRequestHash", () => {
+  it("is stable across object key order but changes with request data", () => {
+    const first = createIdempotencyRequestHash({
+      wine: { id: "wine-a", quantity: 2 },
+      note: null,
+    });
+    const reordered = createIdempotencyRequestHash({
+      note: null,
+      wine: { quantity: 2, id: "wine-a" },
+    });
+    const changed = createIdempotencyRequestHash({
+      note: null,
+      wine: { quantity: 3, id: "wine-a" },
+    });
+
+    expect(first).toMatch(/^[a-f0-9]{64}$/);
+    expect(reordered).toBe(first);
+    expect(changed).not.toBe(first);
+  });
+
+  it("length-prefixes binary parts so boundaries cannot collide", () => {
+    const first = createIdempotencyRequestHash(
+      { type: "upload" },
+      Buffer.from("ab"),
+      Buffer.from("c"),
+    );
+    const second = createIdempotencyRequestHash(
+      { type: "upload" },
+      Buffer.from("a"),
+      Buffer.from("bc"),
+    );
+
+    expect(first).not.toBe(second);
+  });
+
+  it("rejects payload values JSON cannot represent truthfully", () => {
+    expect(() =>
+      createIdempotencyRequestHash({ amount: Number.NaN }),
+    ).toThrow("non-finite");
+    expect(() =>
+      createIdempotencyRequestHash({ amount: BigInt(1) }),
+    ).toThrow("Unsupported");
   });
 });
 
 describe("withIdempotency", () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
-  it("runs the handler when key is null and does not touch the table", async () => {
-    const { client, events } = makeFakeClient();
-    const handler = vi.fn().mockResolvedValue({ status: 200, body: { ok: true } });
-
+  it("runs without storage or idempotency headers when the key is omitted", async () => {
+    const { client, rpc } = successfulClient();
     const result = await withIdempotency({
+      ...BASE_OPTIONS,
       supabase: client,
-      restaurantId: RESTAURANT,
       key: null,
-      handler,
+      handler: vi.fn().mockResolvedValue({
+        status: 201,
+        body: { id: "created" },
+      }),
     });
 
-    expect(handler).toHaveBeenCalledOnce();
-    expect(result).toEqual({ status: 200, body: { ok: true }, replayed: false });
-    expect(events).toEqual([]);
-  });
-
-  it("first call claims the key, runs handler, and caches the response", async () => {
-    const { client, rows, events } = makeFakeClient();
-    const handler = vi
-      .fn()
-      .mockResolvedValue({ status: 201, body: { scanId: "s1" } });
-
-    const result = await withIdempotency({
-      supabase: client,
-      restaurantId: RESTAURANT,
-      key: KEY_A,
-      handler,
-    });
-
-    expect(handler).toHaveBeenCalledOnce();
     expect(result).toEqual({
       status: 201,
-      body: { scanId: "s1" },
+      body: { id: "created" },
       replayed: false,
     });
-    expect(events).toEqual([`insert ${KEY_A}`, `update ${KEY_A}`]);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].response_status).toBe(201);
-    expect(rows[0].response_body).toEqual({ scanId: "s1" });
+    expect(rpc).not.toHaveBeenCalled();
   });
 
-  it("second call with same key replays the cached response without re-running the handler", async () => {
-    const now = new Date().toISOString();
-    const { client, events } = makeFakeClient([
-      {
-        key: KEY_A,
-        restaurant_id: RESTAURANT,
-        response_status: 201,
-        response_body: { scanId: "s1" },
-        created_at: now,
-      },
-    ]);
+  it("claims, executes, completes, and marks a first response", async () => {
+    const { client, rpc } = successfulClient();
+    const result = await withIdempotency({
+      ...BASE_OPTIONS,
+      supabase: client,
+      handler: vi.fn().mockResolvedValue({
+        status: 201,
+        body: { id: "created" },
+      }),
+    });
+
+    expect(result).toEqual({
+      status: 201,
+      body: { id: "created" },
+      replayed: false,
+      headers: { "Idempotency-Replayed": "false" },
+    });
+    expect(rpc).toHaveBeenNthCalledWith(1, "claim_api_idempotency", {
+      p_restaurant_id: "restaurant-a",
+      p_operation_id: "api:POST:/api/pour",
+      p_idempotency_key: KEY,
+      p_request_hash: HASH,
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, "complete_api_idempotency", {
+      p_restaurant_id: "restaurant-a",
+      p_operation_id: "api:POST:/api/pour",
+      p_idempotency_key: KEY,
+      p_request_hash: HASH,
+      p_response_status: 201,
+      p_response_body: { id: "created" },
+      p_response_headers: {},
+    });
+  });
+
+  it("replays the exact completed response without executing the handler", async () => {
+    const { client } = clientWithRpc(async () => ({
+      data: [
+        claimRow("replay", {
+          response_status: 201,
+          response_body: { id: "existing" },
+          response_headers: { ETag: "\"created\"" },
+        }),
+      ],
+      error: null,
+    }));
     const handler = vi.fn();
 
     const result = await withIdempotency({
+      ...BASE_OPTIONS,
       supabase: client,
-      restaurantId: RESTAURANT,
-      key: KEY_A,
       handler,
     });
 
     expect(handler).not.toHaveBeenCalled();
     expect(result).toEqual({
       status: 201,
-      body: { scanId: "s1" },
+      body: { id: "existing" },
       replayed: true,
+      headers: {
+        ETag: "\"created\"",
+        "Idempotency-Replayed": "true",
+      },
     });
-    expect(events).toContain(`insert-conflict ${KEY_A}`);
   });
 
-  it("returns 409 when the same key is seen while a prior call is still in-flight", async () => {
-    const { client } = makeFakeClient([
-      {
-        key: KEY_A,
-        restaurant_id: RESTAURANT,
-        response_status: null, // not yet written → still running
-        response_body: null,
-        created_at: new Date().toISOString(),
-      },
-    ]);
+  it("stores and returns only validated replayable response headers", async () => {
+    const { client, rpc } = successfulClient();
+    const result = await withIdempotency({
+      ...BASE_OPTIONS,
+      supabase: client,
+      handler: vi.fn().mockResolvedValue({
+        status: 202,
+        body: { accepted: true },
+        headers: {
+          ETag: "\"accepted\"",
+          Location: "/api/jobs/job-a",
+        },
+      }),
+    });
+
+    expect(result.headers).toEqual({
+      ETag: "\"accepted\"",
+      Location: "/api/jobs/job-a",
+      "Idempotency-Replayed": "false",
+    });
+    expect(rpc).toHaveBeenNthCalledWith(
+      2,
+      "complete_api_idempotency",
+      expect.objectContaining({
+        p_response_headers: {
+          ETag: "\"accepted\"",
+          Location: "/api/jobs/job-a",
+        },
+      }),
+    );
+  });
+
+  it("fails closed and marks the outcome unknown for unsafe response headers", async () => {
+    const { client, rpc } = successfulClient();
+    const result = await withIdempotency({
+      ...BASE_OPTIONS,
+      supabase: client,
+      handler: vi.fn().mockResolvedValue({
+        status: 200,
+        body: { ok: true },
+        headers: { "Set-Cookie": "session=secret" },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      status: 503,
+      body: { error: { code: "idempotency_unavailable" } },
+    });
+    expect(rpc).toHaveBeenNthCalledWith(
+      2,
+      "fail_api_idempotency",
+      expect.anything(),
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
+      "complete_api_idempotency",
+      expect.anything(),
+    );
+  });
+
+  it.each([
+    ["in_progress", "idempotency_in_progress", "still in progress", true],
+    ["mismatch", "idempotency_key_reused", "different request", false],
+    ["expired", "idempotency_key_expired", "expired", false],
+    [
+      "outcome_unknown",
+      "idempotency_outcome_unknown",
+      "outcome is unknown",
+      false,
+    ],
+  ] as const)(
+    "returns a nested 409 for %s",
+    async (outcome, code, message, hasRetryAfter) => {
+      const { client } = clientWithRpc(async () => ({
+        data: [claimRow(outcome)],
+        error: null,
+      }));
+      const handler = vi.fn();
+
+      const result = await withIdempotency({
+        ...BASE_OPTIONS,
+        supabase: client,
+        handler,
+      });
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        status: 409,
+        body: {
+          error: {
+            code,
+            message: expect.stringContaining(message),
+          },
+        },
+        replayed: false,
+        ...(hasRetryAfter ? { headers: { "Retry-After": "1" } } : {}),
+      });
+    },
+  );
+
+  it("fails closed with 503 when claiming is unavailable", async () => {
+    const providerError = { code: "08006", message: "database unavailable" };
+    const { client } = clientWithRpc(async () => ({
+      data: null,
+      error: providerError,
+    }));
     const handler = vi.fn();
 
     const result = await withIdempotency({
+      ...BASE_OPTIONS,
       supabase: client,
-      restaurantId: RESTAURANT,
-      key: KEY_A,
       handler,
     });
 
+    expect(result).toEqual({
+      status: 503,
+      body: {
+        error: {
+          code: "idempotency_unavailable",
+          message: "Request idempotency is temporarily unavailable.",
+        },
+      },
+      replayed: false,
+    });
     expect(handler).not.toHaveBeenCalled();
-    expect(result.status).toBe(409);
-    expect(result.replayed).toBe(false);
-    expect(result.body).toMatchObject({ error: expect.stringMatching(/in progress/i) });
+    expect(sentry.captureException).toHaveBeenCalledWith(
+      providerError,
+      expect.objectContaining({
+        tags: { surface: "idempotency", phase: "claim" },
+      }),
+    );
   });
 
-  it("returns 409 when a cached row is older than the TTL", async () => {
-    const old = new Date(Date.now() - IDEMPOTENCY_TTL_MS - 1000).toISOString();
-    const { client } = makeFakeClient([
-      {
-        key: KEY_A,
-        restaurant_id: RESTAURANT,
-        response_status: 201,
-        response_body: { scanId: "s1" },
-        created_at: old,
-      },
-    ]);
-    const handler = vi.fn();
+  it("fails closed with 503 on malformed claim or replay metadata", async () => {
+    const malformedClaim = clientWithRpc(async () => ({
+      data: [{ outcome: "surprise" }],
+      error: null,
+    }));
+    const malformedReplay = clientWithRpc(async () => ({
+      data: [
+        claimRow("replay", {
+          response_status: 200,
+          response_body: { ok: true },
+          response_headers: { ETag: 42 },
+        }),
+      ],
+      error: null,
+    }));
+    const unsafeReplay = clientWithRpc(async () => ({
+      data: [
+        claimRow("replay", {
+          response_status: 200,
+          response_body: { ok: true },
+          response_headers: { "Set-Cookie": "session=secret" },
+        }),
+      ],
+      error: null,
+    }));
+
+    for (const client of [
+      malformedClaim.client,
+      malformedReplay.client,
+      unsafeReplay.client,
+    ]) {
+      const result = await withIdempotency({
+        ...BASE_OPTIONS,
+        supabase: client,
+        handler: vi.fn(),
+      });
+      expect(result.status).toBe(503);
+      expect(result.body).toMatchObject({
+        error: { code: "idempotency_unavailable" },
+      });
+    }
+  });
+
+  it("fails closed with 503 when completion cannot be persisted", async () => {
+    const providerError = { code: "08006", message: "completion unavailable" };
+    const { client } = clientWithRpc(async (operation) =>
+      operation === "claim_api_idempotency"
+        ? { data: [claimRow("claimed")], error: null }
+        : { data: null, error: providerError },
+    );
 
     const result = await withIdempotency({
+      ...BASE_OPTIONS,
       supabase: client,
-      restaurantId: RESTAURANT,
-      key: KEY_A,
-      handler,
+      handler: vi.fn().mockResolvedValue({
+        status: 200,
+        body: { ok: true },
+      }),
     });
 
-    expect(handler).not.toHaveBeenCalled();
-    expect(result.status).toBe(409);
-    expect(result.body).toMatchObject({ error: expect.stringMatching(/expired/i) });
+    expect(result.status).toBe(503);
+    expect(result.body).toMatchObject({
+      error: { code: "idempotency_unavailable" },
+    });
   });
 
-  it("deletes the claim row and re-throws if the handler throws", async () => {
-    const { client, rows, events } = makeFakeClient();
-    const boom = new Error("handler blew up");
-    const handler = vi.fn().mockRejectedValue(boom);
+  it("marks an ambiguous handler throw outcome unknown by default", async () => {
+    const { client, rpc } = successfulClient();
+    const failure = new Error("commit status unknown");
 
     await expect(
       withIdempotency({
+        ...BASE_OPTIONS,
         supabase: client,
-        restaurantId: RESTAURANT,
-        key: KEY_A,
-        handler,
+        handler: vi.fn().mockRejectedValue(failure),
       }),
-    ).rejects.toBe(boom);
+    ).rejects.toBe(failure);
 
-    expect(rows).toHaveLength(0);
-    expect(events).toEqual([`insert ${KEY_A}`, `delete ${KEY_A}`]);
+    expect(rpc).toHaveBeenNthCalledWith(2, "fail_api_idempotency", {
+      p_restaurant_id: "restaurant-a",
+      p_operation_id: "api:POST:/api/pour",
+      p_idempotency_key: KEY,
+      p_request_hash: HASH,
+    });
+    expect(rpc).not.toHaveBeenCalledWith(
+      "release_api_idempotency",
+      expect.anything(),
+    );
   });
 
-  it("scopes (key, restaurant_id) — same key in different tenants does not replay", async () => {
-    const { client, events } = makeFakeClient([
-      {
-        key: KEY_A,
-        restaurant_id: "rest-other",
-        response_status: 201,
-        response_body: { scanId: "from-other-tenant" },
-        created_at: new Date().toISOString(),
-      },
-    ]);
-    const handler = vi
-      .fn()
-      .mockResolvedValue({ status: 201, body: { scanId: "mine" } });
+  it("releases an atomic no-commit failure only when explicitly requested", async () => {
+    const { client, rpc } = successfulClient();
+    const failure = new Error("transaction rolled back");
 
-    const result = await withIdempotency({
-      supabase: client,
-      restaurantId: RESTAURANT, // different tenant
-      key: KEY_A,
-      handler,
+    await expect(
+      withIdempotency({
+        ...BASE_OPTIONS,
+        supabase: client,
+        releaseOnError: true,
+        handler: vi.fn().mockRejectedValue(failure),
+      }),
+    ).rejects.toBe(failure);
+
+    expect(rpc).toHaveBeenNthCalledWith(2, "release_api_idempotency", {
+      p_restaurant_id: "restaurant-a",
+      p_operation_id: "api:POST:/api/pour",
+      p_idempotency_key: KEY,
+      p_request_hash: HASH,
     });
+  });
 
-    expect(handler).toHaveBeenCalledOnce();
-    expect(result.body).toEqual({ scanId: "mine" });
-    expect(result.replayed).toBe(false);
-    // A fresh insert happened for this tenant (no conflict).
-    expect(events).toContain(`insert ${KEY_A}`);
+  it("surfaces and records a failed explicit release", async () => {
+    const releaseError = { code: "08006", message: "release unavailable" };
+    const { client } = clientWithRpc(async (operation) =>
+      operation === "claim_api_idempotency"
+        ? { data: [claimRow("claimed")], error: null }
+        : { data: null, error: releaseError },
+    );
+
+    await expect(
+      withIdempotency({
+        ...BASE_OPTIONS,
+        supabase: client,
+        releaseOnError: true,
+        handler: vi.fn().mockRejectedValue(new Error("rolled back")),
+      }),
+    ).rejects.toBe(releaseError);
+    expect(sentry.captureException).toHaveBeenCalledWith(
+      releaseError,
+      expect.objectContaining({
+        tags: { surface: "idempotency", phase: "release" },
+      }),
+    );
   });
 });

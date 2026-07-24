@@ -4,6 +4,7 @@ import { apiError, type ErrorEnvelope } from "./errors";
 type ApiResult = {
   status: number;
   body: unknown;
+  headers?: Record<string, string>;
 };
 
 const STATUS_DEFAULTS: Record<number, { code: string; message: string }> = {
@@ -35,10 +36,16 @@ function isErrorEnvelope(value: unknown): value is ErrorEnvelope {
 
 export function apiResultResponse(result: ApiResult): NextResponse {
   if (result.status < 400) {
-    return NextResponse.json(result.body, { status: result.status });
+    return NextResponse.json(result.body, {
+      status: result.status,
+      headers: result.headers,
+    });
   }
   if (isErrorEnvelope(result.body)) {
-    return NextResponse.json(result.body, { status: result.status });
+    return NextResponse.json(result.body, {
+      status: result.status,
+      headers: result.headers,
+    });
   }
 
   const body = record(result.body);
@@ -67,5 +74,6 @@ export function apiResultResponse(result: ApiResult): NextResponse {
     code,
     message,
     Object.keys(details).length > 0 ? details : undefined,
+    { headers: result.headers },
   );
 }

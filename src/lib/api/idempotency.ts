@@ -1,251 +1,498 @@
 /**
- * BND-006 / INT-005 — Request-level idempotency for mutating endpoints.
+ * Distributed request idempotency for authenticated API mutations.
  *
- * Used by the two inventory-save routes so that a client retrying after a
- * network hiccup gets the same response back instead of double-inserting
- * rows. The client generates a UUIDv4 once per "logical save attempt" and
- * sends it in the `Idempotency-Key` header; the same key is reused across
- * network retries but NOT across a successful save (the scanner clears it
- * after the 2xx lands).
+ * The database derives the actor from `auth.uid()` and scopes every key by
+ * tenant, actor, and operation. A SHA-256 request hash prevents clients from
+ * reusing one key for different input. Claim, replay, completion, and release
+ * decisions are made by SECURITY DEFINER RPCs; clients cannot read or mutate
+ * the backing table directly.
  *
- * Storage model (see migration 0011_scan_idempotency.sql):
- *   table scan_idempotency(
- *     key uuid, restaurant_id uuid,
- *     response_status int, response_body jsonb,
- *     created_at timestamptz
- *   )
- *   primary key (key, restaurant_id)
- *
- * Two-phase write so concurrent retries don't collide:
- *   1. INSERT a sentinel row (status/body null). PK = (key, restaurant).
- *      - No conflict → we own the key; run the handler.
- *      - Conflict    → another call already claimed it; look it up.
- *   2. After the handler returns, UPDATE the row with (status, body).
- *      If the handler throws, DELETE the row so the user can retry
- *      cleanly — we never want a server-side exception to permanently
- *      "lock" a key for 24 hours.
- *
- * Scope: the key is scoped to a (key, restaurant_id) pair so a stolen
- * UUID from another tenant cannot replay a response across the boundary.
- * RLS also enforces this server-side — belt and suspenders.
- *
- * NOTE ON TYPING: the `scan_idempotency` table is now in the generated
- * Database type, so `from("scan_idempotency")` returns a fully typed
- * builder. We still downcast the chain to the simplified
- * `LooseQueryBuilder` shape below because Supabase's real
- * `PostgrestQueryBuilder` is deeply generic and would bloat this file
- * without adding meaningful safety — the call sites are all covered
- * by tests in idempotency.test.ts.
+ * The claim and business mutation are intentionally separate transactions.
+ * Therefore a thrown handler leaves its claim in progress by default. That is
+ * the fail-closed choice: a retry cannot duplicate a mutation whose commit
+ * status is unknown. Callers may opt into release-on-error only when their
+ * business operation is itself atomic and a throw proves it did not commit.
  */
 
+import { createHash } from "node:crypto";
 import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/types/database";
 
-/** Default TTL for cached responses. Matches the server-side cleanup window. */
 export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** Result returned to the route handler. */
 export type IdempotencyResult<T> = {
   status: number;
   body: T;
-  /** True when the response came from the cache rather than a fresh handler run. */
   replayed: boolean;
+  headers?: Record<string, string>;
 };
 
-/**
- * Validate a client-supplied Idempotency-Key header. We accept any
- * opaque string between 8 and 128 chars so clients can evolve their
- * key generation scheme; UUIDv4 (36 chars) is the recommended form.
- */
-export function isValidIdempotencyKey(raw: string | null): raw is string {
-  if (typeof raw !== "string") return false;
-  if (raw.length < 8 || raw.length > 128) return false;
-  // Allow hex, dashes, and URL-safe base64 characters.
-  return /^[A-Za-z0-9_\-]+$/.test(raw);
-}
+type ClaimOutcome =
+  | "claimed"
+  | "replay"
+  | "in_progress"
+  | "mismatch"
+  | "expired"
+  | "outcome_unknown";
 
-// DEBT-015: replaced `type LooseChain = any` with a precise structural
-// type covering exactly the chain methods this module uses. The real
-// @supabase/postgrest-js builder types are deeply generic and would
-// require propagating Database lookups through every helper; the
-// trade-off below is "just-enough" typing — eq() returns the same
-// builder so chained eq() calls still compose, maybeSingle() ends the
-// chain, and insert/update/delete produce a result promise. No `any`
-// escape hatches in the module.
-
-type IdempRow = {
+type ClaimRow = {
+  outcome: ClaimOutcome;
   response_status: number | null;
   response_body: Json | null;
-  created_at: string;
+  response_headers: Json | null;
 };
 
-type SupabaseError = { code?: string; message?: string } | null;
+const NON_REPLAYABLE_RESPONSE_HEADERS = new Set([
+  "authorization",
+  "connection",
+  "content-length",
+  "cookie",
+  "idempotency-replayed",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "proxy-connection",
+  "set-cookie",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]);
 
-interface ChainWithEq<TResult> {
-  eq(column: string, value: string): ChainWithEq<TResult>;
-  then<TOut>(
-    resolve: (v: { data: TResult | null; error: SupabaseError }) => TOut,
-  ): Promise<TOut>;
-  maybeSingle(): Promise<{ data: TResult | null; error: SupabaseError }>;
+export function isValidIdempotencyKey(raw: string | null): raw is string {
+  return (
+    typeof raw === "string" &&
+    raw.length >= 8 &&
+    raw.length <= 128 &&
+    /^[A-Za-z0-9_-]+$/.test(raw)
+  );
 }
 
-type LooseQueryBuilder = {
-  insert(
-    row: Partial<IdempRow> & { key: string; restaurant_id: string },
-  ): Promise<{ error: SupabaseError }>;
-  select(cols: string): ChainWithEq<IdempRow>;
-  update(
-    row: Partial<IdempRow>,
-  ): ChainWithEq<never>;
-  delete(): ChainWithEq<never>;
-};
-
-function idempTable(supabase: SupabaseClient<Database>): LooseQueryBuilder {
-  // See NOTE ON TYPING above. Typed `from("scan_idempotency")` now
-  // resolves against the generated Database; only the chain shape is
-  // simplified via LooseQueryBuilder.
-  return supabase.from("scan_idempotency") as unknown as LooseQueryBuilder;
+export function createIdempotencyRequestHash(
+  payload: unknown,
+  ...binaryParts: readonly Uint8Array[]
+): string {
+  const hash = createHash("sha256");
+  updateLengthPrefixed(hash, Buffer.from(canonicalJson(payload), "utf8"));
+  for (const part of binaryParts) {
+    updateLengthPrefixed(hash, part);
+  }
+  return hash.digest("hex");
 }
 
-/**
- * Run `handler` under idempotency protection.
- *
- * Behaviour by input:
- *   - `key === null`        → handler runs, no caching (caller opted out).
- *   - first time for a key  → handler runs, response is cached, replayed=false.
- *   - retry of a completed  → cached (status,body) returned, replayed=true.
- *   - retry while in-flight → 409 "request in progress".
- *   - retry after TTL       → 409 "key expired; generate a new one".
- *
- * If the handler THROWS, the claim row is deleted and the error propagates.
- * This keeps genuine server errors retryable.
- */
-export async function withIdempotency<T>(opts: {
+function updateLengthPrefixed(
+  hash: ReturnType<typeof createHash>,
+  bytes: Uint8Array,
+): void {
+  const length = Buffer.allocUnsafe(8);
+  length.writeBigUInt64BE(BigInt(bytes.byteLength));
+  hash.update(length);
+  hash.update(bytes);
+}
+
+function canonicalJson(value: unknown): string {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean"
+  ) {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new TypeError("Idempotency payload contains a non-finite number");
+    }
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  }
+  if (typeof value === "object") {
+    const object = value as Record<string, unknown>;
+    const entries = Object.keys(object)
+      .filter((key) => object[key] !== undefined)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${canonicalJson(object[key])}`,
+      );
+    return `{${entries.join(",")}}`;
+  }
+  throw new TypeError(
+    `Unsupported idempotency payload value: ${typeof value}`,
+  );
+}
+
+export async function withIdempotency<T>(options: {
   supabase: SupabaseClient<Database>;
   restaurantId: string;
+  operationId: string;
   key: string | null;
-  /** TTL for a cached response. Defaults to 24h — must match the SQL cleanup. */
-  ttlMs?: number;
-  handler: () => Promise<{ status: number; body: T }>;
-  /** Injected clock for tests. */
-  now?: () => number;
+  requestHash: string;
+  handler: () => Promise<{
+    status: number;
+    body: T;
+    headers?: Record<string, string>;
+  }>;
+  releaseOnError?: boolean;
 }): Promise<IdempotencyResult<T>> {
   const {
     supabase,
     restaurantId,
+    operationId,
     key,
-    ttlMs = IDEMPOTENCY_TTL_MS,
+    requestHash,
     handler,
-    now = Date.now,
-  } = opts;
+    releaseOnError = false,
+  } = options;
 
   if (!key) {
-    const fresh = await handler();
-    return { ...fresh, replayed: false };
+    const result = await handler();
+    return { ...result, replayed: false };
+  }
+  if (!isValidIdempotencyKey(key)) {
+    throw new Error("Invalid Idempotency-Key reached idempotency core");
+  }
+  if (!/^[a-f0-9]{64}$/.test(requestHash)) {
+    throw new Error("Invalid idempotency request hash");
   }
 
-  const tbl = idempTable(supabase);
+  let claim: ClaimRow;
+  try {
+    claim = await claimIdempotency({
+      supabase,
+      restaurantId,
+      operationId,
+      key,
+      requestHash,
+    });
+  } catch (error) {
+    captureStorageError(error, operationId, "claim");
+    return unavailableResult<T>();
+  }
 
-  // ── 1. Claim ────────────────────────────────────────────────────────
-  const { error: insertError } = await tbl.insert({
-    key,
-    restaurant_id: restaurantId,
-    response_status: null,
-    response_body: null,
-  });
-
-  if (insertError) {
-    // 23505 = unique_violation → key already claimed.
-    if (insertError.code !== "23505") {
-      // Any other error: log and fall through to handler without caching,
-      // so the endpoint doesn't become unavailable if idempotency is broken.
-      console.error("scan_idempotency claim failed:", insertError);
-      Sentry.captureException(insertError, {
-        tags: { surface: "idempotency", phase: "claim" },
-        extra: { code: (insertError as { code?: string }).code },
-      });
-      const fresh = await handler();
-      return { ...fresh, replayed: false };
+  if (claim.outcome === "replay") {
+    if (
+      !Number.isInteger(claim.response_status) ||
+      claim.response_status === null ||
+      claim.response_status < 100 ||
+      claim.response_status > 599
+    ) {
+      const error = new Error(
+        "Idempotency replay returned an invalid status",
+      );
+      captureStorageError(error, operationId, "replay");
+      return unavailableResult<T>();
     }
-
-    // Look up the existing row.
-    const { data: existing } = await tbl
-      .select("response_status, response_body, created_at")
-      .eq("key", key)
-      .eq("restaurant_id", restaurantId)
-      .maybeSingle();
-
-    if (!existing) {
-      // Race: row was deleted between our failed insert and this select.
-      // Re-run the handler without caching — worst case the client retries.
-      const fresh = await handler();
-      return { ...fresh, replayed: false };
+    let replayHeaders: Record<string, string>;
+    try {
+      replayHeaders = parseReplayableResponseHeaders(claim.response_headers);
+    } catch (error) {
+      captureStorageError(error, operationId, "replay");
+      return unavailableResult<T>();
     }
-
-    const row = existing as {
-      response_status: number | null;
-      response_body: Json | null;
-      created_at: string;
-    };
-
-    const age = now() - Date.parse(row.created_at);
-    if (age > ttlMs) {
-      return {
-        status: 409,
-        body: {
-          error: "Idempotency key expired; please generate a new one.",
-        } as unknown as T,
-        replayed: false,
-      };
-    }
-
-    if (row.response_status === null) {
-      return {
-        status: 409,
-        body: {
-          error: "A request with this Idempotency-Key is already in progress.",
-        } as unknown as T,
-        replayed: false,
-      };
-    }
-
     return {
-      status: row.response_status,
-      body: row.response_body as T,
+      status: claim.response_status,
+      body: claim.response_body as T,
       replayed: true,
+      headers: {
+        ...replayHeaders,
+        "Idempotency-Replayed": "true",
+      },
+    };
+  }
+  if (claim.outcome === "in_progress") {
+    return {
+      status: 409,
+      body: {
+        error: {
+          code: "idempotency_in_progress",
+          message: "A request with this Idempotency-Key is still in progress.",
+        },
+      } as T,
+      replayed: false,
+      headers: { "Retry-After": "1" },
+    };
+  }
+  if (claim.outcome === "mismatch") {
+    return {
+      status: 409,
+      body: {
+        error: {
+          code: "idempotency_key_reused",
+          message:
+            "This Idempotency-Key was already used for a different request.",
+        },
+      } as T,
+      replayed: false,
+    };
+  }
+  if (claim.outcome === "expired") {
+    return {
+      status: 409,
+      body: {
+        error: {
+          code: "idempotency_key_expired",
+          message: "This Idempotency-Key has expired.",
+        },
+      } as T,
+      replayed: false,
+    };
+  }
+  if (claim.outcome === "outcome_unknown") {
+    return {
+      status: 409,
+      body: {
+        error: {
+          code: "idempotency_outcome_unknown",
+          message:
+            "The original request outcome is unknown and will not be retried.",
+        },
+      } as T,
+      replayed: false,
     };
   }
 
-  // ── 2. We own the key. Run the handler. ────────────────────────────
-  let result: { status: number; body: T };
+  let result: {
+    status: number;
+    body: T;
+    headers?: Record<string, string>;
+  };
   try {
     result = await handler();
-  } catch (err) {
-    // Unclaim so the user can retry without hitting a stale "in progress".
-    await tbl
-      .delete()
-      .eq("key", key)
-      .eq("restaurant_id", restaurantId);
-    throw err;
+  } catch (error) {
+    if (releaseOnError) {
+      await releaseClaim({
+        supabase,
+        restaurantId,
+        operationId,
+        key,
+        requestHash,
+        originalError: error,
+      });
+    } else {
+      await markOutcomeUnknown({
+        supabase,
+        restaurantId,
+        operationId,
+        key,
+        requestHash,
+        originalError: error,
+      });
+    }
+    throw error;
   }
 
-  // ── 3. Cache the response ──────────────────────────────────────────
-  const { error: updateError } = await tbl
-    .update({
-      response_status: result.status,
-      response_body: result.body as unknown as Json,
-    })
-    .eq("key", key)
-    .eq("restaurant_id", restaurantId);
-
-  if (updateError) {
-    // Non-fatal: the response is still correct, just won't be replayed.
-    console.error("scan_idempotency cache update failed:", updateError);
-    Sentry.captureException(updateError, {
-      tags: { surface: "idempotency", phase: "cache-update" },
+  let responseHeaders: Record<string, string>;
+  try {
+    responseHeaders = parseReplayableResponseHeaders(result.headers ?? {});
+  } catch (error) {
+    captureStorageError(error, operationId, "response-validation");
+    await markOutcomeUnknown({
+      supabase,
+      restaurantId,
+      operationId,
+      key,
+      requestHash,
+      originalError: error,
     });
+    return unavailableResult<T>();
   }
 
-  return { ...result, replayed: false };
+  try {
+    const { data, error } = await supabase.rpc("complete_api_idempotency", {
+      p_restaurant_id: restaurantId,
+      p_operation_id: operationId,
+      p_idempotency_key: key,
+      p_request_hash: requestHash,
+      p_response_status: result.status,
+      p_response_body: result.body as unknown as Json,
+      p_response_headers: responseHeaders as Json,
+    });
+    if (error) throw error;
+    if (data !== true) {
+      throw new Error("Idempotency completion did not update its owned claim");
+    }
+  } catch (error) {
+    captureStorageError(error, operationId, "complete");
+    return unavailableResult<T>();
+  }
+
+  return {
+    ...result,
+    replayed: false,
+    headers: {
+      ...responseHeaders,
+      "Idempotency-Replayed": "false",
+    },
+  };
+}
+
+async function claimIdempotency(options: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  operationId: string;
+  key: string;
+  requestHash: string;
+}): Promise<ClaimRow> {
+  const { data, error } = await options.supabase.rpc(
+    "claim_api_idempotency",
+    {
+      p_restaurant_id: options.restaurantId,
+      p_operation_id: options.operationId,
+      p_idempotency_key: options.key,
+      p_request_hash: options.requestHash,
+    },
+  );
+  if (error) throw error;
+
+  const candidate = Array.isArray(data) ? data[0] : data;
+  if (
+    !candidate ||
+    typeof candidate !== "object" ||
+    ![
+      "claimed",
+      "replay",
+      "in_progress",
+      "mismatch",
+      "expired",
+      "outcome_unknown",
+    ].includes(
+      String((candidate as ClaimRow).outcome),
+    )
+  ) {
+    throw new Error("claim_api_idempotency returned an invalid result");
+  }
+  return candidate as ClaimRow;
+}
+
+async function markOutcomeUnknown(options: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  operationId: string;
+  key: string;
+  requestHash: string;
+  originalError: unknown;
+}): Promise<void> {
+  try {
+    const { data, error } = await options.supabase.rpc(
+      "fail_api_idempotency",
+      {
+        p_restaurant_id: options.restaurantId,
+        p_operation_id: options.operationId,
+        p_idempotency_key: options.key,
+        p_request_hash: options.requestHash,
+      },
+    );
+    if (!error && data === true) return;
+
+    captureStorageError(
+      error ??
+        new Error("Idempotency failure marker did not update its owned claim"),
+      options.operationId,
+      "fail-unknown",
+      options.originalError,
+    );
+  } catch (error) {
+    captureStorageError(
+      error,
+      options.operationId,
+      "fail-unknown",
+      options.originalError,
+    );
+  }
+}
+
+async function releaseClaim(options: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  operationId: string;
+  key: string;
+  requestHash: string;
+  originalError: unknown;
+}): Promise<void> {
+  const { data, error } = await options.supabase.rpc(
+    "release_api_idempotency",
+    {
+      p_restaurant_id: options.restaurantId,
+      p_operation_id: options.operationId,
+      p_idempotency_key: options.key,
+      p_request_hash: options.requestHash,
+    },
+  );
+  if (!error && data === true) return;
+
+  const releaseError =
+    error ?? new Error("Idempotency release did not remove its owned claim");
+  captureStorageError(
+    releaseError,
+    options.operationId,
+    "release",
+    options.originalError,
+  );
+  throw releaseError;
+}
+
+function parseReplayableResponseHeaders(
+  value: Json | Record<string, string> | null,
+): Record<string, string> {
+  if (value === null) return {};
+  if (Array.isArray(value) || typeof value !== "object") {
+    throw new Error("Idempotency replay returned invalid response headers");
+  }
+
+  const headers: Record<string, string> = {};
+  for (const [name, headerValue] of Object.entries(value)) {
+    const normalizedName = name.toLowerCase();
+    if (
+      typeof headerValue !== "string" ||
+      !/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(name) ||
+      /[\u0000-\u0008\u000A-\u001F\u007F]/.test(headerValue) ||
+      NON_REPLAYABLE_RESPONSE_HEADERS.has(normalizedName)
+    ) {
+      throw new Error("Idempotency replay returned invalid response headers");
+    }
+    headers[name] = headerValue;
+  }
+  return headers;
+}
+
+function unavailableResult<T>(): IdempotencyResult<T> {
+  return {
+    status: 503,
+    body: {
+      error: {
+        code: "idempotency_unavailable",
+        message: "Request idempotency is temporarily unavailable.",
+      },
+    } as T,
+    replayed: false,
+  };
+}
+
+function captureStorageError(
+  error: unknown,
+  operationId: string,
+  phase: string,
+  originalError?: unknown,
+): void {
+  try {
+    Sentry.captureException(error, {
+      tags: { surface: "idempotency", phase },
+      extra: {
+        operationId,
+        ...(originalError === undefined
+          ? {}
+          : {
+              originalError:
+                originalError instanceof Error
+                  ? originalError.message
+                  : String(originalError),
+            }),
+      },
+    });
+  } catch {
+    // Error reporting cannot replace the fail-closed API result.
+  }
 }

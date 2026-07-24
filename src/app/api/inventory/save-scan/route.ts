@@ -3,7 +3,9 @@ import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 import {
+  createIdempotencyRequestHash,
   isValidIdempotencyKey,
   withIdempotency,
 } from "@/lib/api/idempotency";
@@ -105,18 +107,41 @@ async function postInvoiceInventorySave(request: NextRequest) {
   // followed by a retry must return the original response WITHOUT
   // re-inserting inventory rows.
   const rawKey = request.headers.get("Idempotency-Key");
-  const key = isValidIdempotencyKey(rawKey) ? rawKey : null;
+  if (rawKey !== null && !isValidIdempotencyKey(rawKey)) {
+    return Errors.badRequest(
+      "Invalid Idempotency-Key.",
+      undefined,
+      "invalid_idempotency_key",
+    );
+  }
+  const filePayload = file
+    ? {
+        bytes: Buffer.from(await file.arrayBuffer()),
+        type: file.type,
+      }
+    : null;
 
   const result = await withIdempotency({
     supabase,
     restaurantId,
-    key,
+    operationId: "api:POST:/api/inventory/save-scan",
+    key: rawKey,
+    requestHash: createIdempotencyRequestHash(
+      {
+        scan,
+        originalItems,
+        file: filePayload
+          ? { size: filePayload.bytes.byteLength, type: filePayload.type }
+          : null,
+      },
+      ...(filePayload ? [filePayload.bytes] : []),
+    ),
     handler: async () => saveScanOnce({
       supabase,
       restaurantId,
       scan,
       originalItems,
-      file,
+      file: filePayload,
     }),
   });
 
@@ -129,7 +154,7 @@ async function saveScanOnce(opts: {
   restaurantId: string;
   scan: Scan;
   originalItems: LineItem[];
-  file: File | null;
+  file: { bytes: Buffer; type: string } | null;
 }): Promise<{ status: number; body: unknown }> {
   const { supabase, restaurantId, scan, originalItems, file } = opts;
 
@@ -171,7 +196,6 @@ async function saveScanOnce(opts: {
         : file.type === "image/png" ? "png"
         : "jpg";
       const storagePath = `${restaurantId}/${scanId}.${ext}`;
-      const fileBuffer = Buffer.from(await file.arrayBuffer());
       // INT-016: `upsert: true` as defense-in-depth. In the current
       // retry flow a fresh scanId is generated per handler invocation
       // (line 177 `const scanId = invoiceScan.id;`), so the storage
@@ -187,7 +211,7 @@ async function saveScanOnce(opts: {
       // regardless of the upsert flag.
       const { error: uploadError } = await supabase.storage
         .from("invoice-images")
-        .upload(storagePath, fileBuffer, {
+        .upload(storagePath, file.bytes, {
           contentType: file.type,
           upsert: true,
         });
