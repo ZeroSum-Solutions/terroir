@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import {
+  assignCellarWineSection,
   assignCellarWineSections,
   CellarBatchSectionError,
   chunkCellarWineIds,
 } from "@/lib/cellar/batch-section";
+import { createIdempotentCommandStore } from "@/lib/api/idempotency-client";
 
 const auth = vi.hoisted(() => ({
   requireMembership: vi.fn(),
@@ -510,66 +512,332 @@ describe("cellar collection behavior", () => {
     );
   });
 
-  it("chunks more than 200 client-selected wines without dropping IDs", () => {
-    const ids = Array.from({ length: 401 }, (_, index) => `wine-${index}`);
+  it("canonically sorts and chunks more than 200 selected wines", () => {
+    const ids = Array.from(
+      { length: 401 },
+      (_, index) => `wine-${String(400 - index).padStart(3, "0")}`,
+    );
     const chunks = chunkCellarWineIds(ids);
 
     expect(chunks.map((chunk) => chunk.length)).toEqual([200, 200, 1]);
-    expect(chunks.flat()).toEqual(ids);
+    expect(chunks.flat()).toEqual([...ids].sort());
   });
 
-  it("posts every client chunk and reports partial progress on failure", async () => {
-    const ids = Array.from({ length: 401 }, (_, index) => `wine-${index}`);
+  it("posts 401 IDs as 200/200/1 with distinct command keys", async () => {
+    const ids = Array.from(
+      { length: 401 },
+      (_, index) => `wine-${String(400 - index).padStart(3, "0")}`,
+    );
+    const request = vi
+      .fn<typeof fetch>(async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          wine_ids: string[];
+          section: string;
+        };
+        return Response.json({
+          updated: body.wine_ids.length,
+          section: body.section,
+        });
+      });
+    const commands = createIdempotentCommandStore({
+      fetchImpl: request,
+    });
+
+    await expect(assignCellarWineSections({
+      wineIds: ids,
+      section: "Reserve",
+      commands,
+    })).resolves.toBe(401);
+
+    expect(request).toHaveBeenCalledTimes(3);
+    const bodies = request.mock.calls.map((call) =>
+      JSON.parse(String(call[1]?.body)) as { wine_ids: string[] },
+    );
+    expect(bodies.map(({ wine_ids }) => wine_ids.length)).toEqual([
+      200,
+      200,
+      1,
+    ]);
+    expect(bodies.flatMap(({ wine_ids }) => wine_ids)).toEqual(
+      [...ids].sort(),
+    );
+    const keys = request.mock.calls.map((call) =>
+      new Headers(call[1]?.headers).get("Idempotency-Key"),
+    );
+    expect(new Set(keys).size).toBe(3);
+  });
+
+  it("normalizes a padded bulk section before sending and validating", async () => {
+    const request = vi.fn<typeof fetch>(
+      async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          wine_ids: string[];
+          section: string;
+        };
+        return Response.json({
+          updated: body.wine_ids.length,
+          section: body.section,
+        });
+      },
+    );
+    const commands = createIdempotentCommandStore({
+      fetchImpl: request,
+    });
+
+    await expect(assignCellarWineSections({
+      wineIds: [WINE_ID],
+      section: "  Reserve  ",
+      commands,
+    })).resolves.toBe(1);
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({
+      wine_ids: [WINE_ID],
+      section: "Reserve",
+    });
+  });
+
+  it("retries only a failed suffix with the same failed-chunk key", async () => {
+    const ids = Array.from(
+      { length: 401 },
+      (_, index) => `wine-${String(index).padStart(3, "0")}`,
+    );
+    const request = vi.fn<typeof fetch>(
+      async (_url, init) => {
+        const call = request.mock.calls.length;
+        const body = JSON.parse(String(init?.body)) as {
+          wine_ids: string[];
+          section: string;
+        };
+        if (call === 2) {
+          return Response.json(
+            { error: { message: "Provider unavailable." } },
+            { status: 503 },
+          );
+        }
+        return Response.json({
+          updated: body.wine_ids.length,
+          section: body.section,
+        });
+      },
+    );
+    const commands = createIdempotentCommandStore({
+      fetchImpl: request,
+    });
+
+    await expect(assignCellarWineSections({
+      wineIds: ids,
+      section: "Reserve",
+      commands,
+    })).rejects.toMatchObject({
+      name: "CellarBatchSectionError",
+      message: "Provider unavailable.",
+      assignedCount: 200,
+    } satisfies Partial<CellarBatchSectionError>);
+
+    await expect(assignCellarWineSections({
+      wineIds: ids.slice(200),
+      section: "Reserve",
+      commands,
+    })).resolves.toBe(201);
+
+    expect(request).toHaveBeenCalledTimes(4);
+    const bodies = request.mock.calls.map((call) =>
+      JSON.parse(String(call[1]?.body)) as { wine_ids: string[] },
+    );
+    expect(bodies[0]?.wine_ids).toEqual(ids.slice(0, 200));
+    expect(bodies[1]?.wine_ids).toEqual(ids.slice(200, 400));
+    expect(bodies[2]?.wine_ids).toEqual(ids.slice(200, 400));
+    expect(bodies[3]?.wine_ids).toEqual(ids.slice(400));
+    const keys = request.mock.calls.map((call) =>
+      new Headers(call[1]?.headers).get("Idempotency-Key"),
+    );
+    expect(keys[2]).toBe(keys[1]);
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
+  it("uses one retry key per wine and exact target", async () => {
     const request = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
       .mockResolvedValueOnce(
         Response.json(
           { error: { message: "Provider unavailable." } },
           { status: 503 },
         ),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ wine_id: WINE_ID, section: "Reserve" }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ wine_id: WINE_ID, section: "Library" }),
       );
-
-    const result = assignCellarWineSections({
-      wineIds: ids,
-      section: "Reserve",
-      request,
+    const commands = createIdempotentCommandStore({
+      fetchImpl: request,
     });
 
-    await expect(result).rejects.toMatchObject({
-      name: "CellarBatchSectionError",
-      message: "Provider unavailable.",
-      assignedCount: 200,
-    } satisfies Partial<CellarBatchSectionError>);
-    expect(request).toHaveBeenCalledTimes(2);
-    const firstBody = JSON.parse(
-      String(request.mock.calls[0]?.[1]?.body),
-    ) as { wine_ids: string[] };
-    const secondBody = JSON.parse(
-      String(request.mock.calls[1]?.[1]?.body),
-    ) as { wine_ids: string[] };
-    expect(firstBody.wine_ids).toEqual(ids.slice(0, 200));
-    expect(secondBody.wine_ids).toEqual(ids.slice(200, 400));
+    await expect(assignCellarWineSection({
+      wineId: WINE_ID,
+      section: "Reserve",
+      commands,
+    })).rejects.toThrow("Provider unavailable.");
+    await expect(assignCellarWineSection({
+      wineId: WINE_ID,
+      section: "Reserve",
+      commands,
+    })).resolves.toEqual({
+      wine_id: WINE_ID,
+      section: "Reserve",
+    });
+    await expect(assignCellarWineSection({
+      wineId: WINE_ID,
+      section: "Library",
+      commands,
+    })).resolves.toEqual({
+      wine_id: WINE_ID,
+      section: "Library",
+    });
+
+    const keys = request.mock.calls.map((call) =>
+      new Headers(call[1]?.headers).get("Idempotency-Key"),
+    );
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[1]);
   });
 
-  it("preserves partial progress when a later client chunk loses transport", async () => {
-    const ids = Array.from({ length: 201 }, (_, index) => `wine-${index}`);
-    const request = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
-      .mockRejectedValueOnce(new Error("Network unavailable"));
-
-    await expect(
-      assignCellarWineSections({
-        wineIds: ids,
-        section: "Reserve",
-        request,
-      }),
-    ).rejects.toMatchObject({
-      name: "CellarBatchSectionError",
-      message: "Network unavailable",
-      assignedCount: 200,
+  it("normalizes a padded section before keying, sending, and validating", async () => {
+    const request = vi.fn<typeof fetch>(
+      async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          section: string;
+        };
+        return Response.json({
+          wine_id: WINE_ID,
+          section: body.section,
+        });
+      },
+    );
+    const commands = createIdempotentCommandStore({
+      fetchImpl: request,
     });
+
+    await expect(assignCellarWineSection({
+      wineId: WINE_ID,
+      section: "  Reserve  ",
+      commands,
+    })).resolves.toEqual({
+      wine_id: WINE_ID,
+      section: "Reserve",
+    });
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({
+      section: "Reserve",
+    });
+  });
+
+  it("coalesces the same wine command while distinct wine slots proceed", async () => {
+    const resolvers = new Map<string, (response: Response) => void>();
+    const request = vi.fn<typeof fetch>(
+      (url) =>
+        new Promise<Response>((resolve) => {
+          resolvers.set(String(url), resolve);
+        }),
+    );
+    const commands = createIdempotentCommandStore({
+      fetchImpl: request,
+    });
+
+    const first = assignCellarWineSection({
+      wineId: WINE_ID,
+      section: "Reserve",
+      commands,
+    });
+    const duplicate = assignCellarWineSection({
+      wineId: WINE_ID,
+      section: "Reserve",
+      commands,
+    });
+    const distinct = assignCellarWineSection({
+      wineId: OTHER_WINE_ID,
+      section: "Reserve",
+      commands,
+    });
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+
+    resolvers.get(`/api/cellar/${WINE_ID}/section`)?.(
+      Response.json({ wine_id: WINE_ID, section: "Reserve" }),
+    );
+    resolvers.get(`/api/cellar/${OTHER_WINE_ID}/section`)?.(
+      Response.json({
+        wine_id: OTHER_WINE_ID,
+        section: "Reserve",
+      }),
+    );
+
+    await expect(Promise.all([first, duplicate, distinct])).resolves.toEqual([
+      { wine_id: WINE_ID, section: "Reserve" },
+      { wine_id: WINE_ID, section: "Reserve" },
+      { wine_id: OTHER_WINE_ID, section: "Reserve" },
+    ]);
+    const keys = request.mock.calls.map((call) =>
+      new Headers(call[1]?.headers).get("Idempotency-Key"),
+    );
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
+  it("uses new bulk keys when the target or exact selection changes", async () => {
+    const request = vi.fn<typeof fetch>().mockImplementation(
+      async () =>
+        Response.json(
+          { error: { message: "Provider unavailable." } },
+          { status: 503 },
+        ),
+    );
+    const commands = createIdempotentCommandStore({
+      fetchImpl: request,
+    });
+    const firstSelection = ["wine-a", "wine-b", "wine-z"];
+    const changedMiddleSelection = ["wine-a", "wine-c", "wine-z"];
+
+    await expect(assignCellarWineSections({
+      wineIds: firstSelection,
+      section: "Reserve",
+      commands,
+    })).rejects.toThrow("Provider unavailable.");
+    await expect(assignCellarWineSections({
+      wineIds: firstSelection,
+      section: "Library",
+      commands,
+    })).rejects.toThrow("Provider unavailable.");
+    await expect(assignCellarWineSections({
+      wineIds: changedMiddleSelection,
+      section: "Reserve",
+      commands,
+    })).rejects.toThrow("Provider unavailable.");
+
+    const keys = request.mock.calls.map((call) =>
+      new Headers(call[1]?.headers).get("Idempotency-Key"),
+    );
+    expect(new Set(keys).size).toBe(3);
+  });
+
+  it.each([
+    { updated: 0, section: "Reserve" },
+    { updated: 1, section: "Wrong" },
+    { ok: true },
+  ])("rejects malformed or mismatched 2xx batch data %#", async (payload) => {
+    const response = Response.json(payload);
+    const json = vi.spyOn(response, "json");
+    const request = vi.fn<typeof fetch>().mockResolvedValue(response);
+    const commands = createIdempotentCommandStore({
+      fetchImpl: request,
+    });
+
+    await expect(assignCellarWineSections({
+      wineIds: [WINE_ID],
+      section: "Reserve",
+      commands,
+    })).rejects.toMatchObject({
+      name: "CellarBatchSectionError",
+      assignedCount: 0,
+    });
+    expect(json).toHaveBeenCalledTimes(1);
   });
 
   it("paginates, normalizes bins, and aggregates repeated wines", async () => {

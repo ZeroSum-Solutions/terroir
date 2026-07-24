@@ -32,6 +32,38 @@ export type ApiIdempotencyImplementation = {
  * hash call, binary mode, and caller evidence.
  */
 export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
+  "api:PATCH:/api/cellar/{param}/section": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "retry-stable",
+      sources: [
+        "src/app/(app)/cellar/cellar-list.tsx",
+        "src/lib/cellar/batch-section.ts",
+      ],
+    },
+  },
+  "api:POST:/api/cellar/batch-section": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "assign_cellar_section_batch",
+    },
+    client: {
+      lifecycle: "retry-stable",
+      sources: ["src/lib/cellar/batch-section.ts"],
+    },
+  },
   "api:PATCH:/api/restaurant/{param}": {
     boundary: { kind: "generic-wrapper", count: 1 },
     identity: {

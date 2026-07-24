@@ -116,4 +116,49 @@ describe("high-risk idempotency clients", () => {
     );
     expect(pricing.match(/router\.refresh\(\)/g)).toHaveLength(2);
   });
+
+  it("guards cellar section retries with per-wine and bulk command slots", () => {
+    const cellarList = source(
+      "src/app/(app)/cellar/cellar-list.tsx",
+    );
+    const batchHelper = source("src/lib/cellar/batch-section.ts");
+
+    expect(
+      cellarList.match(/createIdempotentCommandStore\(\)/g),
+    ).toHaveLength(1);
+    expect(cellarList).toContain(
+      "if (movingWineIdsRef.current.has(wineId)) return",
+    );
+    expect(cellarList).toContain(
+      "movingWineIdsRef.current.add(wineId)",
+    );
+    expect(cellarList).toContain(
+      "movingWineIdsRef.current.size > 0",
+    );
+    expect(cellarList).toContain("disabled: !assignable || moving");
+    expect(cellarList).toContain("if (bulkBusyRef.current)");
+    expect(cellarList).toContain("bulkBusyRef.current = true");
+    expect(cellarList).toMatch(
+      /new Set\(\s*selectedWineIds\.slice\(assignedCount\),?\s*\)/,
+    );
+    expect(cellarList).toContain("commands,");
+
+    expect(batchHelper).toContain(
+      "slot: `cellar:section:${input.wineId}`",
+    );
+    expect(batchHelper).toContain(
+      "const section = normalizeCellarSection(input.section)",
+    );
+    expect(batchHelper).toContain(
+      "return `cellar:batch-section:${firstId}:${lastId}:${wineIds.length}`",
+    );
+    expect(batchHelper).toContain(
+      'url: "/api/cellar/batch-section"',
+    );
+    expect(batchHelper).toContain("wine_ids: wineIds");
+    expect(batchHelper).toContain(
+      "candidate.updated === expectedUpdated",
+    );
+    expect(batchHelper.match(/response\.json\(/g)).toBeNull();
+  });
 });

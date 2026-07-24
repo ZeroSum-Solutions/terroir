@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { MoreVertical, MapPin, GripVertical, CheckSquare, Square, Layers, ChevronDown, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -17,9 +17,11 @@ import {
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  assignCellarWineSection,
   assignCellarWineSections,
   CellarBatchSectionError,
 } from "@/lib/cellar/batch-section";
+import { createIdempotentCommandStore } from "@/lib/api/idempotency-client";
 import {
   cellarSectionDropId,
   cellarWineDragId,
@@ -98,6 +100,12 @@ export function CellarList({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const bulkBusyRef = useRef(false);
+  const movingWineIdsRef = useRef(new Set<string>());
+  const [movingWineIds, setMovingWineIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [commands] = useState(() => createIdempotentCommandStore());
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -215,36 +223,53 @@ export function CellarList({
             ? nestedTarget
             : undefined;
       if (targetSection === undefined || wine.section === targetSection) return;
+      if (movingWineIdsRef.current.has(wineId)) return;
 
-      // Persist via API
+      movingWineIdsRef.current.add(wineId);
+      setMovingWineIds(new Set(movingWineIdsRef.current));
       try {
-        const res = await fetch(`/api/cellar/${wineId}/section`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ section: targetSection }),
+        await assignCellarWineSection({
+          wineId,
+          section: targetSection,
+          commands,
         });
-        if (!res.ok) {
-          throw new Error(`Failed (${res.status})`);
-        }
         router.refresh();
-      } catch {
-        toast.error("Failed to move wine");
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to move wine",
+        );
+        // A lost or malformed response can hide a committed move. Reconcile
+        // the rendered cellar while the command store preserves its retry key.
+        router.refresh();
+      } finally {
+        movingWineIdsRef.current.delete(wineId);
+        setMovingWineIds(new Set(movingWineIdsRef.current));
       }
     },
-    [rows, router, toast],
+    [commands, rows, router, toast],
   );
 
   // BND-064: bulk assign selected wines to a section
   const doBulkAssign = useCallback(
     async () => {
-      if (!assignTarget || selectedIds.size === 0) return;
+      if (
+        bulkBusyRef.current ||
+        movingWineIdsRef.current.size > 0 ||
+        !assignTarget ||
+        assignTarget === "__open__" ||
+        selectedIds.size === 0
+      ) {
+        return;
+      }
+      bulkBusyRef.current = true;
       setBusy(true);
-      const selectedWineIds = Array.from(selectedIds);
+      const selectedWineIds = Array.from(selectedIds).sort();
       let assignedCount = 0;
       try {
         assignedCount = await assignCellarWineSections({
           wineIds: selectedWineIds,
           section: assignTarget,
+          commands,
         });
         toast.success(`${selectedWineIds.length} wine${selectedWineIds.length === 1 ? "" : "s"} assigned to ${assignTarget}`);
         setSelectMode(false);
@@ -270,13 +295,15 @@ export function CellarList({
         }
         router.refresh();
       } finally {
+        bulkBusyRef.current = false;
         setBusy(false);
       }
     },
-    [assignTarget, selectedIds, router, toast],
+    [assignTarget, commands, selectedIds, router, toast],
   );
 
   const toggleSelect = useCallback((wineId: string) => {
+    if (bulkBusyRef.current) return;
     if (!selectableIds.has(wineId)) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -287,11 +314,13 @@ export function CellarList({
   }, [selectableIds]);
 
   const selectAll = useCallback(() => {
+    if (bulkBusyRef.current) return;
     const allIds = new Set(selectableFiltered.map((r) => r.wine_id));
     setSelectedIds(allIds);
   }, [selectableFiltered]);
 
   const deselectAll = useCallback(() => {
+    if (bulkBusyRef.current) return;
     setSelectedIds(new Set());
   }, []);
 
@@ -347,8 +376,12 @@ export function CellarList({
           {!selectMode ? (
             <button
               type="button"
-              onClick={() => setSelectMode(true)}
-              className="inline-flex h-[32px] items-center gap-xs rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted transition-colors"
+              onClick={() => {
+                if (movingWineIdsRef.current.size > 0) return;
+                setSelectMode(true);
+              }}
+              disabled={movingWineIds.size > 0}
+              className="inline-flex h-[32px] items-center gap-xs rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted transition-colors disabled:opacity-60"
             >
               <CheckSquare className="h-4 w-4" strokeWidth={2} aria-hidden />
               Select wines
@@ -358,7 +391,8 @@ export function CellarList({
               <button
                 type="button"
                 onClick={selectAll}
-                className="inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted"
+                disabled={busy}
+                className="inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted disabled:opacity-60"
               >
                 Select all ({selectableFiltered.length})
               </button>
@@ -366,7 +400,8 @@ export function CellarList({
                 <button
                   type="button"
                   onClick={deselectAll}
-                  className="inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted"
+                  disabled={busy}
+                  className="inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted disabled:opacity-60"
                 >
                   Clear
                 </button>
@@ -375,8 +410,12 @@ export function CellarList({
                 <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setAssignTarget(assignTarget ? null : "__open__")}
-                    className="inline-flex h-[32px] items-center gap-xs rounded-sm bg-accent px-sm text-[12px] font-medium text-white hover:bg-accent-hover"
+                    onClick={() => {
+                      if (bulkBusyRef.current) return;
+                      setAssignTarget(assignTarget ? null : "__open__");
+                    }}
+                    disabled={busy}
+                    className="inline-flex h-[32px] items-center gap-xs rounded-sm bg-accent px-sm text-[12px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
                   >
                     <Layers className="h-4 w-4" strokeWidth={2} aria-hidden />
                     Assign {selectedIds.size} to section
@@ -388,8 +427,12 @@ export function CellarList({
                         <button
                           key={s.id}
                           type="button"
-                          onClick={() => setAssignTarget(s.name)}
-                          className="block w-full px-sm py-xs text-left text-[13px] text-ink hover:bg-surface-muted"
+                          onClick={() => {
+                            if (bulkBusyRef.current) return;
+                            setAssignTarget(s.name);
+                          }}
+                          disabled={busy}
+                          className="block w-full px-sm py-xs text-left text-[13px] text-ink hover:bg-surface-muted disabled:opacity-60"
                         >
                           {s.name}
                         </button>
@@ -406,14 +449,17 @@ export function CellarList({
                   <button
                     type="button"
                     onClick={doBulkAssign}
-                    disabled={busy}
+                    disabled={busy || movingWineIds.size > 0}
                     className="inline-flex h-[32px] items-center rounded-sm bg-accent px-sm text-[12px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
                   >
                     {busy ? "..." : "Confirm"}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAssignTarget(null)}
+                    onClick={() => {
+                      if (bulkBusyRef.current) return;
+                      setAssignTarget(null);
+                    }}
                     disabled={busy}
                     className="inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted disabled:opacity-60"
                   >
@@ -423,8 +469,14 @@ export function CellarList({
               )}
               <button
                 type="button"
-                onClick={() => { setSelectMode(false); setSelectedIds(new Set()); setAssignTarget(null); }}
-                className="ml-auto inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted"
+                onClick={() => {
+                  if (bulkBusyRef.current) return;
+                  setSelectMode(false);
+                  setSelectedIds(new Set());
+                  setAssignTarget(null);
+                }}
+                disabled={busy}
+                className="ml-auto inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted disabled:opacity-60"
               >
                 Done
               </button>
@@ -448,6 +500,8 @@ export function CellarList({
                 selectMode={selectMode}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
+                movingWineIds={movingWineIds}
+                selectionDisabled={busy}
               />
             ))}
           </div>
@@ -481,6 +535,8 @@ function SectionGroup({
   selectMode,
   selectedIds,
   onToggleSelect,
+  movingWineIds,
+  selectionDisabled,
 }: {
   sectionKey: string;
   sectionName: string;
@@ -490,6 +546,8 @@ function SectionGroup({
   selectMode: boolean;
   selectedIds: Set<string>;
   onToggleSelect: (wineId: string) => void;
+  movingWineIds: Set<string>;
+  selectionDisabled: boolean;
 }) {
   const section = sectionKey === UNCATEGORIZED_SECTION_KEY ? null : sectionKey;
   const { isOver, setNodeRef } = useDroppable({
@@ -526,6 +584,8 @@ function SectionGroup({
               selected={selectedIds.has(row.wine_id)}
               onToggleSelect={() => onToggleSelect(row.wine_id)}
               section={section}
+              moving={movingWineIds.has(row.wine_id)}
+              selectionDisabled={selectionDisabled}
             />
           ))}
         </div>
@@ -549,6 +609,8 @@ function DraggableWineRow({
   selected,
   onToggleSelect,
   section,
+  moving,
+  selectionDisabled,
 }: {
   row: CellarWineRow;
   lowStockThreshold?: number;
@@ -557,12 +619,14 @@ function DraggableWineRow({
   selected: boolean;
   onToggleSelect: () => void;
   section: string | null;
+  moving: boolean;
+  selectionDisabled: boolean;
 }) {
   const assignable = isCellarSectionAssignable(row);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
       id: cellarWineDragId(row.wine_id),
-      disabled: !assignable,
+      disabled: !assignable || moving,
       data: { section },
     });
 
@@ -587,8 +651,9 @@ function DraggableWineRow({
         selectMode={selectMode}
         selected={selected}
         onToggleSelect={onToggleSelect}
+        selectionDisabled={selectionDisabled}
         dragHandle={
-          !selectMode && assignable
+          !selectMode && assignable && !moving
             ? { attributes: { ...attributes }, listeners: { ...listeners } }
             : undefined
         }
@@ -604,6 +669,7 @@ function CellarRow({
   selectMode,
   selected,
   onToggleSelect,
+  selectionDisabled,
   dragHandle,
 }: {
   row: CellarWineRow;
@@ -612,6 +678,7 @@ function CellarRow({
   selectMode?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
+  selectionDisabled?: boolean;
   dragHandle?: {
     attributes: Record<string, unknown>;
     listeners: Record<string, unknown>;
@@ -656,7 +723,7 @@ function CellarRow({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onToggleSelect?.(); }}
-          disabled={!row.has_inventory_record}
+          disabled={!row.has_inventory_record || selectionDisabled}
           className="flex h-[44px] w-[44px] shrink-0 items-center justify-center text-ink-subtle hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
           aria-label={
             !row.has_inventory_record

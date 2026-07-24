@@ -1,6 +1,28 @@
 import { readApiError } from "@/lib/api/client-error";
+import { createIdempotentCommandStore } from "@/lib/api/idempotency-client";
 
 export const CELLAR_BATCH_SECTION_LIMIT = 200;
+
+type IdempotentCommandStore = ReturnType<
+  typeof createIdempotentCommandStore
+>;
+
+type CellarSectionResult = {
+  wine_id: string;
+  section: string | null;
+};
+
+type CellarBatchSectionResult = {
+  updated: number;
+  section: string;
+};
+
+export class CellarSectionCommandError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CellarSectionCommandError";
+  }
+}
 
 export class CellarBatchSectionError extends Error {
   constructor(
@@ -12,38 +34,91 @@ export class CellarBatchSectionError extends Error {
   }
 }
 
-export function chunkCellarWineIds(wineIds: string[]): string[][] {
+export function chunkCellarWineIds(wineIds: readonly string[]): string[][] {
+  const canonicalWineIds = [...wineIds].sort();
   const chunks: string[][] = [];
   for (
     let offset = 0;
-    offset < wineIds.length;
+    offset < canonicalWineIds.length;
     offset += CELLAR_BATCH_SECTION_LIMIT
   ) {
     chunks.push(
-      wineIds.slice(offset, offset + CELLAR_BATCH_SECTION_LIMIT),
+      canonicalWineIds.slice(
+        offset,
+        offset + CELLAR_BATCH_SECTION_LIMIT,
+      ),
     );
   }
   return chunks;
 }
 
+export async function assignCellarWineSection(input: {
+  wineId: string;
+  section: string | null;
+  commands: IdempotentCommandStore;
+}): Promise<CellarSectionResult> {
+  const section = normalizeCellarSection(input.section);
+  const { response, data } = await input.commands.json<unknown>({
+    slot: `cellar:section:${input.wineId}`,
+    url: `/api/cellar/${input.wineId}/section`,
+    method: "PATCH",
+    json: { section },
+  });
+
+  if (!response.ok) {
+    throw new CellarSectionCommandError(
+      readApiError(
+        data,
+        `Failed to move wine (${response.status}).`,
+      ).message,
+    );
+  }
+  if (
+    !data ||
+    typeof data !== "object" ||
+    (data as { wine_id?: unknown }).wine_id !== input.wineId ||
+    (data as { section?: unknown }).section !== section
+  ) {
+    throw new CellarSectionCommandError(
+      "The server returned an invalid cellar section result.",
+    );
+  }
+  return data as CellarSectionResult;
+}
+
+function normalizeCellarSection(section: string): string;
+function normalizeCellarSection(section: null): null;
+function normalizeCellarSection(section: string | null): string | null;
+function normalizeCellarSection(section: string | null): string | null {
+  if (section === null) return null;
+  const normalized = section.trim();
+  if (normalized.length < 1 || normalized.length > 100) {
+    throw new CellarSectionCommandError(
+      "Cellar section must be between 1 and 100 characters.",
+    );
+  }
+  return normalized;
+}
+
 export async function assignCellarWineSections(input: {
-  wineIds: string[];
+  wineIds: readonly string[];
   section: string;
-  request?: typeof fetch;
+  commands: IdempotentCommandStore;
 }): Promise<number> {
-  const request = input.request ?? fetch;
+  const section = normalizeCellarSection(input.section);
   let assignedCount = 0;
 
   for (const wineIds of chunkCellarWineIds(input.wineIds)) {
-    let response: Response;
+    let result: { response: Response; data: unknown };
     try {
-      response = await request("/api/cellar/batch-section", {
+      result = await input.commands.json<unknown>({
+        slot: cellarBatchSectionSlot(wineIds),
+        url: "/api/cellar/batch-section",
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        json: {
           wine_ids: wineIds,
-          section: input.section,
-        }),
+          section,
+        },
       });
     } catch (error) {
       throw new CellarBatchSectionError(
@@ -51,13 +126,24 @@ export async function assignCellarWineSections(input: {
         assignedCount,
       );
     }
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
+    if (!result.response.ok) {
       throw new CellarBatchSectionError(
         readApiError(
-          payload,
-          `Batch assign failed (${response.status}).`,
+          result.data,
+          `Batch assign failed (${result.response.status}).`,
         ).message,
+        assignedCount,
+      );
+    }
+    if (
+      !isCellarBatchSectionResult(
+        result.data,
+        wineIds.length,
+        section,
+      )
+    ) {
+      throw new CellarBatchSectionError(
+        "The server returned an invalid cellar batch result.",
         assignedCount,
       );
     }
@@ -65,4 +151,26 @@ export async function assignCellarWineSections(input: {
   }
 
   return assignedCount;
+}
+
+function cellarBatchSectionSlot(wineIds: readonly string[]): string {
+  const firstId = wineIds[0] ?? "empty";
+  const lastId = wineIds.at(-1) ?? "empty";
+  return `cellar:batch-section:${firstId}:${lastId}:${wineIds.length}`;
+}
+
+function isCellarBatchSectionResult(
+  value: unknown,
+  expectedUpdated: number,
+  expectedSection: string,
+): value is CellarBatchSectionResult {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as {
+    updated?: unknown;
+    section?: unknown;
+  };
+  return (
+    candidate.updated === expectedUpdated &&
+    candidate.section === expectedSection
+  );
 }

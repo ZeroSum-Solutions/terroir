@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/api/auth";
 import { z } from "zod";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseJson, parseParams } from "@/lib/api/validation";
 
 export const runtime = "nodejs";
@@ -15,6 +16,20 @@ const ParamsSchema = z.strictObject({ id: z.string().uuid() });
 const SectionSchema = z.object({
   section: z.string().trim().min(1).max(100).nullable(),
 });
+
+type SectionMutationBody =
+  | { wine_id: string; section: string | null }
+  | { error: { code: string; message: string } };
+
+class CellarSectionProviderError extends Error {
+  constructor(
+    readonly safeMessage: string,
+    options: { cause: unknown },
+  ) {
+    super(safeMessage, options);
+    this.name = "CellarSectionProviderError";
+  }
+}
 
 /**
  * PATCH /api/cellar/[id]/section — reassign a wine to a different cellar section.
@@ -40,48 +55,95 @@ export async function PATCH(
     if (!parsed.ok) return parsed.response;
     const { section } = parsed.data;
 
-    // Verify the wine belongs to this restaurant
-    const { data: wine, error: wineError } = await supabase
-      .from("wines")
-      .select("id")
-      .eq("id", wineId)
-      .eq("restaurant_id", restaurantId)
-      .single();
+    try {
+      return await idempotentMutationResponse<SectionMutationBody>({
+        request,
+        supabase,
+        restaurantId,
+        operationId: "api:PATCH:/api/cellar/{param}/section",
+        payload: { id: wineId, section },
+        releaseOnError: false,
+        handler: async () => {
+          // Keep the lookup, update, and deterministic result inside the
+          // idempotency boundary so successful and not-found outcomes replay
+          // without repeating provider work.
+          const { data: wine, error: wineError } = await supabase
+            .from("wines")
+            .select("id")
+            .eq("id", wineId)
+            .eq("restaurant_id", restaurantId)
+            .single();
 
-    if (wineError && wineError.code !== "PGRST116") {
-      console.error("wines lookup failed:", wineError);
-      Sentry.captureException(wineError, {
-        tags: { surface: "cellar", phase: "find-wine-for-section" },
-        extra: { restaurantId, wineId, section },
+          if (wineError && wineError.code !== "PGRST116") {
+            Sentry.captureException(wineError, {
+              tags: {
+                surface: "cellar",
+                phase: "find-wine-for-section",
+              },
+              extra: { restaurantId, wineId, section },
+            });
+            throw new CellarSectionProviderError(
+              "Failed to find wine.",
+              { cause: wineError },
+            );
+          }
+
+          if (!wine) {
+            return {
+              status: 404,
+              body: {
+                error: {
+                  code: "not_found",
+                  message: "Wine not found.",
+                },
+              },
+            };
+          }
+
+          const { data: updatedRows, error } = await supabase
+            .from("inventory_items")
+            .update({ section })
+            .eq("wine_id", wineId)
+            .eq("restaurant_id", restaurantId)
+            .select("id");
+
+          if (error) {
+            Sentry.captureException(error, {
+              tags: { surface: "cellar", phase: "update-section" },
+              extra: { restaurantId, wineId, section },
+            });
+            throw new CellarSectionProviderError(
+              "Failed to update section.",
+              { cause: error },
+            );
+          }
+
+          if (!updatedRows?.length) {
+            return {
+              status: 404,
+              body: {
+                error: {
+                  code: "not_found",
+                  message: "Inventory not found.",
+                },
+              },
+            };
+          }
+
+          return {
+            status: 200,
+            body: { wine_id: wineId, section },
+          };
+        },
       });
-      return Errors.internal("Failed to find wine.");
+    } catch (error) {
+      // Keyed failures reach this catch only after withIdempotency marks the
+      // owned claim outcome unknown. Keyless calls keep their exact historical
+      // public envelope without leaking provider details.
+      if (error instanceof CellarSectionProviderError) {
+        return Errors.internal(error.safeMessage);
+      }
+      throw error;
     }
-
-    if (!wine) {
-      return Errors.notFound("Wine");
-    }
-
-    // Update all inventory_items for this wine
-    const { data: updatedRows, error } = await supabase
-      .from("inventory_items")
-      .update({ section })
-      .eq("wine_id", wineId)
-      .eq("restaurant_id", restaurantId)
-      .select("id");
-
-    if (error) {
-      console.error("inventory_items section update failed:", error);
-      Sentry.captureException(error, {
-        tags: { surface: "cellar", phase: "update-section" },
-        extra: { restaurantId, wineId, section },
-      });
-      return Errors.internal("Failed to update section.");
-    }
-
-    if (!updatedRows?.length) {
-      return Errors.notFound("Inventory");
-    }
-
-    return NextResponse.json({ wine_id: wineId, section });
   });
 }
