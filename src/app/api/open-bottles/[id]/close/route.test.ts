@@ -48,7 +48,9 @@ function makeSupabase(opts: {
   return { supabase: { rpc, from }, rpc };
 }
 
-function makeContext(id = "bottle-1") {
+const BOTTLE_ID = "b1b2c3d4-e5f6-4789-8abc-def012345678";
+
+function makeContext(id = BOTTLE_ID) {
   return { params: Promise.resolve({ id }) };
 }
 
@@ -70,7 +72,7 @@ describe("POST /api/open-bottles/[id]/close", () => {
   it("closes an open bottle through record_pour and revalidates open cellar", async () => {
     const { supabase, rpc } = makeSupabase({
       bottle: {
-        id: "bottle-1",
+        id: BOTTLE_ID,
         wine_id: WINE_ID,
         remaining_ml: 125,
         closed_at: null,
@@ -88,7 +90,7 @@ describe("POST /api/open-bottles/[id]/close", () => {
 
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toMatchObject({
-      closed: { id: "bottle-1", wine_id: WINE_ID },
+      closed: { id: BOTTLE_ID, wine_id: WINE_ID },
     });
     expect(rpc).toHaveBeenCalledWith("record_pour", {
       p_wine_id: WINE_ID,
@@ -113,10 +115,55 @@ describe("POST /api/open-bottles/[id]/close", () => {
     expect(res.status).toBe(404);
   });
 
+  it("returns 404 for the PostgREST no-row code", async () => {
+    const { supabase } = makeSupabase({
+      bottle: null,
+      fetchError: { code: "PGRST116", message: "no rows" },
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "staff",
+    });
+
+    const res = await POST({} as NextRequest, makeContext());
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({
+      error: { code: "not_found", message: "Bottle not found." },
+    });
+  });
+
+  it("redacts a real bottle-fetch failure instead of reporting 404", async () => {
+    const { supabase } = makeSupabase({
+      bottle: null,
+      fetchError: { code: "XX000", message: "super-secret database failure" },
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "staff",
+    });
+
+    const res = await POST({} as NextRequest, makeContext());
+    const text = await res.text();
+
+    expect(res.status).toBe(500);
+    expect(JSON.parse(text)).toEqual({
+      error: {
+        code: "internal_error",
+        message: "Internal server error.",
+      },
+    });
+    expect(text).not.toContain("super-secret");
+  });
+
   it("returns 403 when the bottle belongs to another restaurant", async () => {
     const { supabase } = makeSupabase({
       bottle: {
-        id: "bottle-1",
+        id: BOTTLE_ID,
         wine_id: WINE_ID,
         remaining_ml: 125,
         closed_at: null,
@@ -138,7 +185,7 @@ describe("POST /api/open-bottles/[id]/close", () => {
   it("returns 409 when the bottle is already closed", async () => {
     const { supabase } = makeSupabase({
       bottle: {
-        id: "bottle-1",
+        id: BOTTLE_ID,
         wine_id: WINE_ID,
         remaining_ml: 125,
         closed_at: "2026-07-03T00:00:00Z",

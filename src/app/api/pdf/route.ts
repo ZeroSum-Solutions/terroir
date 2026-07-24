@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
 import {
   generateWineListPdf,
   WineListPdfGenerationError,
@@ -6,11 +7,22 @@ import {
 } from "@/domains/wine-lists/wine-list-pdf-service";
 import { requireMembership } from "@/lib/api/auth";
 import { apiError, Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseJson } from "@/lib/api/validation";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+const BodySchema = z.object({
+  listId: z.string().uuid(),
+  template: z.enum(["classic", "modern", "minimal"]).optional(),
+});
+
 export async function POST(request: NextRequest) {
+  return withApiHandler(() => postPdf(request));
+}
+
+async function postPdf(request: NextRequest) {
   // Gate on membership and scope every query by restaurant_id. RLS should
   // already enforce this, but belt-and-suspenders: a wine list belonging to a
   // restaurant the caller is not a member of must return 404, not 403 — a 403
@@ -19,16 +31,11 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
-  let body: { listId: string; template?: string };
-  try {
-    body = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
-
-  if (!body.listId) {
-    return Errors.badRequest("listId is required.");
-  }
+  const parsed = await parseJson(request, BodySchema, {
+    message: "Invalid body.",
+  });
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
 
   try {
     const result = await generateWineListPdf({

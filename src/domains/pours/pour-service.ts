@@ -146,7 +146,13 @@ export async function closeOpenBottle(input: CloseOpenBottleInput) {
     .eq("id", bottleId)
     .single();
 
-  if (fetchError || !bottle) {
+  if (
+    fetchError &&
+    (fetchError as { code?: string }).code !== "PGRST116"
+  ) {
+    throw fetchError;
+  }
+  if (!bottle) {
     throw new PourNotFoundError("Bottle not found.");
   }
 

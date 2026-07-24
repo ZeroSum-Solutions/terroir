@@ -8,6 +8,8 @@ import {
 } from "@/domains/pours/pour-service";
 import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseJson } from "@/lib/api/validation";
 
 export const runtime = "nodejs";
 
@@ -31,21 +33,18 @@ const BodySchema = z.object({
  * 500: any other RPC error
  */
 export async function POST(request: NextRequest) {
+  return withApiHandler(() => postUndo(request));
+}
+
+async function postUndo(request: NextRequest) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
-  let raw: unknown;
-  try {
-    raw = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
-
-  const parsed = BodySchema.safeParse(raw);
-  if (!parsed.success) {
-    return Errors.validation(parsed.error.issues, "Invalid body.");
-  }
+  const parsed = await parseJson(request, BodySchema, {
+    message: "Invalid body.",
+  });
+  if (!parsed.ok) return parsed.response;
   const { wine_id } = parsed.data;
 
   try {

@@ -68,7 +68,11 @@ function makeSupabase(opts: {
 }
 
 function makeRequest(body: unknown): NextRequest {
-  return { json: async () => body } as NextRequest;
+  return new Request("http://localhost/api/reconcile", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  }) as unknown as NextRequest;
 }
 
 const UUID_A = "a1b2c3d4-e5f6-4789-8abc-def012345678";

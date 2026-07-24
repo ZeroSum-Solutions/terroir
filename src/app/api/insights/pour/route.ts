@@ -1,44 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
+import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseQuery } from "@/lib/api/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const VALID_RANGES = new Set(["7d", "30d", "90d", "all", "custom"]);
+const QuerySchema = z.object({
+  range: z.enum(["7d", "30d", "90d", "all", "custom"]).default("30d"),
+  topN: z.coerce.number().int().min(1).max(50).default(10),
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+});
 
 /**
  * GET /api/insights/pour?range=30d&topN=10
  * Also supports range=custom&from=YYYY-MM-DD&to=YYYY-MM-DD
  */
 export async function GET(request: NextRequest) {
+  return withApiHandler(() => getPourInsights(request));
+}
+
+async function getPourInsights(request: NextRequest) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
-  const url = new URL(request.url);
-  const range = VALID_RANGES.has(url.searchParams.get("range") ?? "")
-    ? url.searchParams.get("range")!
-    : "30d";
-  const topN = Math.min(
-    Math.max(parseInt(url.searchParams.get("topN") ?? "10", 10) || 10, 1),
-    50,
-  );
+  const parsed = await parseQuery(request.nextUrl.searchParams, QuerySchema);
+  if (!parsed.ok) return parsed.response;
+  const { range, topN, from, to } = parsed.data;
 
   try {
     let since: Date | null = null;
     let until: Date | null = null;
 
     if (range === "custom") {
-      const from = url.searchParams.get("from");
-      const to = url.searchParams.get("to");
       if (from) {
         since = new Date(from + "T00:00:00");
-        if (Number.isNaN(since.getTime())) since = null;
       }
       if (to) {
         until = new Date(to + "T23:59:59.999");
-        if (Number.isNaN(until.getTime())) until = null;
       }
     } else if (range !== "all") {
       const days = parseInt(range.replace("d", ""), 10);
@@ -59,9 +63,9 @@ export async function GET(request: NextRequest) {
     if (until) pourQuery.lte("occurred_at", until.toISOString());
 
     const [
-      { data: pourEventsRaw },
-      { data: inventoryItems },
-      { data: listItems },
+      { data: pourEventsRaw, error: pourError },
+      { data: inventoryItems, error: inventoryError },
+      { data: listItems, error: listItemsError },
     ] = await Promise.all([
       pourQuery,
       supabase
@@ -77,6 +81,9 @@ export async function GET(request: NextRequest) {
         .eq("wine_list_sections.wine_lists.restaurant_id", restaurantId)
         .order("updated_at", { ascending: false }),
     ]);
+    if (pourError) throw pourError;
+    if (inventoryError) throw inventoryError;
+    if (listItemsError) throw listItemsError;
 
     const pourEvents = pourEventsRaw ?? [];
 
@@ -214,9 +221,6 @@ export async function GET(request: NextRequest) {
       tags: { surface: "insights", phase: "pour-analytics" },
       extra: { restaurantId, range, topN },
     });
-    return NextResponse.json(
-      { error: "Failed to load pour analytics." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to load pour analytics.");
   }
 }
