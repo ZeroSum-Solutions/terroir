@@ -70,6 +70,9 @@ jobs:
       - name: Feature ledger verification
         run: pnpm verify:feature-ledger
 
+      - name: API contract verification
+        run: pnpm run verify:api-contract
+
       - name: Typecheck
         run: pnpm exec tsc --noEmit
 

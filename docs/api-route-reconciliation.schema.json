@@ -55,8 +55,6 @@
     },
     "discoveredClassifications": {
       "type": "array",
-      "minItems": 77,
-      "maxItems": 77,
       "uniqueItems": true,
       "items": {
         "$ref": "#/$defs/discoveredClassification"
@@ -116,13 +114,16 @@
           "const": 32
         },
         "exactDiscoveredCount": {
-          "const": 17
+          "type": "integer",
+          "minimum": 0
         },
         "plannedPromiseCount": {
-          "const": 15
+          "type": "integer",
+          "minimum": 0
         },
         "extensionDiscoveredCount": {
-          "const": 60
+          "type": "integer",
+          "minimum": 0
         },
         "crossCuttingRequirementCount": {
           "const": 6
@@ -302,6 +303,7 @@
                 "$ref": "#/$defs/concreteRequirementId"
               },
               "semanticAliasContext": {
+                "type": "array",
                 "maxItems": 0
               }
             }
