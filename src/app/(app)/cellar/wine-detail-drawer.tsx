@@ -7,9 +7,8 @@ import { X, Wine, PackageOpen, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, 
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { readApiError } from "@/lib/api/client-error";
 import {
-  createIdempotencyKey,
-  readApiErrorCode,
-  shouldRetainIdempotencyKey,
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
 } from "@/lib/api/idempotency-client";
 import { useToast } from "@/lib/toast";
 import { ML_PER_OZ } from "@/lib/units";
@@ -37,37 +36,6 @@ import {
 } from "@/lib/pricing/status";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
-
-const OPEN_BOTTLE_COMMAND_STORAGE_PREFIX = "terroir:open-bottle:";
-
-function openBottleStorageKey(wineId: string): string {
-  return `${OPEN_BOTTLE_COMMAND_STORAGE_PREFIX}${wineId}`;
-}
-
-function readOpenBottleCommand(wineId: string): string | null {
-  try {
-    const value = sessionStorage.getItem(openBottleStorageKey(wineId));
-    return typeof value === "string" && value.length >= 8 ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-function storeOpenBottleCommand(wineId: string, key: string): void {
-  try {
-    sessionStorage.setItem(openBottleStorageKey(wineId), key);
-  } catch {
-    // The in-memory ref still protects retries in this drawer instance.
-  }
-}
-
-function clearOpenBottleCommand(wineId: string): void {
-  try {
-    sessionStorage.removeItem(openBottleStorageKey(wineId));
-  } catch {
-    // Storage availability cannot change the server-side result.
-  }
-}
 
 export function WineDetailDrawer({
   row,
@@ -113,67 +81,48 @@ export function WineDetailDrawer({
 
   // BND-121: manually open a bottle without recording a pour
   const [openBottleBusy, setOpenBottleBusy] = useState(false);
-  const openBottleCommandRef = useRef<{
-    wineId: string;
-    key: string;
-  } | null>(null);
+  const openBottleBusyRef = useRef(false);
+  const [openBottleCommands] = useState(() =>
+    createIdempotentCommandStore({
+      persistence: createSessionCommandPersistence(
+        "terroir:open-bottle",
+      ),
+    }),
+  );
 
   const doOpenBottle = useCallback(
     async () => {
-      if (!row) return;
+      if (!row || openBottleBusyRef.current) return;
+      openBottleBusyRef.current = true;
       setErrorMsg(null);
       setOpenBottleBusy(true);
-      if (openBottleCommandRef.current?.wineId !== row.wine_id) {
-        const storedKey = readOpenBottleCommand(row.wine_id);
-        openBottleCommandRef.current = {
-          wineId: row.wine_id,
-          key: storedKey ?? createIdempotencyKey(),
-        };
-        storeOpenBottleCommand(
-          row.wine_id,
-          openBottleCommandRef.current.key,
-        );
-      }
-      const commandKey = openBottleCommandRef.current.key;
       try {
-        const res = await fetch("/api/open-bottles", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Idempotency-Key": commandKey,
-          },
-          body: JSON.stringify({ wine_id: row.wine_id }),
-        });
-        const payload = await res.json().catch(() => null);
-        if (!res.ok) {
-          if (
-            !shouldRetainIdempotencyKey(
-              res.status,
-              readApiErrorCode(payload),
-            )
-          ) {
-            clearOpenBottleCommand(row.wine_id);
-            openBottleCommandRef.current = null;
-          }
+        const { response, data } =
+          await openBottleCommands.json<unknown>({
+            slot: `open:${row.wine_id}`,
+            url: "/api/open-bottles",
+            method: "POST",
+            json: { wine_id: row.wine_id },
+          });
+        if (!response.ok) {
           throw new Error(
             readApiError(
-              payload,
-              `Failed to open bottle (${res.status}).`,
+              data,
+              `Failed to open bottle (${response.status}).`,
             ).message,
           );
         }
-        clearOpenBottleCommand(row.wine_id);
-        openBottleCommandRef.current = null;
         toast.success("Bottle opened");
         startTransition(() => router.refresh());
       } catch (err) {
         toast.error("Open bottle failed");
         setErrorMsg(err instanceof Error ? err.message : "Failed to open bottle.");
       } finally {
+        openBottleBusyRef.current = false;
         setOpenBottleBusy(false);
       }
     },
-    [row, router, toast],
+    [openBottleCommands, row, router, toast],
   );
 
   const doPour = useCallback(

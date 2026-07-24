@@ -4,8 +4,9 @@ import { Check } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { readApiError } from "@/lib/api/client-error";
 import {
+  createBinaryCommandFingerprint,
+  createIdempotentCommandStore,
   readApiErrorCode,
-  shouldRetainIdempotencyKey,
 } from "@/lib/api/idempotency-client";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
 import {
@@ -91,28 +92,6 @@ class ScanError extends Error {
   }
 }
 
-async function postScan(files: File[], signal: AbortSignal, key?: string | null): Promise<Scan> {
-  const body = new FormData();
-  files.forEach(function(f) { body.append("file", f); });
-  const headers: Record<string, string> = {};
-  if (key) headers["Idempotency-Key"] = key;
-  const res = await fetch("/api/scan", { method: "POST", body, signal, headers });
-  if (!res.ok) {
-    const payload = await res.json().catch(() => null);
-    const failure = readApiError(
-      payload,
-      `Scan failed (${res.status})`,
-    );
-    throw new ScanError(
-      failure.message,
-      res.status,
-      readApiErrorCode(payload),
-      failure.rawText,
-    );
-  }
-  return (await res.json()) as Scan;
-}
-
 export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const { restaurantId: _restaurantId } = useRestaurant();
   const [status, setStatus] = useState<Status>("ready");
@@ -121,18 +100,8 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const [scan, setScan] = useState<Scan | null>(null);
   const [originalItems, setOriginalItems] = useState<LineItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-  // BND-006: UUIDv4 generated on the first save attempt and reused across
-  // retries of the SAME logical save. Cleared on a successful 2xx (or on a
-  // 4xx validation error) so the next save starts with a fresh key; held
-  // across 5xx / network failures so a retry hits the idempotency cache
-  // instead of double-inserting inventory rows.
-  const saveKeyRef = useRef<string | null>(null);
-  const bottleSaveKeyRef = useRef<string | null>(null);
-  // BND-089: scan idempotency key — generated on first scan attempt, reused
-  // across retries. Cleared on success or 4xx validation error; held across
-  // 5xx / network failures so retry returns cached result.
-  const scanKeyRef = useRef<string | null>(null);
-  const scanInputRef = useRef<string | null>(null);
+  const savingRef = useRef(false);
+  const [commands] = useState(() => createIdempotentCommandStore());
   const [savedResult, setSavedResult] = useState<{
     itemCount: number;
     wineCount: number;
@@ -148,6 +117,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const [error, setError] = useState<string | null>(null);
   const [rawText, setRawText] = useState<string | null>(null);
   const [lastFile, setLastFile] = useState<File | null>(null);
+  const [lastFiles, setLastFiles] = useState<File[]>([]);
   const [mode, setMode] = useState<ScanMode>("invoice");
   const [bottleResult, setBottleResult] = useState<BottleScanResult | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -188,59 +158,81 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     return () => window.clearInterval(id);
   }, [status]);
 
-  const startScan = useCallback(async (files: File[]) => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
+  const startScan = useCallback(
+    async (files: File[]) => {
+      abortRef.current?.abort();
+      const ac = new AbortController();
+      abortRef.current = ac;
 
-    setLastFile(files[0]);
-    setProgress(0);
-    setStepIndex(0);
-    setStatus("processing");
-    setError(null);
+      setLastFile(files[0]);
+      setLastFiles(files);
+      setProgress(0);
+      setStepIndex(0);
+      setStatus("processing");
+      setError(null);
 
-    const inputFingerprint = files
-      .map((file) =>
-        [file.name, file.size, file.type, file.lastModified].join(":"),
-      )
-      .join("|");
-    if (scanInputRef.current !== inputFingerprint) {
-      scanKeyRef.current = null;
-      scanInputRef.current = inputFingerprint;
-    }
+      try {
+        const identity = {
+          files: files.map((file) => ({
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            lastModified: file.lastModified,
+          })),
+        };
+        const fingerprint = await createBinaryCommandFingerprint(
+          identity,
+          ...files,
+        );
+        const { response, data } = await commands.binary<unknown>({
+          slot: `scan:invoice:${fingerprint}`,
+          url: "/api/scan",
+          method: "POST",
+          fingerprint,
+          signal: ac.signal,
+          makeBody: () => {
+            const body = new FormData();
+            files.forEach((file) => body.append("file", file));
+            return body;
+          },
+        });
+        if (ac.signal.aborted) return;
+        if (!response.ok) {
+          const failure = readApiError(
+            data,
+            `Scan failed (${response.status})`,
+          );
+          throw new ScanError(
+            failure.message,
+            response.status,
+            readApiErrorCode(data),
+            failure.rawText,
+          );
+        }
 
-    // BND-089: mint one key per logical file selection and reuse on retry.
-    if (!scanKeyRef.current) {
-      scanKeyRef.current =
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    }
-    try {
-      const fresh = await postScan(files, ac.signal, scanKeyRef.current);
-      if (ac.signal.aborted) return;
-      setProgress(100);
-      scanKeyRef.current = null; // 2xx → clear for next scan
-      scanInputRef.current = null;
-      setScan(fresh);
-      setOriginalItems([...fresh.items]);
-      saveScan(fresh);
-      setStatus(fresh.quality?.manualFallbackTriggered ? "review" : "results");
-    } catch (err) {
-      if (ac.signal.aborted) return;
-      if (
-        err instanceof ScanError &&
-        !shouldRetainIdempotencyKey(err.status, err.code)
-      ) {
-        scanKeyRef.current = null;
-        scanInputRef.current = null;
+        const fresh = data as Scan;
+        setProgress(100);
+        setScan(fresh);
+        setOriginalItems([...fresh.items]);
+        saveScan(fresh);
+        setStatus(
+          fresh.quality?.manualFallbackTriggered
+            ? "review"
+            : "results",
+        );
+      } catch (err) {
+        if (ac.signal.aborted) return;
+        const message =
+          err instanceof Error ? err.message : "Scan failed.";
+        setError(message);
+        setRawText(
+          err instanceof ScanError ? err.rawText ?? null : null,
+        );
+        setStatus("error");
       }
-      const message = err instanceof Error ? err.message : "Scan failed.";
-      setError(message);
-      setRawText(err instanceof ScanError ? err.rawText ?? null : null);
-      setStatus("error");
-    }
-  }, []);
+    },
+    [commands],
+  );
 
   const updateField = useCallback(
     (id: string, field: LineItemField, value: string | number | null) => {
@@ -290,9 +282,10 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
 
   const startOver = useCallback(() => {
     abortRef.current?.abort();
-    scanKeyRef.current = null;
     saveScan(null);
     setScan(null);
+    setLastFile(null);
+    setLastFiles([]);
     setBottleResult(null);
     setError(null);
     setRawText(null);
@@ -344,63 +337,67 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   }, [scan]);
 
   const saveToInventory = useCallback(async () => {
-    if (!scan || isSaving) return;
+    if (!scan || savingRef.current) return;
+    savingRef.current = true;
     setIsSaving(true);
-    // Reuse an existing key on retry, or mint a new one on first attempt.
-    if (!saveKeyRef.current) {
-      saveKeyRef.current =
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    }
     try {
-      const body = new FormData();
-      body.append("data", JSON.stringify({ scan, originalItems }));
-      if (lastFile) body.append("file", lastFile);
-      const res = await fetch("/api/inventory/save-scan", {
-        method: "POST",
-        headers: { "Idempotency-Key": saveKeyRef.current },
-        body,
-      });
-      if (!res.ok) {
-        const payload = await res.json().catch(() => null);
-        if (
-          !shouldRetainIdempotencyKey(
-            res.status,
-            readApiErrorCode(payload),
-          )
-        ) {
-          saveKeyRef.current = null;
-        }
-        throw new Error(
-          readApiError(
-            payload,
-            `Save failed (${res.status})`,
-          ).message,
-        );
-      }
-      const result = (await res.json()) as {
+      const fingerprint = await createBinaryCommandFingerprint(
+        {
+          scan,
+          originalItems,
+          file: lastFile
+            ? {
+                name: lastFile.name,
+                size: lastFile.size,
+                type: lastFile.type,
+                lastModified: lastFile.lastModified,
+              }
+            : null,
+        },
+        ...(lastFile ? [lastFile] : []),
+      );
+      const { response, data } = await commands.binary<{
         scanId: string;
         itemCount: number;
         wineCount: number;
-      };
-      saveKeyRef.current = null; // 2xx → clear so the next save mints a fresh key
+      }>({
+        slot: "inventory:invoice-save",
+        url: "/api/inventory/save-scan",
+        method: "POST",
+        fingerprint,
+        makeBody: () => {
+          const body = new FormData();
+          body.append(
+            "data",
+            JSON.stringify({ scan, originalItems }),
+          );
+          if (lastFile) body.append("file", lastFile);
+          return body;
+        },
+      });
+      if (!response.ok) {
+        throw new Error(
+          readApiError(
+            data,
+            `Save failed (${response.status})`,
+          ).message,
+        );
+      }
       saveScan(null);
       setScan(null);
       setOriginalItems([]);
-      setSavedResult(result);
+      setLastFile(null);
+      setLastFiles([]);
+      setSavedResult(data);
       setStatus("ready");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Save failed.";
       setToast(message);
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
-  }, [scan, originalItems, isSaving, lastFile]);
-
-  const retryScan = useCallback(() => {
-    if (lastFile) startScan([lastFile]);
-  }, [lastFile, startScan]);
+  }, [commands, scan, originalItems, lastFile]);
 
   const enterManualEntry = useCallback(() => {
     const parsedAt = new Date().toISOString();
@@ -441,6 +438,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     abortRef.current = ac;
 
     setLastFile(file);
+    setLastFiles([file]);
     setStatus("processing");
     setError(null);
 
@@ -473,6 +471,14 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     }
   }, []);
 
+  const retryScan = useCallback(() => {
+    if (mode === "bottle") {
+      if (lastFile) void startBottleScan(lastFile);
+      return;
+    }
+    if (lastFiles.length > 0) void startScan(lastFiles);
+  }, [lastFile, lastFiles, mode, startBottleScan, startScan]);
+
   const saveBottleToInventory = useCallback(
     async (wine: {
       name: string;
@@ -484,52 +490,40 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       qty: number;
       unitCost: number;
     }) => {
-      if (isSaving) return;
+      if (savingRef.current) return;
+      savingRef.current = true;
       setIsSaving(true);
-      if (!bottleSaveKeyRef.current) {
-        bottleSaveKeyRef.current =
-          typeof crypto !== "undefined" && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      }
       try {
-        const res = await fetch("/api/inventory/save-bottle-scan", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Idempotency-Key": bottleSaveKeyRef.current,
-          },
-          body: JSON.stringify({ wine }),
-        });
-        if (!res.ok) {
-          const payload = await res.json().catch(() => null);
-          if (
-            !shouldRetainIdempotencyKey(
-              res.status,
-              readApiErrorCode(payload),
-            )
-          ) {
-            bottleSaveKeyRef.current = null;
-          }
+        const { response, data } =
+          await commands.json<unknown>({
+            slot: "inventory:bottle-save",
+            url: "/api/inventory/save-bottle-scan",
+            method: "POST",
+            json: { wine },
+          });
+        if (!response.ok) {
           throw new Error(
             readApiError(
-              payload,
-              `Save failed (${res.status})`,
+              data,
+              `Save failed (${response.status})`,
             ).message,
           );
         }
-        bottleSaveKeyRef.current = null;
         setBottleResult(null);
+        setLastFile(null);
+        setLastFiles([]);
         setSavedResult({ itemCount: 1, wineCount: 1 });
         setStatus("ready");
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Save failed.";
+        const message =
+          err instanceof Error ? err.message : "Save failed.";
         setToast(message);
       } finally {
+        savingRef.current = false;
         setIsSaving(false);
       }
     },
-    [isSaving],
+    [commands],
   );
 
   const handleStart = useCallback(
@@ -554,9 +548,9 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       {status === "error" && (
         <ErrorView
           message={error ?? "Unknown error."}
-          onRetry={lastFile ? retryScan : startOver}
+          onRetry={lastFiles.length > 0 ? retryScan : startOver}
           onNewPhoto={startOver}
-          hasFile={!!lastFile}
+          hasFile={lastFiles.length > 0}
           onManual={enterManualEntry}
         />
       )}

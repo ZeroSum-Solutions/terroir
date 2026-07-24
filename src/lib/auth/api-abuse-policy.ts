@@ -1,7 +1,7 @@
 import type { ApiRateLimitClass } from "@/lib/api/rate-limit";
 import { API_AUTHORIZATION } from "./api-authorization";
 
-type OperationId = `api:${string}:/api/${string}`;
+export type ApiOperationId = `api:${string}:/api/${string}`;
 
 export type ApiAbusePolicy =
   | {
@@ -31,7 +31,7 @@ export const PLANNED_API_OPERATION_IDS = [
   "api:GET:/api/wine-lists",
   "api:GET:/api/wines",
   "api:GET:/api/wines/{param}",
-] as const satisfies readonly OperationId[];
+] as const satisfies readonly ApiOperationId[];
 
 const RATE_LIMIT_OVERRIDES = {
   "api:POST:/api/pdf": "expensive",
@@ -46,21 +46,21 @@ const RATE_LIMIT_OVERRIDES = {
   "api:POST:/api/wines/enrich": "expensive",
   "api:POST:/api/wines/refresh-retail-batch": "expensive",
   "api:POST:/api/team": "sensitive",
-} as const satisfies Partial<Record<OperationId, ApiRateLimitClass>>;
+} as const satisfies Partial<Record<ApiOperationId, ApiRateLimitClass>>;
 
 const operationIds = [
   ...Object.keys(API_AUTHORIZATION),
   ...PLANNED_API_OPERATION_IDS,
-] as OperationId[];
+] as ApiOperationId[];
 
 export const API_ABUSE_POLICY = Object.fromEntries(
   operationIds.map((operationId) => [
     operationId,
     classifyOperation(operationId),
   ]),
-) as Record<OperationId, ApiAbusePolicy>;
+) as Record<ApiOperationId, ApiAbusePolicy>;
 
-function classifyOperation(operationId: OperationId): ApiAbusePolicy {
+function classifyOperation(operationId: ApiOperationId): ApiAbusePolicy {
   if (operationId === "api:GET:/api/health") {
     return {
       access: "public",
@@ -83,7 +83,7 @@ function classifyOperation(operationId: OperationId): ApiAbusePolicy {
       : "supported";
   const override = (
     RATE_LIMIT_OVERRIDES as Partial<
-      Record<OperationId, ApiRateLimitClass>
+      Record<ApiOperationId, ApiRateLimitClass>
     >
   )[operationId];
   if (override) {
