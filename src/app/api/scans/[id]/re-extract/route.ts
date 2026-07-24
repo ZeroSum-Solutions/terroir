@@ -29,7 +29,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   return withApiHandler(async () => {
-    const auth = await requireMembership();
+    const auth = await requireMembership({ rateLimit: "expensive" });
     if (auth instanceof NextResponse) return auth;
     const { supabase, restaurantId } = auth;
 

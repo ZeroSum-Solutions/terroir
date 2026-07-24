@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function postBottleScan(request: NextRequest) {
-  const auth = await requireMembership();
+  const auth = await requireMembership({ rateLimit: "expensive" });
   if (auth instanceof NextResponse) return auth;
 
   const { supabase, restaurantId } = auth;

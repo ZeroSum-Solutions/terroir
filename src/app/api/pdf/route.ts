@@ -27,7 +27,7 @@ async function postPdf(request: NextRequest) {
   // already enforce this, but belt-and-suspenders: a wine list belonging to a
   // restaurant the caller is not a member of must return 404, not 403 — a 403
   // would confirm the list exists. (ARCH-002)
-  const auth = await requireMembership();
+  const auth = await requireMembership({ rateLimit: "expensive" });
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 

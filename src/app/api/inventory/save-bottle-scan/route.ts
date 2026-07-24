@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function postBottleInventorySave(request: NextRequest) {
-  const auth = await requireMembership();
+  const auth = await requireMembership({ rateLimit: "mutation" });
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 

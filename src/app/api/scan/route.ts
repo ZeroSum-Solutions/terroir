@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
 
 async function postInvoiceScan(request: NextRequest) {
   // ARCH-001: membership gates paid Azure + Anthropic spend.
-  const auth = await requireMembership();
+  const auth = await requireMembership({ rateLimit: "expensive" });
   if (auth instanceof NextResponse) return auth;
 
   const { supabase, user, restaurantId } = auth;

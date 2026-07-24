@@ -21,6 +21,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_rate_limit_buckets: {
+        Row: {
+          bucket_key: string
+          created_at: string
+          request_count: number
+          reset_at: string
+          updated_at: string
+          user_id: string
+          window_seconds: number
+          window_start: string
+        }
+        Insert: {
+          bucket_key: string
+          created_at?: string
+          request_count: number
+          reset_at: string
+          updated_at?: string
+          user_id: string
+          window_seconds: number
+          window_start: string
+        }
+        Update: {
+          bucket_key?: string
+          created_at?: string
+          request_count?: number
+          reset_at?: string
+          updated_at?: string
+          user_id?: string
+          window_seconds?: number
+          window_start?: string
+        }
+        Relationships: []
+      }
       availability_events: {
         Row: {
           created_at: string
@@ -927,7 +960,18 @@ export type Database = {
         Args: { p_restaurant_id: string; p_wine_ids: string[] }
         Returns: string[]
       }
+      cleanup_api_rate_limit_buckets: { Args: never; Returns: number }
       cleanup_scan_idempotency: { Args: never; Returns: undefined }
+      consume_api_rate_limit: {
+        Args: { p_risk_class: string }
+        Returns: {
+          allowed: boolean
+          limit_count: number
+          remaining: number
+          reset_at: string
+          retry_after_seconds: number
+        }[]
+      }
       dismiss_pricing_alert: {
         Args: { p_days?: number; p_wine_id: string }
         Returns: string

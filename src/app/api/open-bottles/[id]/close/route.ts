@@ -41,7 +41,7 @@ export async function POST(
 }
 
 async function postCloseBottle(params: Promise<{ id: string }>) {
-  const auth = await requireMembership();
+  const auth = await requireMembership({ rateLimit: "mutation" });
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
   const parsed = await parseParams(params, ParamsSchema);

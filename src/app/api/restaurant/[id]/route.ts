@@ -48,7 +48,7 @@ export async function PUT(
   { params }: { params: Params },
 ) {
   return withApiHandler(async () => {
-    const auth = await requireAuth();
+    const auth = await requireAuth({ rateLimit: "mutation" });
     if (auth instanceof NextResponse) return auth;
     const { supabase, user } = auth;
     const parsedParams = await parseParams(params, ParamsSchema);

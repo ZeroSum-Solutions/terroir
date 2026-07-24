@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function postUndo(request: NextRequest) {
-  const auth = await requireMembership();
+  const auth = await requireMembership({ rateLimit: "mutation" });
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 

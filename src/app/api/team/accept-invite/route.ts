@@ -28,7 +28,7 @@ function clientIp(request: NextRequest): string {
 
 export async function POST(request: NextRequest) {
   return withApiHandler(async () => {
-    const auth = await requireAuth();
+    const auth = await requireAuth({ rateLimit: "sensitive" });
     if (auth instanceof NextResponse) return auth;
     const { supabase, user } = auth;
 

@@ -23,7 +23,9 @@ export async function POST(
   { params }: { params: Params },
 ) {
   return withApiHandler(async () => {
-    const auth = await requireCapability("team:invite-manage");
+    const auth = await requireCapability("team:invite-manage", {
+      rateLimit: "sensitive",
+    });
     if (auth instanceof NextResponse) return auth;
     const { supabase, user, restaurantId } = auth;
     const parsedParams = await parseParams(params, TeamIdParamsSchema);

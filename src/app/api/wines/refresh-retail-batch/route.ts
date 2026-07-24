@@ -26,7 +26,9 @@ const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
 
 export async function POST() {
   return withApiHandler(async () => {
-    const auth = await requireCapability("wine:manage");
+    const auth = await requireCapability("wine:manage", {
+      rateLimit: "expensive",
+    });
     if (auth instanceof NextResponse) return auth;
     const { supabase, restaurantId } = auth;
 

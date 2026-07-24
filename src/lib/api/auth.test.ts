@@ -9,6 +9,7 @@ const mockGetUser = vi.fn();
 const mockSelect = vi.fn();
 const mockEq = vi.fn();
 const mockOrderFinal = vi.fn();
+const mockRpc = vi.fn();
 
 type MembershipsPayload = {
   data: Array<{ restaurant_id: string; role: string }> | null;
@@ -18,6 +19,7 @@ type MembershipsPayload = {
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () => ({
     auth: { getUser: mockGetUser },
+    rpc: (...args: unknown[]) => mockRpc(...args),
     from: () => ({
       select: (...args: unknown[]) => {
         mockSelect(...args);
@@ -51,6 +53,21 @@ const {
   requireRole,
 } = await import("./auth");
 const { signActiveRestaurantCookie } = await import("./active-restaurant");
+
+beforeEach(() => {
+  mockRpc.mockResolvedValue({
+    data: [
+      {
+        allowed: true,
+        limit_count: 120,
+        remaining: 119,
+        retry_after_seconds: 0,
+        reset_at: new Date(Date.now() + 60_000).toISOString(),
+      },
+    ],
+    error: null,
+  });
+});
 
 function withMemberships(memberships: Array<{ restaurant_id: string; role: string }>) {
   mockOrderFinal.mockImplementation(() => {
@@ -88,6 +105,7 @@ describe("requireAuth", () => {
     const result = await requireAuth();
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(401);
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 
   it("returns 401 for Supabase's ordinary missing-session error", async () => {
@@ -119,6 +137,50 @@ describe("requireAuth", () => {
     const result = await requireAuth();
     expect(result).not.toBeInstanceOf(NextResponse);
     expect((result as { user: { id: string } }).user.id).toBe("u1");
+    expect(mockRpc).toHaveBeenCalledWith("consume_api_rate_limit", {
+      p_risk_class: "standard",
+    });
+  });
+
+  it("returns 429 with standard quota headers when the persisted bucket is exhausted", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "u1", email: "test@test.com" } },
+    });
+    mockRpc.mockResolvedValue({
+      data: [
+        {
+          allowed: false,
+          limit_count: 10,
+          remaining: 0,
+          retry_after_seconds: 42,
+          reset_at: new Date(Date.now() + 42_000).toISOString(),
+        },
+      ],
+      error: null,
+    });
+
+    const result = await requireAuth({ rateLimit: "sensitive" });
+
+    expect(result).toBeInstanceOf(NextResponse);
+    expect((result as NextResponse).status).toBe(429);
+    expect((result as NextResponse).headers.get("Retry-After")).toBe("42");
+    expect((result as NextResponse).headers.get("RateLimit-Limit")).toBe("10");
+    expect((result as NextResponse).headers.get("RateLimit-Remaining")).toBe(
+      "0",
+    );
+    expect((result as NextResponse).headers.get("Cache-Control")).toBe(
+      "private, no-store",
+    );
+  });
+
+  it("throws rate-limit datastore failures instead of running unmetered", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "u1", email: "test@test.com" } },
+    });
+    const providerError = { code: "08006", message: "limiter unavailable" };
+    mockRpc.mockResolvedValue({ data: null, error: providerError });
+
+    await expect(requireAuth()).rejects.toBe(providerError);
   });
 });
 
@@ -134,6 +196,9 @@ describe("requireMembership", () => {
     const result = await requireMembership();
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(403);
+    expect(mockRpc).toHaveBeenCalledWith("consume_api_rate_limit", {
+      p_risk_class: "standard",
+    });
   });
 
   it("throws membership provider failures instead of reporting a false 403", async () => {
@@ -217,6 +282,9 @@ describe("requireOwner", () => {
     const result = await requireOwner();
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(403);
+    expect(mockRpc).toHaveBeenCalledWith("consume_api_rate_limit", {
+      p_risk_class: "mutation",
+    });
   });
 
   it("returns membership for owner", async () => {
@@ -247,6 +315,9 @@ describe("requireRole", () => {
     const result = await requireRole(["owner", "manager"]);
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(403);
+    expect(mockRpc).toHaveBeenCalledWith("consume_api_rate_limit", {
+      p_risk_class: "mutation",
+    });
   });
 
   it("returns the membership when role is in the allowed list (manager)", async () => {
@@ -290,6 +361,9 @@ describe("requireCapability", () => {
 
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(403);
+    expect(mockRpc).toHaveBeenCalledWith("consume_api_rate_limit", {
+      p_risk_class: "mutation",
+    });
   });
 
   it("returns the active membership when the role has the capability", async () => {

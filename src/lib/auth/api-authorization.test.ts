@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import {
+  API_ABUSE_POLICY,
+  PLANNED_API_OPERATION_IDS,
+} from "./api-abuse-policy";
 import { API_AUTHORIZATION } from "./api-authorization";
 import { CAPABILITIES, CAPABILITY_ROLES } from "./capabilities";
 
@@ -76,10 +80,12 @@ describe("API authorization manifest", () => {
       }
 
       if (policy.access === "authenticated") {
-        expect(calls, operation.operationId).toContainEqual({
-          helper: "requireAuth",
-          roles: null,
-        });
+        expect(calls, operation.operationId).toContainEqual(
+          expect.objectContaining({
+            helper: "requireAuth",
+            roles: null,
+          }),
+        );
         continue;
       }
 
@@ -113,12 +119,63 @@ describe("API authorization manifest", () => {
       ).toBe(true);
     }
   });
+
+  it("classifies the full discovered and planned operation union for rate limiting", () => {
+    const operationIds = [
+      ...inventory.discoveredOperations.map(({ operationId }) => operationId),
+      ...PLANNED_API_OPERATION_IDS,
+    ].sort();
+
+    expect(Object.keys(API_ABUSE_POLICY).sort()).toEqual(operationIds);
+    expect(API_ABUSE_POLICY["api:GET:/api/health"]).toEqual({
+      access: "public",
+      rateLimit: "platform-health",
+    });
+    expect(API_ABUSE_POLICY["api:GET:/api/dev-login"]).toEqual({
+      access: "public",
+      rateLimit: "public-bootstrap",
+    });
+  });
+
+  it("keeps every discovered route aligned with its declared risk class", () => {
+    const mismatches: string[] = [];
+    for (const operation of inventory.discoveredOperations) {
+      const policy =
+        API_ABUSE_POLICY[
+          operation.operationId as keyof typeof API_ABUSE_POLICY
+        ];
+      if (policy.access === "public") continue;
+
+      const calls = collectAuthCalls(
+        operation.source.file,
+        operation.source.localName,
+      );
+      const aligned = calls.some(
+        (call) => effectiveRateLimit(call) === policy.rateLimit,
+      );
+      if (!aligned) {
+        mismatches.push(
+          `${operation.operationId}: expected ${policy.rateLimit}, got ${JSON.stringify(calls)}`,
+        );
+      }
+    }
+    expect(mismatches).toEqual([]);
+  });
 });
 
 type AuthCall =
-  | { helper: "requireAuth" | "requireMembership" | "requireOwner"; roles: null }
-  | { helper: "requireRole"; roles: string[] }
-  | { helper: "requireCapability"; capability: string; roles: null };
+  | {
+      helper: "requireAuth" | "requireMembership" | "requireOwner";
+      roles: null;
+      rateLimit: string | null;
+    }
+  | { helper: "requireRole"; roles: string[]; rateLimit: string | null }
+  | {
+      helper: "requireCapability";
+      capability: string;
+      roles: null;
+      rateLimit: string | null;
+    };
 
 function collectAuthCalls(file: string, exportedName: string): AuthCall[] {
   const sourceText = readFileSync(resolve(process.cwd(), file), "utf8");
@@ -152,13 +209,18 @@ function collectAuthCalls(file: string, exportedName: string): AuthCall[] {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
       const name = node.expression.text;
       if (name === "requireAuth" || name === "requireMembership" || name === "requireOwner") {
-        calls.push({ helper: name, roles: null });
+        calls.push({
+          helper: name,
+          roles: null,
+          rateLimit: objectLiteralProperty(node.arguments[0], "rateLimit"),
+        });
       } else if (name === "requireCapability") {
         const capability = literalText(node.arguments[0]);
         calls.push({
           helper: "requireCapability",
           capability: capability ?? "",
           roles: null,
+          rateLimit: objectLiteralProperty(node.arguments[1], "rateLimit"),
         });
       } else if (name === "requireRole") {
         const argument = node.arguments[0];
@@ -168,7 +230,11 @@ function collectAuthCalls(file: string, exportedName: string): AuthCall[] {
                 .map(literalText)
                 .filter((value): value is string => value !== null)
             : [];
-        calls.push({ helper: "requireRole", roles });
+        calls.push({
+          helper: "requireRole",
+          roles,
+          rateLimit: objectLiteralProperty(node.arguments[1], "rateLimit"),
+        });
       } else if (functions.has(name)) {
         visitFunction(name);
       }
@@ -189,4 +255,32 @@ function literalText(node: ts.Node | undefined): string | null {
   return node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
     ? node.text
     : null;
+}
+
+function objectLiteralProperty(
+  node: ts.Node | undefined,
+  propertyName: string,
+): string | null {
+  if (!node || !ts.isObjectLiteralExpression(node)) return null;
+  const property = node.properties.find(
+    (candidate): candidate is ts.PropertyAssignment =>
+      ts.isPropertyAssignment(candidate) &&
+      ts.isIdentifier(candidate.name) &&
+      candidate.name.text === propertyName,
+  );
+  return property ? literalText(property.initializer) : null;
+}
+
+function effectiveRateLimit(call: AuthCall): string {
+  if (call.rateLimit) return call.rateLimit;
+  if (call.helper === "requireOwner" || call.helper === "requireRole") {
+    return "mutation";
+  }
+  if (call.helper === "requireCapability") {
+    return call.capability.endsWith(":view") ||
+      call.capability === "export:read"
+      ? "standard"
+      : "mutation";
+  }
+  return "standard";
 }

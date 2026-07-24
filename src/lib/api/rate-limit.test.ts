@@ -1,5 +1,11 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { __resetRateLimitForTests, rateLimit } from "./rate-limit";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Database } from "@/types/database";
+import {
+  __resetRateLimitForTests,
+  enforceApiRateLimit,
+  rateLimit,
+} from "./rate-limit";
 
 describe("rateLimit", () => {
   beforeEach(() => {
@@ -64,5 +70,99 @@ describe("rateLimit", () => {
     if (!early.ok && !late.ok) {
       expect(late.retryAfterSeconds).toBeLessThan(early.retryAfterSeconds);
     }
+  });
+});
+
+describe("enforceApiRateLimit", () => {
+  it("uses the persisted class bucket and allows requests with capacity", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          allowed: true,
+          limit_count: 60,
+          remaining: 59,
+          retry_after_seconds: 0,
+          reset_at: new Date(Date.now() + 60_000).toISOString(),
+        },
+      ],
+      error: null,
+    });
+
+    await expect(
+      enforceApiRateLimit({
+        supabase: { rpc } as unknown as SupabaseClient<Database>,
+        riskClass: "mutation",
+      }),
+    ).resolves.toBeNull();
+    expect(rpc).toHaveBeenCalledWith("consume_api_rate_limit", {
+      p_risk_class: "mutation",
+    });
+  });
+
+  it("returns the standard 429 envelope and quota headers when exhausted", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          allowed: false,
+          limit_count: 10,
+          remaining: 0,
+          retry_after_seconds: 17,
+          reset_at: new Date(Date.now() + 17_000).toISOString(),
+        },
+      ],
+      error: null,
+    });
+
+    const response = await enforceApiRateLimit({
+      supabase: { rpc } as unknown as SupabaseClient<Database>,
+      riskClass: "expensive",
+    });
+
+    expect(response?.status).toBe(429);
+    expect(response?.headers.get("Retry-After")).toBe("17");
+    expect(response?.headers.get("RateLimit-Limit")).toBe("10");
+    expect(response?.headers.get("RateLimit-Remaining")).toBe("0");
+    await expect(response?.json()).resolves.toEqual({
+      error: {
+        code: "rate_limited",
+        message: "Too many requests. Try again later.",
+      },
+    });
+  });
+
+  it("fails closed when the shared counter is unavailable", async () => {
+    const providerError = { code: "08006", message: "database unavailable" };
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: providerError });
+
+    await expect(
+      enforceApiRateLimit({
+        supabase: { rpc } as unknown as SupabaseClient<Database>,
+        riskClass: "standard",
+      }),
+    ).rejects.toBe(providerError);
+  });
+
+  it("fails closed when the shared counter returns malformed metadata", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          allowed: true,
+          limit_count: 120,
+          remaining: -1,
+          retry_after_seconds: 0,
+          reset_at: "not-a-timestamp",
+        },
+      ],
+      error: null,
+    });
+
+    await expect(
+      enforceApiRateLimit({
+        supabase: { rpc } as unknown as SupabaseClient<Database>,
+        riskClass: "standard",
+      }),
+    ).rejects.toThrow("consume_api_rate_limit returned an invalid result");
   });
 });

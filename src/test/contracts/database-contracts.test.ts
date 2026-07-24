@@ -20,6 +20,14 @@ const tenantHardening = readFileSync(
   "utf8",
 );
 
+const apiRateLimits = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../supabase/migrations/0055_api_rate_limits.sql",
+  ),
+  "utf8",
+);
+
 describe("database security contracts", () => {
   it("keeps public wine-list read policies explicit and narrow", () => {
     for (const table of [
@@ -239,6 +247,52 @@ describe("database security contracts", () => {
     expect(schema).toContain('create policy "members can create own background jobs"');
     expect(schema).not.toContain('create policy "members can update background jobs"');
     expect(schema).not.toContain('create policy "members can delete background jobs"');
+  });
+
+  it("keeps API rate limits server-owned and inaccessible to clients", () => {
+    expect(apiRateLimits).toContain(
+      "v_user_id uuid := auth.uid();",
+    );
+    expect(apiRateLimits).toContain(
+      "security definer\nset search_path = ''",
+    );
+    expect(apiRateLimits).toContain(
+      "revoke all on table public.api_rate_limit_buckets from authenticated;",
+    );
+    expect(apiRateLimits).toContain(
+      "revoke all on function public.consume_api_rate_limit(text) from anon;",
+    );
+    expect(apiRateLimits).toContain(
+      "grant execute on function public.consume_api_rate_limit(text) to authenticated;",
+    );
+    expect(apiRateLimits).not.toMatch(
+      /consume_api_rate_limit\([\s\S]*?p_(?:limit|window|user_id)/,
+    );
+  });
+
+  it("keeps API risk classes and ceilings hardcoded in the database", () => {
+    for (const [riskClass, limit, windowSeconds] of [
+      ["standard", 120, 60],
+      ["mutation", 60, 60],
+      ["expensive", 10, 60],
+      ["sensitive", 10, 3600],
+    ] as const) {
+      expect(apiRateLimits).toMatch(
+        new RegExp(
+          `when '${riskClass}' then[\\s\\S]*?v_class_limit := ${limit};[\\s\\S]*?v_class_window_seconds := ${windowSeconds};`,
+        ),
+      );
+    }
+
+    expect(apiRateLimits).toContain(
+      "v_global_limit constant integer := 600;",
+    );
+    expect(apiRateLimits).toContain(
+      "v_global_window_seconds constant integer := 60;",
+    );
+    expect(apiRateLimits).toMatch(
+      /v_allowed :=[\s\S]*?v_global_count <= v_global_limit[\s\S]*?and v_class_count <= v_class_limit/,
+    );
   });
 });
 
