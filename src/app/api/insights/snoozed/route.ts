@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +34,10 @@ export type SnoozedRow = {
 };
 
 export async function GET() {
+  return withApiHandler(getSnoozedAlerts);
+}
+
+async function getSnoozedAlerts() {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
@@ -100,9 +106,6 @@ export async function GET() {
       tags: { surface: "insights-snoozed", phase: "fetch" },
       extra: { restaurantId },
     });
-    return NextResponse.json(
-      { error: "Failed to fetch snoozed alerts." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to fetch snoozed alerts.");
   }
 }

@@ -1,19 +1,28 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** GET /api/insights — aggregate metrics for the authenticated restaurant. */
 export async function GET() {
+  return withApiHandler(getInsights);
+}
+
+async function getInsights() {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
   try {
     // Fetch scans and inventory in parallel
-    const [{ data: scans }, { data: inventoryItems }] = await Promise.all([
+    const [
+      { data: scans, error: scansError },
+      { data: inventoryItems, error: inventoryError },
+    ] = await Promise.all([
       supabase
         .from("invoice_scans")
         .select("id, distributor_name, item_count, accuracy_score, created_at")
@@ -24,6 +33,8 @@ export async function GET() {
         .select("quantity, unit_cost, wine_id, wines(varietal)")
         .eq("restaurant_id", restaurantId),
     ]);
+    if (scansError) throw scansError;
+    if (inventoryError) throw inventoryError;
 
     const allScans = scans ?? [];
     const items = inventoryItems ?? [];
@@ -90,9 +101,6 @@ export async function GET() {
       tags: { surface: "insights", phase: "fetch" },
       extra: { restaurantId },
     });
-    return NextResponse.json(
-      { error: "Failed to load insights data." },
-      { status: 500 },
-    );
+    return Errors.internal("Failed to load insights data.");
   }
 }
