@@ -447,18 +447,22 @@ Phases are ordered by risk, not visual appeal:
 
 ### TER-020: Reconcile and harden the API contract
 
-**Outcome:** Documented APIs exist or are explicitly amended, and all handlers follow consistent validation, authorization, error, and abuse-control rules.
+**Outcome:** Documented APIs exist at their exact promised method/path pairs, and all handlers follow consistent validation, authorization, error, and abuse-control rules.
 
 **Scope:**
 
-- `TER-020A`: map the 65 current API route files to all API assertions and obtain approval for amendments whose intended implementation is a server component.
-- `TER-020B`: introduce the shared error envelope and Zod request-validation boundary, then migrate one route family at a time.
-- `TER-020C`: centralize restaurant and capability checks and add tenant-isolation tests by route family.
-- `TER-020D`: add risk-based rate limits and idempotency to authentication, scanning, invitation, publish, pour, reconciliation, and other material writes.
-- `TER-020E`: add thin authenticated GET handlers for remaining promised collection resources where an existing query module is authoritative.
-- `TER-020F`: generate contract tests from the final route inventory and prohibit new unregistered routes.
+- `TER-020Aa`: Generate the source-only API route inventory
+- `TER-020Ab`: Reconcile all active API requirements without amendments
+- `TER-020Ac`: Enforce route-inventory drift checks in CI
+- `TER-020B`: Standardize Zod validation and error envelopes
+- `TER-020C`: Centralize authentication, authorization, and tenant isolation
+- `TER-020D`: Apply per-user rate limits and request idempotency
+- `TER-020E`: Implement all missing promised compatibility handlers at their exact paths
+- `TER-020F`: Generate final contract tests and reject unregistered routes
 
-Each child is an independently mergeable leaf spec with its own acceptance subset and completion record. The parent closes only after all six children pass the parent acceptance criteria.
+`TER-020E` owns all 15 currently missing promised method/path pairs, including reads and compatibility writes. Existing alternate-path handlers remain extensions and do not satisfy those active promises.
+
+Each child is an independently mergeable leaf spec with its own acceptance subset and completion record. The parent closes only after all eight children pass the parent acceptance criteria.
 
 **Acceptance:** No active route promise is missing; malformed input never reaches business logic; no raw internal error reaches clients; duplicate retry-safe requests do not duplicate business effects; tenant isolation tests cover every route family.
 **Verification:** Route inventory check, contract tests, fuzzed invalid inputs, and authorization matrix.

@@ -853,5 +853,126 @@
       }
     }
   ],
-  "plannedOperations": []
+  "plannedOperations": [
+    {
+      "operationId": "api:GET:/api/cellar",
+      "method": "GET",
+      "path": "/api/cellar",
+      "sourceRequirementIds": [
+        "TER-CF-181"
+      ]
+    },
+    {
+      "operationId": "api:GET:/api/export",
+      "method": "GET",
+      "path": "/api/export",
+      "sourceRequirementIds": [
+        "TER-CF-211"
+      ]
+    },
+    {
+      "operationId": "api:GET:/api/inventory",
+      "method": "GET",
+      "path": "/api/inventory",
+      "sourceRequirementIds": [
+        "TER-CF-191"
+      ]
+    },
+    {
+      "operationId": "api:GET:/api/restaurant",
+      "method": "GET",
+      "path": "/api/restaurant",
+      "sourceRequirementIds": [
+        "TER-CF-205"
+      ]
+    },
+    {
+      "operationId": "api:PATCH:/api/restaurant",
+      "method": "PATCH",
+      "path": "/api/restaurant",
+      "sourceRequirementIds": [
+        "TER-CF-206"
+      ]
+    },
+    {
+      "operationId": "api:GET:/api/scans",
+      "method": "GET",
+      "path": "/api/scans",
+      "sourceRequirementIds": [
+        "TER-CF-188"
+      ]
+    },
+    {
+      "operationId": "api:GET:/api/scans/{param}",
+      "method": "GET",
+      "path": "/api/scans/[id]",
+      "sourceRequirementIds": [
+        "TER-CF-189"
+      ]
+    },
+    {
+      "operationId": "api:GET:/api/team",
+      "method": "GET",
+      "path": "/api/team",
+      "sourceRequirementIds": [
+        "TER-CF-207"
+      ]
+    },
+    {
+      "operationId": "api:POST:/api/team",
+      "method": "POST",
+      "path": "/api/team",
+      "sourceRequirementIds": [
+        "TER-CF-208"
+      ]
+    },
+    {
+      "operationId": "api:DELETE:/api/team/{param}",
+      "method": "DELETE",
+      "path": "/api/team/[membership_id]",
+      "sourceRequirementIds": [
+        "TER-CF-209"
+      ]
+    },
+    {
+      "operationId": "api:GET:/api/wine-list-items",
+      "method": "GET",
+      "path": "/api/wine-list-items",
+      "sourceRequirementIds": [
+        "TER-CF-201"
+      ]
+    },
+    {
+      "operationId": "api:GET:/api/wine-list-sections",
+      "method": "GET",
+      "path": "/api/wine-list-sections",
+      "sourceRequirementIds": [
+        "TER-CF-198"
+      ]
+    },
+    {
+      "operationId": "api:GET:/api/wine-lists",
+      "method": "GET",
+      "path": "/api/wine-lists",
+      "sourceRequirementIds": [
+        "TER-CF-194"
+      ]
+    },
+    {
+      "operationId": "api:GET:/api/wines",
+      "method": "GET",
+      "path": "/api/wines",
+      "sourceRequirementIds": [
+        "TER-CF-185"
+      ]
+    },
+    {
+      "operationId": "api:GET:/api/wines/{param}",
+      "method": "GET",
+      "path": "/api/wines/[id]",
+      "sourceRequirementIds": [
+        "TER-CF-186"
+      ]
+    }
+  ]
 }
