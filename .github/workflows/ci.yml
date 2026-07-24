@@ -1,19 +1,20 @@
 # BND-012 / INT-003 / INT-006
 #
 # Minimum-viable CI for Terroir. Gates every PR on these checks:
-#   1. typecheck    (tsc --noEmit)
-#   2. lint         (next lint / eslint)
-#   3. unit tests   (vitest run)
-#   4. contract tests (DB security/API envelopes)
-#   5. schema drift (supabase/schema.snapshot.sql must equal a fresh
+#   1. feature ledger verification (authoritative completion contract)
+#   2. typecheck    (tsc --noEmit)
+#   3. lint         (next lint / eslint)
+#   4. unit tests   (vitest run)
+#   5. contract tests (DB security/API envelopes)
+#   6. schema drift (supabase/schema.snapshot.sql must equal a fresh
 #                    concatenation of supabase/migrations/*.sql)
-#   6. types drift  (src/types/database.ts must equal the live schema's
+#   7. types drift  (src/types/database.ts must equal the live schema's
 #                    current generated types) — skipped when
 #                    SUPABASE_ACCESS_TOKEN is not set (fork PRs etc.)
-#   7. downs check  (every forward migration from 0011 onward has a
+#   8. downs check  (every forward migration from 0011 onward has a
 #                    paired supabase/migrations/down/*.down.sql file —
 #                    INT-006)
-#   8. local seed dry-run (sanitized production-like fixtures still build)
+#   9. local seed dry-run (sanitized production-like fixtures still build)
 #
 # The schema-drift step turns "someone added a migration but forgot to
 # update the snapshot" into a hard failure. To regenerate the snapshot
@@ -65,6 +66,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Feature ledger verification
+        run: pnpm verify:feature-ledger
 
       - name: Typecheck
         run: pnpm exec tsc --noEmit
