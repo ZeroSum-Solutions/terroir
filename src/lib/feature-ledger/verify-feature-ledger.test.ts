@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -80,6 +83,20 @@ describe("verifyFeatureLedger", () => {
 
   it.each([
     {
+      name: "schema version drift",
+      mutate: (ledger: ReturnType<typeof createInitialLedger>) => {
+        ledger.schemaVersion = 2;
+      },
+      expected: "schemaVersion must be 1",
+    },
+    {
+      name: "source file drift",
+      mutate: (ledger: ReturnType<typeof createInitialLedger>) => {
+        ledger.sourceFile = "other-spec.txt";
+      },
+      expected: "sourceFile must be app_spec.txt",
+    },
+    {
       name: "count drift",
       mutate: (ledger: ReturnType<typeof createInitialLedger>) => {
         ledger.items.pop();
@@ -140,5 +157,17 @@ describe("verifyFeatureLedger", () => {
     mutate(ledger);
 
     expect(verifyFeatureLedger(SPEC, ledger).join("\n")).toContain(expected);
+  });
+});
+
+describe("checked-in feature ledger", () => {
+  it("accounts for all 269 real app_spec.txt features without verifier errors", () => {
+    const source = fs.readFileSync(path.resolve("app_spec.txt"), "utf8");
+    const ledger = JSON.parse(
+      fs.readFileSync(path.resolve("docs/feature-ledger.json"), "utf8"),
+    );
+
+    expect(ledger.items).toHaveLength(269);
+    expect(verifyFeatureLedger(source, ledger)).toEqual([]);
   });
 });

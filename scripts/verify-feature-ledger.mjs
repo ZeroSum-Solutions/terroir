@@ -11,6 +11,8 @@ export const ALLOWED_STATUSES = [
   "retired",
 ];
 
+const SCHEMA_VERSION = 1;
+const SOURCE_FILE = "app_spec.txt";
 const REQUIRED_FIELDS = [
   "id",
   "domain",
@@ -63,8 +65,8 @@ export function createInitialLedger(source) {
   const features = parseCoreFeatures(source);
 
   return {
-    schemaVersion: 1,
-    sourceFile: "app_spec.txt",
+    schemaVersion: SCHEMA_VERSION,
+    sourceFile: SOURCE_FILE,
     featureCount: features.length,
     items: features.map((feature) => ({
       id: `TER-CF-${String(feature.sourceOrder).padStart(3, "0")}`,
@@ -92,6 +94,12 @@ export function verifyFeatureLedger(source, ledger) {
   const candidate = /** @type {Record<string, unknown>} */ (ledger);
   const items = Array.isArray(candidate.items) ? candidate.items : [];
 
+  if (candidate.schemaVersion !== SCHEMA_VERSION) {
+    errors.push(`schemaVersion must be ${SCHEMA_VERSION}`);
+  }
+  if (candidate.sourceFile !== SOURCE_FILE) {
+    errors.push(`sourceFile must be ${SOURCE_FILE}`);
+  }
   if (!Array.isArray(candidate.items)) {
     errors.push("ledger items must be an array");
   }
