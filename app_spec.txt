@@ -6,12 +6,12 @@
   </overview>
 
   <feature_budget>
-    Generate at most 200 features. Treat each "User can…", "System displays…", or "API returns…" assertion in the core_features section below as one feature — do NOT split a single assertion into multiple sub-features, and do NOT add features beyond what is enumerated. This budget OVERRIDES any complexity-tier table you would otherwise apply.
+    Implement all 269 features enumerated in the core_features section below. The product owner approved this count on 2026-07-23, superseding the previous maximum of 200. Treat each "User can…", "System displays…", or "API returns…" assertion as one feature — do NOT split a single assertion into multiple sub-features, and do NOT add features beyond what is enumerated. This approved count OVERRIDES any complexity-tier table you would otherwise apply.
   </feature_budget>
 
   <initializer_guidance>
     - Call `feature_create_bulk` directly. Do NOT write a code generator script to emit features.
-    - If you need to create 200 features, call `feature_create_bulk` 4 times with ~50 each. That is the intended pattern.
+    - If you need to initialize all 269 features, call `feature_create_bulk` in batches of approximately 45–50. That is the intended pattern.
     - `depends_on_indices` is batch-local. Use `feature_add_dependency` (with returned `feature_id` values) for cross-batch dependencies after all batches are written.
     - Do NOT run small probe batches to test dependency semantics.
     - If a Bash command is blocked by the allowlist (e.g., `sqlite3`), use the MCP `feature_*` tools instead — never write workaround scripts.

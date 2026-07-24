@@ -66,7 +66,9 @@ The codebase is healthy enough to extend, but it is not yet operationally comple
 | Wine lists editor | 29 |
 | **Total** | **269** |
 
-The historical progress diary is useful evidence, but it is not an authoritative completion ledger. It records 231/231 while the current spec says both 269 and at most 200. No later phase may claim application completion until `TER-001` resolves this contradiction.
+The historical progress diary is useful evidence, but it is not an authoritative completion ledger. It records 231/231 while the original spec said both 269 and at most 200.
+
+Resolution recorded 2026-07-23: the product owner directed the team to implement every enumerated feature. All 269 core-feature bullets are active requirements, the former maximum of 200 is superseded, and `docs/feature-ledger.json` is the authoritative completion ledger.
 
 ## 3. Definition of done
 
@@ -102,6 +104,7 @@ The autonomous runner may use the defaults below. It must stop only where the ta
 | Backup connection | Add a dedicated least-privilege direct database URL to GitHub Actions | Secret creation and production restore require approval |
 | Public list navigation | Show a switcher when the same restaurant has multiple published lists | Safe default |
 | Large-file refactors | Split only code touched by a feature, preserving behavior | Safe default |
+| Core feature count | Keep all 269 enumerated bullets active; the former maximum of 200 is superseded | Approved by product owner on 2026-07-23 |
 
 ### 4.1 Human provisioning checklist
 
@@ -148,6 +151,10 @@ The exact prerequisite graph is:
 | TER-022 | TER-004, TER-020 |
 | TER-023 | TER-001, TER-003, TER-020 |
 | TER-024 | TER-020, TER-021, TER-023 |
+| TER-025 | TER-001, TER-004, TER-014, TER-020 |
+| TER-026 | TER-020, TER-021, TER-022, TER-025 |
+| TER-027 | TER-020, TER-025, TER-026 |
+| TER-028 | TER-004, TER-014, TER-020, TER-022, TER-024 |
 | TER-010 | TER-003, TER-004, TER-023 |
 | TER-011 | TER-010 |
 | TER-012 | TER-010, TER-020 |
@@ -164,7 +171,7 @@ The exact prerequisite graph is:
 | TER-041 | TER-004, TER-014, TER-020 |
 | TER-042 | TER-004, TER-014, TER-021, TER-033, TER-034 |
 | TER-043 | TER-004, TER-014, TER-015 |
-| TER-044 | TER-030 through TER-043 as applicable |
+| TER-044 | TER-025 through TER-043 as applicable |
 | TER-045 | All implementation specs whose behavior it documents |
 | TER-046 | TER-002 through TER-045 |
 
@@ -173,8 +180,9 @@ Phases are ordered by risk, not visual appeal:
 1. Immediate containment, truth, and safety: `TER-000` through `TER-006`.
 2. Contracts, asynchronous work, and observability: `TER-020` through `TER-024`.
 3. Identity and restaurant administration: `TER-010` through `TER-015`.
-4. Remaining labeled product features: `TER-030` through `TER-035`.
-5. Full workflow proof and release: `TER-040` through `TER-046`.
+4. Uncovered core domains: `TER-025` through `TER-028`.
+5. Remaining labeled product features: `TER-030` through `TER-035`.
+6. Full workflow proof and release: `TER-040` through `TER-046`.
 
 ## 6. Detailed implementation specifications
 
@@ -529,6 +537,59 @@ Each child is an independently mergeable leaf spec with its own acceptance subse
 **Dependencies:** `TER-020`, `TER-021`, `TER-023`.
 **Approval:** Destructive production retention jobs require explicit approval and a successful backup.
 
+### TER-025: Complete cellar and inventory
+
+**Outcome:** Every active cellar and inventory assertion from `TER-CF-064` through `TER-CF-090` is implemented and proven.
+
+**Scope:**
+
+- Complete the enumerated inventory views, search, filters, sorting, wine detail, quantities, costs, formats, adjustments, availability, metadata, notes, images, deletion, and CSV export.
+- Complete the enumerated cellar-section configuration, ordering, assignment, low-stock, and drink-window presentation behavior.
+- Preserve role and tenant boundaries from `TER-014` and `TER-020`.
+
+**Acceptance:** Each mapped ledger assertion has direct implementation evidence and a positive and negative test without adding behavior beyond its exact source text.
+**Verification:** Inventory unit and route tests, role and tenant tests, and isolated cellar browser coverage.
+**Dependencies:** `TER-001`, `TER-004`, `TER-014`, `TER-020`.
+
+### TER-026: Complete wine intelligence
+
+**Outcome:** Every active wine-intelligence assertion from `TER-CF-091` through `TER-CF-101` is implemented and proven.
+
+**Scope:**
+
+- Complete the enumerated drink-window, serving-temperature, decant, override, visual-cue, enrichment, batching, fallback, and manual-field preservation behavior.
+- Use the provider resilience and worker contracts established by `TER-021` and `TER-022`.
+
+**Acceptance:** Each mapped ledger assertion has deterministic or fixture-backed evidence, and provider failure never overwrites a manual value.
+**Verification:** Calculation, enrichment, fallback, and manual-override tests plus isolated wine-detail browser coverage.
+**Dependencies:** `TER-020`, `TER-021`, `TER-022`, `TER-025`.
+
+### TER-027: Complete price comparison and analytics
+
+**Outcome:** Every active price-comparison and insights assertion from `TER-CF-165` through `TER-CF-179` is implemented and proven.
+
+**Scope:**
+
+- Complete the enumerated market-price comparison, follow-up flag, sorting, and threshold behaviors.
+- Complete the enumerated inventory-value, pour, revenue, aging, scan, date-range, and CSV analytics behaviors.
+
+**Acceptance:** Each mapped ledger assertion has direct query evidence, empty and permission-denied behavior, and responsive browser coverage without adding metrics beyond the exact source bullets.
+**Verification:** Query and export tests, fixture-backed calculation tests, and isolated price-comparison and insights browser coverage.
+**Dependencies:** `TER-020`, `TER-025`, `TER-026`.
+
+### TER-028: Prove bottle scan to inventory
+
+**Outcome:** Every active bottle-scanning assertion from `TER-CF-057` through `TER-CF-063` is implemented and proven.
+
+**Scope:**
+
+- Complete the enumerated QR capture, tenant-scoped lookup, match correction, location, inventory creation, rejection, and rapid-successive-scan behavior.
+- Apply the scanner quality and data-lifecycle controls from `TER-022` and `TER-024`.
+
+**Acceptance:** A valid bottle reaches the correct restaurant inventory; foreign and malformed codes create no write; correction and rapid-scan paths remain usable.
+**Verification:** Decoder and route tests, tenant-isolation tests, and isolated mobile bottle-scan E2E.
+**Dependencies:** `TER-004`, `TER-014`, `TER-020`, `TER-022`, `TER-024`.
+
 ### TER-030: Make “Add to menu” functional
 
 **Outcome:** A recommendation in Insights can be added to a selected wine list without leaving the workflow.
@@ -664,7 +725,7 @@ Each child is an independently mergeable leaf spec with its own acceptance subse
 
 **Acceptance:** Axe-core against WCAG 2.2 AA reports zero serious or critical violations on every core page; every core flow completes by keyboard; mobile controls do not overlap or clip; each external-provider feature has a recovery state.
 **Verification:** Versioned axe-core report, screenshot matrix, keyboard checklist, and device smoke pass.
-**Dependencies:** `TER-030` through `TER-043` as applicable.
+**Dependencies:** `TER-025` through `TER-043` as applicable.
 
 ### TER-045: Restore documentation truth and maintainability
 
