@@ -1174,6 +1174,20 @@ export type Database = {
           wine_id: string
         }[]
       }
+      open_bottle_from_inventory_idempotent: {
+        Args: {
+          p_idempotency_key?: string
+          p_request_hash?: string
+          p_restaurant_id: string
+          p_wine_id: string
+        }
+        Returns: {
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
       reconcile_open_bottle: {
         Args: {
           p_new_remaining_ml: number

@@ -20,6 +20,15 @@ const { POST } = await import("./route");
 const WINE_ID = "11111111-1111-4111-8111-111111111111";
 const BOTTLE_ID = "22222222-2222-4222-8222-222222222222";
 const KEY = "33333333-3333-4333-8333-333333333333";
+const RESTAURANT_ID = "44444444-4444-4444-8444-444444444444";
+const OPEN_BODY = {
+  open_bottle: {
+    id: BOTTLE_ID,
+    wine_id: WINE_ID,
+    remaining_ml: 750,
+    opened_at: "2026-07-24T00:00:00.000Z",
+  },
+};
 
 function request(options: {
   key?: string;
@@ -45,54 +54,21 @@ function makeSupabase(
   return { rpc };
 }
 
-function openRow(outcome: "opened" | "not_found" | "no_sealed_stock") {
-  return {
-    outcome,
-    bottle_id: outcome === "opened" ? BOTTLE_ID : null,
-    wine_id: outcome === "opened" ? WINE_ID : null,
-    remaining_ml: outcome === "opened" ? 750 : null,
-    opened_at:
-      outcome === "opened" ? "2026-07-24T00:00:00.000Z" : null,
-  };
+function resultClient(row: unknown) {
+  return makeSupabase(async (name) => {
+    if (name !== "open_bottle_from_inventory_idempotent") {
+      throw new Error(`unexpected rpc ${name}`);
+    }
+    return { data: [row], error: null };
+  });
 }
 
 function allow(supabase: ReturnType<typeof makeSupabase>) {
   mockRequireMembership.mockResolvedValue({
     supabase,
-    restaurantId: "restaurant-a",
+    restaurantId: RESTAURANT_ID,
     user: { id: "user-a" },
     role: "staff",
-  });
-}
-
-function firstClaimClient(
-  business: { data: unknown; error: unknown } = {
-    data: [openRow("opened")],
-    error: null,
-  },
-) {
-  return makeSupabase(async (name) => {
-    if (name === "claim_api_idempotency") {
-      return {
-        data: [
-          {
-            outcome: "claimed",
-            response_status: null,
-            response_headers: null,
-            response_body: null,
-          },
-        ],
-        error: null,
-      };
-    }
-    if (name === "open_bottle_from_inventory") return business;
-    if (
-      name === "complete_api_idempotency" ||
-      name === "fail_api_idempotency"
-    ) {
-      return { data: true, error: null };
-    }
-    throw new Error(`unexpected rpc ${name}`);
   });
 }
 
@@ -113,7 +89,12 @@ describe("POST /api/open-bottles", () => {
   });
 
   it("rejects a malformed supplied key before any RPC", async () => {
-    const supabase = firstClaimClient();
+    const supabase = resultClient({
+      outcome: "opened",
+      response_status: 201,
+      response_body: OPEN_BODY,
+      replayed: false,
+    });
     allow(supabase);
 
     const response = await POST(request({ key: "bad key" }));
@@ -125,97 +106,86 @@ describe("POST /api/open-bottles", () => {
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
-  it("keeps missing-key compatibility while using the atomic RPC", async () => {
-    const supabase = firstClaimClient();
+  it("keeps missing-key compatibility on the dedicated atomic RPC", async () => {
+    const supabase = resultClient({
+      outcome: "opened",
+      response_status: 201,
+      response_body: OPEN_BODY,
+      replayed: false,
+    });
     allow(supabase);
 
     const response = await POST(request());
 
     expect(response.status).toBe(201);
+    expect(await response.json()).toEqual(OPEN_BODY);
     expect(response.headers.get("Idempotency-Replayed")).toBeNull();
     expect(supabase.rpc).toHaveBeenCalledTimes(1);
     expect(supabase.rpc).toHaveBeenCalledWith(
-      "open_bottle_from_inventory",
+      "open_bottle_from_inventory_idempotent",
       {
-        p_restaurant_id: "restaurant-a",
+        p_restaurant_id: RESTAURANT_ID,
         p_wine_id: WINE_ID,
       },
     );
   });
 
-  it("claims, atomically opens, completes, and returns the compatibility envelope", async () => {
-    const supabase = firstClaimClient();
+  it("binds the key and canonical request hash to the atomic command", async () => {
+    const supabase = resultClient({
+      outcome: "opened",
+      response_status: 201,
+      response_body: OPEN_BODY,
+      replayed: false,
+    });
     allow(supabase);
 
     const response = await POST(request({ key: KEY }));
 
     expect(response.status).toBe(201);
     expect(response.headers.get("Idempotency-Replayed")).toBe("false");
-    expect(await response.json()).toEqual({
-      open_bottle: {
-        id: BOTTLE_ID,
-        wine_id: WINE_ID,
-        remaining_ml: 750,
-        opened_at: "2026-07-24T00:00:00.000Z",
+    expect(await response.json()).toEqual(OPEN_BODY);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      "open_bottle_from_inventory_idempotent",
+      {
+        p_restaurant_id: RESTAURANT_ID,
+        p_wine_id: WINE_ID,
+        p_idempotency_key: KEY,
+        p_request_hash: expect.stringMatching(/^[0-9a-f]{64}$/),
       },
-    });
-    expect(
-      supabase.rpc.mock.calls.filter(
-        ([name]) => name === "open_bottle_from_inventory",
-      ),
-    ).toHaveLength(1);
+    );
     expect(mockRevalidatePath).toHaveBeenCalledWith("/cellar/open");
   });
 
-  it("replays a completed result without invoking the business RPC", async () => {
-    const supabase = makeSupabase(async (name) => {
-      if (name !== "claim_api_idempotency") {
-        throw new Error(`unexpected rpc ${name}`);
-      }
-      return {
-        data: [
-          {
-            outcome: "replay",
-            response_status: 201,
-            response_headers: {},
-            response_body: {
-              open_bottle: {
-                id: BOTTLE_ID,
-                wine_id: WINE_ID,
-                remaining_ml: 750,
-                opened_at: "2026-07-24T00:00:00.000Z",
-              },
-            },
-          },
-        ],
-        error: null,
-      };
+  it("replays the stored response through the same RPC", async () => {
+    const supabase = resultClient({
+      outcome: "replay",
+      response_status: 201,
+      response_body: OPEN_BODY,
+      replayed: true,
     });
     allow(supabase);
 
     const response = await POST(request({ key: KEY }));
 
     expect(response.status).toBe(201);
+    expect(await response.json()).toEqual(OPEN_BODY);
     expect(response.headers.get("Idempotency-Replayed")).toBe("true");
     expect(supabase.rpc).toHaveBeenCalledTimes(1);
+    expect(mockRevalidatePath).toHaveBeenCalledWith("/cellar/open");
   });
 
-  it("returns the exact in-progress envelope without invoking the business RPC", async () => {
-    const supabase = makeSupabase(async (name) => {
-      if (name !== "claim_api_idempotency") {
-        throw new Error(`unexpected rpc ${name}`);
-      }
-      return {
-        data: [
-          {
-            outcome: "in_progress",
-            response_status: null,
-            response_headers: null,
-            response_body: null,
-          },
-        ],
-        error: null,
-      };
+  it("returns the exact in-progress envelope and retry hint", async () => {
+    const supabase = resultClient({
+      outcome: "idempotency_in_progress",
+      response_status: 409,
+      response_body: {
+        error: {
+          code: "idempotency_in_progress",
+          message:
+            "A request with this Idempotency-Key is still in progress.",
+        },
+      },
+      replayed: false,
     });
     allow(supabase);
 
@@ -236,6 +206,47 @@ describe("POST /api/open-bottles", () => {
 
   it.each([
     [
+      "idempotency_key_reused",
+      "This Idempotency-Key was already used for a different request.",
+    ],
+    [
+      "idempotency_key_expired",
+      "This Idempotency-Key has expired.",
+    ],
+    [
+      "idempotency_outcome_unknown",
+      "The original request outcome is unknown and will not be retried.",
+    ],
+  ] as const)("passes through %s without a replay header", async (outcome, message) => {
+    const supabase = resultClient({
+      outcome,
+      response_status: 409,
+      response_body: {
+        error: {
+          code: outcome,
+          message,
+        },
+      },
+      replayed: false,
+    });
+    allow(supabase);
+
+    const response = await POST(request({ key: KEY }));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: {
+        code: outcome,
+        message,
+      },
+    });
+    expect(response.headers.get("Idempotency-Replayed")).toBeNull();
+    expect(response.headers.get("Retry-After")).toBeNull();
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [
       "not_found",
       404,
       { error: { code: "not_found", message: "Wine not found." } },
@@ -250,10 +261,12 @@ describe("POST /api/open-bottles", () => {
         },
       },
     ],
-  ] as const)("maps the atomic %s outcome", async (outcome, status, body) => {
-    const supabase = firstClaimClient({
-      data: [openRow(outcome)],
-      error: null,
+  ] as const)("maps and stores the atomic %s outcome", async (outcome, status, body) => {
+    const supabase = resultClient({
+      outcome,
+      response_status: status,
+      response_body: body,
+      replayed: false,
     });
     allow(supabase);
 
@@ -264,26 +277,78 @@ describe("POST /api/open-bottles", () => {
     expect(response.headers.get("Idempotency-Replayed")).toBe("false");
   });
 
-  it("redacts a business RPC failure and marks the keyed outcome unknown", async () => {
+  it("fails a keyed RPC error closed without calling generic transitions", async () => {
+    const providerError = {
+      code: "XX000",
+      message: "induced completion failure",
+    };
+    const supabase = makeSupabase(async (name) => {
+      if (name !== "open_bottle_from_inventory_idempotent") {
+        throw new Error(`unexpected rpc ${name}`);
+      }
+      return { data: null, error: providerError };
+    });
+    allow(supabase);
+
+    const response = await POST(request({ key: KEY }));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "idempotency_unavailable",
+        message: "Request idempotency is temporarily unavailable.",
+      },
+    });
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+    expect(mockCaptureException).toHaveBeenCalledWith(providerError, {
+      tags: { surface: "open-bottles", phase: "idempotent-rpc" },
+    });
+  });
+
+  it("redacts an unkeyed RPC error through the API boundary", async () => {
     const providerError = {
       code: "XX000",
       message: "super-secret provider failure",
     };
-    const supabase = firstClaimClient({ data: null, error: providerError });
+    const supabase = makeSupabase(async (name) => {
+      if (name !== "open_bottle_from_inventory_idempotent") {
+        throw new Error(`unexpected rpc ${name}`);
+      }
+      return { data: null, error: providerError };
+    });
     allow(supabase);
 
-    const response = await POST(request({ key: KEY }));
+    const response = await POST(request());
     const text = await response.text();
 
     expect(response.status).toBe(500);
     expect(text).not.toContain("super-secret");
-    expect(supabase.rpc).toHaveBeenCalledWith(
-      "fail_api_idempotency",
-      expect.anything(),
-    );
-    expect(supabase.rpc).not.toHaveBeenCalledWith(
-      "complete_api_idempotency",
-      expect.anything(),
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails a malformed keyed RPC result closed so the same key can replay", async () => {
+    const supabase = resultClient({
+      outcome: "opened",
+      response_status: 201,
+      response_body: null,
+      replayed: false,
+    });
+    allow(supabase);
+
+    const response = await POST(request({ key: KEY }));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "idempotency_unavailable" },
+    });
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      {
+        tags: {
+          surface: "open-bottles",
+          phase: "idempotent-rpc-result",
+        },
+      },
     );
   });
 });

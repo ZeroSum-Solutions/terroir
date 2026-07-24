@@ -44,6 +44,14 @@ const atomicIdempotentCommands = readFileSync(
   "utf8",
 );
 
+const atomicOpenBottleIdempotency = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../supabase/migrations/0058_open_bottle_idempotency.sql",
+  ),
+  "utf8",
+);
+
 describe("database security contracts", () => {
   it("keeps public wine-list read policies explicit and narrow", () => {
     for (const table of [
@@ -390,6 +398,30 @@ describe("database security contracts", () => {
     );
     expect(atomicIdempotentCommands).toContain(
       "revoke all on function public.open_bottle_from_inventory(uuid, uuid)\n  from anon;",
+    );
+  });
+
+  it("commits open-bottle responses in the same transaction as inventory", () => {
+    expect(atomicOpenBottleIdempotency).toMatch(
+      /open_bottle_from_inventory_idempotent\([\s\S]*?security definer[\s\S]*?set search_path = ''/,
+    );
+    expect(atomicOpenBottleIdempotency).toContain(
+      "public.is_member_with_role(p_restaurant_id, 'staff')",
+    );
+    expect(atomicOpenBottleIdempotency).toMatch(
+      /pg_advisory_xact_lock\([\s\S]*?insert into public\.api_idempotency[\s\S]*?from public\.open_bottle_from_inventory\([\s\S]*?update public\.api_idempotency[\s\S]*?state = 'completed'/,
+    );
+    expect(atomicOpenBottleIdempotency).toContain(
+      "message = 'idempotency completion changed concurrently'",
+    );
+    expect(atomicOpenBottleIdempotency).toContain(
+      "v_claim.restaurant_id <> p_restaurant_id",
+    );
+    expect(atomicOpenBottleIdempotency).toContain(
+      "revoke all on function public.open_bottle_from_inventory_idempotent(\n  uuid,\n  uuid,\n  text,\n  text\n) from anon;",
+    );
+    expect(atomicOpenBottleIdempotency).toContain(
+      "grant execute on function public.open_bottle_from_inventory_idempotent(\n  uuid,\n  uuid,\n  text,\n  text\n) to authenticated;",
     );
   });
 
