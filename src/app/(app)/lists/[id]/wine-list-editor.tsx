@@ -642,7 +642,7 @@ export function WineListEditor({
       const res = await fetch("/api/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listId: list.id, template: list.template }),
+        body: JSON.stringify({ listId: list.id }),
       });
       if (!res.ok) throw new Error("PDF generation failed");
       const blob = await res.blob();
@@ -655,7 +655,7 @@ export function WineListEditor({
     } finally {
       setGeneratingPdf(false);
     }
-  }, [list.id, list.name, list.template]);
+  }, [list.id, list.name]);
 
   const copyUrl = useCallback(() => {
     if (!list.slug) return;

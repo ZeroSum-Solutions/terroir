@@ -72,6 +72,9 @@ vi.mock("@/lib/wine-list/templates", () => ({
 
 const { POST } = await import("./route");
 
+const LIST_A = "a1b2c3d4-e5f6-4789-8abc-def012345678";
+const LIST_B = "b1b2c3d4-e5f6-4789-8abc-def012345678";
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function makeRequest(body: unknown, opts: { json?: boolean } = {}) {
@@ -127,7 +130,7 @@ describe("POST /api/pdf", () => {
     authedAsA();
     mockSingle.mockResolvedValue({ data: null, error: null });
 
-    const res = await POST(makeRequest({ listId: "list-b" }));
+    const res = await POST(makeRequest({ listId: LIST_B }));
 
     expect(res).toBeInstanceOf(NextResponse);
     expect(res.status).toBe(404);
@@ -135,11 +138,47 @@ describe("POST /api/pdf", () => {
     expect(mockNewPage).not.toHaveBeenCalled();
   });
 
+  it("returns 404 for the PostgREST no-row code", async () => {
+    authedAsA();
+    mockSingle.mockResolvedValue({
+      data: null,
+      error: { code: "PGRST116", message: "no rows" },
+    });
+
+    const res = await POST(makeRequest({ listId: LIST_B }));
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({
+      error: { code: "not_found", message: "Wine list not found." },
+    });
+  });
+
+  it("redacts a real list-fetch failure instead of reporting 404", async () => {
+    authedAsA();
+    mockSingle.mockResolvedValue({
+      data: null,
+      error: { code: "XX000", message: "super-secret database failure" },
+    });
+
+    const res = await POST(makeRequest({ listId: LIST_A }));
+    const text = await res.text();
+
+    expect(res.status).toBe(500);
+    expect(JSON.parse(text)).toEqual({
+      error: {
+        code: "internal_error",
+        message: "Internal server error.",
+      },
+    });
+    expect(text).not.toContain("super-secret");
+    expect(mockLaunch).not.toHaveBeenCalled();
+  });
+
   it("renders a PDF when the list belongs to the authed restaurant", async () => {
     authedAsA();
     mockSingle.mockResolvedValue(okListRow());
 
-    const res = await POST(makeRequest({ listId: "list-a" }));
+    const res = await POST(makeRequest({ listId: LIST_A }));
 
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("application/pdf");
@@ -153,7 +192,7 @@ describe("POST /api/pdf", () => {
     authedAsA();
     mockSingle.mockResolvedValue(okListRow());
 
-    await POST(makeRequest({ listId: "list-a" }));
+    await POST(makeRequest({ listId: LIST_A }));
 
     expect(mockSetContent).toHaveBeenCalledWith(
       expect.any(String),
@@ -171,7 +210,7 @@ describe("POST /api/pdf", () => {
     authedAsA();
     mockSingle.mockResolvedValue(okListRow());
 
-    await POST(makeRequest({ listId: "list-a" }));
+    await POST(makeRequest({ listId: LIST_A }));
 
     const call = mockSetContent.mock.calls[0] as unknown as [string, unknown];
     const html = call[0];
@@ -190,7 +229,7 @@ describe("POST /api/pdf", () => {
       ),
     );
 
-    const res = await POST(makeRequest({ listId: "list-a" }));
+    const res = await POST(makeRequest({ listId: LIST_A }));
 
     expect(res.status).toBe(403);
     expect(mockEq).not.toHaveBeenCalled();
@@ -202,7 +241,7 @@ describe("POST /api/pdf", () => {
       NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
     );
 
-    const res = await POST(makeRequest({ listId: "list-a" }));
+    const res = await POST(makeRequest({ listId: LIST_A }));
 
     expect(res.status).toBe(401);
     expect(mockLaunch).not.toHaveBeenCalled();
@@ -235,7 +274,7 @@ describe("POST /api/pdf", () => {
     mockSingle.mockResolvedValue(okListRow());
     mockPdf.mockRejectedValue(new Error("headless crashed"));
 
-    const res = await POST(makeRequest({ listId: "list-a" }));
+    const res = await POST(makeRequest({ listId: LIST_A }));
 
     expect(res.status).toBe(500);
     const body = await res.json();

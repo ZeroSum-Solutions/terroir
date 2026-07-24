@@ -8,6 +8,8 @@ import {
   reconcileOpenBottles,
 } from "@/domains/cellar/reconcile-service";
 import { requireRole } from "@/lib/api/auth";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseJson } from "@/lib/api/validation";
 
 export const runtime = "nodejs";
 
@@ -44,21 +46,18 @@ const BodySchema = z.object({
  * 500: unhandled RPC failure
  */
 export async function POST(request: NextRequest) {
+  return withApiHandler(() => postReconcile(request));
+}
+
+async function postReconcile(request: NextRequest) {
   const auth = await requireRole(["owner", "manager"]);
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
-  let raw: unknown;
-  try {
-    raw = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
-
-  const parsed = BodySchema.safeParse(raw);
-  if (!parsed.success) {
-    return Errors.validation(parsed.error.issues, "Invalid body.");
-  }
+  const parsed = await parseJson(request, BodySchema, {
+    message: "Invalid body.",
+  });
+  if (!parsed.ok) return parsed.response;
 
   try {
     const updated = await reconcileOpenBottles({

@@ -4,6 +4,8 @@ import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseJson } from "@/lib/api/validation";
 
 export const runtime = "nodejs";
 
@@ -30,21 +32,18 @@ const BodySchema = z.object({
  * 500: unhandled failure
  */
 export async function POST(request: NextRequest) {
+  return withApiHandler(() => postOpenBottle(request));
+}
+
+async function postOpenBottle(request: NextRequest) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId, user } = auth;
 
-  let raw: unknown;
-  try {
-    raw = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
-
-  const parsed = BodySchema.safeParse(raw);
-  if (!parsed.success) {
-    return Errors.validation(parsed.error.issues, "Invalid body.");
-  }
+  const parsed = await parseJson(request, BodySchema, {
+    message: "Invalid body.",
+  });
+  if (!parsed.ok) return parsed.response;
   const { wine_id } = parsed.data;
 
   // Verify the wine belongs to this restaurant and get its size
@@ -54,8 +53,11 @@ export async function POST(request: NextRequest) {
     .eq("id", wine_id)
     .single();
 
-  if (wineErr || !wine) {
-    return Errors.notFound("Wine not found.");
+  if (wineErr && (wineErr as { code?: string }).code !== "PGRST116") {
+    throw wineErr;
+  }
+  if (!wine) {
+    return Errors.notFound("Wine");
   }
 
   if (wine.restaurant_id !== restaurantId) {
@@ -75,12 +77,25 @@ export async function POST(request: NextRequest) {
     .limit(1)
     .single();
 
-  if (sealedErr || !sealedItem) {
+  if (sealedErr && (sealedErr as { code?: string }).code !== "PGRST116") {
+    throw sealedErr;
+  }
+  if (!sealedItem) {
     return Errors.conflict(
       "no_sealed_stock",
       "No sealed bottles available to open.",
     );
   }
+
+  // Resolve the active-bottle write path before mutating sealed inventory.
+  const { data: existingBottle, error: existingError } = await supabase
+    .from("open_bottles")
+    .select("id, closed_at")
+    .eq("wine_id", wine_id)
+    .eq("restaurant_id", restaurantId)
+    .is("closed_at", null)
+    .maybeSingle();
+  if (existingError) throw existingError;
 
   // Decrement sealed inventory
   const { error: decErr } = await supabase
@@ -96,15 +111,6 @@ export async function POST(request: NextRequest) {
     });
     return Errors.internal("Failed to open bottle.");
   }
-
-  // Check if there's already an active open bottle
-  const { data: existingBottle } = await supabase
-    .from("open_bottles")
-    .select("id, closed_at")
-    .eq("wine_id", wine_id)
-    .eq("restaurant_id", restaurantId)
-    .is("closed_at", null)
-    .maybeSingle();
 
   if (existingBottle) {
     // There's already an open bottle — just replace it with the new one

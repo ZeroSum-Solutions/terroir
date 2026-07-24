@@ -63,7 +63,13 @@ export async function generateWineListPdf(
     .eq("restaurant_id", restaurantId)
     .single();
 
-  if (fetchError || !list) {
+  if (
+    fetchError &&
+    (fetchError as { code?: string }).code !== "PGRST116"
+  ) {
+    throw fetchError;
+  }
+  if (!list) {
     throw new WineListPdfNotFoundError();
   }
 
@@ -95,4 +101,3 @@ export async function generateWineListPdf(
     throw new WineListPdfGenerationError(error);
   }
 }
-

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
 import {
   closeOpenBottle,
   PourAlreadyClosedError,
@@ -8,8 +9,12 @@ import {
 } from "@/domains/pours/pour-service";
 import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseParams } from "@/lib/api/validation";
 
 export const runtime = "nodejs";
+
+const ParamsSchema = z.strictObject({ id: z.string().uuid() });
 
 /**
  * POST /api/open-bottles/[id]/close
@@ -33,10 +38,16 @@ export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  return withApiHandler(() => postCloseBottle(params));
+}
+
+async function postCloseBottle(params: Promise<{ id: string }>) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
-  const { id } = await params;
+  const parsed = await parseParams(params, ParamsSchema);
+  if (!parsed.ok) return parsed.response;
+  const { id } = parsed.data;
 
   try {
     const closed = await closeOpenBottle({
@@ -47,7 +58,7 @@ export async function POST(
     return NextResponse.json({ closed });
   } catch (error) {
     if (error instanceof PourNotFoundError) {
-      return Errors.notFound("Bottle not found.");
+      return Errors.notFound("Bottle");
     }
     if (error instanceof PourForbiddenError) {
       return Errors.forbidden("Forbidden.");
