@@ -69,7 +69,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
   const [suggestError, setSuggestError] = useState<string | null>(null);
   // Surfaces failures from POST /api/wines/create-from-lwin so the user
   // isn't left staring at a spinner that quietly disappears.
-  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
   const trapRef = useRef<HTMLDivElement>(null);
 
@@ -91,8 +91,16 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
         const res = await fetch(
           `/api/wines/${selectedId}/pricing-suggestion?glassPourMl=148`,
         );
-        if (!res.ok) throw new Error(`Failed (${res.status}).`);
-        const data = (await res.json()) as PricingSuggestion;
+        const payload = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(
+            readApiError(
+              payload,
+              `Suggestion failed (${res.status}).`,
+            ).message,
+          );
+        }
+        const data = payload as PricingSuggestion;
         if (!cancelled) setSuggestion(data);
       } catch (err) {
         if (!cancelled) {
@@ -143,28 +151,62 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    const controller = new AbortController();
     debounceRef.current = setTimeout(async () => {
       if (searchMode === "catalog" && query.trim().length < 2) {
         setCatalogResults([]);
         return;
       }
       setLoading(true);
+      setSearchError(null);
       try {
         const params = new URLSearchParams();
         if (query.trim()) params.set("q", query.trim());
         if (searchMode === "inventory") {
-          const res = await fetch(`/api/wines/search?${params}`);
-          if (res.ok) setResults(await res.json());
+          const res = await fetch(`/api/wines/search?${params}`, {
+            signal: controller.signal,
+          });
+          const payload = await res.json().catch(() => null);
+          if (controller.signal.aborted) return;
+          if (!res.ok) {
+            setResults([]);
+            setSearchError(
+              readApiError(
+                payload,
+                `Inventory search failed (${res.status}).`,
+              ).message,
+            );
+            return;
+          }
+          setResults(payload as SearchWine[]);
         } else {
-          const res = await fetch(`/api/wines/lwin-search?${params}`);
-          if (res.ok) setCatalogResults(await res.json());
+          const res = await fetch(`/api/wines/lwin-search?${params}`, {
+            signal: controller.signal,
+          });
+          const payload = await res.json().catch(() => null);
+          if (controller.signal.aborted) return;
+          if (!res.ok) {
+            setCatalogResults([]);
+            setSearchError(
+              readApiError(
+                payload,
+                `Catalog search failed (${res.status}).`,
+              ).message,
+            );
+            return;
+          }
+          setCatalogResults(payload as LwinWine[]);
         }
+      } catch {
+        if (controller.signal.aborted) return;
+        setSearchError("Search failed. Check your connection and try again.");
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }, 300);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      controller.abort();
     };
   }, [query, searchMode]);
 
@@ -179,7 +221,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
 
   const handleSelectCatalog = async (lwin: LwinWine) => {
     setLoading(true);
-    setCatalogError(null);
+    setSearchError(null);
     try {
       const res = await fetch("/api/wines/create-from-lwin", {
         method: "POST",
@@ -188,7 +230,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
       });
       const payload = await res.json().catch(() => null);
       if (!res.ok) {
-        setCatalogError(
+        setSearchError(
           readApiError(
             payload,
             `Couldn't import wine (${res.status}).`,
@@ -206,7 +248,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
         region: lwin.region,
       });
     } catch {
-      setCatalogError("Couldn't import wine. Check your connection and try again.");
+      setSearchError("Couldn't import wine. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -242,7 +284,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
             <div className="flex gap-xs border-b border-border px-lg">
               <button
                 type="button"
-                onClick={() => { setSearchMode("inventory"); setQuery(""); setCatalogError(null); }}
+                onClick={() => { setSearchMode("inventory"); setQuery(""); setSearchError(null); }}
                 className={`px-sm py-xs text-[13px] font-medium border-b-2 transition-colors ${
                   searchMode === "inventory"
                     ? "border-accent text-accent"
@@ -253,7 +295,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
               </button>
               <button
                 type="button"
-                onClick={() => { setSearchMode("catalog"); setQuery(""); setCatalogError(null); }}
+                onClick={() => { setSearchMode("catalog"); setQuery(""); setSearchError(null); }}
                 className={`px-sm py-xs text-[13px] font-medium border-b-2 transition-colors ${
                   searchMode === "catalog"
                     ? "border-accent text-accent"
@@ -272,7 +314,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                   value={query}
                   onChange={(e) => {
                     setQuery(e.target.value);
-                    setCatalogError(null);
+                    setSearchError(null);
                   }}
                   placeholder="Search by producer or wine name…"
                   aria-label="Search wines"
@@ -280,13 +322,13 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                 />
               </div>
             </div>
-            {searchMode === "catalog" && catalogError && (
+            {searchError && (
               <div className="border-b border-border px-lg py-sm">
                 <p
                   role="alert"
                   className="rounded-sm border border-danger/30 bg-danger-soft px-sm py-xs text-[12px] text-danger"
                 >
-                  {catalogError}
+                  {searchError}
                 </p>
               </div>
             )}

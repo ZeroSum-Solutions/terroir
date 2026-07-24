@@ -90,6 +90,10 @@ function makeSupabase(dbPlans: DbPlan[], rpcPlans: RpcPlan[] = []) {
         call.filters.push([column, value]);
         return chain;
       },
+      gt: (column: string, value: unknown) => {
+        call.filters.push([column, [">", value]]);
+        return chain;
+      },
       not: (column: string, operator: string, value: unknown) => {
         call.filters.push([column, [operator, value]]);
         return chain;
@@ -273,6 +277,39 @@ describe("wine provider mutation behavior", () => {
 
     expect(response.status).toBe(500);
     expect(providers.fetchRetailPrices).not.toHaveBeenCalled();
+  });
+
+  it("does not pass a non-USD invoice cost into retail-price sanity checks", async () => {
+    authenticate([
+      { table: "wines", data: { id: WINE_ID, lwin_id: "1000001" } },
+      {
+        table: "inventory_items",
+        data: {
+          unit_cost: 75,
+          currency: "EUR",
+          added_via: "invoice_scan",
+        },
+      },
+      { table: "wines", data: { id: WINE_ID } },
+    ]);
+    providers.fetchRetailPrices.mockResolvedValue({
+      retailMin: 100,
+      retailMax: 140,
+      retailMedian: 120,
+      retailerCount: 6,
+      refreshedAt: new Date("2026-07-24T12:00:00.000Z"),
+    });
+
+    const response = await REFRESH_ONE(
+      {} as Request,
+      { params: Promise.resolve({ id: WINE_ID }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(providers.fetchRetailPrices).toHaveBeenCalledWith({
+      lwinId: "1000001",
+      invoiceCost: null,
+    });
   });
 
   it("does not report retail refresh success when persistence affects no row", async () => {
@@ -461,7 +498,14 @@ describe("wine provider mutation behavior", () => {
       },
       {
         table: "inventory_items",
-        data: [{ wine_id: WINE_ID, unit_cost: 75 }],
+        data: [
+          {
+            wine_id: WINE_ID,
+            unit_cost: 75,
+            currency: "USD",
+            added_via: "invoice_scan",
+          },
+        ],
       },
       { table: "wines", data: { id: WINE_ID } },
     ]);

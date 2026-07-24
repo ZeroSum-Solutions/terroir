@@ -74,6 +74,8 @@ describe("suggestGlassPrice", () => {
   it("returns null on bad target pour cost (>= 100)", () => {
     expect(suggestGlassPrice(85, 750, 148, 100)).toBeNull();
     expect(suggestGlassPrice(85, 750, 148, 0)).toBeNull();
+    expect(suggestGlassPrice(0, 750, 148, 22)).toBeNull();
+    expect(suggestGlassPrice(-1, 750, 148, 22)).toBeNull();
   });
 });
 

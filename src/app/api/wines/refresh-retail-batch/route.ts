@@ -93,15 +93,24 @@ export async function POST() {
     const wineIds = eligible.map((wine) => wine.id);
     const { data: invoiceRows, error: invoiceError } = await supabase
       .from("inventory_items")
-      .select("wine_id, unit_cost, added_at")
+      .select("wine_id, unit_cost, currency, added_via, added_at")
       .eq("restaurant_id", restaurantId)
       .in("wine_id", wineIds)
+      .eq("added_via", "invoice_scan")
+      .gt("unit_cost", 0)
+      .or("currency.is.null,currency.eq.USD")
       .order("added_at", { ascending: false });
     if (invoiceError) throw invoiceError;
 
     const costByWine = new Map<string, number>();
     for (const row of invoiceRows ?? []) {
-      if (!row.wine_id || row.unit_cost == null) continue;
+      if (
+        !row.wine_id ||
+        row.unit_cost <= 0 ||
+        (row.currency != null && row.currency.toUpperCase() !== "USD")
+      ) {
+        continue;
+      }
       if (!costByWine.has(row.wine_id)) {
         costByWine.set(row.wine_id, row.unit_cost);
       }

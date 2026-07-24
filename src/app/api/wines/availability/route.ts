@@ -1,12 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseQuery } from "@/lib/api/validation";
+import { WineAvailabilityQuerySchema } from "@/lib/api/wine-read-query-schemas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const DEFAULT_LIMIT = 1000;
-const MAX_LIMIT = 1000;
 
 /**
  * GET /api/wines/availability
@@ -15,7 +14,7 @@ const MAX_LIMIT = 1000;
  * current 86'd state. Consumed by the /availability page (browse +
  * toggle) and available as a public API for future clients.
  *
- * Pagination: offset-based. Clamped to `MAX_LIMIT` rows per page.
+ * Pagination: offset-based. Invalid or out-of-range values return 400.
  * RFC 5988 `Link` headers (next/prev/first/last) are emitted so
  * clients can discover paging without inspecting the body. A typical
  * restaurant has <1000 wines, so the default page returns everything;
@@ -39,66 +38,41 @@ const MAX_LIMIT = 1000;
  * restaurant via RLS, then embed through that.
  */
 export async function GET(request: NextRequest) {
-  const auth = await requireMembership();
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireMembership();
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  const { limit, offset } = parsePagination(request.nextUrl.searchParams);
-
-  const { data, error, count } = await supabase
-    .from("wines")
-    .select(
-      "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, eightysixed_by",
-      { count: "exact" },
-    )
-    .eq("restaurant_id", restaurantId)
-    .order("name", { ascending: true })
-    .range(offset, offset + limit - 1);
-
-  if (error) {
-    console.error("wines availability fetch failed:", error);
-    Sentry.captureException(error, {
-      tags: { surface: "availability", phase: "fetch" },
-      extra: { restaurantId, limit, offset },
-    });
-    return NextResponse.json(
-      { error: "Failed to load wines." },
-      { status: 500 },
+    const parsedQuery = await parseQuery(
+      request.nextUrl.searchParams,
+      WineAvailabilityQuerySchema,
     );
-  }
+    if (!parsedQuery.ok) return parsedQuery.response;
+    const { limit, offset } = parsedQuery.data;
 
-  const total = count ?? (data?.length ?? 0);
-  const headers = new Headers();
-  headers.set("X-Total-Count", String(total));
-  const linkHeader = buildLinkHeader(request.nextUrl, limit, offset, total);
-  if (linkHeader) headers.set("Link", linkHeader);
+    const { data, error, count } = await supabase
+      .from("wines")
+      .select(
+        "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, eightysixed_by",
+        { count: "exact" },
+      )
+      .eq("restaurant_id", restaurantId)
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
 
-  return NextResponse.json(
-    { wines: data ?? [], total, limit, offset },
-    { headers },
-  );
-}
+    const total = count ?? (data?.length ?? 0);
+    const headers = new Headers();
+    headers.set("X-Total-Count", String(total));
+    const linkHeader = buildLinkHeader(request.nextUrl, limit, offset, total);
+    if (linkHeader) headers.set("Link", linkHeader);
 
-function parsePagination(params: URLSearchParams): {
-  limit: number;
-  offset: number;
-} {
-  const rawLimit = Number(params.get("limit"));
-  const rawOffset = Number(params.get("offset"));
-
-  const limit = clamp(
-    Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : DEFAULT_LIMIT,
-    1,
-    MAX_LIMIT,
-  );
-  const offset = Number.isFinite(rawOffset) && rawOffset > 0
-    ? Math.floor(rawOffset)
-    : 0;
-  return { limit, offset };
-}
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.min(Math.max(n, min), max);
+    return NextResponse.json(
+      { wines: data ?? [], total, limit, offset },
+      { headers },
+    );
+  });
 }
 
 /**
@@ -112,7 +86,7 @@ function buildLinkHeader(
   offset: number,
   total: number,
 ): string | null {
-  if (total <= limit) return null;
+  if (total <= limit && offset === 0) return null;
 
   const mk = (off: number): string => {
     const u = new URL(baseUrl);

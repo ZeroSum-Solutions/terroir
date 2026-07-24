@@ -54,6 +54,7 @@ export function getPourCostPct(
 ): number | null {
   if (
     costPerBottle == null ||
+    costPerBottle <= 0 ||
     glassPourMl == null ||
     glassPrice == null ||
     glassPrice <= 0 ||
@@ -122,6 +123,7 @@ export function suggestGlassPrice(
 ): number | null {
   if (
     costPerBottle == null ||
+    costPerBottle <= 0 ||
     glassPourMl == null ||
     targetPourCostPct == null ||
     !sizeMl ||

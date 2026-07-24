@@ -182,7 +182,7 @@ describe("GET /api/wines/availability", () => {
     expect(link).toMatch(/offset=4[^,]*rel="last"/);
   });
 
-  it("clamps limit to MAX and negative offset to 0", async () => {
+  it("rejects out-of-range limit and offset values", async () => {
     const rows: WineRow[] = [makeRow("w-1", "A")];
     mockRequireMembership.mockResolvedValue({
       supabase: makeSupabase(rows, "r-A"),
@@ -191,9 +191,25 @@ describe("GET /api/wines/availability", () => {
       role: "owner",
     });
     const res = await GET(makeRequest("?limit=99999&offset=-10"));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "validation_error" },
+    });
+  });
+
+  it("emits first and previous links for an offset beyond a short result set", async () => {
+    const rows: WineRow[] = [makeRow("w-1", "A")];
+    mockRequireMembership.mockResolvedValue({
+      supabase: makeSupabase(rows, "r-A"),
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "owner",
+    });
+
+    const res = await GET(makeRequest("?limit=1000&offset=1000"));
+
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.limit).toBe(1000);
-    expect(body.offset).toBe(0);
+    expect(res.headers.get("Link")).toContain('rel="first"');
+    expect(res.headers.get("Link")).toContain('rel="prev"');
   });
 });

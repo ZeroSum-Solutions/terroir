@@ -47,17 +47,27 @@ export async function POST(
 
     const { data: inventory, error: inventoryError } = await supabase
       .from("inventory_items")
-      .select("unit_cost")
+      .select("unit_cost, currency, added_via")
       .eq("restaurant_id", restaurantId)
       .eq("wine_id", id)
+      .eq("added_via", "invoice_scan")
+      .gt("unit_cost", 0)
+      .or("currency.is.null,currency.eq.USD")
       .order("added_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (inventoryError) throw inventoryError;
+    const invoiceCost =
+      inventory &&
+      inventory.unit_cost > 0 &&
+      (inventory.currency == null ||
+        inventory.currency.toUpperCase() === "USD")
+        ? inventory.unit_cost
+        : null;
 
     const result = await fetchRetailPrices({
       lwinId: wine.lwin_id,
-      invoiceCost: inventory?.unit_cost ?? null,
+      invoiceCost,
     });
     if (!result) {
       return NextResponse.json({

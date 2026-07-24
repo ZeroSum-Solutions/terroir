@@ -1,39 +1,47 @@
 import { NextResponse, type NextRequest } from "next/server";
-import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
-import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseQuery } from "@/lib/api/validation";
+import { WineSearchQuerySchema } from "@/lib/api/wine-read-query-schemas";
 
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireMembership();
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireMembership();
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  const q = request.nextUrl.searchParams.get("q")?.trim() ?? "";
+    const parsedQuery = await parseQuery(
+      request.nextUrl.searchParams,
+      WineSearchQuerySchema,
+    );
+    if (!parsedQuery.ok) return parsedQuery.response;
+    const { q } = parsedQuery.data;
 
-  let query = supabase
-    .from("wines")
-    .select("id, name, producer, vintage, varietal, region")
-    .eq("restaurant_id", restaurantId)
-    .order("producer")
-    .limit(20);
+    let query = supabase
+      .from("wines")
+      .select("id, name, producer, vintage, varietal, region")
+      .eq("restaurant_id", restaurantId)
+      .order("producer")
+      .limit(20);
 
-  if (q) {
-    // Search by producer or name (case-insensitive)
-    query = query.or(`name.ilike.%${q}%,producer.ilike.%${q}%`);
-  }
+    if (q) {
+      // PostgREST's `.or()` accepts raw filter syntax. Quoting and escaping
+      // keeps commas, parentheses, and quotes inside the ILIKE value.
+      const pattern = quotePostgrestValue(`%${q}%`);
+      query = query.or(
+        `name.ilike.${pattern},producer.ilike.${pattern}`,
+      );
+    }
 
-  const { data: wines, error } = await query;
+    const { data: wines, error } = await query;
+    if (error) throw error;
 
-  if (error) {
-    console.error("wines search failed:", error);
-    Sentry.captureException(error, {
-      tags: { surface: "wines-search", phase: "query" },
-      extra: { restaurantId, q },
-    });
-    return Errors.internal("Search failed.");
-  }
+    return NextResponse.json(wines ?? []);
+  });
+}
 
-  return NextResponse.json(wines ?? []);
+function quotePostgrestValue(value: string): string {
+  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }

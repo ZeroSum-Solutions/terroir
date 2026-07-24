@@ -1,32 +1,33 @@
 import { NextResponse, type NextRequest } from "next/server";
-import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseQuery } from "@/lib/api/validation";
+import { LwinSearchQuerySchema } from "@/lib/api/wine-read-query-schemas";
 
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireMembership();
-  if (auth instanceof NextResponse) return auth;
-  const { supabase } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireMembership();
+    if (auth instanceof NextResponse) return auth;
+    const { supabase } = auth;
 
-  const q = request.nextUrl.searchParams.get("q")?.trim() ?? "";
-  if (q.length < 2) {
-    return NextResponse.json([]);
-  }
+    const parsedQuery = await parseQuery(
+      request.nextUrl.searchParams,
+      LwinSearchQuerySchema,
+    );
+    if (!parsedQuery.ok) return parsedQuery.response;
+    const { q } = parsedQuery.data;
+    if (q.length < 2) {
+      return NextResponse.json([]);
+    }
 
-  const { data, error } = await supabase.rpc("lwin_search", {
-    p_query: q,
-    p_limit: 20,
-  });
-
-  if (error) {
-    console.error("lwin_search failed:", error);
-    Sentry.captureException(error, {
-      tags: { surface: "wines-lwin-search", phase: "lwin_search-rpc" },
-      extra: { q },
+    const { data, error } = await supabase.rpc("lwin_search", {
+      p_query: q,
+      p_limit: 20,
     });
-    return NextResponse.json([], { status: 500 });
-  }
+    if (error) throw error;
 
-  return NextResponse.json(data ?? []);
+    return NextResponse.json(data ?? []);
+  });
 }
