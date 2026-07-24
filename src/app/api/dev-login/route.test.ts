@@ -16,8 +16,12 @@ vi.mock("@/lib/supabase/server", () => ({
 const { GET } = await import("./route");
 
 function makeRequest(token = "temporary-secret"): NextRequest {
+  return makeRequestWithQuery(`token=${encodeURIComponent(token)}`);
+}
+
+function makeRequestWithQuery(query = ""): NextRequest {
   return new NextRequest(
-    `https://terroir.example/api/dev-login?token=${encodeURIComponent(token)}`,
+    `https://terroir.example/api/dev-login${query ? `?${query}` : ""}`,
     {
       headers: {
         host: "terroir.example",
@@ -26,6 +30,11 @@ function makeRequest(token = "temporary-secret"): NextRequest {
       },
     },
   );
+}
+
+function expectSafetyHeaders(response: Response) {
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(response.headers.get("referrer-policy")).toBe("no-referrer");
 }
 
 function configureBaseEnvironment(nodeEnv: "production" | "test") {
@@ -77,6 +86,8 @@ describe("GET /api/dev-login", () => {
 
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("https://terroir.example/");
+    expect(response.headers.get("location")).not.toContain("token");
+    expectSafetyHeaders(response);
     expect(fetch).toHaveBeenCalledWith(
       "https://project.supabase.co/auth/v1/admin/generate_link",
       expect.objectContaining({
@@ -94,9 +105,29 @@ describe("GET /api/dev-login", () => {
 
   it.each([
     {
+      name: "missing query token",
+      configure: configureProductionCapability,
+      request: () => makeRequestWithQuery(),
+    },
+    {
+      name: "empty query token",
+      configure: configureProductionCapability,
+      request: () => makeRequestWithQuery("token="),
+    },
+    {
+      name: "duplicate query token",
+      configure: configureProductionCapability,
+      request: () => makeRequestWithQuery("token=a&token=b"),
+    },
+    {
+      name: "oversized query token",
+      configure: configureProductionCapability,
+      request: () => makeRequest("x".repeat(513)),
+    },
+    {
       name: "wrong raw token",
       configure: configureProductionCapability,
-      token: "wrong-token",
+      request: () => makeRequest("wrong-token"),
     },
     {
       name: "missing hash",
@@ -104,6 +135,7 @@ describe("GET /api/dev-login", () => {
         vi.stubEnv("TEMP_AUTH_BYPASS_EMAIL", "scoped@example.com");
         vi.stubEnv("TEMP_AUTH_BYPASS_EXPIRES_AT", FUTURE_EXPIRY);
       },
+      request: makeRequest,
     },
     {
       name: "invalid hash",
@@ -111,6 +143,7 @@ describe("GET /api/dev-login", () => {
         configureProductionCapability();
         vi.stubEnv("TEMP_AUTH_BYPASS_TOKEN_SHA256", "not-a-sha-256-hash");
       },
+      request: makeRequest,
     },
     {
       name: "missing expiry",
@@ -118,6 +151,7 @@ describe("GET /api/dev-login", () => {
         vi.stubEnv("TEMP_AUTH_BYPASS_EMAIL", "scoped@example.com");
         vi.stubEnv("TEMP_AUTH_BYPASS_TOKEN_SHA256", TOKEN_HASH);
       },
+      request: makeRequest,
     },
     {
       name: "invalid expiry",
@@ -125,6 +159,7 @@ describe("GET /api/dev-login", () => {
         configureProductionCapability();
         vi.stubEnv("TEMP_AUTH_BYPASS_EXPIRES_AT", "not-an-iso-timestamp");
       },
+      request: makeRequest,
     },
     {
       name: "expired capability",
@@ -135,16 +170,18 @@ describe("GET /api/dev-login", () => {
           "2026-07-23T11:59:59.999Z",
         );
       },
+      request: makeRequest,
     },
-  ])("hard-404s $name without disclosing the reason", async ({ configure, token }) => {
+  ])("hard-404s $name without disclosing the reason", async ({ configure, request }) => {
     configure();
     const requestFetch = vi.fn();
     vi.stubGlobal("fetch", requestFetch);
 
-    const response = await GET(makeRequest(token));
+    const response = await GET(request());
 
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("Not found");
+    expectSafetyHeaders(response);
     expect(requestFetch).not.toHaveBeenCalled();
     expect(mockCreateClient).not.toHaveBeenCalled();
   });
@@ -160,6 +197,7 @@ describe("GET /api/dev-login", () => {
 
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("Not found");
+    expectSafetyHeaders(response);
     expect(requestFetch).not.toHaveBeenCalled();
   });
 
@@ -168,9 +206,10 @@ describe("GET /api/dev-login", () => {
     vi.stubEnv("DEV_BYPASS_EMAIL", "developer@example.com");
     mockSuccessfulSupabaseLogin();
 
-    const response = await GET(makeRequest("unused-in-development"));
+    const response = await GET(makeRequestWithQuery());
 
     expect(response.status).toBe(303);
+    expectSafetyHeaders(response);
     expect(fetch).toHaveBeenCalledWith(
       "https://project.supabase.co/auth/v1/admin/generate_link",
       expect.objectContaining({
@@ -193,6 +232,124 @@ describe("GET /api/dev-login", () => {
 
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("Not found");
+    expectSafetyHeaders(response);
     expect(requestFetch).not.toHaveBeenCalled();
+  });
+
+  it("redacts a secret-bearing provider non-2xx response", async () => {
+    configureProductionCapability();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response("service-role=secret-provider-detail", { status: 500 }),
+      ),
+    );
+
+    const response = await GET(makeRequest());
+    const text = await response.text();
+
+    expect(response.status).toBe(502);
+    expect(JSON.parse(text)).toEqual({
+      error: {
+        code: "bad_gateway",
+        message: "Temporary login unavailable.",
+      },
+    });
+    expect(text).not.toContain("secret-provider-detail");
+    expectSafetyHeaders(response);
+    expect(mockCreateClient).not.toHaveBeenCalled();
+  });
+
+  it("redacts a rejected provider request", async () => {
+    configureProductionCapability();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("dns secret-provider-detail");
+      }),
+    );
+
+    const response = await GET(makeRequest());
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "bad_gateway",
+        message: "Temporary login unavailable.",
+      },
+    });
+    expectSafetyHeaders(response);
+    expect(mockCreateClient).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: "non-JSON",
+      response: () => new Response("not-json"),
+    },
+    {
+      name: "missing hashed_token",
+      response: () => Response.json({}),
+    },
+    {
+      name: "empty hashed_token",
+      response: () => Response.json({ hashed_token: "" }),
+    },
+    {
+      name: "oversized hashed_token",
+      response: () => Response.json({ hashed_token: "x".repeat(4097) }),
+    },
+  ])("redacts $name provider payloads without verifying", async ({ response }) => {
+    configureProductionCapability();
+    vi.stubGlobal("fetch", vi.fn(async () => response()));
+
+    const result = await GET(makeRequest());
+
+    expect(result.status).toBe(502);
+    expect(await result.json()).toEqual({
+      error: {
+        code: "bad_gateway",
+        message: "Temporary login unavailable.",
+      },
+    });
+    expectSafetyHeaders(result);
+    expect(mockVerifyOtp).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: "returned verification error",
+      verify: () =>
+        mockVerifyOtp.mockResolvedValue({
+          error: { message: "secret verification detail" },
+        }),
+    },
+    {
+      name: "thrown verification error",
+      verify: () =>
+        mockVerifyOtp.mockRejectedValue(
+          new Error("secret thrown verification detail"),
+        ),
+    },
+  ])("redacts a $name", async ({ verify }) => {
+    configureProductionCapability();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ hashed_token: "valid-proof" })),
+    );
+    verify();
+
+    const response = await GET(makeRequest());
+    const text = await response.text();
+
+    expect(response.status).toBe(502);
+    expect(JSON.parse(text)).toEqual({
+      error: {
+        code: "bad_gateway",
+        message: "Temporary login unavailable.",
+      },
+    });
+    expect(text).not.toContain("secret");
+    expectSafetyHeaders(response);
   });
 });
