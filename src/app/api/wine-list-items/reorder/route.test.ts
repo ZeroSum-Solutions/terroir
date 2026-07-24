@@ -21,6 +21,7 @@ const { PATCH } = await import("./route");
 type RpcResult = { data: unknown; error: unknown };
 type OwnershipRow = {
   id: string;
+  section_id: string;
   wine_list_sections: { wine_lists: { restaurant_id: string } };
 };
 
@@ -57,12 +58,21 @@ function buildSupabase(opts: {
   return { supabase, rpc };
 }
 
-function ownedRow(id: string, restaurantId: string): OwnershipRow {
+function ownedRow(
+  id: string,
+  restaurantId: string,
+  sectionId = "11111111-1111-4111-8111-111111111111",
+): OwnershipRow {
   return {
     id,
+    section_id: sectionId,
     wine_list_sections: { wine_lists: { restaurant_id: restaurantId } },
   };
 }
+
+const ITEM_A = "22222222-2222-4222-8222-222222222222";
+const ITEM_B = "33333333-3333-4333-8333-333333333333";
+const ITEM_C = "44444444-4444-4444-8444-444444444444";
 
 function makeRequest(body: unknown): NextRequest {
   return new Request("http://localhost/api/wine-list-items/reorder", {
@@ -108,7 +118,7 @@ describe("PATCH /api/wine-list-items/reorder", () => {
   });
 
   it("calls reorder_wine_list_items with exact payload on happy path", async () => {
-    const ids = ["item-a", "item-b", "item-c"];
+    const ids = [ITEM_A, ITEM_B, ITEM_C];
     const { supabase, rpc } = buildSupabase({
       rpcResult: { data: null, error: null },
       ownershipRows: ids.map((id) => ownedRow(id, "r-1")),
@@ -123,7 +133,7 @@ describe("PATCH /api/wine-list-items/reorder", () => {
   });
 
   it("surfaces RPC errors as 500 without attempting partial writes", async () => {
-    const ids = ["item-a", "item-b"];
+    const ids = [ITEM_A, ITEM_B];
     const { supabase, rpc } = buildSupabase({
       rpcResult: {
         data: null,
@@ -141,10 +151,10 @@ describe("PATCH /api/wine-list-items/reorder", () => {
 
   // ARCH-014: ownership pre-check
   it("404s when any orderedId belongs to another restaurant (no RPC call)", async () => {
-    const ids = ["item-a", "item-b"];
+    const ids = [ITEM_A, ITEM_B];
     const { supabase, rpc } = buildSupabase({
       rpcResult: { data: null, error: null },
-      ownershipRows: [ownedRow("item-a", "r-1"), ownedRow("item-b", "r-2")],
+      ownershipRows: [ownedRow(ITEM_A, "r-1"), ownedRow(ITEM_B, "r-2")],
     });
     mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
     const res = await PATCH(makeRequest({ orderedIds: ids }));
@@ -153,11 +163,11 @@ describe("PATCH /api/wine-list-items/reorder", () => {
   });
 
   it("404s when a requested id doesn't exist (no RPC call)", async () => {
-    const ids = ["item-a", "item-b"];
+    const ids = [ITEM_A, ITEM_B];
     const { supabase, rpc } = buildSupabase({
       rpcResult: { data: null, error: null },
       // Only one row returned for two ids → len mismatch → reject.
-      ownershipRows: [ownedRow("item-a", "r-1")],
+      ownershipRows: [ownedRow(ITEM_A, "r-1")],
     });
     mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
     const res = await PATCH(makeRequest({ orderedIds: ids }));

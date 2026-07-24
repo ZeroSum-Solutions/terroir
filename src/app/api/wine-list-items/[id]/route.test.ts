@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const mockRequireRole = vi.fn();
 vi.mock("@/lib/api/auth", () => ({
@@ -52,76 +52,83 @@ function makeSupabase(
     _updates: updates,
     _deletes: deletes,
     from: (table: string) => ({
-      // Ownership check: .select().eq().single()
       select: (columns: string) => ({
         eq: (column: string, value: string) => ({
-          single: () => ({
-            then: (
-              resolve: (v: {
-                data: unknown | null;
-                error: null | { message: string };
-              }) => void,
-            ) => {
-              ownershipReads.push({
-                table,
-                columns,
-                eq: { column, value },
-              });
-              if (options.ownedByRestaurant) {
-                resolve({
-                  data: {
-                    wine_list_sections: {
-                      wine_lists: {
-                        restaurant_id: options.ownedByRestaurant,
-                      },
-                    },
+          maybeSingle: async () => {
+            ownershipReads.push({
+              table,
+              columns,
+              eq: { column, value },
+            });
+            if (!options.ownedByRestaurant) {
+              return { data: null, error: null };
+            }
+            return {
+              data: {
+                id: value,
+                section_id: "section-1",
+                wine_list_sections: {
+                  wine_lists: {
+                    restaurant_id: options.ownedByRestaurant,
                   },
-                  error: null,
-                });
-              } else {
-                resolve({ data: null, error: { message: "not found" } });
-              }
-            },
-          }),
+                },
+              },
+              error: null,
+            };
+          },
         }),
       }),
-      // Mutation: .update().eq() or .delete().eq()
-      update: (payload: Record<string, unknown>) => ({
-        eq: (column: string, value: string) => {
-          updates.push({
-            table,
-            payload,
-            eq: { column, value },
-          });
-          return {
-            then: (resolve: (v: { error: null }) => void) =>
-              resolve({ error: null }),
-          };
-        },
-      }),
-      delete: () => ({
-        eq: (column: string, value: string) => {
-          deletes.push({
-            table,
-            eq: { column, value },
-          });
-          return {
-            then: (resolve: (v: { error: null }) => void) =>
-              resolve({ error: null }),
-          };
-        },
-      }),
+      update: (payload: Record<string, unknown>) => {
+        const chain = {
+          eq: (column: string, value: string) => {
+            if (updates.length === 0) {
+              updates.push({
+                table,
+                payload,
+                eq: { column, value },
+              });
+            }
+            return chain;
+          },
+          select: () => chain,
+          maybeSingle: async () => ({ data: { id: ITEM_ID }, error: null }),
+        };
+        return chain;
+      },
+      delete: () => {
+        const chain = {
+          eq: (column: string, value: string) => {
+            if (deletes.length === 0) {
+              deletes.push({
+                table,
+                eq: { column, value },
+              });
+            }
+            return chain;
+          },
+          select: () => chain,
+          maybeSingle: async () => ({ data: { id: ITEM_ID }, error: null }),
+        };
+        return chain;
+      },
     }),
   };
 }
 
 function makeReq(body: unknown): NextRequest {
-  return { json: async () => body } as NextRequest;
+  return new NextRequest(
+    `http://localhost/api/wine-list-items/${ITEM_ID}`,
+    {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 const ITEM_ID = "a1b2c3d4-e5f6-4789-8abc-def012345678";
 const OWNERSHIP_COLUMNS =
-  "wine_list_sections!inner(wine_lists!inner(restaurant_id))";
+  "id, section_id, wine_list_sections!inner(wine_lists!inner(restaurant_id))";
 const ITEM_NOT_FOUND_BODY = {
   error: { code: "not_found", message: "Item not found." },
 };
@@ -174,7 +181,7 @@ function expectedOwnershipRead(): OwnershipRead {
   };
 }
 
-async function expectOpaqueItemNotFound(response: NextResponse) {
+async function expectOpaqueItemNotFound(response: Response) {
   expect(response.status).toBe(404);
   expect(await response.json()).toEqual(ITEM_NOT_FOUND_BODY);
 }

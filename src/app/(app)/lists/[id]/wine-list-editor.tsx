@@ -362,6 +362,7 @@ export function WineListEditor({
     async (wineId: string, glassPrice: number | null, bottlePrice: number | null, sectionIds: string[]) => {
       if (sectionIds.length === 0) return;
       let failed = false;
+      let failureMessage = "Failed to add wine. Please try again.";
       for (const sectionId of sectionIds) {
         const res = await fetch("/api/wine-list-items", {
           method: "POST",
@@ -373,11 +374,17 @@ export function WineListEditor({
             bottle_price: bottlePrice,
           }),
         });
-        if (!res.ok) failed = true;
+        if (!res.ok) {
+          failed = true;
+          failureMessage = await responseError(res, failureMessage);
+        }
       }
       if (!failed) {
         setShowAddWine(false);
         startTransition(() => router.refresh());
+      } else {
+        setErrorToast(failureMessage);
+        setTimeout(() => setErrorToast(null), 4000);
       }
     },
     [router],
@@ -508,7 +515,12 @@ export function WineListEditor({
               : s,
           ),
         );
-        setErrorToast("Failed to reorder wines. Please try again.");
+        setErrorToast(
+          await responseError(
+            res,
+            "Failed to reorder wines. Please try again.",
+          ),
+        );
         setTimeout(() => setErrorToast(null), 4000);
       }
     },
@@ -529,6 +541,10 @@ export function WineListEditor({
       });
       if (!res.ok) {
         startTransition(() => router.refresh());
+        setErrorToast(
+          await responseError(res, "Failed to delete wine. Please try again."),
+        );
+        setTimeout(() => setErrorToast(null), 4000);
       }
     },
     [router],
@@ -568,6 +584,10 @@ export function WineListEditor({
       });
       if (!res.ok) {
         startTransition(() => router.refresh());
+        setErrorToast(
+          await responseError(res, "Failed to update price. Please try again."),
+        );
+        setTimeout(() => setErrorToast(null), 4000);
       }
     },
     [router],
@@ -595,6 +615,13 @@ export function WineListEditor({
       });
       if (!res.ok) {
         startTransition(() => router.refresh());
+        setErrorToast(
+          await responseError(
+            res,
+            "Failed to update pour settings. Please try again.",
+          ),
+        );
+        setTimeout(() => setErrorToast(null), 4000);
       }
     },
     [router],
@@ -618,6 +645,10 @@ export function WineListEditor({
       });
       if (!res.ok) {
         startTransition(() => router.refresh());
+        setErrorToast(
+          await responseError(res, "Failed to update name. Please try again."),
+        );
+        setTimeout(() => setErrorToast(null), 4000);
       }
     },
     [router],
@@ -640,6 +671,10 @@ export function WineListEditor({
       });
       if (!res.ok) {
         startTransition(() => router.refresh());
+        setErrorToast(
+          await responseError(res, "Failed to update blurb. Please try again."),
+        );
+        setTimeout(() => setErrorToast(null), 4000);
       }
     },
     [router],
@@ -663,6 +698,13 @@ export function WineListEditor({
       });
       if (!res.ok) {
         startTransition(() => router.refresh());
+        setErrorToast(
+          await responseError(
+            res,
+            "Failed to update visibility. Please try again.",
+          ),
+        );
+        setTimeout(() => setErrorToast(null), 4000);
       }
     },
     [router],

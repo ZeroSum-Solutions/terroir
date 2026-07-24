@@ -1,87 +1,71 @@
 import { NextResponse, type NextRequest } from "next/server";
-import * as Sentry from "@sentry/nextjs";
-import { z } from "zod";
 import { requireRole } from "@/lib/api/auth";
-import { isOwnWineListSection } from "@/lib/api/wine-list-scope";
 import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseJson } from "@/lib/api/validation";
+import { CreateWineListItemBodySchema } from "@/lib/api/wine-list-item-schemas";
 
 export const runtime = "nodejs";
 
-const AddItemSchema = z.object({
-  section_id: z.string().uuid(),
-  wine_id: z.string().uuid(),
-  glass_price: z.number().nonnegative().nullable().optional(),
-  bottle_price: z.number().nonnegative().nullable().optional(),
-  name_override: z.string().nullable().optional(),
-});
+type SectionScope = {
+  id: string;
+  wine_list_id: string;
+  wine_lists: { restaurant_id: string } | Array<{ restaurant_id: string }>;
+};
+
+function restaurantIdFor(section: SectionScope): string | undefined {
+  const parent = Array.isArray(section.wine_lists)
+    ? section.wine_lists[0]
+    : section.wine_lists;
+  return parent?.restaurant_id;
+}
 
 export async function POST(request: NextRequest) {
-  const auth = await requireRole(["owner", "manager"]);
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireRole(["owner", "manager"]);
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  let raw: unknown;
-  try {
-    raw = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
+    const parsed = await parseJson(request, CreateWineListItemBodySchema);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
 
-  const parsed = AddItemSchema.safeParse(raw);
-  if (!parsed.success) {
-    return Errors.badRequest(
-        parsed.error.issues[0]?.message ?? "Invalid input.",
-      );
-  }
+    const { data, error: sectionError } = await supabase
+      .from("wine_list_sections")
+      .select("id, wine_list_id, wine_lists!inner(restaurant_id)")
+      .eq("id", body.section_id)
+      .maybeSingle();
+    if (sectionError) throw sectionError;
+    const section = data as unknown as SectionScope | null;
+    if (!section || restaurantIdFor(section) !== restaurantId) {
+      return Errors.notFound("Section");
+    }
 
-  const body = parsed.data;
+    const { data: existing, error: positionError } = await supabase
+      .from("wine_list_items")
+      .select("position")
+      .eq("section_id", body.section_id)
+      .order("position", { ascending: false })
+      .limit(1);
+    if (positionError) throw positionError;
+    const nextPosition = (existing?.[0]?.position ?? -1) + 1;
 
-  // ARCH-014: before inserting, confirm section_id belongs to the
-  // caller's restaurant. Otherwise a user with another tenant's
-  // section_id could attempt to insert into it and rely on RLS
-  // alone to block.
-  if (!(await isOwnWineListSection(supabase, body.section_id, restaurantId))) {
-    return Errors.notFound("Section");
-  }
-
-  // Get the max position in this section
-  const { data: existing } = await supabase
-    .from("wine_list_items")
-    .select("position")
-    .eq("section_id", body.section_id)
-    .order("position", { ascending: false })
-    .limit(1);
-
-  const nextPosition = (existing?.[0]?.position ?? -1) + 1;
-
-  const { data: item, error } = await supabase
-    .from("wine_list_items")
-    .insert({
-      section_id: body.section_id,
-      wine_id: body.wine_id,
-      position: nextPosition,
-      glass_price: body.glass_price ?? null,
-      bottle_price: body.bottle_price ?? null,
+    const { data: item, error } = await supabase
+      .from("wine_list_items")
+      .insert({
+        section_id: body.section_id,
+        wine_id: body.wine_id,
+        position: nextPosition,
+        glass_price: body.glass_price ?? null,
+        bottle_price: body.bottle_price ?? null,
         name_override: body.name_override ?? null,
-    })
-    .select("id")
-    .single();
+      })
+      .select("id")
+      .single();
+    if (error || !item) {
+      throw error ?? new Error("wine-list item insert returned no row");
+    }
 
-  if (error || !item) {
-    console.error("wine_list_items insert failed:", error);
-    Sentry.captureException(
-      error ?? new Error("wine_list_items insert returned null"),
-      {
-        tags: { surface: "wine-list-items", phase: "insert" },
-        extra: {
-          restaurantId,
-          section_id: body.section_id,
-          wine_id: body.wine_id,
-        },
-      },
-    );
-    return Errors.internal("Failed to add wine.");
-  }
-
-  return NextResponse.json({ id: item.id });
+    return NextResponse.json({ id: item.id });
+  });
 }
