@@ -4,6 +4,8 @@ import https from "node:https";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+class ProbeTimeoutError extends Error {}
+
 /**
  * Liveness + DB-readiness probe.
  *
@@ -47,7 +49,7 @@ function probeSupabase(url: string, serviceKey: string): Promise<boolean> {
     );
     req.on("timeout", () => {
       req.destroy();
-      reject(new Error("timeout"));
+      reject(new ProbeTimeoutError());
     });
     req.on("error", reject);
     req.end();
@@ -59,24 +61,20 @@ export async function GET() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   let db: "connected" | "error" | "unconfigured" = "unconfigured";
-  let dbError: string | undefined;
+  let dbReason:
+    | "upstream_non_2xx"
+    | "timeout"
+    | "probe_failed"
+    | undefined;
 
   if (url && serviceKey) {
     try {
       const ok = await probeSupabase(url, serviceKey);
       db = ok ? "connected" : "error";
-      if (!ok) dbError = "non-2xx response";
+      if (!ok) dbReason = "upstream_non_2xx";
     } catch (err) {
       db = "error";
-      if (err instanceof Error) {
-        dbError = err.message;
-        // Surface the error code (e.g. ENOTFOUND, ECONNREFUSED, ETIMEDOUT)
-        // so ops can distinguish "Supabase down" from "DNS broken".
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code) dbError = code + ": " + dbError;
-      } else {
-        dbError = "unknown";
-      }
+      dbReason = err instanceof ProbeTimeoutError ? "timeout" : "probe_failed";
     }
   }
 
@@ -84,9 +82,9 @@ export async function GET() {
     {
       status: "ok",
       db,
-      ...(dbError ? { dbError } : {}),
+      ...(dbReason ? { dbReason } : {}),
       timestamp: new Date().toISOString(),
     },
-    { status: 200 },
+    { status: 200, headers: { "Cache-Control": "no-store" } },
   );
 }
