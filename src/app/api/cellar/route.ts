@@ -1,27 +1,31 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { Errors } from "@/lib/api/errors";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/auth";
+import {
+  AddCellarWineBodySchema,
+  CellarInventoryResultSchema,
+} from "@/lib/api/cellar-collection-schemas";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseJson } from "@/lib/api/validation";
 import { enrichWine } from "@/lib/wine-intelligence/enrich";
+import type { Database } from "@/types/database";
 
 export const runtime = "nodejs";
 
-const AddWineSchema = z.object({
-  name: z.string().trim().min(1).max(200),
-  producer: z.string().trim().min(1).max(200),
-  vintage: z.number().int().min(1900).max(2100).nullable().optional(),
-  varietal: z.string().trim().max(100).nullable().optional(),
-  region: z.string().trim().max(100).nullable().optional(),
-  country: z.string().trim().max(100).nullable().optional(),
-  quantity: z.number().int().min(1).default(1),
-  unit_cost: z.number().min(0).optional(),
-});
-
 function buildEnrichmentMetadata(result: ReturnType<typeof enrichWine>) {
   const fields: string[] = [];
-  if (result.drinkWindowStart != null || result.drinkWindowEnd != null) fields.push("drink_window");
-  if (result.servingTempMin != null || result.servingTempMax != null || result.servingTempLabel != null) fields.push("serving_temp");
+  if (result.drinkWindowStart != null || result.drinkWindowEnd != null) {
+    fields.push("drink_window");
+  }
+  if (
+    result.servingTempMin != null ||
+    result.servingTempMax != null ||
+    result.servingTempLabel != null
+  ) {
+    fields.push("serving_temp");
+  }
   if (result.decantMinutes != null) fields.push("decant");
   if (result.peakYear != null) fields.push("peak_year");
   if (result.ratingSource != null) fields.push("rating_source");
@@ -42,125 +46,245 @@ function buildEnrichmentMetadata(result: ReturnType<typeof enrichWine>) {
  * rule-engine enrichment for the new wine.
  */
 export async function POST(request: NextRequest) {
-  const auth = await requireRole(["owner", "manager"]);
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireRole(["owner", "manager"]);
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  let raw: unknown;
-  try {
-    raw = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
-
-  const parsed = AddWineSchema.safeParse(raw);
-  if (!parsed.success) {
-    return Errors.validation(parsed.error.issues, "Invalid input.");
-  }
-
-  const { name, producer, vintage, varietal, region, country, quantity, unit_cost } =
-    parsed.data;
-
-  // Create the wine via the DB function
-  const { data: wineIdArray, error: batchError } = await supabase.rpc(
-    "find_or_create_wines_batch",
-    {
-      p_restaurant_id: restaurantId,
-      p_wines: [
-        {
-          name,
-          producer,
-          vintage: vintage ?? null,
-          varietal: varietal ?? null,
-          region: region ?? null,
-          country: country ?? null,
-          size_ml: 750,
-        },
-      ],
-    },
-  );
-
-  if (batchError || !wineIdArray?.[0]) {
-    console.error("find_or_create_wines_batch failed:", batchError);
-    Sentry.captureException(
-      batchError ?? new Error("find_or_create_wines_batch returned empty"),
-      {
-        tags: { surface: "cellar", phase: "add-wine-batch" },
-        extra: { restaurantId, name, producer },
-      },
-    );
-    return Errors.internal("Failed to create wine.");
-  }
-
-  const wineId = (wineIdArray as string[])[0];
-
-  // Create inventory item
-  const { data: inventoryItem, error: inventoryError } = await supabase
-    .from("inventory_items")
-    .insert({
-      wine_id: wineId,
-      restaurant_id: restaurantId,
+    const parsed = await parseJson(request, AddCellarWineBodySchema);
+    if (!parsed.ok) return parsed.response;
+    const {
+      name,
+      producer,
+      vintage,
+      varietal,
+      region,
+      country,
       quantity,
-      unit_cost: unit_cost ?? 0,
-      added_via: "manual" as const,
-    })
-    .select("id, quantity, unit_cost")
-    .single();
+      unit_cost,
+    } = parsed.data;
 
-  if (inventoryError || !inventoryItem) {
-    console.error("inventory_items insert failed:", inventoryError);
-    Sentry.captureException(
-      inventoryError ?? new Error("inventoryItem null without error"),
+    const { data: wineIds, error: batchError } = await supabase.rpc(
+      "find_or_create_wines_batch",
       {
-        tags: { surface: "cellar", phase: "add-wine-inventory" },
-        extra: { restaurantId, wineId },
+        p_restaurant_id: restaurantId,
+        p_wines: [
+          {
+            name,
+            producer,
+            vintage: vintage ?? null,
+            varietal: varietal ?? null,
+            region: region ?? null,
+            country: country ?? null,
+            size_ml: 750,
+          },
+        ],
       },
     );
-    return Errors.internal("Failed to add wine to inventory.");
-  }
+    if (batchError) throw batchError;
+    const parsedWineId = z.string().uuid().safeParse(wineIds?.[0]);
+    if (!parsedWineId.success) {
+      throw new Error("find-or-create wine RPC returned no valid ID");
+    }
+    const wineId = parsedWineId.data;
 
-  // BND-261: trigger rule-engine enrichment for the newly imported wine.
-  // Fire-and-forget best-effort — enrichment failures do not block the
-  // response (the wine is already safely created).
-  try {
-    const result = enrichWine({ varietal: varietal ?? null, region: region ?? null, country: country ?? null, vintage: vintage ?? null });
-    if (result.drinkWindowStart != null || result.servingTempMin != null) {
-      const metadata = buildEnrichmentMetadata(result);
-      await supabase.rpc("enrich_wines_batch", {
-        p_restaurant_id: restaurantId,
-        p_enrichments: [{
-          id: wineId,
-          drink_window_start: result.drinkWindowStart,
-          drink_window_end: result.drinkWindowEnd,
-          peak_year: result.peakYear,
-          rating: null,
-          rating_source: result.ratingSource ?? null,
-          review_excerpt: result.reviewExcerpt ?? null,
-          serving_temp_min: result.servingTempMin,
-          serving_temp_max: result.servingTempMax,
-          serving_temp_label: result.servingTempLabel ?? null,
-          decant_minutes: result.decantMinutes ?? null,
-          enrichment_metadata: metadata,
-        }],
+    const { data: rawInventoryItem, error: inventoryError } = await supabase
+      .from("inventory_items")
+      .insert({
+        wine_id: wineId,
+        restaurant_id: restaurantId,
+        quantity,
+        unit_cost: unit_cost ?? 0,
+        added_via: "manual" as const,
+      })
+      .select("id, quantity, unit_cost")
+      .maybeSingle();
+    if (inventoryError) throw inventoryError;
+    const inventoryItem =
+      CellarInventoryResultSchema.safeParse(rawInventoryItem);
+    if (!inventoryItem.success) {
+      throw new Error("Inventory insert returned an invalid result");
+    }
+
+    await runBestEffortLwinMatch({
+      supabase,
+      restaurantId,
+      wineId,
+    });
+
+    const canonicalWine = await loadCanonicalWineForEnrichment({
+      supabase,
+      restaurantId,
+      wineId,
+    });
+    if (canonicalWine) {
+      await runBestEffortEnrichment({
+        supabase,
+        restaurantId,
+        wineId,
+        ...canonicalWine,
       });
     }
-  } catch {
-    // Best-effort: don't fail the request if enrichment fails.
-  }
 
-  // BND-093: match new wines against LWIN catalog
+    return NextResponse.json({
+      wineId,
+      inventoryId: inventoryItem.data.id,
+      quantity: inventoryItem.data.quantity,
+      unitCost: inventoryItem.data.unit_cost,
+    });
+  });
+}
+
+async function runBestEffortLwinMatch(input: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  wineId: string;
+}): Promise<void> {
+  const { supabase, restaurantId, wineId } = input;
   try {
-    await supabase.rpc("match_lwin_batch", {
-      p_wine_ids: [wineId],
+    const { data: lwinMatches, error: lwinError } = await supabase.rpc(
+      "match_lwin_batch",
+      { p_wine_ids: [wineId] },
+    );
+    if (lwinError) {
+      captureBestEffortError(lwinError, "match-lwin", {
+        restaurantId,
+        wineId,
+      });
+    } else if (!Array.isArray(lwinMatches)) {
+      captureBestEffortError(
+        new Error("match_lwin_batch returned an invalid result"),
+        "match-lwin-result",
+        { restaurantId, wineId },
+      );
+    }
+  } catch (error) {
+    captureBestEffortError(error, "match-lwin", {
+      restaurantId,
+      wineId,
+    });
+  }
+}
+
+async function loadCanonicalWineForEnrichment(input: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  wineId: string;
+}): Promise<{
+  varietal: string | null;
+  region: string | null;
+  country: string | null;
+  vintage: number | null;
+} | null> {
+  const { supabase, restaurantId, wineId } = input;
+  try {
+    const { data, error } = await supabase
+      .from("wines")
+      .select("varietal, region, country, vintage")
+      .eq("restaurant_id", restaurantId)
+      .eq("id", wineId)
+      .maybeSingle();
+    if (error) {
+      captureBestEffortError(error, "load-canonical-wine", {
+        restaurantId,
+        wineId,
+      });
+      return null;
+    }
+    if (!data) {
+      captureBestEffortError(
+        new Error("Canonical wine was not found after inventory insert"),
+        "load-canonical-wine-result",
+        { restaurantId, wineId },
+      );
+      return null;
+    }
+    return data;
+  } catch (error) {
+    captureBestEffortError(error, "load-canonical-wine", {
+      restaurantId,
+      wineId,
+    });
+    return null;
+  }
+}
+
+async function runBestEffortEnrichment(input: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  wineId: string;
+  varietal: string | null;
+  region: string | null;
+  country: string | null;
+  vintage: number | null;
+}): Promise<void> {
+  const {
+    supabase,
+    restaurantId,
+    wineId,
+    varietal,
+    region,
+    country,
+    vintage,
+  } = input;
+  try {
+    const result = enrichWine({ varietal, region, country, vintage });
+    if (result.drinkWindowStart == null && result.servingTempMin == null) {
+      return;
+    }
+    const { data: updatedCount, error } = await supabase.rpc(
+      "enrich_wines_batch",
+      {
+        p_restaurant_id: restaurantId,
+        p_enrichments: [
+          {
+            id: wineId,
+            drink_window_start: result.drinkWindowStart,
+            drink_window_end: result.drinkWindowEnd,
+            peak_year: result.peakYear,
+            rating: null,
+            rating_source: result.ratingSource ?? null,
+            review_excerpt: result.reviewExcerpt ?? null,
+            serving_temp_min: result.servingTempMin,
+            serving_temp_max: result.servingTempMax,
+            serving_temp_label: result.servingTempLabel ?? null,
+            decant_minutes: result.decantMinutes ?? null,
+            enrichment_metadata: buildEnrichmentMetadata(result),
+          },
+        ],
+      },
+    );
+    if (error) {
+      captureBestEffortError(error, "enrich-wine", {
+        restaurantId,
+        wineId,
+      });
+    } else if (updatedCount !== 1) {
+      captureBestEffortError(
+        new Error("enrich_wines_batch updated an unexpected row count"),
+        "enrich-wine-result",
+        { restaurantId, wineId, updatedCount },
+      );
+    }
+  } catch (error) {
+    captureBestEffortError(error, "enrich-wine", {
+      restaurantId,
+      wineId,
+    });
+  }
+}
+
+function captureBestEffortError(
+  error: unknown,
+  phase: string,
+  extra: Record<string, unknown>,
+): void {
+  try {
+    Sentry.captureException(error, {
+      tags: { surface: "cellar", phase },
+      extra,
     });
   } catch {
-    // Best-effort: don't fail the request if LWIN matching fails.
+    // Observability must never convert a completed inventory write into a 500.
   }
-
-  return NextResponse.json({
-    wineId,
-    inventoryId: inventoryItem.id,
-    quantity: inventoryItem.quantity,
-    unitCost: inventoryItem.unit_cost,
-  });
 }

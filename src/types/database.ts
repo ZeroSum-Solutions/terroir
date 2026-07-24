@@ -844,6 +844,18 @@ export type Database = {
         Args: { p_fields: string[]; p_wine_id: string }
         Returns: undefined
       }
+      assign_cellar_section_batch: {
+        Args: {
+          p_restaurant_id: string
+          p_section: string
+          p_wine_ids: string[]
+        }
+        Returns: undefined
+      }
+      cellar_inventory_wine_ids: {
+        Args: { p_restaurant_id: string; p_wine_ids: string[] }
+        Returns: string[]
+      }
       cleanup_scan_idempotency: { Args: never; Returns: undefined }
       dismiss_pricing_alert: {
         Args: { p_days?: number; p_wine_id: string }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Grid2x2, Loader2, X, Wine } from "lucide-react";
+import { AlertTriangle, Grid2x2, Loader2, X, Wine } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 type CellarConfig = {
@@ -139,9 +139,11 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
 export function CellarGridView({
   config,
   gridData,
+  truncated = false,
 }: {
   config: CellarConfig;
   gridData: GridData;
+  truncated?: boolean;
 }) {
   const [selectedBin, setSelectedBin] = useState<string | null>(null);
 
@@ -151,6 +153,20 @@ export function CellarGridView({
 
   return (
     <>
+      {truncated && (
+        <div
+          role="status"
+          className="mb-md flex items-start gap-xs rounded-sm border border-warning/30 bg-warning/10 px-sm py-xs text-[12px] text-ink"
+        >
+          <AlertTriangle
+            className="mt-0.5 h-4 w-4 shrink-0 text-warning"
+            strokeWidth={2}
+          aria-hidden
+          />
+          Showing the first 10,000 binned inventory records. The list view
+          remains available for primary cellar workflows.
+        </div>
+      )}
       <div className="flex flex-col gap-lg md:flex-row">
         {/* SVG Grid */}
         <div className="flex-1 overflow-x-auto rounded-md border border-border bg-surface p-md">

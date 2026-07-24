@@ -25,6 +25,7 @@ export function CellarShell({
   reconcileItems,
   cellarConfig,
   gridData,
+  gridTruncated,
   restaurantName,
   restaurantId,
   autoEightysixEnabled,
@@ -51,6 +52,7 @@ export function CellarShell({
       totalBottles: number;
     }
   >;
+  gridTruncated: boolean;
   restaurantName: string;
   restaurantId: string;
   autoEightysixEnabled: boolean;
@@ -332,7 +334,11 @@ export function CellarShell({
           sections={cellarSections}
         />
       ) : cellarConfig ? (
-        <CellarGridView config={cellarConfig} gridData={gridData} />
+        <CellarGridView
+          config={cellarConfig}
+          gridData={gridData}
+          truncated={gridTruncated}
+        />
       ) : (
         <CellarSetup restaurantName={restaurantName} />
       )}

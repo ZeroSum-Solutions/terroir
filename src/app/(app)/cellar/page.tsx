@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
+import { loadCellarGridSnapshot } from "@/lib/cellar/grid";
+import { parseCellarSections } from "@/lib/cellar/sections";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import { CellarShell } from "./cellar-shell";
 import type { CellarWineRow } from "./types";
@@ -8,19 +10,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Cellar" };
-
-type BinData = {
-  wines: Array<{
-    wineId: string;
-    name: string;
-    producer: string;
-    vintage: number | null;
-    quantity: number;
-  }>;
-  totalBottles: number;
-};
-
-type GridData = Record<string, BinData>;
 
 /**
  * Cellar single-screen surface (Phase 2 IA redesign — see
@@ -51,6 +40,7 @@ export default async function CellarPage() {
     { data: openBottleRows },
     { data: configRow },
     { data: restaurantRow },
+    gridSnapshot,
   ] = await Promise.all([
     supabase
       .from("wines")
@@ -78,7 +68,16 @@ export default async function CellarPage() {
       )
       .eq("id", restaurantId)
       .single(),
+    loadCellarGridSnapshot(supabase, restaurantId),
   ]);
+
+  const { data: inventoryWineIdRows, error: inventoryWineIdError } =
+    await supabase.rpc("cellar_inventory_wine_ids", {
+      p_restaurant_id: restaurantId,
+      p_wine_ids: (wineRows ?? []).map((wine) => wine.id),
+    });
+  if (inventoryWineIdError) throw inventoryWineIdError;
+  const inventoryWineIds = new Set(inventoryWineIdRows ?? []);
 
   // BND-040 — pull current bottle/glass prices from wine_list_items so
   // the drawer Pricing section can show actual pricing alongside retail
@@ -188,6 +187,7 @@ export default async function CellarPage() {
       tasting_notes: w.tasting_notes ?? null,
       hero_image_url: w.hero_image_url ?? null,
       sealed_count: inv.sealed,
+      has_inventory_record: inventoryWineIds.has(w.id),
       bin_location: inv.bin,
       section: inv.section,
       wine_list_item_id: ob?.wine_list_item_id ?? null,
@@ -237,35 +237,8 @@ export default async function CellarPage() {
     (i) => i.open_remaining_ml !== null,
   );
 
-  // Bin grid view data (kept from the prior /cellar page so the Grid
-  // toggle continues to work).
-  // BND-200 / PERF — Map-based lookup replaces O(n*m) .find()
-  const wineById = new Map((wineRows ?? []).map((w) => [w.id, w]));
-  const gridData: GridData = {};
-  for (const item of inventoryRows ?? []) {
-    if (!item.bin_location || !item.wine_id) continue;
-    const wine = wineById.get(item.wine_id);
-    if (!wine) continue;
-    const bin = item.bin_location.toUpperCase().trim();
-    if (!gridData[bin]) gridData[bin] = { wines: [], totalBottles: 0 };
-    gridData[bin].wines.push({
-      wineId: wine.id,
-      name: wine.name,
-      producer: wine.producer,
-      vintage: wine.vintage,
-      quantity: item.quantity ?? 0,
-    });
-    gridData[bin].totalBottles += item.quantity ?? 0;
-  }
-
   // BND-063/064 — extract cellar sections from config
-  const cellarSections: Array<{ id: string; name: string }> = (() => {
-    const labels = configRow?.labels as Record<string, unknown> | null;
-    if (labels?.sections && Array.isArray(labels.sections)) {
-      return labels.sections as Array<{ id: string; name: string }>;
-    }
-    return [];
-  })();
+  const cellarSections = parseCellarSections(configRow?.labels);
 
   const eightysixStrategy = restaurantRow?.eightysix_strategy === "mark" ? "mark" as const : "hide" as const;
 
@@ -286,7 +259,8 @@ export default async function CellarPage() {
           : null
       }
       cellarSections={cellarSections}
-      gridData={gridData}
+      gridData={gridSnapshot.grid}
+      gridTruncated={gridSnapshot.truncated}
       restaurantName={restaurantName}
       restaurantId={restaurantId}
       autoEightysixEnabled={restaurantRow?.auto_eightysix_from_inventory ?? false}

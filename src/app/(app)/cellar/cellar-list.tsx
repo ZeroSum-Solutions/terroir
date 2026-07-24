@@ -15,6 +15,10 @@ import {
 } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import {
+  assignCellarWineSections,
+  CellarBatchSectionError,
+} from "@/lib/cellar/batch-section";
 import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
 import { useToast } from "@/lib/toast";
@@ -131,6 +135,14 @@ export function CellarList({
       );
     });
   }, [rows, query, filter]);
+  const selectableFiltered = useMemo(
+    () => filtered.filter((row) => row.has_inventory_record),
+    [filtered],
+  );
+  const selectableIds = useMemo(
+    () => new Set(selectableFiltered.map((row) => row.wine_id)),
+    [selectableFiltered],
+  );
 
   // BND-063: group filtered wines by section. "Uncategorized" for wines
   // without a section. If no sections are configured, all wines go into
@@ -208,26 +220,36 @@ export function CellarList({
     async () => {
       if (!assignTarget || selectedIds.size === 0) return;
       setBusy(true);
+      const selectedWineIds = Array.from(selectedIds);
+      let assignedCount = 0;
       try {
-        const res = await fetch("/api/cellar/batch-section", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            wine_ids: Array.from(selectedIds),
-            section: assignTarget,
-          }),
+        assignedCount = await assignCellarWineSections({
+          wineIds: selectedWineIds,
+          section: assignTarget,
         });
-        if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-          throw new Error(payload?.error?.message ?? `Failed (${res.status})`);
-        }
-        toast.success(`${selectedIds.size} wine${selectedIds.size === 1 ? "" : "s"} assigned to ${assignTarget}`);
+        toast.success(`${selectedWineIds.length} wine${selectedWineIds.length === 1 ? "" : "s"} assigned to ${assignTarget}`);
         setSelectMode(false);
         setSelectedIds(new Set());
         setAssignTarget(null);
         router.refresh();
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Batch assign failed");
+        assignedCount =
+          err instanceof CellarBatchSectionError
+            ? err.assignedCount
+            : assignedCount;
+        const detail =
+          err instanceof Error ? err.message : "Batch assign failed";
+        toast.error(
+          assignedCount > 0
+            ? `${assignedCount} assigned before the failure. ${detail}`
+            : detail,
+        );
+        if (assignedCount > 0) {
+          setSelectedIds(
+            new Set(selectedWineIds.slice(assignedCount)),
+          );
+        }
+        router.refresh();
       } finally {
         setBusy(false);
       }
@@ -236,18 +258,19 @@ export function CellarList({
   );
 
   const toggleSelect = useCallback((wineId: string) => {
+    if (!selectableIds.has(wineId)) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(wineId)) next.delete(wineId);
       else next.add(wineId);
       return next;
     });
-  }, []);
+  }, [selectableIds]);
 
   const selectAll = useCallback(() => {
-    const allIds = new Set(filtered.map((r) => r.wine_id));
+    const allIds = new Set(selectableFiltered.map((r) => r.wine_id));
     setSelectedIds(allIds);
-  }, [filtered]);
+  }, [selectableFiltered]);
 
   const deselectAll = useCallback(() => {
     setSelectedIds(new Set());
@@ -318,7 +341,7 @@ export function CellarList({
                 onClick={selectAll}
                 className="inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted"
               >
-                Select all ({filtered.length})
+                Select all ({selectableFiltered.length})
               </button>
               {selectedIds.size > 0 && (
                 <button
@@ -599,8 +622,20 @@ function CellarRow({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onToggleSelect?.(); }}
-          className="flex h-[44px] w-[44px] shrink-0 items-center justify-center text-ink-subtle hover:text-accent"
-          aria-label={selected ? "Deselect" : "Select"}
+          disabled={!row.has_inventory_record}
+          className="flex h-[44px] w-[44px] shrink-0 items-center justify-center text-ink-subtle hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
+          aria-label={
+            !row.has_inventory_record
+              ? "Cannot assign a wine without an inventory record"
+              : selected
+                ? "Deselect"
+                : "Select"
+          }
+          title={
+            row.has_inventory_record
+              ? undefined
+              : "This wine has no inventory record to assign."
+          }
         >
           {selected ? (
             <CheckSquare className="h-5 w-5 text-accent" strokeWidth={2} aria-hidden />

@@ -30,6 +30,7 @@ export type CellarWineRow = {
 
   // From inventory_items (aggregate)
   sealed_count: number;
+  has_inventory_record: boolean;
   bin_location: string | null;
   // BND-063/064 — cellar section from inventory_items.section
   section: string | null;
