@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { readApiError } from "@/lib/api/client-error";
 
 type MatchedWine = {
   id: string;
@@ -133,10 +134,12 @@ async function lookupWine(payload: string): Promise<MatchedWine> {
     body: JSON.stringify({ qr_payload: payload }),
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as {
-      error?: string;
-    } | null;
-    throw new Error(body?.error ?? "Lookup failed (" + res.status + ")");
+    throw new Error(
+      readApiError(
+        await res.json().catch(() => null),
+        "Lookup failed (" + res.status + ")",
+      ).message,
+    );
   }
   return (await res.json()) as MatchedWine;
 }
@@ -252,10 +255,12 @@ export default function ScanBottlePage() {
           }),
         });
         if (!res.ok) {
-          const body = (await res.json().catch(() => null)) as {
-            error?: string;
-          } | null;
-          throw new Error(body?.error ?? "Failed to record location.");
+          throw new Error(
+            readApiError(
+              await res.json().catch(() => null),
+              "Failed to record location.",
+            ).message,
+          );
         }
         // BND-112: add confirmed bottle to session
         setSession((prev) => [

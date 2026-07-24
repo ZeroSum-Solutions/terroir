@@ -6,6 +6,10 @@ import {
   isValidIdempotencyKey,
   withIdempotency,
 } from "@/lib/api/idempotency";
+import { withApiHandler } from "@/lib/api/handler";
+import { apiResultResponse } from "@/lib/api/result-response";
+import { parseJson } from "@/lib/api/validation";
+import { SaveBottleScanBodySchema } from "@/lib/scanner/request-schemas";
 import type { Database } from "@/types/database";
 
 export const runtime = "nodejs";
@@ -24,47 +28,19 @@ type SaveBottleBody = {
 };
 
 export async function POST(request: NextRequest) {
+  return withApiHandler(() => postBottleInventorySave(request));
+}
+
+async function postBottleInventorySave(request: NextRequest) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
-  let body: SaveBottleBody;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON body." },
-      { status: 400 },
-    );
-  }
-
-  const { wine } = body;
-  if (!wine?.name?.trim() || !wine?.producer?.trim()) {
-    return NextResponse.json(
-      { error: "Wine name and producer are required." },
-      { status: 400 },
-    );
-  }
-  if (
-    typeof wine.qty !== "number" ||
-    !Number.isFinite(wine.qty) ||
-    wine.qty < 1
-  ) {
-    return NextResponse.json(
-      { error: "Quantity must be a positive integer." },
-      { status: 400 },
-    );
-  }
-  if (
-    typeof wine.unitCost !== "number" ||
-    !Number.isFinite(wine.unitCost) ||
-    wine.unitCost < 0
-  ) {
-    return NextResponse.json(
-      { error: "Unit cost must be zero or greater." },
-      { status: 400 },
-    );
-  }
+  const parsed = await parseJson(request, SaveBottleScanBodySchema, {
+    message: "Invalid body.",
+  });
+  if (!parsed.ok) return parsed.response;
+  const body: SaveBottleBody = parsed.data;
 
   // ── Idempotency (BND-006) ────────────────────────────────────────
   const rawKey = request.headers.get("Idempotency-Key");
@@ -78,7 +54,7 @@ export async function POST(request: NextRequest) {
       saveBottleOnce({ supabase, restaurantId, wine: body.wine }),
   });
 
-  return NextResponse.json(result.body, { status: result.status });
+  return apiResultResponse(result);
 }
 
 async function saveBottleOnce(opts: {

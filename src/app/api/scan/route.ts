@@ -10,11 +10,21 @@
  * re-running Azure OCR or Claude extraction.
  */
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
 import { assertInvoiceExtractionConfigured } from "@/adapters/llm/anthropic-invoice-extraction";
 import { processInvoiceScanOnce } from "@/domains/scanning/invoice-scan-service";
+import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
 import { rateLimit } from "@/lib/api/rate-limit";
 import { requireMembership } from "@/lib/api/auth";
 import { withIdempotency, isValidIdempotencyKey } from "@/lib/api/idempotency";
+import { apiResultResponse } from "@/lib/api/result-response";
+import {
+  fileField,
+  parseJson,
+  parseMultipart,
+} from "@/lib/api/validation";
+import { InvoicePathBodySchema } from "@/lib/scanner/request-schemas";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -34,14 +44,44 @@ function clientIp(request: NextRequest): string {
 }
 
 const MAX_BYTES = 10 * 1024 * 1024;
-const ALLOWED_MIME = new Set([
-  "image/jpeg", "image/png", "image/heic", "image/heif", "application/pdf",
+const MIME_EXTENSIONS = new Map([
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/heic", "heic"],
+  ["image/heif", "heif"],
+  ["application/pdf", "pdf"],
 ]);
+const ALLOWED_MIME = new Set(MIME_EXTENSIONS.keys());
 
-const json = (body: unknown, status: number) =>
-  NextResponse.json(body, { status });
+const InvoiceFilesSchema = z.object({
+  file: z
+    .union([fileField, z.array(fileField).min(1)])
+    .transform((value) => (Array.isArray(value) ? value : [value])),
+});
+
+function isStorageNotFound(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as {
+    code?: string;
+    error?: string;
+    status?: number;
+    statusCode?: number | string;
+  };
+  return (
+    value.status === 404 ||
+    value.statusCode === 404 ||
+    value.statusCode === "404" ||
+    value.code === "404" ||
+    value.code === "not_found" ||
+    value.error === "not_found"
+  );
+}
 
 export async function POST(request: NextRequest) {
+  return withApiHandler(() => postInvoiceScan(request));
+}
+
+async function postInvoiceScan(request: NextRequest) {
   // ARCH-001: membership gates paid Azure + Anthropic spend.
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
@@ -56,9 +96,9 @@ export async function POST(request: NextRequest) {
     SCAN_RATE_WINDOW_MS,
   );
   if (!limit.ok) {
-    return NextResponse.json(
-      { error: "Too many scan requests. Please wait before scanning again." },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+    return Errors.rateLimited(
+      "Too many scan requests. Please wait before scanning again.",
+      { headers: { "Retry-After": String(limit.retryAfterSeconds) } },
     );
   }
 
@@ -66,44 +106,38 @@ export async function POST(request: NextRequest) {
   const rawKey = request.headers.get("Idempotency-Key");
   const idempotencyKey = isValidIdempotencyKey(rawKey) ? rawKey : null;
 
-  // Preflight Anthropic config BEFORE Azure — avoid burning OCR spend when
-  // we can't finish the pipeline. Also runs before the idempotency claim
-  // so a missing key is a fast 500 without touching the DB.
-  try {
-    assertInvoiceExtractionConfigured();
-  } catch {
-    return json(
-      { error: "Server not configured: ANTHROPIC_API_KEY missing." },
-      500,
-    );
-  }
-
   // ── JSON body path (BND-083: storage-path based submission) ─────────
   const reqContentType = request.headers.get("content-type") ?? "";
   if (
     reqContentType.includes("application/json") &&
     !reqContentType.includes("multipart")
   ) {
-    let jsonBody: { imagePath?: string };
-    try {
-      jsonBody = await request.json();
-    } catch {
-      return json({ error: "Invalid JSON body." }, 400);
+    const parsed = await parseJson(request, InvoicePathBodySchema, {
+      message: "Invalid body.",
+    });
+    if (!parsed.ok) return parsed.response;
+    const { imagePath } = parsed.data;
+
+    const ext = imagePath.split(".").pop()?.toLowerCase() ?? "";
+    const allowedExtensions = new Set([
+      "jpg",
+      "jpeg",
+      "png",
+      "heic",
+      "heif",
+      "pdf",
+    ]);
+    if (!allowedExtensions.has(ext)) {
+      return Errors.unsupportedMediaType(
+        "Unsupported file type: ." +
+          (ext || "unknown") +
+          ". Allowed: jpeg, png, heic, pdf.",
+      );
+    }
+    if (!imagePath.startsWith(restaurantId + "/")) {
+      return Errors.notFound("Image");
     }
 
-    const imagePath = jsonBody.imagePath;
-    if (!imagePath) return json({ error: "Missing imagePath field." }, 400);
-
-    // Download image from Supabase Storage
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from("invoice-images")
-      .download(imagePath);
-
-    if (downloadError || !fileData) {
-      return json({ error: `Image not found: ${downloadError?.message ?? "unknown"}` }, 404);
-    }
-
-    const ext = imagePath.split(".").pop()?.toLowerCase() ?? "jpg";
     const mimeType =
       ext === "pdf"
         ? "application/pdf"
@@ -114,88 +148,97 @@ export async function POST(request: NextRequest) {
             : ext === "heif"
               ? "image/heif"
               : "image/jpeg";
-    const fileBuffer = Buffer.from(await fileData.arrayBuffer());
-
-    // BND-105: reject unsupported file types in JSON body path too.
-    const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "heic", "heif", "pdf"]);
-    if (!ALLOWED_EXT.has(ext)) {
-      return json({
-        code: "unsupported_type",
-        error:
-          "Unsupported file type: ." + ext + ". Allowed: jpeg, png, heic, pdf.",
-      }, 415);
-    }
-
-    if (fileBuffer.length > MAX_BYTES) return json({ error: "File exceeds 10 MB." }, 413);
-
-    // Create invoice_scans row BEFORE the idempotency handler so the scanId
-    // is stable. On replay the handler won't run, so the row is harmless.
-    const { data: invoiceScan, error: insertError } = await supabase
-      .from("invoice_scans")
-      .insert({
-        restaurant_id: restaurantId,
-        created_by: user.id,
-        distributor_name: "Unknown",
-        parsed_line_items: [],
-        final_line_items: [],
-        edits: {},
-        item_count: 0,
-        raw_image_path: imagePath,
-        status: "processing",
-      })
-      .select("id")
-      .single();
-
-    if (insertError || !invoiceScan) {
-      console.error("invoice_scans insert failed:", insertError);
-      return json({ error: "Failed to create scan record." }, 500);
-    }
-
-    const preCreatedScanId = invoiceScan.id;
 
     const result = await withIdempotency({
       supabase,
       restaurantId,
       key: idempotencyKey,
-      handler: () =>
-        processInvoiceScanOnce({
+      handler: async () => {
+        // Avoid storage, database, and OCR work entirely on idempotency replay.
+        assertInvoiceExtractionConfigured();
+        const { data: fileData, error: downloadError } = await supabase.storage
+          .from("invoice-images")
+          .download(imagePath);
+        if (downloadError && !isStorageNotFound(downloadError)) {
+          throw downloadError;
+        }
+        if (downloadError || !fileData) {
+          return {
+            status: 404,
+            body: {
+              error: { code: "not_found", message: "Image not found." },
+            },
+          };
+        }
+
+        const fileBuffer = Buffer.from(await fileData.arrayBuffer());
+        if (fileBuffer.length > MAX_BYTES) {
+          return {
+            status: 413,
+            body: {
+              error: {
+                code: "too_large",
+                message: "File exceeds 10 MB.",
+              },
+            },
+          };
+        }
+
+        const { data: invoiceScan, error: insertError } = await supabase
+          .from("invoice_scans")
+          .insert({
+            restaurant_id: restaurantId,
+            created_by: user.id,
+            distributor_name: "Unknown",
+            parsed_line_items: [],
+            final_line_items: [],
+            edits: {},
+            item_count: 0,
+            raw_image_path: imagePath,
+            status: "processing",
+          })
+          .select("id")
+          .single();
+        if (insertError || !invoiceScan) {
+          throw insertError ?? new Error("invoice_scans insert returned no row");
+        }
+
+        return processInvoiceScanOnce({
           supabase,
           restaurantId,
           userId: user.id,
           fileBuffer,
           mimeType,
-          preCreatedScanId,
+          preCreatedScanId: invoiceScan.id,
           preUploadedPath: imagePath,
-        }),
+        });
+      },
     });
 
-    return json(result.body, result.status);
+    return apiResultResponse(result);
   }
 
   // ── Form-data path ──────────────────────────────────────────────────
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch {
-    return json({ error: "Invalid form data." }, 400);
+  const parsed = await parseMultipart(request, InvoiceFilesSchema, {
+    message: "Invalid body.",
+  });
+  if (!parsed.ok) return parsed.response;
+  const files = parsed.data.file;
+  for (const pageFile of files) {
+    if (pageFile.size === 0) return Errors.badRequest("Empty file.");
+    if (pageFile.size > MAX_BYTES) {
+      return Errors.tooLarge("File exceeds 10 MB.");
+    }
+    if (!ALLOWED_MIME.has(pageFile.type)) {
+      return Errors.unsupportedMediaType(
+        "Unsupported file type: " + (pageFile.type || "unknown") + ".",
+      );
+    }
   }
+  const file = files[0];
 
-  const files = formData.getAll("file");
-  if (files.length === 0) return json({ error: "No file attached." }, 400);
-  const firstEntry = files[0];
-  if (!(firstEntry instanceof File)) return json({ error: "Invalid file." }, 400);
-  const file: File = firstEntry;
-  if (file.size === 0) return json({ error: "Empty file." }, 400);
-  if (file.size > MAX_BYTES) return json({ error: "File exceeds 10 MB." }, 413);
-  if (!ALLOWED_MIME.has(file.type)) {
-    return json(
-      {
-        code: "unsupported_type",
-        error: "Unsupported file type: " + (file.type || "unknown") + ".",
-      },
-      415,
-    );
-  }
+  // Preflight Anthropic config before Azure processing.
+  assertInvoiceExtractionConfigured();
 
   const fileBuffer = Buffer.from(new Uint8Array(await file.arrayBuffer()));
 
@@ -218,43 +261,53 @@ export async function POST(request: NextRequest) {
   // BND-080/BND-081: upload images to Supabase Storage under restaurant
   // prefix AFTER processing (only on first request, not replay).
   if (!result.replayed && result.status === 200) {
-    const scanId = (result.body as { scanId?: string }).scanId;
-    if (scanId) {
-      const extraPaths: string[] = [];
-      let pageIdx = 0;
-      while (pageIdx !== files.length) {
-        const pageFile = files[pageIdx];
-        pageIdx++;
-        if (!(pageFile instanceof File)) {
-          /* skip non-file entries */
-        } else {
-          const pageExt = pageFile.type === "application/pdf" ? "pdf" : pageFile.type === "image/png" ? "png" : "jpg";
-          const pageTag = files.length !== 1 ? "_page" + pageIdx : "";
-          const pagePath = restaurantId + "/" + scanId + pageTag + "." + pageExt;
-          const pageBuf = Buffer.from(new Uint8Array(await pageFile.arrayBuffer()));
-          const pageRes = await supabase.storage
-            .from("invoice-images")
-            .upload(pagePath, pageBuf, {
-              contentType: pageFile.type,
-              upsert: true,
-            });
-          if (!pageRes.error) {
-            if (pageIdx === 1) {
-              await supabase
-                .from("invoice_scans")
-                .update({ raw_image_path: pagePath })
-                .eq("id", scanId);
-            } else {
-              extraPaths.push(pagePath);
+    try {
+      const scanId = (result.body as { scanId?: string }).scanId;
+      if (scanId) {
+        const extraPaths: string[] = [];
+        let pageIdx = 0;
+        while (pageIdx !== files.length) {
+          const pageFile = files[pageIdx];
+          pageIdx++;
+          if (!(pageFile instanceof File)) {
+            /* skip non-file entries */
+          } else {
+            const pageExt = MIME_EXTENSIONS.get(pageFile.type) ?? "jpg";
+            const pageTag = files.length !== 1 ? "_page" + pageIdx : "";
+            const pagePath =
+              restaurantId + "/" + scanId + pageTag + "." + pageExt;
+            const pageBuf = Buffer.from(
+              new Uint8Array(await pageFile.arrayBuffer()),
+            );
+            const pageRes = await supabase.storage
+              .from("invoice-images")
+              .upload(pagePath, pageBuf, {
+                contentType: pageFile.type,
+                upsert: true,
+              });
+            if (!pageRes.error) {
+              if (pageIdx === 1) {
+                await supabase
+                  .from("invoice_scans")
+                  .update({ raw_image_path: pagePath })
+                  .eq("id", scanId);
+              } else {
+                extraPaths.push(pagePath);
+              }
             }
           }
         }
+        if (extraPaths.length !== 0) {
+          await supabase
+            .from("invoice_scans")
+            .update({ extra_image_paths: extraPaths })
+            .eq("id", scanId);
+        }
       }
-      if (extraPaths.length !== 0) {
-        await supabase.from("invoice_scans").update({ extra_image_paths: extraPaths }).eq("id", scanId);
-      }
+    } catch {
+      // Storage enrichment is best-effort after the scan has completed.
     }
   }
 
-  return json(result.body, result.status);
+  return apiResultResponse(result);
 }

@@ -95,10 +95,11 @@ export async function processInvoiceScanOnce(
     const parsed = await extractFromOcr(ocr);
 
     if (parsed.lineItems.length === 0) {
-      await supabase
+      const { error: completionError } = await supabase
         .from("invoice_scans")
         .update({ status: "complete", item_count: 0 })
         .eq("id", scanId);
+      if (completionError) throw completionError;
       return {
         status: 422,
         body: {
@@ -153,10 +154,11 @@ export async function processInvoiceScanOnce(
     if (preUploadedPath) {
       updatePayload.raw_image_path = preUploadedPath;
     }
-    await supabase
+    const { error: completionError } = await supabase
       .from("invoice_scans")
       .update(updatePayload as never)
       .eq("id", scanId);
+    if (completionError) throw completionError;
 
     return { status: 200, body: { scanId, ...result } };
   } catch (error) {
@@ -174,7 +176,10 @@ export async function processInvoiceScanOnce(
           extra: { fileType: mimeType },
         });
       }
-      return { status: OCR_STATUS[error.code], body: { error: error.message } };
+      return {
+        status: OCR_STATUS[error.code],
+        body: { code: error.code, message: error.message },
+      };
     }
 
     if (error instanceof AiExtractError) {
