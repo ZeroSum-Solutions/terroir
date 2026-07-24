@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, Plus, Search, Sparkles } from "lucide-react";
+import { readApiError } from "@/lib/api/client-error";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 
 // BND-040 — pricing suggestion response shape from
@@ -185,15 +186,17 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(lwin),
       });
+      const payload = await res.json().catch(() => null);
       if (!res.ok) {
-        const message = await res
-          .json()
-          .then((d: { error?: string }) => d?.error)
-          .catch(() => null);
-        setCatalogError(message ?? `Couldn't import wine (${res.status}).`);
+        setCatalogError(
+          readApiError(
+            payload,
+            `Couldn't import wine (${res.status}).`,
+          ).message,
+        );
         return;
       }
-      const { id } = await res.json();
+      const { id } = payload as { id: string };
       setSelected({
         id,
         name: lwin.display_name,

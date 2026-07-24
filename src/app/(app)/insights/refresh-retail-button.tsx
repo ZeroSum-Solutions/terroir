@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { DollarSign, Loader2 } from "lucide-react";
+import { readApiError } from "@/lib/api/client-error";
 import { cn } from "@/lib/utils";
 
 /**
@@ -60,10 +61,10 @@ export function RefreshRetailButton() {
       for (let i = 0; i < MAX_LOOP_ITERATIONS; i++) {
         const res = await fetch("/api/wines/refresh-retail-batch", { method: "POST" });
         if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          throw new Error(payload?.error ?? `Refresh failed (${res.status}).`);
+          const payload = await res.json().catch(() => null);
+          throw new Error(
+            readApiError(payload, `Refresh failed (${res.status}).`).message,
+          );
         }
         const body = (await res.json()) as RefreshResponse;
         // Audit-finding M1: when the API key isn't configured, the

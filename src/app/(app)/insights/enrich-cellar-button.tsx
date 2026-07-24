@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, Loader2 } from "lucide-react";
+import { readApiError } from "@/lib/api/client-error";
 import { cn } from "@/lib/utils";
 
 /**
@@ -62,10 +63,10 @@ export function EnrichCellarButton() {
       for (let i = 0; i < MAX_LOOP_ITERATIONS; i++) {
         const res = await fetch("/api/wines/enrich", { method: "POST" });
         if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          throw new Error(payload?.error ?? `Enrich failed (${res.status}).`);
+          const payload = await res.json().catch(() => null);
+          throw new Error(
+            readApiError(payload, `Enrich failed (${res.status}).`).message,
+          );
         }
         const body = (await res.json()) as EnrichResponse;
         totalEnriched += body.enriched;

@@ -113,9 +113,16 @@ async function lwinEnrichFallback(
   const wineIds = wines.map((w) => w.id);
 
   // Run match_lwin_batch to assign LWIN IDs to unmatched wines.
-  const { data: matches } = await supabase.rpc("match_lwin_batch", {
+  const { data: matches, error: matchError } = await supabase.rpc(
+    "match_lwin_batch",
+    {
     p_wine_ids: wineIds,
-  });
+    },
+  );
+  if (matchError) {
+    captureLwinFallbackError(matchError, "match-lwin");
+    return [];
+  }
 
   if (!matches || matches.length === 0) return [];
 
@@ -124,21 +131,29 @@ async function lwinEnrichFallback(
     (matches as Array<{ wine_id: string }>).map((m) => m.wine_id),
   );
 
-  const { data: winesWithLwin } = await supabase
+  const { data: winesWithLwin, error: matchedWinesError } = await supabase
     .from("wines")
     .select("id, lwin_id")
     .in("id", Array.from(matchedIds))
     .not("lwin_id", "is", null);
+  if (matchedWinesError) {
+    captureLwinFallbackError(matchedWinesError, "fetch-matched-wines");
+    return [];
+  }
 
   if (!winesWithLwin || winesWithLwin.length === 0) return [];
 
   const lwinIds = [...new Set(winesWithLwin.map((w) => w.lwin_id as string))];
 
   // Fetch LWIN catalog entries for the matched LWIN IDs.
-  const { data: catalogEntries } = await supabase
+  const { data: catalogEntries, error: catalogError } = await supabase
     .from("lwin_catalog")
     .select("lwin_id, region, country, varietal, colour")
     .in("lwin_id", lwinIds);
+  if (catalogError) {
+    captureLwinFallbackError(catalogError, "fetch-catalog");
+    return [];
+  }
 
   if (!catalogEntries || catalogEntries.length === 0) return [];
 
@@ -306,7 +321,7 @@ export async function enrichRestaurantBatch(
         serving_temp_min: null,
         serving_temp_max: null,
         serving_temp_label: null,
-        decant_minutes: null,
+        decant_minutes: result.decantMinutes ?? null,
         enrichment_metadata: buildMetadata("claude_inference", result),
       });
     }
@@ -335,19 +350,36 @@ export async function enrichRestaurantBatch(
   }
 
   // ARCH-021: LWIN backfill, also bounded.
-  const { data: unmatched } = await supabase
+  const { data: unmatched, error: unmatchedError } = await supabase
     .from("wines")
     .select("id")
     .eq("restaurant_id", restaurantId)
     .is("lwin_id", null)
     .limit(ENRICH_BATCH_LIMIT);
+  if (unmatchedError) {
+    Sentry.captureException(unmatchedError, {
+      tags: { surface: "wines-enrich", phase: "fetch-unmatched-lwin" },
+      extra: { restaurantId },
+    });
+    return { error: "Failed to fetch unmatched wines.", status: 500 };
+  }
 
   let lwinMatched = 0;
   if (unmatched && unmatched.length > 0) {
     const unmatchedIds = unmatched.map((w) => w.id);
-    const { data: matches } = await supabase.rpc("match_lwin_batch", {
+    const { data: matches, error: matchError } = await supabase.rpc(
+      "match_lwin_batch",
+      {
       p_wine_ids: unmatchedIds,
-    });
+      },
+    );
+    if (matchError) {
+      Sentry.captureException(matchError, {
+        tags: { surface: "wines-enrich", phase: "match-unmatched-lwin" },
+        extra: { restaurantId, wineCount: unmatchedIds.length },
+      });
+      return { error: "Failed to match wines to LWIN.", status: 500 };
+    }
     lwinMatched = matches?.length ?? 0;
   }
 
@@ -366,4 +398,11 @@ export async function enrichRestaurantBatch(
       (unmatched?.length ?? 0) >= ENRICH_BATCH_LIMIT ||
       claudeRemaining > 0,
   };
+}
+
+function captureLwinFallbackError(error: unknown, phase: string): void {
+  console.error(`LWIN enrichment fallback failed during ${phase}:`, error);
+  Sentry.captureException(error, {
+    tags: { surface: "wines-enrich", phase: `lwin-fallback-${phase}` },
+  });
 }

@@ -1,83 +1,67 @@
 import { NextResponse, type NextRequest } from "next/server";
-import * as Sentry from "@sentry/nextjs";
+import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseJson } from "@/lib/api/validation";
+import { CreateWineFromLwinBodySchema } from "@/lib/api/wine-provider-mutation-schemas";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  const auth = await requireMembership();
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireMembership();
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  let body: {
-    lwin_id?: string;
-    display_name?: string;
-    producer?: string | null;
-    varietal?: string | null;
-    region?: string | null;
-    country?: string | null;
-  };
-  try {
-    body = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
-  const { lwin_id, display_name, producer, varietal, region, country } = body;
+    const parsed = await parseJson(request, CreateWineFromLwinBodySchema);
+    if (!parsed.ok) return parsed.response;
+    const {
+      lwin_id,
+    } = parsed.data;
 
-  if (!display_name || !lwin_id) {
-    return Errors.badRequest("Missing required fields.");
-  }
+    const { data: catalogWine, error: catalogError } = await supabase
+      .from("lwin_catalog")
+      .select("lwin_id, display_name, producer, varietal, region, country")
+      .eq("lwin_id", lwin_id)
+      .maybeSingle();
+    if (catalogError) throw catalogError;
+    if (!catalogWine) return Errors.notFound("LWIN wine");
 
-  const { data: wineIds, error } = await supabase.rpc(
-    "find_or_create_wines_batch",
-    {
-      p_restaurant_id: restaurantId,
-      p_wines: [
-        {
-          name: display_name,
-          producer: producer ?? "Unknown",
-          vintage: null,
-          varietal: varietal ?? null,
-          region: region ?? null,
-          country: country ?? null,
-          size_ml: 750,
-        },
-      ],
-    },
-  );
-
-  if (error || !wineIds?.[0]) {
-    console.error("create-from-lwin failed:", error);
-    Sentry.captureException(
-      error ?? new Error("find_or_create_wines_batch returned empty"),
+    const { data: wineIds, error } = await supabase.rpc(
+      "find_or_create_wines_batch",
       {
-        tags: { surface: "wines-create-from-lwin", phase: "batch-find-wines" },
-        extra: { restaurantId, lwin_id, display_name },
+        p_restaurant_id: restaurantId,
+        p_wines: [
+          {
+            name: catalogWine.display_name,
+            producer: catalogWine.producer ?? "Unknown",
+            vintage: null,
+            varietal: catalogWine.varietal,
+            region: catalogWine.region,
+            country: catalogWine.country,
+            size_ml: 750,
+          },
+        ],
       },
     );
-    return Errors.internal("Failed to create wine.");
-  }
+    if (error) throw error;
+    const parsedWineId = z.string().uuid().safeParse(wineIds?.[0]);
+    if (!parsedWineId.success) {
+      throw new Error("find-or-create wine RPC returned no valid ID");
+    }
+    const wineId = parsedWineId.data;
 
-  const wineId = (wineIds as string[])[0];
+    const { data: updated, error: lwinError } = await supabase
+      .from("wines")
+      .update({ lwin_id: catalogWine.lwin_id })
+      .eq("id", wineId)
+      .eq("restaurant_id", restaurantId)
+      .select("id")
+      .maybeSingle();
+    if (lwinError) throw lwinError;
+    if (!updated) return Errors.notFound("Wine");
 
-  // ARCH-014: the wineId just came from find_or_create_wines_batch
-  // (which is restaurant-scoped internally), so the current flow is
-  // safe. The .eq('restaurant_id', …) is here so a future refactor
-  // that lets wineId come from user input doesn't silently become
-  // cross-tenant.
-  const { error: lwinError } = await supabase
-    .from("wines")
-    .update({ lwin_id: lwin_id as string })
-    .eq("id", wineId)
-    .eq("restaurant_id", restaurantId);
-  if (lwinError) {
-    console.error("Failed to set lwin_id on wine:", lwinError);
-    Sentry.captureException(lwinError, {
-      tags: { surface: "wines-create-from-lwin", phase: "update-lwin-id" },
-      extra: { restaurantId, wine_id: wineId, lwin_id },
-    });
-  }
-
-  return NextResponse.json({ id: wineId });
+    return NextResponse.json({ id: wineId });
+  });
 }

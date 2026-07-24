@@ -182,18 +182,25 @@ export function WineDetailDrawer({
         const res = await fetch(`/api/wines/${row.wine_id}/enrich`, {
           method: "POST",
         });
-        const payload = (await res.json().catch(() => null)) as
-          | { source?: string | null; message?: string; error?: string }
-          | null;
+        const payload = await res.json().catch(() => null);
         if (!res.ok) {
-          throw new Error(payload?.error ?? `Enrichment failed (${res.status}).`);
+          throw new Error(
+            readApiError(
+              payload,
+              `Enrichment failed (${res.status}).`,
+            ).message,
+          );
         }
-        if (payload?.source == null) {
-          setEnrichMsg(payload?.message ?? "Could not enrich this wine.");
+        const result = payload as {
+          source?: string | null;
+          message?: string;
+        } | null;
+        if (result?.source == null) {
+          setEnrichMsg(result?.message ?? "Could not enrich this wine.");
         } else {
-          const sourceLabel = payload.source === "claude_inference"
+          const sourceLabel = result.source === "claude_inference"
             ? "Claude AI"
-            : payload.source === "lwin_fallback"
+            : result.source === "lwin_fallback"
               ? "LWIN catalog"
               : "rule engine";
           setEnrichMsg(`Enriched via ${sourceLabel}.`);

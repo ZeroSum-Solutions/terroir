@@ -225,6 +225,7 @@ describe("POST /api/wines/enrich", () => {
         servingTempMin: null,
         servingTempMax: null,
         servingTempLabel: null,
+        decantMinutes: 30,
       },
       {
         drinkWindowStart: 2020,
@@ -263,6 +264,7 @@ describe("POST /api/wines/enrich", () => {
     expect(args.p_enrichments).toHaveLength(2);
     expect(args.p_enrichments[0].id).toBe("w-1");
     expect(args.p_enrichments[0].rating_source).toBe("claude_inference");
+    expect(args.p_enrichments[0].decant_minutes).toBe(30);
     expect(args.p_enrichments[1].id).toBe("w-2");
 
     // Both should have enrichment_metadata with source=claude_inference
