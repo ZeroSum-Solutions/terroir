@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  createIdempotencyKey,
   readApiErrorCode,
   shouldRetainIdempotencyKey,
 } from "./idempotency-client";
 
 describe("idempotency client retry policy", () => {
+  it("creates a valid opaque logical-action key", () => {
+    expect(createIdempotencyKey()).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
+  });
+
   it("reads only nested standard error codes", () => {
     expect(
       readApiErrorCode({

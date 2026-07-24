@@ -36,6 +36,14 @@ const apiIdempotency = readFileSync(
   "utf8",
 );
 
+const atomicIdempotentCommands = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../supabase/migrations/0057_atomic_idempotent_commands.sql",
+  ),
+  "utf8",
+);
+
 describe("database security contracts", () => {
   it("keeps public wine-list read policies explicit and narrow", () => {
     for (const table of [
@@ -361,6 +369,51 @@ describe("database security contracts", () => {
     );
     expect(apiIdempotency).toContain(
       "where updated_at < clock_timestamp() - interval '25 hours';",
+    );
+  });
+
+  it("opens sealed inventory and bottle state in one tenant-checked RPC", () => {
+    expect(atomicIdempotentCommands).toMatch(
+      /open_bottle_from_inventory\([\s\S]*?security definer[\s\S]*?set search_path = ''/,
+    );
+    expect(atomicIdempotentCommands).toContain(
+      "public.is_member_with_role(p_restaurant_id, 'staff')",
+    );
+    expect(atomicIdempotentCommands).toMatch(
+      /from public\.open_bottles[\s\S]*?for update;[\s\S]*?from public\.inventory_items[\s\S]*?order by inventory_items\.added_at, inventory_items\.id[\s\S]*?for update;/,
+    );
+    expect(atomicIdempotentCommands).toContain(
+      "source_inventory_item_id = excluded.source_inventory_item_id",
+    );
+    expect(atomicIdempotentCommands).toContain(
+      "on conflict on constraint open_bottles_wine_id_restaurant_id_key",
+    );
+    expect(atomicIdempotentCommands).toContain(
+      "revoke all on function public.open_bottle_from_inventory(uuid, uuid)\n  from anon;",
+    );
+  });
+
+  it("accepts invitations without trusting caller-supplied identity or tenant data", () => {
+    expect(atomicIdempotentCommands).toContain(
+      "atomic_invitation_preflight_failed:",
+    );
+    expect(atomicIdempotentCommands).toContain(
+      "constraint invitations_invitable_role_check",
+    );
+    expect(atomicIdempotentCommands).toMatch(
+      /accept_invitation_idempotent\([\s\S]*?v_user_id uuid := auth\.uid\(\)[\s\S]*?from auth\.users[\s\S]*?lower\(btrim\(invitations\.email\)\) = v_user_email/,
+    );
+    expect(atomicIdempotentCommands).toMatch(
+      /insert into public\.memberships[\s\S]*?on conflict \(user_id, restaurant_id\) do nothing;[\s\S]*?update public\.invitations[\s\S]*?accepted_at is null;/,
+    );
+    expect(atomicIdempotentCommands).toContain(
+      "'api:POST:/api/team/accept-invite'",
+    );
+    expect(atomicIdempotentCommands).toContain(
+      "revoke all on function public.accept_invitation_idempotent(text, text, text)\n  from anon;",
+    );
+    expect(atomicIdempotentCommands).not.toMatch(
+      /accept_invitation_idempotent\(\s*p_(?:restaurant|user|email|role)/,
     );
   });
 });

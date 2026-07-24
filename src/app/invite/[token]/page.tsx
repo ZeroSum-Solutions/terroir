@@ -1,48 +1,141 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, Loader2, RotateCcw, X } from "lucide-react";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotencyKey,
+  readApiErrorCode,
+  shouldRetainIdempotencyKey,
+} from "@/lib/api/idempotency-client";
+
+const INVITE_COMMAND_STORAGE_KEY = "terroir:invite-acceptance";
+
+type StoredInviteCommand = {
+  token: string;
+  key: string;
+};
+
+function readStoredCommand(token: string): StoredInviteCommand | null {
+  try {
+    const raw = sessionStorage.getItem(INVITE_COMMAND_STORAGE_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<StoredInviteCommand>;
+    if (
+      value.token !== token ||
+      typeof value.key !== "string" ||
+      value.key.length < 8
+    ) {
+      return null;
+    }
+    return { token, key: value.key };
+  } catch {
+    return null;
+  }
+}
+
+function storeCommand(command: StoredInviteCommand): void {
+  try {
+    sessionStorage.setItem(INVITE_COMMAND_STORAGE_KEY, JSON.stringify(command));
+  } catch {
+    // The in-memory ref still protects strict-mode and same-mount retries.
+  }
+}
+
+function clearStoredCommand(token: string): void {
+  try {
+    const stored = readStoredCommand(token);
+    if (stored) sessionStorage.removeItem(INVITE_COMMAND_STORAGE_KEY);
+  } catch {
+    // Storage availability cannot change the server-side result.
+  }
+}
 
 export default function AcceptInvitePage() {
   const params = useParams<{ token: string }>();
   const router = useRouter();
+  const commandRef = useRef<StoredInviteCommand | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<"loading" | "success" | "error">(
     "loading",
   );
   const [message, setMessage] = useState("");
+  const [canRetry, setCanRetry] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    let redirectTimer: ReturnType<typeof setTimeout> | undefined;
+
     async function accept() {
-      const res = await fetch("/api/team/accept-invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: params.token }),
-      });
+      setStatus("loading");
+      setMessage("");
+      setCanRetry(false);
 
-      const data = await res.json();
+      const existing =
+        commandRef.current?.token === params.token
+          ? commandRef.current
+          : readStoredCommand(params.token);
+      const command = existing ?? {
+        token: params.token,
+        key: createIdempotencyKey(),
+      };
+      commandRef.current = command;
+      storeCommand(command);
 
-      if (res.ok) {
-        setStatus("success");
-        setMessage(data.message ?? "You have joined the restaurant.");
-        // Redirect to role-aware home after 2 seconds; "/" hits the
-        // redirector at src/app/page.tsx which sends the user to
-        // /insights (owner) or /cellar (manager/staff).
-        setTimeout(() => router.push("/"), 2000);
-      } else {
+      try {
+        const res = await fetch("/api/team/accept-invite", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": command.key,
+          },
+          body: JSON.stringify({ token: params.token }),
+        });
+        const data = await res.json();
+        if (cancelled) return;
+
+        if (res.ok) {
+          clearStoredCommand(params.token);
+          commandRef.current = null;
+          setStatus("success");
+          setMessage(data.message ?? "You have joined the restaurant.");
+          redirectTimer = setTimeout(() => router.push("/"), 2000);
+          return;
+        }
+
         if (res.status === 401) {
-          // Not logged in — redirect to login with return URL
           router.push(`/login?next=/invite/${params.token}`);
           return;
         }
+
+        const retain = shouldRetainIdempotencyKey(
+          res.status,
+          readApiErrorCode(data),
+        );
+        if (!retain) {
+          clearStoredCommand(params.token);
+          commandRef.current = null;
+        }
+        setCanRetry(retain);
         setStatus("error");
         setMessage(readApiError(data, "Failed to accept invitation.").message);
+      } catch {
+        if (cancelled) return;
+        setCanRetry(true);
+        setStatus("error");
+        setMessage(
+          "The invitation response was interrupted. Retry to check the same request safely.",
+        );
       }
     }
 
-    accept();
-  }, [params.token, router]);
+    void accept();
+    return () => {
+      cancelled = true;
+      if (redirectTimer) clearTimeout(redirectTimer);
+    };
+  }, [attempt, params.token, router]);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-surface px-md">
@@ -83,10 +176,13 @@ export default function AcceptInvitePage() {
             <p className="mt-md text-[15px] font-medium text-ink">{message}</p>
             <button
               type="button"
-              onClick={() => router.push("/login")}
-              className="mt-lg flex mx-auto h-[38px] items-center rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
+              onClick={() =>
+                canRetry ? setAttempt((value) => value + 1) : router.push("/login")
+              }
+              className="mt-lg flex mx-auto h-[44px] items-center gap-xs rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
             >
-              Go to login
+              {canRetry && <RotateCcw className="h-4 w-4" aria-hidden="true" />}
+              {canRetry ? "Try again" : "Go to login"}
             </button>
           </>
         )}

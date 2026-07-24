@@ -1,117 +1,165 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { requireAuth } from "@/lib/api/auth";
-import { rateLimit } from "@/lib/api/rate-limit";
 import { apiError, Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
-import { parseJson } from "@/lib/api/validation";
+import {
+  createIdempotencyRequestHash,
+  isValidIdempotencyKey,
+} from "@/lib/api/idempotency";
+import { rateLimit } from "@/lib/api/rate-limit";
+import { apiResultResponse } from "@/lib/api/result-response";
 import { AcceptInviteBodySchema } from "@/lib/api/team-schemas";
+import { parseJson } from "@/lib/api/validation";
+import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
 
-/** Max accept-invite attempts per authed user per IP per hour. */
 const ACCEPT_INVITE_LIMIT = 10;
-/** Rate-limit window in ms (one hour). */
 const ACCEPT_INVITE_WINDOW_MS = 60 * 60 * 1000;
 
-/**
- * Best-effort client-IP extraction. Any fronting proxy (Railway's envoy,
- * Cloudflare, nginx, etc.) sets `x-forwarded-for`; fallback to
- * `x-real-ip` for others. Only the leftmost IP in the list is used.
- * `unknown` is never a realistic value in production, but is a sane
- * fallback for local/test so the key is still stable.
- */
+type AcceptInviteResult = {
+  outcome:
+    | "accepted"
+    | "replay"
+    | "not_found"
+    | "already_used"
+    | "invitation_expired"
+    | "idempotency_key_reused"
+    | "idempotency_key_expired"
+    | "idempotency_outcome_unknown"
+    | "idempotency_in_progress";
+  response_status: number;
+  response_body: Json;
+  replayed: boolean;
+};
+
 function clientIp(request: NextRequest): string {
-  const fwd = request.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim();
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
   return request.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
 export async function POST(request: NextRequest) {
-  return withApiHandler(async () => {
-    const auth = await requireAuth({ rateLimit: "sensitive" });
-    if (auth instanceof NextResponse) return auth;
-    const { supabase, user } = auth;
+  return withApiHandler(() => acceptInvitation(request));
+}
 
-    const limit = rateLimit(
-      `accept-invite:${clientIp(request)}:${user.id}`,
-      ACCEPT_INVITE_LIMIT,
-      ACCEPT_INVITE_WINDOW_MS,
+async function acceptInvitation(request: NextRequest) {
+  const auth = await requireAuth({ rateLimit: "sensitive" });
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, user } = auth;
+
+  const limit = rateLimit(
+    `accept-invite:${clientIp(request)}:${user.id}`,
+    ACCEPT_INVITE_LIMIT,
+    ACCEPT_INVITE_WINDOW_MS,
+  );
+  if (!limit.ok) {
+    return Errors.rateLimited(
+      "Too many invitation attempts. Try again later.",
+      { headers: { "Retry-After": String(limit.retryAfterSeconds) } },
     );
-    if (!limit.ok) {
-      return Errors.rateLimited(
-        "Too many invitation attempts. Try again later.",
-        { headers: { "Retry-After": String(limit.retryAfterSeconds) } },
-      );
-    }
+  }
 
-    const parsed = await parseJson(request, AcceptInviteBodySchema);
-    if (!parsed.ok) return parsed.response;
+  const parsed = await parseJson(request, AcceptInviteBodySchema);
+  if (!parsed.ok) return parsed.response;
 
-    const { data: invitation, error: findError } = await supabase
-      .from("invitations")
-      .select("id, restaurant_id, role, email, expires_at, accepted_at")
-      .eq("token", parsed.data.token)
-      .single();
-    if (findError && (findError as { code?: string }).code !== "PGRST116") {
-      throw findError;
-    }
-    const invalidInvitation = () =>
-      apiError(404, "not_found", "Invalid or expired invitation.");
-    if (!invitation) return invalidInvitation();
+  const rawKey = request.headers.get("Idempotency-Key");
+  if (rawKey !== null && !isValidIdempotencyKey(rawKey)) {
+    return Errors.badRequest(
+      "Invalid Idempotency-Key.",
+      undefined,
+      "invalid_idempotency_key",
+    );
+  }
 
-    const inviteeEmail = invitation.email?.trim().toLowerCase();
-    const userEmail = user.email?.trim().toLowerCase();
-    if (!inviteeEmail || !userEmail || inviteeEmail !== userEmail) {
-      return invalidInvitation();
-    }
-    if (invitation.accepted_at) {
-      return Errors.badRequest("This invitation has already been used.");
-    }
-    if (new Date(invitation.expires_at) < new Date()) {
-      return Errors.badRequest("This invitation has expired.");
-    }
+  const keyedArgs = rawKey
+    ? {
+        p_idempotency_key: rawKey,
+        p_request_hash: createIdempotencyRequestHash({
+          token: parsed.data.token,
+        }),
+      }
+    : {};
+  const { data, error } = await supabase.rpc(
+    "accept_invitation_idempotent",
+    {
+      p_token: parsed.data.token,
+      ...keyedArgs,
+    },
+  );
 
-    const { data: existingMembership, error: membershipLookupError } =
-      await supabase
-        .from("memberships")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("restaurant_id", invitation.restaurant_id)
-        .limit(1)
-        .single();
-    if (
-      membershipLookupError &&
-      (membershipLookupError as { code?: string }).code !== "PGRST116"
-    ) {
-      throw membershipLookupError;
-    }
+  if (error) {
+    if (!rawKey) throw error;
+    captureAcceptInviteError(error, "idempotent-rpc");
+    return apiError(
+      503,
+      "idempotency_unavailable",
+      "Request idempotency is temporarily unavailable.",
+    );
+  }
 
-    if (!existingMembership) {
-      const { error: membershipError } = await supabase
-        .from("memberships")
-        .insert({
-          user_id: user.id,
-          restaurant_id: invitation.restaurant_id,
-          role: invitation.role,
-        });
-      if (membershipError) throw membershipError;
-    }
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | AcceptInviteResult
+    | null;
+  if (
+    !row ||
+    ![
+      "accepted",
+      "replay",
+      "not_found",
+      "already_used",
+      "invitation_expired",
+      "idempotency_key_reused",
+      "idempotency_key_expired",
+      "idempotency_outcome_unknown",
+      "idempotency_in_progress",
+    ].includes(String(row.outcome)) ||
+    !Number.isInteger(row.response_status) ||
+    row.response_status < 100 ||
+    row.response_status > 599 ||
+    typeof row.replayed !== "boolean" ||
+    row.response_body === null ||
+    row.response_body === undefined ||
+    (row.outcome === "replay") !== row.replayed
+  ) {
+    const malformed = new Error(
+      "accept_invitation_idempotent returned an invalid result",
+    );
+    if (!rawKey) throw malformed;
+    captureAcceptInviteError(malformed, "idempotent-rpc-result");
+    return apiError(
+      503,
+      "idempotency_unavailable",
+      "Request idempotency is temporarily unavailable.",
+    );
+  }
 
-    const { data: acceptedInvitation, error: acceptanceError } = await supabase
-      .from("invitations")
-      .update({ accepted_at: new Date().toISOString() })
-      .eq("id", invitation.id)
-      .select("id")
-      .maybeSingle();
-    if (acceptanceError) throw acceptanceError;
-    if (!acceptedInvitation) return invalidInvitation();
+  const headers: Record<string, string> = {};
+  if (row.outcome === "idempotency_in_progress") {
+    headers["Retry-After"] = "1";
+  } else if (rawKey && row.outcome === "replay") {
+    headers["Idempotency-Replayed"] = "true";
+  } else if (
+    rawKey &&
+    ["accepted", "already_used", "invitation_expired"].includes(row.outcome)
+  ) {
+    headers["Idempotency-Replayed"] = "false";
+  }
 
-    return NextResponse.json({
-      success: true,
-      ...(existingMembership
-        ? { message: "You are already a member of this restaurant." }
-        : { role: invitation.role }),
-      restaurantId: invitation.restaurant_id,
-    });
+  return apiResultResponse({
+    status: row.response_status,
+    body: row.response_body,
+    ...(Object.keys(headers).length === 0 ? {} : { headers }),
   });
+}
+
+function captureAcceptInviteError(error: unknown, phase: string): void {
+  try {
+    Sentry.captureException(error, {
+      tags: { surface: "accept-invite", phase },
+    });
+  } catch {
+    // Error reporting cannot replace the fail-closed response.
+  }
 }

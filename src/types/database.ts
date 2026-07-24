@@ -997,6 +997,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_invitation_idempotent: {
+        Args: {
+          p_idempotency_key?: string
+          p_request_hash?: string
+          p_token: string
+        }
+        Returns: {
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
       add_manual_overrides: {
         Args: { p_fields: string[]; p_wine_id: string }
         Returns: undefined
@@ -1052,6 +1065,14 @@ export type Database = {
           retry_after_seconds: number
         }[]
       }
+      dismiss_pricing_alert: {
+        Args: { p_days?: number; p_wine_id: string }
+        Returns: string
+      }
+      enrich_wines_batch: {
+        Args: { p_enrichments: Json; p_restaurant_id: string }
+        Returns: number
+      }
       fail_api_idempotency: {
         Args: {
           p_idempotency_key: string
@@ -1060,14 +1081,6 @@ export type Database = {
           p_restaurant_id: string
         }
         Returns: boolean
-      }
-      dismiss_pricing_alert: {
-        Args: { p_days?: number; p_wine_id: string }
-        Returns: string
-      }
-      enrich_wines_batch: {
-        Args: { p_enrichments: Json; p_restaurant_id: string }
-        Returns: number
       }
       find_or_create_wine: {
         Args: {
@@ -1092,15 +1105,6 @@ export type Database = {
         Args: {
           r_id: string
           required: Database["public"]["Enums"]["membership_role"]
-        }
-        Returns: boolean
-      }
-      release_api_idempotency: {
-        Args: {
-          p_idempotency_key: string
-          p_operation_id: string
-          p_request_hash: string
-          p_restaurant_id: string
         }
         Returns: boolean
       }
@@ -1160,6 +1164,16 @@ export type Database = {
           wine_id: string
         }[]
       }
+      open_bottle_from_inventory: {
+        Args: { p_restaurant_id: string; p_wine_id: string }
+        Returns: {
+          bottle_id: string
+          opened_at: string
+          outcome: string
+          remaining_ml: number
+          wine_id: string
+        }[]
+      }
       reconcile_open_bottle: {
         Args: {
           p_new_remaining_ml: number
@@ -1212,6 +1226,15 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      release_api_idempotency: {
+        Args: {
+          p_idempotency_key: string
+          p_operation_id: string
+          p_request_hash: string
+          p_restaurant_id: string
+        }
+        Returns: boolean
       }
       reorder_wine_list_items: {
         Args: { p_ordered_ids: string[] }
