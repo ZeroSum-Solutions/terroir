@@ -1,0 +1,2159 @@
+{
+  "schemaVersion": 1,
+  "sourceFile": "app_spec.txt",
+  "featureCount": 269,
+  "items": [
+    {
+      "id": "TER-CF-001",
+      "domain": "authentication_and_session",
+      "sourceOrder": 1,
+      "sourceText": "User can sign up with email and password via Supabase Auth",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-002",
+      "domain": "authentication_and_session",
+      "sourceOrder": 2,
+      "sourceText": "User can log in at /login and receive a Supabase session cookie",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-003",
+      "domain": "authentication_and_session",
+      "sourceOrder": 3,
+      "sourceText": "User can log out and have the session cookie cleared",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-004",
+      "domain": "authentication_and_session",
+      "sourceOrder": 4,
+      "sourceText": "User can request a password reset email via Supabase Auth",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-005",
+      "domain": "authentication_and_session",
+      "sourceOrder": 5,
+      "sourceText": "User can complete a password reset from the emailed link",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-006",
+      "domain": "authentication_and_session",
+      "sourceOrder": 6,
+      "sourceText": "System redirects unauthenticated requests to (app)/* back to /login",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-007",
+      "domain": "authentication_and_session",
+      "sourceOrder": 7,
+      "sourceText": "System restores session on page refresh via @supabase/ssr cookie helpers",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-008",
+      "domain": "authentication_and_session",
+      "sourceOrder": 8,
+      "sourceText": "System exposes a server-side Supabase client for route handlers",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-009",
+      "domain": "authentication_and_session",
+      "sourceOrder": 9,
+      "sourceText": "System exposes a browser-side Supabase client for client components",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-010",
+      "domain": "authentication_and_session",
+      "sourceOrder": 10,
+      "sourceText": "API returns 401 when an authenticated route is hit without a session",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-011",
+      "domain": "authentication_and_session",
+      "sourceOrder": 11,
+      "sourceText": "API returns 403 when the user is authenticated but not a member of the requested restaurant",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-012",
+      "domain": "authentication_and_session",
+      "sourceOrder": 12,
+      "sourceText": "System enforces Row-Level Security on every table via is_member / is_member_with_role",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-013",
+      "domain": "authentication_and_session",
+      "sourceOrder": 13,
+      "sourceText": "Dev login route bypasses email auth in non-production environments only",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-014",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 14,
+      "sourceText": "Owner can create a new restaurant on first login",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-015",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 15,
+      "sourceText": "Owner can rename their restaurant",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-016",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 16,
+      "sourceText": "Owner can invite a team member by email",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-017",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 17,
+      "sourceText": "System creates a row in invitations with a single-use token",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-018",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 18,
+      "sourceText": "Invitee can accept an invitation at /invite/[token]",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-019",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 19,
+      "sourceText": "System creates a memberships row when an invitation is accepted",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-020",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 20,
+      "sourceText": "Owner can assign a role (owner, manager, staff) to each member",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-021",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 21,
+      "sourceText": "Owner can revoke a member's access by deleting their membership",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-022",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 22,
+      "sourceText": "Owner can resend a pending invitation",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-023",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 23,
+      "sourceText": "Owner can cancel a pending invitation",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-024",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 24,
+      "sourceText": "Manager can perform inventory and list operations but not delete the restaurant",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-025",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 25,
+      "sourceText": "Staff can record pours and view inventory but cannot edit wine lists",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-026",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 26,
+      "sourceText": "System enforces role gates via is_member_with_role DB function",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-027",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 27,
+      "sourceText": "User can switch between restaurants they belong to via the settings dropdown",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-028",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 28,
+      "sourceText": "User can view the team roster on /team with current roles and pending invites",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-029",
+      "domain": "restaurants_and_teams",
+      "sourceOrder": 29,
+      "sourceText": "API returns 403 when a non-owner attempts an owner-only mutation",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-030",
+      "domain": "invoice_scanning",
+      "sourceOrder": 30,
+      "sourceText": "User can open the camera-based scan UI at /scan on mobile",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-031",
+      "domain": "invoice_scanning",
+      "sourceOrder": 31,
+      "sourceText": "User can upload a single invoice image from the file picker",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-032",
+      "domain": "invoice_scanning",
+      "sourceOrder": 32,
+      "sourceText": "User can upload a multi-page invoice as multiple images in one batch",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-033",
+      "domain": "invoice_scanning",
+      "sourceOrder": 33,
+      "sourceText": "System uploads each image to Supabase Storage under the restaurant's bucket",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-034",
+      "domain": "invoice_scanning",
+      "sourceOrder": 34,
+      "sourceText": "POST /api/scan submits a stored image for OCR processing",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-035",
+      "domain": "invoice_scanning",
+      "sourceOrder": 35,
+      "sourceText": "System calls Azure Document Intelligence and receives raw text plus tables",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-036",
+      "domain": "invoice_scanning",
+      "sourceOrder": 36,
+      "sourceText": "System sends OCR text to Claude with a structured-extraction system prompt",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-037",
+      "domain": "invoice_scanning",
+      "sourceOrder": 37,
+      "sourceText": "Claude returns a typed JSON list of line items (producer, wine, vintage, qty, unit price, currency, format)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-038",
+      "domain": "invoice_scanning",
+      "sourceOrder": 38,
+      "sourceText": "System validates Claude's response with a Zod schema before any DB write",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-039",
+      "domain": "invoice_scanning",
+      "sourceOrder": 39,
+      "sourceText": "System rejects responses that fail validation and surfaces a user-readable error",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-040",
+      "domain": "invoice_scanning",
+      "sourceOrder": 40,
+      "sourceText": "System deduplicates accidental double-submits via the scan_idempotency table",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-041",
+      "domain": "invoice_scanning",
+      "sourceOrder": 41,
+      "sourceText": "System creates an invoice_scans row capturing OCR + extraction metadata",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-042",
+      "domain": "invoice_scanning",
+      "sourceOrder": 42,
+      "sourceText": "System upserts wines via find_or_create_wines_batch DB function",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-043",
+      "domain": "invoice_scanning",
+      "sourceOrder": 43,
+      "sourceText": "System creates inventory_items for each parsed line item linked to the scan",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-044",
+      "domain": "invoice_scanning",
+      "sourceOrder": 44,
+      "sourceText": "System enriches new wines against the LWIN catalog via match_lwin_batch",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-045",
+      "domain": "invoice_scanning",
+      "sourceOrder": 45,
+      "sourceText": "User can review extracted line items in a side-by-side view against the photo",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-046",
+      "domain": "invoice_scanning",
+      "sourceOrder": 46,
+      "sourceText": "User can edit a parsed line item before committing it to inventory",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-047",
+      "domain": "invoice_scanning",
+      "sourceOrder": 47,
+      "sourceText": "User can delete a parsed line item before committing",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-048",
+      "domain": "invoice_scanning",
+      "sourceOrder": 48,
+      "sourceText": "User can re-run extraction on a stored scan if Claude misread it",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-049",
+      "domain": "invoice_scanning",
+      "sourceOrder": 49,
+      "sourceText": "User can view the full history of past scans at /scans",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-050",
+      "domain": "invoice_scanning",
+      "sourceOrder": 50,
+      "sourceText": "User can drill into a single scan to see its image, OCR text, and resulting inventory",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-051",
+      "domain": "invoice_scanning",
+      "sourceOrder": 51,
+      "sourceText": "User can attach a delivery date and supplier name to a scan",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-052",
+      "domain": "invoice_scanning",
+      "sourceOrder": 52,
+      "sourceText": "System shows extraction confidence per line item when available",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-053",
+      "domain": "invoice_scanning",
+      "sourceOrder": 53,
+      "sourceText": "API returns 422 when no wines could be extracted from the image",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-054",
+      "domain": "invoice_scanning",
+      "sourceOrder": 54,
+      "sourceText": "API returns 429 when the user exceeds the per-minute scan rate limit",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-055",
+      "domain": "invoice_scanning",
+      "sourceOrder": 55,
+      "sourceText": "API rejects images larger than 10 MB",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-056",
+      "domain": "invoice_scanning",
+      "sourceOrder": 56,
+      "sourceText": "API rejects file types other than jpeg, png, heic, and pdf",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-057",
+      "domain": "bottle_scanning",
+      "sourceOrder": 57,
+      "sourceText": "User can scan an existing bottle's QR code via the /scan-bottle camera UI",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-058",
+      "domain": "bottle_scanning",
+      "sourceOrder": 58,
+      "sourceText": "System decodes the QR payload and looks up the wine by ID",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-059",
+      "domain": "bottle_scanning",
+      "sourceOrder": 59,
+      "sourceText": "User can confirm or correct the wine match",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-060",
+      "domain": "bottle_scanning",
+      "sourceOrder": 60,
+      "sourceText": "User can record the bottle's current section and bin location",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-061",
+      "domain": "bottle_scanning",
+      "sourceOrder": 61,
+      "sourceText": "System creates an inventory_items row when a new bottle is scanned in",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-062",
+      "domain": "bottle_scanning",
+      "sourceOrder": 62,
+      "sourceText": "System rejects QR codes that do not belong to the current restaurant",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-063",
+      "domain": "bottle_scanning",
+      "sourceOrder": 63,
+      "sourceText": "User can scan multiple bottles in rapid succession in a single session",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-064",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 64,
+      "sourceText": "User can view the full cellar inventory at /cellar grouped by section",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-065",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 65,
+      "sourceText": "User can search wines by producer, varietal, region, or vintage",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-066",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 66,
+      "sourceText": "User can filter wines by color (red, white, rose, sparkling, dessert, fortified)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-067",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 67,
+      "sourceText": "User can filter wines by region or country",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-068",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 68,
+      "sourceText": "User can filter wines by vintage range",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-069",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 69,
+      "sourceText": "User can sort wines by price, vintage, name, or quantity",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-070",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 70,
+      "sourceText": "User can drill into a single wine to see its full detail page",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-071",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 71,
+      "sourceText": "System displays current quantity, average cost, and last-purchase date per wine",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-072",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 72,
+      "sourceText": "System displays inventory by format (750ml, magnum, half, etc.)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-073",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 73,
+      "sourceText": "User can manually adjust a wine's quantity with a reason note",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-074",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 74,
+      "sourceText": "System logs every quantity adjustment as an availability_event",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-075",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 75,
+      "sourceText": "User can mark a wine as 86'd (unavailable) without deleting it",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-076",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 76,
+      "sourceText": "System auto-86s a wine when inventory hits zero via auto_eightysix_on_low_inventory",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-077",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 77,
+      "sourceText": "User can un-86 a wine when restocked",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-078",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 78,
+      "sourceText": "User can edit a wine's metadata (producer, name, region, varietal, vintage)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-079",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 79,
+      "sourceText": "User can attach tasting notes to a wine",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-080",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 80,
+      "sourceText": "User can attach a hero image to a wine in Supabase Storage",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-081",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 81,
+      "sourceText": "User can delete a wine if it has no historical pour or scan references",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-082",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 82,
+      "sourceText": "User can export the current cellar to CSV via /api/export",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-083",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 83,
+      "sourceText": "User can configure cellar sections (e.g., Reds by Region, Cult Cabs, By the Glass) at /cellar/config",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-084",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 84,
+      "sourceText": "User can reorder cellar sections via drag-and-drop (dnd-kit)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-085",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 85,
+      "sourceText": "System persists section order in cellar_config",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-086",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 86,
+      "sourceText": "User can move a wine between sections with drag-and-drop",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-087",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 87,
+      "sourceText": "User can bulk-assign wines to a section",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-088",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 88,
+      "sourceText": "System displays low-stock badges when quantity drops below a configurable threshold",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-089",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 89,
+      "sourceText": "System displays peak-window badges on wines entering or in their drink window",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-090",
+      "domain": "cellar_and_inventory",
+      "sourceOrder": 90,
+      "sourceText": "System surfaces wines past their peak window in a \"drink now\" filter",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-091",
+      "domain": "wine_intelligence",
+      "sourceOrder": 91,
+      "sourceText": "System computes a drink window (start year, peak year, end year) for each wine",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-092",
+      "domain": "wine_intelligence",
+      "sourceOrder": 92,
+      "sourceText": "System computes recommended serving temperature range per wine",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-093",
+      "domain": "wine_intelligence",
+      "sourceOrder": 93,
+      "sourceText": "System computes recommended decant time per wine",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-094",
+      "domain": "wine_intelligence",
+      "sourceOrder": 94,
+      "sourceText": "User can view drink-window guidance on each wine's detail page",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-095",
+      "domain": "wine_intelligence",
+      "sourceOrder": 95,
+      "sourceText": "User can override system-computed drink-window with manual values",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-096",
+      "domain": "wine_intelligence",
+      "sourceOrder": 96,
+      "sourceText": "System flags wines whose vintage falls outside their drink window with a visual cue",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-097",
+      "domain": "wine_intelligence",
+      "sourceOrder": 97,
+      "sourceText": "System enriches imported wines via enrich_wines_batch DB function",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-098",
+      "domain": "wine_intelligence",
+      "sourceOrder": 98,
+      "sourceText": "System batches Claude calls for enrichment to control cost",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-099",
+      "domain": "wine_intelligence",
+      "sourceOrder": 99,
+      "sourceText": "User can request a re-enrichment of a single wine",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-100",
+      "domain": "wine_intelligence",
+      "sourceOrder": 100,
+      "sourceText": "System falls back to LWIN catalog data when Claude has no opinion",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-101",
+      "domain": "wine_intelligence",
+      "sourceOrder": 101,
+      "sourceText": "System never overwrites a manually-set field during enrichment",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-102",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 102,
+      "sourceText": "User can create a new wine list at /lists with a name and description",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-103",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 103,
+      "sourceText": "User can publish or unpublish a wine list",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-104",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 104,
+      "sourceText": "User can set a wine list's slug for the public URL",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-105",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 105,
+      "sourceText": "System rejects slug collisions across the same restaurant",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-106",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 106,
+      "sourceText": "User can clone an existing wine list as a starting point",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-107",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 107,
+      "sourceText": "User can archive a wine list without deleting it",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-108",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 108,
+      "sourceText": "User can delete an archived wine list",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-109",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 109,
+      "sourceText": "User can add a section to a wine list (e.g., Reds, Whites, Champagne)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-110",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 110,
+      "sourceText": "User can rename a section",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-111",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 111,
+      "sourceText": "User can reorder sections via drag-and-drop",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-112",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 112,
+      "sourceText": "User can delete a section (cascades to its items with confirmation)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-113",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 113,
+      "sourceText": "User can add a wine to a section by searching the cellar",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-114",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 114,
+      "sourceText": "User can add a wine to multiple sections at once",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-115",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 115,
+      "sourceText": "User can reorder items within a section via drag-and-drop",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-116",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 116,
+      "sourceText": "System persists item order via reorder_wine_list_items DB function",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-117",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 117,
+      "sourceText": "User can override the public price per list item",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-118",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 118,
+      "sourceText": "User can override the display name per list item",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-119",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 119,
+      "sourceText": "User can attach a custom blurb per list item",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-120",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 120,
+      "sourceText": "User can hide a list item without removing it",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-121",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 121,
+      "sourceText": "User can preview a wine list as a guest would see it",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-122",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 122,
+      "sourceText": "System auto-removes 86'd wines from published lists (or marks them gray, configurable)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-123",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 123,
+      "sourceText": "User can publish a list to a public slug at /list/[slug]",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-124",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 124,
+      "sourceText": "System renders the public list with restaurant branding",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-125",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 125,
+      "sourceText": "System exposes wine_published_list_slugs for cross-list lookups",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-126",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 126,
+      "sourceText": "User can export a wine list as a print-ready PDF via /api/pdf",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-127",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 127,
+      "sourceText": "System generates the PDF via Puppeteer headless Chrome",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-128",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 128,
+      "sourceText": "User can download a wine list as CSV",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-129",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 129,
+      "sourceText": "User can share the public list URL via the share sheet on mobile",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-130",
+      "domain": "wine_lists_editor",
+      "sourceOrder": 130,
+      "sourceText": "User can copy the public list URL with one click",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-131",
+      "domain": "public_wine_list",
+      "sourceOrder": 131,
+      "sourceText": "Guest can view a published wine list at /list/[slug] without logging in",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-132",
+      "domain": "public_wine_list",
+      "sourceOrder": 132,
+      "sourceText": "System renders the list mobile-first with large touch targets",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-133",
+      "domain": "public_wine_list",
+      "sourceOrder": 133,
+      "sourceText": "System displays the restaurant's name and optional logo at top",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-134",
+      "domain": "public_wine_list",
+      "sourceOrder": 134,
+      "sourceText": "System groups wines by section in the configured order",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-135",
+      "domain": "public_wine_list",
+      "sourceOrder": 135,
+      "sourceText": "System shows price, vintage, and producer for each wine",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-136",
+      "domain": "public_wine_list",
+      "sourceOrder": 136,
+      "sourceText": "System hides 86'd wines or marks them visibly unavailable per restaurant config",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-137",
+      "domain": "public_wine_list",
+      "sourceOrder": 137,
+      "sourceText": "System renders a printable view at /list/[slug]/print",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-138",
+      "domain": "public_wine_list",
+      "sourceOrder": 138,
+      "sourceText": "System sets cache-control headers appropriate for a public page",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-139",
+      "domain": "public_wine_list",
+      "sourceOrder": 139,
+      "sourceText": "System returns 404 for unpublished or nonexistent slugs",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-140",
+      "domain": "public_wine_list",
+      "sourceOrder": 140,
+      "sourceText": "Guest can switch between multiple published lists if the restaurant has them",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-141",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 141,
+      "sourceText": "Staff can record a pour from /cellar against a specific bottle",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-142",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 142,
+      "sourceText": "System opens a new bottle if none is currently open for the wine + format",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-143",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 143,
+      "sourceText": "System decrements the open bottle's remaining ounces by the pour amount",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-144",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 144,
+      "sourceText": "System closes a bottle automatically when remaining drops below a threshold",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-145",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 145,
+      "sourceText": "System creates a pour_events row for every pour",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-146",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 146,
+      "sourceText": "System maintains the open_bottles table via pour_events_maintain_open_bottle trigger",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-147",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 147,
+      "sourceText": "User can cancel/undo the most recent pour",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-148",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 148,
+      "sourceText": "User can view all currently open bottles at /cellar/open",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-149",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 149,
+      "sourceText": "User can manually open a bottle without recording a pour (e.g., for tasting)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-150",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 150,
+      "sourceText": "User can manually close an open bottle and discard remaining",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-151",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 151,
+      "sourceText": "System exposes record_pour DB function as the only write path for pours",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-152",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 152,
+      "sourceText": "System rejects pours when no inventory remains",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-153",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 153,
+      "sourceText": "User can configure default pour sizes per format (e.g., 5oz red glass)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-154",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 154,
+      "sourceText": "User can record a pour in a custom amount",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-155",
+      "domain": "pour_and_open_bottles",
+      "sourceOrder": 155,
+      "sourceText": "User can attach a note to a pour event",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-156",
+      "domain": "reconciliation",
+      "sourceOrder": 156,
+      "sourceText": "Manager can run end-of-shift reconciliation at /cellar/reconcile",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-157",
+      "domain": "reconciliation",
+      "sourceOrder": 157,
+      "sourceText": "System lists every open bottle with its tracked remaining volume",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-158",
+      "domain": "reconciliation",
+      "sourceOrder": 158,
+      "sourceText": "User can enter the actual remaining volume for each open bottle",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-159",
+      "domain": "reconciliation",
+      "sourceOrder": 159,
+      "sourceText": "System computes variance and persists adjustments via reconcile_open_bottle",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-160",
+      "domain": "reconciliation",
+      "sourceOrder": 160,
+      "sourceText": "User can reconcile all open bottles in one batch via reconcile_open_bottles_batch",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-161",
+      "domain": "reconciliation",
+      "sourceOrder": 161,
+      "sourceText": "System logs each reconciliation as an availability_event with the manager's user ID",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-162",
+      "domain": "reconciliation",
+      "sourceOrder": 162,
+      "sourceText": "System highlights variances exceeding a configurable threshold",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-163",
+      "domain": "reconciliation",
+      "sourceOrder": 163,
+      "sourceText": "User can view reconciliation history with variance trends",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-164",
+      "domain": "reconciliation",
+      "sourceOrder": 164,
+      "sourceText": "System enforces manager-or-owner role for reconciliation writes",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-165",
+      "domain": "price_comparison",
+      "sourceOrder": 165,
+      "sourceText": "User can view market price comparisons for a wine at /price-comparison",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-166",
+      "domain": "price_comparison",
+      "sourceOrder": 166,
+      "sourceText": "System displays the wine's last-paid price next to indicative market data",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-167",
+      "domain": "price_comparison",
+      "sourceOrder": 167,
+      "sourceText": "User can flag a wine as overpaid for follow-up",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-168",
+      "domain": "price_comparison",
+      "sourceOrder": 168,
+      "sourceText": "User can sort the price-comparison view by variance percentage",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-169",
+      "domain": "price_comparison",
+      "sourceOrder": 169,
+      "sourceText": "System highlights wines whose market price has shifted by more than a configurable percent",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-170",
+      "domain": "insights_and_analytics",
+      "sourceOrder": 170,
+      "sourceText": "User can view restaurant-level analytics at /insights",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-171",
+      "domain": "insights_and_analytics",
+      "sourceOrder": 171,
+      "sourceText": "System shows total inventory value at current cost",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-172",
+      "domain": "insights_and_analytics",
+      "sourceOrder": 172,
+      "sourceText": "System shows pour volume by section over a selectable date range",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-173",
+      "domain": "insights_and_analytics",
+      "sourceOrder": 173,
+      "sourceText": "System shows top-N wines by pour count",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-174",
+      "domain": "insights_and_analytics",
+      "sourceOrder": 174,
+      "sourceText": "System shows top-N wines by revenue (price * pours)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-175",
+      "domain": "insights_and_analytics",
+      "sourceOrder": 175,
+      "sourceText": "System shows wines aging past their drink window",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-176",
+      "domain": "insights_and_analytics",
+      "sourceOrder": 176,
+      "sourceText": "System shows scan throughput (invoices processed per week)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-177",
+      "domain": "insights_and_analytics",
+      "sourceOrder": 177,
+      "sourceText": "System shows extraction accuracy (auto-accepted vs. corrected line items)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-178",
+      "domain": "insights_and_analytics",
+      "sourceOrder": 178,
+      "sourceText": "User can change the date range with a quick selector (7d, 30d, 90d, YTD, custom)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-179",
+      "domain": "insights_and_analytics",
+      "sourceOrder": 179,
+      "sourceText": "User can export an insights view as CSV",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-180",
+      "domain": "api_layer",
+      "sourceOrder": 180,
+      "sourceText": "GET /api/health returns 200 with a JSON liveness payload",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-181",
+      "domain": "api_layer",
+      "sourceOrder": 181,
+      "sourceText": "GET /api/cellar returns the authenticated user's cellar",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-182",
+      "domain": "api_layer",
+      "sourceOrder": 182,
+      "sourceText": "POST /api/cellar adds a wine to the cellar",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-183",
+      "domain": "api_layer",
+      "sourceOrder": 183,
+      "sourceText": "PATCH /api/cellar/[id] updates a wine",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-184",
+      "domain": "api_layer",
+      "sourceOrder": 184,
+      "sourceText": "DELETE /api/cellar/[id] removes a wine (rejects when references exist)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-185",
+      "domain": "api_layer",
+      "sourceOrder": 185,
+      "sourceText": "GET /api/wines returns wines with pagination and filtering",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-186",
+      "domain": "api_layer",
+      "sourceOrder": 186,
+      "sourceText": "GET /api/wines/[id] returns a single wine with enrichment data",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-187",
+      "domain": "api_layer",
+      "sourceOrder": 187,
+      "sourceText": "POST /api/scan submits a stored image for OCR + extraction",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-188",
+      "domain": "api_layer",
+      "sourceOrder": 188,
+      "sourceText": "GET /api/scans lists past scans for the current restaurant",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-189",
+      "domain": "api_layer",
+      "sourceOrder": 189,
+      "sourceText": "GET /api/scans/[id] returns a single scan with line items",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-190",
+      "domain": "api_layer",
+      "sourceOrder": 190,
+      "sourceText": "POST /api/scan-bottle decodes a QR code and resolves the wine",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-191",
+      "domain": "api_layer",
+      "sourceOrder": 191,
+      "sourceText": "GET /api/inventory returns aggregate inventory data",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-192",
+      "domain": "api_layer",
+      "sourceOrder": 192,
+      "sourceText": "POST /api/pour records a pour event",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-193",
+      "domain": "api_layer",
+      "sourceOrder": 193,
+      "sourceText": "POST /api/reconcile reconciles one or more open bottles",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-194",
+      "domain": "api_layer",
+      "sourceOrder": 194,
+      "sourceText": "GET /api/wine-lists returns lists for the restaurant",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-195",
+      "domain": "api_layer",
+      "sourceOrder": 195,
+      "sourceText": "POST /api/wine-lists creates a new list",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-196",
+      "domain": "api_layer",
+      "sourceOrder": 196,
+      "sourceText": "PATCH /api/wine-lists/[id] updates a list",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-197",
+      "domain": "api_layer",
+      "sourceOrder": 197,
+      "sourceText": "DELETE /api/wine-lists/[id] archives a list",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-198",
+      "domain": "api_layer",
+      "sourceOrder": 198,
+      "sourceText": "GET /api/wine-list-sections returns sections for a list",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-199",
+      "domain": "api_layer",
+      "sourceOrder": 199,
+      "sourceText": "POST /api/wine-list-sections creates a section",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-200",
+      "domain": "api_layer",
+      "sourceOrder": 200,
+      "sourceText": "PATCH /api/wine-list-sections/[id] reorders or renames a section",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-201",
+      "domain": "api_layer",
+      "sourceOrder": 201,
+      "sourceText": "GET /api/wine-list-items returns items for a section",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-202",
+      "domain": "api_layer",
+      "sourceOrder": 202,
+      "sourceText": "POST /api/wine-list-items adds a wine to a section",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-203",
+      "domain": "api_layer",
+      "sourceOrder": 203,
+      "sourceText": "PATCH /api/wine-list-items/[id] updates an item override",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-204",
+      "domain": "api_layer",
+      "sourceOrder": 204,
+      "sourceText": "GET /api/insights returns aggregate metrics for the restaurant",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-205",
+      "domain": "api_layer",
+      "sourceOrder": 205,
+      "sourceText": "GET /api/restaurant returns restaurant metadata",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-206",
+      "domain": "api_layer",
+      "sourceOrder": 206,
+      "sourceText": "PATCH /api/restaurant updates restaurant metadata",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-207",
+      "domain": "api_layer",
+      "sourceOrder": 207,
+      "sourceText": "GET /api/team returns memberships and pending invitations",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-208",
+      "domain": "api_layer",
+      "sourceOrder": 208,
+      "sourceText": "POST /api/team invites a new member",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-209",
+      "domain": "api_layer",
+      "sourceOrder": 209,
+      "sourceText": "DELETE /api/team/[membership_id] revokes membership",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-210",
+      "domain": "api_layer",
+      "sourceOrder": 210,
+      "sourceText": "POST /api/pdf generates a print-ready PDF for a wine list",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-211",
+      "domain": "api_layer",
+      "sourceOrder": 211,
+      "sourceText": "GET /api/export streams a CSV export",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-212",
+      "domain": "api_layer",
+      "sourceOrder": 212,
+      "sourceText": "All write endpoints validate input with Zod and return 400 on invalid bodies",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-213",
+      "domain": "api_layer",
+      "sourceOrder": 213,
+      "sourceText": "All endpoints return a consistent error envelope shape",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-214",
+      "domain": "api_layer",
+      "sourceOrder": 214,
+      "sourceText": "All endpoints return 401 for unauthenticated requests",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-215",
+      "domain": "api_layer",
+      "sourceOrder": 215,
+      "sourceText": "All endpoints return 403 for cross-restaurant access attempts",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-216",
+      "domain": "api_layer",
+      "sourceOrder": 216,
+      "sourceText": "All endpoints return 404 for missing resources rather than leaking existence",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-217",
+      "domain": "api_layer",
+      "sourceOrder": 217,
+      "sourceText": "All endpoints return 429 when per-user rate limits are exceeded",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-218",
+      "domain": "user_interface",
+      "sourceOrder": 218,
+      "sourceText": "UI is responsive at the iPhone 14/15 baseline (390×844) per project mobile-parity rule",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-219",
+      "domain": "user_interface",
+      "sourceOrder": 219,
+      "sourceText": "UI is responsive on tablet (768px width)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-220",
+      "domain": "user_interface",
+      "sourceOrder": 220,
+      "sourceText": "UI is responsive on desktop (1280px+)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-221",
+      "domain": "user_interface",
+      "sourceOrder": 221,
+      "sourceText": "UI uses Tailwind v4 utility classes only",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-222",
+      "domain": "user_interface",
+      "sourceOrder": 222,
+      "sourceText": "UI uses CVA-driven component variants for consistency",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-223",
+      "domain": "user_interface",
+      "sourceOrder": 223,
+      "sourceText": "UI uses lucide-react icons exclusively",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-224",
+      "domain": "user_interface",
+      "sourceOrder": 224,
+      "sourceText": "UI surfaces a floating action button on mobile authed views",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-225",
+      "domain": "user_interface",
+      "sourceOrder": 225,
+      "sourceText": "UI shows an onboarding modal on first login until dismissed",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-226",
+      "domain": "user_interface",
+      "sourceOrder": 226,
+      "sourceText": "UI shows loading skeletons during async fetches",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-227",
+      "domain": "user_interface",
+      "sourceOrder": 227,
+      "sourceText": "UI shows toast notifications for write actions",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-228",
+      "domain": "user_interface",
+      "sourceOrder": 228,
+      "sourceText": "UI handles errors gracefully with user-readable messages",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-229",
+      "domain": "user_interface",
+      "sourceOrder": 229,
+      "sourceText": "UI hides destructive actions behind a confirm dialog",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-230",
+      "domain": "user_interface",
+      "sourceOrder": 230,
+      "sourceText": "UI persists drag-and-drop reorders optimistically with rollback on error",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-231",
+      "domain": "user_interface",
+      "sourceOrder": 231,
+      "sourceText": "UI surfaces auth state via the settings dropdown in the header",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-232",
+      "domain": "user_interface",
+      "sourceOrder": 232,
+      "sourceText": "UI prevents double-submission on slow network by disabling submit buttons mid-request",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-233",
+      "domain": "user_interface",
+      "sourceOrder": 233,
+      "sourceText": "UI works offline-tolerant for read-only views via Next.js caching",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-234",
+      "domain": "user_interface",
+      "sourceOrder": 234,
+      "sourceText": "UI keeps touch targets at or above 44px",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-235",
+      "domain": "database_constraints_and_functions",
+      "sourceOrder": 235,
+      "sourceText": "Migrations are forward-only (downs:check enforces in CI)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-236",
+      "domain": "database_constraints_and_functions",
+      "sourceOrder": 236,
+      "sourceText": "schema.snapshot.sql is regenerated on every schema change (snapshot:check enforces in CI)",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-237",
+      "domain": "database_constraints_and_functions",
+      "sourceOrder": 237,
+      "sourceText": "set_updated_at trigger keeps updated_at in sync on row updates",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-238",
+      "domain": "database_constraints_and_functions",
+      "sourceOrder": 238,
+      "sourceText": "handle_new_user trigger creates a profile row on auth signup",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-239",
+      "domain": "database_constraints_and_functions",
+      "sourceOrder": 239,
+      "sourceText": "find_or_create_wine and find_or_create_wines_batch upsert wines idempotently",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-240",
+      "domain": "database_constraints_and_functions",
+      "sourceOrder": 240,
+      "sourceText": "generate_slug produces unique slugs for wine lists",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-241",
+      "domain": "database_constraints_and_functions",
+      "sourceOrder": 241,
+      "sourceText": "match_lwin and match_lwin_batch enrich wines from LWIN catalog",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-242",
+      "domain": "database_constraints_and_functions",
+      "sourceOrder": 242,
+      "sourceText": "lwin_search exposes Postgres full-text search over the catalog",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-243",
+      "domain": "database_constraints_and_functions",
+      "sourceOrder": 243,
+      "sourceText": "cleanup_scan_idempotency periodically clears stale idempotency keys",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-244",
+      "domain": "database_constraints_and_functions",
+      "sourceOrder": 244,
+      "sourceText": "record_pour is the canonical pour-write entry point",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-245",
+      "domain": "database_constraints_and_functions",
+      "sourceOrder": 245,
+      "sourceText": "reconcile_open_bottle and reconcile_open_bottles_batch settle inventory",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-246",
+      "domain": "database_constraints_and_functions",
+      "sourceOrder": 246,
+      "sourceText": "auto_eightysix_on_low_inventory flips availability when stock hits zero",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-247",
+      "domain": "database_constraints_and_functions",
+      "sourceOrder": 247,
+      "sourceText": "enrich_wines_batch performs AI enrichment in a single DB-coordinated batch",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-248",
+      "domain": "database_constraints_and_functions",
+      "sourceOrder": 248,
+      "sourceText": "All RLS policies route through is_member or is_member_with_role",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-249",
+      "domain": "observability_and_ops",
+      "sourceOrder": 249,
+      "sourceText": "Sentry captures server-side errors via instrumentation.ts",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-250",
+      "domain": "observability_and_ops",
+      "sourceOrder": 250,
+      "sourceText": "Sentry captures client-side errors via instrumentation-client.ts",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-251",
+      "domain": "observability_and_ops",
+      "sourceOrder": 251,
+      "sourceText": "Sentry captures edge-runtime errors via sentry.edge.config.ts",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-252",
+      "domain": "observability_and_ops",
+      "sourceOrder": 252,
+      "sourceText": "global-error.tsx renders a Sentry-reported error boundary at the root",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-253",
+      "domain": "observability_and_ops",
+      "sourceOrder": 253,
+      "sourceText": "Source maps upload to Sentry on Railway deploy",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-254",
+      "domain": "observability_and_ops",
+      "sourceOrder": 254,
+      "sourceText": "GET /api/health returns a JSON payload usable by Railway health checks",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-255",
+      "domain": "observability_and_ops",
+      "sourceOrder": 255,
+      "sourceText": "Railway deploy is driven by railway.toml at repo root",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-256",
+      "domain": "observability_and_ops",
+      "sourceOrder": 256,
+      "sourceText": "pnpm build produces a standalone Next.js production build",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-257",
+      "domain": "observability_and_ops",
+      "sourceOrder": 257,
+      "sourceText": "pnpm start serves the built app on the configured Railway port",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-258",
+      "domain": "testing_quality",
+      "sourceOrder": 258,
+      "sourceText": "Vitest runs unit tests with happy-dom environment",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-259",
+      "domain": "testing_quality",
+      "sourceOrder": 259,
+      "sourceText": "Vitest tests cover route handler logic for cellar, scan, pour, reconcile, wine-lists",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-260",
+      "domain": "testing_quality",
+      "sourceOrder": 260,
+      "sourceText": "Vitest tests cover Zod schemas for OCR-extraction validation",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-261",
+      "domain": "testing_quality",
+      "sourceOrder": 261,
+      "sourceText": "Vitest tests cover LWIN matching and slug generation",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-262",
+      "domain": "testing_quality",
+      "sourceOrder": 262,
+      "sourceText": "Playwright covers the invoice-scan happy path end-to-end",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-263",
+      "domain": "testing_quality",
+      "sourceOrder": 263,
+      "sourceText": "Playwright covers the pour + reconcile end-to-end",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-264",
+      "domain": "testing_quality",
+      "sourceOrder": 264,
+      "sourceText": "Playwright covers wine-list publish + public-view end-to-end",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-265",
+      "domain": "testing_quality",
+      "sourceOrder": 265,
+      "sourceText": "Playwright covers team invite + accept end-to-end",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-266",
+      "domain": "testing_quality",
+      "sourceOrder": 266,
+      "sourceText": "ESLint 9 flat config enforces lint cleanliness",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-267",
+      "domain": "testing_quality",
+      "sourceOrder": 267,
+      "sourceText": "TypeScript strict mode enforces type safety",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-268",
+      "domain": "testing_quality",
+      "sourceOrder": 268,
+      "sourceText": "pnpm types:check verifies Supabase types are in sync",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    },
+    {
+      "id": "TER-CF-269",
+      "domain": "testing_quality",
+      "sourceOrder": 269,
+      "sourceText": "pnpm snapshot:check verifies schema snapshot is in sync",
+      "status": "active",
+      "evidenceOwner": "unassigned"
+    }
+  ]
+}
