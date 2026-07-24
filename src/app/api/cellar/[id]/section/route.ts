@@ -3,10 +3,14 @@ import * as Sentry from "@sentry/nextjs";
 import { requireRole } from "@/lib/api/auth";
 import { z } from "zod";
 import { Errors } from "@/lib/api/errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { parseJson, parseParams } from "@/lib/api/validation";
 
 export const runtime = "nodejs";
 
 type Params = Promise<{ id: string }>;
+
+const ParamsSchema = z.strictObject({ id: z.string().uuid() });
 
 const SectionSchema = z.object({
   section: z.string().trim().min(1).max(100),
@@ -23,52 +27,47 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Params },
 ) {
-  const { id: wineId } = await params;
-  const auth = await requireRole(["owner", "manager"]);
-  if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return withApiHandler(async () => {
+    const auth = await requireRole(["owner", "manager"]);
+    if (auth instanceof NextResponse) return auth;
+    const { supabase, restaurantId } = auth;
 
-  // Verify the wine belongs to this restaurant
-  const { data: wine } = await supabase
-    .from("wines")
-    .select("id")
-    .eq("id", wineId)
-    .eq("restaurant_id", restaurantId)
-    .single();
+    const parsedParams = await parseParams(params, ParamsSchema);
+    if (!parsedParams.ok) return parsedParams.response;
+    const { id: wineId } = parsedParams.data;
 
-  if (!wine) {
-    return Errors.notFound("Wine");
-  }
+    const parsed = await parseJson(request, SectionSchema);
+    if (!parsed.ok) return parsed.response;
+    const { section } = parsed.data;
 
-  let raw: unknown;
-  try {
-    raw = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
+    // Verify the wine belongs to this restaurant
+    const { data: wine } = await supabase
+      .from("wines")
+      .select("id")
+      .eq("id", wineId)
+      .eq("restaurant_id", restaurantId)
+      .single();
 
-  const parsed = SectionSchema.safeParse(raw);
-  if (!parsed.success) {
-    return Errors.validation(parsed.error.issues, "Invalid input.");
-  }
+    if (!wine) {
+      return Errors.notFound("Wine");
+    }
 
-  const { section } = parsed.data;
+    // Update all inventory_items for this wine
+    const { error } = await supabase
+      .from("inventory_items")
+      .update({ section })
+      .eq("wine_id", wineId)
+      .eq("restaurant_id", restaurantId);
 
-  // Update all inventory_items for this wine
-  const { error } = await supabase
-    .from("inventory_items")
-    .update({ section })
-    .eq("wine_id", wineId)
-    .eq("restaurant_id", restaurantId);
+    if (error) {
+      console.error("inventory_items section update failed:", error);
+      Sentry.captureException(error, {
+        tags: { surface: "cellar", phase: "update-section" },
+        extra: { restaurantId, wineId, section },
+      });
+      return Errors.internal("Failed to update section.");
+    }
 
-  if (error) {
-    console.error("inventory_items section update failed:", error);
-    Sentry.captureException(error, {
-      tags: { surface: "cellar", phase: "update-section" },
-      extra: { restaurantId, wineId, section },
-    });
-    return Errors.internal("Failed to update section.");
-  }
-
-  return NextResponse.json({ wine_id: wineId, section });
+    return NextResponse.json({ wine_id: wineId, section });
+  });
 }
