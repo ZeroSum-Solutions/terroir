@@ -1,8 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AlertTriangle, Grid2x2, Loader2, X, Wine } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+  readApiErrorCode,
+  shouldRetainIdempotencyKey,
+} from "@/lib/api/idempotency-client";
 
 type CellarConfig = {
   id: string;
@@ -28,23 +35,107 @@ const CELL_SIZE = 48;
 const GAP = 4;
 const LABEL_OFFSET = 28;
 
+const createCellarCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence(
+    "terroir:cellar-config:create",
+  ),
+});
+
+function configMatchesGrid(
+  config: unknown,
+  rows: number,
+  columns: number,
+) {
+  return (
+    !!config &&
+    typeof config === "object" &&
+    (config as { rows?: unknown }).rows === rows &&
+    (config as { columns?: unknown }).columns === columns
+  );
+}
+
+async function reconcileCellarGrid(rows: number, columns: number) {
+  try {
+    const response = await fetch("/api/cellar/config");
+    const data = await response.json();
+    return response.ok && configMatchesGrid(data, rows, columns);
+  } catch {
+    return false;
+  }
+}
+
 export function CellarSetup({ restaurantName: _restaurantName }: { restaurantName: string }) {
   const router = useRouter();
   const [setupRows, setSetupRows] = useState(10);
   const [setupCols, setSetupCols] = useState(10);
   const [creating, setCreating] = useState(false);
+  const creatingRef = useRef(false);
+  const [error, setError] = useState<string | null>(null);
 
   const createCellar = async () => {
+    if (creatingRef.current) return;
+    creatingRef.current = true;
     setCreating(true);
-    const res = await fetch("/api/cellar/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows: setupRows, columns: setupCols }),
-    });
-    if (res.ok) {
-      router.refresh();
+    setError(null);
+    try {
+      let result: { response: Response; data: unknown };
+      try {
+        result = await createCellarCommands.json<unknown>({
+          slot: "cellar-config:create",
+          url: "/api/cellar/config",
+          method: "POST",
+          json: { rows: setupRows, columns: setupCols },
+        });
+      } catch (caught) {
+        if (await reconcileCellarGrid(setupRows, setupCols)) {
+          createCellarCommands.abandon("cellar-config:create");
+          router.refresh();
+          return;
+        }
+        throw caught;
+      }
+
+      const { response, data } = result;
+      if (response.ok) {
+        if (
+          !configMatchesGrid(data, setupRows, setupCols) &&
+          !(await reconcileCellarGrid(setupRows, setupCols))
+        ) {
+          throw new Error(
+            "The server returned an invalid cellar configuration.",
+          );
+        }
+        createCellarCommands.abandon("cellar-config:create");
+        router.refresh();
+        return;
+      }
+
+      if (
+        shouldRetainIdempotencyKey(
+          response.status,
+          readApiErrorCode(data),
+        ) &&
+        (await reconcileCellarGrid(setupRows, setupCols))
+      ) {
+        createCellarCommands.abandon("cellar-config:create");
+        router.refresh();
+        return;
+      }
+
+      throw new Error(
+        readApiError(
+          data,
+          `Failed to create cellar configuration (${response.status}).`,
+        ).message,
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Failed to create cellar.",
+      );
+    } finally {
+      creatingRef.current = false;
+      setCreating(false);
     }
-    setCreating(false);
   };
 
   return (
@@ -73,6 +164,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
             min={1}
             max={26}
             value={setupRows}
+            disabled={creating}
             onChange={(e) =>
               setSetupRows(Math.max(1, Math.min(26, +e.target.value)))
             }
@@ -88,6 +180,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
             min={1}
             max={30}
             value={setupCols}
+            disabled={creating}
             onChange={(e) =>
               setSetupCols(Math.max(1, Math.min(30, +e.target.value)))
             }
@@ -106,6 +199,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
           <button
             key={preset.label}
             type="button"
+            disabled={creating}
             onClick={() => {
               setSetupRows(preset.r);
               setSetupCols(preset.c);
@@ -121,9 +215,15 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
         ))}
       </div>
 
+      {error && (
+        <p className="mb-md text-[13px] text-danger" role="alert">
+          {error}
+        </p>
+      )}
+
       <button
         type="button"
-        onClick={createCellar}
+        onClick={() => void createCellar()}
         disabled={creating}
         className="flex h-[38px] w-full items-center justify-center gap-xs rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
       >

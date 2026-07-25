@@ -255,4 +255,54 @@ describe("high-risk idempotency clients", () => {
     expect(reconcile).toContain("disabled={saving}");
     expect(reconcile).toContain("readApiError(");
   });
+
+  it("persists guarded cellar creation and reconciles ambiguous outcomes", () => {
+    const grid = source(
+      "src/app/(app)/cellar/cellar-grid.tsx",
+    );
+
+    expect(grid).toContain("createIdempotentCommandStore");
+    expect(grid).toContain(
+      '"terroir:cellar-config:create"',
+    );
+    expect(grid.indexOf("const createCellarCommands")).toBeLessThan(
+      grid.indexOf("export function CellarSetup"),
+    );
+    expect(grid).toContain("if (creatingRef.current) return");
+    expect(grid).toContain("creatingRef.current = true");
+    expect(grid).toContain('slot: "cellar-config:create"');
+    expect(grid).toContain('url: "/api/cellar/config"');
+    expect(grid).toContain('method: "POST"');
+    expect(grid).toContain("shouldRetainIdempotencyKey(");
+    expect(grid).toContain("reconcileCellarGrid(");
+    expect(grid).toContain("readApiError(");
+  });
+
+  it("persists guarded section-config edits without clearing unsent input", () => {
+    const page = source(
+      "src/app/(app)/cellar/config/page.tsx",
+    );
+
+    expect(page).toContain("createIdempotentCommandStore");
+    expect(page).toContain(
+      '"terroir:cellar-config:sections"',
+    );
+    expect(page.indexOf("const cellarConfigCommands")).toBeLessThan(
+      page.indexOf("export default function CellarConfigPage"),
+    );
+    expect(page).toContain(
+      "if (busyRef.current || !configurationReadable) return false",
+    );
+    expect(page).toContain("busyRef.current = true");
+    expect(page).toContain('slot: "cellar-config:sections"');
+    expect(page).toContain('url: "/api/cellar/config"');
+    expect(page).toContain('method: "PATCH"');
+    expect(page).toContain("shouldRetainIdempotencyKey(");
+    expect(page).toContain("reconcileSections(");
+    expect(page).toContain("readApiError(");
+    expect(page).toContain("setSections(reordered)");
+    expect(page).toContain("if (!saved) setSections(sections)");
+    expect(page).toContain("if (saved) {");
+    expect(page).toContain('setNewName("")');
+  });
 });

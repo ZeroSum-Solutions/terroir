@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Pencil, Trash2, Check, X, GripVertical } from "lucide-react";
 import {
@@ -18,9 +24,22 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+  readApiErrorCode,
+  shouldRetainIdempotencyKey,
+} from "@/lib/api/idempotency-client";
 import { cn } from "@/lib/utils";
 
 type Section = { id: string; name: string };
+
+const cellarConfigCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence(
+    "terroir:cellar-config:sections",
+  ),
+});
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -33,6 +52,74 @@ function arrayMove<T>(array: T[], from: number, to: number): T[] {
   return result;
 }
 
+function readSections(config: unknown): Section[] | null {
+  if (config === null) return [];
+  if (!config || typeof config !== "object") return null;
+  const labels = (config as { labels?: unknown }).labels;
+  if (labels === null || labels === undefined) return [];
+  if (typeof labels !== "object" || Array.isArray(labels)) return null;
+  const candidate = (labels as { sections?: unknown }).sections;
+  if (candidate === undefined) return [];
+  if (!Array.isArray(candidate)) return null;
+  const sections: Section[] = [];
+  for (const section of candidate) {
+    if (
+      !section ||
+      typeof section !== "object" ||
+      typeof (section as { id?: unknown }).id !== "string" ||
+      typeof (section as { name?: unknown }).name !== "string"
+    ) {
+      return null;
+    }
+    sections.push({
+      id: (section as { id: string }).id,
+      name: (section as { name: string }).name,
+    });
+  }
+  return sections;
+}
+
+function sectionsEqual(left: readonly Section[], right: readonly Section[]) {
+  return (
+    left.length === right.length &&
+    left.every(
+      (section, index) =>
+        section.id === right[index]?.id &&
+        section.name === right[index]?.name,
+    )
+  );
+}
+
+function configMatchesSections(
+  config: unknown,
+  expected: readonly Section[],
+): boolean {
+  if (!config || typeof config !== "object") return false;
+  const sections = readSections(config);
+  if (!sections || !sectionsEqual(sections, expected)) return false;
+  const labels = (config as { labels?: unknown }).labels as
+    | { section_order?: unknown }
+    | undefined;
+  return (
+    Array.isArray(labels?.section_order) &&
+    labels.section_order.length === expected.length &&
+    labels.section_order.every(
+      (id, index) =>
+        typeof id === "string" && id === expected[index]?.id,
+    )
+  );
+}
+
+async function reconcileSections(expected: readonly Section[]) {
+  try {
+    const response = await fetch("/api/cellar/config");
+    const data = await response.json();
+    return response.ok && configMatchesSections(data, expected);
+  } catch {
+    return false;
+  }
+}
+
 export default function CellarConfigPage() {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -41,6 +128,10 @@ export default function CellarConfigPage() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [configurationReadable, setConfigurationReadable] =
+    useState(false);
+  const busyRef = useRef(false);
+  const pendingAddRef = useRef<Section | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -59,13 +150,23 @@ export default function CellarConfigPage() {
 
     async function loadConfig() {
       try {
-        const res = await fetch("/api/cellar/config");
-        if (!res.ok) throw new Error("Failed to load config.");
-        const config = await res.json();
-        if (cancelled) return;
-        if (config?.labels?.sections && Array.isArray(config.labels.sections)) {
-          setSections(config.labels.sections);
+        const response = await fetch("/api/cellar/config");
+        const config = await response.json();
+        if (!response.ok) {
+          throw new Error(
+            readApiError(config, "Failed to load config.").message,
+          );
         }
+        if (cancelled) return;
+        const loadedSections = readSections(config);
+        if (!loadedSections) {
+          throw new Error(
+            "The stored cellar configuration is invalid and cannot be edited.",
+          );
+        }
+        setSections(loadedSections);
+        setConfigurationReadable(true);
+        setError(null);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load.");
@@ -82,50 +183,104 @@ export default function CellarConfigPage() {
   }, []);
 
   const save = useCallback(
-    async (updated: Section[]) => {
+    async (updated: Section[]): Promise<boolean> => {
+      if (busyRef.current || !configurationReadable) return false;
+      busyRef.current = true;
       setBusy(true);
       setError(null);
       try {
-        const res = await fetch("/api/cellar/config", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sections: updated,
-            section_order: updated.map((s) => s.id),
-          }),
-        });
-        if (!res.ok) {
-          const payload = await res.json().catch(() => null);
-          throw new Error(
-            (payload as { error?: string })?.error ?? "Failed to save.",
-          );
+        let result: { response: Response; data: unknown };
+        try {
+          result = await cellarConfigCommands.json<unknown>({
+            slot: "cellar-config:sections",
+            url: "/api/cellar/config",
+            method: "PATCH",
+            json: {
+              sections: updated,
+              section_order: updated.map((section) => section.id),
+            },
+          });
+        } catch (caught) {
+          if (await reconcileSections(updated)) {
+            cellarConfigCommands.abandon("cellar-config:sections");
+            setSections(updated);
+            startTransition(() => router.refresh());
+            return true;
+          }
+          throw caught;
         }
-        setSections(updated);
-        startTransition(() => router.refresh());
+
+        const { response, data } = result;
+        if (response.ok) {
+          if (
+            !configMatchesSections(data, updated) &&
+            !(await reconcileSections(updated))
+          ) {
+            throw new Error(
+              "The server returned an invalid cellar configuration.",
+            );
+          }
+          cellarConfigCommands.abandon("cellar-config:sections");
+          setSections(updated);
+          startTransition(() => router.refresh());
+          return true;
+        }
+
+        if (
+          shouldRetainIdempotencyKey(
+            response.status,
+            readApiErrorCode(data),
+          ) &&
+          (await reconcileSections(updated))
+        ) {
+          cellarConfigCommands.abandon("cellar-config:sections");
+          setSections(updated);
+          startTransition(() => router.refresh());
+          return true;
+        }
+
+        throw new Error(
+          readApiError(
+            data,
+            `Failed to save cellar configuration (${response.status}).`,
+          ).message,
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Save failed.");
+        return false;
       } finally {
+        busyRef.current = false;
         setBusy(false);
       }
     },
-    [router],
+    [configurationReadable, router, startTransition],
   );
 
-  const addSection = useCallback(() => {
+  const addSection = useCallback(async () => {
+    if (busyRef.current) return;
     const name = newName.trim();
     if (!name) return;
-    const updated = [...sections, { id: generateId(), name }];
-    setNewName("");
-    save(updated);
+    const addition =
+      pendingAddRef.current?.name === name
+        ? pendingAddRef.current
+        : { id: generateId(), name };
+    pendingAddRef.current = addition;
+    const saved = await save([...sections, addition]);
+    if (saved) {
+      pendingAddRef.current = null;
+      setNewName("");
+    }
   }, [newName, sections, save]);
 
   const startEdit = useCallback((section: Section) => {
+    if (busyRef.current) return;
     setEditingId(section.id);
     setEditName(section.name);
   }, []);
 
   const commitEdit = useCallback(
-    (id: string) => {
+    async (id: string) => {
+      if (busyRef.current) return;
       const name = editName.trim();
       if (!name) {
         setEditingId(null);
@@ -134,25 +289,25 @@ export default function CellarConfigPage() {
       const updated = sections.map((s) =>
         s.id === id ? { ...s, name } : s,
       );
-      setEditingId(null);
-      save(updated);
+      if (await save(updated)) setEditingId(null);
     },
     [editName, sections, save],
   );
 
   const cancelEdit = useCallback(() => {
+    if (busyRef.current) return;
     setEditingId(null);
   }, []);
 
-  const confirmDelete = useCallback(() => {
-    if (!deleteTarget) return;
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget || busyRef.current) return;
     const updated = sections.filter((s) => s.id !== deleteTarget.id);
-    setDeleteTarget(null);
-    save(updated);
+    if (await save(updated)) setDeleteTarget(null);
   }, [deleteTarget, sections, save]);
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
+      if (busyRef.current) return;
       const { active, over } = event;
       if (!over || active.id === over.id) return;
 
@@ -162,7 +317,9 @@ export default function CellarConfigPage() {
 
       const reordered = arrayMove(sections, oldIndex, newIndex);
       setSections(reordered);
-      save(reordered);
+      void save(reordered).then((saved) => {
+        if (!saved) setSections(sections);
+      });
     },
     [sections, save],
   );
@@ -181,8 +338,9 @@ export default function CellarConfigPage() {
         <button
           type="button"
           onClick={() => router.back()}
+          disabled={busy}
           aria-label="Back to cellar"
-          className="flex h-10 w-10 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted"
+          className="flex h-10 w-10 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted disabled:opacity-40"
         >
           <ArrowLeft className="h-5 w-5" strokeWidth={2} aria-hidden />
         </button>
@@ -244,16 +402,18 @@ export default function CellarConfigPage() {
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") addSection();
+            if (e.key === "Enter") void addSection();
           }}
           placeholder="New section name (e.g. Reds by Region)"
           className="flex-1 rounded-sm border border-border px-sm py-sm text-[14px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-accent-soft"
-          disabled={busy}
+          disabled={busy || !configurationReadable}
         />
         <button
           type="button"
-          onClick={addSection}
-          disabled={busy || !newName.trim()}
+          onClick={() => void addSection()}
+          disabled={
+            busy || !configurationReadable || !newName.trim()
+          }
           className={cn(
             "flex h-[44px] items-center gap-xs rounded-sm bg-accent px-md text-[14px] font-medium text-white transition-colors",
             "hover:bg-accent-hover disabled:opacity-60",
@@ -267,7 +427,9 @@ export default function CellarConfigPage() {
       {deleteTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-          onClick={() => setDeleteTarget(null)}
+          onClick={() => {
+            if (!busy) setDeleteTarget(null);
+          }}
         >
           <div
             role="dialog"
@@ -296,7 +458,7 @@ export default function CellarConfigPage() {
               </button>
               <button
                 type="button"
-                onClick={confirmDelete}
+                onClick={() => void confirmDelete()}
                 disabled={busy}
                 className="flex-1 rounded-sm bg-danger px-md py-sm text-[14px] font-medium text-white hover:opacity-90 disabled:opacity-60"
               >
@@ -338,7 +500,7 @@ function SortableSectionItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: section.id });
+  } = useSortable({ id: section.id, disabled: busy });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -364,16 +526,17 @@ function SortableSectionItem({
             value={editName}
             onChange={(e) => onChangeEditName(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") onCommitEdit(section.id);
+              if (e.key === "Enter") void onCommitEdit(section.id);
               if (e.key === "Escape") onCancelEdit();
             }}
             className="flex-1 rounded-sm border border-border px-xs py-1 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-accent-soft"
+            disabled={busy}
             autoFocus
           />
           <button
             type="button"
-            onClick={() => onCommitEdit(section.id)}
-            disabled={!editName.trim()}
+            onClick={() => void onCommitEdit(section.id)}
+            disabled={busy || !editName.trim()}
             aria-label="Save rename"
             className="flex h-8 w-8 items-center justify-center rounded-sm text-success hover:bg-success-soft disabled:opacity-40"
           >
@@ -382,6 +545,7 @@ function SortableSectionItem({
           <button
             type="button"
             onClick={onCancelEdit}
+            disabled={busy}
             aria-label="Cancel rename"
             className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted"
           >
@@ -396,7 +560,8 @@ function SortableSectionItem({
               {...attributes}
               {...listeners}
               aria-label={`Drag to reorder ${section.name}`}
-              className="flex h-8 w-6 shrink-0 items-center justify-center cursor-grab active:cursor-grabbing text-ink-subtle hover:text-ink-muted touch:min-h-[44px] touch:min-w-[44px]"
+              disabled={busy}
+              className="flex h-8 w-6 shrink-0 items-center justify-center cursor-grab active:cursor-grabbing text-ink-subtle hover:text-ink-muted disabled:cursor-default disabled:opacity-40 touch:min-h-[44px] touch:min-w-[44px]"
             >
               <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>

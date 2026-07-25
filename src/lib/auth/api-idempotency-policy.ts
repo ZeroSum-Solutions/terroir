@@ -61,6 +61,19 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       ],
     },
   },
+  "api:PATCH:/api/cellar/config": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/cellar/config/page.tsx"],
+    },
+  },
   "api:POST:/api/cellar/batch-section": {
     boundary: { kind: "generic-wrapper", count: 1 },
     identity: {
@@ -75,6 +88,19 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
     client: {
       lifecycle: "retry-stable",
       sources: ["src/lib/cellar/batch-section.ts"],
+    },
+  },
+  "api:POST:/api/cellar/config": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/cellar/cellar-grid.tsx"],
     },
   },
   "api:PATCH:/api/restaurant/{param}": {
