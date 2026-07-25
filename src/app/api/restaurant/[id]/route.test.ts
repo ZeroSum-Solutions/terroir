@@ -4,13 +4,26 @@ import { createIdempotencyRequestHash } from "@/lib/api/idempotency";
 
 const mockRequireOwner = vi.fn();
 const mockRequireAuth = vi.fn();
-const mockSetActiveRestaurant = vi.fn();
+const mockVerifyActiveRestaurantMembership = vi.fn();
+const mockResolveActiveMembership = vi.fn();
 vi.mock("@/lib/api/auth", () => ({
   requireOwner: (...args: unknown[]) => mockRequireOwner(...args),
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
 }));
-vi.mock("@/lib/api/active-restaurant", () => ({
-  setActiveRestaurant: (...args: unknown[]) => mockSetActiveRestaurant(...args),
+vi.mock("@/lib/api/active-restaurant", async (importOriginal) => {
+  const original =
+    await importOriginal<
+      typeof import("@/lib/api/active-restaurant")
+    >();
+  return {
+    ...original,
+    verifyActiveRestaurantMembership: (...args: unknown[]) =>
+      mockVerifyActiveRestaurantMembership(...args),
+  };
+});
+vi.mock("@/lib/api/resolve-active-membership", () => ({
+  resolveActiveMembership: (...args: unknown[]) =>
+    mockResolveActiveMembership(...args),
 }));
 
 const { PATCH, GET, PUT, DELETE } = await import("./route");
@@ -88,18 +101,40 @@ function makeSupabaseForGet(
   };
 }
 
-function makeSupabaseForDelete(deleteError: unknown = null) {
-  const filters: Array<[string, string]> = [];
-  const remove = vi.fn(() => ({
-    eq: (column: string, value: string) => {
-      filters.push([column, value]);
-      return Promise.resolve({ error: deleteError });
-    },
-  }));
+type DeleteResultRow = {
+  outcome:
+    | "deleted"
+    | "replay"
+    | "idempotency_key_reused"
+    | "idempotency_key_expired"
+    | "idempotency_outcome_unknown"
+    | "idempotency_in_progress"
+    | "no_membership"
+    | "owner_required"
+    | "forbidden";
+  response_status: number;
+  response_body: unknown;
+  replayed: boolean;
+  execution_started_at: string;
+};
+
+function makeSupabaseForDelete(
+  row: DeleteResultRow = {
+    outcome: "deleted",
+    response_status: 200,
+    response_body: { ok: true },
+    replayed: false,
+    execution_started_at: "2026-07-24T18:00:00.000Z",
+  },
+  rpcError: unknown = null,
+) {
+  const rpc = vi.fn().mockResolvedValue({
+    data: rpcError ? null : [row],
+    error: rpcError,
+  });
   return {
-    filters,
-    remove,
-    supabase: { from: vi.fn(() => ({ delete: remove })) },
+    rpc,
+    supabase: { rpc },
   };
 }
 
@@ -111,6 +146,16 @@ function makeReq(body: unknown, key?: string): NextRequest {
       ...(key ? { "Idempotency-Key": key } : {}),
     },
     body: JSON.stringify(body),
+  }) as NextRequest;
+}
+
+function makeMethodReq(
+  method: "PUT" | "DELETE",
+  key?: string,
+): NextRequest {
+  return new Request(`http://localhost/api/restaurant/${R}`, {
+    method,
+    headers: key ? { "Idempotency-Key": key } : {},
   }) as NextRequest;
 }
 
@@ -180,31 +225,158 @@ describe("GET /api/restaurant/[id]", () => {
 describe("PUT /api/restaurant/[id]", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("sets the active restaurant for a verified member", async () => {
-    const supabase = { from: vi.fn() };
+  it("preserves keyless compatibility and writes the signed cookie", async () => {
+    const supabase = makeSupabase();
     mockRequireAuth.mockResolvedValue({
       supabase,
       user: { id: "u-1" },
     });
-    mockSetActiveRestaurant.mockResolvedValue({ ok: true });
+    mockVerifyActiveRestaurantMembership.mockResolvedValue({ ok: true });
 
-    const res = await PUT({} as NextRequest, { params });
+    const res = await PUT(makeMethodReq("PUT"), { params });
 
     expect(res.status).toBe(200);
-    expect(mockSetActiveRestaurant).toHaveBeenCalledWith(supabase, "u-1", R);
+    expect(await res.json()).toEqual({ ok: true, restaurantId: R });
+    expect(res.headers.get("Idempotency-Replayed")).toBeNull();
+    expect(res.headers.get("set-cookie")).toContain(
+      "active_restaurant_id=",
+    );
+    expect(res.headers.get("set-cookie")).toContain("HttpOnly");
+    expect(mockVerifyActiveRestaurantMembership).toHaveBeenCalledWith(
+      supabase,
+      "u-1",
+      R,
+    );
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
-  it("returns a fixed 403 for a non-member", async () => {
+  it("claims with the full validated parameter identity", async () => {
+    const supabase = makeSupabase();
     mockRequireAuth.mockResolvedValue({
-      supabase: {},
+      supabase,
       user: { id: "u-1" },
     });
-    mockSetActiveRestaurant.mockResolvedValue({
+    mockVerifyActiveRestaurantMembership.mockResolvedValue({ ok: true });
+
+    const res = await PUT(makeMethodReq("PUT", KEY), { params });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Idempotency-Replayed")).toBe("false");
+    expect(supabase.rpc).toHaveBeenNthCalledWith(
+      1,
+      "claim_api_idempotency",
+      {
+        p_restaurant_id: R,
+        p_operation_id: "api:PUT:/api/restaurant/{param}",
+        p_idempotency_key: KEY,
+        p_request_hash: createIdempotencyRequestHash({ id: R }),
+      },
+    );
+    expect(supabase.rpc).toHaveBeenNthCalledWith(
+      2,
+      "complete_api_idempotency",
+      expect.objectContaining({
+        p_restaurant_id: R,
+        p_operation_id: "api:PUT:/api/restaurant/{param}",
+        p_idempotency_key: KEY,
+        p_response_status: 200,
+        p_response_body: { ok: true, restaurantId: R },
+      }),
+    );
+  });
+
+  it("canonicalizes UUID casing for the claim, response, and cookie", async () => {
+    const supabase = makeSupabase();
+    mockRequireAuth.mockResolvedValue({
+      supabase,
+      user: { id: "u-1" },
+    });
+    mockVerifyActiveRestaurantMembership.mockResolvedValue({ ok: true });
+
+    const res = await PUT(makeMethodReq("PUT", KEY), {
+      params: Promise.resolve({ id: R.toUpperCase() }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, restaurantId: R });
+    expect(mockVerifyActiveRestaurantMembership).toHaveBeenCalledWith(
+      supabase,
+      "u-1",
+      R,
+    );
+    expect(supabase.rpc).toHaveBeenNthCalledWith(
+      1,
+      "claim_api_idempotency",
+      expect.objectContaining({
+        p_restaurant_id: R,
+        p_request_hash: createIdempotencyRequestHash({ id: R }),
+      }),
+    );
+    expect(res.headers.get("set-cookie")).toContain(
+      "active_restaurant_id=",
+    );
+  });
+
+  it("replays a lost first response and reapplies the signed cookie", async () => {
+    const supabase = makeSupabase(null, {
+      outcome: "replay",
+      response_status: 200,
+      response_body: { ok: true, restaurantId: R },
+      response_headers: {},
+    });
+    mockRequireAuth.mockResolvedValue({
+      supabase,
+      user: { id: "u-1" },
+    });
+
+    const res = await PUT(makeMethodReq("PUT", KEY), { params });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, restaurantId: R });
+    expect(res.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(res.headers.get("set-cookie")).toContain(
+      "active_restaurant_id=",
+    );
+    expect(res.headers.get("set-cookie")).toContain("HttpOnly");
+    expect(mockVerifyActiveRestaurantMembership).toHaveBeenCalledWith(
+      supabase,
+      "u-1",
+      R,
+    );
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a malformed key before membership verification or claim", async () => {
+    const supabase = makeSupabase();
+    mockRequireAuth.mockResolvedValue({
+      supabase,
+      user: { id: "u-1" },
+    });
+
+    const res = await PUT(makeMethodReq("PUT", "bad key!"), {
+      params,
+    });
+
+    expect(res.status).toBe(400);
+    expect(mockVerifyActiveRestaurantMembership).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["keyless", undefined],
+    ["keyed", KEY],
+  ])("returns a fixed 403 for a non-member (%s)", async (_mode, key) => {
+    const supabase = makeSupabase();
+    mockRequireAuth.mockResolvedValue({
+      supabase,
+      user: { id: "u-1" },
+    });
+    mockVerifyActiveRestaurantMembership.mockResolvedValue({
       ok: false,
       reason: "not_member",
     });
 
-    const res = await PUT({} as NextRequest, { params });
+    const res = await PUT(makeMethodReq("PUT", key), { params });
 
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({
@@ -213,20 +385,22 @@ describe("PUT /api/restaurant/[id]", () => {
         message: "Not a member of this restaurant.",
       },
     });
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
   it("redacts active-membership provider failures", async () => {
+    const supabase = makeSupabase();
     mockRequireAuth.mockResolvedValue({
-      supabase: {},
+      supabase,
       user: { id: "u-1" },
     });
-    mockSetActiveRestaurant.mockResolvedValue({
+    mockVerifyActiveRestaurantMembership.mockResolvedValue({
       ok: false,
       reason: "provider_error",
       cause: { message: "private provider detail" },
     });
 
-    const res = await PUT({} as NextRequest, { params });
+    const res = await PUT(makeMethodReq("PUT"), { params });
 
     expect(res.status).toBe(500);
     expect(JSON.stringify(await res.json())).not.toContain("private");
@@ -531,48 +705,159 @@ describe("PATCH /api/restaurant/[id]", () => {
 describe("DELETE /api/restaurant/[id]", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("deletes only the active owner restaurant", async () => {
+  it("preserves keyless compatibility through the atomic delete RPC", async () => {
     const db = makeSupabaseForDelete();
-    mockRequireOwner.mockResolvedValue({
+    mockRequireAuth.mockResolvedValue({
       supabase: db.supabase,
-      restaurantId: R,
       user: { id: "u-1" },
+    });
+    mockResolveActiveMembership.mockResolvedValue({
+      restaurantId: R,
+      restaurantName: "Restaurant",
       role: "owner",
+      availableRestaurants: [],
     });
 
-    const res = await DELETE({} as NextRequest, { params });
+    const res = await DELETE(makeMethodReq("DELETE"), { params });
 
     expect(res.status).toBe(200);
-    expect(db.filters).toEqual([["id", R]]);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(res.headers.get("Idempotency-Replayed")).toBeNull();
+    expect(db.rpc).toHaveBeenCalledWith(
+      "delete_restaurant_idempotent",
+      {
+        p_restaurant_id: R,
+        p_active_restaurant_id: R,
+      },
+    );
   });
 
-  it("rejects a different active restaurant before deletion", async () => {
+  it("binds a keyed delete to its full validated parameter identity", async () => {
     const db = makeSupabaseForDelete();
-    mockRequireOwner.mockResolvedValue({
+    mockRequireAuth.mockResolvedValue({
       supabase: db.supabase,
-      restaurantId: "22222222-2222-4222-8222-222222222222",
       user: { id: "u-1" },
+    });
+    mockResolveActiveMembership.mockResolvedValue({
+      restaurantId: R,
+      restaurantName: "Restaurant",
       role: "owner",
+      availableRestaurants: [],
     });
 
-    const res = await DELETE({} as NextRequest, { params });
+    const res = await DELETE(makeMethodReq("DELETE", KEY), { params });
 
-    expect(res.status).toBe(403);
-    expect(db.remove).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Idempotency-Replayed")).toBe("false");
+    expect(db.rpc).toHaveBeenCalledWith(
+      "delete_restaurant_idempotent",
+      {
+        p_restaurant_id: R,
+        p_active_restaurant_id: R,
+        p_idempotency_key: KEY,
+        p_request_hash: createIdempotencyRequestHash({ id: R }),
+      },
+    );
   });
 
-  it("redacts delete provider failures", async () => {
-    const db = makeSupabaseForDelete({ message: "private delete detail" });
-    mockRequireOwner.mockResolvedValue({
+  it("replays exact success after deletion has removed every membership", async () => {
+    const db = makeSupabaseForDelete({
+      outcome: "replay",
+      response_status: 200,
+      response_body: { ok: true },
+      replayed: true,
+      execution_started_at: "2026-07-24T18:00:00.000Z",
+    });
+    mockRequireAuth.mockResolvedValue({
       supabase: db.supabase,
-      restaurantId: R,
       user: { id: "u-1" },
-      role: "owner",
+    });
+    mockResolveActiveMembership.mockResolvedValue(null);
+
+    const res = await DELETE(makeMethodReq("DELETE", KEY), { params });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(res.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(db.rpc).toHaveBeenCalledWith(
+      "delete_restaurant_idempotent",
+      expect.objectContaining({
+        p_restaurant_id: R,
+        p_idempotency_key: KEY,
+      }),
+    );
+    expect(db.rpc.mock.calls[0]?.[1]).not.toHaveProperty(
+      "p_active_restaurant_id",
+    );
+  });
+
+  it("rejects malformed keys before active-membership or database work", async () => {
+    const db = makeSupabaseForDelete();
+    mockRequireAuth.mockResolvedValue({
+      supabase: db.supabase,
+      user: { id: "u-1" },
     });
 
-    const res = await DELETE({} as NextRequest, { params });
+    const res = await DELETE(
+      makeMethodReq("DELETE", "bad key!"),
+      { params },
+    );
 
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(400);
+    expect(mockResolveActiveMembership).not.toHaveBeenCalled();
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["no_membership", "No restaurant membership found."],
+    ["owner_required", "Owner access required."],
+    ["forbidden", "Forbidden."],
+  ] as const)(
+    "preserves the %s authorization response",
+    async (outcome, message) => {
+      const db = makeSupabaseForDelete({
+        outcome,
+        response_status: 403,
+        response_body: {
+          error: { code: "forbidden", message },
+        },
+        replayed: false,
+        execution_started_at: "2026-07-24T18:00:00.000Z",
+      });
+      mockRequireAuth.mockResolvedValue({
+        supabase: db.supabase,
+        user: { id: "u-1" },
+      });
+      mockResolveActiveMembership.mockResolvedValue(null);
+
+      const res = await DELETE(makeMethodReq("DELETE"), { params });
+
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({
+        error: { code: "forbidden", message },
+      });
+    },
+  );
+
+  it("fails closed and redacts keyed delete provider failures", async () => {
+    const db = makeSupabaseForDelete(
+      undefined,
+      { code: "XX000", message: "private delete detail" },
+    );
+    mockRequireAuth.mockResolvedValue({
+      supabase: db.supabase,
+      user: { id: "u-1" },
+    });
+    mockResolveActiveMembership.mockResolvedValue({
+      restaurantId: R,
+      restaurantName: "Restaurant",
+      role: "owner",
+      availableRestaurants: [],
+    });
+
+    const res = await DELETE(makeMethodReq("DELETE", KEY), { params });
+
+    expect(res.status).toBe(503);
     expect(JSON.stringify(await res.json())).not.toContain("private");
   });
 });

@@ -107,10 +107,15 @@ describe("API authorization manifest", () => {
       });
 
       // Restaurant GET/PUT authenticate first, then enforce membership against
-      // the explicit restaurant ID instead of the active membership.
+      // the explicit restaurant ID instead of the active membership. DELETE
+      // also authenticates first because its atomic RPC must replay after the
+      // successful root delete has cascaded the membership; the RPC enforces
+      // active-restaurant ownership before every new command.
       const explicitRestaurantAuth =
         (operation.operationId === "api:GET:/api/restaurant/{param}" ||
-          operation.operationId === "api:PUT:/api/restaurant/{param}") &&
+          operation.operationId === "api:PUT:/api/restaurant/{param}" ||
+          operation.operationId ===
+            "api:DELETE:/api/restaurant/{param}") &&
         calls.some((call) => call.helper === "requireAuth");
 
       expect(

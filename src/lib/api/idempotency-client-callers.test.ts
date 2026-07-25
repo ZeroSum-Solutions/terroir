@@ -361,6 +361,27 @@ describe("high-risk idempotency clients", () => {
     expect(pricing.match(/router\.refresh\(\)/g)).toHaveLength(2);
   });
 
+  it("persists one guarded restaurant-switch command and reconciles ambiguity", () => {
+    const settings = source(
+      "src/app/(app)/settings-dropdown.tsx",
+    );
+
+    expect(settings).toContain("createIdempotentCommandStore");
+    expect(settings).toContain(
+      'createSessionCommandPersistence(\n    "terroir:restaurant-switch"',
+    );
+    expect(settings).toContain("if (\n      restaurantId === activeRestaurantId ||\n      switchingRef.current");
+    expect(settings).toContain('slot: "switch"');
+    expect(settings).toContain(
+      "url: `/api/restaurant/${restaurantId}`",
+    );
+    expect(settings).toContain('method: "PUT"');
+    expect(settings).toContain("storePendingSwitch(restaurantId)");
+    expect(settings).toContain("loadPendingSwitch()");
+    expect(settings).toContain("shouldRetainIdempotencyKey(");
+    expect(settings).toContain("router.refresh()");
+  });
+
   it("guards cellar section retries with per-wine and bulk command slots", () => {
     const cellarList = source(
       "src/app/(app)/cellar/cellar-list.tsx",

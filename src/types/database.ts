@@ -64,15 +64,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "api_idempotency_restaurant_id_fkey"
-            columns: ["restaurant_id"]
-            isOneToOne: false
-            referencedRelation: "restaurants"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       api_rate_limit_buckets: {
         Row: {
@@ -1124,6 +1116,21 @@ export type Database = {
           p_wine_id: string
         }
         Returns: {
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
+      delete_restaurant_idempotent: {
+        Args: {
+          p_active_restaurant_id?: string
+          p_idempotency_key?: string
+          p_request_hash?: string
+          p_restaurant_id: string
+        }
+        Returns: {
+          execution_started_at: string
           outcome: string
           replayed: boolean
           response_body: Json

@@ -19,6 +19,11 @@ export type ResolvedMembership = {
   restaurantId: string;
   restaurantName: string;
   role: MembershipRole;
+  availableRestaurants: readonly {
+    restaurantId: string;
+    restaurantName: string;
+    role: MembershipRole;
+  }[];
 };
 
 type Client = SupabaseClient<Database>;
@@ -59,10 +64,18 @@ export async function resolveActiveMembership(
   // an orphan membership row). Fall back to a placeholder.
   const restaurantName =
     (chosen.restaurants as { name: string } | null)?.name ?? "My Restaurant";
+  const availableRestaurants = memberships.map((membership) => ({
+    restaurantId: membership.restaurant_id,
+    restaurantName:
+      (membership.restaurants as { name: string } | null)?.name ??
+      "My Restaurant",
+    role: (membership.role ?? "staff") as MembershipRole,
+  }));
 
   return {
     restaurantId: chosen.restaurant_id,
     restaurantName,
     role: (chosen.role ?? "staff") as MembershipRole,
+    availableRestaurants,
   };
 }

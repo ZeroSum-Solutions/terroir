@@ -10,10 +10,20 @@ vi.mock("@/lib/api/auth", () => ({
   requireOwner: (...args: unknown[]) => auth.requireOwner(...args),
 }));
 
-const active = vi.hoisted(() => ({ setActiveRestaurant: vi.fn() }));
+const active = vi.hoisted(() => ({
+  verifyActiveRestaurantMembership: vi.fn(),
+  writeActiveRestaurantResponseCookie: vi.fn(),
+}));
 vi.mock("@/lib/api/active-restaurant", () => ({
-  setActiveRestaurant: (...args: unknown[]) =>
-    active.setActiveRestaurant(...args),
+  verifyActiveRestaurantMembership: (...args: unknown[]) =>
+    active.verifyActiveRestaurantMembership(...args),
+  writeActiveRestaurantResponseCookie: (...args: unknown[]) =>
+    active.writeActiveRestaurantResponseCookie(...args),
+}));
+const resolveActiveMembership = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/api/resolve-active-membership", () => ({
+  resolveActiveMembership: (...args: unknown[]) =>
+    resolveActiveMembership(...args),
 }));
 
 const { GET, PUT, PATCH, DELETE } = await import("./[id]/route");
@@ -61,7 +71,7 @@ describe("restaurant API boundaries", () => {
     },
     {
       name: "DELETE",
-      auth: "requireOwner" as const,
+      auth: "requireAuth" as const,
       call: (params: Promise<{ id: string }>) =>
         DELETE({} as NextRequest, { params }),
     },
@@ -102,7 +112,10 @@ describe("restaurant API boundaries", () => {
         error: { code: "validation_error" },
       });
       expect(from).not.toHaveBeenCalled();
-      expect(active.setActiveRestaurant).not.toHaveBeenCalled();
+      expect(
+        active.verifyActiveRestaurantMembership,
+      ).not.toHaveBeenCalled();
+      expect(resolveActiveMembership).not.toHaveBeenCalled();
     });
   }
 });

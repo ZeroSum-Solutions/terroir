@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { NextResponse } from "next/server";
 
 // next/headers cookies() stub — we only care about parseActiveRestaurantCookie
 // and signActiveRestaurantCookie here. Keep it simple.
@@ -18,6 +19,8 @@ const {
   parseActiveRestaurantCookie,
   readActiveRestaurantFromCookie,
   setActiveRestaurant,
+  verifyActiveRestaurantMembership,
+  writeActiveRestaurantResponseCookie,
   clearActiveRestaurant,
 } = await import("./active-restaurant");
 
@@ -139,6 +142,31 @@ describe("setActiveRestaurant", () => {
     expect(name).toBe("active_restaurant_id");
     expect(value).toMatch(/^r1\./);
     expect(opts).toMatchObject({ httpOnly: true, sameSite: "lax", path: "/" });
+  });
+
+  it("can verify membership without writing response state", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = mockSupabase({ restaurant_id: "r1" }) as any;
+
+    const result = await verifyActiveRestaurantMembership(
+      supabase,
+      "u1",
+      "r1",
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(mockCookieSet).not.toHaveBeenCalled();
+  });
+
+  it("writes a replay-safe signed HttpOnly cookie on a response", () => {
+    const response = NextResponse.json({ ok: true });
+
+    writeActiveRestaurantResponseCookie(response, "r1");
+
+    expect(response.headers.get("set-cookie")).toContain(
+      "active_restaurant_id=",
+    );
+    expect(response.headers.get("set-cookie")).toContain("HttpOnly");
   });
 });
 

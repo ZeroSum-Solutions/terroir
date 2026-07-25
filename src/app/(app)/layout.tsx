@@ -16,7 +16,13 @@ export default async function AppLayout({
   const auth = await getAuthContext();
   if (!auth) redirect("/login");
 
-  const { restaurantId, restaurantName, userRole, user } = auth;
+  const {
+    restaurantId,
+    restaurantName,
+    userRole,
+    user,
+    availableRestaurants,
+  } = auth;
 
   return (
     <RestaurantProvider restaurantId={restaurantId} restaurantName={restaurantName} userRole={userRole}>
@@ -41,7 +47,12 @@ export default async function AppLayout({
           <span className="hidden text-[12px] tabular text-ink-muted md:inline">
             {user.email}
           </span>
-          <SettingsDropdown />
+          <SettingsDropdown
+            activeRestaurantId={restaurantId}
+            activeRestaurantName={restaurantName}
+            activeRole={userRole}
+            restaurants={availableRestaurants}
+          />
         </div>
       </header>
 

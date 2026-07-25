@@ -133,6 +133,38 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       ],
     },
   },
+  "api:PUT:/api/restaurant/{param}": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/settings-dropdown.tsx"],
+    },
+  },
+  "api:DELETE:/api/restaurant/{param}": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "delete_restaurant_idempotent",
+    },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "delete_restaurant_idempotent",
+    },
+    client: {
+      lifecycle: "no-first-party-caller",
+      sources: [],
+    },
+  },
   "api:POST:/api/inventory/save-bottle-scan": {
     boundary: { kind: "generic-wrapper", count: 1 },
     identity: {

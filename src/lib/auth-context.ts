@@ -33,5 +33,6 @@ export const getAuthContext = cache(async () => {
     restaurantId: membership.restaurantId,
     restaurantName: membership.restaurantName,
     userRole: membership.role,
+    availableRestaurants: membership.availableRestaurants,
   };
 });

@@ -14,12 +14,20 @@
  */
 
 import { cookies } from "next/headers";
+import type { NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Database } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const COOKIE_NAME = "active_restaurant_id";
 const COOKIE_MAX_AGE_S = 60 * 60 * 24 * 30; // 30 days
+const activeRestaurantCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  path: "/",
+  maxAge: COOKIE_MAX_AGE_S,
+} as const;
 
 function getSecret(): string {
   const s = process.env.ACTIVE_RESTAURANT_COOKIE_SECRET;
@@ -86,6 +94,39 @@ export async function setActiveRestaurant(
   | { ok: false; reason: "not_member" }
   | { ok: false; reason: "provider_error"; cause: unknown }
 > {
+  const result = await verifyActiveRestaurantMembership(
+    supabase,
+    userId,
+    restaurantId,
+  );
+  if (!result.ok) return result;
+
+  const store = await cookies();
+  store.set(
+    COOKIE_NAME,
+    signActiveRestaurantCookie(restaurantId),
+    activeRestaurantCookieOptions,
+  );
+  return { ok: true };
+}
+
+/**
+ * Verify an explicit restaurant selection without changing response state.
+ *
+ * PUT /api/restaurant/[id] uses this before its idempotency claim, then applies
+ * the signed cookie to both fresh and replayed successful responses. The
+ * replay-time check prevents a removed membership from restoring a stale
+ * active-restaurant cookie.
+ */
+export async function verifyActiveRestaurantMembership(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  restaurantId: string,
+): Promise<
+  | { ok: true }
+  | { ok: false; reason: "not_member" }
+  | { ok: false; reason: "provider_error"; cause: unknown }
+> {
   const { data, error } = await supabase
     .from("memberships")
     .select("restaurant_id")
@@ -98,15 +139,26 @@ export async function setActiveRestaurant(
     return { ok: false, reason: "not_member" };
   }
 
-  const store = await cookies();
-  store.set(COOKIE_NAME, signActiveRestaurantCookie(restaurantId), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: COOKIE_MAX_AGE_S,
-  });
   return { ok: true };
+}
+
+/**
+ * Reapply the active-restaurant cookie to a successful route response.
+ *
+ * Set-Cookie is intentionally not persisted in the generic idempotency table.
+ * Writing it after the stored result is resolved makes a replay recover a lost
+ * first response while readActiveRestaurantFromCookie still checks current
+ * membership before the selection can influence authorization.
+ */
+export function writeActiveRestaurantResponseCookie(
+  response: NextResponse,
+  restaurantId: string,
+): void {
+  response.cookies.set(
+    COOKIE_NAME,
+    signActiveRestaurantCookie(restaurantId),
+    activeRestaurantCookieOptions,
+  );
 }
 
 /** Clear the active restaurant cookie (used on sign-out). */

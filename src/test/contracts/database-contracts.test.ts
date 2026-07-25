@@ -117,6 +117,14 @@ const atomicBottleConfirmationIdempotency = readFileSync(
   "utf8",
 );
 
+const atomicRestaurantLifecycleIdempotency = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../supabase/migrations/0067_restaurant_lifecycle_idempotency.sql",
+  ),
+  "utf8",
+);
+
 describe("database security contracts", () => {
   it("keeps public wine-list read policies explicit and narrow", () => {
     for (const table of [
@@ -736,6 +744,39 @@ describe("database security contracts", () => {
       createIdempotencyRequestHash({
         id: "64100000-0000-4000-8000-000000000001",
       }),
+    );
+  });
+
+  it("atomically preserves restaurant deletion replay after tenant cascade", () => {
+    expect(atomicRestaurantLifecycleIdempotency).toMatch(
+      /delete_restaurant_idempotent\([\s\S]*?security definer[\s\S]*?set search_path = ''/,
+    );
+    expect(atomicRestaurantLifecycleIdempotency).toContain(
+      "drop constraint if exists api_idempotency_restaurant_id_fkey",
+    );
+    expect(atomicRestaurantLifecycleIdempotency).toMatch(
+      /select \*[\s\S]*?from public\.api_idempotency[\s\S]*?for update;[\s\S]*?if found then[\s\S]*?'replay'::text/,
+    );
+    expect(atomicRestaurantLifecycleIdempotency).toMatch(
+      /p_active_restaurant_id <> p_restaurant_id[\s\S]*?from public\.memberships[\s\S]*?user_id = v_user_id[\s\S]*?for update;[\s\S]*?v_role <> 'owner'/,
+    );
+    expect(atomicRestaurantLifecycleIdempotency).toMatch(
+      /insert into public\.api_idempotency[\s\S]*?delete from public\.restaurants[\s\S]*?update public\.api_idempotency[\s\S]*?state = 'completed'/,
+    );
+    expect(atomicRestaurantLifecycleIdempotency).toContain(
+      "'api:DELETE:/api/restaurant/{param}'",
+    );
+    expect(atomicRestaurantLifecycleIdempotency).toContain(
+      "message = 'idempotency completion changed concurrently'",
+    );
+    expect(atomicRestaurantLifecycleIdempotency).toContain(
+      "grant execute on function public.delete_restaurant_idempotent(",
+    );
+    expect(atomicRestaurantLifecycleIdempotency).not.toMatch(
+      /^\s*execute\s/mi,
+    );
+    expect(atomicRestaurantLifecycleIdempotency).not.toMatch(
+      /^\s*set\s+(?:local\s+)?role\s+(?!=)/mi,
     );
   });
 
