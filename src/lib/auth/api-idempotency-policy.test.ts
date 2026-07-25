@@ -31,14 +31,12 @@ const EXPECTED_PENDING_DISCOVERED = [
   "api:DELETE:/api/cellar/{param}",
   "api:DELETE:/api/restaurant/{param}",
   "api:DELETE:/api/team/invite/{param}",
-  "api:DELETE:/api/team/members/{param}",
   "api:DELETE:/api/wine-list-items/{param}",
   "api:DELETE:/api/wine-list-sections/{param}",
   "api:DELETE:/api/wine-lists/{param}",
   "api:DELETE:/api/wine-lists/{param}/publish",
   "api:DELETE:/api/wines/{param}/image",
   "api:PATCH:/api/scans/{param}",
-  "api:PATCH:/api/team/members/{param}",
   "api:PATCH:/api/wine-list-items/reorder",
   "api:PATCH:/api/wine-list-items/{param}",
   "api:PATCH:/api/wine-list-sections/reorder",
@@ -97,7 +95,7 @@ describe("API idempotency implementation ledger", () => {
       (operationId) => !discovered.has(operationId),
     );
 
-    expect(implemented).toHaveLength(15);
+    expect(implemented).toHaveLength(17);
     expect(pending).toEqual([...EXPECTED_PENDING_DISCOVERED].sort());
     expect(planned).toEqual([...EXPECTED_PLANNED].sort());
     expect(

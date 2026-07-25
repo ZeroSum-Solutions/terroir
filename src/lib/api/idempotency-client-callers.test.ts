@@ -129,6 +129,35 @@ describe("high-risk idempotency clients", () => {
     expect(invitePage).toContain('canRetry ? "Try again" : "Go to login"');
   });
 
+  it("persists guarded per-member role and removal command slots", () => {
+    const teamActions = source(
+      "src/app/(app)/team/team-actions.tsx",
+    );
+
+    expect(teamActions).toContain("createIdempotentCommandStore");
+    expect(teamActions).toContain(
+      'createSessionCommandPersistence("terroir:team-members")',
+    );
+    expect(teamActions.indexOf("const teamMemberCommands")).toBeLessThan(
+      teamActions.indexOf("export function TeamActions"),
+    );
+    expect(teamActions).toContain(
+      "if (busyMemberIdsRef.current.has(memberId)) return",
+    );
+    expect(teamActions).toContain(
+      "slot: `team:member:role:${memberId}`",
+    );
+    expect(teamActions).toContain(
+      "slot: `team:member:remove:${memberId}`",
+    );
+    expect(teamActions).toContain(
+      "url: `/api/team/members/${memberId}`",
+    );
+    expect(teamActions).toContain("disabled={memberBusy}");
+    expect(teamActions).toContain("readApiError(");
+    expect(teamActions.match(/response\.json\(/g)).toBeNull();
+  });
+
   it("keeps restaurant onboarding name retries in one guarded field slot", () => {
     const onboarding = source("src/app/(app)/onboarding-modal.tsx");
 

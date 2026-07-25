@@ -285,25 +285,25 @@ describe("team API provider and mutation boundaries", () => {
     });
   });
 
-  it("requires a tenant-scoped member role update to affect a row", async () => {
-    const lookup = queryEndingIn("maybeSingle", {
-      data: {
-        id: VALID_ID,
-        user_id: "55555555-5555-4555-8555-555555555555",
-        role: "staff",
-        restaurant_id: restaurantId,
-      },
+  it("binds a member role update to the selected tenant and validated input", async () => {
+    const rpc = vi.fn(async () => ({
+      data: [{
+        outcome: "not_found",
+        response_status: 404,
+        response_body: {
+          error: { code: "not_found", message: "Member not found." },
+        },
+        replayed: false,
+        execution_started_at: "2026-07-24T20:00:00.000Z",
+      }],
       error: null,
+    }));
+    auth.requireOwner.mockResolvedValue({
+      supabase: { rpc },
+      restaurantId,
+      user,
+      role: "owner",
     });
-    const update = queryEndingIn("maybeSingle", {
-      data: null,
-      error: null,
-    });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(lookup)
-      .mockReturnValueOnce(update);
-    ownerAuth(from);
 
     const response = await CHANGE_ROLE(
       request(`/api/team/members/${VALID_ID}`, "PATCH", { role: "manager" }),
@@ -311,37 +311,48 @@ describe("team API provider and mutation boundaries", () => {
     );
 
     expect(response.status).toBe(404);
-    expect(update.update).toHaveBeenCalledWith({ role: "manager" });
-    expect(update.eq).toHaveBeenCalledWith("id", VALID_ID);
-    expect(update.eq).toHaveBeenCalledWith("restaurant_id", restaurantId);
+    expect(rpc).toHaveBeenCalledWith(
+      "update_team_member_role_idempotent",
+      {
+        p_restaurant_id: restaurantId,
+        p_member_id: VALID_ID,
+        p_role: "manager",
+      },
+    );
   });
 
-  it("requires a tenant-scoped member delete to affect a row", async () => {
-    const lookup = queryEndingIn("maybeSingle", {
-      data: {
-        id: VALID_ID,
-        user_id: "55555555-5555-4555-8555-555555555555",
-      },
+  it("binds a member removal to the selected tenant and validated path", async () => {
+    const rpc = vi.fn(async () => ({
+      data: [{
+        outcome: "not_found",
+        response_status: 404,
+        response_body: {
+          error: { code: "not_found", message: "Member not found." },
+        },
+        replayed: false,
+        execution_started_at: "2026-07-24T20:00:00.000Z",
+      }],
       error: null,
+    }));
+    auth.requireOwner.mockResolvedValue({
+      supabase: { rpc },
+      restaurantId,
+      user,
+      role: "owner",
     });
-    const deletion = queryEndingIn("maybeSingle", {
-      data: null,
-      error: null,
-    });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(lookup)
-      .mockReturnValueOnce(deletion);
-    ownerAuth(from);
 
-    const response = await REMOVE({} as NextRequest, {
+    const response = await REMOVE(
+      request(`/api/team/members/${VALID_ID}`, "DELETE"),
+      {
       params: Promise.resolve({ id: VALID_ID }),
-    });
+      },
+    );
 
     expect(response.status).toBe(404);
-    expect(deletion.delete).toHaveBeenCalledOnce();
-    expect(deletion.eq).toHaveBeenCalledWith("id", VALID_ID);
-    expect(deletion.eq).toHaveBeenCalledWith("restaurant_id", restaurantId);
+    expect(rpc).toHaveBeenCalledWith("remove_team_member_idempotent", {
+      p_restaurant_id: restaurantId,
+      p_member_id: VALID_ID,
+    });
   });
 
   it("rejects extra member role fields before any database query", async () => {

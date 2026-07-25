@@ -84,6 +84,14 @@ const atomicReconcileIdempotency = readFileSync(
   "utf8",
 );
 
+const atomicTeamMemberIdempotency = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../supabase/migrations/0063_team_member_idempotency.sql",
+  ),
+  "utf8",
+);
+
 describe("database security contracts", () => {
   it("keeps public wine-list read policies explicit and narrow", () => {
     for (const table of [
@@ -585,6 +593,47 @@ describe("database security contracts", () => {
     );
     expect(atomicUndoLastPourIdempotency).toContain(
       "grant execute on function public.undo_last_pour_idempotent(\n  uuid,\n  uuid,\n  text,\n  text\n) to authenticated;",
+    );
+  });
+
+  it("serializes team ownership invariants with each stored response", () => {
+    for (const rpc of [
+      "update_team_member_role_idempotent",
+      "remove_team_member_idempotent",
+    ]) {
+      expect(atomicTeamMemberIdempotency).toMatch(
+        new RegExp(
+          `${rpc}\\([\\s\\S]*?security definer[\\s\\S]*?set search_path = ''`,
+        ),
+      );
+      expect(atomicTeamMemberIdempotency).toContain(
+        `grant execute on function public.${rpc}(`,
+      );
+    }
+    expect(atomicTeamMemberIdempotency).toContain(
+      "public.is_member_with_role(p_restaurant_id, 'owner')",
+    );
+    expect(atomicTeamMemberIdempotency).toMatch(
+      /from public\.memberships[\s\S]*?where restaurant_id = p_restaurant_id[\s\S]*?order by id[\s\S]*?for update;/,
+    );
+    expect(atomicTeamMemberIdempotency).toMatch(
+      /v_target\.role = 'owner'[\s\S]*?select count\(\*\)[\s\S]*?role = 'owner'[\s\S]*?<= 1/,
+    );
+    expect(atomicTeamMemberIdempotency).toContain(
+      "v_target.user_id = v_user_id",
+    );
+    expect(atomicTeamMemberIdempotency).toMatch(
+      /pg_advisory_xact_lock\([\s\S]*?insert into public\.api_idempotency[\s\S]*?update public\.memberships[\s\S]*?update public\.api_idempotency[\s\S]*?state = 'completed'/,
+    );
+    expect(atomicTeamMemberIdempotency).toMatch(
+      /pg_advisory_xact_lock\([\s\S]*?insert into public\.api_idempotency[\s\S]*?delete from public\.memberships[\s\S]*?update public\.api_idempotency[\s\S]*?state = 'completed'/,
+    );
+    expect(atomicTeamMemberIdempotency).not.toMatch(/^\s*execute\s/mi);
+    expect(atomicTeamMemberIdempotency).not.toMatch(
+      /^\s*set\s+(?:local\s+)?role\s+(?!=)/mi,
+    );
+    expect(atomicTeamMemberIdempotency).toContain(
+      "message = 'idempotency completion changed concurrently'",
     );
   });
 

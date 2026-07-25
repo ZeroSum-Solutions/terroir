@@ -282,6 +282,44 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       sources: ["src/app/invite/[token]/page.tsx"],
     },
   },
+  "api:PATCH:/api/team/members/{param}": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "update_team_member_role_idempotent",
+    },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "update_team_member_role_idempotent",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/team/team-actions.tsx"],
+    },
+  },
+  "api:DELETE:/api/team/members/{param}": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "remove_team_member_idempotent",
+    },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "remove_team_member_idempotent",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/team/team-actions.tsx"],
+    },
+  },
 } as const satisfies Partial<
   Record<ApiOperationId, ApiIdempotencyImplementation>
 >;

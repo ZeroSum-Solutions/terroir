@@ -14,6 +14,14 @@ import { useRouter } from "next/navigation";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { TimeAgo } from "@/components/time-ago";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+} from "@/lib/api/idempotency-client";
+
+const teamMemberCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence("terroir:team-members"),
+});
 
 type Member = {
   id: string;
@@ -62,6 +70,10 @@ export function TeamActions({
   const [memberActionError, setMemberActionError] = useState<string | null>(
     null,
   );
+  const [busyMemberIds, setBusyMemberIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const busyMemberIdsRef = useRef(new Set<string>());
 
   const isOwner = members.some(
     (m) => m.user_id === currentUserId && m.role === "owner",
@@ -139,40 +151,97 @@ export function TeamActions({
     return fallback;
   };
 
-  const changeRole = async (memberId: string, role: string) => {
-    setMemberActionError(null);
-    const res = await fetch(`/api/team/members/${memberId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role }),
-    });
-    if (!res.ok) {
-      setMemberActionError(
-        await extractServerError(
-          res,
-          "Couldn't update role. Please try again.",
-        ),
-      );
-      return;
+  const setMemberBusy = (memberId: string, busy: boolean) => {
+    if (busy) {
+      busyMemberIdsRef.current.add(memberId);
+    } else {
+      busyMemberIdsRef.current.delete(memberId);
     }
-    router.refresh();
+    setBusyMemberIds(new Set(busyMemberIdsRef.current));
+  };
+
+  const changeRole = async (
+    memberId: string,
+    role: Member["role"],
+  ) => {
+    if (busyMemberIdsRef.current.has(memberId)) return;
+    setMemberBusy(memberId, true);
+    setMemberActionError(null);
+    try {
+      const { response, data } = await teamMemberCommands.json<unknown>({
+        slot: `team:member:role:${memberId}`,
+        url: `/api/team/members/${memberId}`,
+        method: "PATCH",
+        json: { role },
+      });
+      if (!response.ok) {
+        setMemberActionError(
+          readApiError(
+            data,
+            "Couldn't update role. Please try again.",
+          ).message,
+        );
+        router.refresh();
+        return;
+      }
+      if (
+        !data ||
+        typeof data !== "object" ||
+        (data as { success?: unknown }).success !== true
+      ) {
+        throw new Error("The member update response was invalid.");
+      }
+      router.refresh();
+    } catch (error) {
+      setMemberActionError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Couldn't update role. Please try again.",
+      );
+      router.refresh();
+    } finally {
+      setMemberBusy(memberId, false);
+    }
   };
 
   const removeMember = async (memberId: string) => {
+    if (busyMemberIdsRef.current.has(memberId)) return;
+    setMemberBusy(memberId, true);
     setMemberActionError(null);
-    const res = await fetch(`/api/team/members/${memberId}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) {
+    try {
+      const { response, data } = await teamMemberCommands.json<unknown>({
+        slot: `team:member:remove:${memberId}`,
+        url: `/api/team/members/${memberId}`,
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        setMemberActionError(
+          readApiError(
+            data,
+            "Couldn't remove member. Please try again.",
+          ).message,
+        );
+        router.refresh();
+        return;
+      }
+      if (
+        !data ||
+        typeof data !== "object" ||
+        (data as { success?: unknown }).success !== true
+      ) {
+        throw new Error("The member removal response was invalid.");
+      }
+      router.refresh();
+    } catch (error) {
       setMemberActionError(
-        await extractServerError(
-          res,
-          "Couldn't remove member. Please try again.",
-        ),
+        error instanceof Error && error.message
+          ? error.message
+          : "Couldn't remove member. Please try again.",
       );
-      return;
+      router.refresh();
+    } finally {
+      setMemberBusy(memberId, false);
     }
-    router.refresh();
   };
 
   const revokeInvitation = async (invitationId: string) => {
@@ -262,11 +331,14 @@ export function TeamActions({
               </tr>
             </thead>
             <tbody>
-              {members.map((member) => (
-                <tr
-                  key={member.id}
-                  className="border-t border-dashed border-border"
-                >
+              {members.map((member) => {
+                const memberBusy = busyMemberIds.has(member.id);
+                return (
+                  <tr
+                    key={member.id}
+                    className="border-t border-dashed border-border"
+                    aria-busy={memberBusy || undefined}
+                  >
                   <td className="px-md py-sm font-medium text-ink">
                     {member.user_id === currentUserId
                       ? "You"
@@ -276,7 +348,13 @@ export function TeamActions({
                     {isOwner && member.user_id !== currentUserId ? (
                       <select
                         value={member.role}
-                        onChange={(e) => changeRole(member.id, e.target.value)}
+                        onChange={(e) =>
+                          changeRole(
+                            member.id,
+                            e.target.value as Member["role"],
+                          )
+                        }
+                        disabled={memberBusy}
                         className="rounded-sm border border-border bg-white px-sm py-xs text-[13px] text-ink"
                       >
                         <option value="owner">Owner</option>
@@ -298,6 +376,7 @@ export function TeamActions({
                         <button
                           type="button"
                           aria-label="Remove team member"
+                          disabled={memberBusy}
                           onClick={() => {
                             if (window.confirm("Remove this team member?")) {
                               removeMember(member.id);
@@ -314,8 +393,9 @@ export function TeamActions({
                       )}
                     </td>
                   )}
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

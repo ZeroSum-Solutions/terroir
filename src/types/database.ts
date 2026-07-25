@@ -1298,6 +1298,21 @@ export type Database = {
         }
         Returns: boolean
       }
+      remove_team_member_idempotent: {
+        Args: {
+          p_idempotency_key?: string
+          p_member_id: string
+          p_request_hash?: string
+          p_restaurant_id: string
+        }
+        Returns: {
+          execution_started_at: string
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
       reorder_wine_list_items: {
         Args: { p_ordered_ids: string[] }
         Returns: undefined
@@ -1352,6 +1367,22 @@ export type Database = {
           p_request_hash?: string
           p_restaurant_id: string
           p_wine_id: string
+        }
+        Returns: {
+          execution_started_at: string
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
+      update_team_member_role_idempotent: {
+        Args: {
+          p_idempotency_key?: string
+          p_member_id: string
+          p_request_hash?: string
+          p_restaurant_id: string
+          p_role: Database["public"]["Enums"]["membership_role"]
         }
         Returns: {
           execution_started_at: string
