@@ -9,6 +9,8 @@ import { readApiError } from "@/lib/api/client-error";
 import {
   createIdempotentCommandStore,
   createSessionCommandPersistence,
+  readApiErrorCode,
+  shouldRetainIdempotencyKey,
 } from "@/lib/api/idempotency-client";
 import { useToast } from "@/lib/toast";
 import { ML_PER_OZ } from "@/lib/units";
@@ -36,6 +38,10 @@ import {
 } from "@/lib/pricing/status";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
+
+const pourCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence("terroir:pour"),
+});
 
 export function WineDetailDrawer({
   row,
@@ -65,6 +71,7 @@ export function WineDetailDrawer({
 
   // BND-119: track last pour for undo.
   const [lastPour, setLastPour] = useState<{ ml: number } | null>(null);
+  const pourBusyRef = useRef(false);
 
   const [pendingDirection, setPendingDirection] = useState<
     "eightysixed" | "restored" | null
@@ -127,30 +134,45 @@ export function WineDetailDrawer({
 
   const doPour = useCallback(
     async (ml: number) => {
-      if (!row || !row.glass_pour_ml) return;
+      if (!row || !row.glass_pour_ml || pourBusyRef.current) return;
+      pourBusyRef.current = true;
       setErrorMsg(null);
       setBusy(true);
       setLastPour(null);
+      let shouldReconcile = true;
 
       try {
-        const res = await fetch("/api/pour", {
+        const { response, data } = await pourCommands.json<unknown>({
+          slot: `pour:${row.wine_id}`,
+          url: "/api/pour",
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wine_id: row.wine_id, ml, kind: "pour" }),
+          json: { wine_id: row.wine_id, ml, kind: "pour" },
         });
-        if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          throw new Error(payload?.error ?? `Request failed (${res.status}).`);
+        shouldReconcile =
+          !response.ok &&
+          shouldRetainIdempotencyKey(
+            response.status,
+            readApiErrorCode(data),
+          );
+        if (!response.ok) {
+          throw new Error(
+            readApiError(
+              data,
+              `Request failed (${response.status}).`,
+            ).message,
+          );
         }
         toast.success("Glass poured");
         setLastPour({ ml });
         startTransition(() => router.refresh());
       } catch (err) {
+        if (shouldReconcile) {
+          startTransition(() => router.refresh());
+        }
         toast.error("Pour failed");
         setErrorMsg(err instanceof Error ? err.message : "Pour failed.");
       } finally {
+        pourBusyRef.current = false;
         setBusy(false);
       }
     },

@@ -1256,6 +1256,24 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      record_pour_idempotent: {
+        Args: {
+          p_idempotency_key?: string
+          p_kind?: string
+          p_ml: number
+          p_note?: string
+          p_request_hash?: string
+          p_restaurant_id: string
+          p_wine_id: string
+        }
+        Returns: {
+          execution_started_at: string
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
       release_api_idempotency: {
         Args: {
           p_idempotency_key: string

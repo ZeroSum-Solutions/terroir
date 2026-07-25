@@ -65,6 +65,28 @@ describe("high-risk idempotency clients", () => {
     );
   });
 
+  it("persists pour keys and reconciles outcome-ambiguous failures", () => {
+    const drawer = source(
+      "src/app/(app)/cellar/wine-detail-drawer.tsx",
+    );
+
+    expect(drawer).toContain(
+      'createSessionCommandPersistence("terroir:pour")',
+    );
+    expect(drawer.indexOf("const pourCommands")).toBeLessThan(
+      drawer.indexOf("export function WineDetailDrawer"),
+    );
+    expect(drawer).toContain("slot: `pour:${row.wine_id}`");
+    expect(drawer).toContain('url: "/api/pour"');
+    expect(drawer).toContain(
+      "if (!row || !row.glass_pour_ml || pourBusyRef.current) return",
+    );
+    expect(drawer).toContain("pourBusyRef.current = true");
+    expect(drawer).toContain("shouldRetainIdempotencyKey(");
+    expect(drawer).toContain("if (shouldReconcile)");
+    expect(drawer).not.toContain('fetch("/api/pour"');
+  });
+
   it("persists one invitation key across remounts and transient failures", () => {
     const invitePage = source("src/app/invite/[token]/page.tsx");
 

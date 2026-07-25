@@ -9,12 +9,15 @@ const routeSource = readFileSync(
 );
 
 describe("/api/pour architecture boundary", () => {
-  it("keeps transactional RPC and revalidation orchestration out of the route", () => {
+  it("uses the dedicated atomic RPC without generic idempotency transitions", () => {
     expect(routeSource).toContain("@/domains/pours/pour-service");
-    expect(routeSource).not.toContain("@sentry/nextjs");
+    expect(routeSource).toContain('"record_pour_idempotent"');
+    expect(routeSource).toContain("p_idempotency_key");
+    expect(routeSource).toContain("p_request_hash");
+    expect(routeSource).toContain("createIdempotencyRequestHash");
+    expect(routeSource).not.toContain('"record_pour"');
+    expect(routeSource).not.toContain("withIdempotency");
     expect(routeSource).not.toContain("next/cache");
     expect(routeSource).not.toContain("revalidateAutoEightysixedWines");
-    expect(routeSource).not.toContain(".rpc(");
   });
 });
-

@@ -160,6 +160,27 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       sources: ["src/app/(app)/cellar/open/close-button.tsx"],
     },
   },
+  "api:POST:/api/pour": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "record_pour_idempotent",
+    },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "record_pour_idempotent",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: [
+        "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      ],
+    },
+  },
   "api:POST:/api/scan": {
     boundary: { kind: "generic-wrapper", count: 2 },
     identity: {

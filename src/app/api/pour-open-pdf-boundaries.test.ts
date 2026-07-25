@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 const mockRequireMembership = vi.fn();
 const mockRequireRole = vi.fn();
 const mockCaptureException = vi.fn();
-const mockRecordPour = vi.fn();
+const mockRevalidateRecordedPour = vi.fn();
 const mockUndoLastPour = vi.fn();
 const mockCloseOpenBottle = vi.fn();
 const mockReconcileOpenBottles = vi.fn();
@@ -19,18 +19,17 @@ vi.mock("@sentry/nextjs", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/domains/pours/pour-service", () => {
-  class PourNoInventoryError extends Error {}
   class PourForbiddenError extends Error {}
   class PourNotFoundError extends Error {}
   class PourAlreadyClosedError extends Error {}
   class PourRpcError extends Error {}
   return {
-    PourNoInventoryError,
     PourForbiddenError,
     PourNotFoundError,
     PourAlreadyClosedError,
     PourRpcError,
-    recordPour: (...args: unknown[]) => mockRecordPour(...args),
+    revalidateRecordedPour: (...args: unknown[]) =>
+      mockRevalidateRecordedPour(...args),
     undoLastPour: (...args: unknown[]) => mockUndoLastPour(...args),
     closeOpenBottle: (...args: unknown[]) => mockCloseOpenBottle(...args),
   };
@@ -80,7 +79,7 @@ function request(path: string, body: string): NextRequest {
 }
 
 function allow() {
-  const supabase = { from: vi.fn() };
+  const supabase = { from: vi.fn(), rpc: vi.fn() };
   const auth = {
     supabase,
     restaurantId: "restaurant-a",
@@ -191,7 +190,7 @@ describe("pour/open/PDF shared boundaries", () => {
       mockRequireRole.mockResolvedValue(denial);
 
       expect(await invoke()).toBe(denial);
-      expect(mockRecordPour).not.toHaveBeenCalled();
+      expect(mockRevalidateRecordedPour).not.toHaveBeenCalled();
       expect(mockUndoLastPour).not.toHaveBeenCalled();
       expect(mockCloseOpenBottle).not.toHaveBeenCalled();
       expect(mockReconcileOpenBottles).not.toHaveBeenCalled();
@@ -232,7 +231,8 @@ describe("pour/open/PDF shared boundaries", () => {
         error: { code: "invalid_json", message: "Invalid JSON." },
       });
       expect(supabase.from).not.toHaveBeenCalled();
-      expect(mockRecordPour).not.toHaveBeenCalled();
+      expect(supabase.rpc).not.toHaveBeenCalled();
+      expect(mockRevalidateRecordedPour).not.toHaveBeenCalled();
       expect(mockUndoLastPour).not.toHaveBeenCalled();
       expect(mockReconcileOpenBottles).not.toHaveBeenCalled();
       expect(mockGenerateWineListPdf).not.toHaveBeenCalled();

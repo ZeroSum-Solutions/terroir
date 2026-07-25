@@ -60,6 +60,14 @@ const atomicCloseBottleIdempotency = readFileSync(
   "utf8",
 );
 
+const atomicRecordPourIdempotency = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../supabase/migrations/0060_record_pour_idempotency.sql",
+  ),
+  "utf8",
+);
+
 describe("database security contracts", () => {
   it("keeps public wine-list read policies explicit and narrow", () => {
     for (const table of [
@@ -461,6 +469,41 @@ describe("database security contracts", () => {
     );
     expect(atomicCloseBottleIdempotency).toContain(
       "grant execute on function public.close_open_bottle_idempotent(\n  uuid,\n  uuid,\n  timestamptz,\n  text,\n  text\n) to authenticated;",
+    );
+  });
+
+  it("commits pour responses in the same transaction as every business effect", () => {
+    expect(atomicRecordPourIdempotency).toContain(
+      "create extension if not exists pgcrypto with schema extensions;",
+    );
+    expect(atomicRecordPourIdempotency).toMatch(
+      /record_pour_idempotent\([\s\S]*?security definer[\s\S]*?set search_path = ''/,
+    );
+    expect(atomicRecordPourIdempotency).toContain(
+      "public.is_member_with_role(p_restaurant_id, 'staff')",
+    );
+    expect(atomicRecordPourIdempotency).toMatch(
+      /pg_advisory_xact_lock\([\s\S]*?insert into public\.api_idempotency[\s\S]*?from public\.record_pour\([\s\S]*?update public\.api_idempotency[\s\S]*?state = 'completed'/,
+    );
+    expect(atomicRecordPourIdempotency).not.toContain("execute format");
+    expect(atomicRecordPourIdempotency).not.toContain("set local role");
+    expect(atomicRecordPourIdempotency).toContain(
+      "v_note text := nullif(btrim(p_note), '')",
+    );
+    expect(atomicRecordPourIdempotency).toContain(
+      "v_started_at timestamptz := now()",
+    );
+    expect(atomicRecordPourIdempotency).toContain(
+      "message = 'idempotency completion changed concurrently'",
+    );
+    expect(atomicRecordPourIdempotency).toContain(
+      "v_claim.restaurant_id <> p_restaurant_id",
+    );
+    expect(atomicRecordPourIdempotency).toContain(
+      "revoke all on function public.record_pour_idempotent(\n  uuid,\n  uuid,\n  int,\n  text,\n  text,\n  text,\n  text\n) from anon;",
+    );
+    expect(atomicRecordPourIdempotency).toContain(
+      "grant execute on function public.record_pour_idempotent(\n  uuid,\n  uuid,\n  int,\n  text,\n  text,\n  text,\n  text\n) to authenticated;",
     );
   });
 
