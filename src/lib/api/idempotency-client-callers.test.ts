@@ -79,12 +79,42 @@ describe("high-risk idempotency clients", () => {
     expect(drawer).toContain("slot: `pour:${row.wine_id}`");
     expect(drawer).toContain('url: "/api/pour"');
     expect(drawer).toContain(
-      "if (!row || !row.glass_pour_ml || pourBusyRef.current) return",
+      "pourBusyRef.current ||\n        undoBusyRef.current",
     );
     expect(drawer).toContain("pourBusyRef.current = true");
     expect(drawer).toContain("shouldRetainIdempotencyKey(");
     expect(drawer).toContain("if (shouldReconcile)");
     expect(drawer).not.toContain('fetch("/api/pour"');
+  });
+
+  it("keeps one pour-undo key across remounts and reconciles ambiguity", () => {
+    const drawer = source(
+      "src/app/(app)/cellar/wine-detail-drawer.tsx",
+    );
+
+    expect(drawer).toContain(
+      'createSessionCommandPersistence("terroir:pour-undo")',
+    );
+    expect(drawer).toContain("slot: `undo:${row.wine_id}`");
+    expect(drawer).toContain('url: "/api/pour/undo"');
+    expect(drawer).toContain(
+      "if (!row || !lastPour || undoBusyRef.current) return",
+    );
+    expect(drawer).toContain(
+      "pourBusyRef.current ||\n        undoBusyRef.current",
+    );
+    expect(drawer).toContain(
+      "abandonUndoPourSlot(`undo:${row.wine_id}`)",
+    );
+    expect(drawer).toContain(
+      "flushPendingUndoPourSlotReset(`undo:${row.wine_id}`)",
+    );
+    expect(drawer).toContain("undoBusyRef.current = true");
+    expect(drawer).toContain("shouldRetainIdempotencyKey(");
+    expect(drawer).toContain("readApiErrorCode(data)");
+    expect(drawer).toContain("const isAlreadyUndone =");
+    expect(drawer).toContain("if (isAlreadyUndone) setLastPour(null)");
+    expect(drawer).toContain("if (shouldReconcile)");
   });
 
   it("persists one invitation key across remounts and transient failures", () => {

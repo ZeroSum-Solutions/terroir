@@ -9,6 +9,7 @@ import { readApiError } from "@/lib/api/client-error";
 import {
   createIdempotentCommandStore,
   createSessionCommandPersistence,
+  IdempotentCommandBusyError,
   readApiErrorCode,
   shouldRetainIdempotencyKey,
 } from "@/lib/api/idempotency-client";
@@ -42,6 +43,26 @@ import type { CellarWineRow } from "./types";
 const pourCommands = createIdempotentCommandStore({
   persistence: createSessionCommandPersistence("terroir:pour"),
 });
+const undoPourCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence("terroir:pour-undo"),
+});
+const undoPourSlotsPendingReset = new Set<string>();
+
+function abandonUndoPourSlot(slot: string): void {
+  try {
+    undoPourCommands.abandon(slot);
+    undoPourSlotsPendingReset.delete(slot);
+  } catch (error) {
+    if (!(error instanceof IdempotentCommandBusyError)) throw error;
+    undoPourSlotsPendingReset.add(slot);
+  }
+}
+
+function flushPendingUndoPourSlotReset(slot: string): void {
+  if (undoPourSlotsPendingReset.has(slot)) {
+    abandonUndoPourSlot(slot);
+  }
+}
 
 export function WineDetailDrawer({
   row,
@@ -72,6 +93,7 @@ export function WineDetailDrawer({
   // BND-119: track last pour for undo.
   const [lastPour, setLastPour] = useState<{ ml: number } | null>(null);
   const pourBusyRef = useRef(false);
+  const undoBusyRef = useRef(false);
 
   const [pendingDirection, setPendingDirection] = useState<
     "eightysixed" | "restored" | null
@@ -134,7 +156,14 @@ export function WineDetailDrawer({
 
   const doPour = useCallback(
     async (ml: number) => {
-      if (!row || !row.glass_pour_ml || pourBusyRef.current) return;
+      if (
+        !row ||
+        !row.glass_pour_ml ||
+        pourBusyRef.current ||
+        undoBusyRef.current
+      ) {
+        return;
+      }
       pourBusyRef.current = true;
       setErrorMsg(null);
       setBusy(true);
@@ -162,6 +191,7 @@ export function WineDetailDrawer({
             ).message,
           );
         }
+        abandonUndoPourSlot(`undo:${row.wine_id}`);
         toast.success("Glass poured");
         setLastPour({ ml });
         startTransition(() => router.refresh());
@@ -182,28 +212,49 @@ export function WineDetailDrawer({
   // BND-119: undo the most recent pour.
   const doUndo = useCallback(
     async () => {
-      if (!row || !lastPour) return;
+      if (!row || !lastPour || undoBusyRef.current) return;
+      undoBusyRef.current = true;
       setErrorMsg(null);
       setBusy(true);
+      let shouldReconcile = true;
       try {
-        const res = await fetch("/api/pour/undo", {
+        const { response, data } = await undoPourCommands.json<unknown>({
+          slot: `undo:${row.wine_id}`,
+          url: "/api/pour/undo",
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wine_id: row.wine_id }),
+          json: { wine_id: row.wine_id },
         });
-        if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          throw new Error(payload?.error ?? `Undo failed (${res.status}).`);
+        const errorCode = readApiErrorCode(data);
+        const isAlreadyUndone =
+          response.status === 404 && errorCode === "not_found";
+        shouldReconcile =
+          isAlreadyUndone ||
+          (!response.ok &&
+            shouldRetainIdempotencyKey(
+              response.status,
+              errorCode,
+            ));
+        if (!response.ok) {
+          if (isAlreadyUndone) setLastPour(null);
+          throw new Error(
+            readApiError(
+              data,
+              `Undo failed (${response.status}).`,
+            ).message,
+          );
         }
         toast.success("Pour undone");
         setLastPour(null);
         startTransition(() => router.refresh());
       } catch (err) {
+        if (shouldReconcile) {
+          startTransition(() => router.refresh());
+        }
         toast.error("Undo failed");
         setErrorMsg(err instanceof Error ? err.message : "Undo failed.");
       } finally {
+        flushPendingUndoPourSlotReset(`undo:${row.wine_id}`);
+        undoBusyRef.current = false;
         setBusy(false);
       }
     },

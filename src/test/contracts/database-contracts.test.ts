@@ -68,6 +68,14 @@ const atomicRecordPourIdempotency = readFileSync(
   "utf8",
 );
 
+const atomicUndoLastPourIdempotency = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../supabase/migrations/0061_undo_last_pour_idempotency.sql",
+  ),
+  "utf8",
+);
+
 describe("database security contracts", () => {
   it("keeps public wine-list read policies explicit and narrow", () => {
     for (const table of [
@@ -504,6 +512,38 @@ describe("database security contracts", () => {
     );
     expect(atomicRecordPourIdempotency).toContain(
       "grant execute on function public.record_pour_idempotent(\n  uuid,\n  uuid,\n  int,\n  text,\n  text,\n  text,\n  text\n) to authenticated;",
+    );
+  });
+
+  it("commits pour-undo responses in the same transaction as the undo", () => {
+    expect(atomicUndoLastPourIdempotency).toMatch(
+      /undo_last_pour_idempotent\([\s\S]*?security definer[\s\S]*?set search_path = ''/,
+    );
+    expect(atomicUndoLastPourIdempotency).toContain(
+      "public.is_member_with_role(p_restaurant_id, 'staff')",
+    );
+    expect(atomicUndoLastPourIdempotency).toContain(
+      "create extension if not exists pgcrypto with schema extensions;",
+    );
+    expect(atomicUndoLastPourIdempotency).toMatch(
+      /v_identity :=[\s\S]*?extensions\.digest\([\s\S]*?pg_catalog\.int8send\([\s\S]*?p_request_hash <> v_request_hash/,
+    );
+    expect(atomicUndoLastPourIdempotency).toMatch(
+      /pg_advisory_xact_lock\([\s\S]*?insert into public\.api_idempotency[\s\S]*?from public\.undo_last_pour\([\s\S]*?update public\.api_idempotency[\s\S]*?state = 'completed'/,
+    );
+    expect(atomicUndoLastPourIdempotency).toContain(
+      "message = 'idempotency completion changed concurrently'",
+    );
+    expect(atomicUndoLastPourIdempotency).toContain(
+      "v_claim.restaurant_id <> p_restaurant_id",
+    );
+    expect(atomicUndoLastPourIdempotency).not.toMatch(/^\s*execute\s/mi);
+    expect(atomicUndoLastPourIdempotency).not.toContain("set role");
+    expect(atomicUndoLastPourIdempotency).toContain(
+      "revoke all on function public.undo_last_pour_idempotent(\n  uuid,\n  uuid,\n  text,\n  text\n) from anon;",
+    );
+    expect(atomicUndoLastPourIdempotency).toContain(
+      "grant execute on function public.undo_last_pour_idempotent(\n  uuid,\n  uuid,\n  text,\n  text\n) to authenticated;",
     );
   });
 

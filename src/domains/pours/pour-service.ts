@@ -1,4 +1,3 @@
-import * as Sentry from "@sentry/nextjs";
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidateAutoEightysixedWines } from "@/lib/api/auto-eightysix-revalidation";
@@ -43,40 +42,17 @@ export async function revalidateRecordedPour(input: {
   });
 }
 
-export type UndoLastPourInput = {
+export type RevalidateUndonePourInput = {
   supabase: SupabaseClient<Database>;
   restaurantId: string;
   wineId: string;
+  sinceTs: string;
 };
 
-export async function undoLastPour(input: UndoLastPourInput) {
-  const { supabase, restaurantId, wineId } = input;
-  const sinceTs = new Date().toISOString();
-
-  const { data, error } = await supabase.rpc("undo_last_pour", {
-    p_restaurant_id: restaurantId,
-    p_wine_id: wineId,
-  });
-
-  if (error) {
-    const message = error.message?.trim().toLowerCase();
-    if (
-      error.code === "P0001" &&
-      (message === "no recent pour to undo" || message === "wine not found")
-    ) {
-      throw new PourNotFoundError("Pour to undo not found.");
-    }
-    if (error.code === "42501") {
-      throw new PourForbiddenError();
-    }
-    console.error("undo_last_pour failed:", error);
-    Sentry.captureException(error, {
-      tags: { surface: "pour", phase: "undo_last_pour-rpc" },
-      extra: { wine_id: wineId },
-    });
-    throw new PourRpcError("Undo failed.", { cause: error });
-  }
-
+export async function revalidateUndonePour(
+  input: RevalidateUndonePourInput,
+) {
+  const { supabase, restaurantId, wineId, sinceTs } = input;
   revalidatePath("/availability");
 
   await revalidateAutoEightysixedWines({
@@ -85,6 +61,4 @@ export async function undoLastPour(input: UndoLastPourInput) {
     touchedWineIds: [wineId],
     sinceTs,
   });
-
-  return data;
 }

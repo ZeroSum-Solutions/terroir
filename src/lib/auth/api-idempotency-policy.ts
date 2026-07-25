@@ -181,6 +181,27 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       ],
     },
   },
+  "api:POST:/api/pour/undo": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "undo_last_pour_idempotent",
+    },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "undo_last_pour_idempotent",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: [
+        "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      ],
+    },
+  },
   "api:POST:/api/scan": {
     boundary: { kind: "generic-wrapper", count: 2 },
     identity: {

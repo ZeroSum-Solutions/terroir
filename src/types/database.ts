@@ -1331,6 +1331,21 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      undo_last_pour_idempotent: {
+        Args: {
+          p_idempotency_key?: string
+          p_request_hash?: string
+          p_restaurant_id: string
+          p_wine_id: string
+        }
+        Returns: {
+          execution_started_at: string
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
       wine_published_list_slugs: {
         Args: { p_restaurant_id: string; p_wine_id: string }
         Returns: {
