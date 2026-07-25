@@ -1,30 +1,19 @@
-# Defense-in-depth logical backup of the Supabase production database.
+# Encrypted, portable logical backup of the production Supabase database.
 #
-# WHY: Free tier daily backups exist on Supabase's side but are not downloadable
-# and require a support ticket to restore. This workflow gives us a self-service
-# logical backup we can replay against a fresh project without external help.
+# RUNBOOK: docs/runbooks/database-backup-restore.md
 #
-# RUNBOOK: .council/runbooks/database-backup.md (read it before merging
-# BND-008/009 work — it documents the mandatory pre-migration backup step).
-#
-# REQUIRED SECRET: SUPABASE_DB_URL — full postgres connection string against
-# the DIRECT host (not the pooler). Format:
-#   postgresql://postgres:<DB_PASSWORD>@db.qcfmwphlaekfkqwkfyth.supabase.co:5432/postgres
-# Get the password from https://supabase.com/dashboard/project/qcfmwphlaekfkqwkfyth/settings/database
-#
-# SECURITY NOTE: this workflow consumes a secret (SUPABASE_DB_URL) and reads
-# zero untrusted user input. There are no `${{ github.event.* }}` interpolations
-# in any `run:` block, so the GH Actions injection class doesn't apply here.
-# If you ever add `workflow_run` or PR-comment triggers, audit before shipping.
+# REQUIRED SECRETS:
+# - SUPABASE_DB_URL: port-5432 session-pooler connection for a dedicated
+#   backup-only role (never the transaction pooler).
+# - BACKUP_AGE_RECIPIENT: age X25519 public recipient for the offline restore
+#   identity. The private identity must never be present in this workflow.
 
 name: DB Backup
 
 on:
   schedule:
-    # 06:00 UTC daily — late evening US Pacific the prior day. Quiet window.
     - cron: "0 6 * * *"
   workflow_dispatch:
-    # Manual trigger — used before any production down migration. See runbook.
 
 concurrency:
   group: db-backup
@@ -32,69 +21,388 @@ concurrency:
 
 jobs:
   backup:
-    name: pg_dump production
+    name: Encrypted production backup
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
+      actions: read
       contents: read
+      issues: write
+
+    env:
+      BACKUP_PROJECT_REF: qcfmwphlaekfkqwkfyth
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Install Postgres 17 client
-        # Match the production Postgres major version (17). Default ubuntu image
-        # ships an older client which can produce dumps the server won't reject
-        # but may include subtly wrong syntax for newer features.
+      - name: Resolve runner-local paths
+        shell: bash
         run: |
-          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client-17
+          set -euo pipefail
+          echo "PGSERVICEFILE=$RUNNER_TEMP/terroir-backup.pg_service.conf" >> "$GITHUB_ENV"
+          echo "BACKUP_DIR=$RUNNER_TEMP/terroir-backup" >> "$GITHUB_ENV"
 
-      - name: Run pg_dump
+      - name: Validate required configuration
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in SUPABASE_DB_URL BACKUP_AGE_RECIPIENT; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Required secret ${name} is not configured. See docs/runbooks/database-backup-restore.md."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          if [[ "$BACKUP_AGE_RECIPIENT" != age1* ]]; then
+            echo "::error::BACKUP_AGE_RECIPIENT is not an age X25519 recipient."
+            exit 1
+          fi
+          if [ -z "${RUNNER_TEMP:-}" ] ||
+             [[ "$PGSERVICEFILE" != "$RUNNER_TEMP/"* ]] ||
+             [[ "$BACKUP_DIR" != "$RUNNER_TEMP/"* ]]; then
+            echo "::error::Backup paths must stay beneath RUNNER_TEMP."
+            exit 1
+          fi
+
+      - name: Install PostgreSQL 17 and age
+        shell: bash
+        run: |
+          set -euo pipefail
+          key_file="$RUNNER_TEMP/postgresql-pgdg.asc"
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc |
+            tee "$key_file" > /dev/null
+          fingerprint="$(
+            gpg --show-keys --with-colons "$key_file" |
+              awk -F: '$1 == "fpr" { print $10; exit }'
+          )"
+          if [ "$fingerprint" != "B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8" ]; then
+            echo "::error::Unexpected PostgreSQL repository signing key."
+            exit 1
+          fi
+          sudo gpg --dearmor \
+            --output /usr/share/keyrings/postgresql-pgdg.gpg \
+            "$key_file"
+          sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/postgresql-pgdg.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17 age
+          echo "BACKUP_PG_DUMP_VERSION=$(pg_dump --version)" >> "$GITHUB_ENV"
+          echo "BACKUP_AGE_VERSION=$(age --version)" >> "$GITHUB_ENV"
+
+      - name: Verify the backup role is read-only
+        shell: bash
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          if [ -z "$SUPABASE_DB_URL" ]; then
-            echo "::error::SUPABASE_DB_URL secret is not set. See .council/runbooks/database-backup.md."
+          set -euo pipefail
+          cleanup_service() {
+            rm -f "$PGSERVICEFILE"
+          }
+          trap cleanup_service EXIT
+          trap 'exit 1' HUP INT TERM
+          node scripts/backup/write-pg-service.mjs
+          role_state="$(
+            psql "service=terroir_backup" -X -A -t -v ON_ERROR_STOP=1 \
+              -c "select r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolbypassrls, r.rolreplication, pg_has_role(current_user, 'pg_read_all_data', 'member'), pg_has_role(current_user, 'pg_write_all_data', 'member'), (select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname <> 'information_schema' and n.nspname !~ '^pg_' and ((c.relkind in ('r', 'p', 'v', 'm', 'f') and (has_table_privilege(current_user, c.oid, 'INSERT') or has_table_privilege(current_user, c.oid, 'UPDATE') or has_table_privilege(current_user, c.oid, 'DELETE') or has_table_privilege(current_user, c.oid, 'TRUNCATE') or has_any_column_privilege(current_user, c.oid, 'INSERT') or has_any_column_privilege(current_user, c.oid, 'UPDATE'))) or (c.relkind = 'S' and has_sequence_privilege(current_user, c.oid, 'UPDATE')))), (select count(*) from pg_catalog.pg_class c where c.relowner = r.oid and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')), (select count(*) from pg_catalog.pg_auth_members m join pg_catalog.pg_roles granted_role on granted_role.oid = m.roleid where m.member = r.oid and granted_role.rolname <> 'pg_read_all_data'), (select count(*) from pg_catalog.pg_namespace n where n.nspname <> 'information_schema' and n.nspname !~ '^pg_' and has_schema_privilege(current_user, n.oid, 'CREATE')) from pg_roles r where r.rolname = current_user"
+          )"
+          if [ "$role_state" != "f|f|f|t|f|t|f|0|0|0|0" ]; then
+            echo "::error::SUPABASE_DB_URL must use the read-only backup role with BYPASSRLS and pg_read_all_data."
             exit 1
           fi
 
-          TIMESTAMP=$(date -u +"%Y-%m-%d-%H%M%S")
-          DUMP_FILE="terroir-db-backup-${TIMESTAMP}.sql"
+      - name: Create dump and source evidence
+        id: dump
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$BACKUP_DIR"
+          timestamp="$(date -u +'%Y-%m-%d-%H%M%S')"
+          dump_file="$BACKUP_DIR/terroir-${timestamp}.dump"
+          evidence_file="$BACKUP_DIR/source-evidence.json"
+          payload_file="$BACKUP_DIR/terroir-${timestamp}.tar"
+          encrypted_file="$BACKUP_DIR/terroir-${timestamp}.tar.age"
+          manifest_file="$BACKUP_DIR/terroir-${timestamp}.manifest.json"
+          checksums_file="$BACKUP_DIR/terroir-${timestamp}.sha256"
+          recipient_file="$BACKUP_DIR/age-recipient.txt"
+          snapshot_pid=""
+          close_snapshot_session() {
+            if [ -n "$snapshot_pid" ]; then
+              printf '\\q\n' >&"${SNAPSHOT_HOLDER[1]}" 2>/dev/null || true
+              wait "$snapshot_pid" 2>/dev/null || true
+              snapshot_pid=""
+            fi
+          }
+          cleanup_sensitive() {
+            close_snapshot_session
+            rm -f \
+              "$PGSERVICEFILE" \
+              "$recipient_file" \
+              "$dump_file" \
+              "$evidence_file" \
+              "$payload_file"
+          }
+          trap cleanup_sensitive EXIT
+          trap 'exit 1' HUP INT TERM
 
-          # --no-owner / --no-privileges keep the dump portable across projects
-          # so we can replay it into a fresh Supabase project without role
-          # ownership conflicts.
+          node scripts/backup/write-pg-service.mjs
+          printf '%s\n' "$BACKUP_AGE_RECIPIENT" > "$recipient_file"
+          chmod 600 "$recipient_file"
+
+          coproc SNAPSHOT_HOLDER {
+            psql "service=terroir_backup" \
+              -X -q -A -t -v ON_ERROR_STOP=1
+          }
+          snapshot_pid="$SNAPSHOT_HOLDER_PID"
+          printf '%s\n' \
+            'begin isolation level repeatable read read only;' \
+            'select pg_export_snapshot();' \
+            >&"${SNAPSHOT_HOLDER[1]}"
+          IFS= read -r backup_snapshot <&"${SNAPSHOT_HOLDER[0]}"
+          if [[ ! "$backup_snapshot" =~ ^[0-9A-Fa-f-]+$ ]]; then
+            echo "::error::PostgreSQL did not return a valid exported snapshot."
+            exit 1
+          fi
+
           pg_dump \
+            --dbname=service=terroir_backup \
+            --format=custom \
             --no-owner \
             --no-privileges \
-            --format=plain \
-            --file="$DUMP_FILE" \
-            "$SUPABASE_DB_URL"
+            --snapshot="$backup_snapshot" \
+            --file="$dump_file"
 
-          gzip "$DUMP_FILE"
-          ls -lh "${DUMP_FILE}.gz"
-          echo "DUMP_FILE=${DUMP_FILE}.gz" >> "$GITHUB_ENV"
-
-      - name: Sanity-check the dump
-        # A near-empty dump usually means auth failed silently or the dump
-        # finished before any tables were written. Fail loudly so the empty
-        # artifact doesn't sit there pretending to be a real backup.
-        run: |
-          SIZE=$(stat -c%s "$DUMP_FILE" 2>/dev/null || stat -f%z "$DUMP_FILE")
-          echo "Compressed dump size: ${SIZE} bytes"
-          if [ "$SIZE" -lt 1024 ]; then
-            echo "::error::Dump is suspiciously small (<1KB). Aborting before upload."
+          if [ "$(stat -c%s "$dump_file")" -lt 1024 ]; then
+            echo "::error::Database dump is suspiciously small."
             exit 1
           fi
+          table_entries="$(
+            pg_restore --list "$dump_file" |
+              awk '$4 == "TABLE" && $5 == "DATA" { count += 1 } END { print count + 0 }'
+          )"
+          if [ "$table_entries" -eq 0 ]; then
+            echo "::error::Database dump contains no table data entries."
+            exit 1
+          fi
+          BACKUP_SNAPSHOT_ID="$backup_snapshot" \
+          BACKUP_DUMP_FILE="$dump_file" \
+            node scripts/backup/assert-dump-coverage.mjs
 
-      - name: Upload backup artifact
-        uses: actions/upload-artifact@v4
+          BACKUP_SNAPSHOT_ID="$backup_snapshot" \
+          BACKUP_EVIDENCE_FILE="$evidence_file" \
+            node scripts/backup/collect-database-evidence.mjs
+          close_snapshot_session
+          tar -C "$BACKUP_DIR" -cf "$payload_file" \
+            "$(basename "$dump_file")" \
+            "$(basename "$evidence_file")"
+          age --encrypt --recipients-file "$recipient_file" \
+            --output "$encrypted_file" "$payload_file"
+
+          BACKUP_DUMP_FILE="$dump_file" \
+          BACKUP_EVIDENCE_FILE="$evidence_file" \
+          BACKUP_PAYLOAD_FILE="$payload_file" \
+          BACKUP_ENCRYPTED_FILE="$encrypted_file" \
+          BACKUP_MANIFEST_FILE="$manifest_file" \
+          BACKUP_TABLE_DATA_ENTRIES="$table_entries" \
+            node scripts/backup/create-manifest.mjs
+
+          (
+            cd "$BACKUP_DIR"
+            sha256sum \
+              "$(basename "$encrypted_file")" \
+              "$(basename "$manifest_file")" \
+              > "$(basename "$checksums_file")"
+          )
+
+          rm -f \
+            "$recipient_file" \
+            "$dump_file" \
+            "$evidence_file" \
+            "$payload_file" \
+            "$PGSERVICEFILE"
+          test ! -e "$recipient_file"
+          test ! -e "$dump_file"
+          test ! -e "$evidence_file"
+          test ! -e "$payload_file"
+          test ! -e "$PGSERVICEFILE"
+
+          echo "artifact_name=terroir-db-backup-${timestamp}" >> "$GITHUB_OUTPUT"
+          echo "encrypted_file=$encrypted_file" >> "$GITHUB_OUTPUT"
+          echo "manifest_file=$manifest_file" >> "$GITHUB_OUTPUT"
+          echo "checksums_file=$checksums_file" >> "$GITHUB_OUTPUT"
+
+      - name: Upload encrypted backup and metadata
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ${{ env.DUMP_FILE }}
-          path: ${{ env.DUMP_FILE }}
+          name: ${{ steps.dump.outputs.artifact_name }}
+          path: |
+            ${{ steps.dump.outputs.encrypted_file }}
+            ${{ steps.dump.outputs.manifest_file }}
+            ${{ steps.dump.outputs.checksums_file }}
           retention-days: 90
           if-no-files-found: error
           compression-level: 0
+
+      - name: Verify immutable artifact retention metadata
+        id: verify_artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          metadata="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID"
+          )"
+          expires_at="$(jq -r '.expires_at' <<< "$metadata")"
+          immutable="$(jq -r '.expired == false' <<< "$metadata")"
+          api_digest="$(jq -r '.digest // empty' <<< "$metadata")"
+          if [ "$immutable" != "true" ] || [ -z "$expires_at" ]; then
+            echo "::error::Uploaded artifact is already expired or lacks retention metadata."
+            exit 1
+          fi
+          if [[ ! "$ARTIFACT_DIGEST" =~ ^(sha256:)?[0-9a-f]{64}$ ]]; then
+            echo "::error::Upload did not return a valid SHA-256 artifact digest."
+            exit 1
+          fi
+          if [[ ! "$api_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Artifact API did not return a canonical SHA-256 digest."
+            exit 1
+          fi
+          if [ "${api_digest#sha256:}" != "${ARTIFACT_DIGEST#sha256:}" ]; then
+            echo "::error::Artifact API digest does not match the upload result."
+            exit 1
+          fi
+          EXPIRES_AT="$expires_at" node -e '
+            const remaining = Date.parse(process.env.EXPIRES_AT) - Date.now();
+            if (!Number.isFinite(remaining) || remaining < 89 * 86400_000) {
+              throw new Error("Artifact retention was clamped below 89 days.");
+            }
+          '
+          {
+            echo "### Encrypted database backup"
+            echo "- Artifact ID: \`$ARTIFACT_ID\`"
+            echo "- Immutable artifact digest: \`$api_digest\`"
+            echo "- Effective expiration: \`$expires_at\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "expires_at=$expires_at" >> "$GITHUB_OUTPUT"
+          echo "artifact_digest=$api_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Record the external integrity anchor
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.verify_artifact.outputs.artifact_digest }}
+          EXPIRES_AT: ${{ steps.verify_artifact.outputs.expires_at }}
+        run: |
+          set -euo pipefail
+          title="Database backup integrity ledger"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          issue_number="$(
+            gh issue list \
+              --repo "$GITHUB_REPOSITORY" \
+              --state all \
+              --search "\"$title\" in:title" \
+              --json number,title \
+              --jq ".[] | select(.title == \"$title\") | .number" |
+              head -n 1
+          )"
+          if [ -z "$issue_number" ]; then
+            issue_number="$(
+              gh issue create \
+                --repo "$GITHUB_REPOSITORY" \
+                --title "$title" \
+                --body "Append-only external anchors for immutable encrypted database backup artifacts." |
+                sed -E 's#.*/([0-9]+)$#\1#'
+            )"
+          fi
+          gh issue comment "$issue_number" \
+            --repo "$GITHUB_REPOSITORY" \
+            --body "Run: $run_url
+          Artifact ID: \`$ARTIFACT_ID\`
+          SHA-256: \`$ARTIFACT_DIGEST\`
+          Expires: \`$EXPIRES_AT\`"
+
+      - name: Remove transient credentials and plaintext
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${RUNNER_TEMP:?}"
+          : "${PGSERVICEFILE:?}"
+          : "${BACKUP_DIR:?}"
+          [[ "$PGSERVICEFILE" == "$RUNNER_TEMP/"* ]]
+          [[ "$BACKUP_DIR" == "$RUNNER_TEMP/"* ]]
+          rm -f "$PGSERVICEFILE"
+          rm -rf "$BACKUP_DIR"
+          test ! -e "$PGSERVICEFILE"
+          test ! -e "$BACKUP_DIR"
+
+      - name: Close a recovered backup incident
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          issue_number="$(
+            gh issue list \
+              --repo "$GITHUB_REPOSITORY" \
+              --state open \
+              --search '"Automated database backup failed" in:title' \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+          if [ -n "$issue_number" ]; then
+            gh issue close "$issue_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --comment "Recovered in $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          fi
+
+  backup_incident:
+    name: Report an unsuccessful backup job
+    needs: backup
+    if: ${{ always() && needs.backup.result != 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update a backup failure incident
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title="Automated database backup failed"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          result="${{ needs.backup.result }}"
+          issue_number="$(
+            gh issue list \
+              --repo "$GITHUB_REPOSITORY" \
+              --state open \
+              --search "\"$title\" in:title" \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+          if [ -n "$issue_number" ]; then
+            gh issue comment "$issue_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body "Backup job ended with \`$result\`: $run_url"
+          else
+            gh issue create \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$title" \
+              --body "The encrypted database backup job ended with \`$result\`. Run: $run_url. Schema promotion remains blocked until backup health is restored."
+          fi
