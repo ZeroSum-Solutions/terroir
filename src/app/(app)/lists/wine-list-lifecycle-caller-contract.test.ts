@@ -26,6 +26,9 @@ describe("wine-list lifecycle caller contract", () => {
     expect(landing).not.toContain(
       'fetch(`/api/wine-lists/${list.id}`, {',
     );
+    expect(landing).not.toContain(
+      'fetch(`/api/wine-lists/${list.id}/clone`, {',
+    );
     expect(landing).not.toContain('fetch("/api/wine-lists", {');
     expect(editor).not.toContain(
       'fetch(`/api/wine-lists/${list.id}`, {',
@@ -33,8 +36,12 @@ describe("wine-list lifecycle caller contract", () => {
     expect(publishModal).not.toContain(
       'fetch(`/api/wine-lists/${listId}`, {',
     );
+    expect(publishModal).not.toContain(
+      'fetch(`/api/wine-lists/${listId}/publish`, {',
+    );
     expect(editor).toContain("templateMutationRef.current");
     expect(publishModal).toContain("slugMutationRef.current");
+    expect(publishModal).toContain("publicationMutationRef.current");
     expect(landing).toContain("creatingRef.current");
     expect(landing).toContain("activeMutationSlotsRef.current");
   });

@@ -308,6 +308,268 @@ describe("wine-list lifecycle idempotency callers", () => {
     expect(sessionStorage.length).toBe(0);
   });
 
+  it("guards clone and reuses its persisted key after a lost response", async () => {
+    const first = deferredResponse();
+    mockFetch
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(Response.json({ id: CREATED_ID }));
+    await act(async () => {
+      root.render(<WineListLanding lists={[list()]} />);
+    });
+    const clone = container.querySelector(
+      'button[aria-label="Clone Dinner"]',
+    ) as HTMLButtonElement;
+
+    await act(async () => {
+      clone.click();
+      clone.click();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    const originalKey = keyAt(0);
+    expect(originalKey).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
+
+    await act(async () => {
+      first.reject(new TypeError("connection reset after clone commit"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "connection reset after clone commit",
+      ),
+    );
+    expect(sessionStorage.length).toBe(1);
+
+    await act(async () => {
+      clone.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith(`/lists/${CREATED_ID}`),
+    );
+    expect(keyAt(1)).toBe(originalKey);
+    expect(bodyAt(1)).toBe(bodyAt(0));
+    expect(sessionStorage.length).toBe(0);
+  });
+
+  it("guards publish and replays the same command after ambiguity", async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            error: {
+              code: "idempotency_unavailable",
+              message: "Publication status could not be confirmed.",
+            },
+          },
+          { status: 503 },
+        ),
+      )
+      .mockResolvedValueOnce(Response.json({ slug: "dinner-list" }));
+    await act(async () => {
+      root.render(
+        <PublishModal
+          listId={LIST_ID}
+          currentSlug={null}
+          isPublished={false}
+          onClose={vi.fn()}
+        />,
+      );
+    });
+    await setInput(
+      container.querySelector("#publish-slug") as HTMLInputElement,
+      "Dinner-List",
+    );
+
+    await act(async () => {
+      button(container, "Publish").click();
+      button(container, "Publish").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "could not be confirmed",
+      ),
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(bodyAt(0))).toEqual({ slug: "dinner-list" });
+    const originalKey = keyAt(0);
+    expect(sessionStorage.length).toBe(1);
+
+    await act(async () => {
+      button(container, "Publish").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Your wine list is live"),
+    );
+    expect(keyAt(1)).toBe(originalKey);
+    expect(bodyAt(1)).toBe(bodyAt(0));
+    expect(sessionStorage.length).toBe(0);
+  });
+
+  it("uses a fresh publish key after correcting a colliding slug", async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            error: {
+              code: "slug_collision",
+              message: "This slug is already in use.",
+            },
+          },
+          { status: 409 },
+        ),
+      )
+      .mockResolvedValueOnce(Response.json({ slug: "dinner-list-two" }));
+    await act(async () => {
+      root.render(
+        <PublishModal
+          listId={LIST_ID}
+          currentSlug={null}
+          isPublished={false}
+          onClose={vi.fn()}
+        />,
+      );
+    });
+    const slugInput = container.querySelector(
+      "#publish-slug",
+    ) as HTMLInputElement;
+    await setInput(slugInput, "dinner-list-one");
+
+    await act(async () => {
+      button(container, "Publish").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "already in use",
+      ),
+    );
+    const collidingKey = keyAt(0);
+    expect(JSON.parse(bodyAt(0))).toEqual({ slug: "dinner-list-one" });
+    expect(sessionStorage.length).toBe(0);
+
+    await setInput(slugInput, "dinner-list-two");
+    await act(async () => {
+      button(container, "Publish").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Your wine list is live"),
+    );
+    expect(JSON.parse(bodyAt(1))).toEqual({ slug: "dinner-list-two" });
+    expect(keyAt(1)).not.toBe(collidingKey);
+    expect(sessionStorage.length).toBe(0);
+  });
+
+  it("clears a retained publish key only after refreshed props confirm commit", async () => {
+    mockFetch.mockRejectedValueOnce(
+      new TypeError("connection reset after publication"),
+    );
+    const onClose = vi.fn();
+    await act(async () => {
+      root.render(
+        <PublishModal
+          listId={LIST_ID}
+          currentSlug={null}
+          isPublished={false}
+          onClose={onClose}
+        />,
+      );
+    });
+
+    await act(async () => {
+      button(container, "Publish").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "connection reset after publication",
+      ),
+    );
+    expect(sessionStorage.length).toBe(1);
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      root.render(<div />);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      root.render(
+        <PublishModal
+          listId={LIST_ID}
+          currentSlug="dinner-confirmed"
+          isPublished
+          onClose={onClose}
+        />,
+      );
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Your wine list is live"),
+    );
+    expect(container.textContent).toContain("dinner-confirmed");
+    expect(sessionStorage.length).toBe(0);
+  });
+
+  it("guards unpublish and reuses its key after a transport loss", async () => {
+    const first = deferredResponse();
+    mockFetch
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(Response.json({ ok: true }));
+    await act(async () => {
+      root.render(
+        <PublishModal
+          listId={LIST_ID}
+          currentSlug="dinner"
+          isPublished
+          onClose={vi.fn()}
+        />,
+      );
+    });
+
+    await act(async () => {
+      button(container, "Unpublish").click();
+      button(container, "Unpublish").click();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    const originalKey = keyAt(0);
+
+    await act(async () => {
+      first.reject(new TypeError("connection reset after unpublish"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "connection reset after unpublish",
+      ),
+    );
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.length).toBe(1);
+
+    await act(async () => {
+      button(container, "Unpublish").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Publish wine list"),
+    );
+    expect(keyAt(1)).toBe(originalKey);
+    expect(sessionStorage.length).toBe(0);
+  });
+
   it("guards editor templates visibly and reuses a key after ambiguity", async () => {
     const pending = deferredResponse();
     mockFetch

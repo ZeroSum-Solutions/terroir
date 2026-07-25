@@ -592,6 +592,27 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       sources: ["src/app/(app)/lists/[id]/wine-list-editor.tsx"],
     },
   },
+  "api:DELETE:/api/wine-lists/{param}/publish": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "set_wine_list_publication_idempotent",
+    },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "set_wine_list_publication_idempotent",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: [
+        "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      ],
+    },
+  },
   "api:DELETE:/api/wine-lists/{param}": {
     boundary: { kind: "generic-wrapper", count: 1 },
     identity: {
@@ -603,6 +624,46 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
     client: {
       lifecycle: "session-persistent",
       sources: ["src/app/(app)/lists/wine-list-landing.tsx"],
+    },
+  },
+  "api:POST:/api/wine-lists/{param}/clone": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "clone_wine_list_idempotent",
+    },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "clone_wine_list_idempotent",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/lists/wine-list-landing.tsx"],
+    },
+  },
+  "api:POST:/api/wine-lists/{param}/publish": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "set_wine_list_publication_idempotent",
+    },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "set_wine_list_publication_idempotent",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: [
+        "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      ],
     },
   },
   "api:PATCH:/api/wine-lists/{param}": {

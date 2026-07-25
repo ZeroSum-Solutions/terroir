@@ -22,7 +22,6 @@ const { POST: PUBLISH, DELETE: UNPUBLISH } = await import(
 
 const LIST_ID = "11111111-1111-4111-8111-111111111111";
 const CLONE_ID = "22222222-2222-4222-8222-222222222222";
-const SECTION_ID = "33333333-3333-4333-8333-333333333333";
 const RESTAURANT_ID = "44444444-4444-4444-8444-444444444444";
 
 type DbError = { message: string; code?: string };
@@ -108,6 +107,18 @@ function roleAuth(plans: Plan[]) {
   return supabase;
 }
 
+function roleRpc(data: unknown, error: DbError | null = null) {
+  const rpc = vi.fn(async () => ({ data, error }));
+  const from = vi.fn(() => {
+    throw new Error("dedicated RPC routes must not issue table calls");
+  });
+  auth.requireRole.mockResolvedValue({
+    supabase: { from, rpc },
+    restaurantId: RESTAURANT_ID,
+  });
+  return { from, rpc };
+}
+
 describe("wine-list lifecycle behavior", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -143,38 +154,13 @@ describe("wine-list lifecycle behavior", () => {
   });
 
   it("preserves display fields while cloning a list", async () => {
-    const supabase = roleAuth([
+    const supabase = roleRpc([
       {
-        table: "wine_lists",
-        data: { name: "Dinner", description: "Evening", template: "modern" },
+        outcome: "cloned",
+        response_status: 200,
+        response_body: { id: CLONE_ID },
+        replayed: false,
       },
-      {
-        table: "wine_list_sections",
-        data: [
-          {
-            name: "Reds",
-            position: 0,
-            wine_list_items: [
-              {
-                wine_id: "wine-1",
-                bottle_price: 80,
-                glass_price: 18,
-                glass_pour_ml: 150,
-                pour_size_mode: "fixed",
-                position: 0,
-                is_available: true,
-                tasting_note: "Cherry",
-                name_override: "Reserve",
-                blurb: "Old vines",
-                hidden: true,
-              },
-            ],
-          },
-        ],
-      },
-      { table: "wine_lists", data: { id: CLONE_ID } },
-      { table: "wine_list_sections", data: { id: SECTION_ID } },
-      { table: "wine_list_items", data: [] },
     ]);
 
     const response = await CLONE(
@@ -183,33 +169,19 @@ describe("wine-list lifecycle behavior", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(supabase.calls[4].payload).toEqual([
-      expect.objectContaining({
-        section_id: SECTION_ID,
-        name_override: "Reserve",
-        blurb: "Old vines",
-        hidden: true,
-      }),
-    ]);
+    expect(await response.json()).toEqual({ id: CLONE_ID });
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      "clone_wine_list_idempotent",
+      {
+        p_restaurant_id: RESTAURANT_ID,
+        p_wine_list_id: LIST_ID,
+      },
+    );
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 
-  it("removes a partial clone when a section insert fails", async () => {
-    const supabase = roleAuth([
-      {
-        table: "wine_lists",
-        data: { name: "Dinner", description: null, template: "classic" },
-      },
-      {
-        table: "wine_list_sections",
-        data: [{ name: "Reds", position: 0, wine_list_items: [] }],
-      },
-      { table: "wine_lists", data: { id: CLONE_ID } },
-      {
-        table: "wine_list_sections",
-        error: { message: "section insert failed" },
-      },
-      { table: "wine_lists", data: { id: CLONE_ID } },
-    ]);
+  it("returns a redacted clone failure when the atomic RPC fails", async () => {
+    roleRpc(null, { message: "clone transaction failed" });
 
     const response = await CLONE(
       request(`/api/wine-lists/${LIST_ID}/clone`, "POST"),
@@ -217,18 +189,48 @@ describe("wine-list lifecycle behavior", () => {
     );
 
     expect(response.status).toBe(500);
-    expect(supabase.calls[4]).toMatchObject({
-      action: "delete",
-      filters: [
-        ["id", CLONE_ID, "eq"],
-        ["restaurant_id", RESTAURANT_ID, "eq"],
-      ],
+    expect(await response.json()).toEqual({
+      error: {
+        code: "internal_error",
+        message: "Internal server error.",
+      },
     });
   });
 
-  it("distinguishes a clone provider failure from a missing list", async () => {
-    roleAuth([
-      { table: "wine_lists", error: { message: "provider unavailable" } },
+  it("distinguishes an atomic clone miss from a provider failure", async () => {
+    roleRpc([
+      {
+        outcome: "not_found",
+        response_status: 404,
+        response_body: {
+          error: {
+            code: "not_found",
+            message: "Wine list not found.",
+          },
+        },
+        replayed: false,
+      },
+    ]);
+
+    const response = await CLONE(
+      request(`/api/wine-lists/${LIST_ID}/clone`, "POST"),
+      { params: Promise.resolve({ id: LIST_ID }) },
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      error: { code: "not_found" },
+    });
+  });
+
+  it("rejects a malformed successful clone RPC result", async () => {
+    roleRpc([
+      {
+        outcome: "cloned",
+        response_status: 200,
+        response_body: { id: "not-a-uuid" },
+        replayed: false,
+      },
     ]);
 
     const response = await CLONE(
@@ -237,6 +239,81 @@ describe("wine-list lifecycle behavior", () => {
     );
 
     expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      error: { code: "internal_error" },
+    });
+  });
+
+  it("returns a committed publish miss without table calls", async () => {
+    const supabase = roleRpc([
+      {
+        outcome: "not_found",
+        response_status: 404,
+        response_body: {
+          error: {
+            code: "not_found",
+            message: "Wine list not found.",
+          },
+        },
+        replayed: false,
+      },
+    ]);
+
+    const response = await PUBLISH(
+      request(`/api/wine-lists/${LIST_ID}/publish`, "POST", {}),
+      { params: Promise.resolve({ id: LIST_ID }) },
+    );
+
+    expect(response.status).toBe(404);
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("maps a committed publish uniqueness race to slug_collision", async () => {
+    roleRpc([
+      {
+        outcome: "slug_collision",
+        response_status: 409,
+        response_body: {
+          error: {
+            code: "slug_collision",
+            message: "This slug is already in use.",
+          },
+        },
+        replayed: false,
+      },
+    ]);
+
+    const response = await PUBLISH(
+      request(`/api/wine-lists/${LIST_ID}/publish`, "POST", {}),
+      { params: Promise.resolve({ id: LIST_ID }) },
+    );
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).error.code).toBe("slug_collision");
+  });
+
+  it("returns a committed unpublish miss without table calls", async () => {
+    const supabase = roleRpc([
+      {
+        outcome: "not_found",
+        response_status: 404,
+        response_body: {
+          error: {
+            code: "not_found",
+            message: "Wine list not found.",
+          },
+        },
+        replayed: false,
+      },
+    ]);
+
+    const response = await UNPUBLISH(
+      request(`/api/wine-lists/${LIST_ID}/publish`, "DELETE"),
+      { params: Promise.resolve({ id: LIST_ID }) },
+    );
+
+    expect(response.status).toBe(404);
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 
   it("neutralizes formula-like text in CSV cells", async () => {
@@ -302,55 +379,4 @@ describe("wine-list lifecycle behavior", () => {
     );
   });
 
-  it("does not report publish success when no tenant row was updated", async () => {
-    roleAuth([
-      {
-        table: "wine_lists",
-        data: { slug: "dinner", restaurant_id: RESTAURANT_ID },
-      },
-      { table: "wine_lists", data: null },
-    ]);
-
-    const response = await PUBLISH(
-      request(`/api/wine-lists/${LIST_ID}/publish`, "POST", {}),
-      { params: Promise.resolve({ id: LIST_ID }) },
-    );
-
-    expect(response.status).toBe(404);
-  });
-
-  it("maps a publish uniqueness race to slug_collision", async () => {
-    roleAuth([
-      {
-        table: "wine_lists",
-        data: { slug: "dinner", restaurant_id: RESTAURANT_ID },
-      },
-      {
-        table: "wine_lists",
-        error: { message: "duplicate", code: "23505" },
-      },
-    ]);
-
-    const response = await PUBLISH(
-      request(`/api/wine-lists/${LIST_ID}/publish`, "POST", {}),
-      { params: Promise.resolve({ id: LIST_ID }) },
-    );
-
-    expect(response.status).toBe(409);
-    expect((await response.json()).error.code).toBe("slug_collision");
-  });
-
-  it("does not report unpublish success when no tenant row was updated", async () => {
-    roleAuth([
-      { table: "wine_lists", data: { id: LIST_ID } },
-      { table: "wine_lists", data: null },
-    ]);
-
-    const response = await UNPUBLISH(
-      request(`/api/wine-lists/${LIST_ID}/publish`, "DELETE"),
-      { params: Promise.resolve({ id: LIST_ID }) },
-    );
-
-    expect(response.status).toBe(404);
-  });
 });

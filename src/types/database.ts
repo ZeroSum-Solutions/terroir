@@ -1032,6 +1032,20 @@ export type Database = {
           response_status: number
         }[]
       }
+      clone_wine_list_idempotent: {
+        Args: {
+          p_idempotency_key?: string
+          p_request_hash?: string
+          p_restaurant_id: string
+          p_wine_list_id: string
+        }
+        Returns: {
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
       cleanup_api_idempotency: { Args: never; Returns: number }
       cleanup_api_rate_limit_buckets: { Args: never; Returns: number }
       cleanup_scan_idempotency: { Args: never; Returns: undefined }
@@ -1410,6 +1424,23 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      set_wine_list_publication_idempotent: {
+        Args: {
+          p_has_slug?: boolean
+          p_idempotency_key?: string
+          p_publish: boolean
+          p_request_hash?: string
+          p_restaurant_id: string
+          p_slug?: string
+          p_wine_list_id: string
+        }
+        Returns: {
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

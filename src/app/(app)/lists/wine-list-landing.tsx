@@ -24,17 +24,6 @@ import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { TimeAgo } from "@/components/time-ago";
 import type { WineListWithCount } from "@/lib/wine-list/types";
 
-async function responseError(
-  response: Response,
-  fallback: string,
-): Promise<string> {
-  try {
-    return readApiError(await response.json(), fallback).message;
-  } catch {
-    return fallback;
-  }
-}
-
 function isOkMutation(data: unknown): data is { ok: true } {
   return (
     typeof data === "object" &&
@@ -197,22 +186,30 @@ export function WineListLanding({
 
   const cloneList = useCallback(
     async (list: WineListWithCount) => {
+      const slot = `wine-list:${list.id}:clone`;
+      if (activeMutationSlotsRef.current.has(slot)) return;
       const confirmMessage = `Clone "${list.name}"? A new unpublished copy will be created with all sections and items preserved.`;
       if (!window.confirm(confirmMessage)) return;
 
+      activeMutationSlotsRef.current.add(slot);
+      setDeleteError(null);
       setCloningListId(list.id);
       try {
-        const res = await fetch(`/api/wine-lists/${list.id}/clone`, {
+        const { response, data } = await commands.json<unknown>({
+          slot,
+          url: `/api/wine-lists/${list.id}/clone`,
           method: "POST",
         });
-        if (!res.ok) {
+        if (!response.ok) {
           throw new Error(
-            await responseError(res, "Clone failed. Please try again."),
+            readApiError(data, "Clone failed. Please try again.").message,
           );
         }
-        const { id } = (await res.json()) as { id: string };
+        const id = createdListId(data);
+        if (!id) {
+          throw new Error("The server returned an invalid wine-list clone.");
+        }
         router.refresh();
-        // Navigate to the clone
         router.push(`/lists/${id}`);
       } catch (err) {
         setDeleteError(
@@ -221,10 +218,11 @@ export function WineListLanding({
             : "Clone failed. Please try again.",
         );
       } finally {
+        activeMutationSlotsRef.current.delete(slot);
         setCloningListId(null);
       }
     },
-    [router],
+    [commands, router],
   );
 
   const createList = useCallback(async () => {

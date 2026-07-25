@@ -29,13 +29,10 @@ const inventory = JSON.parse(
 
 const EXPECTED_PENDING_DISCOVERED = [
   "api:DELETE:/api/cellar/{param}",
-  "api:DELETE:/api/wine-lists/{param}/publish",
   "api:DELETE:/api/wines/{param}/image",
   "api:PATCH:/api/wines/{param}",
   "api:PATCH:/api/wines/{param}/availability",
   "api:POST:/api/cellar",
-  "api:POST:/api/wine-lists/{param}/clone",
-  "api:POST:/api/wine-lists/{param}/publish",
   "api:POST:/api/wines/create-from-lwin",
   "api:POST:/api/wines/enrich",
   "api:POST:/api/wines/refresh-retail-batch",
@@ -70,7 +67,7 @@ describe("API idempotency implementation ledger", () => {
       (operationId) => !discovered.has(operationId),
     );
 
-    expect(implemented).toHaveLength(42);
+    expect(implemented).toHaveLength(45);
     expect(pending).toEqual([...EXPECTED_PENDING_DISCOVERED].sort());
     expect(planned).toEqual([...EXPECTED_PLANNED].sort());
     expect(

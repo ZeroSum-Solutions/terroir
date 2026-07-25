@@ -1,23 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { readApiError } from "@/lib/api/client-error";
 import {
   createIdempotentCommandStore,
   createSessionCommandPersistence,
+  readApiErrorCode,
+  shouldRetainIdempotencyKey,
 } from "@/lib/api/idempotency-client";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
-
-async function responseError(
-  response: Response,
-  fallback: string,
-): Promise<string> {
-  try {
-    return readApiError(await response.json(), fallback).message;
-  } catch {
-    return fallback;
-  }
-}
 
 interface QrCodeProps {
   url: string;
@@ -54,6 +46,7 @@ interface PublishModalProps {
 }
 
 export function PublishModal({ listId, currentSlug, isPublished, onClose }: PublishModalProps) {
+  const router = useRouter();
   const [wineListCommands] = useState(() =>
     createIdempotentCommandStore({
       persistence: createSessionCommandPersistence(
@@ -70,60 +63,172 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
   const [copied, setCopied] = useState(false);
   const trapRef = useRef<HTMLDivElement>(null);
   const slugMutationRef = useRef(false);
+  const publicationMutationRef = useRef(false);
+  const publicationReconciliationRef = useRef<
+    "publish" | "unpublish" | null
+  >(null);
   useFocusTrap({ containerRef: trapRef, onEscape: onClose });
+
+  useEffect(() => {
+    const reconciliation = publicationReconciliationRef.current;
+    if (publicationMutationRef.current) return;
+    const confirmedAction = isPublished ? "publish" : "unpublish";
+    if (!reconciliation) {
+      try {
+        wineListCommands.abandon(
+          `wine-list:${listId}:${confirmedAction}`,
+        );
+      } catch {
+        // A live command owns its key until it settles.
+      }
+      return;
+    }
+    const isReconciled =
+      (reconciliation === "publish" && isPublished) ||
+      (reconciliation === "unpublish" && !isPublished);
+    if (!isReconciled) return;
+    try {
+      wineListCommands.abandon(
+        `wine-list:${listId}:${reconciliation}`,
+      );
+      publicationReconciliationRef.current = null;
+    } catch {
+      // Keep the retry identity until the in-flight command fully settles.
+    }
+    const nextSlug = currentSlug ?? "";
+    setPublished(isPublished);
+    setSlug(nextSlug);
+    setSlugInput(nextSlug);
+  }, [
+    currentSlug,
+    isPublished,
+    listId,
+    publishing,
+    wineListCommands,
+  ]);
 
   const publicUrl = slug
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/list/${slug}`
     : null;
 
   const publish = useCallback(async () => {
+    if (publicationMutationRef.current) return;
+    publicationMutationRef.current = true;
     setPublishing(true);
     setSlugError(null);
+    let responseReceived = false;
     try {
       const body: Record<string, string> = {};
       const trimmed = slugInput.trim().toLowerCase();
       if (trimmed) body.slug = trimmed;
 
-      const res = await fetch(`/api/wine-lists/${listId}/publish`, {
+      const { response, data } = await wineListCommands.json<unknown>({
+        slot: `wine-list:${listId}:publish`,
+        url: `/api/wine-lists/${listId}/publish`,
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        json: body,
       });
-      if (res.ok) {
-        const data = await res.json();
-        setSlug((data as { slug: string }).slug);
-        setSlugInput((data as { slug: string }).slug);
-        setPublished(true);
-      } else {
-        setSlugError(await responseError(res, "Publish failed."));
+      responseReceived = true;
+      if (!response.ok) {
+        const shouldReconcile = shouldRetainIdempotencyKey(
+          response.status,
+          readApiErrorCode(data),
+        );
+        if (shouldReconcile) {
+          publicationReconciliationRef.current = "publish";
+          router.refresh();
+        } else {
+          publicationReconciliationRef.current = null;
+        }
+        throw new Error(readApiError(data, "Publish failed.").message);
       }
-    } catch {
-      setSlugError("Publish failed. Please try again.");
+      const nextSlug =
+        typeof data === "object" &&
+        data !== null &&
+        typeof (data as { slug?: unknown }).slug === "string"
+          ? (data as { slug: string }).slug
+          : null;
+      if (!nextSlug) {
+        publicationReconciliationRef.current = null;
+        router.refresh();
+        throw new Error("The server returned an invalid publication.");
+      }
+      publicationReconciliationRef.current = null;
+      setSlug(nextSlug);
+      setSlugInput(nextSlug);
+      setPublished(true);
+      router.refresh();
+    } catch (error) {
+      if (!responseReceived) {
+        publicationReconciliationRef.current = "publish";
+        router.refresh();
+      }
+      setSlugError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Publish failed. Please try again.",
+      );
     } finally {
+      publicationMutationRef.current = false;
       setPublishing(false);
     }
-  }, [listId, slugInput]);
+  }, [listId, router, slugInput, wineListCommands]);
 
   const unpublish = useCallback(async () => {
+    if (publicationMutationRef.current) return;
+    publicationMutationRef.current = true;
     setPublishing(true);
     setSlugError(null);
+    let responseReceived = false;
     try {
-      const res = await fetch(`/api/wine-lists/${listId}/publish`, {
+      const { response, data } = await wineListCommands.json<unknown>({
+        slot: `wine-list:${listId}:unpublish`,
+        url: `/api/wine-lists/${listId}/publish`,
         method: "DELETE",
       });
-      if (res.ok) {
-        setPublished(false);
-        setSlug("");
-        setSlugInput("");
-      } else {
-        setSlugError(await responseError(res, "Unpublish failed."));
+      responseReceived = true;
+      if (!response.ok) {
+        const shouldReconcile = shouldRetainIdempotencyKey(
+          response.status,
+          readApiErrorCode(data),
+        );
+        if (shouldReconcile) {
+          publicationReconciliationRef.current = "unpublish";
+          router.refresh();
+        } else {
+          publicationReconciliationRef.current = null;
+        }
+        throw new Error(readApiError(data, "Unpublish failed.").message);
       }
-    } catch {
-      setSlugError("Unpublish failed. Please try again.");
+      if (
+        typeof data !== "object" ||
+        data === null ||
+        (data as { ok?: unknown }).ok !== true
+      ) {
+        publicationReconciliationRef.current = null;
+        router.refresh();
+        throw new Error("The server returned an invalid unpublish response.");
+      }
+      publicationReconciliationRef.current = null;
+      setPublished(false);
+      setSlug("");
+      setSlugInput("");
+      router.refresh();
+    } catch (error) {
+      if (!responseReceived) {
+        publicationReconciliationRef.current = "unpublish";
+        router.refresh();
+      }
+      setSlugError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Unpublish failed. Please try again.",
+      );
     } finally {
+      publicationMutationRef.current = false;
       setPublishing(false);
     }
-  }, [listId]);
+  }, [listId, router, wineListCommands]);
 
   const saveSlug = useCallback(async () => {
     if (slugMutationRef.current) return;
