@@ -33,6 +33,13 @@ export class ReconcileRpcError extends Error {
   }
 }
 
+export class ReconcileInvalidRequestError extends Error {
+  constructor() {
+    super("Invalid reconcile request.");
+    this.name = "ReconcileInvalidRequestError";
+  }
+}
+
 export type ReconcileEntry = {
   wine_id: string;
   new_remaining_ml: number;
@@ -43,25 +50,42 @@ export type ReconcileOpenBottlesInput = {
   supabase: SupabaseClient<Database>;
   restaurantId: string;
   entries: ReconcileEntry[];
+  idempotencyKey: string | null;
+  requestHash: string | null;
 };
 
 export async function reconcileOpenBottles(
   input: ReconcileOpenBottlesInput,
-): Promise<number> {
-  const { supabase, restaurantId, entries } = input;
-  const sinceTs = new Date().toISOString();
+): Promise<unknown> {
+  const {
+    supabase,
+    restaurantId,
+    entries,
+    idempotencyKey,
+    requestHash,
+  } = input;
+  const keyedArgs = idempotencyKey && requestHash
+    ? {
+        p_idempotency_key: idempotencyKey,
+        p_request_hash: requestHash,
+      }
+    : {};
 
   const { data, error } = await supabase.rpc(
-    "reconcile_open_bottles_batch",
+    "reconcile_open_bottles_idempotent",
     {
       p_restaurant_id: restaurantId,
       p_entries: entries as unknown as Json,
+      ...keyedArgs,
     },
   );
 
   if (error) {
     if (error.code === "42501") {
       throw new ReconcileForbiddenError();
+    }
+    if (idempotencyKey && error.code === "22023") {
+      throw new ReconcileInvalidRequestError();
     }
     if (error.code === "P0002") {
       throw new ReconcileExceedsSizeError();
@@ -74,23 +98,56 @@ export async function reconcileOpenBottles(
     ) {
       throw new ReconcileNotFoundError();
     }
-    console.error("reconcile_open_bottles_batch failed:", error);
-    Sentry.captureException(error, {
-      tags: { surface: "reconcile", phase: "reconcile_open_bottles_batch-rpc" },
-      extra: { entry_count: entries.length },
+    captureReconcileError(error, "reconcile_open_bottles_idempotent-rpc", {
+      entry_count: entries.length,
     });
     throw new ReconcileRpcError("Reconcile failed.", { cause: error });
   }
 
-  revalidatePath("/availability");
+  return Array.isArray(data) ? data[0] : data;
+}
+
+export async function revalidateReconcileResult(input: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  entries: ReconcileEntry[];
+  sinceTs: string;
+}): Promise<void> {
+  const { supabase, restaurantId, entries, sinceTs } = input;
+
+  try {
+    revalidatePath("/availability");
+  } catch (error) {
+    captureReconcileError(error, "revalidate:/availability");
+  }
 
   const touchedWineIds = Array.from(new Set(entries.map((entry) => entry.wine_id)));
-  await revalidateAutoEightysixedWines({
-    supabase,
-    restaurantId,
-    touchedWineIds,
-    sinceTs,
-  });
+  try {
+    await revalidateAutoEightysixedWines({
+      supabase,
+      restaurantId,
+      touchedWineIds,
+      sinceTs,
+    });
+  } catch (error) {
+    captureReconcileError(error, "revalidate:auto-eightysix", {
+      entry_count: entries.length,
+    });
+  }
+}
 
-  return (data as number) ?? 0;
+function captureReconcileError(
+  error: unknown,
+  phase: string,
+  extra?: Record<string, unknown>,
+): void {
+  try {
+    console.error(`reconcile ${phase} failed:`, error);
+    Sentry.captureException(error, {
+      tags: { surface: "reconcile", phase },
+      ...(extra ? { extra } : {}),
+    });
+  } catch {
+    // Observability and cache refresh cannot replace a committed response.
+  }
 }

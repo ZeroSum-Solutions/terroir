@@ -50,7 +50,6 @@ const EXPECTED_PENDING_DISCOVERED = [
   "api:PATCH:/api/wines/{param}/pricing-targets",
   "api:POST:/api/cellar",
   "api:POST:/api/cellar/config",
-  "api:POST:/api/reconcile",
   "api:POST:/api/scan-bottle",
   "api:POST:/api/scan-bottle/confirm",
   "api:POST:/api/scans/{param}/commit",
@@ -100,7 +99,7 @@ describe("API idempotency implementation ledger", () => {
       (operationId) => !discovered.has(operationId),
     );
 
-    expect(implemented).toHaveLength(12);
+    expect(implemented).toHaveLength(13);
     expect(pending).toEqual([...EXPECTED_PENDING_DISCOVERED].sort());
     expect(planned).toEqual([...EXPECTED_PLANNED].sort());
     expect(
@@ -170,20 +169,38 @@ describe("API idempotency implementation ledger", () => {
           );
         }
       } else {
-        expect(calls, operation.operationId).toEqual([
-          expect.objectContaining({
-            routeBoundary: "dedicated-rpc",
-            rpc: implementation.boundary.rpc,
-          }),
-        ]);
-        const routeSource = readFileSync(
-          resolve(process.cwd(), operation.source.file),
-          "utf8",
-        );
-        expect(routeSource, operation.operationId).toContain(
+        let argumentSource: string;
+        if (
+          "source" in implementation.boundary &&
+          implementation.boundary.source
+        ) {
+          expect(calls, operation.operationId).toEqual([]);
+          argumentSource = readFileSync(
+            resolve(
+              process.cwd(),
+              implementation.boundary.source,
+            ),
+            "utf8",
+          );
+          expect(argumentSource, operation.operationId).toContain(
+            `.rpc(\n    "${implementation.boundary.rpc}"`,
+          );
+        } else {
+          expect(calls, operation.operationId).toEqual([
+            expect.objectContaining({
+              routeBoundary: "dedicated-rpc",
+              rpc: implementation.boundary.rpc,
+            }),
+          ]);
+          argumentSource = readFileSync(
+            resolve(process.cwd(), operation.source.file),
+            "utf8",
+          );
+        }
+        expect(argumentSource, operation.operationId).toContain(
           "p_idempotency_key",
         );
-        expect(routeSource, operation.operationId).toContain(
+        expect(argumentSource, operation.operationId).toContain(
           "p_request_hash",
         );
       }

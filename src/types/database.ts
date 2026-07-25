@@ -1231,6 +1231,21 @@ export type Database = {
         Args: { p_entries: Json; p_restaurant_id: string }
         Returns: number
       }
+      reconcile_open_bottles_idempotent: {
+        Args: {
+          p_entries: Json
+          p_idempotency_key?: string
+          p_request_hash?: string
+          p_restaurant_id: string
+        }
+        Returns: {
+          execution_started_at: string
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
       record_pour: {
         Args: {
           p_kind?: string

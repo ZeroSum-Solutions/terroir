@@ -238,4 +238,21 @@ describe("high-risk idempotency clients", () => {
     );
     expect(batchHelper.match(/response\.json\(/g)).toBeNull();
   });
+
+  it("persists one guarded ordered reconcile batch across ambiguous failures", () => {
+    const reconcile = source(
+      "src/app/(app)/cellar/reconcile-list.tsx",
+    );
+
+    expect(reconcile).toContain("createIdempotentCommandStore");
+    expect(reconcile).toContain(
+      'createSessionCommandPersistence("terroir:reconcile")',
+    );
+    expect(reconcile).toContain("if (changedCount === 0 || savingRef.current) return");
+    expect(reconcile).toContain("savingRef.current = true");
+    expect(reconcile).toContain('slot: "save-all"');
+    expect(reconcile).toContain('url: "/api/reconcile"');
+    expect(reconcile).toContain("disabled={saving}");
+    expect(reconcile).toContain("readApiError(");
+  });
 });

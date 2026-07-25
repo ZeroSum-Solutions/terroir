@@ -37,11 +37,13 @@ vi.mock("@/domains/pours/pour-service", () => {
 vi.mock("@/domains/cellar/reconcile-service", () => {
   class ReconcileExceedsSizeError extends Error {}
   class ReconcileForbiddenError extends Error {}
+  class ReconcileInvalidRequestError extends Error {}
   class ReconcileNotFoundError extends Error {}
   class ReconcileRpcError extends Error {}
   return {
     ReconcileExceedsSizeError,
     ReconcileForbiddenError,
+    ReconcileInvalidRequestError,
     ReconcileNotFoundError,
     ReconcileRpcError,
     reconcileOpenBottles: (...args: unknown[]) =>

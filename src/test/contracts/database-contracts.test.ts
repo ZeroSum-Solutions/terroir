@@ -76,6 +76,14 @@ const atomicUndoLastPourIdempotency = readFileSync(
   "utf8",
 );
 
+const atomicReconcileIdempotency = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../supabase/migrations/0062_reconcile_idempotency.sql",
+  ),
+  "utf8",
+);
+
 describe("database security contracts", () => {
   it("keeps public wine-list read policies explicit and narrow", () => {
     for (const table of [
@@ -116,6 +124,39 @@ describe("database security contracts", () => {
     expect(tenantHardening).toMatch(
       /reconcile_open_bottle\([\s\S]*?is_member_with_role\(p_restaurant_id, 'manager'\)[\s\S]*?where id = p_wine_id[\s\S]*?and restaurant_id = p_restaurant_id/,
     );
+  });
+
+  it("atomically binds ordered reconcile batches to database-verified hashes", () => {
+    expect(atomicReconcileIdempotency).toContain(
+      "create or replace function public.reconcile_open_bottles_idempotent(",
+    );
+    expect(atomicReconcileIdempotency).toContain("security definer");
+    expect(atomicReconcileIdempotency).toContain("set search_path = ''");
+    expect(atomicReconcileIdempotency).toContain(
+      "is_member_with_role(p_restaurant_id, 'manager')",
+    );
+    expect(atomicReconcileIdempotency).toContain(
+      "from jsonb_array_elements(p_entries)",
+    );
+    expect(atomicReconcileIdempotency).toContain(
+      "extensions.digest(",
+    );
+    expect(atomicReconcileIdempotency).toContain(
+      "p_request_hash <> v_computed_hash",
+    );
+    expect(atomicReconcileIdempotency).toContain(
+      "v_updated := public.reconcile_open_bottles_batch(",
+    );
+    expect(atomicReconcileIdempotency).toContain(
+      "set state = 'completed'",
+    );
+    expect(atomicReconcileIdempotency.indexOf(
+      "v_updated := public.reconcile_open_bottles_batch(",
+    )).toBeLessThan(
+      atomicReconcileIdempotency.indexOf("set state = 'completed'"),
+    );
+    expect(atomicReconcileIdempotency).not.toMatch(/\n\s*execute\s+/i);
+    expect(atomicReconcileIdempotency).not.toMatch(/\n\s*set\s+role\s+/i);
   });
 
   it("removes legacy tenant-implicit RPC overloads and public execution", () => {

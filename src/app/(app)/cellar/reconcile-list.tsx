@@ -1,7 +1,14 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+  readApiErrorCode,
+  shouldRetainIdempotencyKey,
+} from "@/lib/api/idempotency-client";
 import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
@@ -18,6 +25,10 @@ const FRACTIONS: Array<{ label: string; value: number }> = [
 
 type PendingChange = { newRemainingMl: number; note?: string };
 
+const reconcileCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence("terroir:reconcile"),
+});
+
 export function ReconcileList({
   initialItems,
   varianceThresholdOz = 1.0,
@@ -30,11 +41,13 @@ export function ReconcileList({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const savingRef = useRef(false);
 
   const changedCount = Object.keys(pending).length;
 
   const onSaveAll = async () => {
-    if (changedCount === 0) return;
+    if (changedCount === 0 || savingRef.current) return;
+    savingRef.current = true;
     setError(null);
     setSaving(true);
     const entries = Object.entries(pending).map(([wine_id, p]) => ({
@@ -42,25 +55,58 @@ export function ReconcileList({
       new_remaining_ml: p.newRemainingMl,
       note: p.note,
     }));
+    let shouldRefreshAfterFailure = true;
     try {
-      const res = await fetch("/api/reconcile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entries }),
-      });
-      if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as
-          | { error?: string; code?: string }
-          | null;
-        throw new Error(payload?.error ?? `Failed (${res.status}).`);
+      const { response, data } =
+        await reconcileCommands.json<unknown>({
+          slot: "save-all",
+          url: "/api/reconcile",
+          method: "POST",
+          json: { entries },
+        });
+      if (!response.ok) {
+        shouldRefreshAfterFailure = shouldRetainIdempotencyKey(
+          response.status,
+          readApiErrorCode(data),
+        );
+        throw new Error(
+          readApiError(
+            data,
+            `Failed (${response.status}).`,
+          ).message,
+        );
       }
-      setPending({});
+      setPending((current) => {
+        const remaining = { ...current };
+        for (const entry of entries) {
+          const latest = current[entry.wine_id];
+          if (
+            latest?.newRemainingMl === entry.new_remaining_ml &&
+            latest.note === entry.note
+          ) {
+            delete remaining[entry.wine_id];
+          }
+        }
+        return remaining;
+      });
       startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
+      if (shouldRefreshAfterFailure) {
+        startTransition(() => router.refresh());
+      }
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
+  };
+
+  const updatePending = (
+    wineId: string,
+    change: PendingChange,
+  ) => {
+    if (savingRef.current) return;
+    setPending((prev) => ({ ...prev, [wineId]: change }));
   };
 
   if (initialItems.length === 0) {
@@ -72,7 +118,7 @@ export function ReconcileList({
   }
 
   return (
-    <div className="pb-[120px]">
+    <div className="pb-[120px]" aria-busy={saving}>
       {error && (
         <div
           role="alert"
@@ -89,9 +135,8 @@ export function ReconcileList({
             item={item}
             pending={pending[item.wine_id] ?? null}
             varianceThresholdOz={varianceThresholdOz}
-            onChange={(change) =>
-              setPending((prev) => ({ ...prev, [item.wine_id]: change }))
-            }
+            disabled={saving}
+            onChange={(change) => updatePending(item.wine_id, change)}
           />
         ))}
       </ul>
@@ -124,11 +169,13 @@ function ReconcileRow({
   pending,
   onChange,
   varianceThresholdOz,
+  disabled,
 }: {
   item: ReconcileItem;
   pending: PendingChange | null;
   onChange: (c: PendingChange) => void;
   varianceThresholdOz: number;
+  disabled: boolean;
 }) {
   const currentMl = pending?.newRemainingMl ?? item.open_remaining_ml;
   const currentOz = currentMl / ML_PER_OZ;
@@ -197,6 +244,7 @@ function ReconcileRow({
             <span>Actual:</span>
             <input
               type="number"
+              disabled={disabled}
               min={0}
               max={item.size_ml}
               value={currentMl}
@@ -249,6 +297,7 @@ function ReconcileRow({
             <button
               key={f.label}
               type="button"
+              disabled={disabled}
               onClick={() =>
                 onChange({
                   newRemainingMl: ml,
@@ -275,6 +324,7 @@ function ReconcileRow({
           </span>
           <input
             type="text"
+            disabled={disabled}
             maxLength={500}
             value={pending?.note ?? ""}
             onChange={(e) =>

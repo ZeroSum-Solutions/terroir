@@ -3,7 +3,7 @@ import type { ApiOperationId } from "./api-abuse-policy";
 export type ApiIdempotencyImplementation = {
   boundary:
     | { kind: "generic-wrapper"; count: number }
-    | { kind: "dedicated-rpc"; rpc: string };
+    | { kind: "dedicated-rpc"; rpc: string; source?: string };
   identity: {
     params: "none" | "all-validated";
     body: "none" | "all-validated";
@@ -199,6 +199,28 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       lifecycle: "session-persistent",
       sources: [
         "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      ],
+    },
+  },
+  "api:POST:/api/reconcile": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "reconcile_open_bottles_idempotent",
+      source: "src/domains/cellar/reconcile-service.ts",
+    },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "reconcile_open_bottles_idempotent",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: [
+        "src/app/(app)/cellar/reconcile-list.tsx",
       ],
     },
   },
