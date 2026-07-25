@@ -67,7 +67,10 @@ describe("wine-list section API boundaries", () => {
     {
       name: "DELETE section",
       call: (params: Promise<{ id: string }>) =>
-        REMOVE({} as NextRequest, { params }),
+        REMOVE(
+          request(`/api/wine-list-sections/${VALID_ID}`, "DELETE"),
+          { params },
+        ),
     },
   ]) {
     it(`${operation.name} returns the exact auth denial before resolving params`, async () => {
@@ -135,6 +138,28 @@ describe("wine-list section API boundaries", () => {
     }
     expect(from).not.toHaveBeenCalled();
   });
+
+  it("reorder rejects an operationally unsafe section count before dependencies", async () => {
+    const from = vi.fn();
+    mocks.requireRole.mockResolvedValue({
+      supabase: { from },
+      restaurantId: "22222222-2222-4222-8222-222222222222",
+    });
+    const orderedIds = Array.from(
+      { length: 201 },
+      (_, index) =>
+        `11111111-1111-4111-8111-${String(index).padStart(12, "0")}`,
+    );
+
+    const response = await REORDER(
+      request("/api/wine-list-sections/reorder", "PATCH", {
+        orderedIds,
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(from).not.toHaveBeenCalled();
+  });
 });
 
 describe("wine-list section provider and write boundaries", () => {
@@ -142,9 +167,12 @@ describe("wine-list section provider and write boundaries", () => {
 
   beforeEach(() => vi.clearAllMocks());
 
-  function roleAuth(from: ReturnType<typeof vi.fn>) {
+  function roleAuth(
+    from: ReturnType<typeof vi.fn>,
+    rpc = vi.fn(),
+  ) {
     mocks.requireRole.mockResolvedValue({
-      supabase: { from },
+      supabase: { from, rpc },
       restaurantId,
       user: { id: "33333333-3333-4333-8333-333333333333" },
       role: "manager",
@@ -152,11 +180,12 @@ describe("wine-list section provider and write boundaries", () => {
   }
 
   it("redacts a create owner-lookup provider failure", async () => {
-    const lookup = queryEndingIn("maybeSingle", {
+    const from = vi.fn();
+    const rpc = vi.fn(async () => ({
       data: null,
-      error: new Error("provider secret"),
-    });
-    roleAuth(vi.fn(() => lookup));
+      error: { code: "XX000", message: "provider secret" },
+    }));
+    roleAuth(from, rpc);
 
     const response = await CREATE(
       request("/api/wine-list-sections", "POST", {
@@ -171,6 +200,7 @@ describe("wine-list section provider and write boundaries", () => {
       error: { code: "internal_error", message: "Internal server error." },
     });
     expect(JSON.stringify(body)).not.toContain("provider secret");
+    expect(from).not.toHaveBeenCalled();
   });
 
   it("distinguishes a section lookup provider failure from a missing section", async () => {
@@ -207,9 +237,10 @@ describe("wine-list section provider and write boundaries", () => {
     const from = vi.fn(() => lookup);
     roleAuth(from);
 
-    const response = await REMOVE({} as NextRequest, {
-      params: Promise.resolve({ id: VALID_ID }),
-    });
+    const response = await REMOVE(
+      request(`/api/wine-list-sections/${VALID_ID}`, "DELETE"),
+      { params: Promise.resolve({ id: VALID_ID }) },
+    );
 
     expect(response.status).toBe(404);
     expect(from).toHaveBeenCalledTimes(1);
@@ -269,9 +300,10 @@ describe("wine-list section provider and write boundaries", () => {
       .mockReturnValueOnce(deletion);
     roleAuth(from);
 
-    const response = await REMOVE({} as NextRequest, {
-      params: Promise.resolve({ id: VALID_ID }),
-    });
+    const response = await REMOVE(
+      request(`/api/wine-list-sections/${VALID_ID}`, "DELETE"),
+      { params: Promise.resolve({ id: VALID_ID }) },
+    );
 
     expect(response.status).toBe(404);
     expect(deletion.delete).toHaveBeenCalledOnce();
@@ -310,7 +342,7 @@ describe("wine-list section provider and write boundaries", () => {
     expect(from).toHaveBeenCalledTimes(1);
   });
 
-  it("checks every reordered write result and scopes it to the parent list", async () => {
+  it("persists a validated same-list order through one atomic RPC", async () => {
     const secondId = "66666666-6666-4666-8666-666666666666";
     const wineListId = "44444444-4444-4444-8444-444444444444";
     const lookup = queryEndingIn("single", { data: null, error: null });
@@ -329,20 +361,9 @@ describe("wine-list section provider and write boundaries", () => {
       ],
       error: null,
     }));
-    const firstUpdate = queryEndingIn("maybeSingle", {
-      data: { id: VALID_ID },
-      error: null,
-    });
-    const secondUpdate = queryEndingIn("maybeSingle", {
-      data: null,
-      error: null,
-    });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(lookup)
-      .mockReturnValueOnce(firstUpdate)
-      .mockReturnValueOnce(secondUpdate);
-    roleAuth(from);
+    const from = vi.fn(() => lookup);
+    const rpc = vi.fn(async () => ({ data: null, error: null }));
+    roleAuth(from, rpc);
 
     const response = await REORDER(
       request("/api/wine-list-sections/reorder", "PATCH", {
@@ -350,12 +371,52 @@ describe("wine-list section provider and write boundaries", () => {
       }),
     );
 
-    expect(response.status).toBe(404);
-    expect(firstUpdate.update).toHaveBeenCalledWith({ position: 0 });
-    expect(secondUpdate.update).toHaveBeenCalledWith({ position: 1 });
-    for (const update of [firstUpdate, secondUpdate]) {
-      expect(update.eq).toHaveBeenCalledWith("wine_list_id", wineListId);
-      expect(update.select).toHaveBeenCalledWith("id");
-    }
+    expect(response.status).toBe(200);
+    expect(rpc).toHaveBeenCalledOnce();
+    expect(rpc).toHaveBeenCalledWith("reorder_wine_list_sections", {
+      p_ordered_ids: [VALID_ID, secondId],
+    });
+    expect(from).toHaveBeenCalledTimes(1);
+  });
+
+  it("maps an atomic reorder race to a retryable visible conflict", async () => {
+    const secondId = "66666666-6666-4666-8666-666666666666";
+    const wineListId = "44444444-4444-4444-8444-444444444444";
+    const lookup = queryEndingIn("single", { data: null, error: null });
+    lookup.in = vi.fn(async () => ({
+      data: [
+        {
+          id: VALID_ID,
+          wine_list_id: wineListId,
+          wine_lists: { restaurant_id: restaurantId },
+        },
+        {
+          id: secondId,
+          wine_list_id: wineListId,
+          wine_lists: { restaurant_id: restaurantId },
+        },
+      ],
+      error: null,
+    }));
+    const rpc = vi.fn(async () => ({
+      data: null,
+      error: { code: "T2103", message: "changed concurrently" },
+    }));
+    roleAuth(vi.fn(() => lookup), rpc);
+
+    const response = await REORDER(
+      request("/api/wine-list-sections/reorder", "PATCH", {
+        orderedIds: [VALID_ID, secondId],
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "section_order_conflict",
+        message:
+          "Section order changed concurrently. Refresh and try again.",
+      },
+    });
   });
 });

@@ -88,17 +88,6 @@ export type WineListEditorSection = {
   wine_list_items: WineListEditorItem[];
 };
 
-async function responseError(
-  response: Response,
-  fallback: string,
-): Promise<string> {
-  try {
-    return readApiError(await response.json(), fallback).message;
-  } catch {
-    return fallback;
-  }
-}
-
 function isOkMutation(data: unknown): data is { ok: true } {
   return (
     typeof data === "object" &&
@@ -118,8 +107,44 @@ function createdItemId(data: unknown): string | null {
   return (data as { id: string }).id;
 }
 
+function createdSectionId(data: unknown): string | null {
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    typeof (data as { id?: unknown }).id !== "string"
+  ) {
+    return null;
+  }
+  return (data as { id: string }).id;
+}
+
 function commandIdentity(value: unknown): string {
   return encodeURIComponent(JSON.stringify(value));
+}
+
+export function restoreWineSectionOrderAfterFailedReorder(
+  currentSections: WineListEditorSection[],
+  previousSections: WineListEditorSection[],
+): WineListEditorSection[] {
+  const previousRank = new Map(
+    previousSections.map((section, index) => [section.id, index]),
+  );
+  const currentRank = new Map(
+    currentSections.map((section, index) => [section.id, index]),
+  );
+
+  return [...currentSections]
+    .sort((left, right) => {
+      const leftPreviousRank = previousRank.get(left.id);
+      const rightPreviousRank = previousRank.get(right.id);
+      if (leftPreviousRank === undefined && rightPreviousRank === undefined) {
+        return currentRank.get(left.id)! - currentRank.get(right.id)!;
+      }
+      if (leftPreviousRank === undefined) return 1;
+      if (rightPreviousRank === undefined) return -1;
+      return leftPreviousRank - rightPreviousRank;
+    })
+    .map((section, position) => ({ ...section, position }));
 }
 
 export function restoreWineItemOrderAfterFailedReorder(
@@ -340,6 +365,7 @@ export function WineListEditor({
   const [templateBusy, setTemplateBusy] = useState(false);
   const templateMutationRef = useRef(false);
   const itemMutationSlotsRef = useRef(new Set<string>());
+  const sectionMutationSlotsRef = useRef(new Set<string>());
 
   const totalWines = useMemo(
     () => sections.reduce((sum, s) => sum + s.wine_list_items.length, 0),
@@ -354,27 +380,64 @@ export function WineListEditor({
       setEditingSectionId(null);
       return;
     }
+    const activeSlot = `wine-list-section:${id}:active`;
+    if (sectionMutationSlotsRef.current.has(activeSlot)) return;
+    sectionMutationSlotsRef.current.add(activeSlot);
+    const previousName =
+      sections.find((section) => section.id === id)?.name ?? name;
+    const body = { name };
+    const slot =
+      `wine-list-section:${id}:patch:${commandIdentity(body)}`;
 
-    // Optimistic update
     setSections((prev) =>
       prev.map((s) => (s.id === id ? { ...s, name } : s)),
     );
     setEditingSectionId(null);
 
-    const res = await fetch(`/api/wine-list-sections/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-
-    if (!res.ok) {
+    try {
+      const { response, data } =
+        await wineListCommands.json<unknown>({
+          slot,
+          url: `/api/wine-list-sections/${id}`,
+          method: "PATCH",
+          json: body,
+        });
+      if (!response.ok) {
+        throw new Error(
+          readApiError(
+            data,
+            "Failed to rename section. Please try again.",
+          ).message,
+        );
+      }
+      if (!isOkMutation(data)) {
+        throw new Error("The server returned an invalid rename response.");
+      }
+    } catch (error) {
+      setSections((prev) =>
+        prev.map((section) =>
+          section.id === id && section.name === name
+            ? { ...section, name: previousName }
+            : section,
+        ),
+      );
       startTransition(() => router.refresh());
       setErrorToast(
-        await responseError(res, "Failed to rename section. Please try again."),
+        error instanceof Error && error.message
+          ? error.message
+          : "Failed to rename section. Please try again.",
       );
       setTimeout(() => setErrorToast(null), 4000);
+    } finally {
+      sectionMutationSlotsRef.current.delete(activeSlot);
     }
-  }, [editingSectionId, editSectionName, router]);
+  }, [
+    editingSectionId,
+    editSectionName,
+    router,
+    sections,
+    wineListCommands,
+  ]);
 
   const cancelRename = useCallback(() => {
     setEditingSectionId(null);
@@ -383,44 +446,58 @@ export function WineListEditor({
   // BND-163: delete section
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
-    setDeletingSection(true);
     const targetId = deleteTarget.id;
-
-    // Optimistic update
-    setSections((prev) => prev.filter((s) => s.id !== targetId));
-
-    // If the deleted section was active, switch to the first remaining
-    if (activeSection === targetId) {
-      setSections((prev) => {
-        const remaining = prev.filter((s) => s.id !== targetId);
-        if (remaining.length > 0) setActiveSection(remaining[0].id);
-        return remaining;
-      });
-    }
-
+    const activeSlot = `wine-list-section:${targetId}:active`;
+    if (sectionMutationSlotsRef.current.has(activeSlot)) return;
+    sectionMutationSlotsRef.current.add(activeSlot);
+    setDeletingSection(true);
     setDeleteTarget(null);
 
     try {
-      const res = await fetch(`/api/wine-list-sections/${targetId}`, {
-        method: "DELETE",
-      });
-
-      if (!res.ok) {
-        startTransition(() => router.refresh());
-        setErrorToast(
-          await responseError(
-            res,
+      const { response, data } =
+        await wineListCommands.json<unknown>({
+          slot: `wine-list-section:${targetId}:delete`,
+          url: `/api/wine-list-sections/${targetId}`,
+          method: "DELETE",
+        });
+      if (!response.ok) {
+        throw new Error(
+          readApiError(
+            data,
             "Failed to delete section. Please try again.",
-          ),
+          ).message,
         );
-        setTimeout(() => setErrorToast(null), 4000);
-        setDeletingSection(false);
       }
-    } catch {
+      if (!isOkMutation(data)) {
+        throw new Error("The server returned an invalid delete response.");
+      }
+      setSections((prev) => {
+        const remaining = prev.filter(
+          (section) => section.id !== targetId,
+        );
+        if (activeSection === targetId) {
+          setActiveSection(remaining[0]?.id ?? "");
+        }
+        return remaining;
+      });
+    } catch (error) {
       startTransition(() => router.refresh());
+      setErrorToast(
+        error instanceof Error && error.message
+          ? error.message
+          : "Failed to delete section. Please try again.",
+      );
+      setTimeout(() => setErrorToast(null), 4000);
+    } finally {
       setDeletingSection(false);
+      sectionMutationSlotsRef.current.delete(activeSlot);
     }
-  }, [deleteTarget, activeSection, router]);
+  }, [
+    deleteTarget,
+    activeSection,
+    router,
+    wineListCommands,
+  ]);
 
   const addWineToSection = useCallback(
     async (wineId: string, glassPrice: number | null, bottlePrice: number | null, sectionIds: string[]) => {
@@ -493,32 +570,47 @@ export function WineListEditor({
     if (raw === null) return;
     const name = raw.trim();
     if (!name) return;
+    const activeSlot = "wine-list-section:create-active";
+    if (sectionMutationSlotsRef.current.has(activeSlot)) return;
+    sectionMutationSlotsRef.current.add(activeSlot);
+    const body = { wine_list_id: list.id, name };
 
     setAddingSection(true);
     try {
-      const res = await fetch("/api/wine-list-sections", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wine_list_id: list.id, name }),
-      });
-
-      if (!res.ok) {
-        window.alert(
-          await responseError(
-            res,
-            `Failed to add section (${res.status}).`,
-          ),
+      const { response, data } =
+        await wineListCommands.json<unknown>({
+          slot: `wine-list-section:create:${commandIdentity(body)}`,
+          url: "/api/wine-list-sections",
+          method: "POST",
+          json: body,
+        });
+      if (!response.ok) {
+        throw new Error(
+          readApiError(
+            data,
+            `Failed to add section (${response.status}).`,
+          ).message,
         );
-        return;
       }
-
-      const created = (await res.json()) as { id: string };
-      setActiveSection(created.id);
+      const id = createdSectionId(data);
+      if (!id) {
+        throw new Error("The server returned an invalid section.");
+      }
+      setActiveSection(id);
       startTransition(() => router.refresh());
+    } catch (error) {
+      startTransition(() => router.refresh());
+      setErrorToast(
+        error instanceof Error && error.message
+          ? error.message
+          : "Failed to add section. Please try again.",
+      );
+      setTimeout(() => setErrorToast(null), 4000);
     } finally {
       setAddingSection(false);
+      sectionMutationSlotsRef.current.delete(activeSlot);
     }
-  }, [list.id, router]);
+  }, [list.id, router, wineListCommands]);
 
   // BND-162: sensors for section drag-and-drop
   const sectionSensors = useSensors(
@@ -535,37 +627,58 @@ export function WineListEditor({
       const oldIndex = sections.findIndex((s) => s.id === active.id);
       const newIndex = sections.findIndex((s) => s.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
+      const activeSlot = "wine-list-section:reorder-active";
+      if (sectionMutationSlotsRef.current.has(activeSlot)) return;
+      sectionMutationSlotsRef.current.add(activeSlot);
 
-      // Save previous order for rollback
       const previous = sections.map((s) => ({ ...s }));
 
       const reordered = [...sections];
       const [moved] = reordered.splice(oldIndex, 1);
       reordered.splice(newIndex, 0, moved);
 
-      // Optimistic update
       setSections(reordered.map((s, i) => ({ ...s, position: i })));
 
-      // Persist
-      const res = await fetch("/api/wine-list-sections/reorder", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderedIds: reordered.map((s) => s.id) }),
-      });
-
-      // Rollback on failure
-      if (!res.ok) {
-        setSections(previous.map((s, i) => ({ ...s, position: i })));
+      const orderedIds = reordered.map((section) => section.id);
+      try {
+        const { response, data } =
+          await wineListCommands.json<unknown>({
+            slot:
+              `wine-list-section:reorder:${list.id}:` +
+              commandIdentity(orderedIds),
+            url: "/api/wine-list-sections/reorder",
+            method: "PATCH",
+            json: { orderedIds },
+          });
+        if (!response.ok) {
+          throw new Error(
+            readApiError(
+              data,
+              "Failed to reorder sections. Please try again.",
+            ).message,
+          );
+        }
+        if (!isOkMutation(data)) {
+          throw new Error(
+            "The server returned an invalid section-order response.",
+          );
+        }
+      } catch (error) {
+        setSections((current) =>
+          restoreWineSectionOrderAfterFailedReorder(current, previous),
+        );
+        startTransition(() => router.refresh());
         setErrorToast(
-          await responseError(
-            res,
-            "Failed to reorder sections. Please try again.",
-          ),
+          error instanceof Error && error.message
+            ? error.message
+            : "Failed to reorder sections. Please try again.",
         );
         setTimeout(() => setErrorToast(null), 4000);
+      } finally {
+        sectionMutationSlotsRef.current.delete(activeSlot);
       }
     },
-    [sections],
+    [list.id, router, sections, wineListCommands],
   );
 
   // Wine-item drag sensors (within a section)

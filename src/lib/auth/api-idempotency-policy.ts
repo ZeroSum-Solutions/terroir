@@ -534,6 +534,64 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       sources: ["src/app/(app)/lists/[id]/wine-list-editor.tsx"],
     },
   },
+  "api:DELETE:/api/wine-list-sections/{param}": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/lists/[id]/wine-list-editor.tsx"],
+    },
+  },
+  "api:PATCH:/api/wine-list-sections/reorder": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "reorder_wine_list_sections",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/lists/[id]/wine-list-editor.tsx"],
+    },
+  },
+  "api:PATCH:/api/wine-list-sections/{param}": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/lists/[id]/wine-list-editor.tsx"],
+    },
+  },
+  "api:POST:/api/wine-list-sections": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "create_wine_list_section",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/lists/[id]/wine-list-editor.tsx"],
+    },
+  },
   "api:DELETE:/api/wine-lists/{param}": {
     boundary: { kind: "generic-wrapper", count: 1 },
     identity: {

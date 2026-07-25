@@ -1137,6 +1137,20 @@ export type Database = {
           response_status: number
         }[]
       }
+      create_wine_list_section: {
+        Args: {
+          p_name: string
+          p_restaurant_id: string
+          p_wine_list_id: string
+        }
+        Returns: {
+          created_at: string
+          id: string
+          name: string
+          position: number
+          wine_list_id: string
+        }[]
+      }
       dismiss_pricing_alert: {
         Args: { p_days?: number; p_wine_id: string }
         Returns: string
@@ -1371,6 +1385,10 @@ export type Database = {
         }[]
       }
       reorder_wine_list_items: {
+        Args: { p_ordered_ids: string[] }
+        Returns: undefined
+      }
+      reorder_wine_list_sections: {
         Args: { p_ordered_ids: string[] }
         Returns: undefined
       }

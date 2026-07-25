@@ -1,11 +1,26 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireRole } from "@/lib/api/auth";
-import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseJson } from "@/lib/api/validation";
 import { CreateWineListSectionBodySchema } from "@/lib/api/wine-list-section-schemas";
 
 export const runtime = "nodejs";
+
+type CreateSectionResponse =
+  | {
+      id: string;
+      wine_list_id: string;
+      name: string;
+      position: number;
+      created_at: string;
+    }
+  | {
+      error: {
+        code: "not_found" | "forbidden";
+        message: string;
+      };
+    };
 
 /**
  * BND-025 / DEBT-005 — wire 'Add section' button in the wine-list editor.
@@ -26,35 +41,57 @@ export async function POST(request: NextRequest) {
       message: "Invalid body.",
     });
     if (!parsed.ok) return parsed.response;
-    const { wine_list_id, name } = parsed.data;
+    const body = parsed.data;
 
-    const { data: ownerCheck, error: ownerError } = await supabase
-      .from("wine_lists")
-      .select("id")
-      .eq("id", wine_list_id)
-      .eq("restaurant_id", restaurantId)
-      .maybeSingle();
-    if (ownerError) throw ownerError;
-    if (!ownerCheck) return Errors.notFound("Wine list");
+    return idempotentMutationResponse<CreateSectionResponse>({
+      request,
+      supabase,
+      restaurantId,
+      operationId: "api:POST:/api/wine-list-sections",
+      payload: body,
+      releaseOnError: false,
+      handler: async () => {
+        const { wine_list_id, name } = body;
+        const { data, error } = await supabase.rpc(
+          "create_wine_list_section",
+          {
+            p_restaurant_id: restaurantId,
+            p_wine_list_id: wine_list_id,
+            p_name: name,
+          },
+        );
+        if (error) {
+          if (error.code === "T2105") {
+            return {
+              status: 404,
+              body: {
+                error: {
+                  code: "not_found" as const,
+                  message: "Wine list not found.",
+                },
+              },
+            };
+          }
+          if (error.code === "T2106") {
+            return {
+              status: 403,
+              body: {
+                error: {
+                  code: "forbidden" as const,
+                  message: "Forbidden.",
+                },
+              },
+            };
+          }
+          throw error;
+        }
+        const inserted = Array.isArray(data) ? data[0] : data;
+        if (!inserted) {
+          throw new Error("wine-list section insert returned no row");
+        }
 
-    const { count, error: countError } = await supabase
-      .from("wine_list_sections")
-      .select("id", { count: "exact", head: true })
-      .eq("wine_list_id", wine_list_id);
-    if (countError) throw countError;
-
-    const position = count ?? 0;
-    const { data: inserted, error: insertError } = await supabase
-      .from("wine_list_sections")
-      .insert({ wine_list_id, name, position })
-      .select("id, wine_list_id, name, position, created_at")
-      .single();
-    if (insertError || !inserted) {
-      throw (
-        insertError ?? new Error("wine-list section insert returned no row")
-      );
-    }
-
-    return NextResponse.json(inserted, { status: 201 });
+        return { status: 201, body: inserted };
+      },
+    });
   });
 }

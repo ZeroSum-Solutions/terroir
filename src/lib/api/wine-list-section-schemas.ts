@@ -22,6 +22,7 @@ export const ReorderWineListSectionsBodySchema = z
     orderedIds: z
       .array(z.string().uuid())
       .min(1)
+      .max(200, "orderedIds must not exceed 200 sections.")
       .refine((ids) => new Set(ids).size === ids.length, {
         message: "orderedIds must not contain duplicates.",
       }),

@@ -38,6 +38,7 @@ vi.stubGlobal("fetch", mockFetch);
 const {
   WineListEditor,
   restoreWineItemOrderAfterFailedReorder,
+  restoreWineSectionOrderAfterFailedReorder,
 } = await import("./[id]/wine-list-editor");
 
 const LIST_ID = "11111111-1111-4111-8111-111111111111";
@@ -161,6 +162,178 @@ describe("wine-list item idempotency callers", () => {
     await act(async () => root.unmount());
     container.remove();
     sessionStorage.clear();
+  });
+
+  it("rolls a failed section reorder back without resurrecting deleted sections or stale names", () => {
+    const previous = sections();
+    const retained = {
+      ...previous[1],
+      position: 0,
+      name: "Cellar Reds",
+    };
+    const added: WineListEditorSection = {
+      id: "77777777-7777-4777-8777-777777777777",
+      name: "Dessert",
+      position: 1,
+      wine_list_id: LIST_ID,
+      wine_list_items: [],
+    };
+
+    const restored = restoreWineSectionOrderAfterFailedReorder(
+      [retained, added],
+      previous,
+    );
+
+    expect(restored.map(({ id }) => id)).toEqual([
+      SECOND_SECTION_ID,
+      added.id,
+    ]);
+    expect(restored[0].name).toBe("Cellar Reds");
+    expect(restored.map(({ position }) => position)).toEqual([0, 1]);
+  });
+
+  it("guards section creation and retries an ambiguous outcome with the persisted key", async () => {
+    const first = deferredResponse();
+    Object.defineProperty(window, "prompt", {
+      value: vi.fn(() => "Dessert"),
+      configurable: true,
+    });
+    mockFetch
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(
+        Response.json({
+          id: "77777777-7777-4777-8777-777777777777",
+          wine_list_id: LIST_ID,
+          name: "Dessert",
+          position: 2,
+          created_at: "2026-07-24T00:00:00.000Z",
+        }),
+      );
+    await act(async () => {
+      root.render(<WineListEditor list={list()} sections={sections()} />);
+    });
+
+    await act(async () => {
+      button(container, "Add section").click();
+      button(container, "Add section").click();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(mutationCalls("POST")).toHaveLength(1),
+    );
+    const originalKey = keyAt(0);
+
+    await act(async () => {
+      first.resolve(
+        Response.json(
+          {
+            error: {
+              code: "idempotency_outcome_unknown",
+              message: "The previous outcome is unknown.",
+            },
+          },
+          { status: 409 },
+        ),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain(
+        "previous outcome is unknown",
+      ),
+    );
+
+    await act(async () => {
+      button(container, "Add section").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(mutationCalls("POST")).toHaveLength(2),
+    );
+    expect(keyAt(1)).toBe(originalKey);
+    expect(sessionStorage.length).toBe(0);
+    expect(mockRefresh).toHaveBeenCalled();
+  });
+
+  it("keeps a section retryable after ambiguous deletion and reuses the persisted key", async () => {
+    const first = deferredResponse();
+    mockFetch
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(Response.json({ ok: true }));
+    await act(async () => {
+      root.render(<WineListEditor list={list()} sections={sections()} />);
+    });
+
+    await act(async () => {
+      (
+        container.querySelector(
+          'button[aria-label="Delete By the Glass"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    const confirm = button(container, "Delete section");
+    await act(async () => {
+      confirm.click();
+      confirm.click();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(mutationCalls("DELETE")).toHaveLength(1),
+    );
+    const originalKey = keyAt(0);
+
+    await act(async () => {
+      first.resolve(
+        Response.json(
+          {
+            error: {
+              code: "idempotency_outcome_unknown",
+              message: "The previous outcome is unknown.",
+            },
+          },
+          { status: 409 },
+        ),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain(
+        "previous outcome is unknown",
+      ),
+    );
+    expect(
+      container.querySelector(
+        'button[aria-label="Delete By the Glass"]',
+      ),
+    ).not.toBeNull();
+
+    await act(async () => {
+      (
+        container.querySelector(
+          'button[aria-label="Delete By the Glass"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    await act(async () => {
+      button(container, "Delete section").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(mutationCalls("DELETE")).toHaveLength(2),
+    );
+    expect(keyAt(1)).toBe(originalKey);
+    await vi.waitFor(() =>
+      expect(
+        container.querySelector(
+          'button[aria-label="Delete By the Glass"]',
+        ),
+      ).toBeNull(),
+    );
+    expect(sessionStorage.length).toBe(0);
   });
 
   it("rolls a failed reorder back without resurrecting deleted rows or stale item fields", () => {
