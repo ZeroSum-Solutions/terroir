@@ -1,15 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import Anthropic from "@anthropic-ai/sdk";
 import { type NextRequest } from "next/server";
 
 const mockRequireMembership = vi.fn();
 const mockGetAnthropicClient = vi.fn();
+const mockCaptureException = vi.fn();
 vi.mock("@/lib/api/auth", () => ({
   requireMembership: (...args: unknown[]) => mockRequireMembership(...args),
 }));
 vi.mock("@/lib/ai/anthropic-client", () => ({
   getAnthropicClient: (...args: unknown[]) => mockGetAnthropicClient(...args),
 }));
-vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+vi.mock("@sentry/nextjs", () => ({
+  captureException: (...args: unknown[]) =>
+    mockCaptureException(...args),
+}));
 
 const { POST } = await import("./route");
 
@@ -25,7 +30,20 @@ type Wine = {
   restaurant_id: string;
 };
 
-function makeSupabase(result: { data: Wine | null; error: unknown }) {
+function makeSupabase(
+  result: { data: Wine | null; error: unknown },
+  claim: {
+    outcome: string;
+    response_status: number | null;
+    response_body: unknown;
+    response_headers: unknown;
+  } = {
+    outcome: "claimed",
+    response_status: null,
+    response_body: null,
+    response_headers: null,
+  },
+) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   const query = {
     eq: (...eqArgs: unknown[]) => {
@@ -40,7 +58,19 @@ function makeSupabase(result: { data: Wine | null; error: unknown }) {
       return query;
     },
   }));
-  return { from, calls };
+  const rpc = vi.fn(
+    async (name: string, args: Record<string, unknown>) => {
+      calls.push({ method: `rpc:${name}`, args: [args] });
+      if (name === "claim_api_idempotency") {
+        return { data: [claim], error: null };
+      }
+      if (name === "complete_api_idempotency") {
+        return { data: true, error: null };
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    },
+  );
+  return { from, rpc, calls };
 }
 
 function allow(supabase: ReturnType<typeof makeSupabase>) {
@@ -52,10 +82,16 @@ function allow(supabase: ReturnType<typeof makeSupabase>) {
   });
 }
 
-function qrRequest(qrPayload: unknown): NextRequest {
+function qrRequest(
+  qrPayload: unknown,
+  idempotencyKey?: string,
+  contentType = "application/json",
+): NextRequest {
+  const headers = new Headers({ "content-type": contentType });
+  if (idempotencyKey) headers.set("Idempotency-Key", idempotencyKey);
   return new Request("http://localhost/api/scan-bottle", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify({ qr_payload: qrPayload }),
   }) as unknown as NextRequest;
 }
@@ -92,6 +128,18 @@ describe("POST /api/scan-bottle", () => {
         message: "Wine not found.",
       },
     });
+  });
+
+  it("accepts a case-insensitive JSON media type", async () => {
+    const supabase = makeSupabase({ data: null, error: null });
+    allow(supabase);
+
+    const response = await POST(
+      qrRequest(WINE_ID, undefined, "Application/JSON; Charset=UTF-8"),
+    );
+
+    expect(response.status).toBe(404);
+    expect(supabase.from).toHaveBeenCalledWith("wines");
   });
 
   it("redacts a QR lookup provider failure", async () => {
@@ -169,6 +217,47 @@ describe("POST /api/scan-bottle", () => {
     expect(body).not.toHaveProperty("restaurant_id");
   });
 
+  it("replays a keyed QR lookup without querying the wine again", async () => {
+    const replayBody = {
+      id: WINE_ID,
+      producer: "Stored producer",
+      name: "Stored wine",
+      vintage: 2020,
+      varietal: null,
+      region: null,
+      country: null,
+    };
+    const supabase = makeSupabase(
+      { data: null, error: null },
+      {
+        outcome: "replay",
+        response_status: 200,
+        response_body: replayBody,
+        response_headers: {},
+      },
+    );
+    allow(supabase);
+
+    const response = await POST(
+      qrRequest(WINE_ID, "bottle_lookup_replay"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await response.json()).toEqual(replayBody);
+    expect(supabase.from).not.toHaveBeenCalled();
+    expect(supabase.calls).toContainEqual({
+      method: "rpc:claim_api_idempotency",
+      args: [
+        expect.objectContaining({
+          p_operation_id: "api:POST:/api/scan-bottle",
+          p_idempotency_key: "bottle_lookup_replay",
+          p_request_hash: expect.stringMatching(/^[0-9a-f]{64}$/),
+        }),
+      ],
+    });
+  });
+
   it("preserves bottle-label photo success", async () => {
     const supabase = makeSupabase({ data: null, error: null });
     allow(supabase);
@@ -207,6 +296,118 @@ describe("POST /api/scan-bottle", () => {
       producer: "Domaine Test",
       confidence: 0.98,
     });
+  });
+
+  it("binds keyed label recognition to MIME metadata and exact bytes", async () => {
+    const supabase = makeSupabase({ data: null, error: null });
+    allow(supabase);
+    const parse = vi.fn().mockResolvedValue({
+      parsed_output: {
+        name: "Volnay",
+        producer: "Domaine Test",
+        vintage: 2022,
+        varietal: "Pinot Noir",
+        region: "Burgundy",
+        country: "France",
+        confidence: 0.98,
+        notes: null,
+      },
+    });
+    mockGetAnthropicClient.mockReturnValue({
+      messages: { parse },
+    });
+
+    async function scan(bytes: string, key: string) {
+      const form = new FormData();
+      form.append(
+        "file",
+        new File([bytes], "label.jpg", { type: "image/jpeg" }),
+      );
+      return POST(
+        new Request("http://localhost/api/scan-bottle", {
+          method: "POST",
+          headers: { "Idempotency-Key": key },
+          body: form,
+        }) as unknown as NextRequest,
+      );
+    }
+
+    expect((await scan("front", "bottle_label_front")).status).toBe(200);
+    expect((await scan("back", "bottle_label_back")).status).toBe(200);
+
+    const claims = supabase.calls
+      .filter(({ method }) => method === "rpc:claim_api_idempotency")
+      .map(({ args }) => args[0] as { p_request_hash: string });
+    expect(claims).toHaveLength(2);
+    expect(claims[0].p_request_hash).not.toBe(
+      claims[1].p_request_hash,
+    );
+    expect(parse).toHaveBeenCalledTimes(2);
+  });
+
+  it("stores and reports an upstream provider failure without leaking it", async () => {
+    const supabase = makeSupabase({ data: null, error: null });
+    allow(supabase);
+    const upstreamError = new Anthropic.APIError(
+      500,
+      {},
+      "secret upstream failure",
+      new Headers(),
+    );
+    mockGetAnthropicClient.mockReturnValue({
+      messages: {
+        parse: vi.fn().mockRejectedValue(upstreamError),
+      },
+    });
+    const form = new FormData();
+    form.append(
+      "file",
+      new File(["label"], "label.jpg", { type: "image/jpeg" }),
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/scan-bottle", {
+        method: "POST",
+        headers: { "Idempotency-Key": "provider_failure_0064" },
+        body: form,
+      }) as unknown as NextRequest,
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get("Idempotency-Replayed")).toBe("false");
+    expect(text).not.toContain("secret upstream failure");
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      upstreamError,
+      expect.objectContaining({
+        tags: { surface: "scanner", phase: "claude-call" },
+      }),
+    );
+  });
+
+  it("rejects a malformed label key before provider initialization", async () => {
+    const supabase = makeSupabase({ data: null, error: null });
+    allow(supabase);
+    const form = new FormData();
+    form.append(
+      "file",
+      new File(["label"], "label.jpg", { type: "image/jpeg" }),
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/scan-bottle", {
+        method: "POST",
+        headers: { "Idempotency-Key": "bad key" },
+        body: form,
+      }) as unknown as NextRequest,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "invalid_idempotency_key" },
+    });
+    expect(mockGetAnthropicClient).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
   it("rejects unsupported label files before client initialization", async () => {

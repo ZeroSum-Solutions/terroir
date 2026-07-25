@@ -109,6 +109,14 @@ const atomicInvoiceScanCommitAcceptance = readFileSync(
   "utf8",
 );
 
+const atomicBottleConfirmationIdempotency = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../supabase/migrations/0066_confirm_bottle_scan_idempotency.sql",
+  ),
+  "utf8",
+);
+
 describe("database security contracts", () => {
   it("keeps public wine-list read policies explicit and narrow", () => {
     for (const table of [
@@ -182,6 +190,48 @@ describe("database security contracts", () => {
     );
     expect(atomicReconcileIdempotency).not.toMatch(/\n\s*execute\s+/i);
     expect(atomicReconcileIdempotency).not.toMatch(/\n\s*set\s+role\s+/i);
+  });
+
+  it("atomically binds bottle confirmation to a database-verified identity", () => {
+    expect(atomicBottleConfirmationIdempotency).toContain(
+      "create or replace function public.confirm_bottle_scan_idempotent(",
+    );
+    expect(atomicBottleConfirmationIdempotency).toContain(
+      "security definer",
+    );
+    expect(atomicBottleConfirmationIdempotency).toContain(
+      "set search_path = ''",
+    );
+    expect(atomicBottleConfirmationIdempotency).toContain(
+      "is_member_with_role(p_restaurant_id, 'staff')",
+    );
+    expect(atomicBottleConfirmationIdempotency).toContain(
+      "p_request_hash <> v_computed_hash",
+    );
+    expect(atomicBottleConfirmationIdempotency).toContain(
+      "insert into public.inventory_items",
+    );
+    expect(atomicBottleConfirmationIdempotency).toContain(
+      "set state = 'completed'",
+    );
+    expect(
+      atomicBottleConfirmationIdempotency.indexOf(
+        "insert into public.inventory_items",
+      ),
+    ).toBeLessThan(
+      atomicBottleConfirmationIdempotency.indexOf(
+        "set state = 'completed'",
+      ),
+    );
+    expect(atomicBottleConfirmationIdempotency).toContain(
+      "wines.restaurant_id = p_restaurant_id",
+    );
+    expect(atomicBottleConfirmationIdempotency).not.toMatch(
+      /\n\s*execute\s+/i,
+    );
+    expect(atomicBottleConfirmationIdempotency).not.toMatch(
+      /\n\s*set\s+role\s+/i,
+    );
   });
 
   it("removes legacy tenant-implicit RPC overloads and public execution", () => {

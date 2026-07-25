@@ -80,6 +80,55 @@ describe("high-risk idempotency clients", () => {
     );
   });
 
+  it("persists guarded bottle recognition and confirmation commands", () => {
+    const scanner = source("src/app/(app)/scan/scanner.tsx");
+    const bottlePage = source(
+      "src/app/(app)/scan-bottle/page.tsx",
+    );
+
+    expect(scanner).toContain(
+      'createSessionCommandPersistence(\n    "terroir:bottle-label-scan"',
+    );
+    expect(scanner).toContain("if (bottleScanBusyRef.current) return");
+    expect(scanner).toContain("bottleScanBusyRef.current = true");
+    expect(scanner).toContain("createBinaryCommandFingerprint(");
+    expect(scanner).toContain("file.size");
+    expect(scanner).toContain("file.type");
+    expect(scanner).toContain('url: "/api/scan-bottle"');
+    expect(scanner).toContain(
+      'response.headers.get("Idempotency-Replayed")',
+    );
+    expect(scanner).toContain(
+      'bottleScanCommands.abandon("identify")',
+    );
+    expect(scanner).not.toContain('fetch("/api/scan-bottle"');
+
+    expect(bottlePage).toContain(
+      '"terroir:bottle-scan-lookup"',
+    );
+    expect(bottlePage).toContain(
+      '"terroir:bottle-scan-confirm"',
+    );
+    expect(bottlePage).toContain(
+      "if (!trimmed || lookupBusyRef.current) return",
+    );
+    expect(bottlePage).toContain(
+      "confirmBusyRef.current",
+    );
+    expect(bottlePage).toContain('slot: "lookup"');
+    expect(bottlePage).toContain('slot: "confirm"');
+    expect(bottlePage).toContain('url: "/api/scan-bottle"');
+    expect(bottlePage).toContain(
+      'url: "/api/scan-bottle/confirm"',
+    );
+    expect(bottlePage).toContain("MatchedWineSchema.safeParse(data)");
+    expect(bottlePage).toContain('"/api/wines/search?q="');
+    expect(bottlePage).toContain("searchRequestRef.current");
+    expect(bottlePage).not.toContain(
+      'fetch("/api/scan-bottle"',
+    );
+  });
+
   it("keeps one open-bottle key across remounts and transient failures", () => {
     const drawer = source(
       "src/app/(app)/cellar/wine-detail-drawer.tsx",

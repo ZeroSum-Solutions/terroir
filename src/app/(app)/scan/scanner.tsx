@@ -6,6 +6,7 @@ import { readApiError } from "@/lib/api/client-error";
 import {
   createBinaryCommandFingerprint,
   createIdempotentCommandStore,
+  createSessionCommandPersistence,
   readApiErrorCode,
 } from "@/lib/api/idempotency-client";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
@@ -32,6 +33,11 @@ import { BottleResultsView } from "./views/bottle-results-view";
 
 type Status = "ready" | "processing" | "review" | "results" | "bottle-results" | "error";
 const STORAGE_KEY = "terroir:current-scan";
+const bottleScanCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence(
+    "terroir:bottle-label-scan",
+  ),
+});
 
 export { formatMoney } from "./components/field-inputs";
 
@@ -121,6 +127,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const [mode, setMode] = useState<ScanMode>("invoice");
   const [bottleResult, setBottleResult] = useState<BottleScanResult | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const bottleScanBusyRef = useRef(false);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -433,6 +440,8 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   }, [rawText]);
 
   const startBottleScan = useCallback(async (file: File) => {
+    if (bottleScanBusyRef.current) return;
+    bottleScanBusyRef.current = true;
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
@@ -443,23 +452,47 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     setError(null);
 
     try {
-      const body = new FormData();
-      body.append("file", file);
-      const res = await fetch("/api/scan-bottle", {
-        method: "POST",
-        body,
-        signal: ac.signal,
-      });
+      const identity = {
+        file: {
+          size: file.size,
+          type: file.type,
+        },
+      };
+      const fingerprint = await createBinaryCommandFingerprint(
+        identity,
+        file,
+      );
+      const { response, data } =
+        await bottleScanCommands.binary<unknown>({
+          slot: "identify",
+          url: "/api/scan-bottle",
+          method: "POST",
+          fingerprint,
+          signal: ac.signal,
+          makeBody: () => {
+            const body = new FormData();
+            body.append("file", file);
+            return body;
+          },
+        });
       if (ac.signal.aborted) return;
-      if (!res.ok) {
+      if (!response.ok) {
+        const storedResult =
+          response.headers.get("Idempotency-Replayed") !== null;
+        if (
+          storedResult &&
+          (response.status === 429 || response.status >= 500)
+        ) {
+          bottleScanCommands.abandon("identify");
+        }
         throw new Error(
           readApiError(
-            await res.json().catch(() => null),
-            `Scan failed (${res.status})`,
+            data,
+            `Scan failed (${response.status})`,
           ).message,
         );
       }
-      const result = (await res.json()) as BottleScanResult;
+      const result = data as BottleScanResult;
       setProgress(100);
       setBottleResult(result);
       setStatus("bottle-results");
@@ -468,6 +501,8 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       const message = err instanceof Error ? err.message : "Scan failed.";
       setError(message);
       setStatus("error");
+    } finally {
+      bottleScanBusyRef.current = false;
     }
   }, []);
 

@@ -1085,6 +1085,23 @@ export type Database = {
         }
         Returns: boolean
       }
+      confirm_bottle_scan_idempotent: {
+        Args: {
+          p_bin_location: string
+          p_idempotency_key?: string
+          p_request_hash?: string
+          p_restaurant_id: string
+          p_section: string
+          p_wine_id: string
+        }
+        Returns: {
+          execution_started_at: string
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
       consume_api_rate_limit: {
         Args: { p_risk_class: string }
         Returns: {

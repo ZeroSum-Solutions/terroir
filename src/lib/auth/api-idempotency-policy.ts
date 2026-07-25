@@ -263,6 +263,41 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       ],
     },
   },
+  "api:POST:/api/scan-bottle": {
+    boundary: { kind: "generic-wrapper", count: 2 },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "optional",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: [
+        "src/app/(app)/scan-bottle/page.tsx",
+        "src/app/(app)/scan/scanner.tsx",
+      ],
+    },
+  },
+  "api:POST:/api/scan-bottle/confirm": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "confirm_bottle_scan_idempotent",
+    },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "confirm_bottle_scan_idempotent",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/scan-bottle/page.tsx"],
+    },
+  },
   "api:POST:/api/scan": {
     boundary: { kind: "generic-wrapper", count: 2 },
     identity: {

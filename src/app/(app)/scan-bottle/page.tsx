@@ -13,16 +13,22 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+} from "@/lib/api/idempotency-client";
+import { z } from "zod";
 
-type MatchedWine = {
-  id: string;
-  producer: string;
-  name: string;
-  vintage: number | null;
-  varietal: string | null;
-  region: string | null;
-  country: string | null;
-};
+const MatchedWineSchema = z.object({
+  id: z.string().uuid(),
+  producer: z.string(),
+  name: z.string(),
+  vintage: z.number().int().nullable(),
+  varietal: z.string().nullable(),
+  region: z.string().nullable(),
+  country: z.string().nullable().default(null),
+});
+type MatchedWine = z.infer<typeof MatchedWineSchema>;
 
 type SessionScan = {
   wine: MatchedWine;
@@ -47,10 +53,22 @@ type BarcodeDetectorConstructor = new (options?: {
   detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>>;
 };
 
+const bottleLookupCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence(
+    "terroir:bottle-scan-lookup",
+  ),
+});
+const bottleConfirmCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence(
+    "terroir:bottle-scan-confirm",
+  ),
+});
+
 function useQrScanner(
   videoRef: React.RefObject<HTMLVideoElement | null>,
   active: boolean,
-  onDecode: (text: string) => void,
+  onDecode: (text: string) => Promise<boolean>,
+  onUnavailable: () => void,
 ) {
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -59,7 +77,7 @@ function useQrScanner(
     if (!active || typeof window === "undefined") return;
 
     let cancelled = false;
-    // BarcodeDetector is a browser API not in lib.dom yet (Safari/Chrome only).
+    // BarcodeDetector is an optional Chromium API not included in lib.dom.
     let detector: { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> } | null = null;
 
     if ("BarcodeDetector" in window) {
@@ -75,8 +93,14 @@ function useQrScanner(
       }
     }
 
+    if (!detector || !navigator.mediaDevices?.getUserMedia) {
+      onUnavailable();
+      return;
+    }
+
     const tick = async () => {
-      if (cancelled || !videoRef.current || !detector) {
+      if (cancelled) return;
+      if (!videoRef.current) {
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
@@ -90,14 +114,16 @@ function useQrScanner(
       try {
         const barcodes = await detector.detect(video);
         if (barcodes.length > 0 && !cancelled) {
-          onDecode(barcodes[0].rawValue);
-          return;
+          const accepted = await onDecode(barcodes[0].rawValue);
+          if (accepted || cancelled) return;
         }
       } catch {
         // expected
       }
 
-      rafRef.current = requestAnimationFrame(tick);
+      if (!cancelled) {
+        rafRef.current = requestAnimationFrame(tick);
+      }
     };
 
     navigator.mediaDevices
@@ -115,7 +141,9 @@ function useQrScanner(
         }
         rafRef.current = requestAnimationFrame(tick);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) onUnavailable();
+      });
 
     return () => {
       cancelled = true;
@@ -124,35 +152,51 @@ function useQrScanner(
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [active, videoRef, onDecode]);
+  }, [active, videoRef, onDecode, onUnavailable]);
 }
 
 async function lookupWine(payload: string): Promise<MatchedWine> {
-  const res = await fetch("/api/scan-bottle", {
+  const { response, data } = await bottleLookupCommands.json<unknown>({
+    slot: "lookup",
+    url: "/api/scan-bottle",
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ qr_payload: payload }),
+    json: { qr_payload: payload },
   });
-  if (!res.ok) {
+  if (!response.ok) {
     throw new Error(
       readApiError(
-        await res.json().catch(() => null),
-        "Lookup failed (" + res.status + ")",
+        data,
+        "Lookup failed (" + response.status + ")",
       ).message,
     );
   }
-  return (await res.json()) as MatchedWine;
+  const parsed = MatchedWineSchema.safeParse(data);
+  if (!parsed.success) {
+    throw new Error("Lookup returned an invalid wine.");
+  }
+  return parsed.data;
 }
 
-async function searchWines(query: string): Promise<MatchedWine[]> {
+async function searchWines(
+  query: string,
+  signal: AbortSignal,
+): Promise<MatchedWine[]> {
   if (query.length < 2) return [];
-  const url = "/api/wines?q=" + encodeURIComponent(query) + "&limit=8";
-  const res = await fetch(url);
-  if (!res.ok) return [];
-  const data = (await res.json()) as
-    | { wines?: MatchedWine[] }
-    | MatchedWine[];
-  return Array.isArray(data) ? data : data.wines ?? [];
+  const url = "/api/wines/search?q=" + encodeURIComponent(query);
+  const res = await fetch(url, { signal });
+  if (!res.ok) {
+    throw new Error("Wine search failed.");
+  }
+  const parsed = z.union([
+    z.array(MatchedWineSchema),
+    z.object({ wines: z.array(MatchedWineSchema).optional() }),
+  ]).safeParse(await res.json());
+  if (!parsed.success) {
+    throw new Error("Wine search returned invalid results.");
+  }
+  return Array.isArray(parsed.data)
+    ? parsed.data.slice(0, 8)
+    : (parsed.data.wines ?? []).slice(0, 8);
 }
 
 export default function ScanBottlePage() {
@@ -164,29 +208,26 @@ export default function ScanBottlePage() {
   const [manualCode, setManualCode] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<MatchedWine[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [section, setSection] = useState("");
   const [binLocation, setBinLocation] = useState("");
+  const [lookingUp, setLookingUp] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const lookupBusyRef = useRef(false);
+  const confirmBusyRef = useRef(false);
+  const searchRequestRef = useRef(0);
+  const searchTimerRef = useRef<number | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
 
   // BND-112: batch scanning session state
   const [session, setSession] = useState<SessionScan[]>([]);
 
-  useEffect(() => {
-    if (typeof navigator === "undefined") return;
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: "environment" } })
-      .then((stream) => {
-        stream.getTracks().forEach((t) => t.stop());
-      })
-      .catch(() => {
-        setPhase((p) => (p === "scanning" ? "no-camera" : p));
-      });
-  }, []);
-
-  const handleDecode = useCallback(async (text: string) => {
+  const handleDecode = useCallback(async (text: string): Promise<boolean> => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed || lookupBusyRef.current) return false;
+    lookupBusyRef.current = true;
+    setLookingUp(true);
     setPayload(trimmed);
     try {
       const matched = await lookupWine(trimmed);
@@ -196,10 +237,25 @@ export default function ScanBottlePage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Lookup failed.");
       setPhase("error");
+    } finally {
+      lookupBusyRef.current = false;
+      setLookingUp(false);
     }
+    return true;
   }, []);
 
-  useQrScanner(videoRef, phase === "scanning", handleDecode);
+  const handleScannerUnavailable = useCallback(() => {
+    setPhase((current) =>
+      current === "scanning" ? "no-camera" : current,
+    );
+  }, []);
+
+  useQrScanner(
+    videoRef,
+    phase === "scanning",
+    handleDecode,
+    handleScannerUnavailable,
+  );
 
   const handleManualSubmit = useCallback(
     async (e?: React.FormEvent) => {
@@ -210,23 +266,89 @@ export default function ScanBottlePage() {
     [manualCode, handleDecode],
   );
 
-  const handleCorrectSearch = useCallback(async (q: string) => {
-    setSearchQuery(q);
-    if (q.length < 2) {
-      setSearchResults([]);
-      return;
+  const resetCorrectionSearch = useCallback(() => {
+    searchRequestRef.current += 1;
+    if (searchTimerRef.current !== null) {
+      window.clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = null;
     }
-    setSearching(true);
-    const results = await searchWines(q);
-    setSearchResults(results);
+    searchAbortRef.current?.abort();
+    searchAbortRef.current = null;
+    setSearchQuery("");
+    setSearchResults([]);
+    setSearchError(null);
     setSearching(false);
   }, []);
 
-  const handleCorrectSelect = useCallback((w: MatchedWine) => {
-    setWine(w);
-    setPhase("matched");
-    setError(null);
+  useEffect(
+    () => () => {
+      searchRequestRef.current += 1;
+      if (searchTimerRef.current !== null) {
+        window.clearTimeout(searchTimerRef.current);
+      }
+      searchAbortRef.current?.abort();
+    },
+    [],
+  );
+
+  const handleCorrectSearch = useCallback((q: string) => {
+    const requestId = ++searchRequestRef.current;
+    if (searchTimerRef.current !== null) {
+      window.clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = null;
+    }
+    searchAbortRef.current?.abort();
+    searchAbortRef.current = null;
+    setSearchQuery(q);
+    setSearchError(null);
+    if (q.length < 2) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    searchTimerRef.current = window.setTimeout(() => {
+      searchTimerRef.current = null;
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
+      void searchWines(q, controller.signal)
+        .then((results) => {
+          if (requestId === searchRequestRef.current) {
+            setSearchResults(results);
+          }
+        })
+        .catch((searchFailure: unknown) => {
+          if (
+            requestId === searchRequestRef.current &&
+            !(searchFailure instanceof DOMException &&
+              searchFailure.name === "AbortError")
+          ) {
+            setSearchResults([]);
+            setSearchError(
+              searchFailure instanceof Error
+                ? searchFailure.message
+                : "Wine search failed.",
+            );
+          }
+        })
+        .finally(() => {
+          if (requestId === searchRequestRef.current) {
+            searchAbortRef.current = null;
+            setSearching(false);
+          }
+        });
+    }, 300);
   }, []);
+
+  const handleCorrectSelect = useCallback(
+    (w: MatchedWine) => {
+      resetCorrectionSearch();
+      setWine(w);
+      setPhase("matched");
+      setError(null);
+    },
+    [resetCorrectionSearch],
+  );
 
   const handleScanAgain = useCallback(() => {
     setPhase("scanning");
@@ -242,22 +364,32 @@ export default function ScanBottlePage() {
   const handleConfirmLocation = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault();
-      if (!wine || !section.trim() || !binLocation.trim()) return;
+      if (
+        !wine ||
+        !section.trim() ||
+        !binLocation.trim() ||
+        confirmBusyRef.current
+      ) {
+        return;
+      }
+      confirmBusyRef.current = true;
       setConfirming(true);
       try {
-        const res = await fetch("/api/scan-bottle/confirm", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            wine_id: wine.id,
-            section: section.trim(),
-            bin_location: binLocation.trim(),
-          }),
-        });
-        if (!res.ok) {
+        const { response, data } =
+          await bottleConfirmCommands.json<unknown>({
+            slot: "confirm",
+            url: "/api/scan-bottle/confirm",
+            method: "POST",
+            json: {
+              wine_id: wine.id,
+              section: section.trim(),
+              bin_location: binLocation.trim(),
+            },
+          });
+        if (!response.ok) {
           throw new Error(
             readApiError(
-              await res.json().catch(() => null),
+              data,
               "Failed to record location.",
             ).message,
           );
@@ -272,6 +404,7 @@ export default function ScanBottlePage() {
         setError(err instanceof Error ? err.message : "Failed to record bottle location.");
         setPhase("error");
       } finally {
+        confirmBusyRef.current = false;
         setConfirming(false);
       }
     },
@@ -472,11 +605,11 @@ export default function ScanBottlePage() {
             </div>
             <button
               type="submit"
-              disabled={!manualCode.trim()}
+              disabled={!manualCode.trim() || lookingUp}
               className="flex h-[44px] w-full items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               <Search className="h-4 w-4" strokeWidth={2} />
-              Look up wine
+              {lookingUp ? "Looking up..." : "Look up wine"}
             </button>
           </form>
           <button
@@ -541,9 +674,8 @@ export default function ScanBottlePage() {
             <button
               type="button"
               onClick={() => {
+                resetCorrectionSearch();
                 setPhase("correcting");
-                setSearchQuery("");
-                setSearchResults([]);
               }}
               className="flex h-[44px] items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
             >
@@ -592,6 +724,12 @@ export default function ScanBottlePage() {
             <p className="px-md text-[13px] text-ink-muted">Searching...</p>
           )}
 
+          {!searching && searchError && (
+            <p className="px-md text-[13px] text-danger">
+              {searchError}
+            </p>
+          )}
+
           {!searching && searchResults.length > 0 && (
             <ul className="divide-y divide-border rounded-md border border-border bg-white">
               {searchResults.map((w) => (
@@ -622,6 +760,7 @@ export default function ScanBottlePage() {
           )}
 
           {!searching &&
+            !searchError &&
             searchQuery.length >= 2 &&
             searchResults.length === 0 && (
               <p className="px-md text-[13px] text-ink-muted">
@@ -633,7 +772,10 @@ export default function ScanBottlePage() {
 
           <button
             type="button"
-            onClick={() => setPhase("matched")}
+            onClick={() => {
+              resetCorrectionSearch();
+              setPhase("matched");
+            }}
             className="flex h-[44px] w-full items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
           >
             <X className="h-4 w-4" strokeWidth={2} />
@@ -772,7 +914,7 @@ export default function ScanBottlePage() {
             </div>
             <div>
               <p className="text-[15px] font-medium text-ink">
-                Lookup failed
+                {wine ? "Save failed" : "Lookup failed"}
               </p>
               <p className="mt-xs text-[13px] text-ink-muted">{error}</p>
               {payload && (
@@ -784,13 +926,34 @@ export default function ScanBottlePage() {
             <div className="flex w-full flex-col gap-sm">
               <button
                 type="button"
-                onClick={handleScanAgain}
-                className="flex h-[44px] w-full items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover"
+                onClick={() => {
+                  if (wine && section.trim() && binLocation.trim()) {
+                    void handleConfirmLocation();
+                  } else if (payload) {
+                    void handleDecode(payload);
+                  } else {
+                    handleScanAgain();
+                  }
+                }}
+                disabled={lookingUp || confirming}
+                className="flex h-[44px] w-full items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
               >
                 <Camera className="h-4 w-4" strokeWidth={2} />
-                Try again
+                {lookingUp || confirming ? "Retrying..." : "Try again"}
               </button>
-              {!payload && (
+              {wine ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhase("location");
+                    setError(null);
+                  }}
+                  className="flex h-[44px] w-full items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
+                >
+                  <MapPin className="h-4 w-4" strokeWidth={2} />
+                  Edit location
+                </button>
+              ) : (
                 <button
                   type="button"
                   onClick={() => {
@@ -800,7 +963,7 @@ export default function ScanBottlePage() {
                   className="flex h-[44px] w-full items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
                 >
                   <Keyboard className="h-4 w-4" strokeWidth={2} />
-                  Enter code manually
+                  {payload ? "Enter different code" : "Enter code manually"}
                 </button>
               )}
             </div>
