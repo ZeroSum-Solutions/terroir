@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+} from "@/lib/api/idempotency-client";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 
 async function responseError(
@@ -50,6 +54,13 @@ interface PublishModalProps {
 }
 
 export function PublishModal({ listId, currentSlug, isPublished, onClose }: PublishModalProps) {
+  const [wineListCommands] = useState(() =>
+    createIdempotentCommandStore({
+      persistence: createSessionCommandPersistence(
+        "terroir:wine-list-publish-modal",
+      ),
+    }),
+  );
   const [publishing, setPublishing] = useState(false);
   const [slug, setSlug] = useState(currentSlug ?? "");
   const [slugInput, setSlugInput] = useState(currentSlug ?? "");
@@ -58,6 +69,7 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
   const [published, setPublished] = useState(isPublished);
   const [copied, setCopied] = useState(false);
   const trapRef = useRef<HTMLDivElement>(null);
+  const slugMutationRef = useRef(false);
   useFocusTrap({ containerRef: trapRef, onEscape: onClose });
 
   const publicUrl = slug
@@ -114,6 +126,7 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
   }, [listId]);
 
   const saveSlug = useCallback(async () => {
+    if (slugMutationRef.current) return;
     const trimmed = slugInput.trim().toLowerCase();
     if (!trimmed) {
       setSlugError("Slug must not be empty.");
@@ -123,28 +136,42 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
       setSlugError(null);
       return;
     }
+    slugMutationRef.current = true;
     setPublishing(true);
     setSlugError(null);
     setSlugSuccess(false);
+    const slot = `wine-list:${listId}:slug`;
     try {
-      const res = await fetch(`/api/wine-lists/${listId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug: trimmed }),
-      });
-      if (res.ok) {
+      const { response, data } =
+        await wineListCommands.json<unknown>({
+          slot,
+          url: `/api/wine-lists/${listId}`,
+          method: "PATCH",
+          json: { slug: trimmed },
+        });
+      if (
+        response.ok &&
+        typeof data === "object" &&
+        data !== null &&
+        (data as { ok?: unknown }).ok === true
+      ) {
         setSlug(trimmed);
         setSlugSuccess(true);
         setTimeout(() => setSlugSuccess(false), 2000);
       } else {
-        setSlugError(await responseError(res, "Failed to update slug."));
+        setSlugError(readApiError(data, "Failed to update slug.").message);
       }
-    } catch {
-      setSlugError("Failed to update slug. Please try again.");
+    } catch (error) {
+      setSlugError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Failed to update slug. Please try again.",
+      );
     } finally {
+      slugMutationRef.current = false;
       setPublishing(false);
     }
-  }, [listId, slugInput, slug]);
+  }, [listId, slugInput, slug, wineListCommands]);
 
   const copyUrl = () => {
     if (!publicUrl) return;

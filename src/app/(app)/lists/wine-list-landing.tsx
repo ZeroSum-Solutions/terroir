@@ -16,6 +16,10 @@ import {
   X,
 } from "lucide-react";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+} from "@/lib/api/idempotency-client";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { TimeAgo } from "@/components/time-ago";
 import type { WineListWithCount } from "@/lib/wine-list/types";
@@ -31,6 +35,25 @@ async function responseError(
   }
 }
 
+function isOkMutation(data: unknown): data is { ok: true } {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    (data as { ok?: unknown }).ok === true
+  );
+}
+
+function createdListId(data: unknown): string | null {
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    typeof (data as { id?: unknown }).id !== "string"
+  ) {
+    return null;
+  }
+  return (data as { id: string }).id;
+}
+
 export function WineListLanding({
   lists,
   archivedLists = [],
@@ -41,6 +64,13 @@ export function WineListLanding({
   showArchived?: boolean;
 }) {
   const router = useRouter();
+  const [commands] = useState(() =>
+    createIdempotentCommandStore({
+      persistence: createSessionCommandPersistence(
+        "terroir:wine-list-lifecycle",
+      ),
+    }),
+  );
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -60,6 +90,8 @@ export function WineListLanding({
   const [archivingListId, setArchivingListId] = useState<string | null>(null);
   // Tracks which list is being cloned
   const [cloningListId, setCloningListId] = useState<string | null>(null);
+  const creatingRef = useRef(false);
+  const activeMutationSlotsRef = useRef(new Set<string>());
 
   const copyListLink = useCallback(async (list: WineListWithCount) => {
     if (!list.slug) return;
@@ -75,6 +107,8 @@ export function WineListLanding({
 
   const toggleArchive = useCallback(
     async (list: WineListWithCount) => {
+      const slot = `wine-list:${list.id}:archive`;
+      if (activeMutationSlotsRef.current.has(slot)) return;
       const willArchive = !list.archived;
       const action = willArchive ? "archive" : "unarchive";
       const confirmMessage = willArchive
@@ -82,17 +116,22 @@ export function WineListLanding({
         : `Restore "${list.name}"? It will appear in the default view again.`;
       if (!window.confirm(confirmMessage)) return;
 
+      activeMutationSlotsRef.current.add(slot);
       setArchivingListId(list.id);
       try {
-        const res = await fetch(`/api/wine-lists/${list.id}`, {
+        const { response, data } = await commands.json<unknown>({
+          slot,
+          url: `/api/wine-lists/${list.id}`,
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ archived: willArchive }),
+          json: { archived: willArchive },
         });
-        if (!res.ok) {
+        if (!response.ok) {
           throw new Error(
-            await responseError(res, `Couldn't ${action} wine list.`),
+            readApiError(data, `Couldn't ${action} wine list.`).message,
           );
+        }
+        if (!isOkMutation(data)) {
+          throw new Error(`Couldn't ${action} wine list.`);
         }
         router.refresh();
       } catch (err) {
@@ -102,10 +141,11 @@ export function WineListLanding({
             : `Couldn't ${action} wine list. Please try again.`,
         );
       } finally {
+        activeMutationSlotsRef.current.delete(slot);
         setArchivingListId(null);
       }
     },
-    [router],
+    [commands, router],
   );
 
   const deleteList = useCallback(
@@ -114,22 +154,31 @@ export function WineListLanding({
       // but the UI should never call DELETE on a non-archived list — archive
       // first.
       if (!list.archived) return;
+      const slot = `wine-list:${list.id}:delete`;
+      if (activeMutationSlotsRef.current.has(slot)) return;
 
       const confirmMessage = list.is_published
         ? `Permanently delete "${list.name}"? This list is currently published — its public link will stop working immediately. This cannot be undone.`
         : `Permanently delete "${list.name}"? Its sections and items will be removed. This cannot be undone.`;
       if (!window.confirm(confirmMessage)) return;
 
+      activeMutationSlotsRef.current.add(slot);
       setDeleteError(null);
       setDeletingListId(list.id);
       try {
-        const res = await fetch(`/api/wine-lists/${list.id}`, {
+        const { response, data } = await commands.json<unknown>({
+          slot,
+          url: `/api/wine-lists/${list.id}`,
           method: "DELETE",
+          parse: "json",
         });
-        if (!res.ok) {
+        if (!response.ok) {
           throw new Error(
-            await responseError(res, "Couldn't delete wine list."),
+            readApiError(data, "Couldn't delete wine list.").message,
           );
+        }
+        if (!isOkMutation(data)) {
+          throw new Error("Couldn't delete wine list.");
         }
         router.refresh();
       } catch (err) {
@@ -139,10 +188,11 @@ export function WineListLanding({
             : "Couldn't delete wine list. Please try again.",
         );
       } finally {
+        activeMutationSlotsRef.current.delete(slot);
         setDeletingListId(null);
       }
     },
-    [router],
+    [commands, router],
   );
 
   const cloneList = useCallback(
@@ -178,7 +228,10 @@ export function WineListLanding({
   );
 
   const createList = useCallback(async () => {
+    if (creatingRef.current) return;
     const name = newName.trim() || "Untitled Wine List";
+    const slot = "wine-list:create";
+    creatingRef.current = true;
     setCreating(true);
     setCreateError(null);
     try {
@@ -186,17 +239,21 @@ export function WineListLanding({
       if (newDescription.trim()) {
         body.description = newDescription.trim();
       }
-      const res = await fetch("/api/wine-lists", {
+      const { response, data } = await commands.json<unknown>({
+        slot,
+        url: "/api/wine-lists",
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        json: body,
       });
-      if (!res.ok) {
+      if (!response.ok) {
         throw new Error(
-          await responseError(res, "Couldn't create wine list."),
+          readApiError(data, "Couldn't create wine list.").message,
         );
       }
-      const { id } = (await res.json()) as { id: string };
+      const id = createdListId(data);
+      if (!id) {
+        throw new Error("The server returned an invalid wine list.");
+      }
       router.push(`/lists/${id}`);
     } catch (error) {
       setCreateError(
@@ -204,9 +261,10 @@ export function WineListLanding({
           ? error.message
           : "Couldn't create wine list. Please try again.",
       );
+      creatingRef.current = false;
       setCreating(false);
     }
-  }, [newName, newDescription, router]);
+  }, [commands, newName, newDescription, router]);
 
   const renderCard = (list: WineListWithCount) => {
     const justCopied = copiedListId === list.id;
@@ -393,6 +451,23 @@ export function WineListLanding({
         </div>
       </header>
 
+      {deleteError && (
+        <div
+          role="alert"
+          className="mb-md flex items-start justify-between gap-sm rounded-sm border border-danger/30 bg-danger-soft px-sm py-xs text-[13px] text-danger"
+        >
+          <span>{deleteError}</span>
+          <button
+            type="button"
+            onClick={() => setDeleteError(null)}
+            aria-label="Dismiss error"
+            className="-mr-2xs flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-danger/70 hover:bg-danger/10 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+          >
+            <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+          </button>
+        </div>
+      )}
+
       {noListsAtAll ? (
         <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-border-strong bg-surface-muted px-lg py-3xl text-center">
           <ListOrdered
@@ -419,22 +494,6 @@ export function WineListLanding({
           {/* Active lists */}
           {lists.length > 0 && (
             <div className="grid gap-md md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
-              {deleteError && (
-                <div
-                  role="alert"
-                  className="md:col-span-full flex items-start justify-between gap-sm rounded-sm border border-danger/30 bg-danger-soft px-sm py-xs text-[13px] text-danger"
-                >
-                  <span>{deleteError}</span>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteError(null)}
-                    aria-label="Dismiss error"
-                    className="-mr-2xs flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-danger/70 hover:bg-danger/10 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
-                  >
-                    <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                  </button>
-                </div>
-              )}
               {lists.map(renderCard)}
               <button
                 type="button"

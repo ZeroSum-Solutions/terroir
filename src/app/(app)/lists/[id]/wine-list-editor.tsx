@@ -37,6 +37,10 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+} from "@/lib/api/idempotency-client";
 import type { WineList } from "@/lib/wine-list/types";
 import { type Template } from "@/lib/wine-list/types";
 import { SortableWineRow } from "./components/wine-row";
@@ -236,6 +240,13 @@ export function WineListEditor({
   sections: WineListEditorSection[];
 }) {
   const router = useRouter();
+  const [wineListCommands] = useState(() =>
+    createIdempotentCommandStore({
+      persistence: createSessionCommandPersistence(
+        "terroir:wine-list-editor",
+      ),
+    }),
+  );
   const [sections, setSections] = useState(initialSections);
   const [activeSection, setActiveSection] = useState(
     initialSections[0]?.id ?? "",
@@ -276,6 +287,8 @@ export function WineListEditor({
   const [addingSection, setAddingSection] = useState(false);
   const [deletingItem, setDeletingItem] = useState(false);
   const [deletingSection, setDeletingSection] = useState(false);
+  const [templateBusy, setTemplateBusy] = useState(false);
+  const templateMutationRef = useRef(false);
 
   const totalWines = useMemo(
     () => sections.reduce((sum, s) => sum + s.wine_list_items.length, 0),
@@ -744,24 +757,49 @@ export function WineListEditor({
 
   const updateTemplate = useCallback(
     async (template: Template) => {
-      const res = await fetch(`/api/wine-lists/${list.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template }),
-      });
-      if (!res.ok) {
+      if (templateMutationRef.current) return;
+      templateMutationRef.current = true;
+      setTemplateBusy(true);
+      const slot = `wine-list:${list.id}:template`;
+      try {
+        const { response, data } =
+          await wineListCommands.json<unknown>({
+            slot,
+            url: `/api/wine-lists/${list.id}`,
+            method: "PATCH",
+            json: { template },
+          });
+        if (!response.ok) {
+          setErrorToast(
+            readApiError(
+              data,
+              "Failed to update template. Please try again.",
+            ).message,
+          );
+          setTimeout(() => setErrorToast(null), 4000);
+          return;
+        }
+        if (
+          typeof data !== "object" ||
+          data === null ||
+          (data as { ok?: unknown }).ok !== true
+        ) {
+          throw new Error("The server returned an invalid response.");
+        }
+        startTransition(() => router.refresh());
+      } catch (error) {
         setErrorToast(
-          await responseError(
-            res,
-            "Failed to update template. Please try again.",
-          ),
+          error instanceof Error && error.message
+            ? error.message
+            : "Failed to update template. Please try again.",
         );
         setTimeout(() => setErrorToast(null), 4000);
-        return;
+      } finally {
+        templateMutationRef.current = false;
+        setTemplateBusy(false);
       }
-      startTransition(() => router.refresh());
     },
-    [list.id, router],
+    [list.id, router, wineListCommands],
   );
 
   return (
@@ -935,7 +973,7 @@ export function WineListEditor({
             <TemplatePicker
               current={list.template}
               onChange={updateTemplate}
-              disabled={isPending}
+              disabled={isPending || templateBusy}
             />
           </div>
         </aside>

@@ -359,6 +359,49 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       sources: ["src/app/(app)/team/team-actions.tsx"],
     },
   },
+  "api:DELETE:/api/wine-lists/{param}": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/lists/wine-list-landing.tsx"],
+    },
+  },
+  "api:PATCH:/api/wine-lists/{param}": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: [
+        "src/app/(app)/lists/wine-list-landing.tsx",
+        "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+        "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      ],
+    },
+  },
+  "api:POST:/api/wine-lists": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/lists/wine-list-landing.tsx"],
+    },
+  },
 } as const satisfies Partial<
   Record<ApiOperationId, ApiIdempotencyImplementation>
 >;

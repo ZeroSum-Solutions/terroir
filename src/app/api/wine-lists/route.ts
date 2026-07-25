@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireRole } from "@/lib/api/auth";
 import { withApiHandler } from "@/lib/api/handler";
+import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseJson } from "@/lib/api/validation";
 import { CreateWineListBodySchema } from "@/lib/api/wine-list-lifecycle-schemas";
 import { DEFAULT_SECTIONS } from "@/lib/wine-list/types";
@@ -16,45 +17,58 @@ export async function POST(request: NextRequest) {
     const parsed = await parseJson(request, CreateWineListBodySchema);
     if (!parsed.ok) return parsed.response;
     const { name, description } = parsed.data;
-    const insertPayload: {
-      name: string;
-      restaurant_id: string;
-      description?: string;
-    } = { name, restaurant_id: restaurantId };
-    if (description) insertPayload.description = description;
 
-    const { data: list, error: listError } = await supabase
-      .from("wine_lists")
-      .insert(insertPayload)
-      .select("id")
-      .single();
-    if (listError || !list) {
-      throw listError ?? new Error("wine-list insert returned no row");
-    }
+    return idempotentMutationResponse<{ id: string }>({
+      request,
+      supabase,
+      restaurantId,
+      operationId: "api:POST:/api/wine-lists",
+      payload: { name, description },
+      releaseOnError: false,
+      handler: async () => {
+        const insertPayload: {
+          name: string;
+          restaurant_id: string;
+          description?: string;
+        } = { name, restaurant_id: restaurantId };
+        if (description) insertPayload.description = description;
 
-    const sectionInserts = DEFAULT_SECTIONS.map((sectionName, position) => ({
-      wine_list_id: list.id,
-      name: sectionName,
-      position,
-    }));
-    const { error: sectionsError } = await supabase
-      .from("wine_list_sections")
-      .insert(sectionInserts);
-    if (sectionsError) {
-      const { data: cleaned, error: cleanupError } = await supabase
-        .from("wine_lists")
-        .delete()
-        .eq("id", list.id)
-        .eq("restaurant_id", restaurantId)
-        .select("id")
-        .maybeSingle();
-      if (cleanupError) throw cleanupError;
-      if (!cleaned) {
-        throw new Error("failed to remove partial wine-list creation");
-      }
-      throw sectionsError;
-    }
+        const { data: list, error: listError } = await supabase
+          .from("wine_lists")
+          .insert(insertPayload)
+          .select("id")
+          .single();
+        if (listError || !list) {
+          throw listError ?? new Error("wine-list insert returned no row");
+        }
 
-    return NextResponse.json({ id: list.id });
+        const sectionInserts = DEFAULT_SECTIONS.map(
+          (sectionName, position) => ({
+            wine_list_id: list.id,
+            name: sectionName,
+            position,
+          }),
+        );
+        const { error: sectionsError } = await supabase
+          .from("wine_list_sections")
+          .insert(sectionInserts);
+        if (sectionsError) {
+          const { data: cleaned, error: cleanupError } = await supabase
+            .from("wine_lists")
+            .delete()
+            .eq("id", list.id)
+            .eq("restaurant_id", restaurantId)
+            .select("id")
+            .maybeSingle();
+          if (cleanupError) throw cleanupError;
+          if (!cleaned) {
+            throw new Error("failed to remove partial wine-list creation");
+          }
+          throw sectionsError;
+        }
+
+        return { status: 200, body: { id: list.id } };
+      },
+    });
   });
 }
