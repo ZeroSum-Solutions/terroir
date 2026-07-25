@@ -24,6 +24,62 @@ describe("high-risk idempotency clients", () => {
     expect(scanner).toContain("savingRef.current = true");
   });
 
+  it("persists guarded scan edits and commits across ambiguous outcomes", () => {
+    const review = source(
+      "src/app/(app)/scan/components/scan-review.tsx",
+    );
+
+    expect(review).toContain("createIdempotentCommandStore");
+    expect(review).toContain(
+      'createSessionCommandPersistence("terroir:scan-review")',
+    );
+    expect(review.indexOf("const scanReviewCommands")).toBeLessThan(
+      review.indexOf("export function ScanReview"),
+    );
+    expect(review).toContain(
+      "if (savingRef.current || committingRef.current) return",
+    );
+    expect(review).toContain("committingRef.current ||");
+    expect(review).toContain("savingRef.current ||");
+    expect(review).toContain("slot: `save:${id}`");
+    expect(review).toContain("url: `/api/scans/${id}`");
+    expect(review).toContain("slot: `commit:${id}`");
+    expect(review).toContain("url: `/api/scans/${id}/commit`");
+    expect(review).toContain("shouldRetainIdempotencyKey(");
+    expect(review).toContain("router.refresh()");
+    expect(review).not.toContain(
+      "fetch(`/api/scans/${id}/commit`",
+    );
+  });
+
+  it("persists guarded re-extraction and reconciles ambiguous outcomes", () => {
+    const reExtract = source(
+      "src/app/(app)/scan/[id]/components/re-extract-button.tsx",
+    );
+
+    expect(reExtract).toContain("createIdempotentCommandStore");
+    expect(reExtract).toContain(
+      'createSessionCommandPersistence("terroir:scan-reextract")',
+    );
+    expect(reExtract.indexOf("const reExtractCommands")).toBeLessThan(
+      reExtract.indexOf("export function ReExtractButton"),
+    );
+    expect(reExtract).toContain(
+      "if (reExtractingRef.current) return",
+    );
+    expect(reExtract).toContain(
+      "const slot = `reextract:${scanId}`",
+    );
+    expect(reExtract).toContain(
+      "url: `/api/scans/${scanId}/re-extract`",
+    );
+    expect(reExtract).toContain("shouldRetainIdempotencyKey(");
+    expect(reExtract).toContain("window.location.reload()");
+    expect(reExtract).not.toContain(
+      "fetch(`/api/scans/${scanId}/re-extract`",
+    );
+  });
+
   it("keeps one open-bottle key across remounts and transient failures", () => {
     const drawer = source(
       "src/app/(app)/cellar/wine-detail-drawer.tsx",

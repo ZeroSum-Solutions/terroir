@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
+import { createIdempotencyRequestHash } from "@/lib/api/idempotency";
 
 const auth = vi.hoisted(() => ({ requireMembership: vi.fn() }));
 vi.mock("@/lib/api/auth", () => ({
@@ -24,6 +25,7 @@ function makeSupabase(options: {
   fetch?: { data: unknown; error: unknown };
   update?: { error: unknown };
   updateThrows?: boolean;
+  claim?: unknown;
 } = {}) {
   const filters: Array<[string, string]> = [];
   const builder = {
@@ -56,10 +58,24 @@ function makeSupabase(options: {
     },
   );
 
+  const rpc = vi.fn((name: string) => {
+    if (name === "claim_api_idempotency") {
+      return Promise.resolve({
+        data: options.claim ?? [{ outcome: "claimed" }],
+        error: null,
+      });
+    }
+    if (name === "complete_api_idempotency") {
+      return Promise.resolve({ data: true, error: null });
+    }
+    return Promise.resolve({ data: true, error: null });
+  });
+
   return {
     builder,
     filters,
-    supabase: { from: vi.fn().mockReturnValue(builder) },
+    rpc,
+    supabase: { from: vi.fn().mockReturnValue(builder), rpc },
   };
 }
 
@@ -97,10 +113,17 @@ describe("POST /api/scans/[id]/re-extract", () => {
     });
   }
 
-  function call() {
-    return POST({} as NextRequest, {
-      params: Promise.resolve({ id: SCAN_ID }),
-    });
+  function call(key?: string) {
+    return POST(
+      new Request(
+        `http://localhost/api/scans/${SCAN_ID}/re-extract`,
+        {
+          method: "POST",
+          headers: key ? { "Idempotency-Key": key } : {},
+        },
+      ) as NextRequest,
+      { params: Promise.resolve({ id: SCAN_ID }) },
+    );
   }
 
   it("preserves currency and bottle format in the response and persisted items", async () => {
@@ -236,5 +259,62 @@ describe("POST /api/scans/[id]/re-extract", () => {
 
     expect(response.status).toBe(500);
     expect(JSON.stringify(await response.json())).not.toContain("private");
+  });
+
+  it("binds keyed extraction to the normalized scan ID", async () => {
+    const db = makeSupabase();
+    authorize(db.supabase);
+
+    const response = await call("scan_reextract_key_0001");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Idempotency-Replayed")).toBe("false");
+    expect(db.rpc).toHaveBeenNthCalledWith(1, "claim_api_idempotency", {
+      p_restaurant_id: RESTAURANT_ID,
+      p_operation_id: "api:POST:/api/scans/{param}/re-extract",
+      p_idempotency_key: "scan_reextract_key_0001",
+      p_request_hash: createIdempotencyRequestHash({ id: SCAN_ID }),
+    });
+    expect(extraction.extractFromOcr).toHaveBeenCalledOnce();
+  });
+
+  it("replays keyed extraction without calling the provider or updating", async () => {
+    const replayBody = {
+      scanId: SCAN_ID,
+      items: [{ id: "persisted-line" }],
+      quality: { avgConfidence: 0.98 },
+      rawText: "stored",
+    };
+    const db = makeSupabase({
+      claim: [
+        {
+          outcome: "replay",
+          response_status: 200,
+          response_headers: {},
+          response_body: replayBody,
+        },
+      ],
+    });
+    authorize(db.supabase);
+
+    const response = await call("scan_reextract_key_0002");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await response.json()).toEqual(replayBody);
+    expect(extraction.extractFromOcr).not.toHaveBeenCalled();
+    expect(db.builder.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed keys before provider or database work", async () => {
+    const db = makeSupabase();
+    authorize(db.supabase);
+
+    const response = await call("bad key!");
+
+    expect(response.status).toBe(400);
+    expect(db.rpc).not.toHaveBeenCalled();
+    expect(extraction.extractFromOcr).not.toHaveBeenCalled();
+    expect(db.builder.select).not.toHaveBeenCalled();
   });
 });

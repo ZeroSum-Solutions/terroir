@@ -1058,6 +1058,21 @@ export type Database = {
           response_status: number
         }[]
       }
+      commit_invoice_scan_idempotent: {
+        Args: {
+          p_idempotency_key?: string
+          p_request_hash?: string
+          p_restaurant_id: string
+          p_scan_id: string
+        }
+        Returns: {
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+          wine_ids: string[]
+        }[]
+      }
       complete_api_idempotency: {
         Args: {
           p_idempotency_key: string

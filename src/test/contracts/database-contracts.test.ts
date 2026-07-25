@@ -3,6 +3,7 @@ import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { createIdempotencyRequestHash } from "@/lib/api/idempotency";
 
 const schema = readFileSync(
   join(
@@ -88,6 +89,22 @@ const atomicTeamMemberIdempotency = readFileSync(
   join(
     dirname(fileURLToPath(import.meta.url)),
     "../../../supabase/migrations/0063_team_member_idempotency.sql",
+  ),
+  "utf8",
+);
+
+const atomicInvoiceScanCommitIdempotency = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../supabase/migrations/0065_invoice_scan_commit_idempotency.sql",
+  ),
+  "utf8",
+);
+
+const atomicInvoiceScanCommitAcceptance = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../supabase/tests/0065_invoice_scan_commit_idempotency.sql",
   ),
   "utf8",
 );
@@ -634,6 +651,41 @@ describe("database security contracts", () => {
     );
     expect(atomicTeamMemberIdempotency).toContain(
       "message = 'idempotency completion changed concurrently'",
+    );
+  });
+
+  it("commits invoice inventory and the exact response atomically", () => {
+    expect(atomicInvoiceScanCommitIdempotency).toMatch(
+      /commit_invoice_scan_idempotent\([\s\S]*?security definer[\s\S]*?set search_path = ''/,
+    );
+    expect(atomicInvoiceScanCommitIdempotency).toContain(
+      "public.is_member_with_role(p_restaurant_id, 'staff')",
+    );
+    expect(atomicInvoiceScanCommitIdempotency).toMatch(
+      /v_identity :=[\s\S]*?extensions\.digest\([\s\S]*?p_request_hash is null or p_request_hash <> v_computed_hash/,
+    );
+    expect(atomicInvoiceScanCommitIdempotency).toMatch(
+      /from public\.claim_api_idempotency\([\s\S]*?from public\.invoice_scans[\s\S]*?for update;[\s\S]*?public\.find_or_create_wines_batch\([\s\S]*?insert into public\.inventory_items[\s\S]*?public\.complete_api_idempotency\(/,
+    );
+    expect(atomicInvoiceScanCommitIdempotency).toContain(
+      "'api:POST:/api/scans/{param}/commit'",
+    );
+    expect(atomicInvoiceScanCommitIdempotency).toContain(
+      "message = 'idempotency completion changed concurrently'",
+    );
+    expect(atomicInvoiceScanCommitIdempotency).not.toMatch(
+      /^\s*execute\s/mi,
+    );
+    expect(atomicInvoiceScanCommitIdempotency).not.toMatch(
+      /^\s*set\s+(?:local\s+)?role\s+(?!=)/mi,
+    );
+    expect(atomicInvoiceScanCommitIdempotency).toContain(
+      "grant execute on function public.commit_invoice_scan_idempotent(",
+    );
+    expect(atomicInvoiceScanCommitAcceptance).toContain(
+      createIdempotencyRequestHash({
+        id: "64100000-0000-4000-8000-000000000001",
+      }),
     );
   });
 

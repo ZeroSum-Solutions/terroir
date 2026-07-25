@@ -276,6 +276,53 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       sources: ["src/app/(app)/scan/scanner.tsx"],
     },
   },
+  "api:PATCH:/api/scans/{param}": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/scan/components/scan-review.tsx"],
+    },
+  },
+  "api:POST:/api/scans/{param}/commit": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "commit_invoice_scan_idempotent",
+    },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "commit_invoice_scan_idempotent",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/scan/components/scan-review.tsx"],
+    },
+  },
+  "api:POST:/api/scans/{param}/re-extract": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: [
+        "src/app/(app)/scan/[id]/components/re-extract-button.tsx",
+      ],
+    },
+  },
   "api:POST:/api/team/accept-invite": {
     boundary: {
       kind: "dedicated-rpc",

@@ -33,7 +33,6 @@ const EXPECTED_PENDING_DISCOVERED = [
   "api:DELETE:/api/wine-list-sections/{param}",
   "api:DELETE:/api/wine-lists/{param}/publish",
   "api:DELETE:/api/wines/{param}/image",
-  "api:PATCH:/api/scans/{param}",
   "api:PATCH:/api/wine-list-sections/reorder",
   "api:PATCH:/api/wine-list-sections/{param}",
   "api:PATCH:/api/wines/{param}",
@@ -41,8 +40,6 @@ const EXPECTED_PENDING_DISCOVERED = [
   "api:POST:/api/cellar",
   "api:POST:/api/scan-bottle",
   "api:POST:/api/scan-bottle/confirm",
-  "api:POST:/api/scans/{param}/commit",
-  "api:POST:/api/scans/{param}/re-extract",
   "api:POST:/api/wine-list-sections",
   "api:POST:/api/wine-lists/{param}/clone",
   "api:POST:/api/wine-lists/{param}/publish",
@@ -81,7 +78,7 @@ describe("API idempotency implementation ledger", () => {
       (operationId) => !discovered.has(operationId),
     );
 
-    expect(implemented).toHaveLength(31);
+    expect(implemented).toHaveLength(34);
     expect(pending).toEqual([...EXPECTED_PENDING_DISCOVERED].sort());
     expect(planned).toEqual([...EXPECTED_PLANNED].sort());
     expect(

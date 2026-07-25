@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
+import { createIdempotencyRequestHash } from "@/lib/api/idempotency";
 
 const auth = vi.hoisted(() => ({ requireMembership: vi.fn() }));
 vi.mock("@/lib/api/auth", () => ({
@@ -29,10 +30,13 @@ function lineItem(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeRequest(body: unknown) {
+function makeRequest(body: unknown, key?: string) {
   return new Request(`http://localhost/api/scans/${SCAN_ID}`, {
     method: "PATCH",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(key ? { "Idempotency-Key": key } : {}),
+    },
     body: JSON.stringify(body),
   }) as NextRequest;
 }
@@ -40,6 +44,8 @@ function makeRequest(body: unknown) {
 function makeSupabase(options: {
   fetch?: { data: unknown; error: unknown };
   update?: { error: unknown };
+  claim?: unknown;
+  complete?: boolean;
 } = {}) {
   const fetchFilters: Array<[string, string]> = [];
   const updateFilters: Array<[string, string]> = [];
@@ -72,7 +78,29 @@ function makeSupabase(options: {
     .fn()
     .mockReturnValueOnce(fetchBuilder)
     .mockReturnValueOnce(updateBuilder);
-  return { supabase: { from }, from, update, fetchFilters, updateFilters };
+  const rpc = vi.fn((name: string) => {
+    if (name === "claim_api_idempotency") {
+      return Promise.resolve({
+        data: options.claim ?? [{ outcome: "claimed" }],
+        error: null,
+      });
+    }
+    if (name === "complete_api_idempotency") {
+      return Promise.resolve({
+        data: options.complete ?? true,
+        error: null,
+      });
+    }
+    return Promise.resolve({ data: true, error: null });
+  });
+  return {
+    supabase: { from, rpc },
+    from,
+    rpc,
+    update,
+    fetchFilters,
+    updateFilters,
+  };
 }
 
 function authorize(supabase: unknown) {
@@ -182,5 +210,82 @@ describe("PATCH /api/scans/[id]", () => {
 
     expect(response.status).toBe(500);
     expect(JSON.stringify(await response.json())).not.toContain("sensitive");
+  });
+
+  it("binds a keyed save to all normalized params and body fields", async () => {
+    const db = makeSupabase();
+    authorize(db.supabase);
+    const body = {
+      items: [lineItem()],
+      edits: { "line-1:name": true },
+    };
+
+    const response = await PATCH(
+      makeRequest(body, "scan_save_key_0001"),
+      { params: Promise.resolve({ id: SCAN_ID }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Idempotency-Replayed")).toBe("false");
+    expect(db.rpc).toHaveBeenNthCalledWith(1, "claim_api_idempotency", {
+      p_restaurant_id: RESTAURANT_ID,
+      p_operation_id: "api:PATCH:/api/scans/{param}",
+      p_idempotency_key: "scan_save_key_0001",
+      p_request_hash: createIdempotencyRequestHash({
+        id: SCAN_ID,
+        body,
+      }),
+    });
+    expect(db.rpc).toHaveBeenNthCalledWith(
+      2,
+      "complete_api_idempotency",
+      expect.objectContaining({
+        p_response_status: 200,
+        p_response_body: { success: true, itemCount: 1 },
+      }),
+    );
+  });
+
+  it("replays an exact keyed save without repeating database work", async () => {
+    const db = makeSupabase({
+      claim: [
+        {
+          outcome: "replay",
+          response_status: 200,
+          response_headers: {},
+          response_body: { success: true, itemCount: 1 },
+        },
+      ],
+    });
+    authorize(db.supabase);
+
+    const response = await PATCH(
+      makeRequest(
+        { items: [lineItem()], edits: {} },
+        "scan_save_key_0002",
+      ),
+      { params: Promise.resolve({ id: SCAN_ID }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(db.from).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed keyed saves before claims or mutations", async () => {
+    const db = makeSupabase();
+    authorize(db.supabase);
+
+    const response = await PATCH(
+      makeRequest(
+        { items: [lineItem()], edits: {} },
+        "bad key!",
+      ),
+      { params: Promise.resolve({ id: SCAN_ID }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(db.rpc).not.toHaveBeenCalled();
+    expect(db.from).not.toHaveBeenCalled();
   });
 });

@@ -5,9 +5,21 @@ import { AlertTriangle, ArrowLeft, Download, ExternalLink, Loader2, Save, Trash2
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { accuracyColor } from "@/lib/scanner/accuracy-color";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+  readApiErrorCode,
+  shouldRetainIdempotencyKey,
+} from "@/lib/api/idempotency-client";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
 import { SCORED_FIELDS } from "@/lib/scanner/scored-fields";
 import type { LineItem, LineItemField } from "@/lib/scanner/types";
@@ -25,6 +37,10 @@ interface ScanReviewProps {
   items: LineItem[];
   hasImage: boolean;
 }
+
+const scanReviewCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence("terroir:scan-review"),
+});
 
 function formatMoneyLocal(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -50,6 +66,8 @@ export function ScanReview({
   const [commitOk, setCommitOk] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(hasImage);
+  const savingRef = useRef(false);
+  const committingRef = useRef(false);
 
   useEffect(() => {
     if (!hasImage) return;
@@ -89,46 +107,108 @@ export function ScanReview({
     setItems((prev) => prev.filter((it) => it.id !== itemId));
   }, []);
   const handleSave = useCallback(async () => {
-    if (isSaving) return;
+    if (savingRef.current || committingRef.current) return;
+    savingRef.current = true;
     setIsSaving(true);
     try {
-      const res = await fetch(`/api/scans/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items, edits }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(readApiError(err, "Save failed").message);
+      const { response, data } =
+        await scanReviewCommands.json<unknown>({
+          slot: `save:${id}`,
+          url: `/api/scans/${id}`,
+          method: "PATCH",
+          json: { items, edits },
+        });
+      if (!response.ok) {
+        if (
+          shouldRetainIdempotencyKey(
+            response.status,
+            readApiErrorCode(data),
+          )
+        ) {
+          router.refresh();
+          setSaveMsg(
+            "Save outcome is unknown. The scan was refreshed; retrying will use the same command.",
+          );
+          return;
+        }
+        setSaveMsg(readApiError(data, "Save failed").message);
+        return;
       }
       setSaveMsg("Edits saved.");
       router.refresh();
-    } catch (err) {
-      setSaveMsg(err instanceof Error ? err.message : "Save failed");
+    } catch {
+      router.refresh();
+      setSaveMsg(
+        "Save outcome is unknown. The scan was refreshed; retrying will use the same command.",
+      );
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
-  }, [id, items, edits, isSaving, router]);
+  }, [id, items, edits, router]);
   const handleCommit = useCallback(async () => {
-    if (isCommitting || items.length === 0) return;
+    if (
+      committingRef.current ||
+      savingRef.current ||
+      items.length === 0
+    ) {
+      return;
+    }
     if (!window.confirm(`Commit ${items.length} wines to inventory? This will create inventory records.`)) return;
+    committingRef.current = true;
     setIsCommitting(true);
     try {
-      const res = await fetch(`/api/scans/${id}/commit`, { method: "POST" });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(readApiError(err, "Commit failed").message);
+      const { response, data } =
+        await scanReviewCommands.json<unknown>({
+          slot: `commit:${id}`,
+          url: `/api/scans/${id}/commit`,
+          method: "POST",
+          json: null,
+        });
+      if (!response.ok) {
+        if (
+          shouldRetainIdempotencyKey(
+            response.status,
+            readApiErrorCode(data),
+          )
+        ) {
+          router.refresh();
+          setSaveMsg(
+            "Commit outcome is unknown. Inventory was refreshed; retrying will use the same command.",
+          );
+          return;
+        }
+        setSaveMsg(readApiError(data, "Commit failed").message);
+        return;
       }
-      const result = await res.json();
+      if (
+        !data ||
+        typeof data !== "object" ||
+        !("itemCount" in data) ||
+        typeof data.itemCount !== "number" ||
+        !("wineCount" in data) ||
+        typeof data.wineCount !== "number"
+      ) {
+        setCommitOk(true);
+        setSaveMsg(
+          "Inventory commit completed. Inventory was refreshed.",
+        );
+        router.refresh();
+        return;
+      }
       setCommitOk(true);
-      setSaveMsg(`${result.itemCount} items committed to inventory (${result.wineCount} distinct wines).`);
+      setSaveMsg(`${data.itemCount} items committed to inventory (${data.wineCount} distinct wines).`);
       router.refresh();
-    } catch (err) {
-      setSaveMsg(err instanceof Error ? err.message : "Commit failed");
+    } catch {
+      router.refresh();
+      setSaveMsg(
+        "Commit outcome is unknown. Inventory was refreshed; retrying will use the same command.",
+      );
     } finally {
+      committingRef.current = false;
       setIsCommitting(false);
     }
-  }, [id, items, isCommitting, router]);
+  }, [id, items, router]);
   const { total, bottles, lowC, acc } = useMemo(() => {
     const totalFields = items.length * SCORED_FIELDS.length;
     const edited = Object.keys(edits).length;
@@ -341,7 +421,7 @@ export function ScanReview({
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={isSaving}
+                disabled={isSaving || isCommitting}
                 className="flex h-11 flex-1 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
               >
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" /> : <Save className="h-4 w-4" strokeWidth={2} aria-hidden="true" />}
@@ -350,7 +430,7 @@ export function ScanReview({
               <button
                 type="button"
                 onClick={handleCommit}
-                disabled={isCommitting || commitOk}
+                disabled={isSaving || isCommitting || commitOk}
                 className="flex h-11 flex-1 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
               >
                 {isCommitting ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" /> : null}
