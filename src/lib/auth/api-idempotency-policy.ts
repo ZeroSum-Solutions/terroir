@@ -32,6 +32,19 @@ export type ApiIdempotencyImplementation = {
  * hash call, binary mode, and caller evidence.
  */
 export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
+  "api:DELETE:/api/team/invite/{param}": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/team/team-actions.tsx"],
+    },
+  },
   "api:PATCH:/api/cellar/{param}": {
     boundary: { kind: "generic-wrapper", count: 1 },
     identity: {
@@ -301,6 +314,19 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       sources: ["src/app/(app)/team/team-actions.tsx"],
     },
   },
+  "api:POST:/api/team/invite": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/team/team-actions.tsx"],
+    },
+  },
   "api:DELETE:/api/team/members/{param}": {
     boundary: {
       kind: "dedicated-rpc",
@@ -315,6 +341,19 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       kind: "atomic-rpc",
       rpc: "remove_team_member_idempotent",
     },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/team/team-actions.tsx"],
+    },
+  },
+  "api:POST:/api/team/invite/{param}/resend": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
     client: {
       lifecycle: "session-persistent",
       sources: ["src/app/(app)/team/team-actions.tsx"],

@@ -112,7 +112,9 @@ describe("team API boundaries", () => {
     {
       name: "DELETE invite",
       call: (params: Promise<{ id: string }>) =>
-        REVOKE({} as NextRequest, { params }),
+        REVOKE(request(`/api/team/invite/${VALID_ID}`, "DELETE"), {
+          params,
+        }),
     },
     {
       name: "POST resend invite",
@@ -197,9 +199,12 @@ describe("team API provider and mutation boundaries", () => {
     });
     ownerAuth(vi.fn(() => lookup));
 
-    const response = await REVOKE({} as NextRequest, {
+    const response = await REVOKE(
+      request(`/api/team/invite/${VALID_ID}`, "DELETE"),
+      {
       params: Promise.resolve({ id: VALID_ID }),
-    });
+      },
+    );
 
     expect(response.status).toBe(500);
     const body = await response.json();
@@ -224,9 +229,12 @@ describe("team API provider and mutation boundaries", () => {
       .mockReturnValueOnce(deletion);
     ownerAuth(from);
 
-    const response = await REVOKE({} as NextRequest, {
+    const response = await REVOKE(
+      request(`/api/team/invite/${VALID_ID}`, "DELETE"),
+      {
       params: Promise.resolve({ id: VALID_ID }),
-    });
+      },
+    );
 
     expect(response.status).toBe(404);
     expect(deletion.eq).toHaveBeenCalledWith("id", VALID_ID);

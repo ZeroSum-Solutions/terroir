@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Check,
   Copy,
@@ -17,6 +17,9 @@ import { readApiError } from "@/lib/api/client-error";
 import {
   createIdempotentCommandStore,
   createSessionCommandPersistence,
+  IdempotentCommandBusyError,
+  readApiErrorCode,
+  shouldRetainIdempotencyKey,
 } from "@/lib/api/idempotency-client";
 
 const teamMemberCommands = createIdempotentCommandStore({
@@ -39,6 +42,41 @@ type Invitation = {
   created_at: string;
 };
 
+type InviteResponse = Invitation & { inviteUrl: string };
+
+type PendingInviteReconciliation =
+  | {
+      kind: "create";
+      email: string;
+      role: "manager" | "staff";
+      existingIds: readonly string[];
+      startedAt: number;
+    }
+  | {
+      kind: "revoke";
+      invitationId: string;
+    }
+  | {
+      kind: "resend";
+      invitationId: string;
+    };
+
+const teamInviteCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence("terroir:team-invites"),
+});
+
+function reconciliationKey(
+  reconciliation: PendingInviteReconciliation,
+): string {
+  return reconciliation.kind === "create"
+    ? "create"
+    : `${reconciliation.kind}:${reconciliation.invitationId}`;
+}
+
+function currentTimeMs(): number {
+  return Date.now();
+}
+
 export function TeamActions({
   members,
   invitations,
@@ -58,6 +96,13 @@ export function TeamActions({
   const [creating, setCreating] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [busyInvitationIds, setBusyInvitationIds] = useState<
+    ReadonlySet<string>
+  >(new Set());
+  const createBusyRef = useRef(false);
+  const busyInvitationIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const pendingReconciliationsRef =
+    useRef<readonly PendingInviteReconciliation[]>([]);
   // Per-row "copied" indicator for the Pending invitations table —
   // tracks the invitation id whose link was most recently copied so we
   // can flash a confirmation on that row only.
@@ -79,76 +124,219 @@ export function TeamActions({
     (m) => m.user_id === currentUserId && m.role === "owner",
   );
 
+  useEffect(() => {
+    const resolved: PendingInviteReconciliation[] = [];
+    let recoveredCreateUrl: string | null = null;
+
+    for (const pending of pendingReconciliationsRef.current) {
+      if (pending.kind === "revoke") {
+        if (!invitations.some(({ id }) => id === pending.invitationId)) {
+          resolved.push(pending);
+        }
+        continue;
+      }
+      if (pending.kind === "resend") {
+        // The refresh itself reconciles the pending-invitation table. A
+        // resend row has no durable link back to its source invitation, so
+        // do not guess that an unrelated matching row proves success or
+        // abandon the retained retry key.
+        resolved.push(pending);
+        continue;
+      }
+
+      const existingIds = new Set(pending.existingIds);
+      const candidates = invitations.filter(
+        (invitation) =>
+          !existingIds.has(invitation.id) &&
+          invitation.email === pending.email &&
+          invitation.role === pending.role &&
+          new Date(invitation.created_at).getTime() >=
+            pending.startedAt - 30_000,
+      );
+      if (candidates.length === 1) {
+        const [reconciled] = candidates;
+        resolved.push(pending);
+        recoveredCreateUrl = `${window.location.origin}/invite/${reconciled.token}`;
+      }
+    }
+
+    if (resolved.length === 0) return;
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      let createRecoveryBusy = false;
+      if (recoveredCreateUrl) {
+        try {
+          teamInviteCommands.abandon("create");
+        } catch (error) {
+          if (error instanceof IdempotentCommandBusyError) {
+            createRecoveryBusy = true;
+          } else {
+            throw error;
+          }
+        }
+      }
+      pendingReconciliationsRef.current =
+        pendingReconciliationsRef.current.filter(
+          (pending) =>
+            !resolved.includes(pending) ||
+            (createRecoveryBusy && pending.kind === "create"),
+        );
+      if (recoveredCreateUrl) {
+        setInviteUrl(recoveredCreateUrl);
+        setInviteError(null);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [invitations]);
+
+  const trackPendingReconciliation = (
+    reconciliation: PendingInviteReconciliation,
+  ) => {
+    const key = reconciliationKey(reconciliation);
+    pendingReconciliationsRef.current = [
+      ...pendingReconciliationsRef.current.filter(
+        (pending) => reconciliationKey(pending) !== key,
+      ),
+      reconciliation,
+    ];
+  };
+
+  const clearPendingReconciliation = (
+    reconciliation: PendingInviteReconciliation,
+  ) => {
+    const key = reconciliationKey(reconciliation);
+    pendingReconciliationsRef.current =
+      pendingReconciliationsRef.current.filter(
+        (pending) => reconciliationKey(pending) !== key,
+      );
+  };
+
   const createInvite = async () => {
-    const email = inviteEmail.trim();
+    if (createBusyRef.current) return;
+    const email = inviteEmail.trim().toLowerCase();
     if (!email) {
       setInviteError("Enter the invitee's email address.");
       return;
     }
+    createBusyRef.current = true;
     setCreating(true);
     setInviteError(null);
+    const reconciliation: PendingInviteReconciliation = {
+      kind: "create",
+      email,
+      role: inviteRole,
+      existingIds: invitations.map(({ id }) => id),
+      startedAt: currentTimeMs(),
+    };
     try {
-      const res = await fetch("/api/team/invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, role: inviteRole }),
-      });
-      if (!res.ok) {
-        let serverMessage = "Failed to create invite";
-        try {
-          serverMessage = readApiError(await res.json(), serverMessage).message;
-        } catch {
-          // non-JSON body — fall through to status-based message
+      const { response, data } =
+        await teamInviteCommands.json<InviteResponse>({
+          slot: "create",
+          url: "/api/team/invite",
+          method: "POST",
+          json: { email, role: inviteRole },
+        });
+      if (!response.ok) {
+        if (
+          shouldRetainIdempotencyKey(
+            response.status,
+            readApiErrorCode(data),
+          )
+        ) {
+          trackPendingReconciliation(reconciliation);
+          router.refresh();
+        } else {
+          clearPendingReconciliation(reconciliation);
         }
-        throw new Error(
-          res.status === 403
-            ? "Only owners can create invite links."
-            : serverMessage,
-        );
+        const serverMessage = readApiError(
+          data,
+          "Failed to create invite",
+        ).message;
+        setInviteError(serverMessage);
+        return;
       }
-      const invite = await res.json();
-      setInviteUrl(invite.inviteUrl);
+      clearPendingReconciliation(reconciliation);
+      setInviteUrl(data.inviteUrl);
       router.refresh();
-    } catch (err) {
+    } catch {
+      trackPendingReconciliation(reconciliation);
+      router.refresh();
       setInviteError(
-        err instanceof Error && err.message
-          ? err.message
-          : "Couldn't create invite link. Please try again.",
+        "Invite outcome is unknown. Invitations were refreshed; retrying will use the same command.",
       );
     } finally {
+      createBusyRef.current = false;
       setCreating(false);
     }
   };
 
+  const beginInvitationAction = (invitationId: string): boolean => {
+    if (busyInvitationIdsRef.current.has(invitationId)) return false;
+    const next = new Set(busyInvitationIdsRef.current);
+    next.add(invitationId);
+    busyInvitationIdsRef.current = next;
+    setBusyInvitationIds(next);
+    return true;
+  };
+
+  const finishInvitationAction = (invitationId: string) => {
+    const next = new Set(busyInvitationIdsRef.current);
+    next.delete(invitationId);
+    busyInvitationIdsRef.current = next;
+    setBusyInvitationIds(next);
+  };
+
+  const reconcileResponse = (
+    response: Response,
+    data: unknown,
+    reconciliation: PendingInviteReconciliation,
+  ) => {
+    const ambiguous = shouldRetainIdempotencyKey(
+      response.status,
+      readApiErrorCode(data),
+    );
+    if (ambiguous) {
+      trackPendingReconciliation(reconciliation);
+    } else {
+      clearPendingReconciliation(reconciliation);
+    }
+  };
+
   const copyLink = async () => {
-    await navigator.clipboard.writeText(inviteUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+      setInviteError(null);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setInviteError(
+        "Couldn't copy the invite link. Select and copy it manually.",
+      );
+    }
   };
 
   const copyInvitationLink = async (invitation: Invitation) => {
     const url = `${window.location.origin}/invite/${invitation.token}`;
-    await navigator.clipboard.writeText(url);
-    setCopiedInvitationId(invitation.id);
-    setTimeout(
-      () =>
-        setCopiedInvitationId((current) =>
-          current === invitation.id ? null : current,
-        ),
-      2000,
-    );
-  };
-
-  const extractServerError = async (
-    res: Response,
-    fallback: string,
-  ): Promise<string> => {
     try {
-      return readApiError(await res.json(), fallback).message;
+      await navigator.clipboard.writeText(url);
+      setMemberActionError(null);
+      setCopiedInvitationId(invitation.id);
+      setTimeout(
+        () =>
+          setCopiedInvitationId((current) =>
+            current === invitation.id ? null : current,
+          ),
+        2000,
+      );
     } catch {
-      // non-JSON body — fall through to fallback
+      setMemberActionError(
+        "Couldn't copy the invite link. Try again or open the link manually.",
+      );
     }
-    return fallback;
   };
 
   const setMemberBusy = (memberId: string, busy: boolean) => {
@@ -245,37 +433,78 @@ export function TeamActions({
   };
 
   const revokeInvitation = async (invitationId: string) => {
+    if (!beginInvitationAction(invitationId)) return;
     setMemberActionError(null);
-    const res = await fetch(`/api/team/invite/${invitationId}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) {
+    const reconciliation: PendingInviteReconciliation = {
+      kind: "revoke",
+      invitationId,
+    };
+    try {
+      const { response, data } = await teamInviteCommands.json<unknown>({
+        slot: `revoke:${invitationId}`,
+        url: `/api/team/invite/${invitationId}`,
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        reconcileResponse(response, data, reconciliation);
+        setMemberActionError(
+          readApiError(
+            data,
+            "Couldn't revoke invitation. Please try again.",
+          ).message,
+        );
+        router.refresh();
+        return;
+      }
+      clearPendingReconciliation(reconciliation);
+      router.refresh();
+    } catch {
+      trackPendingReconciliation(reconciliation);
       setMemberActionError(
-        await extractServerError(
-          res,
-          "Couldn't revoke invitation. Please try again.",
-        ),
+        "Revoke outcome is unknown. Invitations were refreshed; retrying will use the same command.",
       );
-      return;
+      router.refresh();
+    } finally {
+      finishInvitationAction(invitationId);
     }
-    router.refresh();
   };
 
   const resendInvitation = async (invitationId: string) => {
+    if (!beginInvitationAction(invitationId)) return;
     setMemberActionError(null);
-    const res = await fetch(`/api/team/invite/${invitationId}/resend`, {
-      method: "POST",
-    });
-    if (!res.ok) {
+    const reconciliation: PendingInviteReconciliation = {
+      kind: "resend",
+      invitationId,
+    };
+    try {
+      const { response, data } =
+        await teamInviteCommands.json<InviteResponse>({
+          slot: `resend:${invitationId}`,
+          url: `/api/team/invite/${invitationId}/resend`,
+          method: "POST",
+        });
+      if (!response.ok) {
+        reconcileResponse(response, data, reconciliation);
+        setMemberActionError(
+          readApiError(
+            data,
+            "Couldn't resend invitation. Please try again.",
+          ).message,
+        );
+        router.refresh();
+        return;
+      }
+      clearPendingReconciliation(reconciliation);
+      router.refresh();
+    } catch {
+      trackPendingReconciliation(reconciliation);
       setMemberActionError(
-        await extractServerError(
-          res,
-          "Couldn't resend invitation. Please try again.",
-        ),
+        "Resend outcome is unknown. Invitations were refreshed; retrying will use the same command.",
       );
-      return;
+      router.refresh();
+    } finally {
+      finishInvitationAction(invitationId);
     }
-    router.refresh();
   };
 
   return (
@@ -288,6 +517,10 @@ export function TeamActions({
             <button
               type="button"
               onClick={() => {
+                pendingReconciliationsRef.current =
+                  pendingReconciliationsRef.current.filter(
+                    ({ kind }) => kind !== "create",
+                  );
                 setShowInvite(true);
                 setInviteUrl("");
                 setInviteEmail("");
@@ -428,6 +661,7 @@ export function TeamActions({
                 {invitations.map((inv) => {
                   const justCopied = copiedInvitationId === inv.id;
                   const expiry = describeExpiry(inv.expires_at);
+                  const invitationBusy = busyInvitationIds.has(inv.id);
                   return (
                     <tr
                       key={inv.id}
@@ -499,11 +733,12 @@ export function TeamActions({
                             <button
                               type="button"
                               onClick={() => resendInvitation(inv.id)}
+                              disabled={invitationBusy}
                               aria-label={`Resend invitation for ${inv.email ?? "invitation"}`}
-                              className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                              className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft disabled:cursor-wait disabled:opacity-60"
                             >
                               <RefreshCw
-                                className="h-3.5 w-3.5"
+                                className={`h-3.5 w-3.5 ${invitationBusy ? "animate-spin" : ""}`}
                                 strokeWidth={2}
                                 aria-hidden
                               />
@@ -513,6 +748,11 @@ export function TeamActions({
                               type="button"
                               onClick={() => {
                                 if (
+                                  busyInvitationIdsRef.current.has(inv.id)
+                                ) {
+                                  return;
+                                }
+                                if (
                                   window.confirm(
                                     `Revoke invitation for ${inv.email ?? "this address"}? The link will stop working immediately.`,
                                   )
@@ -520,8 +760,9 @@ export function TeamActions({
                                   revokeInvitation(inv.id);
                                 }
                               }}
+                              disabled={invitationBusy}
                               aria-label={`Revoke invitation for ${inv.email ?? "invitation"}`}
-                              className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-sm border border-border-strong bg-white text-ink-subtle hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+                              className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-sm border border-border-strong bg-white text-ink-subtle hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 disabled:cursor-wait disabled:opacity-60"
                             >
                               <Trash2
                                 className="h-3.5 w-3.5"
@@ -639,6 +880,7 @@ function InviteModal({
                 inputMode="email"
                 autoComplete="email"
                 required
+                disabled={creating}
                 placeholder="teammate@restaurant.com"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
@@ -665,6 +907,7 @@ function InviteModal({
               <select
                 id="invite-role"
                 value={inviteRole}
+                disabled={creating}
                 onChange={(e) =>
                   setInviteRole(e.target.value as "manager" | "staff")
                 }
@@ -717,6 +960,14 @@ function InviteModal({
                 {inviteUrl}
               </p>
             </div>
+            {error && (
+              <p
+                role="alert"
+                className="mt-md rounded-sm border border-danger/30 bg-danger-soft px-sm py-xs text-[13px] text-danger"
+              >
+                {error}
+              </p>
+            )}
             <div className="mt-md flex justify-end gap-sm">
               <button
                 type="button"

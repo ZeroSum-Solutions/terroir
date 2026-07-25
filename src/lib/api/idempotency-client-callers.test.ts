@@ -158,6 +158,39 @@ describe("high-risk idempotency clients", () => {
     expect(teamActions.match(/response\.json\(/g)).toBeNull();
   });
 
+  it("persists guarded team invite commands and reconciles ambiguous outcomes", () => {
+    const teamActions = source(
+      "src/app/(app)/team/team-actions.tsx",
+    );
+
+    expect(teamActions).toContain("createIdempotentCommandStore");
+    expect(teamActions).toContain(
+      'createSessionCommandPersistence("terroir:team-invites")',
+    );
+    expect(teamActions.indexOf("const teamInviteCommands")).toBeLessThan(
+      teamActions.indexOf("export function TeamActions"),
+    );
+    expect(teamActions).toContain('slot: "create"');
+    expect(teamActions).toContain('url: "/api/team/invite"');
+    expect(teamActions).toContain("slot: `revoke:${invitationId}`");
+    expect(teamActions).toContain(
+      "url: `/api/team/invite/${invitationId}`",
+    );
+    expect(teamActions).toContain("slot: `resend:${invitationId}`");
+    expect(teamActions).toContain(
+      "url: `/api/team/invite/${invitationId}/resend`",
+    );
+    expect(teamActions).toContain("if (createBusyRef.current) return");
+    expect(teamActions).toContain(
+      "if (busyInvitationIdsRef.current.has(invitationId)) return false",
+    );
+    expect(teamActions).toContain("shouldRetainIdempotencyKey(");
+    expect(teamActions).toContain("pendingReconciliationsRef");
+    expect(teamActions).not.toContain(
+      'fetch("/api/team/invite"',
+    );
+  });
+
   it("keeps restaurant onboarding name retries in one guarded field slot", () => {
     const onboarding = source("src/app/(app)/onboarding-modal.tsx");
 
