@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireRole } from "@/lib/api/auth";
-import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseJson, parseParams } from "@/lib/api/validation";
 import {
   UpdateWineListItemBodySchema,
@@ -26,7 +26,7 @@ function restaurantIdFor(item: ItemScope): string | undefined {
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Params },
 ) {
   return withApiHandler(async () => {
@@ -38,30 +38,55 @@ export async function DELETE(
     if (!parsedParams.ok) return parsedParams.response;
     const { id } = parsedParams.data;
 
-    const { data, error: lookupError } = await supabase
-      .from("wine_list_items")
-      .select(
-        "id, section_id, wine_list_sections!inner(wine_lists!inner(restaurant_id))",
-      )
-      .eq("id", id)
-      .maybeSingle();
-    if (lookupError) throw lookupError;
-    const target = data as unknown as ItemScope | null;
-    if (!target || restaurantIdFor(target) !== restaurantId) {
-      return Errors.notFound("Item");
-    }
+    return idempotentMutationResponse<
+      | { ok: true }
+      | { error: { code: "not_found"; message: string } }
+    >({
+      request,
+      supabase,
+      restaurantId,
+      operationId: "api:DELETE:/api/wine-list-items/{param}",
+      payload: { id },
+      releaseOnError: false,
+      handler: async () => {
+        const { data, error: lookupError } = await supabase
+          .from("wine_list_items")
+          .select(
+            "id, section_id, wine_list_sections!inner(wine_lists!inner(restaurant_id))",
+          )
+          .eq("id", id)
+          .maybeSingle();
+        if (lookupError) throw lookupError;
+        const target = data as unknown as ItemScope | null;
+        if (!target || restaurantIdFor(target) !== restaurantId) {
+          return {
+            status: 404,
+            body: {
+              error: { code: "not_found", message: "Item not found." },
+            },
+          };
+        }
 
-    const { data: removed, error } = await supabase
-      .from("wine_list_items")
-      .delete()
-      .eq("id", id)
-      .eq("section_id", target.section_id)
-      .select("id")
-      .maybeSingle();
-    if (error) throw error;
-    if (!removed) return Errors.notFound("Item");
+        const { data: removed, error } = await supabase
+          .from("wine_list_items")
+          .delete()
+          .eq("id", id)
+          .eq("section_id", target.section_id)
+          .select("id")
+          .maybeSingle();
+        if (error) throw error;
+        if (!removed) {
+          return {
+            status: 404,
+            body: {
+              error: { code: "not_found", message: "Item not found." },
+            },
+          };
+        }
 
-    return NextResponse.json({ ok: true });
+        return { status: 200, body: { ok: true } };
+      },
+    });
   });
 }
 
@@ -82,29 +107,54 @@ export async function PATCH(
     if (!parsedBody.ok) return parsedBody.response;
     const { id } = parsedParams.data;
 
-    const { data, error: lookupError } = await supabase
-      .from("wine_list_items")
-      .select(
-        "id, section_id, wine_list_sections!inner(wine_lists!inner(restaurant_id))",
-      )
-      .eq("id", id)
-      .maybeSingle();
-    if (lookupError) throw lookupError;
-    const target = data as unknown as ItemScope | null;
-    if (!target || restaurantIdFor(target) !== restaurantId) {
-      return Errors.notFound("Item");
-    }
+    return idempotentMutationResponse<
+      | { ok: true }
+      | { error: { code: "not_found"; message: string } }
+    >({
+      request,
+      supabase,
+      restaurantId,
+      operationId: "api:PATCH:/api/wine-list-items/{param}",
+      payload: { id, body: parsedBody.data },
+      releaseOnError: false,
+      handler: async () => {
+        const { data, error: lookupError } = await supabase
+          .from("wine_list_items")
+          .select(
+            "id, section_id, wine_list_sections!inner(wine_lists!inner(restaurant_id))",
+          )
+          .eq("id", id)
+          .maybeSingle();
+        if (lookupError) throw lookupError;
+        const target = data as unknown as ItemScope | null;
+        if (!target || restaurantIdFor(target) !== restaurantId) {
+          return {
+            status: 404,
+            body: {
+              error: { code: "not_found", message: "Item not found." },
+            },
+          };
+        }
 
-    const { data: updated, error } = await supabase
-      .from("wine_list_items")
-      .update(parsedBody.data)
-      .eq("id", id)
-      .eq("section_id", target.section_id)
-      .select("id")
-      .maybeSingle();
-    if (error) throw error;
-    if (!updated) return Errors.notFound("Item");
+        const { data: updated, error } = await supabase
+          .from("wine_list_items")
+          .update(parsedBody.data)
+          .eq("id", id)
+          .eq("section_id", target.section_id)
+          .select("id")
+          .maybeSingle();
+        if (error) throw error;
+        if (!updated) {
+          return {
+            status: 404,
+            body: {
+              error: { code: "not_found", message: "Item not found." },
+            },
+          };
+        }
 
-    return NextResponse.json({ ok: true });
+        return { status: 200, body: { ok: true } };
+      },
+    });
   });
 }

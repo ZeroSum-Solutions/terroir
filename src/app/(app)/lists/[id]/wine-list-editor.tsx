@@ -40,6 +40,8 @@ import { readApiError } from "@/lib/api/client-error";
 import {
   createIdempotentCommandStore,
   createSessionCommandPersistence,
+  readApiErrorCode,
+  shouldRetainIdempotencyKey,
 } from "@/lib/api/idempotency-client";
 import type { WineList } from "@/lib/wine-list/types";
 import { type Template } from "@/lib/wine-list/types";
@@ -95,6 +97,54 @@ async function responseError(
   } catch {
     return fallback;
   }
+}
+
+function isOkMutation(data: unknown): data is { ok: true } {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    (data as { ok?: unknown }).ok === true
+  );
+}
+
+function createdItemId(data: unknown): string | null {
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    typeof (data as { id?: unknown }).id !== "string"
+  ) {
+    return null;
+  }
+  return (data as { id: string }).id;
+}
+
+function commandIdentity(value: unknown): string {
+  return encodeURIComponent(JSON.stringify(value));
+}
+
+export function restoreWineItemOrderAfterFailedReorder(
+  currentItems: WineListEditorItem[],
+  previousItems: WineListEditorItem[],
+): WineListEditorItem[] {
+  const previousRank = new Map(
+    previousItems.map((item, index) => [item.id, index]),
+  );
+  const currentRank = new Map(
+    currentItems.map((item, index) => [item.id, index]),
+  );
+
+  return [...currentItems]
+    .sort((left, right) => {
+      const leftPreviousRank = previousRank.get(left.id);
+      const rightPreviousRank = previousRank.get(right.id);
+      if (leftPreviousRank === undefined && rightPreviousRank === undefined) {
+        return currentRank.get(left.id)! - currentRank.get(right.id)!;
+      }
+      if (leftPreviousRank === undefined) return 1;
+      if (rightPreviousRank === undefined) return -1;
+      return leftPreviousRank - rightPreviousRank;
+    })
+    .map((item, position) => ({ ...item, position }));
 }
 
 // BND-161: inline-rename input overlay.
@@ -289,6 +339,7 @@ export function WineListEditor({
   const [deletingSection, setDeletingSection] = useState(false);
   const [templateBusy, setTemplateBusy] = useState(false);
   const templateMutationRef = useRef(false);
+  const itemMutationSlotsRef = useRef(new Set<string>());
 
   const totalWines = useMemo(
     () => sections.reduce((sum, s) => sum + s.wine_list_items.length, 0),
@@ -373,34 +424,68 @@ export function WineListEditor({
 
   const addWineToSection = useCallback(
     async (wineId: string, glassPrice: number | null, bottlePrice: number | null, sectionIds: string[]) => {
-      if (sectionIds.length === 0) return;
-      let failed = false;
+      if (sectionIds.length === 0) {
+        return { failedSectionIds: [], retryRequired: false };
+      }
+      const failedSectionIds: string[] = [];
+      let retryRequired = false;
       let failureMessage = "Failed to add wine. Please try again.";
       for (const sectionId of sectionIds) {
-        const res = await fetch("/api/wine-list-items", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            section_id: sectionId,
-            wine_id: wineId,
-            glass_price: glassPrice,
-            bottle_price: bottlePrice,
-          }),
-        });
-        if (!res.ok) {
-          failed = true;
-          failureMessage = await responseError(res, failureMessage);
+        const body = {
+          section_id: sectionId,
+          wine_id: wineId,
+          glass_price: glassPrice,
+          bottle_price: bottlePrice,
+        };
+        const slot = `wine-list-item:create:${commandIdentity(body)}`;
+        if (itemMutationSlotsRef.current.has(slot)) {
+          failedSectionIds.push(sectionId);
+          continue;
+        }
+        itemMutationSlotsRef.current.add(slot);
+        try {
+          const { response, data } =
+            await wineListCommands.json<unknown>({
+              slot,
+              url: "/api/wine-list-items",
+              method: "POST",
+              json: body,
+            });
+          if (!response.ok) {
+            failedSectionIds.push(sectionId);
+            retryRequired ||= shouldRetainIdempotencyKey(
+              response.status,
+              readApiErrorCode(data),
+            );
+            failureMessage = readApiError(data, failureMessage).message;
+            continue;
+          }
+          if (!createdItemId(data)) {
+            failedSectionIds.push(sectionId);
+            failureMessage = "The server returned an invalid wine-list item.";
+          }
+        } catch (error) {
+          failedSectionIds.push(sectionId);
+          retryRequired = true;
+          failureMessage =
+            error instanceof Error && error.message
+              ? error.message
+              : failureMessage;
+        } finally {
+          itemMutationSlotsRef.current.delete(slot);
         }
       }
-      if (!failed) {
+      if (failedSectionIds.length === 0) {
         setShowAddWine(false);
         startTransition(() => router.refresh());
       } else {
+        startTransition(() => router.refresh());
         setErrorToast(failureMessage);
         setTimeout(() => setErrorToast(null), 4000);
       }
+      return { failedSectionIds, retryRequired };
     },
-    [router],
+    [router, wineListCommands],
   );
 
   const addSection = useCallback(async () => {
@@ -493,6 +578,8 @@ export function WineListEditor({
     async (event: DragEndEvent) => {
       const { active, over } = event;
       if (!over || active.id === over.id || !currentSection) return;
+      const guardSlot = `wine-list-item:${currentSection.id}:reorder-active`;
+      if (itemMutationSlotsRef.current.has(guardSlot)) return;
 
       const items = [...currentSection.wine_list_items];
       const oldIndex = items.findIndex((i) => i.id === active.id);
@@ -504,6 +591,9 @@ export function WineListEditor({
 
       const [moved] = items.splice(oldIndex, 1);
       items.splice(newIndex, 0, moved);
+      const orderedIds = items.map((item) => item.id);
+      const commandSlot =
+        `wine-list-item:reorder:${currentSection.id}:${commandIdentity(orderedIds)}`;
 
       setSections((prev) =>
         prev.map((s) =>
@@ -513,54 +603,98 @@ export function WineListEditor({
         ),
       );
 
-      const res = await fetch("/api/wine-list-items/reorder", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderedIds: items.map((i) => i.id) }),
-      });
-
-      // Rollback on failure
-      if (!res.ok) {
+      itemMutationSlotsRef.current.add(guardSlot);
+      try {
+        const { response, data } =
+          await wineListCommands.json<unknown>({
+            slot: commandSlot,
+            url: "/api/wine-list-items/reorder",
+            method: "PATCH",
+            json: { orderedIds },
+          });
+        if (!response.ok) {
+          throw new Error(
+            readApiError(
+              data,
+              "Failed to reorder wines. Please try again.",
+            ).message,
+          );
+        }
+        if (!isOkMutation(data)) {
+          throw new Error("The server returned an invalid reorder response.");
+        }
+      } catch (error) {
         setSections((prev) =>
           prev.map((s) =>
             s.id === activeSection
-              ? { ...s, wine_list_items: previousItems.map((it, idx) => ({ ...it, position: idx })) }
-              : s,
+              ? {
+                  ...s,
+                  wine_list_items: restoreWineItemOrderAfterFailedReorder(
+                    s.wine_list_items,
+                    previousItems,
+                  ),
+                }
+            : s,
           ),
         );
         setErrorToast(
-          await responseError(
-            res,
-            "Failed to reorder wines. Please try again.",
-          ),
+          error instanceof Error && error.message
+            ? error.message
+            : "Failed to reorder wines. Please try again.",
         );
         setTimeout(() => setErrorToast(null), 4000);
+        startTransition(() => router.refresh());
+      } finally {
+        itemMutationSlotsRef.current.delete(guardSlot);
       }
     },
-    [currentSection, activeSection],
+    [currentSection, activeSection, router, wineListCommands],
   );
 
   const deleteItem = useCallback(
     async (itemId: string) => {
-      setSections((prev) =>
-        prev.map((s) => ({
-          ...s,
-          wine_list_items: s.wine_list_items.filter((i) => i.id !== itemId),
-        })),
-      );
-
-      const res = await fetch(`/api/wine-list-items/${itemId}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
+      const slot = `wine-list-item:${itemId}:delete`;
+      if (itemMutationSlotsRef.current.has(slot)) return;
+      itemMutationSlotsRef.current.add(slot);
+      try {
+        const { response, data } =
+          await wineListCommands.json<unknown>({
+            slot,
+            url: `/api/wine-list-items/${itemId}`,
+            method: "DELETE",
+          });
+        if (!response.ok) {
+          throw new Error(
+            readApiError(
+              data,
+              "Failed to delete wine. Please try again.",
+            ).message,
+          );
+        }
+        if (!isOkMutation(data)) {
+          throw new Error("The server returned an invalid delete response.");
+        }
+        setSections((prev) =>
+          prev.map((s) => ({
+            ...s,
+            wine_list_items: s.wine_list_items.filter(
+              (item) => item.id !== itemId,
+            ),
+          })),
+        );
+      } catch (error) {
         startTransition(() => router.refresh());
         setErrorToast(
-          await responseError(res, "Failed to delete wine. Please try again."),
+          error instanceof Error && error.message
+            ? error.message
+            : "Failed to delete wine. Please try again.",
         );
         setTimeout(() => setErrorToast(null), 4000);
+      } finally {
+        itemMutationSlotsRef.current.delete(slot);
       }
     },
-    [router],
+    [router, wineListCommands],
   );
 
   const requestDeleteItem = useCallback(function(item: WineListEditorItem) {
@@ -575,12 +709,56 @@ export function WineListEditor({
     try { await deleteItem(target.id); } finally { setDeletingItem(false); }
   }, [wineToDelete, deleteItem]);
 
+  const persistItemUpdate = useCallback(
+    async (
+      itemId: string,
+      body: Record<string, unknown>,
+      fallback: string,
+    ) => {
+      const slot =
+        `wine-list-item:${itemId}:patch:${commandIdentity(body)}`;
+      if (itemMutationSlotsRef.current.has(slot)) return null;
+      itemMutationSlotsRef.current.add(slot);
+      try {
+        const { response, data } =
+          await wineListCommands.json<unknown>({
+            slot,
+            url: `/api/wine-list-items/${itemId}`,
+            method: "PATCH",
+            json: body,
+          });
+        if (!response.ok) {
+          throw new Error(readApiError(data, fallback).message);
+        }
+        if (!isOkMutation(data)) {
+          throw new Error("The server returned an invalid update response.");
+        }
+        return true;
+      } catch (error) {
+        startTransition(() => router.refresh());
+        setErrorToast(
+          error instanceof Error && error.message
+            ? error.message
+            : fallback,
+        );
+        setTimeout(() => setErrorToast(null), 4000);
+        return false;
+      } finally {
+        itemMutationSlotsRef.current.delete(slot);
+      }
+    },
+    [router, wineListCommands],
+  );
+
   const updateItemPrice = useCallback(
     async (
       itemId: string,
       field: "glass_price" | "bottle_price",
       value: number | null,
     ) => {
+      const previousValue = sections
+        .flatMap((section) => section.wine_list_items)
+        .find((item) => item.id === itemId)?.[field] ?? null;
       setSections((prev) =>
         prev.map((s) => ({
           ...s,
@@ -590,20 +768,25 @@ export function WineListEditor({
         })),
       );
 
-      const res = await fetch(`/api/wine-list-items/${itemId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
-      });
-      if (!res.ok) {
-        startTransition(() => router.refresh());
-        setErrorToast(
-          await responseError(res, "Failed to update price. Please try again."),
+      const succeeded = await persistItemUpdate(
+        itemId,
+        { [field]: value },
+        "Failed to update price. Please try again.",
+      );
+      if (succeeded === false) {
+        setSections((prev) =>
+          prev.map((section) => ({
+            ...section,
+            wine_list_items: section.wine_list_items.map((item) =>
+              item.id === itemId && item[field] === value
+                ? { ...item, [field]: previousValue }
+                : item,
+            ),
+          })),
         );
-        setTimeout(() => setErrorToast(null), 4000);
       }
     },
-    [router],
+    [persistItemUpdate, sections],
   );
 
   const updateItemPour = useCallback(
@@ -612,6 +795,13 @@ export function WineListEditor({
       field: "glass_pour_ml" | "pour_size_mode",
       value: number | "fixed" | "picker" | null,
     ) => {
+      const previousItem = sections
+        .flatMap((section) => section.wine_list_items)
+        .find((item) => item.id === itemId);
+      const previousValue =
+        field === "glass_pour_ml"
+          ? previousItem?.glass_pour_ml ?? null
+          : previousItem?.pour_size_mode ?? "fixed";
       setSections((prev) =>
         prev.map((s) => ({
           ...s,
@@ -621,27 +811,32 @@ export function WineListEditor({
         })),
       );
 
-      const res = await fetch(`/api/wine-list-items/${itemId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
-      });
-      if (!res.ok) {
-        startTransition(() => router.refresh());
-        setErrorToast(
-          await responseError(
-            res,
-            "Failed to update pour settings. Please try again.",
-          ),
+      const succeeded = await persistItemUpdate(
+        itemId,
+        { [field]: value },
+        "Failed to update pour settings. Please try again.",
+      );
+      if (succeeded === false) {
+        setSections((prev) =>
+          prev.map((section) => ({
+            ...section,
+            wine_list_items: section.wine_list_items.map((item) =>
+              item.id === itemId && item[field] === value
+                ? { ...item, [field]: previousValue }
+                : item,
+            ),
+          })),
         );
-        setTimeout(() => setErrorToast(null), 4000);
       }
     },
-    [router],
+    [persistItemUpdate, sections],
   );
 
   const updateItemName = useCallback(
     async (itemId: string, value: string | null) => {
+      const previousValue = sections
+        .flatMap((section) => section.wine_list_items)
+        .find((item) => item.id === itemId)?.name_override ?? null;
       setSections((prev) =>
         prev.map((s) => ({
           ...s,
@@ -651,23 +846,31 @@ export function WineListEditor({
         })),
       );
 
-      const res = await fetch(`/api/wine-list-items/${itemId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name_override: value }),
-      });
-      if (!res.ok) {
-        startTransition(() => router.refresh());
-        setErrorToast(
-          await responseError(res, "Failed to update name. Please try again."),
+      const succeeded = await persistItemUpdate(
+        itemId,
+        { name_override: value },
+        "Failed to update name. Please try again.",
+      );
+      if (succeeded === false) {
+        setSections((prev) =>
+          prev.map((section) => ({
+            ...section,
+            wine_list_items: section.wine_list_items.map((item) =>
+              item.id === itemId && item.name_override === value
+                ? { ...item, name_override: previousValue }
+                : item,
+            ),
+          })),
         );
-        setTimeout(() => setErrorToast(null), 4000);
       }
     },
-    [router],
+    [persistItemUpdate, sections],
   );
   const updateItemBlurb = useCallback(
     async (itemId: string, value: string | null) => {
+      const previousValue = sections
+        .flatMap((section) => section.wine_list_items)
+        .find((item) => item.id === itemId)?.blurb ?? null;
       setSections((prev) =>
         prev.map((s) => ({
           ...s,
@@ -677,24 +880,33 @@ export function WineListEditor({
         })),
       );
 
-      const res = await fetch(`/api/wine-list-items/${itemId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ blurb: value }),
-      });
-      if (!res.ok) {
-        startTransition(() => router.refresh());
-        setErrorToast(
-          await responseError(res, "Failed to update blurb. Please try again."),
+      const succeeded = await persistItemUpdate(
+        itemId,
+        { blurb: value },
+        "Failed to update blurb. Please try again.",
+      );
+      if (succeeded === false) {
+        setSections((prev) =>
+          prev.map((section) => ({
+            ...section,
+            wine_list_items: section.wine_list_items.map((item) =>
+              item.id === itemId && item.blurb === value
+                ? { ...item, blurb: previousValue }
+                : item,
+            ),
+          })),
         );
-        setTimeout(() => setErrorToast(null), 4000);
       }
     },
-    [router],
+    [persistItemUpdate, sections],
   );
 
   const updateItemHidden = useCallback(
     async (itemId: string, value: boolean) => {
+      const previousValue =
+        sections
+          .flatMap((section) => section.wine_list_items)
+          .find((item) => item.id === itemId)?.hidden ?? false;
       setSections((prev) =>
         prev.map((s) => ({
           ...s,
@@ -704,23 +916,25 @@ export function WineListEditor({
         })),
       );
 
-      const res = await fetch(`/api/wine-list-items/${itemId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hidden: value }),
-      });
-      if (!res.ok) {
-        startTransition(() => router.refresh());
-        setErrorToast(
-          await responseError(
-            res,
-            "Failed to update visibility. Please try again.",
-          ),
+      const succeeded = await persistItemUpdate(
+        itemId,
+        { hidden: value },
+        "Failed to update visibility. Please try again.",
+      );
+      if (succeeded === false) {
+        setSections((prev) =>
+          prev.map((section) => ({
+            ...section,
+            wine_list_items: section.wine_list_items.map((item) =>
+              item.id === itemId && item.hidden === value
+                ? { ...item, hidden: previousValue }
+                : item,
+            ),
+          })),
         );
-        setTimeout(() => setErrorToast(null), 4000);
       }
     },
-    [router],
+    [persistItemUpdate, sections],
   );
 
   const downloadPdf = useCallback(async () => {

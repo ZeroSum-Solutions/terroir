@@ -1080,6 +1080,24 @@ export type Database = {
           retry_after_seconds: number
         }[]
       }
+      create_wine_list_item_idempotent: {
+        Args: {
+          p_bottle_price?: number
+          p_glass_price?: number
+          p_idempotency_key?: string
+          p_name_override?: string
+          p_request_hash?: string
+          p_restaurant_id: string
+          p_section_id: string
+          p_wine_id: string
+        }
+        Returns: {
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
       dismiss_pricing_alert: {
         Args: { p_days?: number; p_wine_id: string }
         Returns: string

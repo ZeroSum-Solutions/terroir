@@ -359,6 +359,67 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       sources: ["src/app/(app)/team/team-actions.tsx"],
     },
   },
+  "api:DELETE:/api/wine-list-items/{param}": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/lists/[id]/wine-list-editor.tsx"],
+    },
+  },
+  "api:PATCH:/api/wine-list-items/reorder": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "reorder_wine_list_items",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/lists/[id]/wine-list-editor.tsx"],
+    },
+  },
+  "api:PATCH:/api/wine-list-items/{param}": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/lists/[id]/wine-list-editor.tsx"],
+    },
+  },
+  "api:POST:/api/wine-list-items": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "create_wine_list_item_idempotent",
+    },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "create_wine_list_item_idempotent",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/lists/[id]/wine-list-editor.tsx"],
+    },
+  },
   "api:DELETE:/api/wine-lists/{param}": {
     boundary: { kind: "generic-wrapper", count: 1 },
     identity: {

@@ -202,12 +202,13 @@ describe("wine-list item provider and write boundaries", () => {
     };
   }
 
-  it("redacts a create section-lookup provider failure", async () => {
-    const lookup = queryEndingIn("maybeSingle", {
+  it("redacts an unkeyed atomic-create provider failure", async () => {
+    const from = vi.fn();
+    const rpc = vi.fn(async () => ({
       data: null,
       error: new Error("provider secret"),
-    });
-    roleAuth(vi.fn(() => lookup));
+    }));
+    roleAuth(from, rpc);
 
     const response = await CREATE(
       request("/api/wine-list-items", "POST", {
@@ -222,31 +223,21 @@ describe("wine-list item provider and write boundaries", () => {
       error: { code: "internal_error", message: "Internal server error." },
     });
     expect(JSON.stringify(body)).not.toContain("provider secret");
+    expect(from).not.toHaveBeenCalled();
   });
 
-  it("creates at the next position only after an owned-section lookup", async () => {
-    const sectionLookup = queryEndingIn("maybeSingle", {
-      data: {
-        id: sectionId,
-        wine_list_id: "66666666-6666-4666-8666-666666666666",
-        wine_lists: { restaurant_id: restaurantId },
-      },
+  it("delegates unkeyed create to the atomic tenant-scoped RPC", async () => {
+    const from = vi.fn();
+    const rpc = vi.fn(async () => ({
+      data: [{
+        outcome: "created",
+        response_status: 200,
+        response_body: { id: VALID_ID },
+        replayed: false,
+      }],
       error: null,
-    });
-    const positionLookup = queryEndingIn("limit", {
-      data: [{ position: 2 }],
-      error: null,
-    });
-    const insertion = queryEndingIn("single", {
-      data: { id: VALID_ID },
-      error: null,
-    });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(sectionLookup)
-      .mockReturnValueOnce(positionLookup)
-      .mockReturnValueOnce(insertion);
-    roleAuth(from);
+    }));
+    roleAuth(from, rpc);
 
     const response = await CREATE(
       request("/api/wine-list-items", "POST", {
@@ -257,14 +248,17 @@ describe("wine-list item provider and write boundaries", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(insertion.insert).toHaveBeenCalledWith({
-      section_id: sectionId,
-      wine_id: "55555555-5555-4555-8555-555555555555",
-      position: 3,
-      glass_price: 14,
-      bottle_price: null,
-      name_override: null,
-    });
+    expect(await response.json()).toEqual({ id: VALID_ID });
+    expect(rpc).toHaveBeenCalledWith(
+      "create_wine_list_item_idempotent",
+      {
+        p_restaurant_id: restaurantId,
+        p_section_id: sectionId,
+        p_wine_id: "55555555-5555-4555-8555-555555555555",
+        p_glass_price: 14,
+      },
+    );
+    expect(from).not.toHaveBeenCalled();
   });
 
   it("distinguishes an item lookup provider failure from missing", async () => {
@@ -331,9 +325,12 @@ describe("wine-list item provider and write boundaries", () => {
       .mockReturnValueOnce(deletion);
     roleAuth(from);
 
-    const response = await REMOVE({} as NextRequest, {
+    const response = await REMOVE(
+      request(`/api/wine-list-items/${VALID_ID}`, "DELETE"),
+      {
       params: Promise.resolve({ id: VALID_ID }),
-    });
+      },
+    );
 
     expect(response.status).toBe(404);
     expect(deletion.delete).toHaveBeenCalledOnce();

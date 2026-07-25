@@ -44,9 +44,24 @@ type LwinWine = {
 interface AddWineModalProps {
   sections: { id: string; name: string }[];
   activeSectionId: string;
-  onAdd: (wineId: string, glassPrice: number | null, bottlePrice: number | null, sectionIds: string[]) => void;
+  onAdd: (
+    wineId: string,
+    glassPrice: number | null,
+    bottlePrice: number | null,
+    sectionIds: string[],
+  ) => Promise<{
+    failedSectionIds: string[];
+    retryRequired: boolean;
+  }>;
   onClose: () => void;
 }
+
+type RetryPayload = {
+  wineId: string;
+  glassPrice: number | null;
+  bottlePrice: number | null;
+  sectionIds: string[];
+};
 
 export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddWineModalProps) {
   const [query, setQuery] = useState("");
@@ -62,6 +77,8 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
   const [bottlePrice, setBottlePrice] = useState("");
   const [glassPrice, setGlassPrice] = useState("");
   const [adding, setAdding] = useState(false);
+  const addingRef = useRef(false);
+  const [retryPayload, setRetryPayload] = useState<RetryPayload | null>(null);
   // BND-040 — pricing suggestion state. Auto-fetched when a wine is
   // selected; user can click "Suggest" to fill the price inputs.
   const [suggestion, setSuggestion] = useState<PricingSuggestion | null>(null);
@@ -117,6 +134,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
 
   /** Clear suggestion + price drafts when the user goes Back to search. */
   const clearSelection = () => {
+    if (retryPayload) return;
     setSelected(null);
     setSuggestion(null);
     setSuggestError(null);
@@ -126,7 +144,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
   };
 
   const applySuggestion = () => {
-    if (!suggestion) return;
+    if (!suggestion || retryPayload) return;
     if (suggestion.suggestedBottle != null) {
       setBottlePrice(suggestion.suggestedBottle.toString());
     }
@@ -136,6 +154,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
   };
 
   const toggleSection = (id: string) => {
+    if (retryPayload) return;
     setSelectedSectionIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -211,12 +230,42 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
   }, [query, searchMode]);
 
   const handleAdd = async () => {
-    if (!selected || adding || selectedSectionIds.size === 0) return;
+    if (
+      !selected ||
+      addingRef.current ||
+      (!retryPayload && selectedSectionIds.size === 0)
+    ) {
+      return;
+    }
+    addingRef.current = true;
     setAdding(true);
-    const glass = glassPrice ? parseFloat(glassPrice) : null;
-    const bottle = bottlePrice ? parseFloat(bottlePrice) : null;
-    await onAdd(selected.id, glass, bottle, Array.from(selectedSectionIds));
-    setAdding(false);
+    const payload = retryPayload ?? {
+      wineId: selected.id,
+      glassPrice: glassPrice ? parseFloat(glassPrice) : null,
+      bottlePrice: bottlePrice ? parseFloat(bottlePrice) : null,
+      sectionIds: Array.from(selectedSectionIds),
+    };
+    try {
+      const result = await onAdd(
+        payload.wineId,
+        payload.glassPrice,
+        payload.bottlePrice,
+        payload.sectionIds,
+      );
+      if (result.failedSectionIds.length > 0) {
+        setSelectedSectionIds(new Set(result.failedSectionIds));
+        setRetryPayload(
+          result.retryRequired
+            ? { ...payload, sectionIds: result.failedSectionIds }
+            : null,
+        );
+      } else {
+        setRetryPayload(null);
+      }
+    } finally {
+      addingRef.current = false;
+      setAdding(false);
+    }
   };
 
   const handleSelectCatalog = async (lwin: LwinWine) => {
@@ -451,6 +500,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                         <input
                           type="checkbox"
                           checked={checked}
+                          disabled={retryPayload !== null}
                           onChange={() => toggleSection(s.id)}
                           className="sr-only"
                           aria-label={`Add to ${s.name}`}
@@ -486,6 +536,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                   <button
                     type="button"
                     onClick={applySuggestion}
+                    disabled={retryPayload !== null}
                     className="inline-flex items-center gap-2xs text-[11px] font-medium text-accent hover:underline"
                   >
                     <Sparkles className="h-3 w-3" strokeWidth={2} aria-hidden />
@@ -547,6 +598,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     inputMode="decimal"
                     id="add-wine-glass-price"
                     value={glassPrice}
+                    disabled={adding || retryPayload !== null}
                     onChange={(e) => setGlassPrice(e.target.value)}
                     placeholder="—"
                     className="h-[38px] w-full rounded-sm border border-border bg-white pl-md pr-sm text-right font-mono text-[14px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
@@ -566,6 +618,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     inputMode="decimal"
                     id="add-wine-bottle-price"
                     value={bottlePrice}
+                    disabled={adding || retryPayload !== null}
                     onChange={(e) => setBottlePrice(e.target.value)}
                     placeholder="—"
                     className="h-[38px] w-full rounded-sm border border-border bg-white pl-md pr-sm text-right font-mono text-[14px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
@@ -582,6 +635,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
               <button
                 type="button"
                 onClick={clearSelection}
+                disabled={retryPayload !== null}
                 className="h-[38px] rounded-sm border border-border-strong px-md text-[14px] font-medium text-ink hover:bg-surface-muted"
               >
                 Back

@@ -126,6 +126,13 @@ function makeReq(body: unknown): NextRequest {
   );
 }
 
+function makeDeleteReq(): NextRequest {
+  return new NextRequest(
+    `http://localhost/api/wine-list-items/${ITEM_ID}`,
+    { method: "DELETE" },
+  );
+}
+
 const ITEM_ID = "a1b2c3d4-e5f6-4789-8abc-def012345678";
 const OWNERSHIP_COLUMNS =
   "id, section_id, wine_list_sections!inner(wine_lists!inner(restaurant_id))";
@@ -194,7 +201,7 @@ const routeCases = [
   },
   {
     method: "DELETE",
-    invoke: (_body?: unknown) => DELETE({} as NextRequest, { params }),
+    invoke: (_body?: unknown) => DELETE(makeDeleteReq(), { params }),
   },
 ] as const;
 
@@ -436,7 +443,7 @@ describe("DELETE /api/wine-list-items/[id]", () => {
       user: { id: "u-1" },
       role: "owner",
     });
-    const res = await DELETE({} as NextRequest, { params });
+    const res = await DELETE(makeDeleteReq(), { params });
     expect(res.status).toBe(200);
   });
 
@@ -448,7 +455,7 @@ describe("DELETE /api/wine-list-items/[id]", () => {
       user: { id: "u-1" },
       role: "owner",
     });
-    const res = await DELETE({} as NextRequest, { params });
+    const res = await DELETE(makeDeleteReq(), { params });
     expect(res.status).toBe(404);
   });
 });
