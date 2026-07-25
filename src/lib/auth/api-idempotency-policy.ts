@@ -402,6 +402,66 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       sources: ["src/app/(app)/lists/wine-list-landing.tsx"],
     },
   },
+  "api:PATCH:/api/wines/{param}/pricing-targets": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: [
+        "src/app/(app)/cellar/pricing-target-override.tsx",
+      ],
+    },
+  },
+  "api:POST:/api/wines/{param}/dismiss-pricing-alert": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: [
+        "src/app/(app)/insights/pricing-review-card.tsx",
+        "src/app/(app)/insights/snoozed-alerts-card.tsx",
+      ],
+    },
+  },
+  "api:POST:/api/wines/{param}/overpaid": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/components/overpaid-flag-button.tsx"],
+    },
+  },
+  "api:POST:/api/wines/{param}/snooze-alert": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: [
+        "src/app/(app)/insights/briefing-alert-card.tsx",
+        "src/app/(app)/insights/snoozed-alerts-card.tsx",
+      ],
+    },
+  },
 } as const satisfies Partial<
   Record<ApiOperationId, ApiIdempotencyImplementation>
 >;

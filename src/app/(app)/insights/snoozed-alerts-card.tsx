@@ -1,10 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, RotateCcw, Clock, DollarSign } from "lucide-react";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+} from "@/lib/api/idempotency-client";
 import { cn } from "@/lib/utils";
+
+const snoozedAlertCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence(
+    "terroir:wine-snoozed-alerts",
+  ),
+});
 
 /**
  * BND-040 follow-up — SnoozedAlertsCard
@@ -33,6 +43,7 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const busyRef = useRef(new Set<string>());
   const [, startTransition] = useTransition();
 
   if (snoozed.length === 0) return null;
@@ -42,6 +53,8 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
     kind: "drink-window" | "pricing",
   ) => {
     const key = `${wineId}:${kind}`;
+    if (busyRef.current.has(key)) return;
+    busyRef.current.add(key);
     setBusy((b) => ({ ...b, [key]: true }));
     setErrorMsg(null);
     try {
@@ -49,23 +62,27 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
         kind === "drink-window"
           ? `/api/wines/${wineId}/snooze-alert`
           : `/api/wines/${wineId}/dismiss-pricing-alert`;
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: 0 }),
-      });
-      if (!res.ok) {
+      const { response, data } =
+        await snoozedAlertCommands.json<unknown>({
+          slot: `unsnooze:${key}`,
+          url: endpoint,
+          method: "POST",
+          json: { days: 0 },
+        });
+      if (!response.ok) {
         throw new Error(
           readApiError(
-            await res.json().catch(() => null),
-            `Failed (${res.status}).`,
+            data,
+            `Failed (${response.status}).`,
           ).message,
         );
       }
       startTransition(() => router.refresh());
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Unsnooze failed.");
+      busyRef.current.delete(key);
       setBusy((b) => ({ ...b, [key]: false }));
+      startTransition(() => router.refresh());
     }
   };
 

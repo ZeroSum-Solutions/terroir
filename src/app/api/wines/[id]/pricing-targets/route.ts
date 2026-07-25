@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { requireCapability } from "@/lib/api/auth";
-import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseJson, parseParams } from "@/lib/api/validation";
 import {
   PricingTargetsBodySchema,
@@ -11,7 +11,7 @@ import {
 export const runtime = "nodejs";
 
 export async function PATCH(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   return withApiHandler(async () => {
@@ -38,22 +38,45 @@ export async function PATCH(
         parsedBody.data.markup_ratio ?? null;
     }
 
-    const { data, error } = await supabase
-      .from("wines")
-      .update(update)
-      .eq("id", id)
-      .eq("restaurant_id", restaurantId)
-      .select(
-        "id, pricing_target_pour_cost_pct, pricing_target_markup_ratio",
-      )
-      .maybeSingle();
-    if (error) throw error;
-    if (!data) return Errors.notFound("Wine");
+    return idempotentMutationResponse<unknown>({
+      request,
+      supabase,
+      restaurantId,
+      operationId: "api:PATCH:/api/wines/{param}/pricing-targets",
+      payload: { id, body: parsedBody.data },
+      releaseOnError: false,
+      handler: async () => {
+        const { data, error } = await supabase
+          .from("wines")
+          .update(update)
+          .eq("id", id)
+          .eq("restaurant_id", restaurantId)
+          .select(
+            "id, pricing_target_pour_cost_pct, pricing_target_markup_ratio",
+          )
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) {
+          return {
+            status: 404,
+            body: {
+              error: {
+                code: "not_found",
+                message: "Wine not found.",
+              },
+            },
+          };
+        }
 
-    return NextResponse.json({
-      wineId: data.id,
-      pour_cost_pct: data.pricing_target_pour_cost_pct,
-      markup_ratio: data.pricing_target_markup_ratio,
+        return {
+          status: 200,
+          body: {
+            wineId: data.id,
+            pour_cost_pct: data.pricing_target_pour_cost_pct,
+            markup_ratio: data.pricing_target_markup_ratio,
+          },
+        };
+      },
     });
   });
 }

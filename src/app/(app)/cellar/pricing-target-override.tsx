@@ -1,10 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, RotateCcw } from "lucide-react";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+} from "@/lib/api/idempotency-client";
 import { cn } from "@/lib/utils";
+
+const pricingTargetCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence(
+    "terroir:wine-pricing-targets",
+  ),
+});
 
 /**
  * BND-040 follow-up — per-wine pricing target override (in cellar drawer).
@@ -57,6 +67,7 @@ export function PricingTargetOverride({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const busyRef = useRef(false);
   const [, startTransition] = useTransition();
 
   const hasOverride = perWinePourCostPct != null || perWineMarkupRatio != null;
@@ -65,27 +76,33 @@ export function PricingTargetOverride({
     pour_cost_pct?: number | null;
     markup_ratio?: number | null;
   }) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch(`/api/wines/${wineId}/pricing-targets`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
+      const { response, data } =
+        await pricingTargetCommands.json<unknown>({
+          slot: `pricing-targets:${wineId}`,
+          url: `/api/wines/${wineId}/pricing-targets`,
+          method: "PATCH",
+          json: body,
+        });
+      if (!response.ok) {
         throw new Error(
           readApiError(
-            await res.json().catch(() => null),
-            `Save failed (${res.status}).`,
+            data,
+            `Save failed (${response.status}).`,
           ).message,
         );
       }
       startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
+      startTransition(() => router.refresh());
       throw e;
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };

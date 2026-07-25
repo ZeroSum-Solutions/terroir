@@ -367,4 +367,51 @@ describe("high-risk idempotency clients", () => {
     expect(page).toContain("if (saved) {");
     expect(page).toContain('setNewName("")');
   });
+
+  it("persists and guards every wine alert mutation caller", () => {
+    const targets = source(
+      "src/app/(app)/cellar/pricing-target-override.tsx",
+    );
+    const pricing = source(
+      "src/app/(app)/insights/pricing-review-card.tsx",
+    );
+    const drinkWindow = source(
+      "src/app/(app)/insights/briefing-alert-card.tsx",
+    );
+    const snoozed = source(
+      "src/app/(app)/insights/snoozed-alerts-card.tsx",
+    );
+    const overpaid = source(
+      "src/components/overpaid-flag-button.tsx",
+    );
+
+    for (const client of [
+      targets,
+      pricing,
+      drinkWindow,
+      snoozed,
+      overpaid,
+    ]) {
+      expect(client).toContain("createIdempotentCommandStore");
+      expect(client).toContain("createSessionCommandPersistence");
+      expect(client).toContain("router.refresh()");
+      expect(client).toContain("readApiError(");
+    }
+    expect(targets).toContain("if (busyRef.current) return");
+    expect(targets).toContain("slot: `pricing-targets:${wineId}`");
+    expect(pricing).toContain("if (busyRef.current.has(wineId)) return");
+    expect(pricing).toContain("slot: `dismiss:${wineId}`");
+    expect(drinkWindow).toContain("if (busyRef.current) return");
+    expect(drinkWindow).toContain(
+      "slot: `snooze:${alert.wine_id}`",
+    );
+    expect(snoozed).toContain("if (busyRef.current.has(key)) return");
+    expect(snoozed).toContain("slot: `unsnooze:${key}`");
+    expect(overpaid).toContain("if (busyRef.current) return");
+    expect(overpaid).toContain("if (inFlightRef.current) return");
+    expect(overpaid).toContain("overpaidSlot(wineId, flagged)");
+    expect(overpaid).toContain(
+      "previous.wineId !== wineId || previous.flagged !== flagged",
+    );
+  });
 });

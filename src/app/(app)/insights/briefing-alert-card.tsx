@@ -1,14 +1,24 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, Clock, X } from "lucide-react";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+} from "@/lib/api/idempotency-client";
 import { cn } from "@/lib/utils";
 import { DrinkWindowTimeline } from "@/components/drink-window-timeline";
 import { getYearsUntilWindowClose } from "@/lib/drink-window/status";
 import type { DrinkWindowAlertRow } from "@/lib/drink-window/alerts";
+
+const drinkWindowAlertCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence(
+    "terroir:wine-drink-window-alerts",
+  ),
+});
 
 /**
  * BND-039 — BriefingAlertCard
@@ -42,6 +52,7 @@ export function BriefingAlertCard({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const busyRef = useRef(false);
   const [, startTransition] = useTransition();
 
   const yearsLeft = getYearsUntilWindowClose(alert.drink_window_end);
@@ -53,19 +64,23 @@ export function BriefingAlertCard({
         : `${yearsLeft} yr${yearsLeft === 1 ? "" : "s"}`;
 
   const onSnooze = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setErrorMsg(null);
     try {
-      const res = await fetch(`/api/wines/${alert.wine_id}/snooze-alert`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: 30 }),
-      });
-      if (!res.ok) {
+      const { response, data } =
+        await drinkWindowAlertCommands.json<unknown>({
+          slot: `snooze:${alert.wine_id}`,
+          url: `/api/wines/${alert.wine_id}/snooze-alert`,
+          method: "POST",
+          json: { days: 30 },
+        });
+      if (!response.ok) {
         throw new Error(
           readApiError(
-            await res.json().catch(() => null),
-            `Failed (${res.status}).`,
+            data,
+            `Failed (${response.status}).`,
           ).message,
         );
       }
@@ -74,7 +89,9 @@ export function BriefingAlertCard({
       startTransition(() => router.refresh());
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Snooze failed.");
+      busyRef.current = false;
       setBusy(false);
+      startTransition(() => router.refresh());
     }
   };
 

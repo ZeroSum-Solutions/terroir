@@ -1,16 +1,26 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, X } from "lucide-react";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+} from "@/lib/api/idempotency-client";
 import { cn } from "@/lib/utils";
 import {
   formatPricingStatusLabel,
   type PricingStatus,
 } from "@/lib/pricing/status";
 import type { PricingAlertRow } from "@/lib/pricing/alerts";
+
+const pricingAlertCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence(
+    "terroir:wine-pricing-alerts",
+  ),
+});
 
 /**
  * BND-040 — PricingReviewCard
@@ -36,31 +46,38 @@ export function PricingReviewCard({
   const router = useRouter();
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const busyRef = useRef(new Set<string>());
   const [, startTransition] = useTransition();
 
   if (alerts.length === 0) return null;
 
   const onSnooze = async (wineId: string) => {
+    if (busyRef.current.has(wineId)) return;
+    busyRef.current.add(wineId);
     setBusy((b) => ({ ...b, [wineId]: true }));
     setErrorMsg(null);
     try {
-      const res = await fetch(`/api/wines/${wineId}/dismiss-pricing-alert`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: 30 }),
-      });
-      if (!res.ok) {
+      const { response, data } =
+        await pricingAlertCommands.json<unknown>({
+          slot: `dismiss:${wineId}`,
+          url: `/api/wines/${wineId}/dismiss-pricing-alert`,
+          method: "POST",
+          json: { days: 30 },
+        });
+      if (!response.ok) {
         throw new Error(
           readApiError(
-            await res.json().catch(() => null),
-            `Failed (${res.status}).`,
+            data,
+            `Failed (${response.status}).`,
           ).message,
         );
       }
       startTransition(() => router.refresh());
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Snooze failed.");
+      busyRef.current.delete(wineId);
       setBusy((b) => ({ ...b, [wineId]: false }));
+      startTransition(() => router.refresh());
     }
   };
 
