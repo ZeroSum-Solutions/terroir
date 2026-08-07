@@ -26,15 +26,14 @@ export function compareDatabaseEvidence(source, restored) {
   const restoredTables = new Map(
     restored.tables.map((entry) => [tableKey(entry), entry]),
   );
-  const allTables = [...new Set([
-    ...sourceTables.keys(),
-    ...restoredTables.keys(),
-  ])].sort();
-  for (const table of allTables) {
+  const targetOnlyTables = [...restoredTables.keys()]
+    .filter((table) => !sourceTables.has(table))
+    .sort();
+  for (const table of [...sourceTables.keys()].sort()) {
     const sourceTable = sourceTables.get(table);
     const restoredTable = restoredTables.get(table);
-    if (!sourceTable || !restoredTable) {
-      failures.push(`table inventory differs for ${table}`);
+    if (!restoredTable) {
+      failures.push(`source table missing after restore for ${table}`);
     } else if (sourceTable.row_count !== restoredTable.row_count) {
       failures.push(
         `row count differs for ${table} (${sourceTable.row_count} != ${restoredTable.row_count})`,
@@ -66,15 +65,14 @@ export function compareDatabaseEvidence(source, restored) {
   const restoredSequences = new Map(
     (restored.sequences ?? []).map((entry) => [sequenceKey(entry), entry]),
   );
-  const allSequences = [...new Set([
-    ...sourceSequences.keys(),
-    ...restoredSequences.keys(),
-  ])].sort();
-  for (const sequence of allSequences) {
+  const targetOnlySequences = [...restoredSequences.keys()]
+    .filter((sequence) => !sourceSequences.has(sequence))
+    .sort();
+  for (const sequence of [...sourceSequences.keys()].sort()) {
     const sourceState = sourceSequences.get(sequence);
     const restoredState = restoredSequences.get(sequence);
-    if (!sourceState || !restoredState) {
-      failures.push(`sequence inventory differs for ${sequence}`);
+    if (!restoredState) {
+      failures.push(`source sequence missing after restore for ${sequence}`);
     } else if (
       sourceState.last_value !== restoredState.last_value ||
       sourceState.is_called !== restoredState.is_called
@@ -93,6 +91,8 @@ export function compareDatabaseEvidence(source, restored) {
       source.largest_non_empty_tables.length,
     tables: restored.tables,
     sequences: restored.sequences ?? [],
+    target_only_tables: targetOnlyTables,
+    target_only_sequences: targetOnlySequences,
     content_checksums: restored.largest_non_empty_tables,
   };
 }

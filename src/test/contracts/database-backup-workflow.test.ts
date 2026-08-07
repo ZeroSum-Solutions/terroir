@@ -595,6 +595,41 @@ describe("database backup workflow", () => {
         ok: true,
         table_count: 1,
         checked_content_checksums: 1,
+        target_only_tables: [],
+        target_only_sequences: [],
+      }),
+    );
+    const forwardTarget = structuredClone(source);
+    forwardTarget.tables.push({
+      schema: "supabase_functions",
+      table: "migrations",
+      kind: "table",
+      row_count: 2,
+    });
+    forwardTarget.sequences.push({
+      schema: "supabase_functions",
+      sequence: "hooks_id_seq",
+      last_value: "1",
+      is_called: false,
+    });
+    expect(compareDatabaseEvidence(source, forwardTarget)).toEqual(
+      expect.objectContaining({
+        ok: true,
+        target_only_tables: ["supabase_functions.migrations"],
+        target_only_sequences: ["supabase_functions.hooks_id_seq"],
+      }),
+    );
+    const missingSource = structuredClone(source);
+    missingSource.tables = [];
+    missingSource.sequences = [];
+    missingSource.largest_non_empty_tables = [];
+    expect(compareDatabaseEvidence(source, missingSource)).toEqual(
+      expect.objectContaining({
+        ok: false,
+        failures: expect.arrayContaining([
+          "source table missing after restore for public.wines",
+          "source sequence missing after restore for public.wines_id_seq",
+        ]),
       }),
     );
     const changed = structuredClone(source);
