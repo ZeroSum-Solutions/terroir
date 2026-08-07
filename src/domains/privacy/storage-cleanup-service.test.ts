@@ -68,4 +68,23 @@ describe("tenant storage cleanup", () => {
     expect(listSupabaseObjectPaths).toHaveBeenCalledTimes(1);
     expect(removeSupabaseObjects).not.toHaveBeenCalled();
   });
+
+  it("fails closed without starting later buckets when removal fails", async () => {
+    vi.mocked(listSupabaseObjectPaths).mockResolvedValueOnce([
+      "tenant-id/invoice.png",
+    ]);
+    vi.mocked(removeSupabaseObjects).mockRejectedValue(
+      new SupabaseStorageError("Failed to remove objects."),
+    );
+
+    await expect(
+      removeTenantStorageObjects({
+        supabase: {} as never,
+        restaurantId: "tenant-id",
+      }),
+    ).rejects.toBeInstanceOf(PrivacyStorageCleanupError);
+
+    expect(listSupabaseObjectPaths).toHaveBeenCalledTimes(1);
+    expect(removeSupabaseObjects).toHaveBeenCalledTimes(1);
+  });
 });

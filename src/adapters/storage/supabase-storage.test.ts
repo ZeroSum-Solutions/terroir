@@ -122,7 +122,7 @@ describe("Supabase Storage adapter", () => {
     expect(paths[100]).toBe("tenant-id/legacy-wine-id/last.webp");
   });
 
-  it.each(["", ".", "..", "nested/object", "nested\\object"])(
+  it.each([null, undefined, "", ".", "..", "nested/object", "nested\\object"])(
     "fails closed when the provider returns an invalid object segment %j",
     async (name) => {
       const list = vi.fn().mockResolvedValue({

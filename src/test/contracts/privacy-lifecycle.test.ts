@@ -114,8 +114,8 @@ describe("TER-024 privacy lifecycle contracts", () => {
   });
 
   it("preserves the individual-wine history guards the tenant trigger orders", () => {
-    expect(schemaSnapshot).toContain(
-      "wine_id       uuid          not null references public.wines(id) on delete restrict",
+    expect(schemaSnapshot).toMatch(
+      /create table public\.wine_list_items[\s\S]{0,500}wine_id\s+uuid\s+not null references public\.wines\(id\) on delete restrict/,
     );
     for (const constraint of [
       "inventory_items_wine_tenant_fkey",

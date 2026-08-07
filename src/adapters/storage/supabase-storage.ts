@@ -114,8 +114,9 @@ export async function listSupabaseObjectPaths(
   const maxEntries = 10_000;
   let visitedEntries = 0;
 
-  function isSafePathSegment(value: string): boolean {
+  function isSafePathSegment(value: unknown): value is string {
     return (
+      typeof value === "string" &&
       value.length > 0 &&
       value !== "." &&
       value !== ".." &&
