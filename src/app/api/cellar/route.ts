@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
     if (result.replayed) return response;
 
     const responseBody = result.response_body as Record<string, unknown>;
-    const inventoryItem = CellarInventoryResultSchema.parse({
+    CellarInventoryResultSchema.parse({
       id: responseBody.inventoryId,
       quantity: responseBody.quantity,
       unit_cost: responseBody.unitCost,
