@@ -65,7 +65,11 @@ export function wineListPdfArtifactPath(input: {
   listId: string;
   template: WineListPdfTemplate;
 }): string {
-  if (!UUID_PATTERN.test(input.restaurantId) || !UUID_PATTERN.test(input.listId)) {
+  if (
+    !UUID_PATTERN.test(input.restaurantId) ||
+    !UUID_PATTERN.test(input.listId) ||
+    resolveWineListPdfTemplate(input.template) !== input.template
+  ) {
     throw new Error("Wine-list PDF artifact identity is invalid");
   }
   return `${input.restaurantId}/${input.listId}_${input.template}.pdf`;

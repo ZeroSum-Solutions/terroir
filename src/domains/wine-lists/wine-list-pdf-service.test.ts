@@ -26,6 +26,11 @@ describe("wine-list PDF value boundaries", () => {
       listId: LIST_ID,
       template: "classic",
     })).toThrow("artifact identity is invalid");
+    expect(() => wineListPdfArtifactPath({
+      restaurantId: RESTAURANT_ID,
+      listId: LIST_ID,
+      template: "../escape" as "classic",
+    })).toThrow("artifact identity is invalid");
   });
 
   it("sanitizes attachment filenames with a non-empty fallback", () => {
