@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "roles": ["owner", "manager", "staff", "guest"],
+  "placeholderPhrases": [
+    "coming soon",
+    "coming in v",
+    "ships in v",
+    "not implemented",
+    "under construction",
+    "work in progress"
+  ],
+  "sourceMappings": [
+    {"pattern": "^src/app/login/|^src/app/auth/", "requirementId": "TER-CF-001"},
+    {"pattern": "^src/app/invite/|^src/app/\\(app\\)/team/", "requirementId": "TER-CF-016"},
+    {"pattern": "^src/app/\\(app\\)/cellar/", "requirementId": "TER-CF-064"},
+    {"pattern": "^src/app/\\(app\\)/scan-bottle/", "requirementId": "TER-CF-057"},
+    {"pattern": "^src/app/\\(app\\)/(scan|scans)/", "requirementId": "TER-CF-030"},
+    {"pattern": "^src/app/\\(app\\)/lists/", "requirementId": "TER-CF-102"},
+    {"pattern": "^src/app/list/", "requirementId": "TER-CF-129"},
+    {"pattern": "^src/app/\\(app\\)/insights/", "requirementId": "TER-CF-170"},
+    {"pattern": "^src/app/\\(app\\)/price-comparison/", "requirementId": "TER-CF-165"},
+    {"pattern": "^src/app/\\(app\\)/fab\\.tsx$", "requirementId": "TER-CF-224"},
+    {"pattern": "^src/app/\\(app\\)/(layout|nav-links|settings-dropdown)\\.tsx$", "requirementId": "TER-CF-231"},
+    {"pattern": "^src/app/", "requirementId": "TER-CF-228"}
+  ],
+  "interactionTest": "e2e/ui-control-crawl.test.ts",
+  "routes": [
+    {"source": "src/app/page.tsx", "path": "/", "roles": ["owner", "manager", "staff", "guest"]},
+    {"source": "src/app/login/page.tsx", "path": "/login", "roles": ["guest"]},
+    {"source": "src/app/auth/complete/page.tsx", "path": "/auth/complete", "roles": ["guest"]},
+    {"source": "src/app/auth/reset-password/page.tsx", "path": "/auth/reset-password", "roles": ["guest"]},
+    {"source": "src/app/invite/[token]/page.tsx", "path": "/invite/:token", "roles": ["guest", "owner", "manager", "staff"], "samplePathEnvironment": "UI_CRAWL_INVITE_TOKEN"},
+    {"source": "src/app/list/[slug]/page.tsx", "path": "/list/:slug", "roles": ["guest"], "samplePathEnvironment": "UI_CRAWL_PUBLIC_LIST_SLUG"},
+    {"source": "src/app/list/[slug]/print/page.tsx", "path": "/list/:slug/print", "roles": ["guest"], "samplePathEnvironment": "UI_CRAWL_PUBLIC_LIST_SLUG"},
+    {"source": "src/app/(app)/cellar/page.tsx", "path": "/cellar", "roles": ["owner", "manager", "staff"]},
+    {"source": "src/app/(app)/cellar/config/page.tsx", "path": "/cellar/config", "roles": ["owner", "manager", "staff"]},
+    {"source": "src/app/(app)/cellar/open/page.tsx", "path": "/cellar/open", "roles": ["owner", "manager", "staff"]},
+    {"source": "src/app/(app)/cellar/reconcile/page.tsx", "path": "/cellar/reconcile", "roles": ["owner", "manager", "staff"]},
+    {"source": "src/app/(app)/cellar/reconcile/history/page.tsx", "path": "/cellar/reconcile/history", "roles": ["owner", "manager", "staff"]},
+    {"source": "src/app/(app)/insights/page.tsx", "path": "/insights", "roles": ["owner", "manager", "staff"]},
+    {"source": "src/app/(app)/lists/page.tsx", "path": "/lists", "roles": ["owner", "manager", "staff"]},
+    {"source": "src/app/(app)/lists/[id]/page.tsx", "path": "/lists/:id", "roles": ["owner", "manager", "staff"], "samplePathEnvironment": "UI_CRAWL_WINE_LIST_ID"},
+    {"source": "src/app/(app)/lists/[id]/preview/page.tsx", "path": "/lists/:id/preview", "roles": ["owner", "manager", "staff"], "samplePathEnvironment": "UI_CRAWL_WINE_LIST_ID"},
+    {"source": "src/app/(app)/lists/[id]/print/page.tsx", "path": "/lists/:id/print", "roles": ["owner", "manager", "staff"], "samplePathEnvironment": "UI_CRAWL_WINE_LIST_ID"},
+    {"source": "src/app/(app)/price-comparison/page.tsx", "path": "/price-comparison", "roles": ["owner", "manager", "staff"]},
+    {"source": "src/app/(app)/scan-bottle/page.tsx", "path": "/scan-bottle", "roles": ["owner", "manager", "staff"]},
+    {"source": "src/app/(app)/scan/page.tsx", "path": "/scan", "roles": ["owner", "manager", "staff"]},
+    {"source": "src/app/(app)/scan/[id]/page.tsx", "path": "/scan/:id", "roles": ["owner", "manager", "staff"], "samplePathEnvironment": "UI_CRAWL_SCAN_ID"},
+    {"source": "src/app/(app)/scans/page.tsx", "path": "/scans", "roles": ["owner", "manager", "staff"]},
+    {"source": "src/app/(app)/team/page.tsx", "path": "/team", "roles": ["owner", "manager", "staff"]}
+  ]
+}

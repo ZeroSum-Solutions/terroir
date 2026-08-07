@@ -454,14 +454,16 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
             </div>
 
             <div className="mt-lg flex justify-between items-center">
-              <a
-                href={publicUrl ?? "#"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[13px] font-medium text-accent hover:underline"
-              >
-                Open in new tab
-              </a>
+              {publicUrl && (
+                <a
+                  href={publicUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[13px] font-medium text-accent hover:underline"
+                >
+                  Open in new tab
+                </a>
+              )}
               <div className="flex gap-sm">
                 <button
                   type="button"

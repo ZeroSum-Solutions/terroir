@@ -74,7 +74,7 @@ export default async function AppLayout({
       </nav>
 
       {/* Floating Action Button — mobile-only primary actions surface.
-          Speed-dial: tap "+" to reveal Scan / Pour / 86 / Voice (stub).
+          Speed-dial: tap "+" to reveal Scan / Pour / 86.
           Hidden on /scan (already a primary-action surface). */}
       <Fab />
 

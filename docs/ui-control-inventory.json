@@ -1,0 +1,5787 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": {
+    "policy": "docs/ui-control-policy.json",
+    "featureLedger": "docs/feature-ledger.json",
+    "sourceRoot": "src/app"
+  },
+  "routeCount": 23,
+  "controlCount": 329,
+  "routes": [
+    {
+      "source": "src/app/page.tsx",
+      "path": "/",
+      "roles": [
+        "owner",
+        "manager",
+        "staff",
+        "guest"
+      ]
+    },
+    {
+      "source": "src/app/login/page.tsx",
+      "path": "/login",
+      "roles": [
+        "guest"
+      ]
+    },
+    {
+      "source": "src/app/auth/complete/page.tsx",
+      "path": "/auth/complete",
+      "roles": [
+        "guest"
+      ]
+    },
+    {
+      "source": "src/app/auth/reset-password/page.tsx",
+      "path": "/auth/reset-password",
+      "roles": [
+        "guest"
+      ]
+    },
+    {
+      "source": "src/app/invite/[token]/page.tsx",
+      "path": "/invite/:token",
+      "roles": [
+        "guest",
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "samplePathEnvironment": "UI_CRAWL_INVITE_TOKEN"
+    },
+    {
+      "source": "src/app/list/[slug]/page.tsx",
+      "path": "/list/:slug",
+      "roles": [
+        "guest"
+      ],
+      "samplePathEnvironment": "UI_CRAWL_PUBLIC_LIST_SLUG"
+    },
+    {
+      "source": "src/app/list/[slug]/print/page.tsx",
+      "path": "/list/:slug/print",
+      "roles": [
+        "guest"
+      ],
+      "samplePathEnvironment": "UI_CRAWL_PUBLIC_LIST_SLUG"
+    },
+    {
+      "source": "src/app/(app)/cellar/page.tsx",
+      "path": "/cellar",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ]
+    },
+    {
+      "source": "src/app/(app)/cellar/config/page.tsx",
+      "path": "/cellar/config",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ]
+    },
+    {
+      "source": "src/app/(app)/cellar/open/page.tsx",
+      "path": "/cellar/open",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ]
+    },
+    {
+      "source": "src/app/(app)/cellar/reconcile/page.tsx",
+      "path": "/cellar/reconcile",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ]
+    },
+    {
+      "source": "src/app/(app)/cellar/reconcile/history/page.tsx",
+      "path": "/cellar/reconcile/history",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ]
+    },
+    {
+      "source": "src/app/(app)/insights/page.tsx",
+      "path": "/insights",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ]
+    },
+    {
+      "source": "src/app/(app)/lists/page.tsx",
+      "path": "/lists",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ]
+    },
+    {
+      "source": "src/app/(app)/lists/[id]/page.tsx",
+      "path": "/lists/:id",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "samplePathEnvironment": "UI_CRAWL_WINE_LIST_ID"
+    },
+    {
+      "source": "src/app/(app)/lists/[id]/preview/page.tsx",
+      "path": "/lists/:id/preview",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "samplePathEnvironment": "UI_CRAWL_WINE_LIST_ID"
+    },
+    {
+      "source": "src/app/(app)/lists/[id]/print/page.tsx",
+      "path": "/lists/:id/print",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "samplePathEnvironment": "UI_CRAWL_WINE_LIST_ID"
+    },
+    {
+      "source": "src/app/(app)/price-comparison/page.tsx",
+      "path": "/price-comparison",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ]
+    },
+    {
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "path": "/scan-bottle",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ]
+    },
+    {
+      "source": "src/app/(app)/scan/page.tsx",
+      "path": "/scan",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ]
+    },
+    {
+      "source": "src/app/(app)/scan/[id]/page.tsx",
+      "path": "/scan/:id",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "samplePathEnvironment": "UI_CRAWL_SCAN_ID"
+    },
+    {
+      "source": "src/app/(app)/scans/page.tsx",
+      "path": "/scans",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ]
+    },
+    {
+      "source": "src/app/(app)/team/page.tsx",
+      "path": "/team",
+      "roles": [
+        "owner",
+        "manager",
+        "staff"
+      ]
+    }
+  ],
+  "controls": [
+    {
+      "id": "src/app/(app)/cellar/auto-eightysix-modal.tsx#button-001",
+      "source": "src/app/(app)/cellar/auto-eightysix-modal.tsx",
+      "line": 79,
+      "kind": "button",
+      "label": "Close settings",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/auto-eightysix-modal.tsx#link-001",
+      "source": "src/app/(app)/cellar/auto-eightysix-modal.tsx",
+      "line": 104,
+      "kind": "link",
+      "label": "Manage cellar sections",
+      "href": "/cellar/config",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/auto-eightysix-panel.tsx#input-001",
+      "source": "src/app/(app)/cellar/auto-eightysix-panel.tsx",
+      "line": 169,
+      "kind": "input",
+      "label": "input at src/app/(app)/cellar/auto-eightysix-panel.tsx:169",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/auto-eightysix-panel.tsx#input-002",
+      "source": "src/app/(app)/cellar/auto-eightysix-panel.tsx",
+      "line": 186,
+      "kind": "input",
+      "label": "input at src/app/(app)/cellar/auto-eightysix-panel.tsx:186",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/auto-eightysix-panel.tsx#input-003",
+      "source": "src/app/(app)/cellar/auto-eightysix-panel.tsx",
+      "line": 224,
+      "kind": "input",
+      "label": "input at src/app/(app)/cellar/auto-eightysix-panel.tsx:224",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/auto-eightysix-panel.tsx#input-004",
+      "source": "src/app/(app)/cellar/auto-eightysix-panel.tsx",
+      "line": 235,
+      "kind": "input",
+      "label": "input at src/app/(app)/cellar/auto-eightysix-panel.tsx:235",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-grid.tsx#input-001",
+      "source": "src/app/(app)/cellar/cellar-grid.tsx",
+      "line": 162,
+      "kind": "input",
+      "label": "input at src/app/(app)/cellar/cellar-grid.tsx:162",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-grid.tsx#input-002",
+      "source": "src/app/(app)/cellar/cellar-grid.tsx",
+      "line": 178,
+      "kind": "input",
+      "label": "input at src/app/(app)/cellar/cellar-grid.tsx:178",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-grid.tsx#button-001",
+      "source": "src/app/(app)/cellar/cellar-grid.tsx",
+      "line": 199,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-grid.tsx#button-002",
+      "source": "src/app/(app)/cellar/cellar-grid.tsx",
+      "line": 224,
+      "kind": "button",
+      "label": "{dynamic} Create cellar",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-grid.tsx#button-003",
+      "source": "src/app/(app)/cellar/cellar-grid.tsx",
+      "line": 380,
+      "kind": "button",
+      "label": "Close bin detail",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-list.tsx#link-001",
+      "source": "src/app/(app)/cellar/cellar-list.tsx",
+      "line": 334,
+      "kind": "link",
+      "label": "Scan an invoice →",
+      "href": "/scan",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-list.tsx#button-001",
+      "source": "src/app/(app)/cellar/cellar-list.tsx",
+      "line": 360,
+      "kind": "button",
+      "label": "Clear filter & search",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-list.tsx#button-002",
+      "source": "src/app/(app)/cellar/cellar-list.tsx",
+      "line": 377,
+      "kind": "button",
+      "label": "Select wines",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-list.tsx#button-003",
+      "source": "src/app/(app)/cellar/cellar-list.tsx",
+      "line": 391,
+      "kind": "button",
+      "label": "Select all ({dynamic})",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-list.tsx#button-004",
+      "source": "src/app/(app)/cellar/cellar-list.tsx",
+      "line": 400,
+      "kind": "button",
+      "label": "Clear",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-list.tsx#button-005",
+      "source": "src/app/(app)/cellar/cellar-list.tsx",
+      "line": 411,
+      "kind": "button",
+      "label": "Assign {dynamic} to section",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-list.tsx#button-006",
+      "source": "src/app/(app)/cellar/cellar-list.tsx",
+      "line": 427,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-list.tsx#button-007",
+      "source": "src/app/(app)/cellar/cellar-list.tsx",
+      "line": 449,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-list.tsx#button-008",
+      "source": "src/app/(app)/cellar/cellar-list.tsx",
+      "line": 457,
+      "kind": "button",
+      "label": "button at src/app/(app)/cellar/cellar-list.tsx:457",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-list.tsx#button-009",
+      "source": "src/app/(app)/cellar/cellar-list.tsx",
+      "line": 470,
+      "kind": "button",
+      "label": "Done",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-list.tsx#button-010",
+      "source": "src/app/(app)/cellar/cellar-list.tsx",
+      "line": 723,
+      "kind": "button",
+      "label": "!row.has_inventory_record\n              ? \"Cannot assign a wine without an inventory record\"\n              : selected\n                ? \"Deselect\"\n                : \"Select\"",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-list.tsx#button-011",
+      "source": "src/app/(app)/cellar/cellar-list.tsx",
+      "line": 751,
+      "kind": "button",
+      "label": "Drag to reorder",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-list.tsx#button-012",
+      "source": "src/app/(app)/cellar/cellar-list.tsx",
+      "line": 762,
+      "kind": "button",
+      "label": "{dynamic} {dynamic} {dynamic} } {dynamic} } {dynamic} {dynamic} {dynamic} {dynamic} {dynamic} {dynamic} {dynamic} glass{dynamic} left )} {dynamic} {dynamic} )} ",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-shell.tsx#button-001",
+      "source": "src/app/(app)/cellar/cellar-shell.tsx",
+      "line": 213,
+      "kind": "button",
+      "label": "Search wines",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-shell.tsx#button-002",
+      "source": "src/app/(app)/cellar/cellar-shell.tsx",
+      "line": 240,
+      "kind": "button",
+      "label": "Cellar settings",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-shell.tsx#button-003",
+      "source": "src/app/(app)/cellar/cellar-shell.tsx",
+      "line": 261,
+      "kind": "button",
+      "label": "Show",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-shell.tsx#button-004",
+      "source": "src/app/(app)/cellar/cellar-shell.tsx",
+      "line": 279,
+      "kind": "button",
+      "label": "{dynamic} {dynamic} )}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-shell.tsx#button-005",
+      "source": "src/app/(app)/cellar/cellar-shell.tsx",
+      "line": 312,
+      "kind": "button",
+      "label": "Reconcile {dynamic} open bottle {dynamic} →",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-shell.tsx#button-006",
+      "source": "src/app/(app)/cellar/cellar-shell.tsx",
+      "line": 357,
+      "kind": "button",
+      "label": "Done",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-shell.tsx#input-001",
+      "source": "src/app/(app)/cellar/cellar-shell.tsx",
+      "line": 422,
+      "kind": "input",
+      "label": "Search name, producer, region…",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-shell.tsx#button-007",
+      "source": "src/app/(app)/cellar/cellar-shell.tsx",
+      "line": 445,
+      "kind": "button",
+      "label": "Clear search",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-shell.tsx#button-008",
+      "source": "src/app/(app)/cellar/cellar-shell.tsx",
+      "line": 482,
+      "kind": "button",
+      "label": "`${label",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/config/page.tsx#button-001",
+      "source": "src/app/(app)/cellar/config/page.tsx",
+      "line": 338,
+      "kind": "button",
+      "label": "Back to cellar",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/config/page.tsx#input-001",
+      "source": "src/app/(app)/cellar/config/page.tsx",
+      "line": 400,
+      "kind": "input",
+      "label": "New section name (e.g. Reds by Region)",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/config/page.tsx#button-002",
+      "source": "src/app/(app)/cellar/config/page.tsx",
+      "line": 411,
+      "kind": "button",
+      "label": "Add",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/config/page.tsx#button-003",
+      "source": "src/app/(app)/cellar/config/page.tsx",
+      "line": 451,
+      "kind": "button",
+      "label": "Cancel",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/config/page.tsx#button-004",
+      "source": "src/app/(app)/cellar/config/page.tsx",
+      "line": 459,
+      "kind": "button",
+      "label": "Delete",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/config/page.tsx#input-002",
+      "source": "src/app/(app)/cellar/config/page.tsx",
+      "line": 524,
+      "kind": "input",
+      "label": "input at src/app/(app)/cellar/config/page.tsx:524",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/config/page.tsx#button-005",
+      "source": "src/app/(app)/cellar/config/page.tsx",
+      "line": 536,
+      "kind": "button",
+      "label": "Save rename",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/config/page.tsx#button-006",
+      "source": "src/app/(app)/cellar/config/page.tsx",
+      "line": 545,
+      "kind": "button",
+      "label": "Cancel rename",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/config/page.tsx#button-007",
+      "source": "src/app/(app)/cellar/config/page.tsx",
+      "line": 558,
+      "kind": "button",
+      "label": "`Drag to reorder ${section.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/config/page.tsx#button-008",
+      "source": "src/app/(app)/cellar/config/page.tsx",
+      "line": 574,
+      "kind": "button",
+      "label": "`Rename ${section.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/config/page.tsx#button-009",
+      "source": "src/app/(app)/cellar/config/page.tsx",
+      "line": 583,
+      "kind": "button",
+      "label": "`Delete ${section.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/edit-metadata-modal.tsx#button-001",
+      "source": "src/app/(app)/cellar/edit-metadata-modal.tsx",
+      "line": 182,
+      "kind": "button",
+      "label": "Close",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/edit-metadata-modal.tsx#input-001",
+      "source": "src/app/(app)/cellar/edit-metadata-modal.tsx",
+      "line": 197,
+      "kind": "input",
+      "label": "input at src/app/(app)/cellar/edit-metadata-modal.tsx:197",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/edit-metadata-modal.tsx#input-002",
+      "source": "src/app/(app)/cellar/edit-metadata-modal.tsx",
+      "line": 208,
+      "kind": "input",
+      "label": "input at src/app/(app)/cellar/edit-metadata-modal.tsx:208",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/edit-metadata-modal.tsx#input-003",
+      "source": "src/app/(app)/cellar/edit-metadata-modal.tsx",
+      "line": 219,
+      "kind": "input",
+      "label": "e.g. 2020",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/edit-metadata-modal.tsx#input-004",
+      "source": "src/app/(app)/cellar/edit-metadata-modal.tsx",
+      "line": 233,
+      "kind": "input",
+      "label": "e.g. Cabernet Sauvignon",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/edit-metadata-modal.tsx#input-005",
+      "source": "src/app/(app)/cellar/edit-metadata-modal.tsx",
+      "line": 245,
+      "kind": "input",
+      "label": "e.g. Napa Valley",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/edit-metadata-modal.tsx#textarea-001",
+      "source": "src/app/(app)/cellar/edit-metadata-modal.tsx",
+      "line": 257,
+      "kind": "textarea",
+      "label": "Enter free-form tasting notes...",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/edit-metadata-modal.tsx#input-006",
+      "source": "src/app/(app)/cellar/edit-metadata-modal.tsx",
+      "line": 278,
+      "kind": "input",
+      "label": "e.g. 2025",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/edit-metadata-modal.tsx#input-007",
+      "source": "src/app/(app)/cellar/edit-metadata-modal.tsx",
+      "line": 290,
+      "kind": "input",
+      "label": "e.g. 2030",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/edit-metadata-modal.tsx#input-008",
+      "source": "src/app/(app)/cellar/edit-metadata-modal.tsx",
+      "line": 302,
+      "kind": "input",
+      "label": "e.g. 2035",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/edit-metadata-modal.tsx#button-002",
+      "source": "src/app/(app)/cellar/edit-metadata-modal.tsx",
+      "line": 328,
+      "kind": "button",
+      "label": "Cancel",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/edit-metadata-modal.tsx#button-003",
+      "source": "src/app/(app)/cellar/edit-metadata-modal.tsx",
+      "line": 336,
+      "kind": "button",
+      "label": "{dynamic} Save changes",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/note-modal.tsx#textarea-001",
+      "source": "src/app/(app)/cellar/note-modal.tsx",
+      "line": 73,
+      "kind": "textarea",
+      "label": "e.g., last bottle just poured",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/note-modal.tsx#button-001",
+      "source": "src/app/(app)/cellar/note-modal.tsx",
+      "line": 84,
+      "kind": "button",
+      "label": "Cancel",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/note-modal.tsx#button-002",
+      "source": "src/app/(app)/cellar/note-modal.tsx",
+      "line": 91,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/open/close-button.tsx#button-001",
+      "source": "src/app/(app)/cellar/open/close-button.tsx",
+      "line": 120,
+      "kind": "button",
+      "label": "Cancel close",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/open/close-button.tsx#button-002",
+      "source": "src/app/(app)/cellar/open/close-button.tsx",
+      "line": 129,
+      "kind": "button",
+      "label": "isClosing\n              ? \"Closing bottle\"\n              : confirming\n                ? `Confirm discard ${remainingOz.toFixed(1)",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/open/page.tsx#link-001",
+      "source": "src/app/(app)/cellar/open/page.tsx",
+      "line": 52,
+      "kind": "link",
+      "label": "Back to cellar",
+      "href": "/cellar",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/open/page.tsx#link-002",
+      "source": "src/app/(app)/cellar/open/page.tsx",
+      "line": 109,
+      "kind": "link",
+      "label": "{dynamic}{dynamic} {dynamic} {dynamic} )} {dynamic} · {dynamic}{dynamic} {dynamic})} 25 ? \"bg-accent\" : remainingPct > 10 ? \"bg-warning\" : \"bg-error\", )} style=",
+      "href": "`/cellar?wine=${bottle.wine_id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/pour-picker-modal.tsx#button-001",
+      "source": "src/app/(app)/cellar/pour-picker-modal.tsx",
+      "line": 77,
+      "kind": "button",
+      "label": "{dynamic} oz",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/pour-picker-modal.tsx#input-001",
+      "source": "src/app/(app)/cellar/pour-picker-modal.tsx",
+      "line": 99,
+      "kind": "input",
+      "label": "5.0",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/pour-picker-modal.tsx#button-002",
+      "source": "src/app/(app)/cellar/pour-picker-modal.tsx",
+      "line": 118,
+      "kind": "button",
+      "label": "Pour",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/pour-picker-modal.tsx#textarea-001",
+      "source": "src/app/(app)/cellar/pour-picker-modal.tsx",
+      "line": 136,
+      "kind": "textarea",
+      "label": "e.g., comp for VIP",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/pour-picker-modal.tsx#button-003",
+      "source": "src/app/(app)/cellar/pour-picker-modal.tsx",
+      "line": 148,
+      "kind": "button",
+      "label": "Cancel",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/pricing-target-override.tsx#button-001",
+      "source": "src/app/(app)/cellar/pricing-target-override.tsx",
+      "line": 174,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/pricing-target-override.tsx#input-001",
+      "source": "src/app/(app)/cellar/pricing-target-override.tsx",
+      "line": 203,
+      "kind": "input",
+      "label": "Per-wine pour cost target",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/pricing-target-override.tsx#input-002",
+      "source": "src/app/(app)/cellar/pricing-target-override.tsx",
+      "line": 232,
+      "kind": "input",
+      "label": "Per-wine markup ratio target",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/pricing-target-override.tsx#button-002",
+      "source": "src/app/(app)/cellar/pricing-target-override.tsx",
+      "line": 258,
+      "kind": "button",
+      "label": "Use house defaults",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/pricing-targets-panel.tsx#input-001",
+      "source": "src/app/(app)/cellar/pricing-targets-panel.tsx",
+      "line": 166,
+      "kind": "input",
+      "label": "Glass pour cost percentage target",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/pricing-targets-panel.tsx#input-002",
+      "source": "src/app/(app)/cellar/pricing-targets-panel.tsx",
+      "line": 193,
+      "kind": "input",
+      "label": "Bottle markup ratio target",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/reconcile-list.tsx#button-001",
+      "source": "src/app/(app)/cellar/reconcile-list.tsx",
+      "line": 145,
+      "kind": "button",
+      "label": "{dynamic} change${dynamic}` : \"No changes yet\"}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/reconcile-list.tsx#input-001",
+      "source": "src/app/(app)/cellar/reconcile-list.tsx",
+      "line": 245,
+      "kind": "input",
+      "label": "Actual remaining volume in ml",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/reconcile-list.tsx#button-002",
+      "source": "src/app/(app)/cellar/reconcile-list.tsx",
+      "line": 297,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/reconcile-list.tsx#input-002",
+      "source": "src/app/(app)/cellar/reconcile-list.tsx",
+      "line": 325,
+      "kind": "input",
+      "label": "spill, miscount, etc.",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/reconcile-modal.tsx#button-001",
+      "source": "src/app/(app)/cellar/reconcile-modal.tsx",
+      "line": 85,
+      "kind": "button",
+      "label": "Close reconcile mode",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/reconcile/history/page.tsx#link-001",
+      "source": "src/app/(app)/cellar/reconcile/history/page.tsx",
+      "line": 216,
+      "kind": "link",
+      "label": "Back to reconcile",
+      "href": "/cellar/reconcile",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/reconcile/history/page.tsx#link-002",
+      "source": "src/app/(app)/cellar/reconcile/history/page.tsx",
+      "line": 243,
+      "kind": "link",
+      "label": "Go to reconcile",
+      "href": "/cellar/reconcile",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/reconcile/history/page.tsx#link-003",
+      "source": "src/app/(app)/cellar/reconcile/history/page.tsx",
+      "line": 362,
+      "kind": "link",
+      "label": "{dynamic} {dynamic} {dynamic} {dynamic}` : \"\"}",
+      "href": "`/cellar?wine=${event.wine_id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/reconcile/history/page.tsx#link-004",
+      "source": "src/app/(app)/cellar/reconcile/history/page.tsx",
+      "line": 417,
+      "kind": "link",
+      "label": "{dynamic} {dynamic} {dynamic} )}",
+      "href": "`/cellar?wine=${event.wine_id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/reconcile/page.tsx#link-001",
+      "source": "src/app/(app)/cellar/reconcile/page.tsx",
+      "line": 58,
+      "kind": "link",
+      "label": "Back to cellar",
+      "href": "/cellar",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/reconcile/page.tsx#link-002",
+      "source": "src/app/(app)/cellar/reconcile/page.tsx",
+      "line": 72,
+      "kind": "link",
+      "label": "History",
+      "href": "/cellar/reconcile/history",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-001",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 527,
+      "kind": "button",
+      "label": "Close",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-002",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 555,
+      "kind": "button",
+      "label": "Remove image",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#input-001",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 571,
+      "kind": "input",
+      "label": "input at src/app/(app)/cellar/wine-detail-drawer.tsx:571",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-003",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 664,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-004",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 676,
+      "kind": "button",
+      "label": "{dynamic} oz`}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-005",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 690,
+      "kind": "button",
+      "label": "Pick a custom pour size",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-006",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 705,
+      "kind": "button",
+      "label": "Undo last pour ({dynamic} oz)",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-007",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 717,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-008",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 737,
+      "kind": "button",
+      "label": "{dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-009",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 764,
+      "kind": "button",
+      "label": "Edit metadata",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-010",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 786,
+      "kind": "button",
+      "label": "Cancel",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-011",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 794,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-012",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 805,
+      "kind": "button",
+      "label": "Delete wine",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/fab.tsx#button-001",
+      "source": "src/app/(app)/fab.tsx",
+      "line": 122,
+      "kind": "button",
+      "label": "open ? \"Close actions\" : \"Open actions\"",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-224",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/fab.tsx#link-001",
+      "source": "src/app/(app)/fab.tsx",
+      "line": 181,
+      "kind": "link",
+      "label": "label",
+      "href": "action.href",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-224",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/briefing-alert-card.tsx#link-001",
+      "source": "src/app/(app)/insights/briefing-alert-card.tsx",
+      "line": 138,
+      "kind": "link",
+      "label": "View {dynamic} bottle{dynamic}",
+      "href": "`/cellar?wine=${alert.wine_id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/briefing-alert-card.tsx#button-001",
+      "source": "src/app/(app)/insights/briefing-alert-card.tsx",
+      "line": 145,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/date-range-selector.tsx#button-001",
+      "source": "src/app/(app)/insights/date-range-selector.tsx",
+      "line": 70,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/date-range-selector.tsx#input-001",
+      "source": "src/app/(app)/insights/date-range-selector.tsx",
+      "line": 101,
+      "kind": "input",
+      "label": "input at src/app/(app)/insights/date-range-selector.tsx:101",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/date-range-selector.tsx#input-002",
+      "source": "src/app/(app)/insights/date-range-selector.tsx",
+      "line": 113,
+      "kind": "input",
+      "label": "input at src/app/(app)/insights/date-range-selector.tsx:113",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/date-range-selector.tsx#button-002",
+      "source": "src/app/(app)/insights/date-range-selector.tsx",
+      "line": 122,
+      "kind": "button",
+      "label": "Apply",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/enrich-cellar-button.tsx#button-001",
+      "source": "src/app/(app)/insights/enrich-cellar-button.tsx",
+      "line": 106,
+      "kind": "button",
+      "label": "{dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/page.tsx#link-001",
+      "source": "src/app/(app)/insights/page.tsx",
+      "line": 433,
+      "kind": "link",
+      "label": "Go to scanner",
+      "href": "/scan",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/page.tsx#a-001",
+      "source": "src/app/(app)/insights/page.tsx",
+      "line": 455,
+      "kind": "link",
+      "label": "Export CSV",
+      "href": "/api/insights/csv",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/page.tsx#link-002",
+      "source": "src/app/(app)/insights/page.tsx",
+      "line": 557,
+      "kind": "link",
+      "label": "{dynamic} {dynamic}",
+      "href": "`/cellar?wine=${w.wine_id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/page.tsx#link-003",
+      "source": "src/app/(app)/insights/page.tsx",
+      "line": 907,
+      "kind": "link",
+      "label": "Scan an invoice",
+      "href": "/scan",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/page.tsx#link-004",
+      "source": "src/app/(app)/insights/page.tsx",
+      "line": 928,
+      "kind": "link",
+      "label": "`View scan from ${scan.distributor_name",
+      "href": "`/scan/${scan.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/pricing-review-card.tsx#link-001",
+      "source": "src/app/(app)/insights/pricing-review-card.tsx",
+      "line": 198,
+      "kind": "link",
+      "label": "Review",
+      "href": "`/cellar?wine=${alert.wine_id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/pricing-review-card.tsx#button-001",
+      "source": "src/app/(app)/insights/pricing-review-card.tsx",
+      "line": 205,
+      "kind": "button",
+      "label": "Snooze 30 days",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/refresh-retail-button.tsx#button-001",
+      "source": "src/app/(app)/insights/refresh-retail-button.tsx",
+      "line": 115,
+      "kind": "button",
+      "label": "{dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/snoozed-alerts-card.tsx#button-001",
+      "source": "src/app/(app)/insights/snoozed-alerts-card.tsx",
+      "line": 125,
+      "kind": "button",
+      "label": "Snoozed alerts {dynamic} active snooze{dynamic}. Tap to view + unsnooze early.",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/insights/snoozed-alerts-card.tsx#button-002",
+      "source": "src/app/(app)/insights/snoozed-alerts-card.tsx",
+      "line": 194,
+      "kind": "button",
+      "label": "Unsnooze",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-170",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/layout.tsx#link-001",
+      "source": "src/app/(app)/layout.tsx",
+      "line": 33,
+      "kind": "link",
+      "label": "Terroir",
+      "href": "/",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-231",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx#button-001",
+      "source": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx",
+      "line": 346,
+      "kind": "button",
+      "label": "My inventory",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx#button-002",
+      "source": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx",
+      "line": 357,
+      "kind": "button",
+      "label": "LWIN catalog",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx#input-001",
+      "source": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx",
+      "line": 372,
+      "kind": "input",
+      "label": "Search wines",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx#button-003",
+      "source": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx",
+      "line": 408,
+      "kind": "button",
+      "label": "{dynamic}, {dynamic} {dynamic} {dynamic} )}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx#button-004",
+      "source": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx",
+      "line": 442,
+      "kind": "button",
+      "label": "{dynamic} {dynamic} } {dynamic} )} {dynamic} )}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx#input-002",
+      "source": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx",
+      "line": 512,
+      "kind": "input",
+      "label": "`Add to ${s.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx#button-005",
+      "source": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx",
+      "line": 548,
+      "kind": "button",
+      "label": "Use these",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx#input-003",
+      "source": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx",
+      "line": 608,
+      "kind": "input",
+      "label": "—",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx#input-004",
+      "source": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx",
+      "line": 628,
+      "kind": "input",
+      "label": "—",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx#button-006",
+      "source": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx",
+      "line": 647,
+      "kind": "button",
+      "label": "Back",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx#button-007",
+      "source": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx",
+      "line": 656,
+      "kind": "button",
+      "label": "Cancel",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx#button-008",
+      "source": "src/app/(app)/lists/[id]/components/add-wine-modal.tsx",
+      "line": 664,
+      "kind": "button",
+      "label": "{dynamic} sections` : \"list\"}`}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/publish-modal.tsx#input-001",
+      "source": "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      "line": 338,
+      "kind": "input",
+      "label": "spring-2026",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/publish-modal.tsx#button-001",
+      "source": "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      "line": 360,
+      "kind": "button",
+      "label": "Cancel",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/publish-modal.tsx#button-002",
+      "source": "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      "line": 367,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/publish-modal.tsx#button-003",
+      "source": "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      "line": 395,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/publish-modal.tsx#button-004",
+      "source": "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      "line": 403,
+      "kind": "button",
+      "label": "Download QR (PNG)",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/publish-modal.tsx#input-002",
+      "source": "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      "line": 421,
+      "kind": "input",
+      "label": "input at src/app/(app)/lists/[id]/components/publish-modal.tsx:421",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/publish-modal.tsx#button-005",
+      "source": "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      "line": 435,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/publish-modal.tsx#a-001",
+      "source": "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      "line": 458,
+      "kind": "link",
+      "label": "Open in new tab",
+      "href": "publicUrl",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/publish-modal.tsx#button-006",
+      "source": "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      "line": 468,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/publish-modal.tsx#button-007",
+      "source": "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      "line": 476,
+      "kind": "button",
+      "label": "Done",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/template-picker.tsx#button-001",
+      "source": "src/app/(app)/lists/[id]/components/template-picker.tsx",
+      "line": 17,
+      "kind": "button",
+      "label": "{dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/wine-row.tsx#button-001",
+      "source": "src/app/(app)/lists/[id]/components/wine-row.tsx",
+      "line": 95,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/wine-row.tsx#input-001",
+      "source": "src/app/(app)/lists/[id]/components/wine-row.tsx",
+      "line": 116,
+      "kind": "input",
+      "label": "input at src/app/(app)/lists/[id]/components/wine-row.tsx:116",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/wine-row.tsx#button-002",
+      "source": "src/app/(app)/lists/[id]/components/wine-row.tsx",
+      "line": 163,
+      "kind": "button",
+      "label": "isOverridden ? \"Custom display name (click to edit)\" : \"Click to set a custom display name\"",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/wine-row.tsx#input-002",
+      "source": "src/app/(app)/lists/[id]/components/wine-row.tsx",
+      "line": 189,
+      "kind": "input",
+      "label": "item.wines.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/wine-row.tsx#input-003",
+      "source": "src/app/(app)/lists/[id]/components/wine-row.tsx",
+      "line": 227,
+      "kind": "input",
+      "label": "`Pour size in ml for ${item.wines.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/wine-row.tsx#input-004",
+      "source": "src/app/(app)/lists/[id]/components/wine-row.tsx",
+      "line": 263,
+      "kind": "input",
+      "label": "input at src/app/(app)/lists/[id]/components/wine-row.tsx:263",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/wine-row.tsx#input-005",
+      "source": "src/app/(app)/lists/[id]/components/wine-row.tsx",
+      "line": 273,
+      "kind": "input",
+      "label": "input at src/app/(app)/lists/[id]/components/wine-row.tsx:273",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/wine-row.tsx#button-003",
+      "source": "src/app/(app)/lists/[id]/components/wine-row.tsx",
+      "line": 346,
+      "kind": "button",
+      "label": "`Remove ${item.wines.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/wine-row.tsx#textarea-001",
+      "source": "src/app/(app)/lists/[id]/components/wine-row.tsx",
+      "line": 361,
+      "kind": "textarea",
+      "label": "Add a note for guests (e.g., sommelier pick, pairing suggestion)",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/wine-row.tsx#button-004",
+      "source": "src/app/(app)/lists/[id]/components/wine-row.tsx",
+      "line": 370,
+      "kind": "button",
+      "label": "item.hidden ? \"Hidden from public list\" : \"Visible on public list\"",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/wine-row.tsx#button-005",
+      "source": "src/app/(app)/lists/[id]/components/wine-row.tsx",
+      "line": 407,
+      "kind": "button",
+      "label": "`Options for ${item.wines.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/wine-row.tsx#textarea-002",
+      "source": "src/app/(app)/lists/[id]/components/wine-row.tsx",
+      "line": 448,
+      "kind": "textarea",
+      "label": "Sommelier pick, pairing suggestion...",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/components/wine-row.tsx#button-006",
+      "source": "src/app/(app)/lists/[id]/components/wine-row.tsx",
+      "line": 456,
+      "kind": "button",
+      "label": "item.hidden ? \"Hidden from public list\" : \"Visible on public list\"",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/preview/page.tsx#link-001",
+      "source": "src/app/(app)/lists/[id]/preview/page.tsx",
+      "line": 78,
+      "kind": "link",
+      "label": "Back to editor",
+      "href": "`/lists/${id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/preview/page.tsx#a-001",
+      "source": "src/app/(app)/lists/[id]/preview/page.tsx",
+      "line": 96,
+      "kind": "link",
+      "label": "Open live version",
+      "href": "`/list/${list.slug",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/print/print-controls.tsx#link-001",
+      "source": "src/app/(app)/lists/[id]/print/print-controls.tsx",
+      "line": 9,
+      "kind": "link",
+      "label": "Back to editor",
+      "href": "`/lists/${listId",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/print/print-controls.tsx#button-001",
+      "source": "src/app/(app)/lists/[id]/print/print-controls.tsx",
+      "line": 16,
+      "kind": "button",
+      "label": "Print",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-001",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 231,
+      "kind": "button",
+      "label": "`Drag to reorder ${section.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#input-001",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 244,
+      "kind": "input",
+      "label": "input at src/app/(app)/lists/[id]/wine-list-editor.tsx:244",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-002",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 259,
+      "kind": "button",
+      "label": "{dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-003",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 282,
+      "kind": "button",
+      "label": "`Rename ${section.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-004",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 293,
+      "kind": "button",
+      "label": "`Delete ${section.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#link-001",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1136,
+      "kind": "link",
+      "label": "All lists",
+      "href": "/lists",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-005",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1161,
+      "kind": "button",
+      "label": "{dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#a-001",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1174,
+      "kind": "link",
+      "label": "Toast Export",
+      "href": "/api/export/toast-csv",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#a-002",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1182,
+      "kind": "link",
+      "label": "CSV",
+      "href": "`/api/wine-lists/${list.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#a-003",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1191,
+      "kind": "link",
+      "label": "Preview",
+      "href": "`/lists/${list.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#a-004",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1200,
+      "kind": "link",
+      "label": "Print",
+      "href": "`/lists/${list.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-006",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1210,
+      "kind": "button",
+      "label": "Copy URL",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-007",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1219,
+      "kind": "button",
+      "label": "Publish",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#select-001",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1233,
+      "kind": "select",
+      "label": "select at src/app/(app)/lists/[id]/wine-list-editor.tsx:1233",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-008",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1285,
+      "kind": "button",
+      "label": "Add section",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-009",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1322,
+      "kind": "button",
+      "label": "Add wine",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-010",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1388,
+      "kind": "button",
+      "label": "Add another wine to {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-011",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1413,
+      "kind": "button",
+      "label": "Close",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-012",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1432,
+      "kind": "button",
+      "label": "Cancel",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-013",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1439,
+      "kind": "button",
+      "label": "Remove wine",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-014",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1462,
+      "kind": "button",
+      "label": "Close",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-015",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1484,
+      "kind": "button",
+      "label": "Cancel",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-016",
+      "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "line": 1491,
+      "kind": "button",
+      "label": "Delete section",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#button-001",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 278,
+      "kind": "button",
+      "label": "{dynamic} {dynamic} {dynamic} )} {dynamic} {dynamic} wines {dynamic} ) : ( Updated )}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#button-002",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 334,
+      "kind": "button",
+      "label": "`Copy public link for ${list.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#a-001",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 355,
+      "kind": "link",
+      "label": "`Open public ${list.name",
+      "href": "`/list/${list.slug",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#button-003",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 372,
+      "kind": "button",
+      "label": "`Clone ${list.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#button-004",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 384,
+      "kind": "button",
+      "label": "list.archived\n                  ? `Restore ${list.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#button-005",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 403,
+      "kind": "button",
+      "label": "`Permanently delete ${list.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#a-002",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 433,
+      "kind": "link",
+      "label": "{dynamic})`}",
+      "href": "showArchived ? \"/lists\" : \"/lists?show_archived=1\"",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#button-006",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 441,
+      "kind": "button",
+      "label": "New wine list",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#button-007",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 458,
+      "kind": "button",
+      "label": "Dismiss error",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#button-008",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 481,
+      "kind": "button",
+      "label": "New wine list",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#button-009",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 496,
+      "kind": "button",
+      "label": "Create a new list Start from scratch or a template",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#link-001",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 533,
+      "kind": "link",
+      "label": "Show archived lists",
+      "href": "/lists?show_archived=1",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#input-001",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 616,
+      "kind": "input",
+      "label": "Spring 2026 Wine List…",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#textarea-001",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 627,
+      "kind": "textarea",
+      "label": "Description (optional)",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#button-010",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 643,
+      "kind": "button",
+      "label": "Cancel",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/lists/wine-list-landing.tsx#button-011",
+      "source": "src/app/(app)/lists/wine-list-landing.tsx",
+      "line": 650,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-102",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/nav-links.tsx#link-001",
+      "source": "src/app/(app)/nav-links.tsx",
+      "line": 49,
+      "kind": "link",
+      "label": "{dynamic}",
+      "href": "href",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-231",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/nav-links.tsx#link-002",
+      "source": "src/app/(app)/nav-links.tsx",
+      "line": 82,
+      "kind": "link",
+      "label": "{dynamic}",
+      "href": "href",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-231",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/onboarding-modal.tsx#input-001",
+      "source": "src/app/(app)/onboarding-modal.tsx",
+      "line": 68,
+      "kind": "input",
+      "label": "Tartine Cellar…",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-228",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/onboarding-modal.tsx#button-001",
+      "source": "src/app/(app)/onboarding-modal.tsx",
+      "line": 80,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-228",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/price-comparison/export-csv-button.tsx#button-001",
+      "source": "src/app/(app)/price-comparison/export-csv-button.tsx",
+      "line": 79,
+      "kind": "button",
+      "label": "Download price comparison as CSV",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-165",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/price-comparison/page.tsx#link-001",
+      "source": "src/app/(app)/price-comparison/page.tsx",
+      "line": 288,
+      "kind": "link",
+      "label": "Go to scanner",
+      "href": "/scan",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-165",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/price-comparison/page.tsx#link-002",
+      "source": "src/app/(app)/price-comparison/page.tsx",
+      "line": 349,
+      "kind": "link",
+      "label": "`View top savings opportunity: ${comparable[0].wine.producer",
+      "href": "`/cellar?wine=${comparable[0].wine.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-165",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/price-comparison/page.tsx#link-003",
+      "source": "src/app/(app)/price-comparison/page.tsx",
+      "line": 428,
+      "kind": "link",
+      "label": "`View ${comp.wine.producer",
+      "href": "`/cellar?wine=${comp.wine.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-165",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/price-comparison/page.tsx#link-004",
+      "source": "src/app/(app)/price-comparison/page.tsx",
+      "line": 564,
+      "kind": "link",
+      "label": "`View ${comp.wine.producer",
+      "href": "`/cellar?wine=${comp.wine.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-165",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/price-comparison/page.tsx#link-005",
+      "source": "src/app/(app)/price-comparison/page.tsx",
+      "line": 691,
+      "kind": "link",
+      "label": "`View ${comp.wine.producer",
+      "href": "`/cellar?wine=${comp.wine.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-165",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/price-comparison/page.tsx#link-006",
+      "source": "src/app/(app)/price-comparison/page.tsx",
+      "line": 766,
+      "kind": "link",
+      "label": "`View ${comp.wine.producer",
+      "href": "`/cellar?wine=${comp.wine.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-165",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/price-comparison/sort-controls.tsx#button-001",
+      "source": "src/app/(app)/price-comparison/sort-controls.tsx",
+      "line": 22,
+      "kind": "button",
+      "label": "Variance {dynamic} )}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-165",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-001",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 450,
+      "kind": "button",
+      "label": "End session",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-002",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 508,
+      "kind": "button",
+      "label": "Start new session",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-003",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 541,
+      "kind": "button",
+      "label": "Enter code manually",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-004",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 569,
+      "kind": "button",
+      "label": "Enter code",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#form-001",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 583,
+      "kind": "form",
+      "label": "form at src/app/(app)/scan-bottle/page.tsx:583",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#input-001",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 591,
+      "kind": "input",
+      "label": "Enter the code from the bottle label",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-005",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 606,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-006",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 615,
+      "kind": "button",
+      "label": "Use camera instead",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-007",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 674,
+      "kind": "button",
+      "label": "Correct",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-008",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 685,
+      "kind": "button",
+      "label": "Confirm",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#input-002",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 710,
+      "kind": "input",
+      "label": "Search by producer, name, or vintage...",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-009",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 737,
+      "kind": "button",
+      "label": "{dynamic} {dynamic} {dynamic} {dynamic} {dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-010",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 773,
+      "kind": "button",
+      "label": "Cancel",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#form-002",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 799,
+      "kind": "form",
+      "label": "form at src/app/(app)/scan-bottle/page.tsx:799",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#input-003",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 807,
+      "kind": "input",
+      "label": "e.g. \"Red Room\", \"Main Cellar\"",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#input-004",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 825,
+      "kind": "input",
+      "label": "e.g. \"A-12\", \"Shelf 3, Row 5\"",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-011",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 836,
+      "kind": "button",
+      "label": "Back",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-012",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 844,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-013",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 883,
+      "kind": "button",
+      "label": "Scan another bottle",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-014",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 892,
+      "kind": "button",
+      "label": "End session ({dynamic} scanned)",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-015",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 927,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-016",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 945,
+      "kind": "button",
+      "label": "Edit location",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan-bottle/page.tsx#button-017",
+      "source": "src/app/(app)/scan-bottle/page.tsx",
+      "line": 957,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-057",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/[id]/components/re-extract-button.tsx#button-001",
+      "source": "src/app/(app)/scan/[id]/components/re-extract-button.tsx",
+      "line": 97,
+      "kind": "button",
+      "label": "Re-run Claude extraction on the stored OCR text",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/[id]/scan-detail-view.tsx#link-001",
+      "source": "src/app/(app)/scan/[id]/scan-detail-view.tsx",
+      "line": 100,
+      "kind": "link",
+      "label": "Back to scan history",
+      "href": "/scans",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/[id]/scan-detail-view.tsx#button-001",
+      "source": "src/app/(app)/scan/[id]/scan-detail-view.tsx",
+      "line": 112,
+      "kind": "button",
+      "label": "Download line items as CSV",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/[id]/scan-detail-view.tsx#button-002",
+      "source": "src/app/(app)/scan/[id]/scan-detail-view.tsx",
+      "line": 188,
+      "kind": "button",
+      "label": "OCR text",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/[id]/scan-detail-view.tsx#a-001",
+      "source": "src/app/(app)/scan/[id]/scan-detail-view.tsx",
+      "line": 227,
+      "kind": "link",
+      "label": "`Open full-resolution invoice from ${distributor",
+      "href": "imageUrl",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/[id]/scan-detail-view.tsx#a-002",
+      "source": "src/app/(app)/scan/[id]/scan-detail-view.tsx",
+      "line": 244,
+      "kind": "link",
+      "label": "Open full size",
+      "href": "imageUrl",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/[id]/scan-detail-view.tsx#link-002",
+      "source": "src/app/(app)/scan/[id]/scan-detail-view.tsx",
+      "line": 427,
+      "kind": "link",
+      "label": "{dynamic}",
+      "href": "`/cellar?wine=${ii.wine_id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/[id]/scan-detail-view.tsx#link-003",
+      "source": "src/app/(app)/scan/[id]/scan-detail-view.tsx",
+      "line": 458,
+      "kind": "link",
+      "label": "{dynamic} {dynamic} {dynamic} {dynamic} ×{dynamic} {dynamic}` : \"—\"} {dynamic}` : \"—\"}",
+      "href": "`/cellar?wine=${ii.wine_id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/components/field-inputs.tsx#input-001",
+      "source": "src/app/(app)/scan/components/field-inputs.tsx",
+      "line": 68,
+      "kind": "input",
+      "label": "label",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/components/field-inputs.tsx#input-002",
+      "source": "src/app/(app)/scan/components/field-inputs.tsx",
+      "line": 110,
+      "kind": "input",
+      "label": "Vintage",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/components/field-inputs.tsx#input-003",
+      "source": "src/app/(app)/scan/components/field-inputs.tsx",
+      "line": 149,
+      "kind": "input",
+      "label": "Unit cost",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/components/field-inputs.tsx#button-001",
+      "source": "src/app/(app)/scan/components/field-inputs.tsx",
+      "line": 169,
+      "kind": "button",
+      "label": "Decrease quantity",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/components/field-inputs.tsx#button-002",
+      "source": "src/app/(app)/scan/components/field-inputs.tsx",
+      "line": 180,
+      "kind": "button",
+      "label": "Increase quantity",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/components/line-item-card.tsx#button-001",
+      "source": "src/app/(app)/scan/components/line-item-card.tsx",
+      "line": 68,
+      "kind": "button",
+      "label": "`Remove ${item.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/components/scan-review.tsx#link-001",
+      "source": "src/app/(app)/scan/components/scan-review.tsx",
+      "line": 246,
+      "kind": "link",
+      "label": "Back to scanner",
+      "href": "/scan",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/components/scan-review.tsx#button-001",
+      "source": "src/app/(app)/scan/components/scan-review.tsx",
+      "line": 258,
+      "kind": "button",
+      "label": "Download line items as CSV",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/components/scan-review.tsx#a-001",
+      "source": "src/app/(app)/scan/components/scan-review.tsx",
+      "line": 321,
+      "kind": "link",
+      "label": "`Open full-resolution invoice from ${distributor",
+      "href": "imageUrl",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/components/scan-review.tsx#a-002",
+      "source": "src/app/(app)/scan/components/scan-review.tsx",
+      "line": 337,
+      "kind": "link",
+      "label": "Open full size",
+      "href": "imageUrl",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/components/scan-review.tsx#button-002",
+      "source": "src/app/(app)/scan/components/scan-review.tsx",
+      "line": 389,
+      "kind": "button",
+      "label": "`Remove ${it.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/components/scan-review.tsx#button-003",
+      "source": "src/app/(app)/scan/components/scan-review.tsx",
+      "line": 421,
+      "kind": "button",
+      "label": "{dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/components/scan-review.tsx#button-004",
+      "source": "src/app/(app)/scan/components/scan-review.tsx",
+      "line": 430,
+      "kind": "button",
+      "label": "{dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/bottle-results-view.tsx#button-001",
+      "source": "src/app/(app)/scan/views/bottle-results-view.tsx",
+      "line": 166,
+      "kind": "button",
+      "label": "Scan another",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/bottle-results-view.tsx#button-002",
+      "source": "src/app/(app)/scan/views/bottle-results-view.tsx",
+      "line": 174,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/confidence-gate.tsx#button-001",
+      "source": "src/app/(app)/scan/views/confidence-gate.tsx",
+      "line": 35,
+      "kind": "button",
+      "label": "Review AI results",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/confidence-gate.tsx#button-002",
+      "source": "src/app/(app)/scan/views/confidence-gate.tsx",
+      "line": 42,
+      "kind": "button",
+      "label": "Enter manually",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/error-view.tsx#button-001",
+      "source": "src/app/(app)/scan/views/error-view.tsx",
+      "line": 24,
+      "kind": "button",
+      "label": "Retry with same photo",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/error-view.tsx#button-002",
+      "source": "src/app/(app)/scan/views/error-view.tsx",
+      "line": 34,
+      "kind": "button",
+      "label": "New photo",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/error-view.tsx#button-003",
+      "source": "src/app/(app)/scan/views/error-view.tsx",
+      "line": 42,
+      "kind": "button",
+      "label": "Enter manually",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/ready-view.tsx#link-001",
+      "source": "src/app/(app)/scan/views/ready-view.tsx",
+      "line": 21,
+      "kind": "link",
+      "label": "View all",
+      "href": "/scans",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/ready-view.tsx#link-002",
+      "source": "src/app/(app)/scan/views/ready-view.tsx",
+      "line": 24,
+      "kind": "link",
+      "label": "{dynamic} {dynamic}% {dynamic} {dynamic} wines · ${dynamic}",
+      "href": "`/scan/${s.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/ready-view.tsx#button-001",
+      "source": "src/app/(app)/scan/views/ready-view.tsx",
+      "line": 85,
+      "kind": "button",
+      "label": "Invoice",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/ready-view.tsx#button-002",
+      "source": "src/app/(app)/scan/views/ready-view.tsx",
+      "line": 98,
+      "kind": "button",
+      "label": "Bottle",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/ready-view.tsx#link-003",
+      "source": "src/app/(app)/scan/views/ready-view.tsx",
+      "line": 134,
+      "kind": "link",
+      "label": "Add to wine list",
+      "href": "/lists",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/ready-view.tsx#button-003",
+      "source": "src/app/(app)/scan/views/ready-view.tsx",
+      "line": 142,
+      "kind": "button",
+      "label": "Dismiss",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/ready-view.tsx#button-004",
+      "source": "src/app/(app)/scan/views/ready-view.tsx",
+      "line": 153,
+      "kind": "button",
+      "label": "{dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/ready-view.tsx#button-005",
+      "source": "src/app/(app)/scan/views/ready-view.tsx",
+      "line": 170,
+      "kind": "button",
+      "label": "Take photo",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/ready-view.tsx#button-006",
+      "source": "src/app/(app)/scan/views/ready-view.tsx",
+      "line": 178,
+      "kind": "button",
+      "label": "Upload file",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/ready-view.tsx#input-001",
+      "source": "src/app/(app)/scan/views/ready-view.tsx",
+      "line": 188,
+      "kind": "input",
+      "label": "input at src/app/(app)/scan/views/ready-view.tsx:188",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/ready-view.tsx#input-002",
+      "source": "src/app/(app)/scan/views/ready-view.tsx",
+      "line": 196,
+      "kind": "input",
+      "label": "input at src/app/(app)/scan/views/ready-view.tsx:196",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/results-view.tsx#button-001",
+      "source": "src/app/(app)/scan/views/results-view.tsx",
+      "line": 138,
+      "kind": "button",
+      "label": "Raw invoice text",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/results-view.tsx#button-002",
+      "source": "src/app/(app)/scan/views/results-view.tsx",
+      "line": 178,
+      "kind": "button",
+      "label": "Clear",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/results-view.tsx#input-001",
+      "source": "src/app/(app)/scan/views/results-view.tsx",
+      "line": 198,
+      "kind": "input",
+      "label": "Supplier name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/results-view.tsx#input-002",
+      "source": "src/app/(app)/scan/views/results-view.tsx",
+      "line": 210,
+      "kind": "input",
+      "label": "Invoice number",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/results-view.tsx#input-003",
+      "source": "src/app/(app)/scan/views/results-view.tsx",
+      "line": 221,
+      "kind": "input",
+      "label": "Delivery date",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/results-view.tsx#button-003",
+      "source": "src/app/(app)/scan/views/results-view.tsx",
+      "line": 329,
+      "kind": "button",
+      "label": "`Remove ${it.name",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/results-view.tsx#button-004",
+      "source": "src/app/(app)/scan/views/results-view.tsx",
+      "line": 369,
+      "kind": "button",
+      "label": "Scan another Scan",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/results-view.tsx#button-005",
+      "source": "src/app/(app)/scan/views/results-view.tsx",
+      "line": 379,
+      "kind": "button",
+      "label": "Export as CSV",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/results-view.tsx#button-006",
+      "source": "src/app/(app)/scan/views/results-view.tsx",
+      "line": 388,
+      "kind": "button",
+      "label": "Export accuracy JSON (source + items + per-field edits)",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scan/views/results-view.tsx#button-007",
+      "source": "src/app/(app)/scan/views/results-view.tsx",
+      "line": 398,
+      "kind": "button",
+      "label": "{dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scans/export-csv-button.tsx#button-001",
+      "source": "src/app/(app)/scans/export-csv-button.tsx",
+      "line": 61,
+      "kind": "button",
+      "label": "Download this page of scan history as CSV",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scans/page.tsx#link-001",
+      "source": "src/app/(app)/scans/page.tsx",
+      "line": 148,
+      "kind": "link",
+      "label": "`${f.label",
+      "href": "`/scans${buildQuery({ status: f.value",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scans/page.tsx#link-002",
+      "source": "src/app/(app)/scans/page.tsx",
+      "line": 177,
+      "kind": "link",
+      "label": "Back to scanner",
+      "href": "/scan",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scans/page.tsx#link-003",
+      "source": "src/app/(app)/scans/page.tsx",
+      "line": 228,
+      "kind": "link",
+      "label": "Scan an invoice",
+      "href": "/scan",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scans/page.tsx#link-004",
+      "source": "src/app/(app)/scans/page.tsx",
+      "line": 277,
+      "kind": "link",
+      "label": "{dynamic}",
+      "href": "`/scan/${s.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scans/page.tsx#link-005",
+      "source": "src/app/(app)/scans/page.tsx",
+      "line": 287,
+      "kind": "link",
+      "label": "{dynamic}",
+      "href": "`/scan/${s.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scans/page.tsx#link-006",
+      "source": "src/app/(app)/scans/page.tsx",
+      "line": 295,
+      "kind": "link",
+      "label": "{dynamic}",
+      "href": "`/scan/${s.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scans/page.tsx#link-007",
+      "source": "src/app/(app)/scans/page.tsx",
+      "line": 303,
+      "kind": "link",
+      "label": "{dynamic}",
+      "href": "`/scan/${s.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scans/page.tsx#link-008",
+      "source": "src/app/(app)/scans/page.tsx",
+      "line": 311,
+      "kind": "link",
+      "label": "{dynamic}",
+      "href": "`/scan/${s.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scans/page.tsx#link-009",
+      "source": "src/app/(app)/scans/page.tsx",
+      "line": 320,
+      "kind": "link",
+      "label": "{dynamic}%` : \"—\"}",
+      "href": "`/scan/${s.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scans/page.tsx#link-010",
+      "source": "src/app/(app)/scans/page.tsx",
+      "line": 337,
+      "kind": "link",
+      "label": "{dynamic} {dynamic} {dynamic} )} {dynamic} {dynamic}",
+      "href": "`/scan/${s.id",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scans/page.tsx#link-011",
+      "source": "src/app/(app)/scans/page.tsx",
+      "line": 381,
+      "kind": "link",
+      "label": "Previous",
+      "href": "`/scans${buildQuery({ page: page - 1, status",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/scans/page.tsx#link-012",
+      "source": "src/app/(app)/scans/page.tsx",
+      "line": 398,
+      "kind": "link",
+      "label": "Next",
+      "href": "`/scans${buildQuery({ page: page + 1, status",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-030",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/settings-dropdown.tsx#button-001",
+      "source": "src/app/(app)/settings-dropdown.tsx",
+      "line": 225,
+      "kind": "button",
+      "label": "Settings",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-231",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/settings-dropdown.tsx#button-002",
+      "source": "src/app/(app)/settings-dropdown.tsx",
+      "line": 263,
+      "kind": "button",
+      "label": "{dynamic} {dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-231",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/settings-dropdown.tsx#link-001",
+      "source": "src/app/(app)/settings-dropdown.tsx",
+      "line": 320,
+      "kind": "link",
+      "label": "Pricing",
+      "href": "/price-comparison",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-231",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/settings-dropdown.tsx#link-002",
+      "source": "src/app/(app)/settings-dropdown.tsx",
+      "line": 333,
+      "kind": "link",
+      "label": "Team",
+      "href": "/team",
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-231",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/settings-dropdown.tsx#form-001",
+      "source": "src/app/(app)/settings-dropdown.tsx",
+      "line": 347,
+      "kind": "form",
+      "label": "form at src/app/(app)/settings-dropdown.tsx:347",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-231",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/settings-dropdown.tsx#button-003",
+      "source": "src/app/(app)/settings-dropdown.tsx",
+      "line": 348,
+      "kind": "button",
+      "label": "Sign out",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-231",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/team/team-actions.tsx#button-001",
+      "source": "src/app/(app)/team/team-actions.tsx",
+      "line": 517,
+      "kind": "button",
+      "label": "Create invite link",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-016",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/team/team-actions.tsx#button-002",
+      "source": "src/app/(app)/team/team-actions.tsx",
+      "line": 543,
+      "kind": "button",
+      "label": "Dismiss error",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-016",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/team/team-actions.tsx#select-001",
+      "source": "src/app/(app)/team/team-actions.tsx",
+      "line": 582,
+      "kind": "select",
+      "label": "select at src/app/(app)/team/team-actions.tsx:582",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-016",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/team/team-actions.tsx#button-003",
+      "source": "src/app/(app)/team/team-actions.tsx",
+      "line": 609,
+      "kind": "button",
+      "label": "Remove team member",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-016",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/team/team-actions.tsx#button-004",
+      "source": "src/app/(app)/team/team-actions.tsx",
+      "line": 712,
+      "kind": "button",
+      "label": "`Copy invite link for ${inv.email ?? \"invitation\"",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-016",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/team/team-actions.tsx#button-005",
+      "source": "src/app/(app)/team/team-actions.tsx",
+      "line": 733,
+      "kind": "button",
+      "label": "`Resend invitation for ${inv.email ?? \"invitation\"",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-016",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/team/team-actions.tsx#button-006",
+      "source": "src/app/(app)/team/team-actions.tsx",
+      "line": 747,
+      "kind": "button",
+      "label": "`Revoke invitation for ${inv.email ?? \"invitation\"",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-016",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/team/team-actions.tsx#input-001",
+      "source": "src/app/(app)/team/team-actions.tsx",
+      "line": 877,
+      "kind": "input",
+      "label": "teammate@restaurant.com",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-016",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/team/team-actions.tsx#select-002",
+      "source": "src/app/(app)/team/team-actions.tsx",
+      "line": 907,
+      "kind": "select",
+      "label": "select at src/app/(app)/team/team-actions.tsx:907",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-016",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/team/team-actions.tsx#button-007",
+      "source": "src/app/(app)/team/team-actions.tsx",
+      "line": 936,
+      "kind": "button",
+      "label": "Cancel",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-016",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/team/team-actions.tsx#button-008",
+      "source": "src/app/(app)/team/team-actions.tsx",
+      "line": 943,
+      "kind": "button",
+      "label": "{dynamic} Generate link",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-016",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/team/team-actions.tsx#button-009",
+      "source": "src/app/(app)/team/team-actions.tsx",
+      "line": 972,
+      "kind": "button",
+      "label": "Done",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-016",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/team/team-actions.tsx#button-010",
+      "source": "src/app/(app)/team/team-actions.tsx",
+      "line": 979,
+      "kind": "button",
+      "label": "{dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-016",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/auth/complete/page.tsx#a-001",
+      "source": "src/app/auth/complete/page.tsx",
+      "line": 60,
+      "kind": "link",
+      "label": "Back to sign in",
+      "href": "/login",
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/auth/reset-password/page.tsx#form-001",
+      "source": "src/app/auth/reset-password/page.tsx",
+      "line": 76,
+      "kind": "form",
+      "label": "form at src/app/auth/reset-password/page.tsx:76",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/auth/reset-password/page.tsx#input-001",
+      "source": "src/app/auth/reset-password/page.tsx",
+      "line": 81,
+      "kind": "input",
+      "label": "At least 6 characters",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/auth/reset-password/page.tsx#input-002",
+      "source": "src/app/auth/reset-password/page.tsx",
+      "line": 97,
+      "kind": "input",
+      "label": "Same password again",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/global-error.tsx#a-001",
+      "source": "src/app/global-error.tsx",
+      "line": 90,
+      "kind": "link",
+      "label": "Back to home",
+      "href": "/",
+      "actors": [
+        "owner",
+        "manager",
+        "staff",
+        "guest"
+      ],
+      "requirementId": "TER-CF-228",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/invite/[token]/page.tsx#button-001",
+      "source": "src/app/invite/[token]/page.tsx",
+      "line": 128,
+      "kind": "button",
+      "label": "{dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff",
+        "guest"
+      ],
+      "requirementId": "TER-CF-016",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/magic-link-submit.tsx#button-001",
+      "source": "src/app/login/magic-link-submit.tsx",
+      "line": 12,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/magic-link-submit.tsx#button-002",
+      "source": "src/app/login/magic-link-submit.tsx",
+      "line": 36,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/magic-link-submit.tsx#button-003",
+      "source": "src/app/login/magic-link-submit.tsx",
+      "line": 60,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#form-001",
+      "source": "src/app/login/page.tsx",
+      "line": 139,
+      "kind": "form",
+      "label": "form at src/app/login/page.tsx:139",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#input-001",
+      "source": "src/app/login/page.tsx",
+      "line": 144,
+      "kind": "input",
+      "label": "you@restaurant.com…",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#a-001",
+      "source": "src/app/login/page.tsx",
+      "line": 159,
+      "kind": "link",
+      "label": "Back to sign in",
+      "href": "/login",
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#form-002",
+      "source": "src/app/login/page.tsx",
+      "line": 167,
+      "kind": "form",
+      "label": "form at src/app/login/page.tsx:167",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#input-002",
+      "source": "src/app/login/page.tsx",
+      "line": 173,
+      "kind": "input",
+      "label": "you@restaurant.com…",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#a-002",
+      "source": "src/app/login/page.tsx",
+      "line": 188,
+      "kind": "link",
+      "label": "Forgot password?",
+      "href": "/login?forgot=1",
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#a-003",
+      "source": "src/app/login/page.tsx",
+      "line": 202,
+      "kind": "link",
+      "label": "Sign in as {dynamic}",
+      "href": "/api/dev-login",
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    }
+  ]
+}

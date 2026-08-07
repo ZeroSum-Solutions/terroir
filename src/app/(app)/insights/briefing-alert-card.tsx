@@ -33,9 +33,9 @@ const drinkWindowAlertCommands = createIdempotentCommandStore({
  *
  * Actions:
  *   • View bottles → deep-link to /cellar?wine={id} (Cellar opens drawer)
- *   • Add to menu → disabled stub for v1.5 (the menu-pairing feature)
- *   • Add to staff briefing → disabled stub for v1.5
  *   • Snooze 30 days → POST /api/wines/{id}/snooze-alert + refresh
+ * TER-030 and TER-031 will add the menu and staff-briefing actions once
+ * those workflows are functional; unfinished actions are not rendered.
  */
 
 // Type re-export for back-compat. The canonical shape lives in
@@ -142,14 +142,6 @@ export function BriefingAlertCard({
               View {alert.bottle_count} bottle{alert.bottle_count === 1 ? "" : "s"}
               <ChevronRight className="h-4 w-4" strokeWidth={2} aria-hidden />
             </Link>
-            <button
-              type="button"
-              disabled
-              title="Menu pairing flow ships in v1.5"
-              className="h-[38px] rounded-sm border border-border bg-bg-tertiary px-md text-[13px] font-medium text-ink-subtle"
-            >
-              Add to menu
-            </button>
             <button
               type="button"
               disabled={busy}

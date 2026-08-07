@@ -73,6 +73,9 @@ jobs:
       - name: API contract verification
         run: pnpm run verify:api-contract
 
+      - name: Visible-control inventory and placeholder gate
+        run: pnpm run verify:ui-controls
+
       - name: Typecheck
         run: pnpm exec tsc --noEmit
 
