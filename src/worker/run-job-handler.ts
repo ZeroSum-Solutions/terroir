@@ -27,7 +27,7 @@ function validateResult(result: JobResult): JobResult {
       "Background job returned a non-serializable result",
     );
   }
-  if (serialized.length > 900_000) {
+  if (Buffer.byteLength(serialized, "utf8") > 900_000) {
     throw new JobExecutionError(
       "invalid_job_result",
       false,

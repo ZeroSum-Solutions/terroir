@@ -215,6 +215,25 @@ describe("worker runtime", () => {
     });
   });
 
+  it("rejects multibyte results by encoded size before the database boundary", async () => {
+    const store = new FakeStore();
+    store.claims.push([job()]);
+    const runtime = new WorkerRuntime(
+      config(),
+      store,
+      { wine_list_pdf: async () => ({ content: "\u{1F377}".repeat(230_000) }) },
+      telemetry().sink,
+    );
+
+    await runtime.pollOnce();
+    expect(await runtime.waitForIdle()).toBe(true);
+    expect(store.completions).toEqual([]);
+    expect(store.failures[0].failure).toMatchObject({
+      code: "invalid_job_result",
+      retryable: false,
+    });
+  });
+
   it("drains, then aborts overdue work into a retryable shutdown", async () => {
     vi.useFakeTimers();
     const store = new FakeStore();
