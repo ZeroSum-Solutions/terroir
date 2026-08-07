@@ -337,9 +337,14 @@ describe("failure evidence redaction", () => {
     );
     expect(workflow).not.toContain("playwright install --with-deps");
     expect(workflow).toMatch(
-      /Encrypt browser evidence[\s\S]*?age -r[\s\S]*?rm -rf playwright-report test-results\/playwright[\s\S]*?Retain browser failure evidence[\s\S]*?if: always\(\)/,
+      /Encrypt browser evidence[\s\S]*?id: encrypt_evidence[\s\S]*?rm -f "\$archive" "\$encrypted" "\$encrypted\.sha256"[\s\S]*?age -r[\s\S]*?sha256sum "\$encrypted"[\s\S]*?rm -rf playwright-report test-results\/playwright/,
     );
-    expect(workflow).toContain("path: test-results/isolated-e2e-");
+    expect(workflow).toContain(
+      "if: ${{ always() && steps.encrypt_evidence.outcome == 'success' }}",
+    );
+    expect(workflow).toContain(
+      "test-results/isolated-e2e-${{ matrix.slot }}.tar.gz.age",
+    );
   });
 
   test("retains trace and video only inside encrypted workflow evidence", () => {

@@ -93,6 +93,7 @@ jobs:
         run: pnpm run test:e2e:isolated
 
       - name: Encrypt browser evidence
+        id: encrypt_evidence
         if: always()
         shell: bash
         run: |
@@ -108,16 +109,22 @@ jobs:
           archive="$RUNNER_TEMP/isolated-e2e-${{ matrix.slot }}.tar.gz"
           encrypted="test-results/isolated-e2e-${{ matrix.slot }}.tar.gz.age"
           mkdir -p test-results
+          rm -f "$archive" "$encrypted" "$encrypted.sha256"
           tar -czf "$archive" playwright-report/ test-results/playwright/
           age -r "$E2E_EVIDENCE_AGE_RECIPIENT" -o "$encrypted" "$archive"
+          test -s "$encrypted"
+          head -n 1 "$encrypted" | grep -Fx 'age-encryption.org/v1'
+          sha256sum "$encrypted" > "$encrypted.sha256"
           rm -f "$archive"
           rm -rf playwright-report test-results/playwright
 
       - name: Retain browser failure evidence
-        if: always()
+        if: ${{ always() && steps.encrypt_evidence.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: isolated-e2e-${{ github.run_id }}-${{ matrix.slot }}
-          path: test-results/isolated-e2e-${{ matrix.slot }}.tar.gz.age
+          path: |
+            test-results/isolated-e2e-${{ matrix.slot }}.tar.gz.age
+            test-results/isolated-e2e-${{ matrix.slot }}.tar.gz.age.sha256
           if-no-files-found: error
           retention-days: 14
