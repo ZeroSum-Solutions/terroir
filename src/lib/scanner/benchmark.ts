@@ -14,6 +14,18 @@ const MetricSchema = z.enum([
 
 export type ScannerQualityMetric = z.infer<typeof MetricSchema>;
 
+const QualityMetricsSchema = z.object({
+  producerExact: z.number().min(0).max(1),
+  cuveeExact: z.number().min(0).max(1),
+  vintageExact: z.number().min(0).max(1),
+  formatExact: z.number().min(0).max(1),
+  quantityExact: z.number().min(0).max(1),
+  costExact: z.number().min(0).max(1),
+  invoiceLineRecall: z.number().min(0).max(1),
+  invoiceLinePrecision: z.number().min(0).max(1),
+  lineAssociationExact: z.number().min(0).max(1),
+}).strict();
+
 const BenchmarkLineSchema = z.object({
   associationId: z.string().min(1),
   producer: z.string(),
@@ -101,7 +113,7 @@ export const ScannerThresholdsSchema = z.object({
     source: z.string().min(1),
     note: z.string().min(1),
   }),
-  qualityFloors: z.record(MetricSchema, z.number().min(0).max(1)),
+  qualityFloors: QualityMetricsSchema,
   maximumUnreviewedLowConfidenceCommits: z.number().int().nonnegative(),
   lowConfidenceCutoff: z.number().min(0).max(1),
   latency: z.object({
@@ -150,7 +162,7 @@ export const ScannerBenchmarkReportSchema: z.ZodType<ScannerBenchmarkReport> =
     corpusId: z.string().min(1),
     fixtureRevision: z.string().min(1),
     caseCount: z.number().int().positive(),
-    quality: z.record(MetricSchema, z.number().min(0).max(1)),
+    quality: QualityMetricsSchema,
     counts: z.object({
       expectedInvoiceLines: z.number().int().nonnegative(),
       observedInvoiceLines: z.number().int().nonnegative(),
@@ -372,9 +384,12 @@ function thresholdViolations(
 export function evaluateScannerBenchmark(
   corpusInput: unknown,
   thresholdInput: unknown,
-  baseline?: ScannerBenchmarkReport,
+  baselineInput?: unknown,
 ): ScannerBenchmarkEvaluation {
   const thresholds = ScannerThresholdsSchema.parse(thresholdInput);
+  const baseline = baselineInput === undefined
+    ? undefined
+    : ScannerBenchmarkReportSchema.parse(baselineInput);
   const report = scoreScannerBenchmark(corpusInput, thresholds.lowConfidenceCutoff);
   const violations = thresholdViolations(report, thresholds);
 

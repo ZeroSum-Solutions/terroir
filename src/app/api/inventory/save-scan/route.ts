@@ -18,6 +18,7 @@ import {
 } from "@/lib/api/validation";
 import { SaveInvoiceScanBodySchema } from "@/lib/scanner/request-schemas";
 import { SCORED_FIELDS } from "@/lib/scanner/scored-fields";
+import { LOW_CONFIDENCE_ITEM_THRESHOLD } from "@/lib/scanner/scoring";
 import type { LineItem, Scan } from "@/lib/scanner/types";
 import type { Database, Json } from "@/types/database";
 
@@ -103,7 +104,7 @@ async function postInvoiceInventorySave(request: NextRequest) {
 
   const requiresLowConfidenceReview = scan.items.some(
     (item) =>
-      item.confidence < 0.75 ||
+      item.confidence < LOW_CONFIDENCE_ITEM_THRESHOLD ||
       (item.lowFields !== undefined && item.lowFields.length > 0),
   );
   if (requiresLowConfidenceReview && !scan.reviewedLowConfidence) {

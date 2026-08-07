@@ -424,6 +424,50 @@ describe("POST /api/scan-bottle", () => {
     );
   });
 
+  it("classifies non-400 provider input failures as non-retryable bad input", async () => {
+    const supabase = makeSupabase({ data: null, error: null });
+    allow(supabase);
+    const badInput = new Anthropic.APIError(
+      413,
+      {},
+      "secret oversized provider payload",
+      new Headers(),
+    );
+    mockGetAnthropicClient.mockReturnValue({
+      messages: { parse: vi.fn().mockRejectedValue(badInput) },
+    });
+    const form = new FormData();
+    form.append(
+      "file",
+      new File(["label"], "label.jpg", { type: "image/jpeg" }),
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/scan-bottle", {
+        method: "POST",
+        headers: { "Idempotency-Key": "provider_bad_input_ter022" },
+        body: form,
+      }) as unknown as NextRequest,
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(text)).toEqual({
+      error: {
+        code: "bad_request",
+        message:
+          "Could not process this photo. Try a different angle or better lighting.",
+      },
+    });
+    expect(text).not.toContain("secret");
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      badInput,
+      expect.objectContaining({
+        extra: { failure_kind: "bad_input", retryable: false },
+      }),
+    );
+  });
+
   it("rejects a malformed label key before provider initialization", async () => {
     const supabase = makeSupabase({ data: null, error: null });
     allow(supabase);

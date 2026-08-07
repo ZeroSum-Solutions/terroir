@@ -22,6 +22,7 @@ import {
 } from "@/lib/api/idempotency-client";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
 import { SCORED_FIELDS } from "@/lib/scanner/scored-fields";
+import { LOW_CONFIDENCE_ITEM_THRESHOLD } from "@/lib/scanner/scoring";
 import type { LineItem, LineItemField } from "@/lib/scanner/types";
 import { MoneyInput, QtyStepper, TextInput, VintageInput } from "./field-inputs";
 import { LineItemCard } from "./line-item-card";
@@ -156,7 +157,7 @@ export function ScanReview({
     }
     const hasLowConfidence = items.some(
       (item) =>
-        item.confidence < 0.75 ||
+        item.confidence < LOW_CONFIDENCE_ITEM_THRESHOLD ||
         (item.lowFields !== undefined && item.lowFields.length > 0),
     );
     const confirmation = hasLowConfidence

@@ -2,6 +2,7 @@
 
 import { AlertTriangle, RotateCcw, Save } from "lucide-react";
 import { useCallback, useState } from "react";
+import { LOW_CONFIDENCE_ITEM_THRESHOLD } from "@/lib/scanner/scoring";
 import type { BottleScanResult } from "@/lib/scanner/types";
 import {
   TextInput,
@@ -40,7 +41,7 @@ export function BottleResultsView({
   const [qty, setQty] = useState(1);
   const [unitCost, setUnitCost] = useState(0);
 
-  const lowConfidence = result.confidence < 0.75;
+  const lowConfidence = result.confidence < LOW_CONFIDENCE_ITEM_THRESHOLD;
 
   const handleSave = useCallback(() => {
     if (!name.trim() || !producer.trim()) return;
@@ -86,7 +87,7 @@ export function BottleResultsView({
           <span className={`rounded-pill px-sm py-2xs font-mono text-[12px] font-medium ${
             result.confidence >= 0.9
               ? "bg-success-soft text-success"
-              : result.confidence >= 0.75
+              : result.confidence >= LOW_CONFIDENCE_ITEM_THRESHOLD
                 ? "bg-surface-muted text-ink-muted"
                 : "bg-warning-soft text-warning"
           }`}>

@@ -225,6 +225,22 @@ async function postBottleScan(request: NextRequest) {
             },
           };
         }
+        if (failure.kind === "bad_input") {
+          Sentry.captureException(error, {
+            tags: { surface: "scanner", phase: "claude-call" },
+            extra: { failure_kind: failure.kind, retryable: failure.retryable },
+          });
+          return {
+            status: 400,
+            body: {
+              error: {
+                code: "bad_request",
+                message:
+                  "Could not process this photo. Try a different angle or better lighting.",
+              },
+            },
+          };
+        }
         if (
           error instanceof Anthropic.APIError ||
           failure.kind === "unavailable"
@@ -232,8 +248,8 @@ async function postBottleScan(request: NextRequest) {
           Sentry.captureException(error, {
             tags: { surface: "scanner", phase: "claude-call" },
             extra: {
-              failure_kind: "unavailable",
-              retryable: true,
+              failure_kind: failure.kind,
+              retryable: failure.retryable,
             },
           });
           return {

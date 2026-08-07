@@ -38,7 +38,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Score synthetic fixtures
-        run: node --experimental-strip-types scripts/score-scanner-fixtures.ts | tee scanner-score.json
+        shell: bash
+        run: |
+          set -o pipefail
+          node --experimental-strip-types scripts/score-scanner-fixtures.ts | tee scanner-score.json
 
       - name: Upload scoring evidence
         uses: actions/upload-artifact@v4

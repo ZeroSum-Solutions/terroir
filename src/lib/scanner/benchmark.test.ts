@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   evaluateScannerBenchmark,
   ScannerBenchmarkCorpusSchema,
+  ScannerThresholdsSchema,
   type ScannerBenchmarkCorpus,
   type ScannerThresholds,
 } from "./benchmark";
@@ -223,5 +224,22 @@ describe("scanner benchmark release gate", () => {
     expect(() => ScannerBenchmarkCorpusSchema.parse(corpus)).toThrow(
       /Duplicate benchmark case id|Duplicate expected association id/,
     );
+  });
+
+  it("rejects threshold and baseline quality maps with missing metric keys", () => {
+    const incompleteThresholds = structuredClone(thresholds()) as unknown as {
+      qualityFloors: Partial<Record<string, number>>;
+    };
+    delete incompleteThresholds.qualityFloors.lineAssociationExact;
+    expect(() => ScannerThresholdsSchema.parse(incompleteThresholds)).toThrow();
+
+    const baseline = evaluateScannerBenchmark(
+      fixtureCorpus(),
+      thresholds(),
+    ).report as unknown as { quality: Partial<Record<string, number>> };
+    delete baseline.quality.costExact;
+    expect(() =>
+      evaluateScannerBenchmark(fixtureCorpus(), thresholds(), baseline),
+    ).toThrow();
   });
 });
