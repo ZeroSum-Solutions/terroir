@@ -15,6 +15,7 @@ import {
   provisionIsolatedFixture,
   type IsolatedFixture,
 } from "./isolated-fixture";
+import { redactBrowserEvidence } from "./evidence";
 
 type IsolatedFixtures = {
   isolatedConfig: IsolatedE2eConfig;
@@ -77,10 +78,13 @@ function observePage(page: Page, testInfo: TestInfo) {
   const serverErrors: Array<Record<string, unknown>> = [];
 
   page.on("console", (message) => {
-    consoleMessages.push({ text: message.text(), type: message.type() });
-    if (message.type() === "error") consoleErrors.push(message.text());
+    const text = redactBrowserEvidence(message.text());
+    consoleMessages.push({ text, type: message.type() });
+    if (message.type() === "error") consoleErrors.push(text);
   });
-  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("pageerror", (error) => {
+    pageErrors.push(redactBrowserEvidence(error.message));
+  });
   page.on("requestfailed", (request) => {
     const failure = request.failure()?.errorText ?? "request failed";
     const record = {

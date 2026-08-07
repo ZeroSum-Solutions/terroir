@@ -8,6 +8,7 @@ import {
   readIsolatedE2eConfig,
 } from "../../../e2e/fixtures/config";
 import { injectFixtureSession } from "../../../e2e/fixtures/isolated-fixture";
+import { redactBrowserEvidence } from "../../../e2e/fixtures/evidence";
 
 const STAGING_REF = "wwhxcgtcecsftcivosop";
 
@@ -211,6 +212,25 @@ describe("fixture helper shipping boundary", () => {
           && /(?:^|[/\\])(?:e2e-)?fixtures?(?:[/\\]|\.)/i.test(file),
       ),
     ).toEqual([]);
+  });
+});
+
+describe("failure evidence redaction", () => {
+  test("removes bearer, Supabase, JWT, and auth-query credentials", () => {
+    const message = [
+      "Bearer top-secret-token",
+      "sb_secret_stagingvalue",
+      jwt({ sub: "fixture-user" }),
+      "https://example.test/callback?token=magic-value&next=/cellar",
+    ].join(" ");
+
+    const redacted = redactBrowserEvidence(message);
+
+    expect(redacted).not.toContain("top-secret-token");
+    expect(redacted).not.toContain("stagingvalue");
+    expect(redacted).not.toContain("fixture-user");
+    expect(redacted).not.toContain("magic-value");
+    expect(redacted).toContain("[redacted]");
   });
 });
 
