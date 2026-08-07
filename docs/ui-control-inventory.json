@@ -6,7 +6,7 @@
     "sourceRoot": "src/app"
   },
   "routeCount": 23,
-  "controlCount": 329,
+  "controlCount": 337,
   "routes": [
     {
       "source": "src/app/page.tsx",
@@ -5538,26 +5538,11 @@
       "unavailableState": null
     },
     {
-      "id": "src/app/auth/complete/page.tsx#a-001",
-      "source": "src/app/auth/complete/page.tsx",
-      "line": 60,
-      "kind": "link",
-      "label": "Back to sign in",
-      "href": "/login",
-      "actors": [
-        "guest"
-      ],
-      "requirementId": "TER-CF-001",
-      "interactionTest": "e2e/ui-control-crawl.test.ts",
-      "transientDisabled": false,
-      "unavailableState": null
-    },
-    {
       "id": "src/app/auth/reset-password/page.tsx#form-001",
       "source": "src/app/auth/reset-password/page.tsx",
-      "line": 76,
+      "line": 73,
       "kind": "form",
-      "label": "form at src/app/auth/reset-password/page.tsx:76",
+      "label": "form at src/app/auth/reset-password/page.tsx:73",
       "href": null,
       "actors": [
         "guest"
@@ -5570,7 +5555,7 @@
     {
       "id": "src/app/auth/reset-password/page.tsx#input-001",
       "source": "src/app/auth/reset-password/page.tsx",
-      "line": 81,
+      "line": 78,
       "kind": "input",
       "label": "At least 6 characters",
       "href": null,
@@ -5585,7 +5570,7 @@
     {
       "id": "src/app/auth/reset-password/page.tsx#input-002",
       "source": "src/app/auth/reset-password/page.tsx",
-      "line": 97,
+      "line": 94,
       "kind": "input",
       "label": "Same password again",
       "href": null,
@@ -5666,7 +5651,7 @@
     {
       "id": "src/app/login/magic-link-submit.tsx#button-003",
       "source": "src/app/login/magic-link-submit.tsx",
-      "line": 60,
+      "line": 58,
       "kind": "button",
       "label": "{dynamic}",
       "href": null,
@@ -5679,56 +5664,26 @@
       "unavailableState": null
     },
     {
-      "id": "src/app/login/page.tsx#form-001",
-      "source": "src/app/login/page.tsx",
-      "line": 139,
-      "kind": "form",
-      "label": "form at src/app/login/page.tsx:139",
+      "id": "src/app/login/magic-link-submit.tsx#button-004",
+      "source": "src/app/login/magic-link-submit.tsx",
+      "line": 82,
+      "kind": "button",
+      "label": "{dynamic}",
       "href": null,
       "actors": [
         "guest"
       ],
       "requirementId": "TER-CF-001",
       "interactionTest": "e2e/ui-control-crawl.test.ts",
-      "transientDisabled": false,
+      "transientDisabled": true,
       "unavailableState": null
     },
     {
       "id": "src/app/login/page.tsx#input-001",
       "source": "src/app/login/page.tsx",
-      "line": 144,
+      "line": 47,
       "kind": "input",
       "label": "you@restaurant.com…",
-      "href": null,
-      "actors": [
-        "guest"
-      ],
-      "requirementId": "TER-CF-001",
-      "interactionTest": "e2e/ui-control-crawl.test.ts",
-      "transientDisabled": false,
-      "unavailableState": null
-    },
-    {
-      "id": "src/app/login/page.tsx#a-001",
-      "source": "src/app/login/page.tsx",
-      "line": 159,
-      "kind": "link",
-      "label": "Back to sign in",
-      "href": "/login",
-      "actors": [
-        "guest"
-      ],
-      "requirementId": "TER-CF-001",
-      "interactionTest": "e2e/ui-control-crawl.test.ts",
-      "transientDisabled": false,
-      "unavailableState": null
-    },
-    {
-      "id": "src/app/login/page.tsx#form-002",
-      "source": "src/app/login/page.tsx",
-      "line": 167,
-      "kind": "form",
-      "label": "form at src/app/login/page.tsx:167",
       "href": null,
       "actors": [
         "guest"
@@ -5741,9 +5696,69 @@
     {
       "id": "src/app/login/page.tsx#input-002",
       "source": "src/app/login/page.tsx",
-      "line": 173,
+      "line": 74,
       "kind": "input",
-      "label": "you@restaurant.com…",
+      "label": "At least 6 characters",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#input-003",
+      "source": "src/app/login/page.tsx",
+      "line": 92,
+      "kind": "input",
+      "label": "Enter the same password",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#form-001",
+      "source": "src/app/login/page.tsx",
+      "line": 169,
+      "kind": "form",
+      "label": "form at src/app/login/page.tsx:169",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#a-001",
+      "source": "src/app/login/page.tsx",
+      "line": 173,
+      "kind": "link",
+      "label": "Back to sign in",
+      "href": "loginHref(\"magic\", safePostLoginPath)",
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#form-002",
+      "source": "src/app/login/page.tsx",
+      "line": 181,
+      "kind": "form",
+      "label": "form at src/app/login/page.tsx:181",
       "href": null,
       "actors": [
         "guest"
@@ -5756,10 +5771,10 @@
     {
       "id": "src/app/login/page.tsx#a-002",
       "source": "src/app/login/page.tsx",
-      "line": 188,
+      "line": 187,
       "kind": "link",
       "label": "Forgot password?",
-      "href": "/login?forgot=1",
+      "href": "`/login?forgot=1`",
       "actors": [
         "guest"
       ],
@@ -5771,7 +5786,112 @@
     {
       "id": "src/app/login/page.tsx#a-003",
       "source": "src/app/login/page.tsx",
-      "line": 202,
+      "line": 193,
+      "kind": "link",
+      "label": "Sign in with a magic link",
+      "href": "loginHref(\"magic\", safePostLoginPath)",
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#form-003",
+      "source": "src/app/login/page.tsx",
+      "line": 201,
+      "kind": "form",
+      "label": "form at src/app/login/page.tsx:201",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#a-004",
+      "source": "src/app/login/page.tsx",
+      "line": 207,
+      "kind": "link",
+      "label": "Already have an account? Sign in",
+      "href": "loginHref(\"password\", safePostLoginPath)",
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#form-004",
+      "source": "src/app/login/page.tsx",
+      "line": 215,
+      "kind": "form",
+      "label": "form at src/app/login/page.tsx:215",
+      "href": null,
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#a-005",
+      "source": "src/app/login/page.tsx",
+      "line": 220,
+      "kind": "link",
+      "label": "Forgot password?",
+      "href": "`/login?forgot=1`",
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#a-006",
+      "source": "src/app/login/page.tsx",
+      "line": 226,
+      "kind": "link",
+      "label": "Sign in with password",
+      "href": "loginHref(\"password\", safePostLoginPath)",
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#a-007",
+      "source": "src/app/login/page.tsx",
+      "line": 232,
+      "kind": "link",
+      "label": "Create an account",
+      "href": "loginHref(\"signup\", safePostLoginPath)",
+      "actors": [
+        "guest"
+      ],
+      "requirementId": "TER-CF-001",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/login/page.tsx#a-008",
+      "source": "src/app/login/page.tsx",
+      "line": 246,
       "kind": "link",
       "label": "Sign in as {dynamic}",
       "href": "/api/dev-login",

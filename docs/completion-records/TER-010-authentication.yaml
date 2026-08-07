@@ -1,5 +1,6 @@
 spec_id: TER-010
-commit: ac7db9aaee9a83853976d5dfe89b44235e6f91fd
+commit: 41bb631c144c560b03c7b188911661bf8140537b
+source_commit: ac7db9aaee9a83853976d5dfe89b44235e6f91fd
 status: implemented_external_verification_pending
 scope: "Secure the email authentication application boundary: configured-origin redirects, password sign-up and sign-in, recovery, sign-out, generic auth failures, and a staging-only real-provider E2E harness."
 requirements_implemented:
@@ -13,8 +14,9 @@ requirements_not_closed:
   - Supabase Site URL, redirect allow-list, email-provider settings, and the redacted before-and-after settings export are approval-gated operator work.
 tests:
   targeted: pnpm exec vitest run src/app/login/actions.test.ts src/app/auth/callback/route.test.ts src/app/auth/confirm/route.test.ts src/lib/api/safe-redirect.test.ts src/lib/auth/attempt-rate-limit.test.ts src/lib/auth/redirects.test.ts src/lib/auth/real-e2e-config.test.ts src/lib/supabase/proxy.test.ts (8 files, 45 passed)
-  full: pnpm run test (137 files, 1427 passed); pnpm run test:contracts (8 files, 78 passed); pnpm exec tsc --noEmit; pnpm run lint; pnpm run build
-  contracts: pnpm run verify:api-contract (87 discovered operations, 5 planned promises, 87 classifications); pnpm run verify:feature-ledger (269 features); pnpm run snapshot:check (73 migrations, no schema diff); pnpm run downs:check (62 paired forward migrations)
+  full: pnpm run test (139 files, 1445 passed); pnpm run test:contracts (9 files, 87 passed); pnpm exec tsc --noEmit; pnpm run lint; pnpm run build
+  contracts: pnpm run verify:api-contract (87 discovered operations, 5 planned promises, 87 classifications); pnpm run verify:feature-ledger (269 features); pnpm run verify:ui-controls (23 routes, 337 controls); pnpm run snapshot:check (73 migrations, no schema diff); pnpm run downs:check (63 paired forward migrations)
+  staging_guard: pnpm run test:staging passed against the already deployed pre-integration release e8d9f573762a2bbca779d37f73d08a17a81e157f; it did not exercise this un-deployed auth integration.
   real_provider_e2e: skipped intentionally; AUTH_E2E_ENABLED and the isolated staging/Mailpit secret contract were not supplied.
   local_browser_smoke: unavailable; all three smoke tests stopped before application execution because the repository-pinned Chromium 1217 cache was missing Google Chrome for Testing Framework. This is not a pass.
 staging:
@@ -33,4 +35,4 @@ known_limits:
   - Documentation describes the required configuration but cannot prove mutable Supabase settings until an approved operator captures the redacted before-and-after record.
   - Browser and provider behavior remains unverified against an approved staging target; a skipped real-provider test must not close the criterion.
   - Existing temporary development bypass removal remains TER-011 scope; this change adds no bypass.
-rollback: Revert ac7db9aaee9a83853976d5dfe89b44235e6f91fd to remove this authentication implementation; no migration or external configuration change is included.
+rollback: Revert 41bb631c144c560b03c7b188911661bf8140537b to remove this authentication implementation; no migration or external configuration change is included.
