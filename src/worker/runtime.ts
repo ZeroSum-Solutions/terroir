@@ -264,12 +264,12 @@ export class WorkerRuntime {
       );
     } catch (error) {
       stopHeartbeat();
+      clearTimeout(timeout);
       if (error instanceof LeaseLostError) {
         this.metric("jobs_lease_lost", 1, this.jobFields(job, startedAt, "lease_lost"));
         return;
       }
       await this.recordFailure(job, error, startedAt);
-      clearTimeout(timeout);
       return;
     }
     stopHeartbeat();

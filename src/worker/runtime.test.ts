@@ -155,6 +155,7 @@ describe("worker runtime", () => {
     expect(store.heartbeats).toEqual([job().id]);
     expect(store.completions).toEqual([]);
     expect(store.failures).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("leaves an ambiguous completion for lease recovery instead of contradicting it", async () => {
