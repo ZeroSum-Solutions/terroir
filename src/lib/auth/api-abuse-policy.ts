@@ -6,7 +6,7 @@ export type ApiOperationId = `api:${string}:/api/${string}`;
 export type ApiAbusePolicy =
   | {
       access: "public";
-      rateLimit: "platform-health" | "public-bootstrap";
+      rateLimit: "platform-health";
       idempotency: "none";
     }
   | {
@@ -58,14 +58,6 @@ function classifyOperation(operationId: ApiOperationId): ApiAbusePolicy {
       idempotency: "none",
     };
   }
-  if (operationId === "api:GET:/api/dev-login") {
-    return {
-      access: "public",
-      rateLimit: "public-bootstrap",
-      idempotency: "none",
-    };
-  }
-
   const method = operationId.split(":")[1];
   const idempotency =
     method === "GET" || operationId === "api:POST:/api/pdf"

@@ -47,36 +47,35 @@ describe("API authorization manifest", () => {
     expect(classifiedIds).toEqual(discoveredIds);
   });
 
-  it("keeps only health and the login bootstrap public", () => {
+  it("keeps the retired alternate-auth operation absent from every contract", () => {
+    const retiredOperationId = `api:GET:/api/${["dev", "login"].join("-")}`;
+    const discoveredIds = inventory.discoveredOperations.map(
+      ({ operationId }) => operationId,
+    );
+
+    expect(discoveredIds).not.toContain(retiredOperationId);
+    expect(API_AUTHORIZATION).not.toHaveProperty(retiredOperationId);
+    expect(API_ABUSE_POLICY).not.toHaveProperty(retiredOperationId);
+  });
+
+  it("keeps only health public", () => {
     const publicIds = Object.entries(API_AUTHORIZATION)
       .filter(([, policy]) => policy.access === "public")
       .map(([operationId]) => operationId)
       .sort();
 
-    expect(publicIds).toEqual([
-      "api:GET:/api/dev-login",
-      "api:GET:/api/health",
-    ]);
+    expect(publicIds).toEqual(["api:GET:/api/health"]);
   });
 
-  it("keeps health and dev-login as explicit public contracts", () => {
+  it("keeps health as the explicit public contract", () => {
     const health = readFileSync(
       resolve(process.cwd(), "src/app/api/health/route.ts"),
       "utf8",
     );
-    const devLogin = readFileSync(
-      resolve(process.cwd(), "src/app/api/dev-login/route.ts"),
-      "utf8",
-    );
-
     expect(health).toContain('export const runtime = "nodejs"');
     expect(health).toContain('export const dynamic = "force-dynamic"');
     expect(health).toContain('"Cache-Control": "no-store"');
     expect(health).toContain("status: 200");
-    expect(devLogin).toContain('export const runtime = "nodejs"');
-    expect(devLogin).toContain("isValidTemporaryBypassToken(");
-    expect(devLogin).toContain('new NextResponse("Not found",');
-    expect(devLogin).toContain("status: 404");
   });
 
   it("requires a session without an existing membership only for invite acceptance", () => {
@@ -178,11 +177,6 @@ describe("API authorization manifest", () => {
       rateLimit: "platform-health",
       idempotency: "none",
     });
-    expect(API_ABUSE_POLICY["api:GET:/api/dev-login"]).toEqual({
-      access: "public",
-      rateLimit: "public-bootstrap",
-      idempotency: "none",
-    });
   });
 
   it("classifies the exact idempotency support set", () => {
@@ -195,7 +189,7 @@ describe("API authorization manifest", () => {
       .map(([operationId]) => operationId)
       .sort();
 
-    expect(none).toHaveLength(33);
+    expect(none).toHaveLength(32);
     expect(supported).toHaveLength(59);
     expect(none).toContain("api:POST:/api/pdf");
     expect(

@@ -75,11 +75,6 @@ describe("deriveCriterion", () => {
       "is the canonical write path",
     ],
     [
-      "Dev login route bypasses email auth in non-production environments only",
-      "Dev login route",
-      "bypasses email auth in non-production environments only",
-    ],
-    [
       "System auto-removes 86'd wines from published lists (or marks them gray, configurable)",
       "System",
       "auto-removes 86'd wines from published lists (or marks them gray, configurable)",
@@ -108,6 +103,7 @@ describe("deriveCriterion", () => {
 describe("metadataForRequirement", () => {
   it.each([
     [1, "TER-010", "identity"],
+    [13, "TER-011", "identity"],
     [57, "TER-028", "bottle-scanning"],
     [180, "TER-023", "operations"],
     [269, "TER-005", "quality-engineering"],
@@ -369,7 +365,8 @@ describe("checked-in feature ledger", () => {
 
     expect(counts).toEqual({
       "TER-005": 13,
-      "TER-010": 13,
+      "TER-010": 12,
+      "TER-011": 1,
       "TER-012": 1,
       "TER-013": 2,
       "TER-014": 4,

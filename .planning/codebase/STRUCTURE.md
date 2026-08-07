@@ -53,7 +53,7 @@ app/
 │   ├── onboarding-modal.tsx
 │   └── settings-dropdown.tsx
 └── api/                      # JSON route handlers
-    ├── cellar/, dev-login/, export/, health/, insights/, inventory/,
+    ├── cellar/, export/, health/, insights/, inventory/,
     │   pdf/, pour/, reconcile/, restaurant/, scan/, scan-bottle/,
     │   scans/, team/, wine-list-items/, wine-list-sections/,
     │   wine-lists/, wines/

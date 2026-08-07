@@ -35,7 +35,6 @@ NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<local anon key>
 SUPABASE_SERVICE_ROLE_KEY=<local service role key>
 ACTIVE_RESTAURANT_COOKIE_SECRET=<at least 16 random chars>
-DEV_BYPASS_EMAIL=owner+local@terroir.test
 
 # Strongly recommended safety rail. Set this to the prod project ref or
 # another unique substring from the prod Supabase URL.
@@ -94,10 +93,10 @@ URL unless `ALLOW_PROD_SEED=yes` is set. Do not set that for this local seed.
 
 ## Login
 
-After seeding, use dev login:
+After seeding, use the normal password sign-in form with the owner fixture:
 
-```bash
-DEV_BYPASS_EMAIL=owner+local@terroir.test
+```text
+owner+local@terroir.test
 ```
 
 Other seeded users:
@@ -134,8 +133,12 @@ Once seeded, run authenticated checks against:
 - [price comparison](http://127.0.0.1:3000/price-comparison)
 - [team](http://127.0.0.1:3000/team)
 
-For E2E, set `DEV_BYPASS_EMAIL` and run:
+The local pour-flow browser test also signs in through the normal password
+form. It refuses non-loopback Supabase targets. Opt in explicitly and run:
 
 ```bash
+LOCAL_E2E_ENABLED=1 \
+LOCAL_SEED_USER_EMAIL=owner+local@terroir.test \
+LOCAL_SEED_USER_PASSWORD='Terroir-local-123!' \
 pnpm exec playwright test e2e/pour-flow.test.ts
 ```

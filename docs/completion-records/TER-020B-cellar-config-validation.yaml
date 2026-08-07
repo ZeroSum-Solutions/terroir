@@ -7,9 +7,9 @@ requirements_closed:
   - TER-CF-213
 scope: Enforce shared Zod request parsing and safe error envelopes across every discovered active API route.
 tests:
-  targeted: pnpm exec vitest run src/lib/api-route-inventory/verify-api-contract.test.ts src/lib/api/validation.contract.test.ts src/lib/api/errors.contract.test.ts src/lib/api/handler.contract.test.ts src/app/api/health/route.test.ts src/app/api/dev-login/route.test.ts (6 files, 66 passed)
+  targeted: Historical TER-020B verification covered six files and 66 tests, including the authentication bootstrap route later removed by TER-011.
   full: pnpm run test (131 files, 1390 passed); pnpm run test:contracts (6 files, 50 passed); pnpm exec tsc --noEmit; pnpm run lint; pnpm run build
-  e2e: not-applicable; this boundary-only change does not alter a browser workflow, and focused health/dev-login tests cover the two non-envelope response exceptions.
+  e2e: not-applicable; this boundary-only change did not alter a browser workflow, and its focused tests covered the then-current response exceptions.
 staging:
   url: not-applicable
   result: not-run; no deployment was authorized for this isolated completion slice.
@@ -24,9 +24,9 @@ evidence:
   - The verifier rejects request.json and request.formData bypasses, direct query reads, unparsed dynamic params, missing withApiHandler coverage, and raw JSON error payloads.
   - Negative fixtures prove those five regressions fail the route-boundary contract.
   - Health remains an intentional operational HTTP 200 payload; its route test verifies redaction of network and secret-bearing probe failures.
-  - Dev-login retains its intentional opaque plaintext 404; its route test verifies missing, malformed, duplicate, oversized, and wrong tokens never call the provider.
+  - Historical note: TER-020B retained the temporary authentication bootstrap; TER-011 later removed that entire runtime surface.
   - pnpm run verify:api-contract, pnpm run verify:feature-ledger, pnpm run snapshot:check, and pnpm run downs:check passed.
 known_limits:
   - The verifier is a source-level contract and complements focused handler tests; it does not execute every route against a live Supabase deployment.
-  - The audit retains the deliberate plaintext opaque 404 from /api/dev-login and the health probe's 200 operational-status payload; neither is a normal API error response.
+  - The health probe's 200 operational-status payload remains the only non-envelope response exception after TER-011.
 rollback: Revert 46fb1608ccde43802ccc14f4dfc3691b4594371b to remove the enforcement gate; no route behavior, migration, or data is changed by this completion commit.

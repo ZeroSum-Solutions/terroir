@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 27,
     "plannedPromiseCount": 5,
-    "extensionDiscoveredCount": 60,
+    "extensionDiscoveredCount": 59,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -362,12 +362,6 @@
     },
     {
       "operationId": "api:GET:/api/cellar/grid",
-      "classification": "extension",
-      "concreteRequirementId": null,
-      "semanticAliasContext": []
-    },
-    {
-      "operationId": "api:GET:/api/dev-login",
       "classification": "extension",
       "concreteRequirementId": null,
       "semanticAliasContext": []

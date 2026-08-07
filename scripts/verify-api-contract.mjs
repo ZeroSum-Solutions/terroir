@@ -239,10 +239,7 @@ export function verifyInventoryParity(projectRoot, inventory) {
   }
   return errors;
 }
-const ROUTE_SAFETY_EXCEPTIONS = new Set([
-  "src/app/api/dev-login/route.ts",
-  "src/app/api/health/route.ts",
-]);
+const ROUTE_SAFETY_EXCEPTIONS = new Set(["src/app/api/health/route.ts"]);
 
 function routeSafetyError(file, message) {
   return `${file}: ${message}`;
@@ -251,9 +248,8 @@ function routeSafetyError(file, message) {
 /**
  * Enforce the boundary conventions that make TER-CF-212 and TER-CF-213
  * mechanically reviewable for every discovered route. Health is an
- * operational 200-status probe, and dev-login deliberately returns an opaque
- * plaintext 404 before it is enabled; their focused route tests own those
- * exceptional response semantics.
+ * operational 200-status probe whose focused route tests own its exceptional
+ * response semantics.
  */
 export function verifyApiRouteSafety(projectRoot, inventory) {
   const errors = [];

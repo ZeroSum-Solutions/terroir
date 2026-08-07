@@ -10,10 +10,10 @@ type OperationId = `api:${string}:/api/${string}`;
 /**
  * Authorization contract for every source-discovered API operation.
  *
- * `health` is public for platform liveness and `dev-login` is the login
- * bootstrap. Invite acceptance requires a user session but deliberately does
- * not require an existing restaurant membership. Every other operation
- * requires the named capability in the active membership.
+ * `health` is public for platform liveness. Invite acceptance requires a user
+ * session but deliberately does not require an existing restaurant
+ * membership. Every other operation requires the named capability in the
+ * active membership.
  */
 export const API_AUTHORIZATION = {
   "api:GET:/api/cellar": membership("cellar:view"),
@@ -26,7 +26,6 @@ export const API_AUTHORIZATION = {
   "api:POST:/api/cellar/config": membership("cellar:manage"),
   "api:PATCH:/api/cellar/config": membership("cellar:manage"),
   "api:GET:/api/cellar/grid": membership("cellar:view"),
-  "api:GET:/api/dev-login": { access: "public" },
   "api:GET:/api/export/toast-csv": membership("export:read"),
   "api:GET:/api/export": membership("export:read"),
   "api:GET:/api/health": { access: "public" },

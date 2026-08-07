@@ -33,7 +33,8 @@ const REQUIRED_FIELDS = [
   "sourceOrder",
 ];
 const COMPLETION_RULES = [
-  [1, 13, "TER-010", "identity"],
+  [1, 12, "TER-010", "identity"],
+  [13, 13, "TER-011", "identity"],
   [14, 15, "TER-013", "restaurant-admin"],
   [16, 19, "TER-015", "team-invitations"],
   [20, 21, "TER-043", "team-lifecycle"],
@@ -76,7 +77,7 @@ const ACTOR_PATTERNS = [
   /^(User|Owner|Manager|Staff|Guest|Invitee|System|API|UI|Claude|Sentry) (.+)$/,
   /^((?:GET|POST|PATCH|DELETE) \S+) (.+)$/,
   /^(All (?:write endpoints|endpoints|RLS policies)) (.+)$/,
-  /^(Dev login route|Migrations|schema\.snapshot\.sql|set_updated_at trigger|handle_new_user trigger|find_or_create_wine and find_or_create_wines_batch|generate_slug|match_lwin and match_lwin_batch|lwin_search|cleanup_scan_idempotency|record_pour|reconcile_open_bottle and reconcile_open_bottles_batch|auto_eightysix_on_low_inventory|enrich_wines_batch|global-error\.tsx|Source maps|Railway deploy|pnpm build|pnpm start|Vitest|Playwright|ESLint 9 flat config|TypeScript strict mode|pnpm types:check|pnpm snapshot:check) (.+)$/,
+  /^(Migrations|schema\.snapshot\.sql|set_updated_at trigger|handle_new_user trigger|find_or_create_wine and find_or_create_wines_batch|generate_slug|match_lwin and match_lwin_batch|lwin_search|cleanup_scan_idempotency|record_pour|reconcile_open_bottle and reconcile_open_bottles_batch|auto_eightysix_on_low_inventory|enrich_wines_batch|global-error\.tsx|Source maps|Railway deploy|pnpm build|pnpm start|Vitest|Playwright|ESLint 9 flat config|TypeScript strict mode|pnpm types:check|pnpm snapshot:check) (.+)$/,
 ];
 
 export function parseCoreFeatures(source) {

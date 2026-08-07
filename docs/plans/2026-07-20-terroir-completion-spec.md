@@ -111,7 +111,7 @@ The autonomous runner may use the defaults below. It must stop only where the ta
 Collect these approvals and capabilities as one batch before `TER-000` so the autonomous runner does not stall one credential at a time. Values remain in ZS Vault or the destination secret store and never enter this document.
 
 - GitHub repository administrator access for branch protection, Actions secrets, and required checks.
-- Railway project administrator access for staging, worker services, deployment variables, rollback, and temporary-bypass rotation.
+- Railway project administrator access for staging, worker services, deployment variables, rollback, and temporary authentication bypass rotation.
 - Supabase organization access for a separate staging project, auth URL configuration, storage policies, service-role E2E setup, and a least-privilege direct backup connection.
 - Approval for the staging and worker resource budget.
 - A transactional email provider account, verified sender domain, sandbox inbox, API secret, and production-send approval, plus staging SMTP or an equivalent test inbox for real Supabase magic-link E2E.

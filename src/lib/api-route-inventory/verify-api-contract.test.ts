@@ -260,21 +260,14 @@ describe("TER-020B route-boundary contract", () => {
     ).toEqual([`${source}: raw error response must use shared Errors/apiError`]);
   });
 
-  it("keeps health and opaque dev-login response semantics as explicit exceptions", () => {
+  it("keeps health response semantics as the only explicit exception", () => {
     const root = fixtureRoot();
     const health = "src/app/api/health/route.ts";
-    const devLogin = "src/app/api/dev-login/route.ts";
     writeFixture(root, health, "export function GET() { return Response.json({ status: 'ok' }); }");
-    writeFixture(root, devLogin, `export function GET(request) {
-      return new Response("Not found", { status: 404 });
-    }`);
 
     expect(
       verifyApiRouteSafety(root, {
-        discoveredOperations: [
-          { source: { file: health } },
-          { source: { file: devLogin } },
-        ],
+        discoveredOperations: [{ source: { file: health } }],
       }),
     ).toEqual([]);
   });
@@ -435,9 +428,9 @@ describe("checked-in API contract gate", () => {
 
     expect(result.errors).toEqual([]);
     expect(result.summary).toEqual({
-      discoveredOperationCount: 87,
+      discoveredOperationCount: 86,
       plannedOperationCount: 5,
-      classificationCount: 87,
+      classificationCount: 86,
     });
     expect(paths.map((file) => readFileSync(resolve(file), "utf8"))).toEqual(
       before,

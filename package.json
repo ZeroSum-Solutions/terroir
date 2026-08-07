@@ -18,6 +18,7 @@
     "test:e2e": "playwright test",
     "test:ui-crawl": "TERROIR_UI_CRAWL=1 playwright test e2e/ui-control-crawl.test.ts",
     "verify:api-contract": "node scripts/verify-api-contract.mjs",
+    "verify:auth-removal": "node scripts/verify-auth-removal.mjs",
     "verify:feature-ledger": "node scripts/verify-feature-ledger.mjs",
     "verify:ui-controls": "node scripts/verify-ui-controls.mjs",
     "ui-controls:generate": "node scripts/verify-ui-controls.mjs --write",

@@ -10,7 +10,7 @@ import { createClient } from "@supabase/supabase-js";
  * Cellar surface.
  *
  * Path exercised:
- *   1. Authenticate via /api/dev-login (DEV_BYPASS_EMAIL in .env.local).
+ *   1. Authenticate through the normal password form with a local seed user.
  *   2. Call list_open_bottle_items RPC directly (service-role) to find
  *      a by-the-glass wine with sealed inventory or an open bottle.
  *   3. Navigate to /cellar, tap the wine row → drawer opens → tap the
@@ -28,18 +28,38 @@ import { createClient } from "@supabase/supabase-js";
 
 test.describe("BND-038 pour → reconcile", () => {
   test.skip(
-    !!process.env.CI,
-    "Requires DEV_BYPASS_EMAIL; shared DB — run locally only for now.",
+    process.env.LOCAL_E2E_ENABLED !== "1",
+    "Requires an explicitly enabled, loopback-only local Supabase fixture.",
   );
 
   test.describe.configure({ mode: "serial" });
 
   async function login(page: Page) {
-    // Dev-login mints a server-side session via the Supabase admin
-    // API and sets auth cookies. No redirect to supabase.co — works
-    // even inside the preview sandbox.
-    const res = await page.request.get("/api/dev-login");
-    expect(res.ok(), await res.text()).toBeTruthy();
+    await page.goto("/login?mode=password");
+    await page.getByLabel("Work email").fill(seededEmail());
+    await page
+      .getByLabel("Password")
+      .fill(seededPassword());
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect
+      .poll(() => page.context().cookies())
+      .toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: expect.stringContaining("auth-token") }),
+        ]),
+      );
+  }
+
+  function seededEmail() {
+    return process.env.LOCAL_SEED_USER_EMAIL ?? "owner+local@terroir.test";
+  }
+
+  function seededPassword() {
+    const password = process.env.LOCAL_SEED_USER_PASSWORD;
+    if (!password) {
+      throw new Error("LOCAL_SEED_USER_PASSWORD must be set for the local E2E.");
+    }
+    return password;
   }
 
   type OpenBottleItem = {
@@ -64,15 +84,18 @@ test.describe("BND-038 pour → reconcile", () => {
     if (!url || !key) {
       throw new Error(
         "pour-flow E2E requires NEXT_PUBLIC_SUPABASE_URL + " +
-          "SUPABASE_SERVICE_ROLE_KEY (same as /api/dev-login).",
+          "SUPABASE_SERVICE_ROLE_KEY for the local fixture.",
       );
+    }
+    const hostname = new URL(url).hostname;
+    if (hostname !== "127.0.0.1" && hostname !== "localhost") {
+      throw new Error("pour-flow E2E refuses non-loopback Supabase targets.");
     }
     return createClient(url, key, { auth: { persistSession: false } });
   }
 
   async function resolveRestaurantId(): Promise<string> {
-    const email = process.env.DEV_BYPASS_EMAIL;
-    if (!email) throw new Error("DEV_BYPASS_EMAIL not set");
+    const email = seededEmail();
     const admin = adminClient();
     const { data: users, error: userErr } =
       await admin.auth.admin.listUsers({ perPage: 200 });

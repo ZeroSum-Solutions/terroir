@@ -610,6 +610,11 @@ async function ensureUsers(supabase) {
   for (const seedUser of USERS) {
     const found = byEmail.get(seedUser.email.toLowerCase());
     if (found) {
+      const { error } = await supabase.auth.admin.updateUserById(found.id, {
+        password: PASSWORD,
+        email_confirm: true,
+      });
+      if (error) throw error;
       ids[seedUser.role] = found.id;
       continue;
     }
@@ -683,7 +688,7 @@ async function seed() {
   await upsertRows(supabase, "invitations", rows.invitations);
 
   console.log("Seed complete.");
-  console.log(`Set DEV_BYPASS_EMAIL=${USERS[0].email} for owner login.`);
+  console.log(`Sign in through /login with ${USERS[0].email}.`);
 }
 
 async function teardown() {

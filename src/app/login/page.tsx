@@ -119,10 +119,6 @@ export default async function LoginPage({
   const isForgotPassword = forgot === "1";
   const loginMode: LoginMode =
     mode === "password" || mode === "signup" ? mode : "magic";
-  const devBypassEmail =
-    process.env.NODE_ENV !== "production"
-      ? process.env.DEV_BYPASS_EMAIL
-      : undefined;
 
   const title = isForgotPassword
     ? "Reset your password"
@@ -236,23 +232,6 @@ export default async function LoginPage({
               Create an account
             </a>
           </form>
-        )}
-
-        {devBypassEmail && !sent && !signup && reset !== "1" && reset_done !== "1" && (
-          <div className="mt-lg border-t border-dashed border-border pt-lg">
-            <p className="mb-sm text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
-              Dev only
-            </p>
-            <a
-              href="/api/dev-login"
-              className="flex h-[38px] items-center justify-center rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted"
-            >
-              Sign in as {devBypassEmail}
-            </a>
-            <p className="mt-xs text-[11px] text-ink-subtle">
-              Skips email. Disabled in production (no DEV_BYPASS_EMAIL set).
-            </p>
-          </div>
         )}
       </div>
     </main>

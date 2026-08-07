@@ -13,7 +13,7 @@
 
 ### 2. API Routes (`src/app/api/`)
 JSON route handlers, one folder per resource:
-`cellar/`, `dev-login/`, `export/`, `health/`, `insights/`, `inventory/`, `pdf/`, `pour/`, `reconcile/`, `restaurant/`, `scan/`, `scan-bottle/`, `scans/`, `team/`, `wine-list-items/`, `wine-list-sections/`, `wine-lists/`, `wines/`
+`cellar/`, `export/`, `health/`, `insights/`, `inventory/`, `pdf/`, `pour/`, `reconcile/`, `restaurant/`, `scan/`, `scan-bottle/`, `scans/`, `team/`, `wine-list-items/`, `wine-list-sections/`, `wine-lists/`, `wines/`
 
 All inputs validated with Zod. Auth enforced via Supabase server client (`src/lib/supabase/`).
 

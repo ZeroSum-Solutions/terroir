@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 71,
-  "discoveredOperationCount": 87,
+  "routeFileCount": 70,
+  "discoveredOperationCount": 86,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/cellar",
@@ -110,17 +110,6 @@
       "path": "/api/cellar/grid",
       "source": {
         "file": "src/app/api/cellar/grid/route.ts",
-        "exportKind": "function-declaration",
-        "localName": "GET",
-        "moduleSpecifier": null
-      }
-    },
-    {
-      "operationId": "api:GET:/api/dev-login",
-      "method": "GET",
-      "path": "/api/dev-login",
-      "source": {
-        "file": "src/app/api/dev-login/route.ts",
         "exportKind": "function-declaration",
         "localName": "GET",
         "moduleSpecifier": null

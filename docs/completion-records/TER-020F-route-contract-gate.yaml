@@ -6,7 +6,7 @@ requirements_closed:
   - Final route-contract tests derive their operation coverage from docs/api-route-inventory.json.
   - The API verifier rejects source-discovered handlers without an API_AUTHORIZATION registration.
   - The API verifier rejects stale authorization entries and stale or missing planned-operation registrations.
-  - Contract tests verify method/path identity, authorization/capability alignment, active-membership tenant guards where mechanically inspectable, and the explicit health and dev-login exceptions.
+  - Contract tests verify method/path identity, authorization/capability alignment, active-membership tenant guards where mechanically inspectable, and explicit response exceptions.
 scope: Generate final contract tests and reject unregistered routes.
 tests:
   targeted: pnpm exec vitest run src/lib/api-route-inventory/verify-api-contract.test.ts src/lib/auth/api-authorization.test.ts (2 files, 24 passed)

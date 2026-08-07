@@ -84,7 +84,7 @@
       - API returns 401 when an authenticated route is hit without a session
       - API returns 403 when the user is authenticated but not a member of the requested restaurant
       - System enforces Row-Level Security on every table via is_member / is_member_with_role
-      - Dev login route bypasses email auth in non-production environments only
+      - System exposes no alternate sign-in route outside normal Supabase authentication
     </authentication_and_session>
 
     <restaurants_and_teams>
@@ -456,7 +456,6 @@
   <api_endpoints_summary>
     <auth>
       - GET / POST handled by Supabase Auth (email/password + OAuth)
-      - POST /api/dev-login (non-prod only)
     </auth>
     <core_resources>
       - GET / POST /api/cellar

@@ -88,6 +88,12 @@ jobs:
       - name: Contract tests
         run: pnpm run test:contracts
 
+      - name: Production build
+        run: pnpm run build
+
+      - name: Authentication removal verification
+        run: pnpm run verify:auth-removal -- --require-build
+
       - name: Schema drift check
         # Regenerate the snapshot and diff against the committed one.
         # Any change means a migration was added without running
