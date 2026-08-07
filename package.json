@@ -24,6 +24,8 @@
     "test:ui-crawl": "TERROIR_UI_CRAWL=1 playwright test e2e/ui-control-crawl.test.ts",
     "validate:env": "node scripts/validate-runtime-config.mjs",
     "validate:worker": "node --experimental-strip-types src/worker/validate-config.ts",
+    "validate:worker-browser": "node scripts/validate-worker-browser.mjs",
+    "worker:install-browser": "puppeteer browsers install chrome",
     "drill:alerts": "node scripts/run-alert-drill.mjs",
     "verify:api-contract": "node scripts/verify-api-contract.mjs",
     "verify:auth-removal": "node scripts/verify-auth-removal.mjs",

@@ -11,6 +11,14 @@ const rollback = readFileSync(
 );
 const route = readFileSync("src/app/api/pdf/route.ts", "utf8");
 const handler = readFileSync("src/worker/wine-list-pdf-handler.ts", "utf8");
+const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
+  scripts: Record<string, string>;
+};
+const workerManifest = readFileSync("railway.worker.toml", "utf8");
+const browserValidator = readFileSync(
+  "scripts/validate-worker-browser.mjs",
+  "utf8",
+);
 const client = readFileSync(
   "src/app/(app)/lists/[id]/wine-list-editor.tsx",
   "utf8",
@@ -36,6 +44,16 @@ describe("TER-021E PDF worker contract", () => {
     expect(handler).toContain("upsert: true");
     expect(client).toContain("createIdempotentCommandStore");
     expect(client).toContain("waitForQueuedPdf");
+  });
+
+  it("installs and verifies the pinned browser before building the worker image", () => {
+    expect(packageJson.scripts["worker:install-browser"]).toBe(
+      "puppeteer browsers install chrome",
+    );
+    expect(workerManifest).toContain("pnpm worker:install-browser");
+    expect(workerManifest).toContain("pnpm validate:worker-browser");
+    expect(browserValidator).toContain("puppeteer.executablePath()");
+    expect(browserValidator).toContain("constants.X_OK");
   });
 
   it("keeps artifacts private, bounded, and tenant-readable only", () => {

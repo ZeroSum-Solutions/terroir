@@ -3,7 +3,7 @@
 # root railway.toml.
 
 [build]
-buildCommand = "pnpm validate:worker && pnpm build"
+buildCommand = "pnpm worker:install-browser && pnpm validate:worker-browser && pnpm validate:worker && pnpm build"
 
 [deploy]
 startCommand = "pnpm worker"

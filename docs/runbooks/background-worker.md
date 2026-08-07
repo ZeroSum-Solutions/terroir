@@ -36,6 +36,7 @@ Supabase project. Never copy the production key into staging.
 | Variable | Default | Contract |
 | --- | ---: | --- |
 | `TERROIR_RELEASE_SHA` | Railway Git SHA | Exact commit for local CLI deployments; overrides provider metadata in release logs. |
+| `PUPPETEER_CACHE_DIR` | provider cache | Set to `/app/.cache/puppeteer` so the build-installed browser is retained in the runtime image. |
 | `WORKER_ID` | generated host/replica ID | 1-128 safe identifier characters |
 | `WORKER_CONCURRENCY` | 4 | maximum active jobs, 1-20 |
 | `WORKER_CLAIM_LIMIT` | 4 | per-poll claim bound, never above concurrency |
@@ -67,6 +68,12 @@ non-empty queue is a stop condition until every queued type has an owning
 handler or an approved cleanup disposition. Health exposes
 `registered_handlers` and `accepting_jobs` so an idle control-plane deployment
 cannot be mistaken for active job processing.
+
+The worker build runs `pnpm worker:install-browser` followed by
+`pnpm validate:worker-browser`. The second command fails the image build unless
+Puppeteer's resolved executable exists and is executable. Do not enable the PDF
+queue when the build omitted this gate, even if the control-plane health check
+is otherwise ready.
 
 ## Wine-list PDF pilot
 
