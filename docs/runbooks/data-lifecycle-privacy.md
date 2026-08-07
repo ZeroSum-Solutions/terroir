@@ -30,6 +30,9 @@ setting before production use.
   Migration `0079` orders pour events, list items, and receipt inventory ahead
   of the root cascade so their individual-wine history guards cannot strand the
   tenant database graph.
+- Deleting one wine list makes its generated PDFs unreadable immediately because
+  the Storage policy requires the referenced list to exist. Its bounded physical
+  objects remain until tenant deletion removes the restaurant prefix.
 - A wine deletion removes the associated image variants after its atomic
   database deletion. If Storage is temporarily unavailable, the API returns a
   failure and a keyed retry repeats only the cleanup.
@@ -55,7 +58,7 @@ setting before production use.
 | API idempotency and rate-limit records | Application operator | 24 hours / configured rate-limit window | Existing cleanup removes them; Auth-user deletion cascades user-bound records. |
 | Background-job metadata and result | Restaurant owner and worker operator | 30 days after terminal status, once a worker-owned cleanup is deployed | PDF results contain a canonical tenant path and safe filename only. Do not place raw invoice content, signed URLs, credentials, or personal data in JSON payloads. The current worker lifecycle has no row-retention runner. |
 | Generated CSV export response | Requesting authenticated member | Request lifetime only | The application returns the CSV directly and does not persist it in application Storage. The recipient controls any downloaded copy. |
-| Generated wine-list PDF artifact | Restaurant owner | Latest snapshot per list/template until replacement or tenant deletion | The private bucket holds at most one classic, modern, and minimal artifact per list. Worker retries and later requests upsert the same canonical path; tenant deletion removes the prefix. |
+| Generated wine-list PDF artifact | Restaurant owner | Latest snapshot per list/template until replacement or tenant deletion | The private bucket holds at most one classic, modern, and minimal artifact per list. List deletion revokes reads immediately; bounded physical objects remain until tenant deletion removes the prefix. Worker retries and later requests upsert the same canonical path. |
 | Railway logs and Sentry telemetry | Platform operator | Provider-configured; record the live setting in the staging evidence | Application events are redacted before egress. Sentry removes request/user/context/breadcrumb/exception payloads and replay masks all text and blocks media. |
 | Azure OCR and Anthropic extraction payloads | Provider account owner | Provider-configured; confirm account controls before production | Invoice data is sent only for the authorized scan. Do not claim a provider retention period without current account evidence. |
 | GitHub backup and workflow artifacts | GitHub workflow operator | Backup artifacts: 90 days; staging-smoke artifacts: 14 days | Artifacts contain no application secrets or customer payloads; backup lifecycle is governed by the database backup runbook. |

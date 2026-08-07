@@ -105,6 +105,13 @@ export function createWineListPdfJobHandler(
         template: generated.template,
       };
     } catch (error) {
+      if (signal.aborted) {
+        throw signal.reason ?? new JobExecutionError(
+          "job_aborted",
+          true,
+          "Wine-list PDF job was interrupted",
+        );
+      }
       if (error instanceof JobExecutionError) throw error;
       if (error instanceof WineListPdfNotFoundError) {
         throw new JobExecutionError(

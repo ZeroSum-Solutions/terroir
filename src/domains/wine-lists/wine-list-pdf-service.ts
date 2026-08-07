@@ -21,6 +21,15 @@ export class WineListPdfGenerationError extends Error {
   }
 }
 
+export type WineListPdfTemplate = "classic" | "modern" | "minimal";
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function resolveWineListPdfTemplate(value: unknown): WineListPdfTemplate {
+  return value === "modern" || value === "minimal" ? value : "classic";
+}
+
 type PdfWineListItem = {
   position: number;
   glass_price: number | null;
@@ -42,24 +51,27 @@ export type GenerateWineListPdfInput = {
   restaurantId: string;
   listId: string;
   signal?: AbortSignal;
-  template?: string;
+  template?: WineListPdfTemplate;
 };
 
 export type GenerateWineListPdfResult = {
   filename: string;
   pdf: Buffer;
-  template: string;
+  template: WineListPdfTemplate;
 };
 
 export function wineListPdfArtifactPath(input: {
   restaurantId: string;
   listId: string;
-  template: string;
+  template: WineListPdfTemplate;
 }): string {
+  if (!UUID_PATTERN.test(input.restaurantId) || !UUID_PATTERN.test(input.listId)) {
+    throw new Error("Wine-list PDF artifact identity is invalid");
+  }
   return `${input.restaurantId}/${input.listId}_${input.template}.pdf`;
 }
 
-function wineListPdfFilename(name: string): string {
+export function wineListPdfFilename(name: string): string {
   const safeName = name.replace(/[^a-zA-Z0-9 ]/g, "").trim();
   return `${safeName || "wine-list"}.pdf`;
 }
@@ -95,7 +107,7 @@ export async function generateWineListPdf(
     (list.wine_list_sections ?? []) as unknown as WineListSectionEmbed<PdfWineListItem>[],
   );
 
-  const template = input.template ?? list.template ?? "classic";
+  const template = resolveWineListPdfTemplate(input.template ?? list.template);
   const html = renderTemplate(template, {
     name: list.name,
     restaurantName,

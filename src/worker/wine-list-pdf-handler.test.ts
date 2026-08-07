@@ -109,4 +109,20 @@ describe("wine-list PDF worker handler", () => {
     expect(generate).not.toHaveBeenCalled();
     expect(upload).not.toHaveBeenCalled();
   });
+
+  it("preserves the worker abort reason during an in-flight render", async () => {
+    const controller = new AbortController();
+    const abortReason = new JobExecutionError(
+      "worker_shutdown",
+      true,
+      "Worker is shutting down",
+    );
+    generate.mockImplementationOnce(async () => {
+      controller.abort(abortReason);
+      throw new DOMException("aborted", "AbortError");
+    });
+
+    await expect(handler()(job(), controller.signal)).rejects.toBe(abortReason);
+    expect(upload).not.toHaveBeenCalled();
+  });
 });
