@@ -7,8 +7,10 @@ convention landing).
 ## Convention
 
 - Every forward `NNNN_<name>.sql` landed from 2026-04-23 onward **must**
-  have a paired `NNNN_<name>.down.sql` here. The CI check in
-  `.github/workflows/ci.yml` enforces this.
+  have a paired `NNNN_<name>.down.sql` here. The CI check enforces this.
+- Forward and down migration versions must each be unique. `pnpm run
+  downs:check` reports every colliding file before Supabase can reject a local
+  reset.
 - Down migrations are applied **manually** for now — no tool runs them
   automatically. The convention exists so a rollback is a copy-paste
   away, not a whiteboard improvisation under production pressure.
@@ -52,8 +54,8 @@ update their inline definitions to match.
 
 ## When adding a new migration
 
-1. Write `supabase/migrations/NNNN_<name>.sql` as usual.
-2. Write `supabase/migrations/down/NNNN_<name>.down.sql` at the same
+1. Write `NNNN_<name>.sql` in the forward-migrations directory as usual.
+2. Write `NNNN_<name>.down.sql` in this directory at the same
    time. Think through the rollback *before* it's needed.
 3. If the migration is structurally irreversible, still create the
    `.down.sql` file, and make its contents a single comment line
@@ -61,13 +63,13 @@ update their inline definitions to match.
 4. Both files get committed together. CI rejects the PR if the down
    is missing.
 
-## Why paired files instead of a migration tool (sqitch/dbmate/goose)
+## Why paired files instead of a migration tool (sqitch, dbmate, or goose)
 
 - Supabase's local stack uses its own migration runner; swapping to a
   third-party tool requires a migration-of-migrations.
 - The Supabase CLI's `db push` respects `.sql` files in the up
   direction and is happy to ignore `down/` entirely. Our CI check
   fills the enforcement gap without a runtime dependency.
-- We can revisit when/if we ever need automatic rollback in CI/CD.
+- We can revisit if we ever need automatic rollback in CI and CD.
   Today's need is "a rollback is one command away when pageable" —
   paired files meet that bar.

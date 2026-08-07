@@ -1,7 +1,7 @@
 # Local Supabase Data
 
 Use this for production-like, sanitized local testing. It does **not** use
-the prod demo dataset from `docs/DEMO-DATA.md`.
+the prod demo dataset from [DEMO-DATA.md](DEMO-DATA.md).
 
 ## Seed Contents
 
@@ -11,14 +11,14 @@ the prod demo dataset from `docs/DEMO-DATA.md`.
 - 1 restaurant with cellar config
 - 250 wines across colors, regions, vintages, formats, pricing, enrichment,
   86'd, manual override, and alert states
-- 60 invoice scans with OCR/extraction-like JSON
+- 60 invoice scans with OCR-like extraction JSON
 - 400 inventory rows across sections, bins, formats, low-stock, and zero-stock
   cases
 - 4 wine lists: published BTG, published full list, draft list, archived list
-- Wine-list sections/items with prices, blurbs, hidden items, pour tracking,
-  and 86 availability states
-- 200 pour events, 25 open bottles, and 30 availability/reconcile events
-- 10 pending/accepted invite rows
+- Wine-list sections and items with prices, blurbs, hidden items, pour
+  tracking, and 86 availability states
+- 200 pour events, 25 open bottles, and 30 availability and reconcile events
+- 10 pending and accepted invite rows
 
 The seed restaurant id is:
 
@@ -30,7 +30,7 @@ de100000-0000-4000-8000-000000000001
 
 Set `.env.local` to a local Supabase target with migrations already applied:
 
-```bash
+```text
 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<local anon key>
 SUPABASE_SERVICE_ROLE_KEY=<local service role key>
@@ -46,6 +46,23 @@ Use `supabase status` to get the local anon and service-role keys when the
 Supabase CLI is running.
 
 ## Commands
+
+### Migration baseline
+
+Before resetting a local database, verify the migration baseline:
+
+```bash
+pnpm run downs:check
+```
+
+Every forward migration must use the `NNNN_<name>.sql` filename pattern, have
+a unique version, and have the paired down migration required by the check.
+
+To recreate the local database from that baseline:
+
+```bash
+supabase db reset
+```
 
 Dry run:
 
@@ -98,7 +115,7 @@ Terroir-local-123!
 
 The password can be overridden with:
 
-```bash
+```text
 LOCAL_SEED_USER_PASSWORD=<new local password>
 ```
 
@@ -106,16 +123,16 @@ LOCAL_SEED_USER_PASSWORD=<new local password>
 
 Once seeded, run authenticated checks against:
 
-- `/cellar`
-- `/cellar/open`
-- `/cellar/reconcile`
-- `/lists`
-- `/lists/de100005-0000-4000-8000-000000000001`
-- `/list/local-seed-by-the-glass`
-- `/list/local-seed-full-list`
-- `/insights`
-- `/price-comparison`
-- `/team`
+- [cellar](http://127.0.0.1:3000/cellar)
+- [open cellar](http://127.0.0.1:3000/cellar/open)
+- [reconcile cellar](http://127.0.0.1:3000/cellar/reconcile)
+- [wine lists](http://127.0.0.1:3000/lists)
+- [seeded wine list](http://127.0.0.1:3000/lists/de100005-0000-4000-8000-000000000001)
+- [by-the-glass list](http://127.0.0.1:3000/list/local-seed-by-the-glass)
+- [full list](http://127.0.0.1:3000/list/local-seed-full-list)
+- [insights](http://127.0.0.1:3000/insights)
+- [price comparison](http://127.0.0.1:3000/price-comparison)
+- [team](http://127.0.0.1:3000/team)
 
 For E2E, set `DEV_BYPASS_EMAIL` and run:
 

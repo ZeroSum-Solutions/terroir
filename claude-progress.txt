@@ -322,12 +322,12 @@ Stats after this session: 177/231 passing (76.6%).
   - Preserves enrichment_metadata (not overwritten)
 
 - **#56 User can attach tasting notes to a wine** (PASSING)
-  - Added tasting_notes column to wines table (migration 0046)
+  - Added tasting_notes column to wines table (migration 0072)
   - Included in PATCH /api/wines/[id] schema and EditMetadataModal
   - Displayed in wine detail drawer as a dedicated section with whitespace-pre-wrap
 
 - **#57 User can attach a hero image to a wine in Supabase Storage** (PASSING)
-  - Added hero_image_url column to wines table (migration 0046)
+  - Added hero_image_url column to wines table (migration 0072)
   - Created wine-images storage bucket with RLS policies (member upload, public read)
   - POST /api/wines/[id]/image: multipart upload, stores at {restaurantId}/{wineId}.{ext}
   - DELETE /api/wines/[id]/image: removes from storage + clears URL
@@ -342,8 +342,8 @@ Stats after this session: 177/231 passing (76.6%).
 - All three features (#55, #56, #57) marked passing
 
 ### Files changed
-- NEW: supabase/migrations/0046_wines_tasting_notes_hero_image.sql (7 lines)
-- NEW: supabase/migrations/down/0046_wines_tasting_notes_hero_image.down.sql (5 lines)
+- NEW: supabase/migrations/0072_wines_tasting_notes_hero_image.sql (7 lines)
+- NEW: supabase/migrations/down/0072_wines_tasting_notes_hero_image.down.sql (5 lines)
 - NEW: src/app/api/wines/[id]/route.ts (84 lines) -- PATCH for wine metadata
 - NEW: src/app/api/wines/[id]/image/route.ts (173 lines) -- POST + DELETE for hero image
 - NEW: src/app/(app)/cellar/edit-metadata-modal.tsx (284 lines) -- Edit modal component
@@ -654,7 +654,7 @@ Stats after this session: 159/231 passing (68.8%).
 - pour_events.open_bottle_id is nullable — new_bottle events don't populate it (created by trigger)
 
 ### Files changed
-- NEW: supabase/migrations/0038.sql (open_bottle_id column + updated RPCs)
+- NEW: supabase/migrations/0038_pour_events_open_bottle_id.sql (open_bottle_id column + updated RPCs)
 - NEW: supabase/migrations/down/0038_pour_events_open_bottle_id.down.sql
 - NEW: supabase/migrations/0040_undo_last_pour.sql (undo_last_pour RPC)
 - NEW: supabase/migrations/down/0040_undo_last_pour.down.sql
@@ -1376,7 +1376,7 @@ Completed:
 94 side by side scan review with image editable items PASSING
 95 edit line items before commit PASSING
 
-Migration 0049 adds format text and currency text
+Migration 0073 adds format text and currency text
 Updated save-scan and commit endpoints
 Updated database types
 Fixed onUpdateSource destructuring bug
