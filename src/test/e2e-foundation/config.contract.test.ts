@@ -94,6 +94,38 @@ describe("fixture identity isolation", () => {
 });
 
 describe("valid session injection", () => {
+  test("rejects a forged production config before any provider request", async () => {
+    const stagingConfig = readIsolatedE2eConfig(baseEnvironment())!;
+    const identity = buildFixtureIdentity(stagingConfig.runId, "pour-flow", 0);
+    const originalFetch = globalThis.fetch;
+    let requestCount = 0;
+    globalThis.fetch = async () => {
+      requestCount += 1;
+      throw new Error("network must not be reached");
+    };
+
+    try {
+      await expect(
+        injectFixtureSession(
+          { addCookies: async () => undefined } as never,
+          {
+            ...stagingConfig,
+            supabaseUrl: "https://qcfmwphlaekfkqwkfyth.supabase.co",
+          },
+          {
+            ...identity,
+            password: "synthetic-password",
+            userId: "10000000-0000-4000-8000-000000000001",
+          },
+        ),
+      ).rejects.toThrow(/validated staging configuration/i);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(requestCount).toBe(0);
+  });
+
   test("stores provider-issued SSR cookies in only the supplied browser context", async () => {
     const env = baseEnvironment();
     const config = readIsolatedE2eConfig(env)!;

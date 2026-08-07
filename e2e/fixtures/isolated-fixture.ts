@@ -7,6 +7,7 @@ import type {
   FixtureIdentity,
   IsolatedE2eConfig,
 } from "./config";
+import { assertIsolatedE2eConfig } from "./config";
 
 const STORAGE_BUCKET = "wine-images";
 const WEBP_PIXEL = Buffer.from(
@@ -30,6 +31,7 @@ export async function provisionIsolatedFixture(
   config: IsolatedE2eConfig,
   identity: FixtureIdentity,
 ): Promise<IsolatedFixture> {
+  assertIsolatedE2eConfig(config);
   const admin = adminClient(config);
   await cleanupIsolatedFixture(config, identity, admin);
 
@@ -76,6 +78,7 @@ export async function cleanupIsolatedFixture(
   identity: FixtureIdentity,
   existingAdmin?: AdminClient,
 ): Promise<void> {
+  assertIsolatedE2eConfig(config);
   const admin = existingAdmin ?? adminClient(config);
   const cleanupErrors: Error[] = [];
 
@@ -132,6 +135,7 @@ export async function injectFixtureSession(
   config: IsolatedE2eConfig,
   fixture: IsolatedFixture,
 ): Promise<void> {
+  assertIsolatedE2eConfig(config);
   let cookiesToSet: Array<{
     name: string;
     options: CookieOptions;
@@ -182,6 +186,7 @@ export async function injectFixtureSession(
 }
 
 function adminClient(config: IsolatedE2eConfig): AdminClient {
+  assertIsolatedE2eConfig(config);
   return createClient<Database>(config.supabaseUrl, config.serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });

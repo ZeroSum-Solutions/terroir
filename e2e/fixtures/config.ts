@@ -10,8 +10,10 @@ const STAGING_APPLICATION_ORIGIN =
 const STAGING_PROJECT_REF = "wwhxcgtcecsftcivosop";
 const STAGING_SUPABASE_ORIGIN =
   `https://${STAGING_PROJECT_REF}.supabase.co`;
+const VALIDATED_STAGING_CONFIG = Symbol("validated-staging-e2e-config");
 
 export type IsolatedE2eConfig = {
+  readonly [VALIDATED_STAGING_CONFIG]: true;
   baseUrl: string;
   publishableKey: string;
   runId: string;
@@ -134,14 +136,28 @@ export function readIsolatedE2eConfig(
     "TERROIR_E2E_SERVICE_ROLE_KEY",
   );
 
-  return {
+  return Object.freeze({
+    [VALIDATED_STAGING_CONFIG]: true as const,
     baseUrl,
     publishableKey,
     runId,
     serviceRoleKey,
     stagingProjectRef: STAGING_PROJECT_REF,
     supabaseUrl,
-  };
+  });
+}
+
+export function assertIsolatedE2eConfig(
+  config: IsolatedE2eConfig,
+): void {
+  if (
+    config[VALIDATED_STAGING_CONFIG] !== true
+    || config.baseUrl !== STAGING_APPLICATION_ORIGIN
+    || config.stagingProjectRef !== STAGING_PROJECT_REF
+    || config.supabaseUrl !== STAGING_SUPABASE_ORIGIN
+  ) {
+    throw new Error("The fixture helper requires a validated staging configuration.");
+  }
 }
 
 export function buildFixtureIdentity(
