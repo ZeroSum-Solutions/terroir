@@ -1,0 +1,30 @@
+spec_id: TER-020B
+parent_spec: TER-020
+commit: f66d02e0bacadf1148b40d13722c944ac9873e9d
+status: in_progress
+requirements_closed: []
+scope: Standardize request parsing and validation-error envelopes for POST and PATCH /api/cellar/config.
+tests:
+  targeted: pnpm exec vitest run src/app/api/cellar/config/route.test.ts (34 passed)
+  full: pnpm run test (129 files, 1348 passed); pnpm run test:contracts (6 files, 50 passed)
+  e2e: not-applicable; this parser-only change preserves existing capability and tenant guards, which route tests cover.
+staging:
+  url: not-applicable
+  result: not-run; no deployment was authorized for this isolated completion slice.
+data_change:
+  migration: none
+  backup_verified: not-applicable
+security:
+  tenant_check: pass; capability denial remains before request-body parsing and mutations remain inside the existing restaurant-scoped idempotency boundary.
+  secret_scan: pass; reviewed diff contains no credentials and internal errors remain redacted.
+evidence:
+  - POST and PATCH now use parseJson with their existing strict Zod schemas.
+  - Malformed JSON returns the shared invalid_json envelope before an idempotency claim.
+  - Schema-invalid JSON returns validation_error with Zod issue details before an idempotency claim.
+  - pnpm run verify:feature-ledger and pnpm run verify:api-contract passed.
+  - pnpm exec tsc --noEmit, pnpm run lint, pnpm run snapshot:check, pnpm run downs:check, and pnpm run build passed.
+known_limits:
+  - TER-CF-212 and TER-CF-213 remain active global requirements; this record does not claim their all-route closure.
+  - The audit retained the deliberate plaintext opaque 404 from /api/dev-login to preserve its anti-disclosure response semantics.
+  - The health probe's 200 operational-status payload is not an API error response and remains unchanged.
+rollback: Revert f66d02e0bacadf1148b40d13722c944ac9873e9d to restore the prior cellar-config parser behavior.
