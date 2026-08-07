@@ -33,6 +33,8 @@ describe("database backup workflow", () => {
       "n.nspname in ('auth', 'public', 'storage')",
     );
     expect(workflow).toContain("BACKUP_PG_DUMP_VERSION");
+    expect(workflow).toContain('pg_bin="/usr/lib/postgresql/17/bin"');
+    expect(workflow).toContain('echo "$pg_bin" >> "$GITHUB_PATH"');
     expect(workflow).toContain("artifact-digest");
     expect(workflow).toContain("${api_digest#sha256:}");
     expect(workflow).toContain("assert-dump-coverage.mjs");

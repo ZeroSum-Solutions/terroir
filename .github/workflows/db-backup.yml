@@ -92,7 +92,10 @@ jobs:
           sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/postgresql-pgdg.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17 age
-          echo "BACKUP_PG_DUMP_VERSION=$(pg_dump --version)" >> "$GITHUB_ENV"
+          pg_bin="/usr/lib/postgresql/17/bin"
+          test -x "$pg_bin/pg_dump"
+          echo "$pg_bin" >> "$GITHUB_PATH"
+          echo "BACKUP_PG_DUMP_VERSION=$($pg_bin/pg_dump --version)" >> "$GITHUB_ENV"
           echo "BACKUP_AGE_VERSION=$(age --version)" >> "$GITHUB_ENV"
 
       - name: Verify the backup role is read-only
