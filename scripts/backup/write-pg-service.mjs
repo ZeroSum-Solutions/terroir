@@ -43,13 +43,18 @@ export function createPgServiceConfig(
     throw new Error("SUPABASE_DB_URL must name exactly one database.");
   }
 
+  const isCanonicalLocalRestore =
+    ["127.0.0.1", "localhost", "::1"].includes(url.hostname) &&
+    url.port === "54322" &&
+    decodeURIComponent(url.username) === "postgres" &&
+    database === "postgres";
   const values = {
     host: url.hostname,
     port: url.port || "5432",
     dbname: decodeURIComponent(database),
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
-    sslmode: "require",
+    sslmode: isCanonicalLocalRestore ? "disable" : "require",
   };
   return [
     `[${serviceName}]`,
