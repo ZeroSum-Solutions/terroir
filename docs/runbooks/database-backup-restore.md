@@ -161,9 +161,15 @@ images do not match the production-managed auth schema. It accepts only
 superuser, resets the canonical stack, and prepares only tables listed in the
 authenticated source evidence. The narrow compatibility adjustment adds the
 three production migration-metadata columns when needed and rejects conflicting
-types. `pg_restore --data-only --disable-triggers` preserves all local
+types. The restore use-list is generated only from the authenticated
+source-evidence table and sequence inventories; extension-owned platform rows
+such as `cron.job` are excluded even though they exist in the full archive.
+Uncovered large objects and malformed, missing, or duplicate archive entries
+fail closed. `pg_restore --data-only --disable-triggers` preserves all local
 Supabase-owned DDL and global event triggers while `--exit-on-error` makes any
-remaining runtime/schema mismatch fail the drill.
+remaining runtime/schema mismatch fail the drill. Supabase start/reset output
+is captured only in the mode-700 temporary directory because normal status
+output contains local demo keys.
 
 The detailed commands below document the evidence flow for incident review;
 they are not a second supported procedure and must not be run independently.
@@ -305,6 +311,7 @@ pg_restore \
   --no-owner \
   --no-privileges \
   --exit-on-error \
+  --use-list="$restore_use_list" \
   "$dump_file"
 ```
 

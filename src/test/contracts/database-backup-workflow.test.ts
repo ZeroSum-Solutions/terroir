@@ -468,9 +468,84 @@ describe("database backup workflow", () => {
     expect(script).toContain("assert-supabase-cli-version.mjs");
     expect(script).toContain("supabase db reset");
     expect(script).toContain("prepare-disposable-restore.mjs");
+    expect(script).toContain("create-restore-use-list.mjs");
     expect(script).toContain("--data-only");
     expect(script).toContain("--disable-triggers");
+    expect(script).toContain("supabase-start.log");
+    expect(script).toContain("supabase-reset.log");
     expect(script).not.toContain("--clean");
+  });
+
+  it("selects only authenticated archive data and excludes platform rows", async () => {
+    const { createRestoreUseList } =
+      await loadScript("create-restore-use-list");
+    const listing = `; Archive created at 2026-08-07
+100; 0 0 TABLE DATA cron job postgres
+101; 0 0 TABLE DATA public wines postgres
+102; 0 0 TABLE DATA public wines_shadow postgres
+103; 0 0 TABLE DATA public wine_partitions postgres
+104; 0 0 SEQUENCE SET public wines_id_seq postgres
+105; 0 0 SEQUENCE SET cron jobid_seq postgres
+`;
+    const evidence = {
+      format_version: 1,
+      tables: [
+        { schema: "public", table: "wines", kind: "table" },
+        {
+          schema: "public",
+          table: "wine_partitions",
+          kind: "partitioned",
+        },
+      ],
+      sequences: [
+        { schema: "public", sequence: "wines_id_seq" },
+      ],
+    };
+    const useList = createRestoreUseList(listing, evidence);
+    expect(useList).toContain("TABLE DATA public wines postgres");
+    expect(useList).toContain(
+      "TABLE DATA public wine_partitions postgres",
+    );
+    expect(useList).toContain("SEQUENCE SET public wines_id_seq postgres");
+    expect(useList).not.toContain("cron job");
+    expect(useList).not.toContain("wines_shadow");
+  });
+
+  it("fails closed on ambiguous or uncovered archive data", async () => {
+    const { createRestoreUseList } =
+      await loadScript("create-restore-use-list");
+    const evidence = {
+      format_version: 1,
+      tables: [{ schema: "public", table: "wines", kind: "table" }],
+      sequences: [],
+    };
+    expect(() =>
+      createRestoreUseList(
+        "101; 0 0 TABLE DATA public wines postgres\n101; 0 0 TABLE DATA public wines postgres\n",
+        evidence,
+      ),
+    ).toThrow(/duplicate TABLE DATA/u);
+    expect(() =>
+      createRestoreUseList(
+        "101; 0 0 TABLE DATA public wines\n",
+        evidence,
+      ),
+    ).toThrow(/unparseable/u);
+    expect(() =>
+      createRestoreUseList(
+        "101; 0 0 TABLE DATA public wines postgres\n102; 0 0 BLOBS - - postgres\n",
+        evidence,
+      ),
+    ).toThrow(/large-object data/u);
+    expect(() =>
+      createRestoreUseList(
+        "101; 0 0 TABLE DATA public wines postgres\n",
+        {
+          ...evidence,
+          tables: [{ schema: "public", table: "wines owner" }],
+        },
+      ),
+    ).toThrow(/unsupported identifier/u);
   });
 
   it("validates the redacted role-state vector", async () => {

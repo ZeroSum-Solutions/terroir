@@ -139,9 +139,15 @@ BACKUP_DUMP_FILE="$dump_file" \
 BACKUP_EVIDENCE_FILE="$source_evidence" \
   node scripts/backup/verify-artifact.mjs
 
-supabase start
+printf 'Starting the disposable Supabase stack (status output suppressed).\n'
+if ! supabase start > "$work_dir/supabase-start.log" 2>&1; then
+  fail "supabase start failed; output was suppressed because it can contain local credentials"
+fi
 stack_started=true
-supabase db reset
+printf 'Resetting the disposable Supabase database.\n'
+if ! supabase db reset > "$work_dir/supabase-reset.log" 2>&1; then
+  fail "supabase db reset failed; output was suppressed because it can contain local credentials"
+fi
 PG_DATABASE_URL="$target_url" node scripts/backup/assert-disposable-target.mjs
 export PGSERVICEFILE="$work_dir/restore.pg_service.conf"
 export PGSERVICE_NAME=terroir_restore
@@ -155,12 +161,20 @@ restore_identity="$(psql 'service=terroir_restore' -X -A -t -v ON_ERROR_STOP=1 \
 BACKUP_SOURCE_EVIDENCE_FILE="$source_evidence" \
   node scripts/backup/prepare-disposable-restore.mjs | \
   psql 'service=terroir_restore' -X -q -v ON_ERROR_STOP=1
+archive_list="$work_dir/archive.list"
+restore_use_list="$work_dir/restore.use-list"
+pg_restore --list "$dump_file" > "$archive_list"
+BACKUP_ARCHIVE_LIST_FILE="$archive_list" \
+BACKUP_SOURCE_EVIDENCE_FILE="$source_evidence" \
+BACKUP_RESTORE_USE_LIST_FILE="$restore_use_list" \
+  node scripts/backup/create-restore-use-list.mjs
 pg_restore --dbname=service=terroir_restore \
   --data-only \
   --disable-triggers \
   --no-owner \
   --no-privileges \
   --exit-on-error \
+  --use-list="$restore_use_list" \
   "$dump_file"
 
 restored_evidence="$work_dir/restored-evidence.json"
