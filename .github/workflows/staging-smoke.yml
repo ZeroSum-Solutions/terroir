@@ -89,8 +89,17 @@ jobs:
           test -x "$TERROIR_E2E_BROWSER_PATH"
           "$TERROIR_E2E_BROWSER_PATH" --version
 
-      - name: Install Playwright video helper
-        run: pnpm exec playwright install ffmpeg
+      - name: Bind the runner video helper to Playwright
+        shell: bash
+        run: |
+          set -euo pipefail
+          system_ffmpeg="$(command -v ffmpeg)"
+          test -x "$system_ffmpeg"
+          revision="$(node -e 'const path = require("node:path"); const testPackage = require.resolve("@playwright/test/package.json"); const playwrightPackage = require.resolve("playwright/package.json", { paths: [path.dirname(testPackage)] }); const corePackage = require.resolve("playwright-core/package.json", { paths: [path.dirname(playwrightPackage)] }); const manifest = require(path.join(path.dirname(corePackage), "browsers.json")); const entry = manifest.browsers.find(({ name }) => name === "ffmpeg"); if (!entry?.revision) process.exit(1); process.stdout.write(entry.revision)')"
+          playwright_ffmpeg="$HOME/.cache/ms-playwright/ffmpeg-$revision/ffmpeg-linux"
+          mkdir -p "$(dirname "$playwright_ffmpeg")"
+          ln -sfn "$system_ffmpeg" "$playwright_ffmpeg"
+          "$playwright_ffmpeg" -version
 
       - name: Run the isolated authenticated workflow
         run: pnpm run test:e2e:isolated
