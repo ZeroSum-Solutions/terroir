@@ -1,0 +1,36 @@
+spec_id: TER-010
+commit: ac7db9aaee9a83853976d5dfe89b44235e6f91fd
+status: implemented_external_verification_pending
+scope: "Secure the email authentication application boundary: configured-origin redirects, password sign-up and sign-in, recovery, sign-out, generic auth failures, and a staging-only real-provider E2E harness."
+requirements_implemented:
+  - Email/password sign-up and password sign-in use Supabase Auth and generic outcomes.
+  - Magic-link and reset URLs use NEXT_PUBLIC_APP_URL rather than request Host or forwarded-host headers.
+  - Callback, recovery confirmation, reset, implicit completion, and sign-out routes clear or avoid sensitive URL/referrer data and reject unsafe destinations.
+  - Per-instance five-attempt-per-minute burst control supplements Supabase's configured email rate limit.
+  - The real-provider browser suite accepts only explicit, isolated staging and Mailpit configuration and deletes its generated fixture in finally.
+requirements_not_closed:
+  - TER-010 acceptance requires real-provider staging E2E and an approved production canary from a clean browser.
+  - Supabase Site URL, redirect allow-list, email-provider settings, and the redacted before-and-after settings export are approval-gated operator work.
+tests:
+  targeted: pnpm exec vitest run src/app/login/actions.test.ts src/app/auth/callback/route.test.ts src/app/auth/confirm/route.test.ts src/lib/api/safe-redirect.test.ts src/lib/auth/attempt-rate-limit.test.ts src/lib/auth/redirects.test.ts src/lib/auth/real-e2e-config.test.ts src/lib/supabase/proxy.test.ts (8 files, 45 passed)
+  full: pnpm run test (137 files, 1427 passed); pnpm run test:contracts (8 files, 78 passed); pnpm exec tsc --noEmit; pnpm run lint; pnpm run build
+  contracts: pnpm run verify:api-contract (87 discovered operations, 5 planned promises, 87 classifications); pnpm run verify:feature-ledger (269 features); pnpm run snapshot:check (73 migrations, no schema diff); pnpm run downs:check (62 paired forward migrations)
+  real_provider_e2e: skipped intentionally; AUTH_E2E_ENABLED and the isolated staging/Mailpit secret contract were not supplied.
+  local_browser_smoke: unavailable; all three smoke tests stopped before application execution because the repository-pinned Chromium 1217 cache was missing Google Chrome for Testing Framework. This is not a pass.
+staging:
+  url: not-configured
+  result: not-run; no deployment, dashboard setting, test account, credential, or external auth configuration was changed.
+production:
+  canary: not-run; requires explicit approval.
+data_change:
+  migration: none
+  backup_verified: not-applicable
+security:
+  redirect_boundary: pass in unit coverage; safe paths only, with encoded separators, control characters, malformed encodings, and forwarded-host input rejected or ignored.
+  error_boundary: pass in unit coverage; provider errors and privileged next values are not reflected on failed link paths.
+  secret_scan: pass; gitleaks protect --staged scanned the implementation commit with no leaks.
+known_limits:
+  - Documentation describes the required configuration but cannot prove mutable Supabase settings until an approved operator captures the redacted before-and-after record.
+  - Browser and provider behavior remains unverified against an approved staging target; a skipped real-provider test must not close the criterion.
+  - Existing temporary development bypass removal remains TER-011 scope; this change adds no bypass.
+rollback: Revert ac7db9aaee9a83853976d5dfe89b44235e6f91fd to remove this authentication implementation; no migration or external configuration change is included.
