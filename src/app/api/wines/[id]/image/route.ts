@@ -11,6 +11,7 @@ import {
 import { requireRole } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseMultipart, parseParams } from "@/lib/api/validation";
 import { WineIdParamsSchema } from "@/lib/api/wine-mutation-schemas";
 import { WineImageFormSchema } from "@/lib/api/wine-provider-mutation-schemas";
@@ -18,6 +19,9 @@ import { WineImageFormSchema } from "@/lib/api/wine-provider-mutation-schemas";
 export const runtime = "nodejs";
 
 type Params = Promise<{ id: string }>;
+type ImageMutationBody =
+  | { hero_image_url: string | null }
+  | { error: { code: string; message: string } };
 
 export async function POST(
   request: NextRequest,
@@ -34,36 +38,46 @@ export async function POST(
     if (!parsedForm.ok) return parsedForm.response;
 
     try {
-      const heroImageUrl = await uploadWineHeroImage({
+      const file = parsedForm.data.file;
+      const fileBytes = new Uint8Array(await file.arrayBuffer());
+      return await idempotentMutationResponse<ImageMutationBody>({
+        request,
         supabase,
         restaurantId,
-        wineId: parsedParams.data.id,
-        file: parsedForm.data.file,
+        operationId: "api:POST:/api/wines/{param}/image",
+        payload: {
+          id: parsedParams.data.id,
+          file: { size: file.size, type: file.type },
+        },
+        binaryParts: [fileBytes],
+        releaseOnError: false,
+        handler: async () => {
+          try {
+            const heroImageUrl = await uploadWineHeroImage({
+              supabase,
+              restaurantId,
+              wineId: parsedParams.data.id,
+              file,
+            });
+            return {
+              status: 200,
+              body: { hero_image_url: heroImageUrl },
+            };
+          } catch (error) {
+            const result = deterministicImageError(error);
+            if (result) return result;
+            throw error;
+          }
+        },
       });
-      return NextResponse.json({ hero_image_url: heroImageUrl });
     } catch (error) {
-      if (error instanceof WineImageNotFoundError) {
-        return Errors.notFound("Wine");
-      }
-      if (error instanceof WineImageUnsupportedTypeError) {
-        return Errors.unsupportedMediaType(error.message);
-      }
-      if (error instanceof WineImageTooLargeError) {
-        return Errors.tooLarge(error.message);
-      }
-      if (error instanceof WineImageStorageError) {
-        return Errors.internal("Image upload failed.");
-      }
-      if (error instanceof WineImagePersistenceError) {
-        return Errors.internal("Failed to save image.");
-      }
-      throw error;
+      return imageErrorResponse(error, "Image upload failed.");
     }
   });
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Params },
 ) {
   return withApiHandler(async () => {
@@ -75,23 +89,60 @@ export async function DELETE(
     if (!parsedParams.ok) return parsedParams.response;
 
     try {
-      await deleteWineHeroImage({
+      return await idempotentMutationResponse<ImageMutationBody>({
+        request,
         supabase,
         restaurantId,
-        wineId: parsedParams.data.id,
+        operationId: "api:DELETE:/api/wines/{param}/image",
+        payload: { id: parsedParams.data.id },
+        releaseOnError: false,
+        handler: async () => {
+          try {
+            await deleteWineHeroImage({
+              supabase,
+              restaurantId,
+              wineId: parsedParams.data.id,
+            });
+            return { status: 200, body: { hero_image_url: null } };
+          } catch (error) {
+            const result = deterministicImageError(error);
+            if (result) return result;
+            throw error;
+          }
+        },
       });
-      return NextResponse.json({ hero_image_url: null });
     } catch (error) {
-      if (error instanceof WineImageNotFoundError) {
-        return Errors.notFound("Wine");
-      }
-      if (error instanceof WineImagePersistenceError) {
-        return Errors.internal("Failed to remove image.");
-      }
-      if (error instanceof WineImageStorageError) {
-        return Errors.internal("Failed to remove image.");
-      }
-      throw error;
+      return imageErrorResponse(error, "Failed to remove image.");
     }
   });
+}
+
+function deterministicImageError(error: unknown) {
+  if (error instanceof WineImageNotFoundError) {
+    return {
+      status: 404,
+      body: { error: { code: "not_found", message: "Wine not found." } },
+    };
+  }
+  if (error instanceof WineImageUnsupportedTypeError) {
+    return {
+      status: 415,
+      body: {
+        error: { code: "unsupported_media_type", message: error.message },
+      },
+    };
+  }
+  if (error instanceof WineImageTooLargeError) {
+    return {
+      status: 413,
+      body: { error: { code: "too_large", message: error.message } },
+    };
+  }
+  return null;
+}
+
+function imageErrorResponse(error: unknown, message: string) {
+  if (error instanceof WineImageStorageError) return Errors.internal(message);
+  if (error instanceof WineImagePersistenceError) return Errors.internal(message);
+  throw error;
 }

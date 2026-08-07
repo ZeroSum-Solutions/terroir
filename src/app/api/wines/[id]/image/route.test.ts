@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextResponse, type NextRequest } from "next/server";
+import { createIdempotencyRequestHash } from "@/lib/api/idempotency";
 
 const mockRequireRole = vi.fn();
 vi.mock("@/lib/api/auth", () => ({
@@ -22,6 +23,10 @@ function makeSupabase(opts: {
   updateError?: { message: string } | null;
   updatedWine?: WineRow;
   removeError?: { message: string } | null;
+  rpcImplementation?: (
+    name: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: unknown }>;
 }) {
   const upload = vi.fn(() =>
     Promise.resolve({ data: null, error: opts.uploadError ?? null }),
@@ -73,7 +78,14 @@ function makeSupabase(opts: {
     return selectChain;
   });
   return {
-    supabase: { from, storage: { from: storageFrom } },
+    supabase: {
+      from,
+      storage: { from: storageFrom },
+      rpc: vi.fn(
+        opts.rpcImplementation ??
+          (async () => ({ data: null, error: new Error("unexpected RPC") })),
+      ),
+    },
     getPublicUrl,
     remove,
     storageFrom,
@@ -100,10 +112,15 @@ function makeFile(type = "image/png", size?: number) {
   return new File([bytes], "hero", { type });
 }
 
-function makeFormRequest(file: File | null): NextRequest {
+function makeFormRequest(file: File | null, idempotencyKey?: string): NextRequest {
   const formData = new FormData();
   if (file) formData.set("file", file);
-  return { formData: async () => formData } as NextRequest;
+  return {
+    formData: async () => formData,
+    headers: new Headers(
+      idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {},
+    ),
+  } as NextRequest;
 }
 
 function badFormRequest(): NextRequest {
@@ -112,6 +129,12 @@ function badFormRequest(): NextRequest {
       throw new Error("not multipart");
     },
   } as unknown) as NextRequest;
+}
+
+function makeDeleteRequest(idempotencyKey?: string): NextRequest {
+  return new Request("http://localhost/api/wines/image", {
+    headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {},
+  }) as NextRequest;
 }
 
 describe("POST /api/wines/[id]/image", () => {
@@ -217,6 +240,65 @@ describe("POST /api/wines/[id]/image", () => {
     expect(updates).toHaveLength(0);
   });
 
+  it("replays a keyed upload exactly without a second storage write", async () => {
+    const key = "wine-image-upload-key";
+    const body = await makeFile().arrayBuffer();
+    const requestHash = createIdempotencyRequestHash(
+      { id: WINE_ID, file: { size: body.byteLength, type: "image/png" } },
+      new Uint8Array(body),
+    );
+    const publicUrl = `https://cdn.example/r-A/${WINE_ID}.png`;
+    const { supabase, upload } = makeSupabase({
+      wine: { id: WINE_ID },
+      rpcImplementation: async (name, args) => {
+        if (name === "claim_api_idempotency") {
+          expect(args).toMatchObject({
+            p_operation_id: "api:POST:/api/wines/{param}/image",
+            p_request_hash: requestHash,
+          });
+          return {
+            data: [
+              {
+                outcome: upload.mock.calls.length === 0 ? "claimed" : "replay",
+                response_status: upload.mock.calls.length === 0 ? null : 200,
+                response_headers: upload.mock.calls.length === 0 ? null : {},
+                response_body:
+                  upload.mock.calls.length === 0
+                    ? null
+                    : { hero_image_url: publicUrl },
+              },
+            ],
+            error: null,
+          };
+        }
+        if (name === "complete_api_idempotency") {
+          return { data: true, error: null };
+        }
+        throw new Error(`unexpected RPC ${name}`);
+      },
+    });
+    mockRequireRole.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "manager",
+    });
+
+    const first = await POST(
+      makeFormRequest(makeFile(), key),
+      makeContext(),
+    );
+    const replay = await POST(
+      makeFormRequest(makeFile(), key),
+      makeContext(),
+    );
+
+    expect(first.headers.get("Idempotency-Replayed")).toBe("false");
+    expect(replay.headers.get("Idempotency-Replayed")).toBe("true");
+    await expect(replay.json()).resolves.toEqual({ hero_image_url: publicUrl });
+    expect(upload).toHaveBeenCalledTimes(1);
+  });
+
   it("415s unsupported image types before touching storage", async () => {
     const { supabase, upload } = makeSupabase({ wine: { id: WINE_ID } });
     mockRequireRole.mockResolvedValue({
@@ -318,6 +400,49 @@ describe("POST /api/wines/[id]/image", () => {
     expect(res.status).toBe(500);
   });
 
+  it("marks a keyed storage failure unknown instead of replaying an uncertain write", async () => {
+    const { supabase } = makeSupabase({
+      wine: { id: WINE_ID },
+      uploadError: { message: "bucket offline" },
+      rpcImplementation: async (name) => {
+        if (name === "claim_api_idempotency") {
+          return {
+            data: [
+              {
+                outcome: "claimed",
+                response_status: null,
+                response_headers: null,
+                response_body: null,
+              },
+            ],
+            error: null,
+          };
+        }
+        if (name === "fail_api_idempotency") return { data: true, error: null };
+        throw new Error(`unexpected RPC ${name}`);
+      },
+    });
+    mockRequireRole.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "manager",
+    });
+
+    const res = await POST(
+      makeFormRequest(makeFile(), "wine-image-storage-failure-key"),
+      makeContext(),
+    );
+
+    expect(res.status).toBe(500);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      "fail_api_idempotency",
+      expect.objectContaining({
+        p_operation_id: "api:POST:/api/wines/{param}/image",
+      }),
+    );
+  });
+
   it("removes the uploaded object when persisting its URL fails", async () => {
     const { supabase, remove } = makeSupabase({
       wine: { id: WINE_ID },
@@ -363,7 +488,7 @@ describe("DELETE /api/wines/[id]/image", () => {
       NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
     );
 
-    const res = await DELETE({} as NextRequest, makeContext());
+    const res = await DELETE(makeDeleteRequest(), makeContext());
 
     expect(res.status).toBe(401);
   });
@@ -379,7 +504,7 @@ describe("DELETE /api/wines/[id]/image", () => {
       role: "manager",
     });
 
-    const res = await DELETE({} as NextRequest, makeContext());
+    const res = await DELETE(makeDeleteRequest(), makeContext());
 
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ hero_image_url: null });
@@ -395,6 +520,53 @@ describe("DELETE /api/wines/[id]/image", () => {
     });
   });
 
+  it("replays a keyed delete exactly without removing objects twice", async () => {
+    const key = "wine-image-delete-key";
+    const requestHash = createIdempotencyRequestHash({ id: WINE_ID });
+    const { supabase, remove } = makeSupabase({
+      wine: { id: WINE_ID },
+      rpcImplementation: async (name, args) => {
+        if (name === "claim_api_idempotency") {
+          expect(args).toMatchObject({
+            p_operation_id: "api:DELETE:/api/wines/{param}/image",
+            p_request_hash: requestHash,
+          });
+          return {
+            data: [
+              {
+                outcome: remove.mock.calls.length === 0 ? "claimed" : "replay",
+                response_status: remove.mock.calls.length === 0 ? null : 200,
+                response_headers: remove.mock.calls.length === 0 ? null : {},
+                response_body:
+                  remove.mock.calls.length === 0 ? null : { hero_image_url: null },
+              },
+            ],
+            error: null,
+          };
+        }
+        if (name === "complete_api_idempotency") {
+          return { data: true, error: null };
+        }
+        throw new Error(`unexpected RPC ${name}`);
+      },
+    });
+    mockRequireRole.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "manager",
+    });
+
+    const request = makeDeleteRequest(key);
+    const first = await DELETE(request, makeContext());
+    const replay = await DELETE(request, makeContext());
+
+    expect(first.headers.get("Idempotency-Replayed")).toBe("false");
+    expect(replay.headers.get("Idempotency-Replayed")).toBe("true");
+    await expect(replay.json()).resolves.toEqual({ hero_image_url: null });
+    expect(remove).toHaveBeenCalledTimes(3);
+  });
+
   it("500s after clearing the URL when object removal needs a retry", async () => {
     const { supabase, updates } = makeSupabase({
       wine: { id: WINE_ID },
@@ -407,7 +579,7 @@ describe("DELETE /api/wines/[id]/image", () => {
       role: "manager",
     });
 
-    const res = await DELETE({} as NextRequest, makeContext());
+    const res = await DELETE(makeDeleteRequest(), makeContext());
 
     expect(res.status).toBe(500);
     expect(updates).toContainEqual({
@@ -428,7 +600,7 @@ describe("DELETE /api/wines/[id]/image", () => {
       role: "manager",
     });
 
-    const res = await DELETE({} as NextRequest, makeContext());
+    const res = await DELETE(makeDeleteRequest(), makeContext());
 
     expect(res.status).toBe(404);
     expect(remove).not.toHaveBeenCalled();
@@ -446,7 +618,7 @@ describe("DELETE /api/wines/[id]/image", () => {
       role: "manager",
     });
 
-    const res = await DELETE({} as NextRequest, makeContext());
+    const res = await DELETE(makeDeleteRequest(), makeContext());
 
     expect(res.status).toBe(500);
   });
@@ -463,7 +635,7 @@ describe("DELETE /api/wines/[id]/image", () => {
       role: "manager",
     });
 
-    const res = await DELETE({} as NextRequest, makeContext());
+    const res = await DELETE(makeDeleteRequest(), makeContext());
 
     expect(res.status).toBe(404);
     expect(remove).not.toHaveBeenCalled();

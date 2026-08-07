@@ -28,14 +28,12 @@ const inventory = JSON.parse(
 ) as Inventory;
 
 const EXPECTED_PENDING_DISCOVERED = [
-  "api:DELETE:/api/wines/{param}/image",
   "api:PATCH:/api/wines/{param}",
   "api:PATCH:/api/wines/{param}/availability",
   "api:POST:/api/wines/create-from-lwin",
   "api:POST:/api/wines/enrich",
   "api:POST:/api/wines/refresh-retail-batch",
   "api:POST:/api/wines/{param}/enrich",
-  "api:POST:/api/wines/{param}/image",
   "api:POST:/api/wines/{param}/refresh-retail",
 ] as const satisfies readonly ApiOperationId[];
 

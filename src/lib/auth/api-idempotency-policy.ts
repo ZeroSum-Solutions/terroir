@@ -524,6 +524,19 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       sources: ["src/app/(app)/lists/[id]/wine-list-editor.tsx"],
     },
   },
+  "api:DELETE:/api/wines/{param}/image": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/cellar/wine-detail-drawer.tsx"],
+    },
+  },
   "api:PATCH:/api/wine-list-items/reorder": {
     boundary: { kind: "generic-wrapper", count: 1 },
     identity: {
@@ -570,6 +583,19 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
     client: {
       lifecycle: "session-persistent",
       sources: ["src/app/(app)/lists/[id]/wine-list-editor.tsx"],
+    },
+  },
+  "api:POST:/api/wines/{param}/image": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "required",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/cellar/wine-detail-drawer.tsx"],
     },
   },
   "api:DELETE:/api/wine-list-sections/{param}": {

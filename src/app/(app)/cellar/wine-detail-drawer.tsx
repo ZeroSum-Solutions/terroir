@@ -8,6 +8,7 @@ import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { readApiError } from "@/lib/api/client-error";
 import {
   createIdempotentCommandStore,
+  createBinaryCommandFingerprint,
   createSessionCommandPersistence,
   IdempotentCommandBusyError,
   readApiErrorCode,
@@ -48,6 +49,9 @@ const undoPourCommands = createIdempotentCommandStore({
 });
 const deleteCellarWineCommands = createIdempotentCommandStore({
   persistence: createSessionCommandPersistence("terroir:cellar-delete"),
+});
+const wineImageCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence("terroir:wine-image"),
 });
 const undoPourSlotsPendingReset = new Set<string>();
 
@@ -92,6 +96,7 @@ export function WineDetailDrawer({
   const [editOpen, setEditOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const wineImageBusyRef = useRef(false);
 
   // BND-119: track last pour for undo.
   const [lastPour, setLastPour] = useState<{ ml: number } | null>(null);
@@ -310,25 +315,42 @@ export function WineDetailDrawer({
   const handleImageUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      if (!file || !row) return;
+      if (!file || !row || wineImageBusyRef.current) return;
+      wineImageBusyRef.current = true;
       setUploading(true);
       setErrorMsg(null);
+      let shouldReconcile = true;
       try {
-        const formData = new FormData();
-        formData.append("file", file);
-        const res = await fetch(`/api/wines/${row.wine_id}/image`, {
+        const fingerprint = await createBinaryCommandFingerprint(
+          { id: row.wine_id, file: { size: file.size, type: file.type } },
+          file,
+        );
+        const { response, data } = await wineImageCommands.binary<unknown>({
+          slot: `image:upload:${row.wine_id}`,
+          url: `/api/wines/${row.wine_id}/image`,
           method: "POST",
-          body: formData,
+          fingerprint,
+          makeBody: () => {
+            const formData = new FormData();
+            formData.append("file", file);
+            return formData;
+          },
         });
-        if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-          throw new Error(payload?.error?.message ?? `Upload failed (${res.status}).`);
+        shouldReconcile =
+          !response.ok &&
+          shouldRetainIdempotencyKey(response.status, readApiErrorCode(data));
+        if (!response.ok) {
+          throw new Error(
+            readApiError(data, `Upload failed (${response.status}).`).message,
+          );
         }
         toast.success("Image uploaded");
         startTransition(() => router.refresh());
       } catch (err) {
+        if (shouldReconcile) startTransition(() => router.refresh());
         setErrorMsg(err instanceof Error ? err.message : "Upload failed.");
       } finally {
+        wineImageBusyRef.current = false;
         setUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
       }
@@ -338,20 +360,32 @@ export function WineDetailDrawer({
 
   const handleImageDelete = useCallback(
     async () => {
-      if (!row) return;
+      if (!row || wineImageBusyRef.current) return;
+      wineImageBusyRef.current = true;
       setUploading(true);
       setErrorMsg(null);
+      let shouldReconcile = true;
       try {
-        const res = await fetch(`/api/wines/${row.wine_id}/image`, { method: "DELETE" });
-        if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-          throw new Error(payload?.error?.message ?? `Delete failed (${res.status}).`);
+        const { response, data } = await wineImageCommands.json<unknown>({
+          slot: `image:delete:${row.wine_id}`,
+          url: `/api/wines/${row.wine_id}/image`,
+          method: "DELETE",
+        });
+        shouldReconcile =
+          !response.ok &&
+          shouldRetainIdempotencyKey(response.status, readApiErrorCode(data));
+        if (!response.ok) {
+          throw new Error(
+            readApiError(data, `Delete failed (${response.status}).`).message,
+          );
         }
         toast.success("Image removed");
         startTransition(() => router.refresh());
       } catch (err) {
+        if (shouldReconcile) startTransition(() => router.refresh());
         setErrorMsg(err instanceof Error ? err.message : "Delete failed.");
       } finally {
+        wineImageBusyRef.current = false;
         setUploading(false);
       }
     },

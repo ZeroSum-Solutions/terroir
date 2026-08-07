@@ -222,6 +222,23 @@ describe("high-risk idempotency clients", () => {
     expect(drawer).toContain("if (shouldReconcile)");
   });
 
+  it("persists one wine-image key per wine and fingerprints the exact upload bytes", () => {
+    const drawer = source(
+      "src/app/(app)/cellar/wine-detail-drawer.tsx",
+    );
+
+    expect(drawer).toContain(
+      'createSessionCommandPersistence("terroir:wine-image")',
+    );
+    expect(drawer).toContain("createBinaryCommandFingerprint");
+    expect(drawer).toContain("wineImageCommands.binary");
+    expect(drawer).toContain("wineImageCommands.json");
+    expect(drawer).toContain('url: `/api/wines/${row.wine_id}/image`');
+    expect(drawer).toContain("slot: `image:upload:${row.wine_id}`");
+    expect(drawer).toContain("slot: `image:delete:${row.wine_id}`");
+    expect(drawer).toContain("shouldRetainIdempotencyKey(");
+  });
+
   it("persists one invitation key across remounts and transient failures", () => {
     const invitePage = source("src/app/invite/[token]/page.tsx");
 
