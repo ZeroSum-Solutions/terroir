@@ -406,6 +406,40 @@ describe("POST /api/cellar/config idempotency", () => {
     expect(supabase.inserts).toEqual([]);
   });
 
+  it("returns the shared malformed-JSON envelope before a claim", async () => {
+    const supabase = makeMutationSupabase();
+    allowMutation(supabase);
+
+    const response = await POST(
+      mutationRequest("POST", "{malformed", KEY),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "invalid_json", message: "Invalid JSON." },
+    });
+    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(supabase.inserts).toEqual([]);
+  });
+
+  it("returns Zod issue details for schema-invalid bodies before a claim", async () => {
+    const supabase = makeMutationSupabase();
+    allowMutation(supabase);
+
+    const response = await POST(mutationRequest("POST", { rows: 0 }, KEY));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: "validation_error",
+        message: "Invalid input.",
+        details: [{ path: ["rows"] }],
+      },
+    });
+    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(supabase.inserts).toEqual([]);
+  });
+
   it("rejects a malformed key before the insert", async () => {
     const supabase = makeMutationSupabase();
     allowMutation(supabase);
@@ -674,6 +708,42 @@ describe("PATCH /api/cellar/config idempotency", () => {
     const response = await PATCH(mutationRequest("PATCH", body, KEY));
 
     expect(response.status).toBe(400);
+    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("returns the shared malformed-JSON envelope before a claim", async () => {
+    const supabase = makeMutationSupabase();
+    allowMutation(supabase);
+
+    const response = await PATCH(
+      mutationRequest("PATCH", "{malformed", KEY),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "invalid_json", message: "Invalid JSON." },
+    });
+    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("returns Zod issue details for schema-invalid bodies before a claim", async () => {
+    const supabase = makeMutationSupabase();
+    allowMutation(supabase);
+
+    const response = await PATCH(
+      mutationRequest("PATCH", { sections: [{ id: "", name: "A" }] }, KEY),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: "validation_error",
+        message: "Invalid sections.",
+        details: [{ path: ["sections", 0, "id"] }],
+      },
+    });
     expect(supabase.rpc).not.toHaveBeenCalled();
     expect(supabase.from).not.toHaveBeenCalled();
   });

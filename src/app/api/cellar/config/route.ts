@@ -5,6 +5,7 @@ import { Errors } from "@/lib/api/errors";
 import { requireCapability, requireMembership } from "@/lib/api/auth";
 import { withApiHandler } from "@/lib/api/handler";
 import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
+import { parseJson } from "@/lib/api/validation";
 import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
@@ -85,17 +86,8 @@ async function createCellarConfig(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
-  let raw: unknown;
-  try {
-    raw = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
-
-  const parsed = CellarConfigSchema.safeParse(raw);
-  if (!parsed.success) {
-    return Errors.badRequest(parsed.error.issues[0]?.message ?? "Invalid input.");
-  }
+  const parsed = await parseJson(request, CellarConfigSchema);
+  if (!parsed.ok) return parsed.response;
 
   const body = parsed.data;
   const normalized = {
@@ -171,17 +163,10 @@ async function updateCellarConfig(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
 
-  let raw: unknown;
-  try {
-    raw = await request.json();
-  } catch {
-    return Errors.badRequest("Invalid JSON.");
-  }
-
-  const parsed = PatchSectionsSchema.safeParse(raw);
-  if (!parsed.success) {
-    return Errors.validation(parsed.error.issues, "Invalid sections.");
-  }
+  const parsed = await parseJson(request, PatchSectionsSchema, {
+    message: "Invalid sections.",
+  });
+  if (!parsed.ok) return parsed.response;
 
   const { sections, section_order, pour_defaults } = parsed.data;
 
