@@ -110,25 +110,54 @@ export async function listSupabaseObjectPaths(
   const { supabase, bucket, prefix } = input;
   const paths: string[] = [];
   const pageSize = 100;
-  let offset = 0;
+  const maxDepth = 8;
+  const maxEntries = 10_000;
+  let visitedEntries = 0;
 
-  while (true) {
-    const { data, error } = await supabase.storage.from(bucket).list(prefix, {
-      limit: pageSize,
-      offset,
-      sortBy: { column: "name", order: "asc" },
-    });
-    if (error) {
-      throw new SupabaseStorageError("Failed to list objects.", {
-        cause: error,
-      });
+  async function visit(currentPrefix: string, depth: number): Promise<void> {
+    if (depth > maxDepth) {
+      throw new SupabaseStorageError(
+        "Storage object tree exceeds cleanup limits.",
+      );
     }
 
-    const page = data ?? [];
-    for (const object of page) {
-      if (object.name) paths.push(`${prefix}/${object.name}`);
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .list(currentPrefix, {
+          limit: pageSize,
+          offset,
+          sortBy: { column: "name", order: "asc" },
+        });
+      if (error) {
+        throw new SupabaseStorageError("Failed to list objects.", {
+          cause: error,
+        });
+      }
+
+      const page = data ?? [];
+      for (const object of page) {
+        if (!object.name) continue;
+        visitedEntries += 1;
+        if (visitedEntries > maxEntries) {
+          throw new SupabaseStorageError(
+            "Storage object tree exceeds cleanup limits.",
+          );
+        }
+
+        const objectPath = `${currentPrefix}/${object.name}`;
+        // Supabase returns folder placeholders with a null id. Recurse so
+        // tenant deletion also removes objects written by older nested-path
+        // versions while retaining strict depth and entry bounds.
+        if (object.id === null) await visit(objectPath, depth + 1);
+        else paths.push(objectPath);
+      }
+      if (page.length < pageSize) return;
+      offset += pageSize;
     }
-    if (page.length < pageSize) return paths;
-    offset += pageSize;
   }
+
+  await visit(prefix, 0);
+  return paths;
 }

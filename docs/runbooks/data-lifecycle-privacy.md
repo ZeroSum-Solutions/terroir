@@ -18,9 +18,11 @@ setting before production use.
   `0075` and `0076`; a missing bucket is a failed privacy rollout.
 - A tenant deletion removes both bucket prefixes before the database cascade.
   It fails before the database deletion if Storage cleanup fails. A retry is
-  safe because the removal calls are idempotent. Migration `0079` orders pour
-  events, list items, and receipt inventory ahead of the root cascade so their
-  individual-wine history guards cannot strand the tenant database graph.
+  safe because the removal calls are idempotent. Cleanup recursively covers
+  legacy nested paths with an eight-level and 10,000-entry fail-closed bound.
+  Migration `0079` orders pour events, list items, and receipt inventory ahead
+  of the root cascade so their individual-wine history guards cannot strand the
+  tenant database graph.
 - A wine deletion removes the associated image variants after its atomic
   database deletion. If Storage is temporarily unavailable, the API returns a
   failure and a keyed retry repeats only the cleanup.

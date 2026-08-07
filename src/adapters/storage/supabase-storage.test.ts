@@ -53,6 +53,56 @@ describe("Supabase Storage adapter", () => {
     });
   });
 
+  it("recursively lists legacy nested tenant objects", async () => {
+    const list = vi.fn(async (prefix: string) => {
+      if (prefix === "tenant-id") {
+        return {
+          data: [
+            { id: null, name: "legacy-wine-id" },
+            { id: "flat-object", name: "current.webp" },
+          ],
+          error: null,
+        };
+      }
+      if (prefix === "tenant-id/legacy-wine-id") {
+        return {
+          data: [{ id: "nested-object", name: "fixture.webp" }],
+          error: null,
+        };
+      }
+      throw new Error(`Unexpected prefix: ${prefix}`);
+    });
+    const supabase = storageClient(list);
+
+    await expect(
+      listSupabaseObjectPaths({
+        supabase: supabase as never,
+        bucket: "wine-images",
+        prefix: "tenant-id",
+      }),
+    ).resolves.toEqual([
+      "tenant-id/legacy-wine-id/fixture.webp",
+      "tenant-id/current.webp",
+    ]);
+  });
+
+  it("fails closed when a legacy object tree exceeds the depth bound", async () => {
+    const list = vi.fn(async (_prefix: string) => ({
+      data: [{ id: null, name: "nested" }],
+      error: null,
+    }));
+    const supabase = storageClient(list);
+
+    await expect(
+      listSupabaseObjectPaths({
+        supabase: supabase as never,
+        bucket: "wine-images",
+        prefix: "tenant-id",
+      }),
+    ).rejects.toThrow("Storage object tree exceeds cleanup limits.");
+    expect(list).toHaveBeenCalledTimes(9);
+  });
+
   it("batches image URL signing and keeps only provider-approved URLs", async () => {
     const paths = Array.from({ length: 101 }, (_, index) => "tenant/" + index);
     const createSignedUrls = vi
