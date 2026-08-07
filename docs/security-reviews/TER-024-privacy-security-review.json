@@ -1,0 +1,531 @@
+{
+  "schema_version": "1.0",
+  "ref": "3fda4873b1c87f2e75f96756d53a03106324c385",
+  "base": {
+    "status": "AVAILABLE",
+    "value": "f9a19fdcbd3613f19ce63307c8c029b7981bd063",
+    "unavailable_reason": null,
+    "evidence": [
+      {
+        "class": "COMMAND",
+        "citation": "docs/security-reviews/TER-024-privacy-evidence.md:3-4"
+      }
+    ]
+  },
+  "scope": {
+    "changed_paths": [
+      "docs/completion-records/TER-024-privacy-lifecycle.yaml",
+      "docs/runbooks/data-lifecycle-privacy.md",
+      "src/adapters/storage/supabase-storage.test.ts",
+      "src/adapters/storage/supabase-storage.ts",
+      "src/app/(app)/cellar/page.tsx",
+      "src/app/api/cellar/[id]/route.test.ts",
+      "src/app/api/cellar/[id]/route.ts",
+      "src/app/api/cellar/cellar-lifecycle-idempotency.test.ts",
+      "src/app/api/inventory/save-scan/route.ts",
+      "src/app/api/restaurant/[id]/route.test.ts",
+      "src/app/api/restaurant/[id]/route.ts",
+      "src/app/api/scans/[id]/image/route.test.ts",
+      "src/app/api/wines/[id]/image/route.test.ts",
+      "src/domains/cellar/wine-image-service.ts",
+      "src/domains/privacy/storage-cleanup-service.ts",
+      "src/domains/scanning/invoice-scan-service.ts",
+      "src/domains/scanning/scan-image-service.ts",
+      "src/test/contracts/privacy-lifecycle.test.ts",
+      "supabase/migrations/0075_privacy_storage_lifecycle.sql",
+      "supabase/migrations/down/0075_privacy_storage_lifecycle.down.sql",
+      "supabase/schema.snapshot.sql",
+      "supabase/tests/0075_privacy_storage_lifecycle.sql"
+    ],
+    "captured_diff_paths": [
+      "docs/completion-records/TER-024-privacy-lifecycle.yaml",
+      "docs/runbooks/data-lifecycle-privacy.md",
+      "src/adapters/storage/supabase-storage.test.ts",
+      "src/adapters/storage/supabase-storage.ts",
+      "src/app/(app)/cellar/page.tsx",
+      "src/app/api/cellar/[id]/route.test.ts",
+      "src/app/api/cellar/[id]/route.ts",
+      "src/app/api/cellar/cellar-lifecycle-idempotency.test.ts",
+      "src/app/api/inventory/save-scan/route.ts",
+      "src/app/api/restaurant/[id]/route.test.ts",
+      "src/app/api/restaurant/[id]/route.ts",
+      "src/app/api/scans/[id]/image/route.test.ts",
+      "src/app/api/wines/[id]/image/route.test.ts",
+      "src/domains/cellar/wine-image-service.ts",
+      "src/domains/privacy/storage-cleanup-service.ts",
+      "src/domains/scanning/invoice-scan-service.ts",
+      "src/domains/scanning/scan-image-service.ts",
+      "src/test/contracts/privacy-lifecycle.test.ts",
+      "supabase/migrations/0075_privacy_storage_lifecycle.sql",
+      "supabase/migrations/down/0075_privacy_storage_lifecycle.down.sql",
+      "supabase/schema.snapshot.sql",
+      "supabase/tests/0075_privacy_storage_lifecycle.sql"
+    ],
+    "path_classification": [
+      {
+        "path": "docs/completion-records/TER-024-privacy-lifecycle.yaml",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "docs/completion-records/TER-024-privacy-lifecycle.yaml:1"
+          }
+        ]
+      },
+      {
+        "path": "docs/runbooks/data-lifecycle-privacy.md",
+        "surfaces": [
+          "export"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "docs/runbooks/data-lifecycle-privacy.md:10-29"
+          }
+        ]
+      },
+      {
+        "path": "src/adapters/storage/supabase-storage.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/adapters/storage/supabase-storage.test.ts:1-112"
+          }
+        ]
+      },
+      {
+        "path": "src/adapters/storage/supabase-storage.ts",
+        "surfaces": [
+          "export"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/adapters/storage/supabase-storage.ts:13-59"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/page.tsx",
+        "surfaces": [
+          "authorization",
+          "export"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/app/(app)/cellar/page.tsx:82-88"
+          }
+        ]
+      },
+      {
+        "path": "src/app/api/cellar/[id]/route.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/app/api/cellar/[id]/route.test.ts:552-640"
+          }
+        ]
+      },
+      {
+        "path": "src/app/api/cellar/[id]/route.ts",
+        "surfaces": [
+          "authorization",
+          "export"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/app/api/cellar/[id]/route.ts:237-260"
+          }
+        ]
+      },
+      {
+        "path": "src/app/api/cellar/cellar-lifecycle-idempotency.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/app/api/cellar/cellar-lifecycle-idempotency.test.ts:123-166"
+          }
+        ]
+      },
+      {
+        "path": "src/app/api/inventory/save-scan/route.ts",
+        "surfaces": [
+          "untrusted-input",
+          "export"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/app/api/inventory/save-scan/route.ts:193-233"
+          }
+        ]
+      },
+      {
+        "path": "src/app/api/restaurant/[id]/route.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/app/api/restaurant/[id]/route.test.ts:705-875"
+          }
+        ]
+      },
+      {
+        "path": "src/app/api/restaurant/[id]/route.ts",
+        "surfaces": [
+          "authentication",
+          "authorization",
+          "export"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/app/api/restaurant/[id]/route.ts:200-229"
+          }
+        ]
+      },
+      {
+        "path": "src/app/api/scans/[id]/image/route.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/app/api/scans/[id]/image/route.test.ts:70-91"
+          }
+        ]
+      },
+      {
+        "path": "src/app/api/wines/[id]/image/route.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/app/api/wines/[id]/image/route.test.ts:183-306"
+          }
+        ]
+      },
+      {
+        "path": "src/domains/cellar/wine-image-service.ts",
+        "surfaces": [
+          "untrusted-input",
+          "export"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/domains/cellar/wine-image-service.ts:73-117"
+          }
+        ]
+      },
+      {
+        "path": "src/domains/privacy/storage-cleanup-service.ts",
+        "surfaces": [
+          "authorization",
+          "export"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/domains/privacy/storage-cleanup-service.ts:16-63"
+          }
+        ]
+      },
+      {
+        "path": "src/domains/scanning/invoice-scan-service.ts",
+        "surfaces": [
+          "export"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/domains/scanning/invoice-scan-service.ts:80-86"
+          }
+        ]
+      },
+      {
+        "path": "src/domains/scanning/scan-image-service.ts",
+        "surfaces": [
+          "authorization",
+          "export"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/domains/scanning/scan-image-service.ts:39-65"
+          }
+        ]
+      },
+      {
+        "path": "src/test/contracts/privacy-lifecycle.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/test/contracts/privacy-lifecycle.test.ts:24-103"
+          }
+        ]
+      },
+      {
+        "path": "supabase/migrations/0075_privacy_storage_lifecycle.sql",
+        "surfaces": [
+          "authorization",
+          "export"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "supabase/migrations/0075_privacy_storage_lifecycle.sql:151-240"
+          }
+        ]
+      },
+      {
+        "path": "supabase/migrations/down/0075_privacy_storage_lifecycle.down.sql",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "supabase/migrations/down/0075_privacy_storage_lifecycle.down.sql:1-9"
+          }
+        ]
+      },
+      {
+        "path": "supabase/schema.snapshot.sql",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "supabase/schema.snapshot.sql:12638-12950"
+          }
+        ]
+      },
+      {
+        "path": "supabase/tests/0075_privacy_storage_lifecycle.sql",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "supabase/tests/0075_privacy_storage_lifecycle.sql:1-77"
+          }
+        ]
+      }
+    ],
+    "sensitive_surfaces": [
+      "authentication",
+      "authorization",
+      "untrusted-input",
+      "export"
+    ],
+    "diff_command_id": "CMD-001",
+    "evidence": [
+      {
+        "class": "COMMAND",
+        "citation": "docs/security-reviews/TER-024-privacy-evidence.md:8-35"
+      }
+    ]
+  },
+  "commands": [
+    {
+      "id": "CMD-001",
+      "purpose": "diff",
+      "command": "git diff --name-only f9a19fdcbd3613f19ce63307c8c029b7981bd063...3fda4873b1c87f2e75f96756d53a03106324c385",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "scope": "f9a19fdcbd3613f19ce63307c8c029b7981bd063...3fda4873b1c87f2e75f96756d53a03106324c385",
+      "evidence": [
+        {
+          "class": "COMMAND",
+          "citation": "docs/security-reviews/TER-024-privacy-evidence.md:8-35"
+        }
+      ],
+      "unavailable_reason": null
+    },
+    {
+      "id": "CMD-002",
+      "purpose": "secrets-scan",
+      "command": "gitleaks detect --source . --no-banner --redact --log-opts f9a19fdcbd3613f19ce63307c8c029b7981bd063..3fda4873b1c87f2e75f96756d53a03106324c385",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "scope": "f9a19fdcbd3613f19ce63307c8c029b7981bd063..3fda4873b1c87f2e75f96756d53a03106324c385",
+      "evidence": [
+        {
+          "class": "COMMAND",
+          "citation": "docs/security-reviews/TER-024-privacy-evidence.md:39-42"
+        }
+      ],
+      "unavailable_reason": null
+    },
+    {
+      "id": "CMD-003",
+      "purpose": "local quality gates",
+      "command": "pnpm test; tsc --noEmit; pnpm lint; pnpm downs:check; pnpm snapshot:check",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "scope": "working tree at reviewed commit",
+      "evidence": [
+        {
+          "class": "COMMAND",
+          "citation": "docs/security-reviews/TER-024-privacy-evidence.md:46-49"
+        }
+      ],
+      "unavailable_reason": null
+    }
+  ],
+  "exports": {
+    "state": "LISTED",
+    "items": [
+      {
+        "id": "EXP-001",
+        "destination": "Supabase Storage invoice-images and wine-images",
+        "data_classes": [
+          "invoice images",
+          "wine or bottle images",
+          "tenant and object identifiers"
+        ],
+        "initiating_identity": "authenticated restaurant member, manager, or owner",
+        "authorization_evidence": [
+          {
+            "class": "STATIC",
+            "citation": "supabase/migrations/0075_privacy_storage_lifecycle.sql:156-240"
+          }
+        ],
+        "recipient_scope": "members of the matching restaurant tenant through Storage RLS and five-minute signed URLs",
+        "retention_redaction": "private buckets; runbook defines tenant deletion and approved retention procedure",
+        "failure_behavior": "RLS denies unauthorized operations; signing and cleanup failures return fixed errors without provider detail",
+        "policy_basis": {
+          "status": "OWNER-APPROVED",
+          "citation": "task:TER-024 privacy and storage lifecycle",
+          "owner": "Devin",
+          "reason": null
+        }
+      },
+      {
+        "id": "EXP-002",
+        "destination": "Sentry error telemetry",
+        "data_classes": [
+          "redacted image-storage failure metadata"
+        ],
+        "initiating_identity": "authenticated image and deletion request path",
+        "authorization_evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/app/api/restaurant/[id]/route.ts:200-229"
+          }
+        ],
+        "recipient_scope": "existing Sentry project only",
+        "retention_redaction": "Sentry scrubber removes request, user, message, exception, image, path, and provider data",
+        "failure_behavior": "telemetry failure does not replace the fixed API response",
+        "policy_basis": {
+          "status": "OWNER-APPROVED",
+          "citation": "task:TER-024 auditable privacy evidence without secrets or PII",
+          "owner": "Devin",
+          "reason": null
+        }
+      }
+    ],
+    "evidence": [
+      {
+        "class": "STATIC",
+        "citation": "docs/runbooks/data-lifecycle-privacy.md:10-29"
+      }
+    ],
+    "unavailable_reason": null
+  },
+  "secrets_scan": {
+    "result": "PASS",
+    "command_id": "CMD-002",
+    "scope": "RANGE",
+    "comparison": "f9a19fdcbd3613f19ce63307c8c029b7981bd063..3fda4873b1c87f2e75f96756d53a03106324c385",
+    "evidence": [
+      {
+        "class": "COMMAND",
+        "citation": "docs/security-reviews/TER-024-privacy-evidence.md:39-42"
+      }
+    ],
+    "unavailable_reason": null
+  },
+  "export_policy": {
+    "result": "PASS",
+    "evidence": [
+      {
+        "class": "STATIC",
+        "citation": "docs/runbooks/data-lifecycle-privacy.md:10-29"
+      }
+    ],
+    "unavailable_reason": null
+  },
+  "coverage": [
+    {
+      "surface": "prompt-injection",
+      "state": "NOT-APPLICABLE",
+      "evidence": [
+        {
+          "class": "STATIC",
+          "citation": "docs/security-reviews/TER-024-privacy-evidence.md:51"
+        }
+      ],
+      "unavailable_reason": null
+    },
+    {
+      "surface": "secrets",
+      "state": "REVIEWED",
+      "evidence": [
+        {
+          "class": "COMMAND",
+          "citation": "docs/security-reviews/TER-024-privacy-evidence.md:39-42"
+        }
+      ],
+      "unavailable_reason": null
+    },
+    {
+      "surface": "authentication",
+      "state": "REVIEWED",
+      "evidence": [
+        {
+          "class": "STATIC",
+          "citation": "src/app/api/restaurant/[id]/route.ts:200-215"
+        }
+      ],
+      "unavailable_reason": null
+    },
+    {
+      "surface": "authorization",
+      "state": "REVIEWED",
+      "evidence": [
+        {
+          "class": "STATIC",
+          "citation": "supabase/migrations/0075_privacy_storage_lifecycle.sql:156-240"
+        }
+      ],
+      "unavailable_reason": null
+    },
+    {
+      "surface": "untrusted-input",
+      "state": "REVIEWED",
+      "evidence": [
+        {
+          "class": "STATIC",
+          "citation": "src/domains/cellar/wine-image-service.ts:84-107"
+        }
+      ],
+      "unavailable_reason": null
+    },
+    {
+      "surface": "export",
+      "state": "REVIEWED",
+      "evidence": [
+        {
+          "class": "STATIC",
+          "citation": "docs/runbooks/data-lifecycle-privacy.md:10-29"
+        }
+      ],
+      "unavailable_reason": null
+    }
+  ],
+  "findings": [],
+  "verdict": "PASS"
+}
