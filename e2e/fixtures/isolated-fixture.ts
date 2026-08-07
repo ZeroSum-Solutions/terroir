@@ -82,6 +82,21 @@ export async function cleanupIsolatedFixture(
   const admin = existingAdmin ?? adminClient(config);
   const cleanupErrors: Error[] = [];
 
+  // Pour history has a restrictive tenant FK to wines. Delete fixture ledger
+  // rows first so the restaurant cascade cannot race that restriction. The
+  // delete trigger also gets a live open-bottle row to reverse before the rest
+  // of the fixture graph is removed.
+  for (const restaurantId of [
+    identity.restaurantId,
+    identity.secondRestaurantId,
+  ]) {
+    const { error } = await admin
+      .from("pour_events")
+      .delete()
+      .eq("restaurant_id", restaurantId);
+    if (error) cleanupErrors.push(error);
+  }
+
   const { error: storageError } = await admin.storage
     .from(STORAGE_BUCKET)
     .remove([identity.storagePath]);

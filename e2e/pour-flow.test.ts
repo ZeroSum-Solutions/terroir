@@ -1,4 +1,24 @@
+import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures/isolated-test";
+
+async function selectPrimaryRestaurant(
+  page: Page,
+  restaurantId: string,
+  namespace: string,
+): Promise<void> {
+  const response = await page.evaluate(
+    async ({ restaurantId, namespace }) => {
+      const result = await fetch(`/api/restaurant/${restaurantId}`, {
+        credentials: "same-origin",
+        headers: { "Idempotency-Key": `e2e-pour-primary-${namespace}` },
+        method: "PUT",
+      });
+      return result.status;
+    },
+    { namespace, restaurantId },
+  );
+  expect(response).toBe(200);
+}
 
 /**
  * TER-004 / BND-038 — an isolated, authenticated pour and reconcile cycle.
@@ -17,6 +37,12 @@ test.describe("isolated pour → reconcile", () => {
   }) => {
     await page.goto("/cellar", { waitUntil: "networkidle" });
     await expect(page).not.toHaveURL(/\/login/);
+    await selectPrimaryRestaurant(
+      page,
+      isolatedFixture.restaurantId,
+      isolatedFixture.namespace,
+    );
+    await page.reload({ waitUntil: "networkidle" });
 
     const cardLabel = new RegExp(
       `Primary Cuvee ${isolatedFixture.namespace}`,

@@ -96,7 +96,7 @@ test.describe("multi-restaurant isolation", () => {
     });
     expect([403, 404]).toContain(primaryPourDenial.status);
 
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     const secondRestaurantButton = page.getByRole("menuitem", {
       name: new RegExp(`Second E2E ${isolatedFixture.namespace}`, "i"),
     });
@@ -119,7 +119,7 @@ test.describe("multi-restaurant isolation", () => {
       .toBe(isolatedFixture.secondRestaurantId);
 
     await page.reload({ waitUntil: "networkidle" });
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     await expect(page.getByRole("menu")).toContainText(
       `Second E2E ${isolatedFixture.namespace}`,
     );
