@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0",
+  "ref": "ebb7440cd1a4a383540322a41bdaac7fe4656f9a",
+  "base": {
+    "status": "AVAILABLE",
+    "value": "c5069ce9a1856e611b02414979580f6d34f3cbda",
+    "unavailable_reason": null,
+    "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-traversal-evidence.md:3-5"}]
+  },
+  "scope": {
+    "changed_paths": [
+      "docs/runbooks/data-lifecycle-privacy.md",
+      "src/adapters/storage/supabase-storage.test.ts",
+      "src/adapters/storage/supabase-storage.ts"
+    ],
+    "captured_diff_paths": [
+      "docs/runbooks/data-lifecycle-privacy.md",
+      "src/adapters/storage/supabase-storage.test.ts",
+      "src/adapters/storage/supabase-storage.ts"
+    ],
+    "path_classification": [
+      {"path": "docs/runbooks/data-lifecycle-privacy.md", "surfaces": ["export"], "evidence": [{"class": "STATIC", "citation": "docs/runbooks/data-lifecycle-privacy.md:19-25"}]},
+      {"path": "src/adapters/storage/supabase-storage.test.ts", "surfaces": [], "evidence": [{"class": "STATIC", "citation": "src/adapters/storage/supabase-storage.test.ts:56-104"}]},
+      {"path": "src/adapters/storage/supabase-storage.ts", "surfaces": ["untrusted-input", "export"], "evidence": [{"class": "STATIC", "citation": "src/adapters/storage/supabase-storage.ts:107-162"}]}
+    ],
+    "sensitive_surfaces": ["untrusted-input", "export"],
+    "diff_command_id": "CMD-001",
+    "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-traversal-evidence.md:7-11"}]
+  },
+  "commands": [
+    {
+      "id": "CMD-001", "purpose": "diff",
+      "command": "git diff --name-only c5069ce9a1856e611b02414979580f6d34f3cbda...ebb7440cd1a4a383540322a41bdaac7fe4656f9a",
+      "outcome": "PASS", "exit_code": 0,
+      "scope": "c5069ce9a1856e611b02414979580f6d34f3cbda...ebb7440cd1a4a383540322a41bdaac7fe4656f9a",
+      "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-traversal-evidence.md:7-11"}], "unavailable_reason": null
+    },
+    {
+      "id": "CMD-002", "purpose": "secrets-scan",
+      "command": "gitleaks detect --source . --no-banner --redact --log-opts c5069ce9a1856e611b02414979580f6d34f3cbda..ebb7440cd1a4a383540322a41bdaac7fe4656f9a",
+      "outcome": "PASS", "exit_code": 0,
+      "scope": "c5069ce9a1856e611b02414979580f6d34f3cbda..ebb7440cd1a4a383540322a41bdaac7fe4656f9a",
+      "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-traversal-evidence.md:13-15"}], "unavailable_reason": null
+    },
+    {
+      "id": "CMD-003", "purpose": "security-control-test",
+      "command": "pnpm exec vitest run src/adapters/storage/supabase-storage.test.ts",
+      "outcome": "PASS", "exit_code": 0, "scope": "TER-024 Storage traversal",
+      "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-traversal-evidence.md:17-19"}], "unavailable_reason": null
+    }
+  ],
+  "exports": {
+    "state": "LISTED",
+    "items": [{
+      "id": "EXP-001",
+      "destination": "Supabase Storage governed tenant buckets",
+      "data_classes": ["tenant identifiers", "object path metadata", "deletion commands"],
+      "initiating_identity": "authenticated restaurant owner through the tenant deletion endpoint",
+      "authorization_evidence": [{"class": "STATIC", "citation": "src/app/api/restaurant/[id]/route.ts:196-225"}],
+      "recipient_scope": "the active restaurant prefix in existing private Supabase Storage buckets",
+      "retention_redaction": "only object paths are listed; the cleanup deletes governed objects and logs no provider payload",
+      "failure_behavior": "provider, depth, or entry-limit failures stop before database deletion with a fixed application error",
+      "policy_basis": {"status": "OWNER-APPROVED", "citation": "task:TER-024 complete privacy deletion", "owner": "Devin", "reason": null}
+    }],
+    "evidence": [{"class": "STATIC", "citation": "docs/runbooks/data-lifecycle-privacy.md:10-35"}],
+    "unavailable_reason": null
+  },
+  "secrets_scan": {
+    "result": "PASS", "command_id": "CMD-002", "scope": "RANGE",
+    "comparison": "c5069ce9a1856e611b02414979580f6d34f3cbda..ebb7440cd1a4a383540322a41bdaac7fe4656f9a",
+    "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-traversal-evidence.md:13-15"}], "unavailable_reason": null
+  },
+  "export_policy": {"result": "PASS", "evidence": [{"class": "STATIC", "citation": "docs/runbooks/data-lifecycle-privacy.md:10-35"}], "unavailable_reason": null},
+  "coverage": [
+    {"surface": "prompt-injection", "state": "NOT-APPLICABLE", "evidence": [{"class": "STATIC", "citation": "src/adapters/storage/supabase-storage.ts:107-162"}], "unavailable_reason": null},
+    {"surface": "secrets", "state": "REVIEWED", "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-traversal-evidence.md:13-15"}], "unavailable_reason": null},
+    {"surface": "authentication", "state": "NOT-APPLICABLE", "evidence": [{"class": "STATIC", "citation": "src/adapters/storage/supabase-storage.ts:107-162"}], "unavailable_reason": null},
+    {"surface": "authorization", "state": "NOT-APPLICABLE", "evidence": [{"class": "STATIC", "citation": "src/app/api/restaurant/[id]/route.ts:196-225"}], "unavailable_reason": null},
+    {"surface": "untrusted-input", "state": "REVIEWED", "evidence": [{"class": "STATIC", "citation": "src/adapters/storage/supabase-storage.ts:113-158"}, {"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-traversal-evidence.md:17-19"}], "unavailable_reason": null},
+    {"surface": "export", "state": "REVIEWED", "evidence": [{"class": "STATIC", "citation": "docs/runbooks/data-lifecycle-privacy.md:10-35"}], "unavailable_reason": null}
+  ],
+  "findings": [],
+  "verdict": "PASS"
+}
