@@ -180,7 +180,9 @@ describe("GET /api/health", () => {
       "OBSERVABILITY_DRILL_TOKEN_SHA256",
       createHash("sha256").update(token).digest("hex"),
     );
+    vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "staging");
+    vi.stubEnv("OBSERVABILITY_DRILL_ENABLED", "1");
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
 
     const response = await GET(
