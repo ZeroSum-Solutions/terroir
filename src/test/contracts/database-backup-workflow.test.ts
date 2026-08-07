@@ -383,6 +383,30 @@ describe("database backup workflow", () => {
     });
   });
 
+  it("rejects checksum path traversal and duplicate entries", async () => {
+    const { assertChecksumFile } =
+      await loadScript("verify-checksum-file");
+    const digest = "a".repeat(64);
+    expect(() =>
+      assertChecksumFile(
+        `${digest}  backup.tar.age\n${digest}  backup.manifest.json\n`,
+        ["/tmp/backup.tar.age", "/tmp/backup.manifest.json"],
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertChecksumFile(
+        `${digest}  ../../outside\n${digest}  backup.manifest.json\n`,
+        ["/tmp/backup.tar.age", "/tmp/backup.manifest.json"],
+      ),
+    ).toThrow(/unsafe or unexpected/u);
+    expect(() =>
+      assertChecksumFile(
+        `${digest}  backup.tar.age\n${digest}  backup.tar.age\n`,
+        ["/tmp/backup.tar.age", "/tmp/backup.manifest.json"],
+      ),
+    ).toThrow(/unsafe or unexpected/u);
+  });
+
   it("builds a fail-closed data-only restore preparation", async () => {
     const { createRestorePreparationSql } =
       await loadScript("prepare-disposable-restore");
@@ -467,7 +491,12 @@ describe("database backup workflow", () => {
       format_version: 1,
       migration_version: "0065",
       tables: [
-        { schema: "public", table: "wines", row_count: 2 },
+        {
+          schema: "public",
+          table: "wines",
+          kind: "table",
+          row_count: 2,
+        },
       ],
       sequences: [
         {
@@ -506,6 +535,13 @@ describe("database backup workflow", () => {
           expect.stringContaining("sequence state differs"),
         ]),
       }),
+    );
+    const partitioned = structuredClone(source);
+    partitioned.tables[0].kind = "partitioned";
+    const flattened = structuredClone(partitioned);
+    flattened.tables[0].kind = "table";
+    expect(compareDatabaseEvidence(partitioned, flattened).failures).toContain(
+      "relation kind differs for public.wines",
     );
   });
 });

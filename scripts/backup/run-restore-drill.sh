@@ -6,7 +6,7 @@ repo="wiggdevin/terroir"
 run_id="${BACKUP_RUN_ID:-}"
 target_url="${PG_DATABASE_URL:-postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres}"
 proof_root="$HOME/Inbox/notes/terroir-backup-drills"
-proof_dir="${BACKUP_PROOF_DIR:-$proof_root/$(date -u +%Y%m%dT%H%M%SZ)}"
+requested_proof_dir="${BACKUP_PROOF_DIR:-$proof_root/$(date -u +%Y%m%dT%H%M%SZ)}"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/terroir-restore.XXXXXX")"
 stack_started=false
 
@@ -37,11 +37,20 @@ find_one() {
 }
 
 [[ "$run_id" =~ ^[0-9]+$ ]] || fail "BACKUP_RUN_ID must be a numeric successful workflow run ID"
-case "$proof_dir" in
-  "$proof_root"/*) ;;
+case "$requested_proof_dir" in
+  "$proof_root"/*) proof_name="${requested_proof_dir#"$proof_root"/}" ;;
   *) fail "BACKUP_PROOF_DIR must be below $proof_root" ;;
 esac
-mkdir -p "$proof_dir" "$work_dir/artifact"
+[[ "$proof_name" =~ ^[A-Za-z0-9._-]+$ && "$proof_name" != "." && "$proof_name" != ".." ]] || \
+  fail "BACKUP_PROOF_DIR must be one safe directory below the proof root"
+mkdir -p "$proof_root" "$work_dir/artifact"
+proof_root="$(cd "$proof_root" && pwd -P)"
+mkdir -p "$proof_root/$proof_name"
+proof_dir="$(cd "$proof_root/$proof_name" && pwd -P)"
+case "$proof_dir" in
+  "$proof_root"/*) ;;
+  *) fail "BACKUP_PROOF_DIR must resolve below $proof_root" ;;
+esac
 chmod 700 "$proof_dir" "$work_dir"
 
 PG_DATABASE_URL="$target_url" node scripts/backup/assert-disposable-target.mjs
@@ -58,6 +67,10 @@ gh run download "$run_id" --repo "$repo" --dir "$work_dir/artifact"
 encrypted_file="$(find_one '*.tar.age')"
 manifest_file="$(find_one '*.manifest.json')"
 checksums_file="$(find_one '*.sha256')"
+BACKUP_CHECKSUMS_FILE="$checksums_file" \
+BACKUP_ENCRYPTED_FILE="$encrypted_file" \
+BACKUP_MANIFEST_FILE="$manifest_file" \
+  node scripts/backup/verify-checksum-file.mjs
 if command -v sha256sum >/dev/null 2>&1; then
   (cd "$(dirname "$checksums_file")" && sha256sum --check "$(basename "$checksums_file")")
 else
@@ -105,7 +118,7 @@ done < <(tar -tf "$payload_file")
 dump_member=""
 evidence_member=""
 for member in "${payload_members[@]}"; do
-  [[ "$member" != */* && "$member" != .* && "$member" != *..* ]] || \
+  [[ "$member" != */* && "$member" != .* && "$member" != -* && "$member" != *..* ]] || \
     fail "backup payload contains an unsafe member name"
   case "$member" in
     *.dump) [ -z "$dump_member" ] || fail "backup payload contains multiple dumps"; dump_member="$member" ;;
@@ -117,8 +130,8 @@ done
   fail "backup payload is missing dump or source evidence"
 dump_file="$work_dir/$dump_member"
 source_evidence="$work_dir/$evidence_member"
-tar -xOf "$payload_file" "$dump_member" > "$dump_file"
-tar -xOf "$payload_file" "$evidence_member" > "$source_evidence"
+tar -xOf "$payload_file" -- "$dump_member" > "$dump_file"
+tar -xOf "$payload_file" -- "$evidence_member" > "$source_evidence"
 BACKUP_MANIFEST_FILE="$manifest_file" \
 BACKUP_ENCRYPTED_FILE="$encrypted_file" \
 BACKUP_PAYLOAD_FILE="$payload_file" \

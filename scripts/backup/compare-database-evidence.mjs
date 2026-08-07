@@ -20,23 +20,30 @@ export function compareDatabaseEvidence(source, restored) {
     );
   }
 
-  const sourceCounts = new Map(
-    source.tables.map((entry) => [tableKey(entry), entry.row_count]),
+  const sourceTables = new Map(
+    source.tables.map((entry) => [tableKey(entry), entry]),
   );
-  const restoredCounts = new Map(
-    restored.tables.map((entry) => [tableKey(entry), entry.row_count]),
+  const restoredTables = new Map(
+    restored.tables.map((entry) => [tableKey(entry), entry]),
   );
   const allTables = [...new Set([
-    ...sourceCounts.keys(),
-    ...restoredCounts.keys(),
+    ...sourceTables.keys(),
+    ...restoredTables.keys(),
   ])].sort();
   for (const table of allTables) {
-    if (!sourceCounts.has(table) || !restoredCounts.has(table)) {
+    const sourceTable = sourceTables.get(table);
+    const restoredTable = restoredTables.get(table);
+    if (!sourceTable || !restoredTable) {
       failures.push(`table inventory differs for ${table}`);
-    } else if (sourceCounts.get(table) !== restoredCounts.get(table)) {
+    } else if (sourceTable.row_count !== restoredTable.row_count) {
       failures.push(
-        `row count differs for ${table} (${sourceCounts.get(table)} != ${restoredCounts.get(table)})`,
+        `row count differs for ${table} (${sourceTable.row_count} != ${restoredTable.row_count})`,
       );
+    } else if (
+      sourceTable.kind !== undefined &&
+      sourceTable.kind !== restoredTable.kind
+    ) {
+      failures.push(`relation kind differs for ${table}`);
     }
   }
 
