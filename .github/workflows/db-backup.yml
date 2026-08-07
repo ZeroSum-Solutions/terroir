@@ -7,6 +7,8 @@
 #   backup-only role (never the transaction pooler).
 # - BACKUP_AGE_RECIPIENT: age X25519 public recipient for the offline restore
 #   identity. The private identity must never be present in this workflow.
+# - RESTORE_DRILL_AGE_RECIPIENT: age X25519 public recipient for the separate
+#   identity available only to the protected restore-drill workflow.
 
 name: DB Backup
 
@@ -48,10 +50,11 @@ jobs:
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+          RESTORE_DRILL_AGE_RECIPIENT: ${{ secrets.RESTORE_DRILL_AGE_RECIPIENT }}
         run: |
           set -euo pipefail
           missing=0
-          for name in SUPABASE_DB_URL BACKUP_AGE_RECIPIENT; do
+          for name in SUPABASE_DB_URL BACKUP_AGE_RECIPIENT RESTORE_DRILL_AGE_RECIPIENT; do
             if [ -z "${!name:-}" ]; then
               echo "::error::Required secret ${name} is not configured. See docs/runbooks/database-backup-restore.md."
               missing=1
@@ -60,8 +63,15 @@ jobs:
           if [ "$missing" -ne 0 ]; then
             exit 1
           fi
-          if [[ "$BACKUP_AGE_RECIPIENT" != age1* ]]; then
-            echo "::error::BACKUP_AGE_RECIPIENT is not an age X25519 recipient."
+          for name in BACKUP_AGE_RECIPIENT RESTORE_DRILL_AGE_RECIPIENT; do
+            value="${!name}"
+            if [[ "$value" != age1* || "$value" == *$'\n'* || "$value" == *$'\r'* ]]; then
+              echo "::error::${name} is not one age X25519 recipient."
+              exit 1
+            fi
+          done
+          if [ "$BACKUP_AGE_RECIPIENT" = "$RESTORE_DRILL_AGE_RECIPIENT" ]; then
+            echo "::error::Backup and restore-drill age recipients must be distinct."
             exit 1
           fi
           if [ -z "${RUNNER_TEMP:-}" ] ||
@@ -112,7 +122,7 @@ jobs:
           node scripts/backup/write-pg-service.mjs
           role_state="$(
             psql "service=terroir_backup" -X -A -t -v ON_ERROR_STOP=1 \
-              -c "select r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolbypassrls, r.rolreplication, pg_has_role(current_user, 'pg_read_all_data', 'member'), pg_has_role(current_user, 'pg_write_all_data', 'member'), (select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname <> 'information_schema' and n.nspname !~ '^pg_' and not exists (select 1 from pg_catalog.pg_extension e where e.extnamespace = n.oid) and not exists (select 1 from pg_catalog.pg_depend d where d.classid = 'pg_catalog.pg_class'::regclass and d.objid = c.oid and d.deptype = 'e') and ((c.relkind in ('r', 'p', 'v', 'm', 'f') and (has_table_privilege(current_user, c.oid, 'INSERT') or has_table_privilege(current_user, c.oid, 'UPDATE') or has_table_privilege(current_user, c.oid, 'DELETE') or has_table_privilege(current_user, c.oid, 'TRUNCATE') or has_any_column_privilege(current_user, c.oid, 'INSERT') or has_any_column_privilege(current_user, c.oid, 'UPDATE'))) or (c.relkind = 'S' and has_sequence_privilege(current_user, c.oid, 'UPDATE')))), (select count(*) from pg_catalog.pg_class c where c.relowner = r.oid and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')), (select count(*) from pg_catalog.pg_auth_members m join pg_catalog.pg_roles granted_role on granted_role.oid = m.roleid where m.member = r.oid and granted_role.rolname <> 'pg_read_all_data'), (select count(*) from pg_catalog.pg_namespace n where n.nspname <> 'information_schema' and n.nspname !~ '^pg_' and not exists (select 1 from pg_catalog.pg_extension e where e.extnamespace = n.oid) and not exists (select 1 from pg_catalog.pg_depend d where d.classid = 'pg_catalog.pg_namespace'::regclass and d.objid = n.oid and d.deptype = 'e') and has_schema_privilege(current_user, n.oid, 'CREATE')), current_setting('statement_timeout') = '0', current_setting('idle_in_transaction_session_timeout') = '0', coalesce(r.rolconfig, array[]::text[]) @> array['default_transaction_read_only=on'] from pg_roles r where r.rolname = current_user"
+              -c "select r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolbypassrls, r.rolreplication, pg_has_role(current_user, 'pg_read_all_data', 'member'), pg_has_role(current_user, 'pg_write_all_data', 'member'), (select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname <> 'information_schema' and n.nspname !~ '^pg_' and ((c.relkind in ('r', 'p', 'v', 'm', 'f') and (has_table_privilege(current_user, c.oid, 'INSERT') or has_table_privilege(current_user, c.oid, 'UPDATE') or has_table_privilege(current_user, c.oid, 'DELETE') or has_table_privilege(current_user, c.oid, 'TRUNCATE') or has_any_column_privilege(current_user, c.oid, 'INSERT') or has_any_column_privilege(current_user, c.oid, 'UPDATE'))) or (c.relkind = 'S' and has_sequence_privilege(current_user, c.oid, 'UPDATE')))), (select count(*) from pg_catalog.pg_class c where c.relowner = r.oid and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')), (select count(*) from pg_catalog.pg_auth_members m join pg_catalog.pg_roles granted_role on granted_role.oid = m.roleid where m.member = r.oid and granted_role.rolname <> 'pg_read_all_data'), (select count(*) from pg_catalog.pg_namespace n where n.nspname <> 'information_schema' and n.nspname !~ '^pg_' and has_schema_privilege(current_user, n.oid, 'CREATE')), current_setting('statement_timeout') = '0', current_setting('idle_in_transaction_session_timeout') = '0', coalesce(r.rolconfig, array[]::text[]) @> array['default_transaction_read_only=on'] from pg_roles r where r.rolname = current_user"
           )"
           BACKUP_ROLE_STATE="$role_state" \
             node scripts/backup/assert-backup-role-state.mjs
@@ -123,6 +133,7 @@ jobs:
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+          RESTORE_DRILL_AGE_RECIPIENT: ${{ secrets.RESTORE_DRILL_AGE_RECIPIENT }}
         run: |
           set -euo pipefail
           mkdir -p "$BACKUP_DIR"
@@ -137,7 +148,7 @@ jobs:
           snapshot_pid=""
           close_snapshot_session() {
             if [ -n "$snapshot_pid" ]; then
-              printf '\\q\n' >&"${SNAPSHOT_HOLDER[1]}" 2>/dev/null || true
+              printf '\\q\n' 1>&"${SNAPSHOT_HOLDER[1]}" 2>/dev/null || true
               wait "$snapshot_pid" 2>/dev/null || true
               snapshot_pid=""
             fi
@@ -155,7 +166,10 @@ jobs:
           trap 'exit 1' HUP INT TERM
 
           node scripts/backup/write-pg-service.mjs
-          printf '%s\n' "$BACKUP_AGE_RECIPIENT" > "$recipient_file"
+          printf '%s\n%s\n' \
+            "$BACKUP_AGE_RECIPIENT" \
+            "$RESTORE_DRILL_AGE_RECIPIENT" \
+            > "$recipient_file"
           chmod 600 "$recipient_file"
 
           coproc SNAPSHOT_HOLDER {
@@ -193,6 +207,11 @@ jobs:
           )"
           if [ "$table_entries" -eq 0 ]; then
             echo "::error::Database dump contains no table data entries."
+            exit 1
+          fi
+          if pg_restore --list "$dump_file" |
+             grep -Eq '[[:space:]]BLOBS?([[:space:]]|$)'; then
+            echo "::error::Backup archive contains large objects unsupported by the restore drill."
             exit 1
           fi
           BACKUP_SNAPSHOT_ID="$backup_snapshot" \
@@ -237,10 +256,12 @@ jobs:
           test ! -e "$payload_file"
           test ! -e "$PGSERVICEFILE"
 
-          echo "artifact_name=terroir-db-backup-${timestamp}" >> "$GITHUB_OUTPUT"
-          echo "encrypted_file=$encrypted_file" >> "$GITHUB_OUTPUT"
-          echo "manifest_file=$manifest_file" >> "$GITHUB_OUTPUT"
-          echo "checksums_file=$checksums_file" >> "$GITHUB_OUTPUT"
+          {
+            echo "artifact_name=terroir-db-backup-${timestamp}"
+            echo "encrypted_file=$encrypted_file"
+            echo "manifest_file=$manifest_file"
+            echo "checksums_file=$checksums_file"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upload encrypted backup and metadata
         id: upload

@@ -7,12 +7,13 @@ const SERVICE_NAME = process.env.PGSERVICE ?? "terroir_backup";
 const SNAPSHOT_ID = process.env.BACKUP_SNAPSHOT_ID;
 
 export function snapshotSql(sql, snapshotId = SNAPSHOT_ID) {
-  if (!snapshotId) return sql;
-  if (!/^[0-9A-Fa-f-]+$/u.test(snapshotId)) {
+  if (snapshotId && !/^[0-9A-Fa-f-]+$/u.test(snapshotId)) {
     throw new Error("BACKUP_SNAPSHOT_ID has an invalid format.");
   }
-  return `begin isolation level repeatable read read only;
-set transaction snapshot '${snapshotId}';
+  return `begin${snapshotId ? " isolation level repeatable read read only" : " read only"};
+${snapshotId ? `set transaction snapshot '${snapshotId}';\n` : ""}set local timezone = 'UTC';
+set local datestyle = 'ISO, YMD';
+set local extra_float_digits = 3;
 ${sql};
 commit`;
 }

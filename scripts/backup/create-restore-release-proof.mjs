@@ -5,6 +5,9 @@ import { assertRestoreReport } from "./assert-restore-report.mjs";
 
 export function createRestoreReleaseProof({
   runId,
+  candidateSha,
+  restoreWorkflowRunId,
+  restoreWorkflowHeadSha,
   githubRun,
   githubArtifacts,
   source,
@@ -16,6 +19,15 @@ export function createRestoreReleaseProof({
   }
   if (!/^[0-9a-f]{40}$/u.test(githubRun.headSha ?? "")) {
     throw new Error("Backup run head SHA is invalid.");
+  }
+  if (!/^[0-9a-f]{40}$/u.test(candidateSha ?? "")) {
+    throw new Error("Release candidate SHA is invalid.");
+  }
+  if (
+    !/^\d+$/u.test(restoreWorkflowRunId ?? "") ||
+    !/^[0-9a-f]{40}$/u.test(restoreWorkflowHeadSha ?? "")
+  ) {
+    throw new Error("Restore workflow identity is invalid.");
   }
   const artifacts = githubArtifacts?.artifacts?.filter(
     ({ expired }) => expired === false,
@@ -36,6 +48,9 @@ export function createRestoreReleaseProof({
     format_version: 1,
     backup_run_id: runId,
     backup_head_sha: githubRun.headSha,
+    candidate_sha: candidateSha,
+    restore_workflow_run_id: restoreWorkflowRunId,
+    restore_workflow_head_sha: restoreWorkflowHeadSha,
     backup_artifact_id: String(artifact.id),
     backup_artifact_digest: artifact.digest,
     restore_report_sha256: createHash("sha256")
@@ -55,6 +70,9 @@ export function createRestoreReleaseProof({
 
 function main() {
   const runId = process.env.BACKUP_RUN_ID;
+  const candidateSha = process.env.BACKUP_CANDIDATE_SHA;
+  const restoreWorkflowRunId = process.env.GITHUB_RUN_ID;
+  const restoreWorkflowHeadSha = process.env.GITHUB_SHA;
   const runFile = process.env.BACKUP_GITHUB_RUN_FILE;
   const artifactsFile = process.env.BACKUP_GITHUB_ARTIFACTS_FILE;
   const sourceFile = process.env.BACKUP_SOURCE_EVIDENCE_FILE;
@@ -62,6 +80,9 @@ function main() {
   const proofFile = process.env.BACKUP_RELEASE_PROOF_FILE;
   if (
     !runId ||
+    !candidateSha ||
+    !restoreWorkflowRunId ||
+    !restoreWorkflowHeadSha ||
     !runFile ||
     !artifactsFile ||
     !sourceFile ||
@@ -73,6 +94,9 @@ function main() {
   const reportBytes = readFileSync(reportFile);
   const proof = createRestoreReleaseProof({
     runId,
+    candidateSha,
+    restoreWorkflowRunId,
+    restoreWorkflowHeadSha,
     githubRun: JSON.parse(readFileSync(runFile, "utf8")),
     githubArtifacts: JSON.parse(readFileSync(artifactsFile, "utf8")),
     source: JSON.parse(readFileSync(sourceFile, "utf8")),

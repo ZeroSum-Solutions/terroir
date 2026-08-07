@@ -25,6 +25,7 @@ describe("database backup workflow", () => {
     );
 
     expect(workflow).toContain("BACKUP_AGE_RECIPIENT");
+    expect(workflow).toContain("RESTORE_DRILL_AGE_RECIPIENT");
     expect(workflow).toContain("age --encrypt");
     expect(workflow).toContain("pg_read_all_data");
     expect(workflow).toContain("rolsuper");
@@ -32,14 +33,15 @@ describe("database backup workflow", () => {
     expect(workflow).toContain(
       "default_transaction_read_only=on",
     );
-    expect(workflow).toContain("e.extnamespace = n.oid");
-    expect(workflow).toContain("d.deptype = 'e'");
+    expect(workflow).not.toContain("e.extnamespace = n.oid");
+    expect(workflow).not.toContain("d.deptype = 'e'");
     expect(workflow).toContain("BACKUP_PG_DUMP_VERSION");
     expect(workflow).toContain('pg_bin="/usr/lib/postgresql/17/bin"');
     expect(workflow).toContain('echo "$pg_bin" >> "$GITHUB_PATH"');
     expect(workflow).toContain("artifact-digest");
     expect(workflow).toContain("${api_digest#sha256:}");
     expect(workflow).toContain("assert-dump-coverage.mjs");
+    expect(workflow).toContain("archive contains large objects");
     expect(workflow).toContain("pg_export_snapshot");
     expect(workflow).toContain("--snapshot=\"$backup_snapshot\"");
     expect(workflow).toContain(
@@ -258,6 +260,13 @@ describe("database backup workflow", () => {
     expect(snapshotSql("select 1", "00000003-1")).toContain(
       "set transaction snapshot '00000003-1'",
     );
+    expect(snapshotSql("select 1")).toContain("set local timezone = 'UTC'");
+    expect(snapshotSql("select 1")).toContain(
+      "set local datestyle = 'ISO, YMD'",
+    );
+    expect(snapshotSql("select 1")).toContain(
+      "set local extra_float_digits = 3",
+    );
     expect(() => snapshotSql("select 1", "bad'; drop table wines"))
       .toThrow(/invalid format/u);
   });
@@ -323,6 +332,7 @@ describe("database backup workflow", () => {
       BACKUP_TABLE_DATA_ENTRIES: "7",
       BACKUP_PROJECT_REF: "project-ref",
       BACKUP_AGE_RECIPIENT: "age1recipient",
+      RESTORE_DRILL_AGE_RECIPIENT: "age1restorerecipient",
       BACKUP_PG_DUMP_VERSION: "pg_dump (PostgreSQL) 17.6",
       BACKUP_AGE_VERSION: "v1.2.1",
       GITHUB_SHA: "a".repeat(40),
@@ -351,7 +361,15 @@ describe("database backup workflow", () => {
       expect.objectContaining({ name: "db.tar.age" }),
     );
     expect(manifest.encryption).toEqual(
-      expect.objectContaining({ age_version: "v1.2.1" }),
+      expect.objectContaining({
+        age_version: "v1.2.1",
+        recipient_sha256: createHash("sha256")
+          .update("age1recipient")
+          .digest("hex"),
+        restore_drill_recipient_sha256: createHash("sha256")
+          .update("age1restorerecipient")
+          .digest("hex"),
+      }),
     );
 
     const manifestFile = join(dir, "db.manifest.json");
@@ -679,6 +697,9 @@ describe("database backup workflow", () => {
     const reportBytes = Buffer.from(JSON.stringify(report));
     const proof = createRestoreReleaseProof({
       runId: "123",
+      candidateSha: "d".repeat(40),
+      restoreWorkflowRunId: "900",
+      restoreWorkflowHeadSha: "e".repeat(40),
       githubRun: {
         conclusion: "success",
         headSha: "b".repeat(40),
@@ -701,6 +722,9 @@ describe("database backup workflow", () => {
       expect.objectContaining({
         backup_run_id: "123",
         backup_artifact_id: "456",
+        candidate_sha: "d".repeat(40),
+        restore_workflow_run_id: "900",
+        restore_workflow_head_sha: "e".repeat(40),
         restore_report_sha256: createHash("sha256")
           .update(reportBytes)
           .digest("hex"),
@@ -809,7 +833,7 @@ describe("database backup workflow", () => {
     );
   });
 
-  it("fails production promotion without current backup and restore proof", async () => {
+  it("fails production promotion without trusted backup and restore proof", async () => {
     const { assertReleaseBackupHealth } =
       await loadScript("assert-release-backup-health");
     const now = "2026-08-07T16:00:00.000Z";
@@ -817,10 +841,17 @@ describe("database backup workflow", () => {
       id: 123,
       status: "completed",
       conclusion: "success",
+      event: "workflow_dispatch",
       head_branch: "main",
       head_sha: "a".repeat(40),
       created_at: "2026-08-07T15:00:00.000Z",
     };
+    const backupRuns = [
+      { ...latestBackup, id: 124, status: "in_progress", conclusion: null },
+      latestBackup,
+      { ...latestBackup, id: 122, event: "schedule" },
+      { ...latestBackup, id: 121, event: "workflow_dispatch" },
+    ];
     const artifacts = {
       artifacts: [
         {
@@ -847,44 +878,167 @@ describe("database backup workflow", () => {
       restored_table_count: 66,
       required_content_checksums: 10,
       checked_content_checksums: 10,
+      candidate_sha: "d".repeat(40),
+      restore_workflow_run_id: "900",
+      restore_workflow_head_sha: "f".repeat(40),
+    };
+    const restoreReportBytes = Buffer.from(
+      JSON.stringify({
+        ok: true,
+        failures: [],
+        verified_at: proof.verified_at,
+        migration_version: proof.migration_version,
+        source_table_count: proof.source_table_count,
+        source_non_empty_table_count: proof.source_non_empty_table_count,
+        table_count: proof.restored_table_count,
+        required_content_checksums: proof.required_content_checksums,
+        checked_content_checksums: proof.checked_content_checksums,
+      }),
+    );
+    proof.restore_report_sha256 = createHash("sha256")
+      .update(restoreReportBytes)
+      .digest("hex");
+    const restoreRun = {
+      id: 900,
+      status: "completed",
+      conclusion: "success",
+      event: "workflow_dispatch",
+      head_branch: "main",
+      head_sha: "f".repeat(40),
+      created_at: "2026-08-07T15:15:00.000Z",
+      path: ".github/workflows/db-restore-drill.yml",
+    };
+    const restoreArtifacts = {
+      artifacts: [{
+        id: 901,
+        name: "database-restore-proof-900",
+        expired: false,
+        digest: `sha256:${"e".repeat(64)}`,
+      }],
     };
 
     expect(() =>
       assertReleaseBackupHealth({
-        latestBackup,
+        backupRuns,
         artifacts,
+        restoreRun,
+        restoreArtifacts,
         proof,
+        restoreReportBytes,
         expectedRunId: "123",
+        expectedRestoreRunId: "900",
+        expectedCandidateSha: "d".repeat(40),
+        expectedTrustedWorkflowSha: "f".repeat(40),
         now,
       }),
     ).not.toThrow();
     expect(() =>
       assertReleaseBackupHealth({
-        latestBackup: { ...latestBackup, conclusion: "failure" },
+        backupRuns: backupRuns.map((run) =>
+          run.id === 123 ? { ...run, conclusion: "failure" } : run,
+        ),
         artifacts,
+        restoreRun,
+        restoreArtifacts,
         proof,
+        restoreReportBytes,
         expectedRunId: "123",
+        expectedRestoreRunId: "900",
+        expectedCandidateSha: "d".repeat(40),
+        expectedTrustedWorkflowSha: "f".repeat(40),
         now,
       }),
     ).toThrow(/latest DB Backup run is not successful/u);
     expect(() =>
       assertReleaseBackupHealth({
-        latestBackup,
+        backupRuns,
         artifacts,
+        restoreRun,
+        restoreArtifacts,
         proof: { ...proof, checked_content_checksums: 9 },
+        restoreReportBytes,
         expectedRunId: "123",
+        expectedRestoreRunId: "900",
+        expectedCandidateSha: "d".repeat(40),
+        expectedTrustedWorkflowSha: "f".repeat(40),
         now,
       }),
     ).toThrow(/Restore proof checksum coverage is incomplete/u);
     expect(() =>
       assertReleaseBackupHealth({
-        latestBackup,
+        backupRuns,
         artifacts,
+        restoreRun,
+        restoreArtifacts,
         proof: { ...proof, backup_artifact_digest: `sha256:${"d".repeat(64)}` },
+        restoreReportBytes,
         expectedRunId: "123",
+        expectedRestoreRunId: "900",
+        expectedCandidateSha: "d".repeat(40),
+        expectedTrustedWorkflowSha: "f".repeat(40),
         now,
       }),
     ).toThrow(/artifact digest does not match/u);
+    expect(() =>
+      assertReleaseBackupHealth({
+        backupRuns,
+        artifacts,
+        restoreRun,
+        restoreArtifacts,
+        proof: { ...proof, candidate_sha: "0".repeat(40) },
+        restoreReportBytes,
+        expectedRunId: "123",
+        expectedRestoreRunId: "900",
+        expectedCandidateSha: "d".repeat(40),
+        expectedTrustedWorkflowSha: "f".repeat(40),
+        now,
+      }),
+    ).toThrow(/not bound to the backup, workflow run, and candidate/u);
+    expect(() =>
+      assertReleaseBackupHealth({
+        backupRuns,
+        artifacts,
+        restoreRun: { ...restoreRun, path: ".github/workflows/other.yml" },
+        restoreArtifacts,
+        proof,
+        restoreReportBytes,
+        expectedRunId: "123",
+        expectedRestoreRunId: "900",
+        expectedCandidateSha: "d".repeat(40),
+        expectedTrustedWorkflowSha: "f".repeat(40),
+        now,
+      }),
+    ).toThrow(/not from a successful trusted main workflow run/u);
+    expect(() =>
+      assertReleaseBackupHealth({
+        backupRuns,
+        artifacts,
+        restoreRun,
+        restoreArtifacts,
+        proof,
+        restoreReportBytes: Buffer.from("{}"),
+        expectedRunId: "123",
+        expectedRestoreRunId: "900",
+        expectedCandidateSha: "d".repeat(40),
+        expectedTrustedWorkflowSha: "f".repeat(40),
+        now,
+      }),
+    ).toThrow(/report digest is invalid/u);
+    expect(() =>
+      assertReleaseBackupHealth({
+        backupRuns: backupRuns.filter(({ event }) => event !== "schedule"),
+        artifacts,
+        restoreRun,
+        restoreArtifacts,
+        proof,
+        restoreReportBytes,
+        expectedRunId: "123",
+        expectedRestoreRunId: "900",
+        expectedCandidateSha: "d".repeat(40),
+        expectedTrustedWorkflowSha: "f".repeat(40),
+        now,
+      }),
+    ).toThrow(/three successful backups including a scheduled run/u);
 
     const promotion = readFileSync(
       resolve(
@@ -894,14 +1048,25 @@ describe("database backup workflow", () => {
       "utf8",
     );
     expect(promotion).toContain("backup_run_id:");
-    expect(promotion).toContain("restore_proof_b64:");
+    expect(promotion).toContain("restore_run_id:");
+    expect(promotion).not.toContain("restore_proof_b64:");
     expect(promotion).toContain("assert-release-backup-health.mjs");
     expect(promotion).toContain(
-      "actions/workflows/db-backup.yml/runs?branch=main&per_page=1",
+      "actions/workflows/db-backup.yml/runs?branch=main&per_page=10",
     );
-    expect(promotion).toContain("Upload database recovery proof");
+    expect(promotion).toContain("gh run download");
+    expect(promotion.indexOf("ref: ${{ github.sha }}")).toBeLessThan(
+      promotion.indexOf("ref: ${{ inputs.sha }}"),
+    );
     expect(promotion.indexOf("Require database recovery proof")).toBeLessThan(
       promotion.indexOf("Fast-forward production only"),
     );
+    const restoreWorkflow = readFileSync(
+      resolve(process.cwd(), ".github/workflows/db-restore-drill.yml"),
+      "utf8",
+    );
+    expect(restoreWorkflow).toContain("RESTORE_DRILL_AGE_IDENTITY");
+    expect(restoreWorkflow).toContain("run-restore-drill.sh");
+    expect(restoreWorkflow).toContain("database-restore-proof-");
   });
 });

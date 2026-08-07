@@ -13,6 +13,7 @@ export async function createBackupManifest(env = process.env) {
     "BACKUP_TABLE_DATA_ENTRIES",
     "BACKUP_PROJECT_REF",
     "BACKUP_AGE_RECIPIENT",
+    "RESTORE_DRILL_AGE_RECIPIENT",
     "BACKUP_PG_DUMP_VERSION",
     "BACKUP_AGE_VERSION",
     "GITHUB_SHA",
@@ -58,6 +59,9 @@ export async function createBackupManifest(env = process.env) {
       age_version: env.BACKUP_AGE_VERSION,
       recipient_sha256: createHash("sha256")
         .update(env.BACKUP_AGE_RECIPIENT)
+        .digest("hex"),
+      restore_drill_recipient_sha256: createHash("sha256")
+        .update(env.RESTORE_DRILL_AGE_RECIPIENT)
         .digest("hex"),
     },
   };

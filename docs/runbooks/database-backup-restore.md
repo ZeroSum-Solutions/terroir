@@ -6,9 +6,11 @@ healthy only after the encrypted artifact, manifest, and checksum file upload
 successfully. A release that includes a migration remains blocked unless the
 latest backup is healthy and the most recent disposable restore drill passed.
 
-The workflow never receives the decryption identity. Production connection
-credentials and the offline age identity live only in ZS Vault. Never put a
-database URL, password, or age identity in command arguments or logs.
+The backup workflow never receives a decryption identity. New backups are
+encrypted to two distinct recipients: an offline identity stored only in ZS
+Vault and a CI restore identity stored only as a protected
+`database-recovery` GitHub environment secret. Never put a database URL,
+password, or age identity in command arguments or logs.
 The coverage gate includes every non-system, non-extension-owned schema that
 owns a dumpable relation. Empty schemas are intentionally outside the gate
 because PostgreSQL custom archives need not represent them.
@@ -84,7 +86,7 @@ zsvault get terroir_supabase_backup_db_url |
 ```
 
 Generate a distinct offline age identity, save the private identity to ZS
-Vault, and send only its public recipient to GitHub.
+Vault, and send only its public recipient to the backup workflow.
 
 ```bash
 umask 077
@@ -103,11 +105,37 @@ gh secret set BACKUP_AGE_RECIPIENT \
 rm -f "$identity_file" "$TMPDIR/terroir-backup-age-recipient.txt"
 ```
 
-Confirm the repository has both secret names. GitHub never returns values.
+Create a second age identity for automated restore drills. Store its private
+identity only in the protected `database-recovery` GitHub environment and its
+public recipient as a repository secret. Configure that environment to allow
+deployments only from `main` and require the release-owner reviewer. This
+identity can decrypt database backups, so it must not be a general repository
+secret.
+
+```bash
+umask 077
+restore_identity_file="$TMPDIR/terroir-restore-drill-age-identity.txt"
+restore_recipient_file="$TMPDIR/terroir-restore-drill-age-recipient.txt"
+age-keygen -o "$restore_identity_file"
+age-keygen -y "$restore_identity_file" > "$restore_recipient_file"
+gh secret set RESTORE_DRILL_AGE_IDENTITY \
+  --env database-recovery \
+  --repo wiggdevin/terroir \
+  < "$restore_identity_file"
+gh secret set RESTORE_DRILL_AGE_RECIPIENT \
+  --repo wiggdevin/terroir \
+  < "$restore_recipient_file"
+rm -f "$restore_identity_file" "$restore_recipient_file"
+```
+
+Confirm the repository and environment have all secret names. GitHub never
+returns values.
 
 ```bash
 gh secret list --repo wiggdevin/terroir |
-  grep -E '^(SUPABASE_DB_URL|BACKUP_AGE_RECIPIENT)[[:space:]]'
+  grep -E '^(SUPABASE_DB_URL|BACKUP_AGE_RECIPIENT|RESTORE_DRILL_AGE_RECIPIENT)[[:space:]]'
+gh secret list --env database-recovery --repo wiggdevin/terroir |
+  grep -E '^RESTORE_DRILL_AGE_IDENTITY[[:space:]]'
 ```
 
 ## Run and inspect a backup
@@ -132,7 +160,8 @@ The workflow must report:
 
 - a non-privileged role with `pg_read_all_data`;
 - a non-empty custom dump containing table-data entries;
-- successful age encryption;
+- successful age encryption to the distinct offline and restore-drill
+  recipients;
 - removal of every plaintext file before artifact upload; and
 - one uploaded artifact retained for 90 days; and
 - a matching SHA-256 anchor appended to the persistent GitHub issue named
@@ -170,6 +199,10 @@ Supabase-owned DDL and global event triggers while `--exit-on-error` makes any
 remaining runtime/schema mismatch fail the drill. Supabase start/reset output
 is captured only in the mode-700 temporary directory because normal status
 output contains local demo keys.
+
+Backups created before dual-recipient encryption remain available through this
+local ZS Vault restore path. They cannot produce a trusted production-release
+proof; dispatch a new dual-recipient backup before attempting a promotion.
 
 The detailed commands below document the evidence flow for incident review;
 they are not a second supported procedure and must not be run independently.
@@ -355,29 +388,38 @@ Review `restore-report.json` before recording the drill as PASS. Its `ok` field
 must be `true`, `failures` must be empty, and
 `checked_content_checksums` must be ten unless production had fewer than ten
 non-empty tables. The entrypoint enforces that count and also writes a redacted
-`release-proof.json` that binds the restore report's SHA-256 to the successful
-backup run, immutable artifact digest, migration version, table counts, and
-checksum coverage. The proof contains no connection string, credential,
-plaintext database content, or age identity.
+`release-proof.json` only when `BACKUP_CANDIDATE_SHA` is supplied. It binds the
+restore report's SHA-256 to the successful backup run, immutable artifact
+digest, trusted restore-workflow run, exact candidate SHA, migration version,
+table counts, and checksum coverage. The proof contains no connection string,
+credential, plaintext database content, or age identity.
 
 ## Enforced production recovery gate
 
-The production promotion workflow requires the numeric backup run ID and the
-base64 encoding of `release-proof.json`. Before it can fast-forward `main`, the
-workflow queries GitHub for the latest `DB Backup` run on `main` and requires
-that exact run to be completed successfully within 30 hours. It also requires
-one unexpired artifact whose ID and immutable digest match the restore proof,
-a successful restore performed after that backup, and complete checksum
-coverage. A failed, running, stale, superseded, or unproven backup blocks the
-promotion before any production push. The validated redacted proof is retained
-with the promotion run for 90 days.
+Dispatch `DB Restore Drill` from `main` with the latest completed backup run ID
+and exact current staging SHA. The protected workflow downloads and
+authenticates the backup, decrypts it with the separate environment identity,
+performs the actual disposable restore, and uploads one immutable redacted
+artifact named for its workflow run. Operators cannot supply or edit the
+release proof.
 
-Use the repository's `Promote to production` workflow after the staging SHA is
-green. Supply the proof as data, not as executable shell content; the workflow
-base64-decodes it into a mode-600 file, bounds it to 16 KiB, parses it as JSON,
-and never evaluates it. The release owner and confirmation checks remain
-independent requirements. A restore proof for a previous backup cannot satisfy
-the gate after a newer backup run starts.
+The production promotion workflow requires the numeric backup and restore run
+IDs. Before it checks out candidate code or can fast-forward `main`, trusted
+gate code from the promotion's `main` SHA queries GitHub and requires the three
+most recent completed `DB Backup` runs to have succeeded, with at least one
+scheduled run. The selected backup must be the newest completed run on `main`,
+be no older than 30 hours, and have one unexpired artifact. The selected
+`DB Restore Drill` must be a successful `main` workflow-dispatch run with one
+unexpired proof artifact. The gate verifies the downloaded report hash,
+artifact digest, restore counts, checksum coverage, workflow-run identity, and
+candidate SHA. A failed, running, stale, superseded, or unproven backup blocks
+the promotion before any production push.
+
+Use the repository's `Promote to production` workflow after the staging SHA and
+restore drill are green. Supply only their exact SHA and numeric run IDs. The
+release owner, confirmation, protected production environment, fresh staging
+smoke test, and database recovery gate remain independent requirements. A
+restore proof for another SHA or a previous backup cannot satisfy the gate.
 
 ## Failure and rotation handling
 

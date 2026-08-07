@@ -104,7 +104,11 @@ jq -e --arg artifact_id "$artifact_id" --arg artifact_digest "$artifact_digest" 
   fail "artifact digest is not anchored in the integrity ledger"
 
 identity_file="$work_dir/age-identity.txt"
-zsvault get terroir_backup_age_identity > "$identity_file"
+if [ -n "${RESTORE_DRILL_AGE_IDENTITY:-}" ]; then
+  printf '%s\n' "$RESTORE_DRILL_AGE_IDENTITY" > "$identity_file"
+else
+  zsvault get terroir_backup_age_identity > "$identity_file"
+fi
 [ -s "$identity_file" ] || fail "backup age identity is unavailable"
 chmod 600 "$identity_file"
 payload_file="$work_dir/backup.tar"
@@ -152,6 +156,7 @@ PG_DATABASE_URL="$target_url" node scripts/backup/assert-disposable-target.mjs
 export PGSERVICEFILE="$work_dir/restore.pg_service.conf"
 export PGSERVICE_NAME=terroir_restore
 export PG_DATABASE_URL="$target_url"
+unset BACKUP_PROJECT_REF
 node scripts/backup/write-pg-service.mjs
 unset PG_DATABASE_URL
 restore_identity="$(psql 'service=terroir_restore' -X -A -t -v ON_ERROR_STOP=1 \
@@ -198,13 +203,16 @@ jq -n --arg supabase_cli "$supabase_version" --arg run_id "$run_id" '{
   target: "canonical-local-supabase",
   platform_ddl_preserved: true
 }' > "$proof_dir/restore-method.json"
-BACKUP_RUN_ID="$run_id" \
-BACKUP_GITHUB_RUN_FILE="$proof_dir/github-run.json" \
-BACKUP_GITHUB_ARTIFACTS_FILE="$proof_dir/github-artifacts.json" \
-BACKUP_SOURCE_EVIDENCE_FILE="$source_evidence" \
-BACKUP_RESTORE_REPORT_FILE="$restore_report" \
-BACKUP_RELEASE_PROOF_FILE="$proof_dir/release-proof.json" \
-  node scripts/backup/create-restore-release-proof.mjs
+if [ -n "${BACKUP_CANDIDATE_SHA:-}" ]; then
+  BACKUP_RUN_ID="$run_id" \
+  BACKUP_CANDIDATE_SHA="$BACKUP_CANDIDATE_SHA" \
+  BACKUP_GITHUB_RUN_FILE="$proof_dir/github-run.json" \
+  BACKUP_GITHUB_ARTIFACTS_FILE="$proof_dir/github-artifacts.json" \
+  BACKUP_SOURCE_EVIDENCE_FILE="$source_evidence" \
+  BACKUP_RESTORE_REPORT_FILE="$restore_report" \
+  BACKUP_RELEASE_PROOF_FILE="$proof_dir/release-proof.json" \
+    node scripts/backup/create-restore-release-proof.mjs
+fi
 
 cp "$manifest_file" "$checksums_file" "$proof_dir/"
 printf 'Restore drill PASS for run %s\n' "$run_id"
