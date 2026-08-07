@@ -244,6 +244,24 @@ describe("failure evidence redaction", () => {
     expect(redacted).not.toContain("magic-value");
     expect(redacted).toContain("[redacted]");
   });
+
+  test("keeps the forced-failure drill dispatch-only and uploads evidence", () => {
+    const workflow = fs.readFileSync(
+      path.join(process.cwd(), ".github/workflows/staging-smoke.yml"),
+      "utf8",
+    );
+
+    expect(workflow).toMatch(/force_evidence_failure:[\s\S]*?type: boolean/);
+    expect(workflow).toMatch(
+      /github\.event_name == 'workflow_dispatch' && inputs\.force_evidence_failure/,
+    );
+    expect(workflow).toMatch(
+      /Exercise the failure evidence path[\s\S]*?exit 1[\s\S]*?Retain browser failure evidence[\s\S]*?if: always\(\)/,
+    );
+    expect(workflow).toContain(
+      "Intentional staging evidence drill; no request or credential data captured.",
+    );
+  });
 });
 
 function walk(directory: string): string[] {

@@ -9,6 +9,11 @@ on:
         description: Candidate SHA that Railway must be serving
         required: true
         type: string
+      force_evidence_failure:
+        description: Intentionally fail after Playwright to verify retained evidence
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: staging-smoke-${{ github.ref }}
@@ -81,6 +86,13 @@ jobs:
 
       - name: Run the isolated authenticated workflow
         run: pnpm run test:e2e:isolated
+
+      - name: Exercise the failure evidence path
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.force_evidence_failure }}
+        run: |
+          mkdir -p test-results/playwright
+          printf '%s\n' 'Intentional staging evidence drill; no request or credential data captured.' > test-results/playwright/forced-evidence-drill.txt
+          exit 1
 
       - name: Retain browser failure evidence
         if: always()
