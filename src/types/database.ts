@@ -150,13 +150,19 @@ export type Database = {
       background_jobs: {
         Row: {
           attempt_count: number
+          claimed_by: string | null
           created_at: string
           created_by: string | null
+          dead_lettered_at: string | null
           error_code: string | null
           error_message: string | null
           finished_at: string | null
+          heartbeat_at: string | null
           id: string
+          idempotency_key: string | null
           job_type: string
+          lease_expires_at: string | null
+          lease_token: string | null
           max_attempts: number
           metadata: Json
           restaurant_id: string
@@ -170,13 +176,19 @@ export type Database = {
         }
         Insert: {
           attempt_count?: number
+          claimed_by?: string | null
           created_at?: string
           created_by?: string | null
+          dead_lettered_at?: string | null
           error_code?: string | null
           error_message?: string | null
           finished_at?: string | null
+          heartbeat_at?: string | null
           id?: string
+          idempotency_key?: string | null
           job_type: string
+          lease_expires_at?: string | null
+          lease_token?: string | null
           max_attempts?: number
           metadata?: Json
           restaurant_id: string
@@ -190,13 +202,19 @@ export type Database = {
         }
         Update: {
           attempt_count?: number
+          claimed_by?: string | null
           created_at?: string
           created_by?: string | null
+          dead_lettered_at?: string | null
           error_code?: string | null
           error_message?: string | null
           finished_at?: string | null
+          heartbeat_at?: string | null
           id?: string
+          idempotency_key?: string | null
           job_type?: string
+          lease_expires_at?: string | null
+          lease_token?: string | null
           max_attempts?: number
           metadata?: Json
           restaurant_id?: string
@@ -1035,6 +1053,45 @@ export type Database = {
         }
         Returns: undefined
       }
+      background_job_backoff: {
+        Args: { p_attempt_count: number; p_base_seconds?: number }
+        Returns: string
+      }
+      cancel_background_job: {
+        Args: { p_job_id: string; p_restaurant_id: string }
+        Returns: {
+          attempt_count: number
+          claimed_by: string | null
+          created_at: string
+          created_by: string | null
+          dead_lettered_at: string | null
+          error_code: string | null
+          error_message: string | null
+          finished_at: string | null
+          heartbeat_at: string | null
+          id: string
+          idempotency_key: string | null
+          job_type: string
+          lease_expires_at: string | null
+          lease_token: string | null
+          max_attempts: number
+          metadata: Json
+          restaurant_id: string
+          result: Json
+          run_after: string
+          started_at: string | null
+          status: string
+          subject_id: string | null
+          subject_table: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "background_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       cellar_inventory_wine_ids: {
         Args: { p_restaurant_id: string; p_wine_ids: string[] }
         Returns: string[]
@@ -1052,6 +1109,46 @@ export type Database = {
           response_headers: Json
           response_status: number
         }[]
+      }
+      claim_background_jobs: {
+        Args: {
+          p_base_backoff_seconds?: number
+          p_lease_seconds?: number
+          p_limit?: number
+          p_worker_id: string
+        }
+        Returns: {
+          attempt_count: number
+          claimed_by: string | null
+          created_at: string
+          created_by: string | null
+          dead_lettered_at: string | null
+          error_code: string | null
+          error_message: string | null
+          finished_at: string | null
+          heartbeat_at: string | null
+          id: string
+          idempotency_key: string | null
+          job_type: string
+          lease_expires_at: string | null
+          lease_token: string | null
+          max_attempts: number
+          metadata: Json
+          restaurant_id: string
+          result: Json
+          run_after: string
+          started_at: string | null
+          status: string
+          subject_id: string | null
+          subject_table: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "background_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       clone_wine_list_idempotent: {
         Args: {
@@ -1111,6 +1208,46 @@ export type Database = {
           p_restaurant_id: string
         }
         Returns: boolean
+      }
+      complete_background_job: {
+        Args: {
+          p_job_id: string
+          p_lease_token: string
+          p_result?: Json
+          p_worker_id: string
+        }
+        Returns: {
+          attempt_count: number
+          claimed_by: string | null
+          created_at: string
+          created_by: string | null
+          dead_lettered_at: string | null
+          error_code: string | null
+          error_message: string | null
+          finished_at: string | null
+          heartbeat_at: string | null
+          id: string
+          idempotency_key: string | null
+          job_type: string
+          lease_expires_at: string | null
+          lease_token: string | null
+          max_attempts: number
+          metadata: Json
+          restaurant_id: string
+          result: Json
+          run_after: string
+          started_at: string | null
+          status: string
+          subject_id: string | null
+          subject_table: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "background_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       confirm_bottle_scan_idempotent: {
         Args: {
@@ -1204,6 +1341,50 @@ export type Database = {
         Args: { p_days?: number; p_wine_id: string }
         Returns: string
       }
+      enqueue_background_job: {
+        Args: {
+          p_idempotency_key: string
+          p_job_type: string
+          p_max_attempts?: number
+          p_metadata?: Json
+          p_restaurant_id: string
+          p_run_after?: string
+          p_subject_id?: string
+          p_subject_table?: string
+        }
+        Returns: {
+          attempt_count: number
+          claimed_by: string | null
+          created_at: string
+          created_by: string | null
+          dead_lettered_at: string | null
+          error_code: string | null
+          error_message: string | null
+          finished_at: string | null
+          heartbeat_at: string | null
+          id: string
+          idempotency_key: string | null
+          job_type: string
+          lease_expires_at: string | null
+          lease_token: string | null
+          max_attempts: number
+          metadata: Json
+          restaurant_id: string
+          result: Json
+          run_after: string
+          started_at: string | null
+          status: string
+          subject_id: string | null
+          subject_table: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "background_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       enrich_wines_batch: {
         Args: { p_enrichments: Json; p_restaurant_id: string }
         Returns: number
@@ -1216,6 +1397,49 @@ export type Database = {
           p_restaurant_id: string
         }
         Returns: boolean
+      }
+      fail_background_job: {
+        Args: {
+          p_base_backoff_seconds?: number
+          p_error_code: string
+          p_error_message: string
+          p_job_id: string
+          p_lease_token: string
+          p_retryable?: boolean
+          p_worker_id: string
+        }
+        Returns: {
+          attempt_count: number
+          claimed_by: string | null
+          created_at: string
+          created_by: string | null
+          dead_lettered_at: string | null
+          error_code: string | null
+          error_message: string | null
+          finished_at: string | null
+          heartbeat_at: string | null
+          id: string
+          idempotency_key: string | null
+          job_type: string
+          lease_expires_at: string | null
+          lease_token: string | null
+          max_attempts: number
+          metadata: Json
+          restaurant_id: string
+          result: Json
+          run_after: string
+          started_at: string | null
+          status: string
+          subject_id: string | null
+          subject_table: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "background_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       find_or_create_wine: {
         Args: {
@@ -1235,6 +1459,46 @@ export type Database = {
         Returns: string[]
       }
       generate_slug: { Args: { input: string }; Returns: string }
+      heartbeat_background_job: {
+        Args: {
+          p_job_id: string
+          p_lease_seconds?: number
+          p_lease_token: string
+          p_worker_id: string
+        }
+        Returns: {
+          attempt_count: number
+          claimed_by: string | null
+          created_at: string
+          created_by: string | null
+          dead_lettered_at: string | null
+          error_code: string | null
+          error_message: string | null
+          finished_at: string | null
+          heartbeat_at: string | null
+          id: string
+          idempotency_key: string | null
+          job_type: string
+          lease_expires_at: string | null
+          lease_token: string | null
+          max_attempts: number
+          metadata: Json
+          restaurant_id: string
+          result: Json
+          run_after: string
+          started_at: string | null
+          status: string
+          subject_id: string | null
+          subject_table: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "background_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       is_member: { Args: { r_id: string }; Returns: boolean }
       is_member_with_role: {
         Args: {
@@ -1440,6 +1704,45 @@ export type Database = {
       reorder_wine_list_sections: {
         Args: { p_ordered_ids: string[] }
         Returns: undefined
+      }
+      requeue_background_job: {
+        Args: {
+          p_job_id: string
+          p_restaurant_id: string
+          p_run_after?: string
+        }
+        Returns: {
+          attempt_count: number
+          claimed_by: string | null
+          created_at: string
+          created_by: string | null
+          dead_lettered_at: string | null
+          error_code: string | null
+          error_message: string | null
+          finished_at: string | null
+          heartbeat_at: string | null
+          id: string
+          idempotency_key: string | null
+          job_type: string
+          lease_expires_at: string | null
+          lease_token: string | null
+          max_attempts: number
+          metadata: Json
+          restaurant_id: string
+          result: Json
+          run_after: string
+          started_at: string | null
+          status: string
+          subject_id: string | null
+          subject_table: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "background_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       set_wine_availability: {
         Args: { p_direction: string; p_note: string; p_wine_id: string }
