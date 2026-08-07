@@ -670,6 +670,13 @@ describe("team member idempotency callers", () => {
 
   it("guards a role change immediately and disables both row actions", async () => {
     let resolveRequest!: (response: Response) => void;
+    let resolveDigest!: (digest: ArrayBuffer) => void;
+    vi.spyOn(globalThis.crypto.subtle, "digest").mockImplementationOnce(
+      () =>
+        new Promise<ArrayBuffer>((resolve) => {
+          resolveDigest = resolve;
+        }),
+    );
     mockFetch.mockReturnValueOnce(
       new Promise<Response>((resolve) => {
         resolveRequest = resolve;
@@ -683,9 +690,15 @@ describe("team member idempotency callers", () => {
       await Promise.resolve();
     });
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).not.toHaveBeenCalled();
     expect(roleSelect().disabled).toBe(true);
     expect(removeButton().disabled).toBe(true);
+
+    await act(async () => {
+      resolveDigest(new ArrayBuffer(32));
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(`/api/team/members/${MEMBER_ID}`);
     expect(init.method).toBe("PATCH");
