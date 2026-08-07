@@ -47,7 +47,12 @@ function mockProbe(mode: ProbeMode) {
 }
 
 async function expectHealth(
-  expected: { db: "connected" | "error" | "unconfigured"; dbReason?: string },
+  expected: {
+    db: "connected" | "error" | "unconfigured";
+    dbReason?: string;
+    environment?: string;
+    release?: string;
+  },
 ) {
   const response = await GET();
   const body = await response.json();
@@ -57,6 +62,8 @@ async function expectHealth(
     status: "ok",
     db: expected.db,
     ...(expected.dbReason ? { dbReason: expected.dbReason } : {}),
+    environment: expected.environment ?? "unknown",
+    ...(expected.release ? { release: expected.release } : {}),
     timestamp: "2026-07-24T10:00:00.000Z",
   });
   expect(body).not.toHaveProperty("error");
@@ -69,6 +76,8 @@ describe("GET /api/health", () => {
     vi.setSystemTime(new Date("2026-07-24T10:00:00.000Z"));
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "");
+    vi.stubEnv("RAILWAY_GIT_COMMIT_SHA", "");
     vi.clearAllMocks();
   });
 
@@ -88,6 +97,17 @@ describe("GET /api/health", () => {
     mockProbe({ kind: "response", status: 204 });
 
     await expectHealth({ db: "connected" });
+  });
+
+  it("reports only the deploy identity needed by the staging gate", async () => {
+    vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "staging");
+    vi.stubEnv("RAILWAY_GIT_COMMIT_SHA", "abc1234");
+
+    await expectHealth({
+      db: "unconfigured",
+      environment: "staging",
+      release: "abc1234",
+    });
   });
 
   it("uses a stable reason for upstream non-2xx responses", async () => {
@@ -124,6 +144,7 @@ describe("GET /api/health", () => {
       status: "ok",
       db: "error",
       dbReason: "probe_failed",
+      environment: "unknown",
       timestamp: "2026-07-24T10:00:00.000Z",
     });
     expect(text).not.toContain(error.message);

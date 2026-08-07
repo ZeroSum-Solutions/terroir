@@ -1,0 +1,69 @@
+name: Promote to production
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Exact staging SHA to promote after an approved release decision
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  verify-staging-candidate:
+    name: Verify staging candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Require the exact current staging SHA
+        env:
+          CANDIDATE_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          git check-ref-format --allow-onelevel "$CANDIDATE_SHA"
+          git rev-parse --verify "$CANDIDATE_SHA^{commit}"
+          git fetch origin staging
+          test "$CANDIDATE_SHA" = "$(git rev-parse origin/staging)"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Require a fresh staging smoke pass for this SHA
+        env:
+          STAGING_EXPECTED_SHA: ${{ inputs.sha }}
+          STAGING_SMOKE_ATTEMPTS: "20"
+        run: pnpm run test:staging
+
+  promote:
+    name: Promote the verified SHA
+    needs: verify-staging-candidate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fast-forward production only
+        env:
+          CANDIDATE_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git merge-base --is-ancestor origin/main "$CANDIDATE_SHA"
+          git push origin "$CANDIDATE_SHA:main"

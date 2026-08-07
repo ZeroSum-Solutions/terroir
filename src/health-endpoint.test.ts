@@ -10,6 +10,7 @@ describe("GET /api/health", () => {
     expect(body).toHaveProperty("status", "ok");
     expect(body).toHaveProperty("db");
     expect(["connected", "error", "unconfigured"]).toContain(body.db);
+    expect(body).toHaveProperty("environment");
     expect(body).toHaveProperty("timestamp");
 
     console.log("Health check response:", JSON.stringify(body, null, 2));

@@ -32,6 +32,7 @@ pnpm start               # serve the production build locally
 pnpm lint                # ESLint
 pnpm test                # Vitest unit + route tests
 pnpm test:e2e            # Playwright end-to-end
+pnpm test:staging        # read-only pinned staging infrastructure smoke
 pnpm verify:feature-ledger # verify the authoritative feature ledger
 pnpm exec tsc --noEmit   # type-check
 pnpm run snapshot        # regenerate supabase/schema.snapshot.sql after a new migration
@@ -63,7 +64,12 @@ Before your first deploy, set these as Railway service variables:
 
 See `.env.example` for the full list with notes.
 
-**No staging environment yet** — every push to `main` auto-deploys directly to production. For a prototype this is fine; the moment you have paying customers, add a `staging` branch + a second Railway service (same Nixpacks config, different Supabase project or schema). 10-minute setup in Railway's UI: new service from GitHub, track the `staging` branch, duplicate the env vars pointing at a staging Supabase project.
+Staging is pinned to `https://terroir-web-staging.up.railway.app`. Run
+`pnpm test:staging` only as a read-only infrastructure check; it rejects every
+other target host. The controlled candidate/promotion/rollback procedure and
+the current staging readiness record live in
+[`docs/STAGING-SETUP.md`](docs/STAGING-SETUP.md). Do not promote to production
+until that gate and the synthetic workflow report are both green.
 
 ## Repo layout
 

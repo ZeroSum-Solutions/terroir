@@ -59,6 +59,8 @@ function probeSupabase(url: string, serviceKey: string): Promise<boolean> {
 export async function GET() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const environment = process.env.RAILWAY_ENVIRONMENT_NAME?.trim() || "unknown";
+  const release = process.env.RAILWAY_GIT_COMMIT_SHA?.trim();
 
   let db: "connected" | "error" | "unconfigured" = "unconfigured";
   let dbReason:
@@ -82,6 +84,8 @@ export async function GET() {
     {
       status: "ok",
       db,
+      environment,
+      ...(release ? { release } : {}),
       ...(dbReason ? { dbReason } : {}),
       timestamp: new Date().toISOString(),
     },

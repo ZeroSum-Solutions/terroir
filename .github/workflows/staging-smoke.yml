@@ -1,0 +1,42 @@
+name: Staging smoke
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Candidate SHA that Railway must be serving
+        required: true
+        type: string
+
+concurrency:
+  group: staging-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Required staging smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Confirm the deployed candidate on staging
+        env:
+          STAGING_EXPECTED_SHA: ${{ inputs.sha || github.sha }}
+          STAGING_SMOKE_ATTEMPTS: "20"
+        run: pnpm run test:staging

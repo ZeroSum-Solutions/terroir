@@ -27,11 +27,12 @@ business workflows. Adapter modules own external/provider mechanics.
 
 ## Remaining Handoffs
 
-- Activate real staging in Railway/Supabase before treating staging as a hard
-  promotion gate.
+- TER-003's pinned staging smoke and promotion workflow are in the repository,
+  but live isolation and synthetic stateful workflow evidence remain required
+  before staging can become a production promotion gate. See
+  [`STAGING-SETUP.md`](STAGING-SETUP.md).
 - Move OCR, enrichment, and PDF execution to a worker or scheduled processor
   that consumes `background_jobs`; this needs an operational owner and
   non-production environment credentials.
 - Finish extracting `auth`, remaining `cellar`, `insights`, and `storage`
   workflow code as those routes are touched.
-
