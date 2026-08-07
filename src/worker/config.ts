@@ -29,6 +29,7 @@ const workerEnvironmentSchema = z
     WORKER_DEAD_LETTER_ALERT_COUNT: integer(1, 1_000_000, 1),
     RAILWAY_ENVIRONMENT_NAME: z.string().trim().min(1).optional(),
     RAILWAY_GIT_COMMIT_SHA: z.string().trim().min(7).max(64).optional(),
+    TERROIR_RELEASE_SHA: z.string().trim().min(7).max(64).optional(),
     RAILWAY_REPLICA_ID: z.string().trim().min(1).max(64).optional(),
   })
   .passthrough()
@@ -111,6 +112,9 @@ export function parseWorkerConfig(env: WorkerEnvironment = process.env) {
     queueAgeAlertMs: result.data.WORKER_QUEUE_AGE_ALERT_MS,
     deadLetterAlertCount: result.data.WORKER_DEAD_LETTER_ALERT_COUNT,
     environment: result.data.RAILWAY_ENVIRONMENT_NAME ?? "unknown",
-    release: result.data.RAILWAY_GIT_COMMIT_SHA ?? "unknown",
+    release:
+      result.data.TERROIR_RELEASE_SHA ??
+      result.data.RAILWAY_GIT_COMMIT_SHA ??
+      "unknown",
   });
 }

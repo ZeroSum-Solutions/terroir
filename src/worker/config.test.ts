@@ -8,13 +8,18 @@ const required = {
 
 describe("worker configuration", () => {
   it("returns bounded defaults without exposing credentials", () => {
-    const config = parseWorkerConfig(required);
+    const config = parseWorkerConfig({
+      ...required,
+      RAILWAY_GIT_COMMIT_SHA: "provider-sha",
+      TERROIR_RELEASE_SHA: "exact-local-deploy-sha",
+    });
     expect(config).toMatchObject({
       concurrency: 4,
       claimLimit: 4,
       leaseSeconds: 120,
       heartbeatIntervalMs: 30_000,
       port: 3001,
+      release: "exact-local-deploy-sha",
     });
   });
 

@@ -35,6 +35,7 @@ Supabase project. Never copy the production key into staging.
 
 | Variable | Default | Contract |
 | --- | ---: | --- |
+| `TERROIR_RELEASE_SHA` | Railway Git SHA | Exact commit for local CLI deployments; overrides provider metadata in release logs. |
 | `WORKER_ID` | generated host/replica ID | 1-128 safe identifier characters |
 | `WORKER_CONCURRENCY` | 4 | maximum active jobs, 1-20 |
 | `WORKER_CLAIM_LIMIT` | 4 | per-poll claim bound, never above concurrency |
