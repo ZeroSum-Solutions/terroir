@@ -28,8 +28,11 @@ export default defineConfig({
   use: {
     baseURL: externalBaseUrl ?? "http://localhost:3000",
     screenshot: "only-on-failure",
-    trace: "retain-on-failure",
-    video: "retain-on-failure",
+    // Isolated staging sessions use real provider cookies. Playwright traces
+    // and videos can retain request headers or session state, so that job
+    // exports only synthetic screenshots and our explicitly redacted JSON.
+    trace: isolatedE2e ? "off" : "retain-on-failure",
+    video: isolatedE2e ? "off" : "retain-on-failure",
     launchOptions: process.env.UI_CRAWL_BROWSER_PATH
       ? { executablePath: process.env.UI_CRAWL_BROWSER_PATH }
       : undefined,

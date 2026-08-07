@@ -7,7 +7,10 @@ import {
   buildFixtureIdentity,
   readIsolatedE2eConfig,
 } from "../../../e2e/fixtures/config";
-import { injectFixtureSession } from "../../../e2e/fixtures/isolated-fixture";
+import {
+  cleanupIsolatedFixture,
+  injectFixtureSession,
+} from "../../../e2e/fixtures/isolated-fixture";
 import { redactBrowserEvidence } from "../../../e2e/fixtures/evidence";
 
 const STAGING_REF = "wwhxcgtcecsftcivosop";
@@ -92,10 +95,18 @@ describe("fixture identity isolation", () => {
     expect(
       new Set(identities.map((value) => value.secondRestaurantId)),
     ).toHaveLength(3);
+    expect(
+      new Set(identities.map((value) => value.foreignRestaurantId)),
+    ).toHaveLength(3);
     expect(new Set(identities.map((value) => value.email))).toHaveLength(3);
     expect(
       identities.every(
-        (value) => value.restaurantId !== value.secondRestaurantId,
+        (value) =>
+          new Set([
+            value.restaurantId,
+            value.secondRestaurantId,
+            value.foreignRestaurantId,
+          ]).size === 3,
       ),
     ).toBe(true);
     expect(
@@ -103,6 +114,71 @@ describe("fixture identity isolation", () => {
         value.storagePath.startsWith(`${value.restaurantId}/`),
       ),
     ).toBe(true);
+  });
+
+  test("refuses to delete a tenant without fixture provenance", async () => {
+    const config = readIsolatedE2eConfig(baseEnvironment())!;
+    const identity = buildFixtureIdentity(config.runId, "cleanup", 0);
+    const unknownRestaurantId =
+      "99999999-9999-4999-8999-999999999999";
+    const deletedRestaurantIds: string[] = [];
+    let deletedUser = false;
+    const admin = {
+      auth: {
+        admin: {
+          deleteUser: async () => {
+            deletedUser = true;
+            return { error: null };
+          },
+          listUsers: async () => ({
+            data: {
+              users: [{ email: identity.email, id: "fixture-user" }],
+            },
+            error: null,
+          }),
+        },
+      },
+      from: (table: string) => {
+        if (table === "memberships") {
+          return {
+            select: () => ({
+              eq: async () => ({
+                data: [
+                  {
+                    restaurant_id: unknownRestaurantId,
+                    restaurants: { name: "Unrelated staging tenant" },
+                  },
+                ],
+                error: null,
+              }),
+            }),
+          };
+        }
+        return {
+          delete: () => ({
+            eq: async (_column: string, restaurantId: string) => {
+              deletedRestaurantIds.push(restaurantId);
+              return { error: null };
+            },
+          }),
+        };
+      },
+      storage: {
+        from: () => ({ remove: async () => ({ error: null }) }),
+      },
+    };
+
+    await expect(
+      cleanupIsolatedFixture(config, identity, admin as never),
+    ).rejects.toMatchObject({
+      errors: [
+        expect.objectContaining({
+          message: expect.stringMatching(/fixture provenance/i),
+        }),
+      ],
+    });
+    expect(deletedRestaurantIds).not.toContain(unknownRestaurantId);
+    expect(deletedUser).toBe(false);
   });
 });
 
@@ -261,6 +337,16 @@ describe("failure evidence redaction", () => {
     expect(workflow).toContain(
       "Intentional staging evidence drill; no request or credential data captured.",
     );
+  });
+
+  test("disables trace and video export for credentialed isolated sessions", () => {
+    const config = fs.readFileSync(
+      path.join(process.cwd(), "playwright.config.ts"),
+      "utf8",
+    );
+
+    expect(config).toContain('trace: isolatedE2e ? "off"');
+    expect(config).toContain('video: isolatedE2e ? "off"');
   });
 });
 

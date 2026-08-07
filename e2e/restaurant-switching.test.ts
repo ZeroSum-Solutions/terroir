@@ -86,12 +86,26 @@ test.describe("multi-restaurant isolation", () => {
     expect(primaryEvidence).not.toContain(isolatedFixture.secondListId);
     expect(primaryEvidence).not.toContain(isolatedFixture.secondRestaurantId);
 
+    const primaryPourDenial = await api(page, "/api/pour", {
+      body: { kind: "pour", ml: 30, wine_id: isolatedFixture.secondWineId },
+      idempotencyKey: `e2e-primary-deny-${isolatedFixture.namespace}`,
+      method: "POST",
+    });
+    expect([403, 404]).toContain(primaryPourDenial.status);
+
     await page.getByRole("button", { name: "Settings" }).click();
     const secondRestaurantButton = page.getByRole("menuitem", {
       name: new RegExp(`Second E2E ${isolatedFixture.namespace}`, "i"),
     });
     await expect(secondRestaurantButton).toContainText("manager");
     await secondRestaurantButton.click();
+
+    await expect(
+      page.getByText(`Second Cuvee ${isolatedFixture.namespace}`).first(),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByText(`Primary Cuvee ${isolatedFixture.namespace}`),
+    ).toHaveCount(0);
 
     await expect
       .poll(async () => {
@@ -136,9 +150,22 @@ test.describe("multi-restaurant isolation", () => {
     expect(secondEvidence).not.toContain(isolatedFixture.listId);
     expect(secondEvidence).not.toContain(isolatedFixture.restaurantId);
 
+    const secondPour = await api(page, "/api/pour", {
+      body: { kind: "pour", ml: 30, wine_id: isolatedFixture.secondWineId },
+      idempotencyKey: `e2e-second-pour-${isolatedFixture.namespace}`,
+      method: "POST",
+    });
+    expect(secondPour.status).toBe(200);
+    const secondPourDenial = await api(page, "/api/pour", {
+      body: { kind: "pour", ml: 30, wine_id: isolatedFixture.wineId },
+      idempotencyKey: `e2e-second-deny-${isolatedFixture.namespace}`,
+      method: "POST",
+    });
+    expect([403, 404]).toContain(secondPourDenial.status);
+
     const denied = await api(
       page,
-      "/api/restaurant/00000000-0000-4000-8000-000000000099",
+      `/api/restaurant/${isolatedFixture.foreignRestaurantId}`,
       {
         idempotencyKey: `e2e-denied-${isolatedFixture.namespace}`,
         method: "PUT",

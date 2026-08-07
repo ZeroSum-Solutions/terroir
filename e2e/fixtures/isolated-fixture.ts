@@ -92,15 +92,38 @@ export async function cleanupIsolatedFixture(
     let canDeleteUser = true;
     const { data: memberships, error: membershipError } = await admin
       .from("memberships")
-      .select("restaurant_id")
+      .select("restaurant_id, restaurants(name)")
       .eq("user_id", user.id);
     if (membershipError) {
       cleanupErrors.push(membershipError);
       canDeleteUser = false;
     } else {
+      const fixtureRestaurantIds = new Set([
+        identity.restaurantId,
+        identity.secondRestaurantId,
+      ]);
+      const expectedBootstrapName = `E2E bootstrap ${identity.namespace}`;
       for (const restaurantId of new Set(
         (memberships ?? []).map((row) => row.restaurant_id),
       )) {
+        const membership = (memberships ?? []).find(
+          (row) => row.restaurant_id === restaurantId,
+        );
+        const restaurantName = (
+          membership?.restaurants as { name: string } | null
+        )?.name;
+        if (
+          !fixtureRestaurantIds.has(restaurantId)
+          && restaurantName !== expectedBootstrapName
+        ) {
+          cleanupErrors.push(
+            new Error(
+              "Refusing to delete a restaurant without fixture provenance.",
+            ),
+          );
+          canDeleteUser = false;
+          continue;
+        }
         const { error } = await admin
           .from("restaurants")
           .delete()
@@ -129,6 +152,12 @@ export async function cleanupIsolatedFixture(
     .delete()
     .eq("id", identity.secondRestaurantId);
   if (secondRestaurantError) cleanupErrors.push(secondRestaurantError);
+
+  const { error: foreignRestaurantError } = await admin
+    .from("restaurants")
+    .delete()
+    .eq("id", identity.foreignRestaurantId);
+  if (foreignRestaurantError) cleanupErrors.push(foreignRestaurantError);
 
   if (cleanupErrors.length > 0) {
     throw new AggregateError(cleanupErrors, "Unable to clean isolated E2E fixture.");
@@ -255,6 +284,12 @@ async function replaceBootstrapRestaurant(
     name: `Second E2E ${identity.namespace}`,
   });
   if (secondRestaurantError) throw secondRestaurantError;
+
+  const { error: foreignRestaurantError } = await admin.from("restaurants").insert({
+    id: identity.foreignRestaurantId,
+    name: `Foreign E2E ${identity.namespace}`,
+  });
+  if (foreignRestaurantError) throw foreignRestaurantError;
 
   const { error: newMembershipError } = await admin.from("memberships").insert({
     restaurant_id: identity.restaurantId,

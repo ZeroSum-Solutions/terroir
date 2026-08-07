@@ -24,6 +24,7 @@ export type IsolatedE2eConfig = {
 
 export type FixtureIdentity = {
   email: string;
+  foreignRestaurantId: string;
   inventoryId: string;
   listId: string;
   namespace: string;
@@ -178,6 +179,7 @@ export function buildFixtureIdentity(
 
   return {
     email: `terroir-e2e-${namespace}@terroir.test`,
+    foreignRestaurantId: uuidFromSeed(`${seed}:foreign-restaurant`),
     inventoryId: uuidFromSeed(`${seed}:inventory`),
     listId: uuidFromSeed(`${seed}:list`),
     namespace,
