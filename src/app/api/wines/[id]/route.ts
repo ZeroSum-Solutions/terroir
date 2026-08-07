@@ -1,12 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
 import { requireRole } from "@/lib/api/auth";
-import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseJson, parseParams } from "@/lib/api/validation";
 import {
   EditWineBodySchema,
   WineIdParamsSchema,
 } from "@/lib/api/wine-mutation-schemas";
+import type { Database } from "@/types/database";
 
 export const runtime = "nodejs";
 
@@ -37,6 +40,30 @@ export async function PATCH(
     const { id } = parsedParams.data;
     const updates = parsedBody.data;
 
+    return idempotentMutationResponse<unknown>({
+      request,
+      supabase,
+      restaurantId,
+      operationId: "api:PATCH:/api/wines/{param}",
+      payload: { id, updates },
+      releaseOnError: false,
+      handler: () => updateWineResponse({ supabase, restaurantId, id, updates }),
+    });
+  });
+}
+
+async function updateWineResponse({
+  supabase,
+  restaurantId,
+  id,
+  updates,
+}: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  id: string;
+  updates: z.infer<typeof EditWineBodySchema>;
+}) {
+
     const enrichableFieldMap: Record<string, string> = {
       region: "region",
       varietal: "varietal",
@@ -58,7 +85,7 @@ export async function PATCH(
         .eq("restaurant_id", restaurantId)
         .maybeSingle();
       if (currentError) throw currentError;
-      if (!current) return Errors.notFound("Wine");
+      if (!current) return errorResult("not_found", "Wine not found.", 404);
 
       const start =
         updates.drink_window_start !== undefined
@@ -73,18 +100,20 @@ export async function PATCH(
           ? updates.peak_year
           : current.peak_year;
       if (start !== null && end !== null && start > end) {
-        return Errors.unprocessable(
+        return errorResult(
           "invalid_drink_window",
           "Drink-window start must not be after its end.",
+          422,
         );
       }
       if (
         peak !== null &&
         ((start !== null && peak < start) || (end !== null && peak > end))
       ) {
-        return Errors.unprocessable(
+        return errorResult(
           "invalid_drink_window",
           "Peak year must fall within the drink window.",
+          422,
         );
       }
     }
@@ -99,13 +128,14 @@ export async function PATCH(
       )
       .maybeSingle();
     if (isUniqueViolation(error)) {
-      return Errors.conflict(
+      return errorResult(
         "wine_collision",
         "A matching wine already exists.",
+        409,
       );
     }
     if (error) throw error;
-    if (!data) return Errors.notFound("Wine");
+    if (!data) return errorResult("not_found", "Wine not found.", 404);
 
     if (overriddenFields.size > 0) {
       const { error: overrideError } = await supabase.rpc(
@@ -120,6 +150,9 @@ export async function PATCH(
       }
     }
 
-    return NextResponse.json(data);
-  });
+    return { status: 200, body: data };
+}
+
+function errorResult(code: string, message: string, status: number) {
+  return { status, body: { error: { code, message } } };
 }

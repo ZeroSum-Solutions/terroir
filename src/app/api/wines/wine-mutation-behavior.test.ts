@@ -87,11 +87,18 @@ function makeSupabase(dbPlans: DbPlan[], rpcPlans: RpcPlan[] = []) {
   return { calls, client: { from, rpc }, rpc };
 }
 
-function request(path: string, method: string, body?: unknown) {
+function request(
+  path: string,
+  method: string,
+  body?: unknown,
+  idempotencyKey?: string,
+) {
+  const headers = new Headers();
+  if (body !== undefined) headers.set("content-type", "application/json");
+  if (idempotencyKey) headers.set("Idempotency-Key", idempotencyKey);
   return new NextRequest(`http://localhost${path}`, {
     method,
-    headers:
-      body === undefined ? undefined : { "content-type": "application/json" },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
@@ -111,6 +118,45 @@ function setRoleAuth(
 
 describe("wine mutation behavior", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("replays metadata and availability responses before business work", async () => {
+    const replay = (body: unknown) => ({
+      fn: "claim_api_idempotency",
+      data: [{
+        outcome: "replay",
+        response_status: 200,
+        response_body: body,
+        response_headers: {},
+      }],
+    });
+    const metadata = setRoleAuth([], [replay({ id: WINE_ID })]);
+    const metadataResponse = await UPDATE_WINE(
+      request(
+        `/api/wines/${WINE_ID}`,
+        "PATCH",
+        { name: "Reserve" },
+        "wine-metadata-replay-key",
+      ),
+      { params: Promise.resolve({ id: WINE_ID }) },
+    );
+    expect(metadataResponse.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await metadataResponse.json()).toEqual({ id: WINE_ID });
+    expect(metadata.calls).toEqual([]);
+
+    const availability = setRoleAuth([], [replay({ changed: false })]);
+    const availabilityResponse = await AVAILABILITY(
+      request(
+        `/api/wines/${WINE_ID}/availability`,
+        "PATCH",
+        { direction: "eightysixed" },
+        "wine-availability-replay-key",
+      ),
+      { params: Promise.resolve({ id: WINE_ID }) },
+    );
+    expect(availabilityResponse.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await availabilityResponse.json()).toEqual({ changed: false });
+    expect(availability.calls).toEqual([]);
+  });
 
   it("returns 404 when a metadata update affects no tenant row", async () => {
     setRoleAuth([{ table: "wines", data: null }]);

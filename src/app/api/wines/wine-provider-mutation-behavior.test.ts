@@ -114,10 +114,12 @@ function makeSupabase(dbPlans: DbPlan[], rpcPlans: RpcPlan[] = []) {
   return { calls, client: { from, rpc }, rpc };
 }
 
-function request(path: string, body: unknown) {
+function request(path: string, body: unknown, idempotencyKey?: string) {
+  const headers = new Headers({ "content-type": "application/json" });
+  if (idempotencyKey) headers.set("Idempotency-Key", idempotencyKey);
   return new NextRequest(`http://localhost${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify(body),
   });
 }
@@ -151,6 +153,30 @@ describe("wine provider mutation behavior", () => {
     providers.enrichWineWithClaude.mockReset();
     providers.fetchRetailPrices.mockReset();
     providers.enrichWineWithClaude.mockResolvedValue(null);
+  });
+
+  it("replays create-from-LWIN before catalog or wine persistence", async () => {
+    const supabase = authenticate([], [{
+      fn: "claim_api_idempotency",
+      data: [{
+        outcome: "replay",
+        response_status: 200,
+        response_body: { id: WINE_ID },
+        response_headers: {},
+      }],
+    }]);
+
+    const response = await CREATE_LWIN(
+      request(
+        "/api/wines/create-from-lwin",
+        { lwin_id: "1000001", display_name: "Ignored" },
+        "lwin-create-replay-key",
+      ),
+    );
+
+    expect(response.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await response.json()).toEqual({ id: WINE_ID });
+    expect(supabase.calls).toEqual([]);
   });
   afterEach(() => vi.unstubAllEnvs());
 

@@ -3,7 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, Plus, Search, Sparkles } from "lucide-react";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+} from "@/lib/api/idempotency-client";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
+
+const lwinImportCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence("terroir:lwin-import"),
+});
 
 // BND-040 — pricing suggestion response shape from
 // /api/wines/[id]/pricing-suggestion. Mirrors the route's JSON.
@@ -78,6 +86,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
   const [glassPrice, setGlassPrice] = useState("");
   const [adding, setAdding] = useState(false);
   const addingRef = useRef(false);
+  const importBusyRef = useRef(false);
   const [retryPayload, setRetryPayload] = useState<RetryPayload | null>(null);
   // BND-040 — pricing suggestion state. Auto-fetched when a wine is
   // selected; user can click "Suggest" to fill the price inputs.
@@ -269,25 +278,27 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
   };
 
   const handleSelectCatalog = async (lwin: LwinWine) => {
+    if (importBusyRef.current) return;
+    importBusyRef.current = true;
     setLoading(true);
     setSearchError(null);
     try {
-      const res = await fetch("/api/wines/create-from-lwin", {
+      const { response, data } = await lwinImportCommands.json<unknown>({
+        slot: `lwin:${lwin.lwin_id}`,
+        url: "/api/wines/create-from-lwin",
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(lwin),
+        json: lwin,
       });
-      const payload = await res.json().catch(() => null);
-      if (!res.ok) {
+      if (!response.ok) {
         setSearchError(
           readApiError(
-            payload,
-            `Couldn't import wine (${res.status}).`,
+            data,
+            `Couldn't import wine (${response.status}).`,
           ).message,
         );
         return;
       }
-      const { id } = payload as { id: string };
+      const { id } = data as { id: string };
       setSelected({
         id,
         name: lwin.display_name,
@@ -299,6 +310,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
     } catch {
       setSearchError("Couldn't import wine. Check your connection and try again.");
     } finally {
+      importBusyRef.current = false;
       setLoading(false);
     }
   };

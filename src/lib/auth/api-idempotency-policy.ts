@@ -760,6 +760,32 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       sources: ["src/app/(app)/lists/wine-list-landing.tsx"],
     },
   },
+  "api:PATCH:/api/wines/{param}": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/cellar/edit-metadata-modal.tsx"],
+    },
+  },
+  "api:PATCH:/api/wines/{param}/availability": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/cellar/wine-detail-drawer.tsx"],
+    },
+  },
   "api:PATCH:/api/wines/{param}/pricing-targets": {
     boundary: { kind: "generic-wrapper", count: 1 },
     identity: {
@@ -799,6 +825,21 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
     client: {
       lifecycle: "session-persistent",
       sources: ["src/app/(app)/insights/refresh-retail-button.tsx"],
+    },
+  },
+  "api:POST:/api/wines/create-from-lwin": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: [
+        "src/app/(app)/lists/[id]/components/add-wine-modal.tsx",
+      ],
     },
   },
   "api:POST:/api/wines/{param}/enrich": {

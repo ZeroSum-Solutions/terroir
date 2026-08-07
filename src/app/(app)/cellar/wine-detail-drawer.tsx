@@ -56,6 +56,9 @@ const wineImageCommands = createIdempotentCommandStore({
 const enrichmentCommands = createIdempotentCommandStore({
   persistence: createSessionCommandPersistence("terroir:wine-enrichment"),
 });
+const availabilityCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence("terroir:wine-availability"),
+});
 const undoPourSlotsPendingReset = new Set<string>();
 
 function abandonUndoPourSlot(slot: string): void {
@@ -100,6 +103,7 @@ export function WineDetailDrawer({
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wineImageBusyRef = useRef(false);
+  const availabilityBusyRef = useRef(false);
 
   // BND-119: track last pour for undo.
   const [lastPour, setLastPour] = useState<{ ml: number } | null>(null);
@@ -429,22 +433,24 @@ export function WineDetailDrawer({
   );
 
   const onConfirm86 = async (note: string | undefined) => {
-    if (!row || !pendingDirection) return;
+    if (!row || !pendingDirection || availabilityBusyRef.current) return;
     const direction = pendingDirection;
     setPendingDirection(null);
     setErrorMsg(null);
     setBusy(true);
+    availabilityBusyRef.current = true;
     try {
-      const res = await fetch(`/api/wines/${row.wine_id}/availability`, {
+      const { response, data } = await availabilityCommands.json<unknown>({
+        slot: `availability:${row.wine_id}`,
+        url: `/api/wines/${row.wine_id}/availability`,
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ direction, note }),
+        json: { direction, note },
       });
-      if (!res.ok) {
+      if (!response.ok) {
         throw new Error(
           readApiError(
-            await res.json().catch(() => null),
-            `Request failed (${res.status}).`,
+            data,
+            `Request failed (${response.status}).`,
           ).message,
         );
       }
@@ -454,6 +460,7 @@ export function WineDetailDrawer({
       toast.error("Toggle failed");
       setErrorMsg(err instanceof Error ? err.message : "Toggle failed.");
     } finally {
+      availabilityBusyRef.current = false;
       setBusy(false);
     }
   };

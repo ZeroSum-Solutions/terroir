@@ -27,11 +27,7 @@ const inventory = JSON.parse(
   ),
 ) as Inventory;
 
-const EXPECTED_PENDING_DISCOVERED = [
-  "api:PATCH:/api/wines/{param}",
-  "api:PATCH:/api/wines/{param}/availability",
-  "api:POST:/api/wines/create-from-lwin",
-] as const satisfies readonly ApiOperationId[];
+const EXPECTED_PENDING_DISCOVERED = [] as const satisfies readonly ApiOperationId[];
 
 const EXPECTED_PLANNED = [
   "api:DELETE:/api/team/{param}",
@@ -59,7 +55,7 @@ describe("API idempotency implementation ledger", () => {
       (operationId) => !discovered.has(operationId),
     );
 
-    expect(implemented).toHaveLength(53);
+    expect(implemented).toHaveLength(56);
     expect(pending).toEqual([...EXPECTED_PENDING_DISCOVERED].sort());
     expect(planned).toEqual([...EXPECTED_PLANNED].sort());
     expect(

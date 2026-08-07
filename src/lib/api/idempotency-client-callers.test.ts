@@ -7,6 +7,40 @@ function source(path: string): string {
 }
 
 describe("high-risk idempotency clients", () => {
+  it("persists the remaining wine write commands across ambiguous failures", () => {
+    const metadata = source(
+      "src/app/(app)/cellar/edit-metadata-modal.tsx",
+    );
+    const drawer = source(
+      "src/app/(app)/cellar/wine-detail-drawer.tsx",
+    );
+    const addWine = source(
+      "src/app/(app)/lists/[id]/components/add-wine-modal.tsx",
+    );
+
+    expect(metadata).toContain('"terroir:wine-metadata"');
+    expect(metadata).toContain("slot: `metadata:${wineId}`");
+    expect(metadata).toContain("url: `/api/wines/${wineId}`");
+    expect(metadata).toContain("if (!producer.trim() || !name.trim() || savingRef.current)");
+    expect(metadata).not.toContain("fetch(`/api/wines/${wineId}`");
+
+    expect(drawer).toContain('"terroir:wine-availability"');
+    expect(drawer).toContain("slot: `availability:${row.wine_id}`");
+    expect(drawer).toContain(
+      "url: `/api/wines/${row.wine_id}/availability`",
+    );
+    expect(drawer).toContain("availabilityBusyRef.current");
+    expect(drawer).not.toContain(
+      "fetch(`/api/wines/${row.wine_id}/availability`",
+    );
+
+    expect(addWine).toContain('"terroir:lwin-import"');
+    expect(addWine).toContain("slot: `lwin:${lwin.lwin_id}`");
+    expect(addWine).toContain('url: "/api/wines/create-from-lwin"');
+    expect(addWine).toContain("if (importBusyRef.current) return");
+    expect(addWine).not.toContain('fetch("/api/wines/create-from-lwin"');
+  });
+
   it("keeps enrichment and retail refresh retries bound to their exact command", () => {
     const enrichButton = source(
       "src/app/(app)/insights/enrich-cellar-button.tsx",

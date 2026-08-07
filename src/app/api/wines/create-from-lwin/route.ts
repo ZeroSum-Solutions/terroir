@@ -1,10 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireCapability } from "@/lib/api/auth";
-import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseJson } from "@/lib/api/validation";
 import { CreateWineFromLwinBodySchema } from "@/lib/api/wine-provider-mutation-schemas";
+import type { Database } from "@/types/database";
 
 export const runtime = "nodejs";
 
@@ -20,13 +22,41 @@ export async function POST(request: NextRequest) {
       lwin_id,
     } = parsed.data;
 
+    return idempotentMutationResponse<unknown>({
+      request,
+      supabase,
+      restaurantId,
+      operationId: "api:POST:/api/wines/create-from-lwin",
+      payload: { lwin_id },
+      releaseOnError: false,
+      handler: () => createFromLwinResponse({
+        supabase,
+        restaurantId,
+        lwinId: lwin_id,
+      }),
+    });
+  });
+}
+
+async function createFromLwinResponse({
+  supabase,
+  restaurantId,
+  lwinId,
+}: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  lwinId: string;
+}) {
+
     const { data: catalogWine, error: catalogError } = await supabase
       .from("lwin_catalog")
       .select("lwin_id, display_name, producer, varietal, region, country")
-      .eq("lwin_id", lwin_id)
+      .eq("lwin_id", lwinId)
       .maybeSingle();
     if (catalogError) throw catalogError;
-    if (!catalogWine) return Errors.notFound("LWIN wine");
+    if (!catalogWine) {
+      return errorResult("not_found", "LWIN wine not found.", 404);
+    }
 
     const { data: wineIds, error } = await supabase.rpc(
       "find_or_create_wines_batch",
@@ -60,8 +90,11 @@ export async function POST(request: NextRequest) {
       .select("id")
       .maybeSingle();
     if (lwinError) throw lwinError;
-    if (!updated) return Errors.notFound("Wine");
+    if (!updated) return errorResult("not_found", "Wine not found.", 404);
 
-    return NextResponse.json({ id: wineId });
-  });
+    return { status: 200, body: { id: wineId } };
+}
+
+function errorResult(code: string, message: string, status: number) {
+  return { status, body: { error: { code, message } } };
 }

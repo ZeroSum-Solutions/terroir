@@ -1,13 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/api/auth";
-import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseJson, parseParams } from "@/lib/api/validation";
 import {
   WineAvailabilityBodySchema,
   WineIdParamsSchema,
 } from "@/lib/api/wine-mutation-schemas";
+import type { Database } from "@/types/database";
 
 export const runtime = "nodejs";
 
@@ -29,6 +31,38 @@ export async function PATCH(
     const { id } = parsedParams.data;
     const { direction, note } = parsedBody.data;
 
+    return idempotentMutationResponse<unknown>({
+      request,
+      supabase,
+      restaurantId,
+      operationId: "api:PATCH:/api/wines/{param}/availability",
+      payload: { id, direction, note: note ?? null },
+      releaseOnError: false,
+      handler: () => availabilityResponse({
+        supabase,
+        restaurantId,
+        id,
+        direction,
+        note,
+      }),
+    });
+  });
+}
+
+async function availabilityResponse({
+  supabase,
+  restaurantId,
+  id,
+  direction,
+  note,
+}: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  id: string;
+  direction: "eightysixed" | "restored";
+  note?: string;
+}) {
+
     const { data: scope, error: scopeError } = await supabase
       .from("wines")
       .select("id")
@@ -36,7 +70,7 @@ export async function PATCH(
       .eq("restaurant_id", restaurantId)
       .maybeSingle();
     if (scopeError) throw scopeError;
-    if (!scope) return Errors.notFound("Wine");
+    if (!scope) return errorResult("not_found", "Wine not found.", 404);
 
     const { data: events, error: rpcError } = await supabase.rpc(
       "set_wine_availability",
@@ -58,16 +92,22 @@ export async function PATCH(
     }
 
     if (!events || events.length === 0) {
-      return NextResponse.json({ changed: false });
+      return { status: 200, body: { changed: false } };
     }
 
     const event = events[0];
-    return NextResponse.json({
-      changed: true,
-      event: {
-        direction: event.direction,
-        occurred_at: event.created_at,
+    return {
+      status: 200,
+      body: {
+        changed: true,
+        event: {
+          direction: event.direction,
+          occurred_at: event.created_at,
+        },
       },
-    });
-  });
+    };
+}
+
+function errorResult(code: string, message: string, status: number) {
+  return { status, body: { error: { code, message } } };
 }

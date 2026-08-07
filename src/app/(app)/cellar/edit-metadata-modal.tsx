@@ -4,8 +4,17 @@ import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { X, Loader2 } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
+import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+} from "@/lib/api/idempotency-client";
 import { useToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+
+const metadataCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence("terroir:wine-metadata"),
+});
 
 type WineMetadata = {
   producer: string;
@@ -30,6 +39,7 @@ export function EditMetadataModal({
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const savingRef = useRef(false);
   const toast = useToast();
 
   const [busy, setBusy] = useState(false);
@@ -63,10 +73,7 @@ export function EditMetadataModal({
   });
 
   const handleSave = useCallback(async () => {
-    if (!producer.trim() || !name.trim()) return;
-
-    setBusy(true);
-    setErrorMsg(null);
+    if (!producer.trim() || !name.trim() || savingRef.current) return;
 
     const body: Record<string, unknown> = {};
     if (producer.trim() !== initial.producer) body.producer = producer.trim();
@@ -114,18 +121,20 @@ export function EditMetadataModal({
       return;
     }
 
+    savingRef.current = true;
+    setBusy(true);
+    setErrorMsg(null);
+
     try {
-      const res = await fetch(`/api/wines/${wineId}`, {
+      const { response, data } = await metadataCommands.json<unknown>({
+        slot: `metadata:${wineId}`,
+        url: `/api/wines/${wineId}`,
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        json: body,
       });
-      if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as
-          | { error?: { message?: string } }
-          | null;
+      if (!response.ok) {
         throw new Error(
-          payload?.error?.message ?? `Update failed (${res.status}).`,
+          readApiError(data, `Update failed (${response.status}).`).message,
         );
       }
       toast.success("Metadata updated");
@@ -134,6 +143,7 @@ export function EditMetadataModal({
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Update failed.");
     } finally {
+      savingRef.current = false;
       setBusy(false);
     }
   }, [
