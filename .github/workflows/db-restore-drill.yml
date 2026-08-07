@@ -11,6 +11,10 @@ on:
         description: Exact current staging SHA this restore proof authorizes
         required: true
         type: string
+      confirmation:
+        description: Type RESTORE-TRUSTED-BACKUP to authorize the recovery drill
+        required: true
+        type: string
 
 concurrency:
   group: db-restore-drill
@@ -31,6 +35,18 @@ jobs:
       contents: read
       issues: read
     steps:
+      - name: Require the configured recovery owner
+        env:
+          ACTOR: ${{ github.actor }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          RECOVERY_OWNER: ${{ vars.PRODUCTION_RELEASE_OWNER }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test -n "$RECOVERY_OWNER"
+          test "$ACTOR" = "$RECOVERY_OWNER"
+          test "$CONFIRMATION" = "RESTORE-TRUSTED-BACKUP"
+
       - name: Checkout trusted restore implementation
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

@@ -1065,6 +1065,13 @@ describe("database backup workflow", () => {
       resolve(process.cwd(), ".github/workflows/db-restore-drill.yml"),
       "utf8",
     );
+    expect(restoreWorkflow).toContain("confirmation:");
+    expect(restoreWorkflow).toContain("PRODUCTION_RELEASE_OWNER");
+    expect(restoreWorkflow).toContain("RESTORE-TRUSTED-BACKUP");
+    expect(restoreWorkflow.indexOf("Require the configured recovery owner"))
+      .toBeLessThan(
+        restoreWorkflow.indexOf("Checkout trusted restore implementation"),
+      );
     expect(restoreWorkflow).toContain("RESTORE_DRILL_AGE_IDENTITY");
     expect(restoreWorkflow).toContain("run-restore-drill.sh");
     expect(restoreWorkflow).toContain("database-restore-proof-");
