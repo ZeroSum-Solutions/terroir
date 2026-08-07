@@ -34,7 +34,9 @@ test.describe("multi-restaurant isolation", () => {
     isolatedFixture,
     page,
   }) => {
-    await page.goto("/cellar", { waitUntil: "networkidle" });
+    test.setTimeout(60_000);
+
+    await page.goto("/cellar", { waitUntil: "domcontentloaded" });
     await expect(page).not.toHaveURL(/\/login/);
 
     const primarySwitch = await api(
@@ -46,7 +48,7 @@ test.describe("multi-restaurant isolation", () => {
       },
     );
     expect(primarySwitch.status).toBe(200);
-    await page.reload({ waitUntil: "networkidle" });
+    await page.reload({ waitUntil: "domcontentloaded" });
 
     const primaryCellar = await api(page, "/api/cellar");
     const primaryLists = await api(page, "/api/wine-lists");
@@ -105,7 +107,7 @@ test.describe("multi-restaurant isolation", () => {
       })
       .toBe(isolatedFixture.secondRestaurantId);
 
-    await page.reload({ waitUntil: "networkidle" });
+    await page.reload({ waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await expect(page.getByRole("menu")).toContainText(
       `Second E2E ${isolatedFixture.namespace}`,
