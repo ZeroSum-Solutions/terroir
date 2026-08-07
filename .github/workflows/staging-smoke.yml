@@ -89,6 +89,11 @@ jobs:
           test -x "$TERROIR_E2E_BROWSER_PATH"
           "$TERROIR_E2E_BROWSER_PATH" --version
 
+      - name: Install runner evidence helpers
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age ffmpeg
+
       - name: Bind the runner video helper to Playwright
         shell: bash
         run: |
@@ -116,8 +121,6 @@ jobs:
             echo "::error::BACKUP_AGE_RECIPIENT must be one age X25519 public recipient."
             exit 1
           fi
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq age
           archive="$RUNNER_TEMP/isolated-e2e-${{ matrix.slot }}.tar.gz"
           encrypted="test-results/isolated-e2e-${{ matrix.slot }}.tar.gz.age"
           mkdir -p test-results
