@@ -122,6 +122,9 @@ export async function generateWineListPdf(
       template,
     };
   } catch (error) {
+    if (input.signal?.aborted) {
+      throw input.signal.reason ?? error;
+    }
     console.error("PDF generation failed");
     Sentry.captureException(error, {
       tags: { surface: "pdf", phase: "puppeteer-render" },

@@ -102,15 +102,34 @@ function parseQueuedPdfResponse(value: unknown): QueuedPdfResponse {
   return { jobId, status };
 }
 
-async function waitForQueuedPdf(jobId: string): Promise<Response> {
+function abortableDelay(milliseconds: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener("abort", aborted);
+      resolve();
+    }, milliseconds);
+    const aborted = () => {
+      window.clearTimeout(timer);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", aborted, { once: true });
+  });
+}
+
+async function waitForQueuedPdf(
+  jobId: string,
+  signal: AbortSignal,
+): Promise<Response> {
   for (let attempt = 0; attempt < 150; attempt += 1) {
     const response = await fetch("/api/pdf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jobId }),
+      signal,
     });
     if (response.status !== 202) return response;
-    await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+    await abortableDelay(2_000, signal);
   }
   throw new Error("PDF generation is still running. Check Background work.");
 }
@@ -131,8 +150,10 @@ async function savePdfResponse(response: Response, filename: string) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = `${filename}.pdf`;
+  document.body.append(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function isOkMutation(data: unknown): data is { ok: true } {
@@ -379,6 +400,7 @@ export function WineListEditor({
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [editSectionName, setEditSectionName] = useState("");
   const editInputRef = useRef<HTMLInputElement | null>(null);
+  const pdfAbortRef = useRef<AbortController | null>(null);
 
   // Focus the input when entering edit mode
   useEffect(() => {
@@ -387,6 +409,8 @@ export function WineListEditor({
       editInputRef.current.select();
     }
   }, [editingSectionId]);
+
+  useEffect(() => () => pdfAbortRef.current?.abort(), []);
 
   // BND-163: delete confirmation state
   const [deleteTarget, setDeleteTarget] =
@@ -1098,6 +1122,9 @@ export function WineListEditor({
   );
 
   const downloadPdf = useCallback(async () => {
+    pdfAbortRef.current?.abort();
+    const controller = new AbortController();
+    pdfAbortRef.current = controller;
     setGeneratingPdf(true);
     setErrorToast(null);
     try {
@@ -1107,21 +1134,26 @@ export function WineListEditor({
         method: "POST",
         json: { listId: list.id },
         parse: "none",
+        signal: controller.signal,
       });
       let response = result.response;
       if (response.status === 202) {
         const queued = parseQueuedPdfResponse(await response.json());
-        response = await waitForQueuedPdf(queued.jobId);
+        response = await waitForQueuedPdf(queued.jobId, controller.signal);
       }
       await savePdfResponse(response, list.name);
     } catch (error) {
+      if (controller.signal.aborted) return;
       setErrorToast(
         error instanceof Error
           ? error.message
           : "PDF generation failed. Please try again.",
       );
     } finally {
-      setGeneratingPdf(false);
+      if (pdfAbortRef.current === controller) {
+        pdfAbortRef.current = null;
+        if (!controller.signal.aborted) setGeneratingPdf(false);
+      }
     }
   }, [list.id, list.name, wineListCommands]);
 

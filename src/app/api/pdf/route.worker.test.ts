@@ -60,7 +60,7 @@ describe("POST /api/pdf worker rollout", () => {
   });
 
   it("keeps the synchronous binary response when the flag is absent", async () => {
-    const response = await POST(request({ listId: LIST_ID }));
+    const response = await POST(request({ listId: LIST_ID, legacyField: true }));
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("application/pdf");
     expect(generate).toHaveBeenCalledOnce();

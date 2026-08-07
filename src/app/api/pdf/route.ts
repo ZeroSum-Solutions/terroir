@@ -30,7 +30,6 @@ const BodySchema = z
     jobId: z.string().uuid().optional(),
     template: z.enum(["classic", "modern", "minimal"]).optional(),
   })
-  .strict()
   .superRefine((value, context) => {
     if ((value.listId ? 1 : 0) + (value.jobId ? 1 : 0) !== 1) {
       context.addIssue({

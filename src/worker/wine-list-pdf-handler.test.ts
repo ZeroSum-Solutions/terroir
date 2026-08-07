@@ -125,4 +125,15 @@ describe("wine-list PDF worker handler", () => {
     await expect(handler()(job(), controller.signal)).rejects.toBe(abortReason);
     expect(upload).not.toHaveBeenCalled();
   });
+
+  it("normalizes an unclassified abort as a retryable interruption", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(handler()(job(), controller.signal)).rejects.toMatchObject({
+      code: "job_aborted",
+      retryable: true,
+    });
+    expect(generate).not.toHaveBeenCalled();
+  });
 });

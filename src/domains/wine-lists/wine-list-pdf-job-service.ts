@@ -21,8 +21,7 @@ const ArtifactResultSchema = z
     filename: z.string().min(5).max(204).regex(/^[A-Za-z0-9 ]+\.pdf$/),
     list_id: z.string().uuid(),
     template: z.enum(["classic", "modern", "minimal"]),
-  })
-  .strict();
+  });
 
 type Client = SupabaseClient<Database>;
 

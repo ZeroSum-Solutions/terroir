@@ -11,7 +11,7 @@ import {
   uploadSupabaseObject,
 } from "../adapters/storage/supabase-storage.ts";
 import type { Database } from "../types/database.ts";
-import { JobExecutionError } from "./errors.ts";
+import { JobExecutionError, LeaseLostError } from "./errors.ts";
 import type { BackgroundJob, JobHandler } from "./types.ts";
 
 const MetadataSchema = z
@@ -58,14 +58,22 @@ function parseJob(job: Readonly<BackgroundJob>) {
   };
 }
 
-function throwIfAborted(signal: AbortSignal): void {
-  if (signal.aborted) {
-    throw signal.reason ?? new JobExecutionError(
-      "job_aborted",
-      true,
-      "Wine-list PDF job was interrupted",
-    );
+function normalizedAbortReason(signal: AbortSignal): Error {
+  if (
+    signal.reason instanceof JobExecutionError ||
+    signal.reason instanceof LeaseLostError
+  ) {
+    return signal.reason;
   }
+  return new JobExecutionError(
+    "job_aborted",
+    true,
+    "Wine-list PDF job was interrupted",
+  );
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) throw normalizedAbortReason(signal);
 }
 
 export function createWineListPdfJobHandler(
@@ -106,11 +114,7 @@ export function createWineListPdfJobHandler(
       };
     } catch (error) {
       if (signal.aborted) {
-        throw signal.reason ?? new JobExecutionError(
-          "job_aborted",
-          true,
-          "Wine-list PDF job was interrupted",
-        );
+        throw normalizedAbortReason(signal);
       }
       if (error instanceof JobExecutionError) throw error;
       if (error instanceof WineListPdfNotFoundError) {
