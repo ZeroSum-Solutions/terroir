@@ -130,6 +130,11 @@ describe("database backup workflow", () => {
         "project-ref",
       ),
     ).toThrow(/session pooler port 5432/u);
+    const localRestore = createPgServiceConfig(
+      "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+      "terroir_restore",
+    );
+    expect(localRestore).toContain("sslmode=disable");
   });
 
   it("derives only the expected port-5432 session-pooler backup URL", async () => {
