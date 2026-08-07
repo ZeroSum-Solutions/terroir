@@ -4401,7 +4401,7 @@
     {
       "id": "src/app/(app)/scan/components/scan-review.tsx#link-001",
       "source": "src/app/(app)/scan/components/scan-review.tsx",
-      "line": 246,
+      "line": 258,
       "kind": "link",
       "label": "Back to scanner",
       "href": "/scan",
@@ -4418,7 +4418,7 @@
     {
       "id": "src/app/(app)/scan/components/scan-review.tsx#button-001",
       "source": "src/app/(app)/scan/components/scan-review.tsx",
-      "line": 258,
+      "line": 270,
       "kind": "button",
       "label": "Download line items as CSV",
       "href": null,
@@ -4435,7 +4435,7 @@
     {
       "id": "src/app/(app)/scan/components/scan-review.tsx#a-001",
       "source": "src/app/(app)/scan/components/scan-review.tsx",
-      "line": 321,
+      "line": 333,
       "kind": "link",
       "label": "`Open full-resolution invoice from ${distributor",
       "href": "imageUrl",
@@ -4452,7 +4452,7 @@
     {
       "id": "src/app/(app)/scan/components/scan-review.tsx#a-002",
       "source": "src/app/(app)/scan/components/scan-review.tsx",
-      "line": 337,
+      "line": 349,
       "kind": "link",
       "label": "Open full size",
       "href": "imageUrl",
@@ -4469,7 +4469,7 @@
     {
       "id": "src/app/(app)/scan/components/scan-review.tsx#button-002",
       "source": "src/app/(app)/scan/components/scan-review.tsx",
-      "line": 389,
+      "line": 401,
       "kind": "button",
       "label": "`Remove ${it.name",
       "href": null,
@@ -4486,7 +4486,7 @@
     {
       "id": "src/app/(app)/scan/components/scan-review.tsx#button-003",
       "source": "src/app/(app)/scan/components/scan-review.tsx",
-      "line": 421,
+      "line": 433,
       "kind": "button",
       "label": "{dynamic} {dynamic}",
       "href": null,
@@ -4503,7 +4503,7 @@
     {
       "id": "src/app/(app)/scan/components/scan-review.tsx#button-004",
       "source": "src/app/(app)/scan/components/scan-review.tsx",
-      "line": 430,
+      "line": 442,
       "kind": "button",
       "label": "{dynamic} {dynamic}",
       "href": null,
@@ -4520,7 +4520,7 @@
     {
       "id": "src/app/(app)/scan/views/bottle-results-view.tsx#button-001",
       "source": "src/app/(app)/scan/views/bottle-results-view.tsx",
-      "line": 166,
+      "line": 167,
       "kind": "button",
       "label": "Scan another",
       "href": null,
@@ -4537,7 +4537,7 @@
     {
       "id": "src/app/(app)/scan/views/bottle-results-view.tsx#button-002",
       "source": "src/app/(app)/scan/views/bottle-results-view.tsx",
-      "line": 174,
+      "line": 175,
       "kind": "button",
       "label": "{dynamic}",
       "href": null,
