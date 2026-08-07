@@ -9,6 +9,7 @@ import {
 const PUBLIC_PATHS = [
   "/login",
   "/auth/callback",
+  "/auth/confirm",
   "/auth/complete",
   "/api/dev-login",
   "/list",
@@ -23,8 +24,10 @@ function isPublic(pathname: string) {
 
 function redirectToLogin(request: NextRequest) {
   const url = request.nextUrl.clone();
+  const next = `${request.nextUrl.pathname}${request.nextUrl.search}`;
   url.pathname = "/login";
-  url.searchParams.set("next", request.nextUrl.pathname);
+  url.search = "";
+  url.searchParams.set("next", next);
   return NextResponse.redirect(url);
 }
 
@@ -81,10 +84,7 @@ export async function updateSession(request: NextRequest) {
     // "/" hits the role-aware redirector at src/app/page.tsx, sending
     // the user to /insights (owner) or /cellar (manager/staff). Was
     // hardcoded "/scanner" pre-IA-redesign.
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    url.searchParams.delete("next");
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return response;

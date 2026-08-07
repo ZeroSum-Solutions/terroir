@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { authErrorMessage, loginUrl } from "@/lib/auth/redirects";
 import { SetPasswordSubmit } from "@/app/login/magic-link-submit";
-
 
 export const metadata: Metadata = { title: "Set new password" };
 
@@ -14,24 +13,24 @@ async function setNewPassword(formData: FormData) {
   const confirm = String(formData.get("confirm") ?? "");
 
   if (!password) {
-    redirect("/auth/reset-password?error=" + encodeURIComponent("Enter a new password."));
+    redirect("/auth/reset-password?error=invalid_password");
   }
   if (password.length < 6) {
-    redirect("/auth/reset-password?error=" + encodeURIComponent("Password must be at least 6 characters."));
+    redirect("/auth/reset-password?error=invalid_password");
   }
   if (password !== confirm) {
-    redirect("/auth/reset-password?error=" + encodeURIComponent("Passwords don't match."));
+    redirect("/auth/reset-password?error=password_mismatch");
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password });
 
   if (error) {
-    redirect("/auth/reset-password?error=" + encodeURIComponent(error.message));
+    redirect("/auth/reset-password?error=unavailable");
   }
 
   // Sign out after setting password so the user can log in with their new password
-  await supabase.auth.signOut();
+  await supabase.auth.signOut({ scope: "global" });
   redirect("/login?reset_done=1");
 }
 
@@ -42,17 +41,15 @@ export default async function ResetPasswordPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { error } = await searchParams;
+  const { error: errorCode } = await searchParams;
+  const error = authErrorMessage(errorCode);
 
   // Verify the user has a session (post-recovery code exchange)
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
 
   if (!data.user) {
-    const hdrs = await headers();
-    const host = hdrs.get("host") ?? "localhost:3000";
-    const proto = hdrs.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-    redirect(`${proto}://${host}/login?error=${encodeURIComponent("Reset link expired. Request a new one.")}`);
+    redirect(loginUrl({ error: "link" }));
   }
 
   return (
@@ -109,7 +106,7 @@ export default async function ResetPasswordPage({
           {error && (
             <div id="reset-password-error" role="alert" className="text-[13px] text-danger">{error}</div>
           )}
-<SetPasswordSubmit />
+          <SetPasswordSubmit />
         </form>
       </div>
     </main>

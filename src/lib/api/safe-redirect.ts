@@ -31,14 +31,29 @@ export function safeNext(
   if (typeof candidate !== "string" || candidate.length === 0) {
     return fallback;
   }
+  if (candidate.includes("\r") || candidate.includes("\n")) return fallback;
+
+  let decodedCandidate: string;
+  try {
+    decodedCandidate = decodeURIComponent(candidate);
+  } catch {
+    return fallback;
+  }
+
   // Back-slashes can trick some URL parsers into treating the rest as a
-  // host — reject outright.
-  if (candidate.includes("\\")) return fallback;
+  // host. Check the decoded value too so an encoded separator cannot be
+  // reinterpreted by a proxy before the redirect reaches the browser.
+  if (decodedCandidate.includes("\\")) return fallback;
 
   // Must start with a single `/` — rejects `//evil.com/x` (protocol-relative)
   // and any absolute-URL form like `http://`, `https://`, `data:`,
   // `javascript:`, `mailto:`, etc.
-  if (candidate[0] !== "/" || candidate[1] === "/") return fallback;
+  if (
+    decodedCandidate[0] !== "/" ||
+    decodedCandidate[1] === "/"
+  ) {
+    return fallback;
+  }
 
   return candidate;
 }
