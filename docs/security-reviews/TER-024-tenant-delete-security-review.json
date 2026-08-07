@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.0",
+  "ref": "26e32bdc9973c2f866910bacc5129e9b487a9b65",
+  "base": {
+    "status": "AVAILABLE",
+    "value": "d55b81c41560af7f6cf1a12b3cd4608cfa5ee8aa",
+    "unavailable_reason": null,
+    "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-tenant-delete-evidence.md:3-5"}]
+  },
+  "scope": {
+    "changed_paths": [
+      "docs/runbooks/data-lifecycle-privacy.md",
+      "src/test/contracts/privacy-lifecycle.test.ts",
+      "supabase/migrations/0079_restaurant_delete_dependents.sql",
+      "supabase/migrations/down/0079_restaurant_delete_dependents.down.sql",
+      "supabase/schema.snapshot.sql"
+    ],
+    "captured_diff_paths": [
+      "docs/runbooks/data-lifecycle-privacy.md",
+      "src/test/contracts/privacy-lifecycle.test.ts",
+      "supabase/migrations/0079_restaurant_delete_dependents.sql",
+      "supabase/migrations/down/0079_restaurant_delete_dependents.down.sql",
+      "supabase/schema.snapshot.sql"
+    ],
+    "path_classification": [
+      {
+        "path": "docs/runbooks/data-lifecycle-privacy.md",
+        "surfaces": [],
+        "evidence": [{"class": "STATIC", "citation": "docs/runbooks/data-lifecycle-privacy.md:19-23"}]
+      },
+      {
+        "path": "src/test/contracts/privacy-lifecycle.test.ts",
+        "surfaces": [],
+        "evidence": [{"class": "STATIC", "citation": "src/test/contracts/privacy-lifecycle.test.ts:93-113"}]
+      },
+      {
+        "path": "supabase/migrations/0079_restaurant_delete_dependents.sql",
+        "surfaces": ["authorization"],
+        "evidence": [{"class": "STATIC", "citation": "supabase/migrations/0079_restaurant_delete_dependents.sql:8-45"}]
+      },
+      {
+        "path": "supabase/migrations/down/0079_restaurant_delete_dependents.down.sql",
+        "surfaces": [],
+        "evidence": [{"class": "STATIC", "citation": "supabase/migrations/down/0079_restaurant_delete_dependents.down.sql:1-4"}]
+      },
+      {
+        "path": "supabase/schema.snapshot.sql",
+        "surfaces": ["authorization"],
+        "evidence": [{"class": "STATIC", "citation": "supabase/schema.snapshot.sql:12994"}]
+      }
+    ],
+    "sensitive_surfaces": ["authorization"],
+    "diff_command_id": "CMD-001",
+    "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-tenant-delete-evidence.md:7-13"}]
+  },
+  "commands": [
+    {
+      "id": "CMD-001",
+      "purpose": "diff",
+      "command": "git diff --name-only d55b81c41560af7f6cf1a12b3cd4608cfa5ee8aa...26e32bdc9973c2f866910bacc5129e9b487a9b65",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "scope": "d55b81c41560af7f6cf1a12b3cd4608cfa5ee8aa...26e32bdc9973c2f866910bacc5129e9b487a9b65",
+      "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-tenant-delete-evidence.md:7-13"}],
+      "unavailable_reason": null
+    },
+    {
+      "id": "CMD-002",
+      "purpose": "secrets-scan",
+      "command": "gitleaks detect --source . --no-banner --redact --log-opts d55b81c41560af7f6cf1a12b3cd4608cfa5ee8aa..26e32bdc9973c2f866910bacc5129e9b487a9b65",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "scope": "d55b81c41560af7f6cf1a12b3cd4608cfa5ee8aa..26e32bdc9973c2f866910bacc5129e9b487a9b65",
+      "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-tenant-delete-evidence.md:15-17"}],
+      "unavailable_reason": null
+    },
+    {
+      "id": "CMD-003",
+      "purpose": "security-control-test",
+      "command": "pnpm exec vitest run src/test/contracts/privacy-lifecycle.test.ts",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "scope": "TER-024 tenant deletion contract",
+      "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-tenant-delete-evidence.md:19-21"}],
+      "unavailable_reason": null
+    }
+  ],
+  "exports": {
+    "state": "NONE",
+    "items": [],
+    "evidence": [{"class": "STATIC", "citation": "docs/security-reviews/TER-024-tenant-delete-evidence.md:23"}],
+    "unavailable_reason": null
+  },
+  "secrets_scan": {
+    "result": "PASS",
+    "command_id": "CMD-002",
+    "scope": "RANGE",
+    "comparison": "d55b81c41560af7f6cf1a12b3cd4608cfa5ee8aa..26e32bdc9973c2f866910bacc5129e9b487a9b65",
+    "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-tenant-delete-evidence.md:15-17"}],
+    "unavailable_reason": null
+  },
+  "export_policy": {
+    "result": "PASS",
+    "evidence": [{"class": "STATIC", "citation": "docs/security-reviews/TER-024-tenant-delete-evidence.md:23"}],
+    "unavailable_reason": null
+  },
+  "coverage": [
+    {"surface": "prompt-injection", "state": "NOT-APPLICABLE", "evidence": [{"class": "STATIC", "citation": "supabase/migrations/0079_restaurant_delete_dependents.sql:8-45"}], "unavailable_reason": null},
+    {"surface": "secrets", "state": "REVIEWED", "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-tenant-delete-evidence.md:15-17"}], "unavailable_reason": null},
+    {"surface": "authentication", "state": "NOT-APPLICABLE", "evidence": [{"class": "STATIC", "citation": "supabase/migrations/0079_restaurant_delete_dependents.sql:8-45"}], "unavailable_reason": null},
+    {"surface": "authorization", "state": "REVIEWED", "evidence": [{"class": "STATIC", "citation": "supabase/migrations/0079_restaurant_delete_dependents.sql:8-45"}, {"class": "COMMAND", "citation": "docs/security-reviews/TER-024-tenant-delete-evidence.md:19-21"}], "unavailable_reason": null},
+    {"surface": "untrusted-input", "state": "NOT-APPLICABLE", "evidence": [{"class": "STATIC", "citation": "supabase/migrations/0079_restaurant_delete_dependents.sql:14-32"}], "unavailable_reason": null},
+    {"surface": "export", "state": "NOT-APPLICABLE", "evidence": [{"class": "STATIC", "citation": "docs/security-reviews/TER-024-tenant-delete-evidence.md:23"}], "unavailable_reason": null}
+  ],
+  "findings": [],
+  "verdict": "PASS"
+}
