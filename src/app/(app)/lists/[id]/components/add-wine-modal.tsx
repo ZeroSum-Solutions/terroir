@@ -287,7 +287,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
         slot: `lwin:${lwin.lwin_id}`,
         url: "/api/wines/create-from-lwin",
         method: "POST",
-        json: lwin,
+        json: { lwin_id: lwin.lwin_id },
       });
       if (!response.ok) {
         setSearchError(

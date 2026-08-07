@@ -158,6 +158,49 @@ describe("wine mutation behavior", () => {
     expect(availability.calls).toEqual([]);
   });
 
+  it("rejects reused wine keys with changed payloads before business work", async () => {
+    const mismatch = {
+      fn: "claim_api_idempotency",
+      data: [{
+        outcome: "mismatch",
+        response_status: null,
+        response_body: null,
+        response_headers: null,
+      }],
+    };
+    const metadata = setRoleAuth([], [mismatch]);
+    const metadataResponse = await UPDATE_WINE(
+      request(
+        `/api/wines/${WINE_ID}`,
+        "PATCH",
+        { name: "Different reserve" },
+        "wine-metadata-reused-key",
+      ),
+      { params: Promise.resolve({ id: WINE_ID }) },
+    );
+    expect(metadataResponse.status).toBe(409);
+    expect((await metadataResponse.json()).error.code).toBe(
+      "idempotency_key_reused",
+    );
+    expect(metadata.calls).toEqual([]);
+
+    const availability = setRoleAuth([], [mismatch]);
+    const availabilityResponse = await AVAILABILITY(
+      request(
+        `/api/wines/${WINE_ID}/availability`,
+        "PATCH",
+        { direction: "restored" },
+        "wine-availability-reused-key",
+      ),
+      { params: Promise.resolve({ id: WINE_ID }) },
+    );
+    expect(availabilityResponse.status).toBe(409);
+    expect((await availabilityResponse.json()).error.code).toBe(
+      "idempotency_key_reused",
+    );
+    expect(availability.calls).toEqual([]);
+  });
+
   it("returns 404 when a metadata update affects no tenant row", async () => {
     setRoleAuth([{ table: "wines", data: null }]);
 

@@ -37,6 +37,7 @@ describe("high-risk idempotency clients", () => {
     expect(addWine).toContain('"terroir:lwin-import"');
     expect(addWine).toContain("slot: `lwin:${lwin.lwin_id}`");
     expect(addWine).toContain('url: "/api/wines/create-from-lwin"');
+    expect(addWine).toContain("json: { lwin_id: lwin.lwin_id }");
     expect(addWine).toContain("if (importBusyRef.current) return");
     expect(addWine).not.toContain('fetch("/api/wines/create-from-lwin"');
   });

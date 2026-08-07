@@ -178,6 +178,32 @@ describe("wine provider mutation behavior", () => {
     expect(await response.json()).toEqual({ id: WINE_ID });
     expect(supabase.calls).toEqual([]);
   });
+
+  it("rejects a reused create-from-LWIN key with changed input", async () => {
+    const supabase = authenticate([], [{
+      fn: "claim_api_idempotency",
+      data: [{
+        outcome: "mismatch",
+        response_status: null,
+        response_body: null,
+        response_headers: null,
+      }],
+    }]);
+
+    const response = await CREATE_LWIN(
+      request(
+        "/api/wines/create-from-lwin",
+        { lwin_id: "1000002", display_name: "Changed" },
+        "lwin-create-reused-key",
+      ),
+    );
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).error.code).toBe(
+      "idempotency_key_reused",
+    );
+    expect(supabase.calls).toEqual([]);
+  });
   afterEach(() => vi.unstubAllEnvs());
 
   it("persists Claude decant guidance during single-wine enrichment", async () => {
