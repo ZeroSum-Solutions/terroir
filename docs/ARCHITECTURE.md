@@ -18,6 +18,8 @@ business workflows. Adapter modules own external provider mechanics.
 - `../src/adapters/llm/index.ts`: Anthropic invoice extraction boundary.
 - `../src/adapters/pdf/index.ts`: Puppeteer HTML-to-PDF boundary.
 - `../src/lib/supabase/server.ts`: Supabase server-client creation boundary.
+- `../src/components/background-job-progress.tsx`: shared authenticated-shell
+  progress, refresh recovery, and manager retry UI for durable jobs.
 
 ## Database Contracts
 
@@ -38,6 +40,27 @@ business workflows. Adapter modules own external provider mechanics.
 - `cancel_background_job` revokes queued or active work for the creator or a
   tenant manager. `requeue_background_job` is manager-only and resets a failed
   dead letter without changing its idempotent job identity.
+
+## Background Job Progress UI
+
+- The authenticated layout reads the 20 most recently updated jobs for the
+  active restaurant. Database RLS remains authoritative: creators see their
+  own jobs, while owners and managers can see all jobs in that tenant.
+- The shared client surface names queued, running, retrying, failed,
+  dead-lettered, succeeded, and cancelled states without exposing provider
+  error text. It links each supported job type back to its invoice, cellar, or
+  wine-list surface.
+- Active jobs refresh every five seconds and idle discovery refreshes every 15
+  seconds. Automatic polling stops after five minutes; a manual 44-pixel
+  refresh control restarts it. Focus, page-show, visibility, and reconnect
+  events immediately reconcile stale pages.
+- Retry appears only for roles with the shared `job:retry` capability. The
+  database `requeue_background_job` RPC independently requires a current-tenant
+  owner or manager and binds both restaurant and job IDs. An ambiguous retry
+  response triggers a read before the UI reports failure.
+- This UI does not enqueue work or require a running worker. PDF, invoice OCR,
+  and wine enrichment remain on their existing synchronous paths until their
+  separately scoped TER-021 migration tasks pass staging soak tests.
 
 ## Remaining Handoffs
 

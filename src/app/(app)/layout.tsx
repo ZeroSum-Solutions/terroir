@@ -7,6 +7,11 @@ import { DesktopNavLinks, MobileNavLinks } from "./nav-links";
 import { Fab } from "./fab";
 import { ToastWrapper } from "./toast-wrapper";
 import { OnboardingModal } from "./onboarding-modal";
+import { BackgroundJobProgress } from "@/components/background-job-progress";
+import {
+  BACKGROUND_JOB_PROGRESS_SELECT,
+  parseBackgroundJobSummaries,
+} from "@/lib/jobs/progress";
 
 export default async function AppLayout({
   children,
@@ -22,7 +27,18 @@ export default async function AppLayout({
     userRole,
     user,
     availableRestaurants,
+    supabase,
   } = auth;
+
+  const { data: backgroundJobRows } = await supabase
+    .from("background_jobs")
+    .select(BACKGROUND_JOB_PROGRESS_SELECT)
+    .eq("restaurant_id", restaurantId)
+    .order("updated_at", { ascending: false })
+    .limit(20);
+  const initialBackgroundJobs = parseBackgroundJobSummaries(
+    backgroundJobRows ?? [],
+  );
 
   return (
     <RestaurantProvider restaurantId={restaurantId} restaurantName={restaurantName} userRole={userRole}>
@@ -58,6 +74,12 @@ export default async function AppLayout({
 
       {/* Content — bottom padding on mobile to clear the tab bar */}
       <main className="mx-auto w-full max-w-[1440px] flex-1 px-md py-lg pb-[88px] md:px-lg md:py-xl md:pb-xl">
+        <BackgroundJobProgress
+          key={restaurantId}
+          initialJobs={initialBackgroundJobs}
+          restaurantId={restaurantId}
+          userRole={userRole}
+        />
         {children}
       </main>
 

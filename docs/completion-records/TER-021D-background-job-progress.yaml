@@ -1,0 +1,31 @@
+spec_id: TER-021D
+parent_spec: TER-021
+base_commit: f9a19fdcbd3613f19ce63307c8c029b7981bd063
+status: source_complete_runtime_evidence_pending
+scope: Shared tenant-scoped background-job progress, bounded refresh recovery, and capability-gated dead-letter retry UI.
+requirements_implemented:
+  - The authenticated shell shows the latest RLS-visible jobs for the active restaurant across invoice OCR, wine enrichment, and wine-list PDF surfaces.
+  - Queued, running, retrying, failed, dead-lettered, succeeded, and cancelled states have distinct honest copy.
+  - Active polling runs every five seconds, idle discovery every 15 seconds, and both stop after a five-minute window until manual or stale-page recovery restarts them.
+  - Focus, visibility, page-show, online, manual refresh, and full reload reconcile durable state.
+  - Retry is rendered only for owner and manager roles through the shared job:retry capability and calls the tenant-bound manager-only requeue_background_job RPC.
+tests:
+  focused: pnpm exec vitest run src/lib/jobs/progress.test.ts src/components/background-job-progress.test.tsx src/lib/auth/capabilities.test.ts src/test/contracts/background-job-lifecycle.test.ts (4 files, 19 passed)
+  full: pnpm test (147 files, 1491 passed); pnpm run test:contracts (11 files, 116 passed); pnpm lint; pnpm exec tsc --noEmit; pnpm build.
+  inventories: pnpm run verify:api-contract (86 operations); pnpm run verify:feature-ledger (269 features); pnpm run verify:ui-controls (23 routes, 336 controls).
+  database_static: pnpm run snapshot:check (74 migrations, no diff); pnpm run downs:check (64 paired forward migrations).
+  browser_contract: e2e/jobs/job-progress.test.ts seeds lifecycle-valid isolated staging rows and verifies 390-pixel layout, 44-pixel retry, refresh persistence, and tenant switching.
+  browser_collection: pnpm exec playwright test e2e/jobs --list (1 test in 1 file).
+  browser_runtime: pending; the exact source commit was not deployed and no staging credentials or production mutation were authorized.
+deployment:
+  executed: false
+  worker_dependency: none; this leaf reads and requeues lifecycle rows but does not enqueue work or call worker internals.
+security:
+  read_scope: Supabase RLS plus an explicit active restaurant filter.
+  retry_scope: Shared UI capability plus the manager-only tenant-bound database RPC; ambiguous responses are reconciled by read.
+  error_boundary: Provider error text and job metadata are not selected or rendered.
+known_limits:
+  - Staging browser evidence remains pending until this source is deployed to the isolated staging target with migration 0074 applied.
+  - TER-021E, TER-021F, and TER-021G still own moving PDF, invoice OCR, and wine enrichment endpoints to the worker.
+  - TER-021C still owns worker deployment, queue telemetry, and kill-and-restart evidence.
+rollback: Revert the TER-021D feature commit; no migration, queue mutation, deployment, or production configuration is included.

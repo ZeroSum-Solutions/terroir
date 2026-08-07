@@ -24,6 +24,7 @@ describe("capability matrix", () => {
         "wine-list:view",
         "wine-list:manage",
         "scan:create",
+        "job:retry",
         "pour:record",
         "reconcile:manage",
         "insights:view",
@@ -69,6 +70,7 @@ describe("capability matrix", () => {
     expect(hasCapability("staff", "restaurant:manage")).toBe(false);
     expect(hasCapability("staff", "team:invite-manage")).toBe(false);
     expect(hasCapability("staff", "team:member-manage")).toBe(false);
+    expect(hasCapability("staff", "job:retry")).toBe(false);
   });
 
   it("keeps destructive and membership-management capabilities owner-only", () => {
@@ -90,6 +92,7 @@ describe("capability matrix", () => {
       expect(hasCapability(role, "wine:manage")).toBe(true);
       expect(hasCapability(role, "wine-list:manage")).toBe(true);
       expect(hasCapability(role, "reconcile:manage")).toBe(true);
+      expect(hasCapability(role, "job:retry")).toBe(true);
     }
   });
 });

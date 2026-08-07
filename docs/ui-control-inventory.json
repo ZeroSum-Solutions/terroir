@@ -2208,7 +2208,7 @@
     {
       "id": "src/app/(app)/layout.tsx#link-001",
       "source": "src/app/(app)/layout.tsx",
-      "line": 33,
+      "line": 49,
       "kind": "link",
       "label": "Terroir",
       "href": "/",
