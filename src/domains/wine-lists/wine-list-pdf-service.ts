@@ -1,10 +1,10 @@
 import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { renderHtmlToPdf } from "@/adapters/pdf";
-import { renderWineListSections } from "@/lib/wine-list/render";
-import type { WineListSectionEmbed } from "@/lib/wine-list/shapes";
-import { renderTemplate } from "@/lib/wine-list/templates";
-import type { Database } from "@/types/database";
+import { renderHtmlToPdf } from "../../adapters/pdf/html-to-pdf.ts";
+import { renderWineListSections } from "../../lib/wine-list/render.ts";
+import type { WineListSectionEmbed } from "../../lib/wine-list/shapes.ts";
+import { renderTemplate } from "../../lib/wine-list/templates.ts";
+import type { Database } from "../../types/database.ts";
 
 export class WineListPdfNotFoundError extends Error {
   constructor() {
@@ -41,13 +41,28 @@ export type GenerateWineListPdfInput = {
   supabase: SupabaseClient<Database>;
   restaurantId: string;
   listId: string;
+  signal?: AbortSignal;
   template?: string;
 };
 
 export type GenerateWineListPdfResult = {
   filename: string;
   pdf: Buffer;
+  template: string;
 };
+
+export function wineListPdfArtifactPath(input: {
+  restaurantId: string;
+  listId: string;
+  template: string;
+}): string {
+  return `${input.restaurantId}/${input.listId}_${input.template}.pdf`;
+}
+
+function wineListPdfFilename(name: string): string {
+  const safeName = name.replace(/[^a-zA-Z0-9 ]/g, "").trim();
+  return `${safeName || "wine-list"}.pdf`;
+}
 
 export async function generateWineListPdf(
   input: GenerateWineListPdfInput,
@@ -88,13 +103,14 @@ export async function generateWineListPdf(
   });
 
   try {
-    const pdf = await renderHtmlToPdf(html);
+    const pdf = await renderHtmlToPdf(html, input.signal);
     return {
-      filename: `${list.name.replace(/[^a-zA-Z0-9 ]/g, "")}.pdf`,
+      filename: wineListPdfFilename(list.name),
       pdf,
+      template,
     };
   } catch (error) {
-    console.error("PDF generation failed:", error);
+    console.error("PDF generation failed");
     Sentry.captureException(error, {
       tags: { surface: "pdf", phase: "puppeteer-render" },
     });

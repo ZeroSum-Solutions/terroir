@@ -1,0 +1,35 @@
+spec_id: TER-021E
+parent_spec: TER-021
+base_commit: f7d015131cdb96f5c6614766dd6f98fd24c09ce2
+status: source_complete_runtime_evidence_pending
+scope: Worker-backed wine-list PDF generation behind a default-safe rollback flag, with durable enqueue identity and private bounded artifacts.
+requirements_implemented:
+  - Missing or non-literal PDF_WORKER_ENABLED values preserve the existing synchronous PDF response.
+  - Enabled generation requires a valid caller-owned Idempotency-Key and returns the durable wine_list_pdf job reference within the request.
+  - The worker validates tenant, subject table, subject ID, and allowlisted template before rendering.
+  - Duplicate delivery upserts one canonical private object per restaurant, list, and template.
+  - Completed downloads re-check membership, tenant, job type, subject, result shape, and exact artifact path.
+  - Disabling new enqueues does not strand queued jobs or prevent completed artifact retrieval.
+database:
+  forward: supabase/migrations/0077_wine_list_pdf_artifacts.sql
+  rollback: supabase/migrations/down/0077_wine_list_pdf_artifacts.down.sql
+  acceptance: supabase/tests/0077_wine_list_pdf_artifacts.sql
+  bucket: generated-exports
+  retention: Latest snapshot per list/template until replacement or tenant deletion.
+security:
+  authorization: Existing requireMembership gate plus explicit restaurant filters and private Storage RLS.
+  untrusted_input: Strict generation, artifact, job metadata, and durable result schemas; exact canonical path equality before Storage read.
+  export: Authenticated application response only; no public or signed export URL is stored or logged.
+  secrets: The service-role key remains isolated to the worker process and is never returned in health, job result, or telemetry.
+rollback: Set PDF_WORKER_ENABLED=0 on the web service, allow queued and active PDF jobs to drain with the handler deployed, then roll back the worker if required.
+verification:
+  focused: 9 files and 60 tests passed across route, enqueue service, worker handler, rollback flag, legacy synchronous path, shared boundary, privacy, and contract coverage.
+  full: 160 files and 1539 tests passed; 13 contract files and 125 contract tests passed; lint, TypeScript, and production build passed on Node 24.16.0 with pnpm 10.33.2.
+  static: Schema snapshot (76 migrations), 66 paired down migrations, 86 API operations, 269 feature-ledger entries, and 336 UI controls passed their drift gates.
+  browser_collection: pnpm exec playwright test e2e/lists --list reports one isolated PDF worker test.
+  documentation: Project documentation verifier and whitespace gate passed for the README, worker runbook, and privacy lifecycle runbook.
+staging_evidence_required:
+  - Apply migration 0077 to the isolated staging project and prove same-tenant download plus cross-tenant denial.
+  - Deploy the exact candidate to the approved staging web and worker services, verify one registered handler, then enable PDF_WORKER_ENABLED only on staging.
+  - Prove enqueue latency, duplicate delivery, browser download content, 10-client load, kill/restart recovery, poison dead-letter, alert delivery, and rollback to the synchronous path.
+deployment: Not deployed; no remote database, Storage, Railway, GitHub, or production setting was changed by this slice.

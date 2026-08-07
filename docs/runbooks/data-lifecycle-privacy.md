@@ -9,14 +9,19 @@ setting before production use.
 
 - Storage object names are tenant-scoped. New invoice objects use
   `<restaurant-id>/<scan-id>[_pageN].<extension>` and wine images use
-  `<restaurant-id>/<wine-id>.<extension>`.
-- `invoice-images` and `wine-images` are private. The application stores no
-  public wine-image URL. It issues authenticated signed URLs for five minutes.
+  `<restaurant-id>/<wine-id>.<extension>`. Generated wine-list PDFs use the
+  bounded path `<restaurant-id>/<list-id>_<template>.pdf`.
+- `invoice-images`, `wine-images`, and `generated-exports` are private. The
+  application stores no public wine-image or export URL. It issues authenticated
+  image signed URLs for five minutes and streams PDF artifacts only after a
+  fresh tenant/job check.
 - `0076_private_media_bucket_provisioning.sql` creates either governed bucket
   when an older environment is missing it and idempotently reapplies the
   private ten-mebibyte MIME allowlist. Run the TER-024 SQL acceptance after
-  `0075` and `0076`; a missing bucket is a failed privacy rollout.
-- A tenant deletion removes both bucket prefixes before the database cascade.
+  `0075` and `0076`. Migration `0077_wine_list_pdf_artifacts.sql` provisions
+  `generated-exports` with its tenant policy and PDF-only limit. A missing
+  governed bucket is a failed privacy rollout.
+- A tenant deletion removes all three bucket prefixes before the database cascade.
   It fails before the database deletion if Storage cleanup fails. A retry is
   safe because the removal calls are idempotent. Cleanup recursively covers
   legacy nested paths with an eight-level and 10,000-entry fail-closed bound.
@@ -48,8 +53,9 @@ setting before production use.
 | Wine hero image (including a bottle image uploaded as the hero) | Restaurant owner | While its wine exists | The manager image endpoint removes all image variants. Wine deletion repeats object cleanup after the atomic row deletion. There is no separate bottle-image bucket. |
 | Invitation email and token | Restaurant owner | 30 days after expiry or cancellation | Expired invitations cannot be accepted. A manually approved cleanup may delete the row; never emit the email or token to telemetry. |
 | API idempotency and rate-limit records | Application operator | 24 hours / configured rate-limit window | Existing cleanup removes them; Auth-user deletion cascades user-bound records. |
-| Background-job metadata and result | Restaurant owner and worker operator | 30 days after terminal status, once a worker-owned cleanup is deployed | Do not place raw invoice content, object URLs, credentials, or personal data in JSON payloads. The current worker lifecycle has no retention runner. |
-| Generated CSV/PDF export response | Requesting authenticated member | Request lifetime only | The application returns the export directly and does not persist it in application Storage. The recipient controls any downloaded copy. |
+| Background-job metadata and result | Restaurant owner and worker operator | 30 days after terminal status, once a worker-owned cleanup is deployed | PDF results contain a canonical tenant path and safe filename only. Do not place raw invoice content, signed URLs, credentials, or personal data in JSON payloads. The current worker lifecycle has no row-retention runner. |
+| Generated CSV export response | Requesting authenticated member | Request lifetime only | The application returns the CSV directly and does not persist it in application Storage. The recipient controls any downloaded copy. |
+| Generated wine-list PDF artifact | Restaurant owner | Latest snapshot per list/template until replacement or tenant deletion | The private bucket holds at most one classic, modern, and minimal artifact per list. Worker retries and later requests upsert the same canonical path; tenant deletion removes the prefix. |
 | Railway logs and Sentry telemetry | Platform operator | Provider-configured; record the live setting in the staging evidence | Application events are redacted before egress. Sentry removes request/user/context/breadcrumb/exception payloads and replay masks all text and blocks media. |
 | Azure OCR and Anthropic extraction payloads | Provider account owner | Provider-configured; confirm account controls before production | Invoice data is sent only for the authorized scan. Do not claim a provider retention period without current account evidence. |
 | GitHub backup and workflow artifacts | GitHub workflow operator | Backup artifacts: 90 days; staging-smoke artifacts: 14 days | Artifacts contain no application secrets or customer payloads; backup lifecycle is governed by the database backup runbook. |
@@ -82,7 +88,7 @@ credentials, raw provider responses, tokens, or object paths.
 2. Use a synthetic staging tenant first. Verify the authenticated caller is an
    owner, then delete through `DELETE /api/restaurant/{id}`. Do not invoke SQL
    directly to bypass the Storage cleanup.
-3. Confirm both Storage bucket prefixes are empty using an authorized staging
+3. Confirm all three Storage bucket prefixes are empty using an authorized staging
    session, and confirm the tenant cannot be read through the database or
    signed-image endpoints. Record only environment, release SHA, operation
    result, counts, and timestamps.
@@ -97,7 +103,8 @@ credentials, raw provider responses, tokens, or object paths.
 ## Rollback boundary
 
 `0075_privacy_storage_lifecycle.down.sql`,
-`0076_private_media_bucket_provisioning.down.sql`, and
+`0076_private_media_bucket_provisioning.down.sql`,
+`0077_wine_list_pdf_artifacts.down.sql`, and
 `0079_restaurant_delete_dependents.down.sql` are intentionally fail-closed,
 non-executable rollback records. Reverting or deleting the private buckets,
 broadening their old prefix-only policies, or dropping the dependency-order
@@ -105,3 +112,6 @@ trigger would re-expose, lose, or strand tenant data. If application code must
 roll back, keep the private paths, signed-URL contract, and deletion trigger;
 rehearse the target revision against a restored staging backup, and introduce
 any necessary compatibility change as a new forward migration.
+
+A web rollback disables `PDF_WORKER_ENABLED`; it does not make exports public
+or delete artifacts while queued work may still reference them.

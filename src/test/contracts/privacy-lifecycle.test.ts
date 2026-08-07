@@ -44,6 +44,10 @@ const saveScanRoute = readFileSync(
   "utf8",
 );
 const schemaSnapshot = readFileSync("supabase/schema.snapshot.sql", "utf8");
+const storageCleanup = readFileSync(
+  "src/domains/privacy/storage-cleanup-service.ts",
+  "utf8",
+);
 
 describe("TER-024 privacy lifecycle contracts", () => {
   it("makes both image buckets private and validates new object owners", () => {
@@ -89,6 +93,7 @@ describe("TER-024 privacy lifecycle contracts", () => {
     expect(restaurantRoute).toContain("Failed to remove restaurant storage.");
     expect(cellarRoute).toContain("removeWineImageObjects");
     expect(cellarRoute).toContain("requiresWineImageCleanup(result)");
+    expect(storageCleanup).toContain('"generated-exports"');
   });
 
   it("orders restrictive tenant rows ahead of the restaurant cascade", () => {

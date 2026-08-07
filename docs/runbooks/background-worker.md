@@ -8,12 +8,11 @@ available concurrency, heartbeats active leases, applies a per-job timeout,
 records retryable or terminal failures through the database state machine,
 and stops taking claims before a bounded signal drain.
 
-The runtime does not register invoice OCR, wine enrichment, or wine-list PDF
-handlers. With zero registered handlers it observes aggregate queue health but
-does not claim jobs. TER-021E/F/G must add an idempotent handler and its tests
-before the matching enqueue path is enabled. Once processing is enabled, a row
-whose type has no deployed handler records `unsupported_job_type` as a
-non-retryable failure; the worker never guesses or runs a synchronous web path.
+TER-021E registers the `wine_list_pdf` handler. Invoice OCR and wine enrichment
+remain unregistered until TER-021F/G provide their own idempotent handlers and
+tests. A row whose type has no deployed handler records `unsupported_job_type`
+as a non-retryable failure; the worker never guesses or runs a synchronous web
+path.
 
 The source-ready runtime is not deployment proof. Creating a Railway worker
 service or paying for queue infrastructure requires the product owner's
@@ -52,6 +51,11 @@ Supabase project. Never copy the production key into staging.
 | `WORKER_QUEUE_AGE_ALERT_MS` | 300000 | action-required queue-age threshold |
 | `WORKER_DEAD_LETTER_ALERT_COUNT` | 1 | action-required terminal-job threshold |
 
+The web service separately owns `PDF_WORKER_ENABLED`. Missing, `0`, or any
+value except literal `1` keeps PDF generation synchronous. Do not put this flag
+on the worker as a handler kill switch: queued and retrying work must remain
+processable during web rollback.
+
 `pnpm validate:worker` validates names and shapes before build. Its error only
 lists invalid variable names. The `GET /health` response is 200 only after a
 successful database operation and before that success becomes stale. A 503
@@ -62,6 +66,30 @@ non-empty queue is a stop condition until every queued type has an owning
 handler or an approved cleanup disposition. Health exposes
 `registered_handlers` and `accepting_jobs` so an idle control-plane deployment
 cannot be mistaken for active job processing.
+
+## Wine-list PDF pilot
+
+Migration `0077_wine_list_pdf_artifacts.sql` creates the private
+`generated-exports` bucket. The worker accepts only a tenant UUID, a
+`wine_lists` subject UUID, and an optional allowlisted template from durable
+job input. It re-queries the list through the service-role client, renders the
+PDF, and upserts exactly one canonical object per restaurant, list, and
+template. The job result contains only that canonical path, filename, list ID,
+and template; it never contains PDF bytes, a signed URL, restaurant content,
+or a credential.
+
+The authenticated `POST /api/pdf` route keeps its synchronous binary response
+while the flag is off. With the flag on, a generation request requires an
+`Idempotency-Key`, returns `202` with the durable job ID, and lets the client
+poll the same route with that job ID. Completed downloads re-check tenant
+scope, job type, subject, result shape, and the exact artifact path before
+Storage read. Disabling the flag stops new enqueues but deliberately keeps
+completed-job downloads available.
+
+Before setting the flag to `1`, apply migration 0077, deploy this handler,
+confirm worker health reports one registered handler, and verify the queue has
+no unsupported types. Then run the PDF browser proof and required worker drill
+against synthetic staging data.
 
 ## Lifecycle and recovery
 
@@ -135,8 +163,10 @@ this drill.
 
 ## Rollback
 
-Disable every enqueue path before stopping the worker. Let active work drain,
-then remove the worker service or roll it back to the prior known-good SHA.
+Set `PDF_WORKER_ENABLED=0` on the web service before stopping the worker. This
+immediately restores synchronous generation for new requests. Let queued,
+retrying, and active PDF jobs drain with the handler still deployed, then
+remove the worker service or roll it back to the prior known-good SHA.
 Queued and retrying rows remain durable; do not delete or rewrite them during
 an application rollback. If a handler is rolled back, keep its enqueue path
 disabled until a compatible handler is deployed and the queue is inspected.

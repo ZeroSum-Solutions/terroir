@@ -10,6 +10,7 @@ import type {
 import { assertIsolatedE2eConfig } from "./config";
 
 const STORAGE_BUCKET = "wine-images";
+const GENERATED_EXPORTS_BUCKET = "generated-exports";
 const WEBP_PIXEL = Buffer.from(
   "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJaQAA3AA/v89WAAAAA==",
   "base64",
@@ -107,6 +108,19 @@ export async function cleanupIsolatedFixture(
     .from(STORAGE_BUCKET)
     .remove([identity.storagePath]);
   if (storageError) cleanupErrors.push(storageError);
+
+  const exportPaths = [
+    [identity.restaurantId, identity.listId],
+    [identity.secondRestaurantId, identity.secondListId],
+  ].flatMap(([restaurantId, listId]) =>
+    ["classic", "modern", "minimal"].map(
+      (template) => `${restaurantId}/${listId}_${template}.pdf`,
+    )
+  );
+  const { error: exportError } = await admin.storage
+    .from(GENERATED_EXPORTS_BUCKET)
+    .remove(exportPaths);
+  if (exportError) cleanupErrors.push(exportError);
 
   const user = await findUserByEmail(admin, identity.email);
   if (user) {

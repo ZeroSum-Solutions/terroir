@@ -6,7 +6,11 @@ import {
 } from "@/adapters/storage";
 import type { Database } from "@/types/database";
 
-const STORAGE_BUCKETS = ["invoice-images", "wine-images"] as const;
+const STORAGE_BUCKETS = [
+  "invoice-images",
+  "wine-images",
+  "generated-exports",
+] as const;
 
 export class PrivacyStorageCleanupError extends Error {
   constructor(cause: unknown) {

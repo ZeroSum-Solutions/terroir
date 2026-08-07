@@ -88,6 +88,53 @@ export type WineListEditorSection = {
   wine_list_items: WineListEditorItem[];
 };
 
+type QueuedPdfResponse = { jobId: string; status: string };
+
+function parseQueuedPdfResponse(value: unknown): QueuedPdfResponse {
+  if (!value || typeof value !== "object") {
+    throw new Error("PDF queue returned an invalid response");
+  }
+  const jobId = (value as { jobId?: unknown }).jobId;
+  const status = (value as { status?: unknown }).status;
+  if (typeof jobId !== "string" || typeof status !== "string") {
+    throw new Error("PDF queue returned an invalid response");
+  }
+  return { jobId, status };
+}
+
+async function waitForQueuedPdf(jobId: string): Promise<Response> {
+  for (let attempt = 0; attempt < 150; attempt += 1) {
+    const response = await fetch("/api/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId }),
+    });
+    if (response.status !== 202) return response;
+    await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+  }
+  throw new Error("PDF generation is still running. Check Background work.");
+}
+
+async function savePdfResponse(response: Response, filename: string) {
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(
+      readApiError(payload, `PDF generation failed (${response.status}).`)
+        .message,
+    );
+  }
+  if (!response.headers.get("Content-Type")?.includes("application/pdf")) {
+    throw new Error("PDF generation returned an invalid file.");
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${filename}.pdf`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 function isOkMutation(data: unknown): data is { ok: true } {
   return (
     typeof data === "object" &&
@@ -1052,24 +1099,31 @@ export function WineListEditor({
 
   const downloadPdf = useCallback(async () => {
     setGeneratingPdf(true);
+    setErrorToast(null);
     try {
-      const res = await fetch("/api/pdf", {
+      const result = await wineListCommands.json({
+        slot: `pdf:${list.id}`,
+        url: "/api/pdf",
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listId: list.id }),
+        json: { listId: list.id },
+        parse: "none",
       });
-      if (!res.ok) throw new Error("PDF generation failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${list.name}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+      let response = result.response;
+      if (response.status === 202) {
+        const queued = parseQueuedPdfResponse(await response.json());
+        response = await waitForQueuedPdf(queued.jobId);
+      }
+      await savePdfResponse(response, list.name);
+    } catch (error) {
+      setErrorToast(
+        error instanceof Error
+          ? error.message
+          : "PDF generation failed. Please try again.",
+      );
     } finally {
       setGeneratingPdf(false);
     }
-  }, [list.id, list.name]);
+  }, [list.id, list.name, wineListCommands]);
 
   const copyUrl = useCallback(() => {
     if (!list.slug) return;

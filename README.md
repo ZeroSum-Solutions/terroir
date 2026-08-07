@@ -86,8 +86,10 @@ The worker must first be deployed against the isolated staging Supabase
 project. Its credential boundary, config, metrics, drain behavior, and required
 kill/restart and dead-letter drill are in
 [`docs/runbooks/background-worker.md`](docs/runbooks/background-worker.md).
-TER-021E/F/G must register a handler before its matching enqueue path is
-enabled; an unregistered job is deliberately dead-lettered.
+TER-021E registers the wine-list PDF handler; its web enqueue remains off by
+default through `PDF_WORKER_ENABLED`. TER-021F/G must register their handlers
+before enabling invoice OCR or wine enrichment. An unregistered job is
+deliberately dead-lettered.
 
 The public health endpoint preserves Railway liveness while publishing safe
 readiness and degraded-dependency states. See

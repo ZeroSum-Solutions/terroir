@@ -17,7 +17,7 @@ const client = createWorkerSupabaseClient(
 const runtime = new WorkerRuntime(
   config,
   createSupabaseJobStore(client),
-  createJobHandlers(),
+  createJobHandlers(client),
   telemetry,
 );
 const server = createWorkerHealthServer(runtime);

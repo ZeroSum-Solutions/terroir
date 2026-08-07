@@ -1,0 +1,6 @@
+-- TER-021E fail-closed rollback boundary.
+--
+-- Do not make generated exports public or delete stored artifacts during an
+-- application rollback. Disable PDF_WORKER_ENABLED so new requests use the
+-- synchronous path, leave the worker handler deployed until queued jobs drain,
+-- and use a new forward migration for any later storage-policy change.
