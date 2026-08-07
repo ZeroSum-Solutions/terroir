@@ -10,6 +10,11 @@ export function assertDisposableRestoreUrl(rawUrl) {
       "Restore drill refuses every non-loopback database target.",
     );
   }
+  if (url.port !== "54322" || decodeURIComponent(url.username) !== "postgres") {
+    throw new Error(
+      "Restore drill target must be the canonical local Supabase postgres service on port 54322.",
+    );
+  }
   if (url.pathname.replace(/^\/+/, "") !== "postgres") {
     throw new Error("Restore drill target must be the disposable postgres DB.");
   }

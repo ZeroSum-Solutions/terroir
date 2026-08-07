@@ -40,10 +40,95 @@ alter role terroir_backup
        inherit
        noreplication
        bypassrls;
+
+do $cleanup$
+declare
+  membership record;
+  target_relation record;
+  target_schema record;
+begin
+  for membership in
+    select granted_role.rolname
+    from pg_catalog.pg_auth_members member
+    join pg_catalog.pg_roles granted_role
+      on granted_role.oid = member.roleid
+    join pg_catalog.pg_roles member_role
+      on member_role.oid = member.member
+    where member_role.rolname = 'terroir_backup'
+      and granted_role.rolname <> 'pg_read_all_data'
+  loop
+    execute format(
+      'revoke %I from terroir_backup',
+      membership.rolname
+    );
+  end loop;
+
+  for target_schema in
+    select distinct n.nspname
+    from pg_catalog.pg_namespace n
+    cross join lateral pg_catalog.aclexplode(n.nspacl) acl
+    where acl.grantee = (
+      select oid from pg_catalog.pg_roles where rolname = 'terroir_backup'
+    )
+  loop
+    execute format(
+      'revoke all privileges on schema %I from terroir_backup',
+      target_schema.nspname
+    );
+  end loop;
+
+  for target_relation in
+    select distinct n.nspname, c.relname, c.relkind
+    from pg_catalog.pg_class c
+    join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    cross join lateral pg_catalog.aclexplode(c.relacl) acl
+    where acl.grantee = (
+      select oid from pg_catalog.pg_roles where rolname = 'terroir_backup'
+    )
+      and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')
+  loop
+    execute format(
+      'revoke all privileges on %s %I.%I from terroir_backup',
+      case when target_relation.relkind = 'S' then 'sequence' else 'table' end,
+      target_relation.nspname,
+      target_relation.relname
+    );
+  end loop;
+end
+$cleanup$;
+
+revoke all privileges on database postgres from terroir_backup;
 grant connect on database postgres to terroir_backup;
 grant pg_read_all_data to terroir_backup;
 alter role terroir_backup set default_transaction_read_only = on;
-alter role terroir_backup set statement_timeout = '10min';
+alter role terroir_backup set statement_timeout = '15min';
+
+do $verify_cleanup$
+begin
+  if exists (
+    select 1
+    from pg_catalog.pg_auth_members member
+    join pg_catalog.pg_roles granted_role
+      on granted_role.oid = member.roleid
+    join pg_catalog.pg_roles member_role
+      on member_role.oid = member.member
+    where member_role.rolname = 'terroir_backup'
+      and granted_role.rolname <> 'pg_read_all_data'
+  ) then
+    raise exception 'terroir_backup retains an unexpected role membership';
+  end if;
+  if exists (
+    select 1
+    from pg_catalog.pg_class c
+    cross join lateral pg_catalog.aclexplode(c.relacl) acl
+    where acl.grantee = (
+      select oid from pg_catalog.pg_roles where rolname = 'terroir_backup'
+    )
+  ) then
+    raise exception 'terroir_backup retains direct relation privileges';
+  end if;
+end
+$verify_cleanup$;
 `.trimStart();
 }
 

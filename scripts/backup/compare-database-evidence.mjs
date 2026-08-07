@@ -5,6 +5,10 @@ function tableKey(entry) {
   return `${entry.schema}.${entry.table}`;
 }
 
+function sequenceKey(entry) {
+  return `${entry.schema}.${entry.sequence}`;
+}
+
 export function compareDatabaseEvidence(source, restored) {
   const failures = [];
   if (source.format_version !== 1 || restored.format_version !== 1) {
@@ -49,14 +53,39 @@ export function compareDatabaseEvidence(source, restored) {
     }
   }
 
+  const sourceSequences = new Map(
+    (source.sequences ?? []).map((entry) => [sequenceKey(entry), entry]),
+  );
+  const restoredSequences = new Map(
+    (restored.sequences ?? []).map((entry) => [sequenceKey(entry), entry]),
+  );
+  const allSequences = [...new Set([
+    ...sourceSequences.keys(),
+    ...restoredSequences.keys(),
+  ])].sort();
+  for (const sequence of allSequences) {
+    const sourceState = sourceSequences.get(sequence);
+    const restoredState = restoredSequences.get(sequence);
+    if (!sourceState || !restoredState) {
+      failures.push(`sequence inventory differs for ${sequence}`);
+    } else if (
+      sourceState.last_value !== restoredState.last_value ||
+      sourceState.is_called !== restoredState.is_called
+    ) {
+      failures.push(`sequence state differs for ${sequence}`);
+    }
+  }
+
   return {
     ok: failures.length === 0,
     failures,
     migration_version: restored.migration_version,
     table_count: restored.tables.length,
+    sequence_count: restoredSequences.size,
     checked_content_checksums:
       source.largest_non_empty_tables.length,
     tables: restored.tables,
+    sequences: restored.sequences ?? [],
     content_checksums: restored.largest_non_empty_tables,
   };
 }

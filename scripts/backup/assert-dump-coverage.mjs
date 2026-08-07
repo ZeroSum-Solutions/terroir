@@ -29,14 +29,19 @@ function run(command, args) {
 }
 
 export function parseArchiveSchemas(listing) {
-  // PostgreSQL creates public with the database and pg_dump intentionally
-  // omits a standalone SCHEMA entry for it.
-  const schemas = new Set(["public"]);
+  const schemas = new Set();
   for (const line of listing.split("\n")) {
     const match = line.match(
       /^\d+;\s+\d+\s+\d+\s+SCHEMA\s+-\s+(\S+)\s+\S+\s*$/u,
     );
     if (match) schemas.add(match[1]);
+    if (
+      /\s(?:TABLE(?: DATA)?|VIEW|MATERIALIZED VIEW|SEQUENCE|FUNCTION|PROCEDURE|TYPE|DOMAIN)\s+public\s+/u.test(
+        line,
+      )
+    ) {
+      schemas.add("public");
+    }
   }
   return schemas;
 }

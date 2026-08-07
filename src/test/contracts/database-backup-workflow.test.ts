@@ -76,7 +76,7 @@ describe("database backup workflow", () => {
       await loadScript("assert-dump-coverage");
     const archive = parseArchiveSchemas(`
 123; 0 0 SCHEMA - auth supabase_auth_admin
-124; 0 0 SCHEMA - public postgres
+124; 1259 123 TABLE public wines postgres
 125; 0 0 SCHEMA - storage supabase_storage_admin
 `);
 
@@ -178,6 +178,8 @@ describe("database backup workflow", () => {
     expect(sql).toContain("nocreaterole");
     expect(sql).toContain("bypassrls");
     expect(sql).toContain("inherit");
+    expect(sql).toContain("revoke all privileges on %s %I.%I");
+    expect(sql).toContain("granted_role.rolname <> 'pg_read_all_data'");
     expect(sql).toContain("grant pg_read_all_data");
     expect(sql).toContain("default_transaction_read_only = on");
     expect(sql).toContain(
@@ -203,6 +205,11 @@ describe("database backup workflow", () => {
         "postgresql://postgres:password@localhost:54322/customer_data",
       ),
     ).toThrow(/disposable postgres DB/u);
+    expect(() =>
+      assertDisposableRestoreUrl(
+        "postgresql://postgres:password@127.0.0.1:5432/postgres",
+      ),
+    ).toThrow(/canonical local Supabase/u);
   });
 
   it("binds plaintext, evidence, encrypted artifact, and run provenance", async () => {
@@ -285,6 +292,14 @@ describe("database backup workflow", () => {
       tables: [
         { schema: "public", table: "wines", row_count: 2 },
       ],
+      sequences: [
+        {
+          schema: "public",
+          sequence: "wines_id_seq",
+          last_value: "2",
+          is_called: true,
+        },
+      ],
       largest_non_empty_tables: [
         {
           schema: "public",
@@ -304,12 +319,14 @@ describe("database backup workflow", () => {
     const changed = structuredClone(source);
     changed.tables[0].row_count = 1;
     changed.largest_non_empty_tables[0].sha256 = "def";
+    changed.sequences[0].last_value = "1";
     expect(compareDatabaseEvidence(source, changed)).toEqual(
       expect.objectContaining({
         ok: false,
         failures: expect.arrayContaining([
           expect.stringContaining("row count differs"),
           expect.stringContaining("content checksum differs"),
+          expect.stringContaining("sequence state differs"),
         ]),
       }),
     );
