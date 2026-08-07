@@ -43,6 +43,7 @@ const saveScanRoute = readFileSync(
   "src/app/api/inventory/save-scan/route.ts",
   "utf8",
 );
+const schemaSnapshot = readFileSync("supabase/schema.snapshot.sql", "utf8");
 
 describe("TER-024 privacy lifecycle contracts", () => {
   it("makes both image buckets private and validates new object owners", () => {
@@ -110,6 +111,20 @@ describe("TER-024 privacy lifecycle contracts", () => {
       "no executable reverse",
     );
     expect(restaurantDeleteDependentsRollback).not.toContain("drop trigger");
+  });
+
+  it("preserves the individual-wine history guards the tenant trigger orders", () => {
+    expect(schemaSnapshot).toContain(
+      "wine_id       uuid          not null references public.wines(id) on delete restrict",
+    );
+    for (const constraint of [
+      "inventory_items_wine_tenant_fkey",
+      "pour_events_wine_tenant_fkey",
+    ]) {
+      expect(schemaSnapshot).toMatch(
+        new RegExp(`${constraint}[\\s\\S]{0,180}on delete restrict;`),
+      );
+    }
   });
 
   it("documents ownership, retention, provider limits, and fail-closed rollback", () => {

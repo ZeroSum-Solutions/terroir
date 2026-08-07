@@ -86,6 +86,85 @@ describe("Supabase Storage adapter", () => {
     ]);
   });
 
+  it("paginates nested legacy folders without escaping the tenant prefix", async () => {
+    const nestedFirstPage = Array.from({ length: 100 }, (_, index) => ({
+      id: `nested-${index}`,
+      name: `nested-${index}.webp`,
+    }));
+    const list = vi.fn(async (prefix: string, options: { offset: number }) => {
+      if (prefix === "tenant-id") {
+        return {
+          data: [{ id: null, name: "legacy-wine-id" }],
+          error: null,
+        };
+      }
+      if (prefix === "tenant-id/legacy-wine-id" && options.offset === 0) {
+        return { data: nestedFirstPage, error: null };
+      }
+      if (prefix === "tenant-id/legacy-wine-id" && options.offset === 100) {
+        return {
+          data: [{ id: "nested-last", name: "last.webp" }],
+          error: null,
+        };
+      }
+      throw new Error(`Unexpected list request: ${prefix}/${options.offset}`);
+    });
+    const supabase = storageClient(list);
+
+    const paths = await listSupabaseObjectPaths({
+      supabase: supabase as never,
+      bucket: "wine-images",
+      prefix: "tenant-id",
+    });
+
+    expect(paths).toHaveLength(101);
+    expect(paths[0]).toBe("tenant-id/legacy-wine-id/nested-0.webp");
+    expect(paths[100]).toBe("tenant-id/legacy-wine-id/last.webp");
+  });
+
+  it.each(["", ".", "..", "nested/object", "nested\\object"])(
+    "fails closed when the provider returns an invalid object segment %j",
+    async (name) => {
+      const list = vi.fn().mockResolvedValue({
+        data: [{ id: "provider-object", name }],
+        error: null,
+      });
+      const supabase = storageClient(list);
+
+      await expect(
+        listSupabaseObjectPaths({
+          supabase: supabase as never,
+          bucket: "wine-images",
+          prefix: "tenant-id",
+        }),
+      ).rejects.toThrow("Storage object tree contains an invalid path.");
+    },
+  );
+
+  it("fails closed when a tenant object tree exceeds the entry bound", async () => {
+    const fullPage = Array.from({ length: 100 }, (_, index) => ({
+      id: `object-${index}`,
+      name: `object-${index}.webp`,
+    }));
+    const list = vi.fn(async (_prefix: string, options: { offset: number }) => ({
+      data:
+        options.offset < 10_000
+          ? fullPage
+          : [{ id: "overflow", name: "overflow.webp" }],
+      error: null,
+    }));
+    const supabase = storageClient(list);
+
+    await expect(
+      listSupabaseObjectPaths({
+        supabase: supabase as never,
+        bucket: "wine-images",
+        prefix: "tenant-id",
+      }),
+    ).rejects.toThrow("Storage object tree exceeds cleanup limits.");
+    expect(list).toHaveBeenCalledTimes(101);
+  });
+
   it("fails closed when a legacy object tree exceeds the depth bound", async () => {
     const list = vi.fn(async (_prefix: string) => ({
       data: [{ id: null, name: "nested" }],

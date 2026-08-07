@@ -114,6 +114,22 @@ export async function listSupabaseObjectPaths(
   const maxEntries = 10_000;
   let visitedEntries = 0;
 
+  function isSafePathSegment(value: string): boolean {
+    return (
+      value.length > 0 &&
+      value !== "." &&
+      value !== ".." &&
+      !value.includes("/") &&
+      !value.includes("\\")
+    );
+  }
+
+  if (!prefix.split("/").every(isSafePathSegment)) {
+    throw new SupabaseStorageError(
+      "Storage object tree contains an invalid path.",
+    );
+  }
+
   async function visit(currentPrefix: string, depth: number): Promise<void> {
     if (depth > maxDepth) {
       throw new SupabaseStorageError(
@@ -138,7 +154,11 @@ export async function listSupabaseObjectPaths(
 
       const page = data ?? [];
       for (const object of page) {
-        if (!object.name) continue;
+        if (!isSafePathSegment(object.name)) {
+          throw new SupabaseStorageError(
+            "Storage object tree contains an invalid path.",
+          );
+        }
         visitedEntries += 1;
         if (visitedEntries > maxEntries) {
           throw new SupabaseStorageError(
@@ -147,6 +167,11 @@ export async function listSupabaseObjectPaths(
         }
 
         const objectPath = `${currentPrefix}/${object.name}`;
+        if (!objectPath.startsWith(`${prefix}/`)) {
+          throw new SupabaseStorageError(
+            "Storage object tree contains an invalid path.",
+          );
+        }
         // Supabase returns folder placeholders with a null id. Recurse so
         // tenant deletion also removes objects written by older nested-path
         // versions while retaining strict depth and entry bounds.

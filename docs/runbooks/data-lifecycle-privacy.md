@@ -20,6 +20,8 @@ setting before production use.
   It fails before the database deletion if Storage cleanup fails. A retry is
   safe because the removal calls are idempotent. Cleanup recursively covers
   legacy nested paths with an eight-level and 10,000-entry fail-closed bound.
+  Provider-returned names must remain single safe path segments under the
+  tenant prefix; malformed, absolute, or traversal-like paths fail closed.
   Migration `0079` orders pour events, list items, and receipt inventory ahead
   of the root cascade so their individual-wine history guards cannot strand the
   tenant database graph.
