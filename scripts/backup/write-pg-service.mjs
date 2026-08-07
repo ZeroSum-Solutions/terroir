@@ -39,17 +39,19 @@ export function createPgServiceConfig(
   return [
     `[${serviceName}]`,
     ...Object.entries(values).map(
-      ([key, value]) => `${key}=${quoteServiceValue(value)}`,
+      ([key, value]) => `${key}=${serviceValue(value)}`,
     ),
     "",
   ].join("\n");
 }
 
-function quoteServiceValue(value) {
-  if (/[\0\r\n]/u.test(value)) {
-    throw new Error("Database connection fields must be single-line.");
+function serviceValue(value) {
+  if (!/^[A-Za-z0-9._:/+=@-]+$/u.test(value)) {
+    throw new Error(
+      "Database connection fields must use service-file-safe characters.",
+    );
   }
-  return `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
+  return value;
 }
 
 export function writePgServiceFile({

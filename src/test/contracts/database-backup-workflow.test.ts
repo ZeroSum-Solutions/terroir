@@ -90,18 +90,23 @@ describe("database backup workflow", () => {
     ).toThrow(/custom_app/u);
   });
 
-  it("writes a decoded, quoted libpq service without URL query drift", async () => {
+  it("writes a libpq service with safe raw INI values and no URL query drift", async () => {
     const { createPgServiceConfig } =
       await loadScript("write-pg-service");
     const config = createPgServiceConfig(
-      "postgresql://backup:p%40ss%27word@db.example.test:5432/postgres",
+      "postgresql://backup:p%40ss-word@db.example.test:5432/postgres",
     );
 
     expect(config).toContain("[terroir_backup]");
-    expect(config).toContain("host='db.example.test'");
-    expect(config).toContain("user='backup'");
-    expect(config).toContain("password='p@ss\\'word'");
-    expect(config).toContain("sslmode='require'");
+    expect(config).toContain("host=db.example.test");
+    expect(config).toContain("user=backup");
+    expect(config).toContain("password=p@ss-word");
+    expect(config).toContain("sslmode=require");
+    expect(() =>
+      createPgServiceConfig(
+        "postgresql://backup:p%27ssword@db.example.test/postgres",
+      ),
+    ).toThrow(/service-file-safe/u);
     expect(() =>
       createPgServiceConfig(
         "postgresql://backup:password@db.example.test/postgres?sslmode=disable",
@@ -149,7 +154,8 @@ describe("database backup workflow", () => {
     );
 
     expect(sql).toContain("alter role terroir_backup");
-    expect(sql).toContain("nosuperuser");
+    expect(sql).toContain("and rolsuper");
+    expect(sql).toContain("must never be a superuser");
     expect(sql).toContain("nocreatedb");
     expect(sql).toContain("nocreaterole");
     expect(sql).toContain("bypassrls");

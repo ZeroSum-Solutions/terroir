@@ -20,13 +20,21 @@ begin
   ) then
     create role terroir_backup;
   end if;
+
+  if exists (
+    select 1
+    from pg_catalog.pg_roles
+    where rolname = 'terroir_backup'
+      and rolsuper
+  ) then
+    raise exception 'terroir_backup must never be a superuser';
+  end if;
 end
 $provision$;
 
 alter role terroir_backup
   with login
        password ${sqlLiteral(password)}
-       nosuperuser
        nocreatedb
        nocreaterole
        inherit
