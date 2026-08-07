@@ -54,11 +54,19 @@ function deleteRequest(key = KEY) {
   });
 }
 
-function allowRole(rpc: ReturnType<typeof vi.fn>, from = vi.fn()) {
+function allowRole(
+  rpc: ReturnType<typeof vi.fn>,
+  from = vi.fn(),
+  storage = {
+    from: vi.fn(() => ({
+      remove: vi.fn().mockResolvedValue({ data: [], error: null }),
+    })),
+  },
+) {
   auth.requireRole.mockResolvedValue({
     restaurantId: RESTAURANT_ID,
     role: "owner",
-    supabase: { rpc, from },
+    supabase: { rpc, from, storage },
   });
   return from;
 }

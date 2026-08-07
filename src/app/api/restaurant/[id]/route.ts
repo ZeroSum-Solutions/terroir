@@ -16,6 +16,10 @@ import {
   writeActiveRestaurantResponseCookie,
 } from "@/lib/api/active-restaurant";
 import { resolveActiveMembership } from "@/lib/api/resolve-active-membership";
+import {
+  PrivacyStorageCleanupError,
+  removeTenantStorageObjects,
+} from "@/domains/privacy/storage-cleanup-service";
 import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
@@ -209,6 +213,20 @@ async function deleteRestaurant(
   // commands still have to match the active restaurant and owner role inside
   // the same transaction as the delete.
   const activeMembership = await resolveActiveMembership(supabase, user.id);
+  if (
+    activeMembership?.restaurantId === id &&
+    activeMembership.role === "owner"
+  ) {
+    try {
+      await removeTenantStorageObjects({ supabase, restaurantId: id });
+    } catch (error) {
+      if (error instanceof PrivacyStorageCleanupError) {
+        captureDeleteRestaurantError(error, "storage-cleanup");
+        return Errors.internal("Failed to remove restaurant storage.");
+      }
+      throw error;
+    }
+  }
   const keyedArgs = key
     ? {
         p_idempotency_key: key,

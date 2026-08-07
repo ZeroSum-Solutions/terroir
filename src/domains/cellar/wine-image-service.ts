@@ -1,7 +1,8 @@
 import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  getSupabasePublicUrl,
+  createSupabaseSignedUrl,
+  createSupabaseSignedUrls,
   removeSupabaseObjects,
   SupabaseStorageError,
   uploadSupabaseObject,
@@ -10,6 +11,7 @@ import type { Database } from "@/types/database";
 
 const WINE_IMAGE_BUCKET = "wine-images";
 const MAX_BYTES = 10 * 1024 * 1024;
+const SIGNED_URL_TTL_SECONDS = 300;
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 const EXT_BY_MIME: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -105,36 +107,30 @@ export async function uploadWineHeroImage(
     });
   } catch (error) {
     if (error instanceof SupabaseStorageError) {
-      console.error("wine image upload failed:", error.cause ?? error);
+      console.error("wine image upload failed.");
       Sentry.captureException(error.cause ?? error, {
         tags: { surface: "wines", phase: "upload-image" },
-        extra: { wineId, restaurantId, storagePath },
+        extra: { wineId, restaurantId },
       });
       throw new WineImageStorageError(error);
     }
     throw error;
   }
 
-  const publicUrl = getSupabasePublicUrl({
-    supabase,
-    bucket: WINE_IMAGE_BUCKET,
-    path: storagePath,
-  });
-
-  if (existingWine.hero_image_url !== publicUrl) {
+  if (existingWine.hero_image_url !== storagePath) {
     const { data: updatedWine, error: updateError } = await supabase
       .from("wines")
-      .update({ hero_image_url: publicUrl })
+      .update({ hero_image_url: storagePath })
       .eq("id", wineId)
       .eq("restaurant_id", restaurantId)
       .select("id")
       .maybeSingle();
 
     if (updateError) {
-      console.error("wine image URL update failed:", updateError);
+      console.error("wine image path update failed.");
       Sentry.captureException(updateError, {
         tags: { surface: "wines", phase: "update-image-url" },
-        extra: { wineId, restaurantId, publicUrl },
+        extra: { wineId, restaurantId },
       });
       await removeStoredImageBestEffort({ supabase, storagePath });
       throw new WineImagePersistenceError(
@@ -160,7 +156,18 @@ export async function uploadWineHeroImage(
     });
   }
 
-  return publicUrl;
+  const signedUrl = await createWineHeroImageSignedUrl({
+    supabase,
+    restaurantId,
+    wineId,
+    storagePath,
+  });
+  if (!signedUrl) {
+    throw new WineImageStorageError(
+      new Error("Canonical wine image path could not be signed."),
+    );
+  }
+  return signedUrl;
 }
 
 export async function deleteWineHeroImage(
@@ -179,7 +186,7 @@ export async function deleteWineHeroImage(
     .maybeSingle();
 
   if (updateError) {
-    console.error("wine image URL clear failed:", updateError);
+    console.error("wine image path clear failed.");
     Sentry.captureException(updateError, {
       tags: { surface: "wines", phase: "delete-image" },
       extra: { wineId, restaurantId },
@@ -203,6 +210,66 @@ export async function deleteWineHeroImage(
   }
 
   return null;
+}
+
+export async function createWineHeroImageSignedUrl(input: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  wineId: string;
+  storagePath: string | null;
+}): Promise<string | null> {
+  const { supabase, restaurantId, wineId, storagePath } = input;
+  if (!storagePath || !isWineImagePath(storagePath, restaurantId, wineId)) {
+    return null;
+  }
+
+  try {
+    return await createSupabaseSignedUrl({
+      supabase,
+      bucket: WINE_IMAGE_BUCKET,
+      path: storagePath,
+      expiresInSeconds: SIGNED_URL_TTL_SECONDS,
+    });
+  } catch (error) {
+    if (error instanceof SupabaseStorageError) {
+      throw new WineImageStorageError(error);
+    }
+    throw error;
+  }
+}
+
+export async function createWineHeroImageSignedUrls(input: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  images: Array<{ wineId: string; storagePath: string | null }>;
+}): Promise<Map<string, string>> {
+  const { supabase, restaurantId, images } = input;
+  const validImages = images.filter(
+    (image): image is { wineId: string; storagePath: string } =>
+      image.storagePath !== null &&
+      isWineImagePath(image.storagePath, restaurantId, image.wineId),
+  );
+  if (validImages.length === 0) return new Map();
+
+  try {
+    const signedUrlsByPath = await createSupabaseSignedUrls({
+      supabase,
+      bucket: WINE_IMAGE_BUCKET,
+      paths: validImages.map((image) => image.storagePath),
+      expiresInSeconds: SIGNED_URL_TTL_SECONDS,
+    });
+    return new Map(
+      validImages.flatMap((image) => {
+        const signedUrl = signedUrlsByPath.get(image.storagePath);
+        return signedUrl ? [[image.wineId, signedUrl] as const] : [];
+      }),
+    );
+  } catch (error) {
+    if (error instanceof SupabaseStorageError) {
+      throw new WineImageStorageError(error);
+    }
+    throw error;
+  }
 }
 
 async function assertWineExists(input: {
@@ -255,19 +322,32 @@ async function removeStoredImage(input: {
     });
   } catch (error) {
     if (error instanceof SupabaseStorageError) {
-      console.error("wine image cleanup failed:", error.cause ?? error);
+      console.error("wine image cleanup failed.");
       Sentry.captureException(error.cause ?? error, {
         tags: { surface: "wines", phase: input.phase },
         extra: {
           wineId: input.wineId,
           restaurantId: input.restaurantId,
-          storagePath: input.storagePath,
         },
       });
       throw new WineImageStorageError(error);
     }
     throw error;
   }
+}
+
+function isWineImagePath(
+  storagePath: string,
+  restaurantId: string,
+  wineId: string,
+): boolean {
+  return new RegExp(
+    `^${escapeRegex(restaurantId)}/${escapeRegex(wineId)}\\.(jpg|png|webp)$`,
+  ).test(storagePath);
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function hasExpectedImageSignature(mime: string, body: Buffer): boolean {

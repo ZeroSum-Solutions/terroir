@@ -59,6 +59,7 @@ function makeSupabase(options: {
     data: CellarDeleteRow[] | null;
     error: { code?: string; message?: string } | null;
   };
+  storageRemoveError?: { message: string } | null;
 } = {}) {
   const claimRow = options.claimRow ?? {
     outcome: "claimed",
@@ -67,6 +68,11 @@ function makeSupabase(options: {
     response_headers: null,
   };
   const calls: Array<{ method: string; args: unknown[] }> = [];
+  const remove = vi.fn(async () => ({
+    data: [],
+    error: options.storageRemoveError ?? null,
+  }));
+  const storageFrom = vi.fn(() => ({ remove }));
   const rpc = vi.fn(async (operation: string) => {
     if (operation === "claim_api_idempotency") {
       return { data: [claimRow], error: null };
@@ -158,7 +164,13 @@ function makeSupabase(options: {
     }
     throw new Error(`Unexpected table: ${table}`);
   });
-  return { from, calls, rpc };
+  return {
+    from,
+    calls,
+    rpc,
+    storage: { from: storageFrom },
+    remove,
+  };
 }
 
 function allow(supabase: ReturnType<typeof makeSupabase>) {
@@ -603,6 +615,11 @@ describe("DELETE /api/cellar/[id]", () => {
         p_wine_id: WINE_ID,
       }),
     );
+    expect(supabase.remove).toHaveBeenCalledWith([
+      `${RESTAURANT_ID}/${WINE_ID}.jpg`,
+      `${RESTAURANT_ID}/${WINE_ID}.png`,
+      `${RESTAURANT_ID}/${WINE_ID}.webp`,
+    ]);
   });
 
   it("returns 500 when the dedicated deletion RPC provider fails", async () => {

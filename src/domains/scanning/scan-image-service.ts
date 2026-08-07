@@ -7,7 +7,7 @@ import {
 import type { Database } from "@/types/database";
 
 const INVOICE_IMAGE_BUCKET = "invoice-images";
-const SIGNED_URL_TTL_SECONDS = 3600;
+const SIGNED_URL_TTL_SECONDS = 300;
 
 export class ScanImageNotFoundError extends Error {
   constructor() {
@@ -61,7 +61,7 @@ export async function getScanImageUrl(
     });
   } catch (error) {
     if (error instanceof SupabaseStorageError) {
-      console.error("fetch-storage failed:", error.cause ?? error);
+      console.error("fetch-storage failed.");
       Sentry.captureException(error.cause ?? error, {
         tags: { surface: "scanner", phase: "fetch-storage" },
         extra: { scan_id: scanId },

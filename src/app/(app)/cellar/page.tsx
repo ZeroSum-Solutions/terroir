@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
 import { loadCellarGridSnapshot } from "@/lib/cellar/grid";
 import { parseCellarSections } from "@/lib/cellar/sections";
+import { createWineHeroImageSignedUrls } from "@/domains/cellar/wine-image-service";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import { CellarShell } from "./cellar-shell";
 import type { CellarWineRow } from "./types";
@@ -78,6 +79,14 @@ export default async function CellarPage() {
     });
   if (inventoryWineIdError) throw inventoryWineIdError;
   const inventoryWineIds = new Set(inventoryWineIdRows ?? []);
+  const heroImageUrls = await createWineHeroImageSignedUrls({
+    supabase,
+    restaurantId,
+    images: (wineRows ?? []).map((wine) => ({
+      wineId: wine.id,
+      storagePath: wine.hero_image_url,
+    })),
+  }).catch(() => new Map<string, string>());
 
   // BND-040 — pull current bottle/glass prices from wine_list_items so
   // the drawer Pricing section can show actual pricing alongside retail
@@ -185,7 +194,7 @@ export default async function CellarPage() {
       is_eightysixed: w.is_eightysixed ?? false,
       eightysixed_at: w.eightysixed_at,
       tasting_notes: w.tasting_notes ?? null,
-      hero_image_url: w.hero_image_url ?? null,
+      hero_image_url: heroImageUrls.get(w.id) ?? null,
       sealed_count: inv.sealed,
       has_inventory_record: inventoryWineIds.has(w.id),
       bin_location: inv.bin,

@@ -87,7 +87,7 @@ describe("GET /api/scans/[id]/image", () => {
       url: "https://signed.example/scan-1",
     });
     expect(storageFrom).toHaveBeenCalledWith("invoice-images");
-    expect(createSignedUrl).toHaveBeenCalledWith(`r-A/${SCAN_ID}.png`, 3600);
+    expect(createSignedUrl).toHaveBeenCalledWith(`r-A/${SCAN_ID}.png`, 300);
   });
 
   it("404s when the scan has no image path", async () => {

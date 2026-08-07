@@ -128,13 +128,18 @@ function makeSupabaseForDelete(
   },
   rpcError: unknown = null,
 ) {
+  const list = vi.fn().mockResolvedValue({ data: [], error: null });
+  const remove = vi.fn().mockResolvedValue({ data: [], error: null });
+  const storageFrom = vi.fn(() => ({ list, remove }));
   const rpc = vi.fn().mockResolvedValue({
     data: rpcError ? null : [row],
     error: rpcError,
   });
   return {
     rpc,
-    supabase: { rpc },
+    list,
+    remove,
+    supabase: { rpc, storage: { from: storageFrom } },
   };
 }
 
@@ -730,6 +735,11 @@ describe("DELETE /api/restaurant/[id]", () => {
         p_active_restaurant_id: R,
       },
     );
+    expect(db.list).toHaveBeenCalledWith(R, {
+      limit: 100,
+      offset: 0,
+      sortBy: { column: "name", order: "asc" },
+    });
   });
 
   it("binds a keyed delete to its full validated parameter identity", async () => {

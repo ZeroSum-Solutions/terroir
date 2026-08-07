@@ -31,13 +31,16 @@ function makeSupabase(opts: {
   const upload = vi.fn(() =>
     Promise.resolve({ data: null, error: opts.uploadError ?? null }),
   );
-  const getPublicUrl = vi.fn((path: string) => ({
-    data: { publicUrl: `https://cdn.example/${path}` },
-  }));
+  const createSignedUrl = vi.fn((path: string, expiresIn: number) =>
+    Promise.resolve({
+      data: { signedUrl: `https://signed.example/${path}?expires=${expiresIn}` },
+      error: null,
+    }),
+  );
   const remove = vi.fn(() =>
     Promise.resolve({ data: null, error: opts.removeError ?? null }),
   );
-  const storageFrom = vi.fn(() => ({ upload, getPublicUrl, remove }));
+  const storageFrom = vi.fn(() => ({ upload, createSignedUrl, remove }));
   const updates: unknown[] = [];
   const from = vi.fn((table: string) => {
     const selectFilters: Array<[string, string]> = [];
@@ -86,7 +89,7 @@ function makeSupabase(opts: {
           (async () => ({ data: null, error: new Error("unexpected RPC") })),
       ),
     },
-    getPublicUrl,
+    createSignedUrl,
     remove,
     storageFrom,
     updates,
@@ -178,8 +181,8 @@ describe("POST /api/wines/[id]/image", () => {
     expect(res.status).toBe(400);
   });
 
-  it("uploads the hero image and persists the public URL", async () => {
-    const { supabase, upload, getPublicUrl, remove, updates } = makeSupabase({
+  it("uploads the hero image, persists its private path, and returns a short-lived signed URL", async () => {
+    const { supabase, upload, createSignedUrl, remove, updates } = makeSupabase({
       wine: { id: WINE_ID },
     });
     mockRequireRole.mockResolvedValue({
@@ -193,7 +196,7 @@ describe("POST /api/wines/[id]/image", () => {
 
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({
-      hero_image_url: `https://cdn.example/r-A/${WINE_ID}.png`,
+      hero_image_url: `https://signed.example/r-A/${WINE_ID}.png?expires=300`,
     });
     expect(upload).toHaveBeenCalledWith(
       `r-A/${WINE_ID}.png`,
@@ -203,10 +206,10 @@ describe("POST /api/wines/[id]/image", () => {
       upsert: true,
       },
     );
-    expect(getPublicUrl).toHaveBeenCalledWith(`r-A/${WINE_ID}.png`);
+    expect(createSignedUrl).toHaveBeenCalledWith(`r-A/${WINE_ID}.png`, 300);
     expect(updates).toContainEqual({
       payload: {
-        hero_image_url: `https://cdn.example/r-A/${WINE_ID}.png`,
+        hero_image_url: `r-A/${WINE_ID}.png`,
       },
       filters: [
         ["id", WINE_ID],
@@ -219,9 +222,10 @@ describe("POST /api/wines/[id]/image", () => {
   });
 
   it("treats an upload to the already-persisted object path as idempotent", async () => {
-    const publicUrl = `https://cdn.example/r-A/${WINE_ID}.png`;
+    const storagePath = `r-A/${WINE_ID}.png`;
+    const signedUrl = `https://signed.example/${storagePath}?expires=300`;
     const { supabase, updates } = makeSupabase({
-      wine: { id: WINE_ID, hero_image_url: publicUrl },
+      wine: { id: WINE_ID, hero_image_url: storagePath },
       updateError: { message: "write should not run" },
     });
     mockRequireRole.mockResolvedValue({
@@ -235,7 +239,7 @@ describe("POST /api/wines/[id]/image", () => {
 
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({
-      hero_image_url: publicUrl,
+      hero_image_url: signedUrl,
     });
     expect(updates).toHaveLength(0);
   });
@@ -247,7 +251,7 @@ describe("POST /api/wines/[id]/image", () => {
       { id: WINE_ID, file: { size: body.byteLength, type: "image/png" } },
       new Uint8Array(body),
     );
-    const publicUrl = `https://cdn.example/r-A/${WINE_ID}.png`;
+    const signedUrl = `https://signed.example/r-A/${WINE_ID}.png?expires=300`;
     const { supabase, upload } = makeSupabase({
       wine: { id: WINE_ID },
       rpcImplementation: async (name, args) => {
@@ -265,7 +269,7 @@ describe("POST /api/wines/[id]/image", () => {
                 response_body:
                   upload.mock.calls.length === 0
                     ? null
-                    : { hero_image_url: publicUrl },
+                    : { hero_image_url: signedUrl },
               },
             ],
             error: null,
@@ -295,7 +299,7 @@ describe("POST /api/wines/[id]/image", () => {
 
     expect(first.headers.get("Idempotency-Replayed")).toBe("false");
     expect(replay.headers.get("Idempotency-Replayed")).toBe("true");
-    await expect(replay.json()).resolves.toEqual({ hero_image_url: publicUrl });
+    await expect(replay.json()).resolves.toEqual({ hero_image_url: signedUrl });
     expect(upload).toHaveBeenCalledTimes(1);
   });
 

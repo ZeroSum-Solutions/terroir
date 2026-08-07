@@ -1,0 +1,9 @@
+-- TER-024 safe rollback boundary.
+--
+-- This migration intentionally has no executable reverse. Re-exposing either
+-- object bucket as public, restoring broad prefix-only Storage policies, or
+-- restoring deleted Auth-user identifiers would create a data-disclosure or
+-- integrity regression. If an application rollback is necessary, deploy code
+-- that continues to consume canonical private paths and signed URLs, then make
+-- any narrowly scoped schema change in a new forward migration after a staged
+-- backup/restore rehearsal. See docs/runbooks/data-lifecycle-privacy.md.

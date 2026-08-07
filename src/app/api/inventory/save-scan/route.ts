@@ -179,7 +179,7 @@ async function saveScanOnce(opts: {
     .single();
 
   if (scanInsertError || !invoiceScan) {
-    console.error("invoice_scans insert failed:", scanInsertError);
+    console.error("invoice_scans insert failed.");
     Sentry.captureException(scanInsertError ?? new Error("invoiceScan null without error"), {
       tags: { surface: "save-scan", phase: "invoice_scans-insert" },
       extra: { restaurantId, itemCount: scan.items.length },
@@ -216,7 +216,7 @@ async function saveScanOnce(opts: {
           upsert: true,
         });
       if (uploadError) {
-        console.error("Invoice image upload failed:", uploadError);
+        console.error("Invoice image upload failed.");
         Sentry.captureException(uploadError, {
           tags: { surface: "save-scan", phase: "storage-upload" },
           extra: { scanId, contentType: file.type },
@@ -227,8 +227,8 @@ async function saveScanOnce(opts: {
           .update({ raw_image_path: storagePath })
           .eq("id", scanId);
       }
-    } catch (err) {
-      console.error("Invoice image upload error:", err);
+    } catch {
+      console.error("Invoice image upload failed.");
     }
   }
 

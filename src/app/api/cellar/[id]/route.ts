@@ -11,6 +11,10 @@ import {
 } from "@/lib/api/idempotency";
 import { apiResultResponse } from "@/lib/api/result-response";
 import { parseJson, parseParams } from "@/lib/api/validation";
+import {
+  PrivacyStorageCleanupError,
+  removeWineImageObjects,
+} from "@/domains/privacy/storage-cleanup-service";
 import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
@@ -230,14 +234,44 @@ export async function DELETE(
         : Errors.internal();
     }
 
-    return apiResultResponse({
+    const response = apiResultResponse({
       status: result.response_status,
       body: result.response_body,
       ...(cellarDeleteHeaders(result, rawKey !== null)
         ? { headers: cellarDeleteHeaders(result, rawKey !== null)! }
         : {}),
     });
+    if (requiresWineImageCleanup(result)) {
+      try {
+        await removeWineImageObjects({ supabase, restaurantId, wineId });
+      } catch (cleanupError) {
+        if (cleanupError instanceof PrivacyStorageCleanupError) {
+          captureCellarDeleteError(
+            cleanupError,
+            "storage-cleanup",
+            restaurantId,
+            wineId,
+          );
+          return Errors.internal("Wine image cleanup failed.");
+        }
+        throw cleanupError;
+      }
+    }
+    return response;
   });
+}
+
+function requiresWineImageCleanup(result: CellarDeleteResult): boolean {
+  if (result.outcome === "not_found" && result.response_status === 404) {
+    // An earlier storage attempt can have failed after the RPC removed the row.
+    // Removing this deterministic tenant path makes a keyless retry converge too.
+    return true;
+  }
+  return (
+    result.response_status === 200 &&
+    isRecord(result.response_body) &&
+    result.response_body.deleted === true
+  );
 }
 
 function firstCellarDeleteResult(data: unknown): CellarDeleteResult | null {

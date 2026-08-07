@@ -32,6 +32,38 @@ export async function createSupabaseSignedUrl(
   return data.signedUrl;
 }
 
+export async function createSupabaseSignedUrls(
+  input: Omit<StorageInput, "path"> & {
+    paths: string[];
+    expiresInSeconds: number;
+  },
+): Promise<Map<string, string>> {
+  const { supabase, bucket, paths, expiresInSeconds } = input;
+  const signedUrls = new Map<string, string>();
+
+  // Limit each signing request so large cellars do not create one request per
+  // image or exceed the provider's bulk-operation ceiling.
+  for (let offset = 0; offset < paths.length; offset += 100) {
+    const { data, error } = await supabase
+      .storage
+      .from(bucket)
+      .createSignedUrls(paths.slice(offset, offset + 100), expiresInSeconds);
+
+    if (error) {
+      throw new SupabaseStorageError("Failed to create signed URLs.", {
+        cause: error,
+      });
+    }
+    for (const entry of data ?? []) {
+      if (entry.path && entry.signedUrl) {
+        signedUrls.set(entry.path, entry.signedUrl);
+      }
+    }
+  }
+
+  return signedUrls;
+}
+
 export async function uploadSupabaseObject(
   input: StorageInput & {
     body: Buffer | ArrayBuffer | Blob;
@@ -52,21 +84,51 @@ export async function uploadSupabaseObject(
   }
 }
 
-export function getSupabasePublicUrl(input: StorageInput): string {
-  const { supabase, bucket, path } = input;
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  return data?.publicUrl ?? "";
-}
-
 export async function removeSupabaseObjects(
   input: Omit<StorageInput, "path"> & { paths: string[] },
 ): Promise<void> {
   const { supabase, bucket, paths } = input;
-  const { error } = await supabase.storage.from(bucket).remove(paths);
+  // Keep deletes below the provider's bulk-operation ceiling. This makes
+  // tenant cleanup safe even when a prefix has more than one list page.
+  for (let offset = 0; offset < paths.length; offset += 100) {
+    const { error } = await supabase
+      .storage
+      .from(bucket)
+      .remove(paths.slice(offset, offset + 100));
 
-  if (error) {
-    throw new SupabaseStorageError("Failed to remove objects.", {
-      cause: error,
+    if (error) {
+      throw new SupabaseStorageError("Failed to remove objects.", {
+        cause: error,
+      });
+    }
+  }
+}
+
+export async function listSupabaseObjectPaths(
+  input: Omit<StorageInput, "path"> & { prefix: string },
+): Promise<string[]> {
+  const { supabase, bucket, prefix } = input;
+  const paths: string[] = [];
+  const pageSize = 100;
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await supabase.storage.from(bucket).list(prefix, {
+      limit: pageSize,
+      offset,
+      sortBy: { column: "name", order: "asc" },
     });
+    if (error) {
+      throw new SupabaseStorageError("Failed to list objects.", {
+        cause: error,
+      });
+    }
+
+    const page = data ?? [];
+    for (const object of page) {
+      if (object.name) paths.push(`${prefix}/${object.name}`);
+    }
+    if (page.length < pageSize) return paths;
+    offset += pageSize;
   }
 }

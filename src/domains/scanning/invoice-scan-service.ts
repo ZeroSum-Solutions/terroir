@@ -82,7 +82,7 @@ export async function processInvoiceScanOnce(
       .single();
 
     if (invErr || !invScan) {
-      console.error("invoice_scans insert failed:", invErr);
+      console.error("invoice_scans insert failed.");
       return { status: 500, body: { error: "Failed to create scan record." } };
     }
     scanId = invScan.id;
