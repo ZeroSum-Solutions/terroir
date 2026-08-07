@@ -4,12 +4,15 @@ import { isDeepStrictEqual } from "node:util";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
+import ts from "typescript";
 import { createInventory, discoverRouteOperations, operationIdFor, validateInventoryShape } from "./generate-api-route-inventory.mjs";
 const FILES = {
   inventory: "docs/api-route-inventory.json", inventorySchema: "docs/api-route-inventory.schema.json",
   reconciliation: "docs/api-route-reconciliation.json", reconciliationSchema: "docs/api-route-reconciliation.schema.json",
   ledger: "docs/feature-ledger.json",
   plan: "docs/plans/2026-07-20-terroir-completion-spec.md",
+  authorization: "src/lib/auth/api-authorization.ts",
+  abusePolicy: "src/lib/auth/api-abuse-policy.ts",
 };
 const CROSS_CUTTING = [
   ["TER-CF-212", "write_operations", "TER-020B"], ["TER-CF-213", "all_operations", "TER-020B"],
@@ -20,6 +23,141 @@ const PLAN_LEAVES = ["TER-020Aa", "TER-020Ab", "TER-020Ac", "TER-020B", "TER-020
 const readJson = (root, file) => JSON.parse(fs.readFileSync(path.join(root, file), "utf8"));
 const ids = (items) => items.map((item) => item.operationId);
 const same = (left, right) => isDeepStrictEqual(left, right);
+
+function parseSource(sourceText, file) {
+  return ts.createSourceFile(
+    file,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+}
+
+function variableInitializer(source, name) {
+  for (const statement of source.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === name) {
+        return declaration.initializer ?? null;
+      }
+    }
+  }
+  return null;
+}
+
+function unwrapExpression(expression) {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isSatisfiesExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function propertyName(property) {
+  if (ts.isStringLiteral(property.name) || ts.isNoSubstitutionTemplateLiteral(property.name)) {
+    return property.name.text;
+  }
+  return ts.isIdentifier(property.name) ? property.name.text : null;
+}
+
+export function registeredObjectKeys(sourceText, file, variableName) {
+  const initial = variableInitializer(parseSource(sourceText, file), variableName);
+  const initializer = initial && unwrapExpression(initial);
+  if (!initializer || !ts.isObjectLiteralExpression(initializer)) {
+    return { keys: [], errors: [`${file}: ${variableName} must be an object literal`] };
+  }
+  const keys = [];
+  const errors = [];
+  for (const property of initializer.properties) {
+    if (!ts.isPropertyAssignment(property) || !property.name) {
+      errors.push(`${file}: ${variableName} contains an unsupported property`);
+      continue;
+    }
+    const key = propertyName(property);
+    if (!key) {
+      errors.push(`${file}: ${variableName} contains a non-literal property key`);
+      continue;
+    }
+    keys.push(key);
+  }
+  return { keys, errors };
+}
+
+export function registeredStringArray(sourceText, file, variableName) {
+  const initial = variableInitializer(parseSource(sourceText, file), variableName);
+  const initializer = initial && unwrapExpression(initial);
+  if (!initializer || !ts.isArrayLiteralExpression(initializer)) {
+    return { values: [], errors: [`${file}: ${variableName} must be a string array literal`] };
+  }
+  const values = [];
+  const errors = [];
+  for (const element of initializer.elements) {
+    if (ts.isStringLiteral(element) || ts.isNoSubstitutionTemplateLiteral(element)) {
+      values.push(element.text);
+    } else {
+      errors.push(`${file}: ${variableName} contains a non-string entry`);
+    }
+  }
+  return { values, errors };
+}
+
+function compareRegistration(expected, registered, missingLabel, staleLabel) {
+  const errors = [];
+  const expectedSet = new Set(expected);
+  const registeredSet = new Set(registered);
+  for (const operationId of [...expectedSet].sort()) {
+    if (!registeredSet.has(operationId)) errors.push(`${missingLabel}: ${operationId}`);
+  }
+  for (const operationId of [...registeredSet].sort()) {
+    if (!expectedSet.has(operationId)) errors.push(`${staleLabel}: ${operationId}`);
+  }
+  if (registeredSet.size !== registered.length) {
+    errors.push(`${staleLabel}: duplicate operation ID`);
+  }
+  return errors;
+}
+
+/**
+ * Reject source-discovered handlers that have not been explicitly registered
+ * in the authorization contract. Planned operations stay in the abuse-policy
+ * manifest until their handler exists, so the same gate catches stale plans.
+ */
+export function verifyRouteRegistration(projectRoot, inventory) {
+  const authorizationPath = path.join(projectRoot, FILES.authorization);
+  const abusePolicyPath = path.join(projectRoot, FILES.abusePolicy);
+  const authorization = registeredObjectKeys(
+    fs.readFileSync(authorizationPath, "utf8"),
+    FILES.authorization,
+    "API_AUTHORIZATION",
+  );
+  const planned = registeredStringArray(
+    fs.readFileSync(abusePolicyPath, "utf8"),
+    FILES.abusePolicy,
+    "PLANNED_API_OPERATION_IDS",
+  );
+  return [
+    ...authorization.errors,
+    ...planned.errors,
+    ...compareRegistration(
+      ids(inventory.discoveredOperations),
+      authorization.keys,
+      "unregistered source API operation",
+      "stale API authorization registration",
+    ),
+    ...compareRegistration(
+      ids(inventory.plannedOperations),
+      planned.values,
+      "unregistered planned API operation",
+      "stale planned API registration",
+    ),
+  ];
+}
 function uniqueMap(items, key, label, errors) {
   const result = new Map();
   for (const item of items) {
@@ -354,6 +492,7 @@ export function verifyApiContract(projectRoot = process.cwd()) {
     if (!inventoryErrors.length) {
       errors.push(...verifyInventoryParity(projectRoot, inventory));
       errors.push(...verifyApiRouteSafety(projectRoot, inventory));
+      errors.push(...verifyRouteRegistration(projectRoot, inventory));
     }
     if (!inventoryErrors.length && !reconciliationErrors.length) {
       errors.push(

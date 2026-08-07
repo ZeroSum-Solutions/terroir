@@ -12,6 +12,8 @@ import { CAPABILITIES, CAPABILITY_ROLES } from "./capabilities";
 type Inventory = {
   discoveredOperations: Array<{
     operationId: string;
+    method: string;
+    path: string;
     source: { file: string; localName: string };
   }>;
 };
@@ -24,6 +26,18 @@ const inventory = JSON.parse(
 ) as Inventory;
 
 describe("API authorization manifest", () => {
+  it("binds every registered contract to its inventoried method and path", () => {
+    for (const operation of inventory.discoveredOperations) {
+      expect(operation.operationId).toBe(
+        `api:${operation.method}:${operation.path
+          .replace(/\[\[\.\.\.[^\]]+\]\]/g, "{optional-catchall}")
+          .replace(/\[\.\.\.[^\]]+\]/g, "{catchall}")
+          .replace(/\[[^\]]+\]/g, "{param}")}`,
+      );
+      expect(API_AUTHORIZATION).toHaveProperty(operation.operationId);
+    }
+  });
+
   it("classifies every discovered operation with no stale entries", () => {
     const discoveredIds = inventory.discoveredOperations
       .map(({ operationId }) => operationId)
@@ -43,6 +57,26 @@ describe("API authorization manifest", () => {
       "api:GET:/api/dev-login",
       "api:GET:/api/health",
     ]);
+  });
+
+  it("keeps health and dev-login as explicit public contracts", () => {
+    const health = readFileSync(
+      resolve(process.cwd(), "src/app/api/health/route.ts"),
+      "utf8",
+    );
+    const devLogin = readFileSync(
+      resolve(process.cwd(), "src/app/api/dev-login/route.ts"),
+      "utf8",
+    );
+
+    expect(health).toContain('export const runtime = "nodejs"');
+    expect(health).toContain('export const dynamic = "force-dynamic"');
+    expect(health).toContain('"Cache-Control": "no-store"');
+    expect(health).toContain("status: 200");
+    expect(devLogin).toContain('export const runtime = "nodejs"');
+    expect(devLogin).toContain("isValidTemporaryBypassToken(");
+    expect(devLogin).toContain('new NextResponse("Not found",');
+    expect(devLogin).toContain("status: 404");
   });
 
   it("requires a session without an existing membership only for invite acceptance", () => {
@@ -122,6 +156,13 @@ describe("API authorization manifest", () => {
         aligned || explicitRestaurantAuth,
         `${operation.operationId}: ${JSON.stringify(calls)}`,
       ).toBe(true);
+
+      if (policy.access === "membership" && !explicitRestaurantAuth) {
+        expect(
+          calls.some((call) => call.helper !== "requireAuth"),
+          `${operation.operationId} must resolve an active restaurant membership`,
+        ).toBe(true);
+      }
     }
   });
 

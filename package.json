@@ -12,7 +12,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:contracts": "vitest run src/test/contracts src/lib/api/errors.contract.test.ts src/lib/api/validation.contract.test.ts src/lib/api/handler.contract.test.ts",
+    "test:contracts": "vitest run src/test/contracts src/lib/api/errors.contract.test.ts src/lib/api/validation.contract.test.ts src/lib/api/handler.contract.test.ts src/lib/auth/api-authorization.test.ts src/lib/api-route-inventory/verify-api-contract.test.ts",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "verify:api-contract": "node scripts/verify-api-contract.mjs",

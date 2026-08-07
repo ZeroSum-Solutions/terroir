@@ -16,6 +16,7 @@ import {
   validateReconciliationSemantics,
   verifyApiContract,
   verifyInventoryParity,
+  verifyRouteRegistration,
 } from "../../../scripts/verify-api-contract.mjs";
 
 interface ContractDocuments {
@@ -276,6 +277,59 @@ describe("TER-020B route-boundary contract", () => {
         ],
       }),
     ).toEqual([]);
+  });
+});
+
+describe("route registration gate", () => {
+  it("rejects source handlers that are not registered in the authorization contract", () => {
+    const root = fixtureRoot();
+    const inventory = fixtureInventory();
+    writeFixture(
+      root,
+      "src/lib/auth/api-authorization.ts",
+      'export const API_AUTHORIZATION = { "api:GET:/api/health": {} };',
+    );
+    writeFixture(
+      root,
+      "src/lib/auth/api-abuse-policy.ts",
+      'export const PLANNED_API_OPERATION_IDS = ["api:POST:/api/wines"];',
+    );
+    inventory.discoveredOperations.push({
+      operationId: "api:POST:/api/health",
+      method: "POST",
+      path: "/api/health",
+      source: {
+        file: "src/app/api/health/route.ts",
+        exportKind: "function-declaration",
+        localName: "POST",
+        moduleSpecifier: null,
+      },
+    });
+
+    expect(verifyRouteRegistration(root, inventory)).toEqual([
+      "unregistered source API operation: api:POST:/api/health",
+    ]);
+  });
+
+  it("rejects stale authorization and planned-operation registrations", () => {
+    const root = fixtureRoot();
+    const inventory = fixtureInventory();
+    writeFixture(
+      root,
+      "src/lib/auth/api-authorization.ts",
+      'export const API_AUTHORIZATION = { "api:GET:/api/health": {}, "api:POST:/api/stale": {} };',
+    );
+    writeFixture(
+      root,
+      "src/lib/auth/api-abuse-policy.ts",
+      'export const PLANNED_API_OPERATION_IDS = ["api:POST:/api/stale"];',
+    );
+
+    expect(verifyRouteRegistration(root, inventory)).toEqual([
+      "stale API authorization registration: api:POST:/api/stale",
+      "unregistered planned API operation: api:POST:/api/wines",
+      "stale planned API registration: api:POST:/api/stale",
+    ]);
   });
 });
 
