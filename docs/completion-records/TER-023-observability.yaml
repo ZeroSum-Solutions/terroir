@@ -1,25 +1,29 @@
 spec_id: TER-023
-commit: 1189876
-status: partial
-scope: Truthful deployment configuration, public liveness with readiness state, privacy-safe observability primitives, initial operational metrics, and an alert/runbook contract.
+implementation_commit: eaba9a4
+status: source_complete_runtime_evidence_pending
+scope: Centralized fail-fast configuration, truthful public readiness, privacy-safe telemetry, exact-destination non-production alert drill, and incident response policy.
 tests:
-  focused: src/lib/config/runtime.test.ts, src/lib/observability/telemetry.test.ts, src/lib/observability/sentry-scrub.test.ts, src/app/api/health/route.test.ts
-  full: pnpm run test (134 files, 1392 passed); pnpm run test:contracts (6 files, 50 passed)
-  gates: pnpm exec tsc --noEmit; pnpm run lint; pnpm run verify:api-contract; pnpm run verify:feature-ledger; pnpm run snapshot:check; pnpm run downs:check; pnpm run build
+  focused: Runtime schema, health/drill guard, drill CLI destination safety, structured telemetry, Sentry scrubbing/replay privacy, and sample-rate parsing.
+  full: pnpm test; pnpm test:contracts; pnpm exec tsc --noEmit; pnpm lint; pnpm build.
+  inventories: pnpm verify:api-contract; pnpm verify:feature-ledger; pnpm verify:ui-controls.
+  migrations: pnpm snapshot:check; pnpm downs:check; no migration added or edited.
 deployment:
   executed: false
-  validation: pnpm validate:env rejects missing core variables and passed with harmless placeholder values only.
+  configuration_gate: Railway build and application start both run the same names-only Zod validation.
+  local_alert_drill: passed against a local Next server; response and structured event contained the required redacted envelope.
+  staging_alert_delivery: pending deployment, alert-rule configuration, delivered-notification evidence, and dashboard screenshot.
 security:
-  public_health: preserves HTTP 200 liveness and emits names-only degraded details.
-  logging: structured logs redact PII and secret-shaped fields; Sentry removes request, user, context, error-message, and exception-value payloads.
-  secret_scan: project documentation verifier passed with no secret markers.
+  public_health: HTTP 200 liveness remains stable; readiness and dependency states are names-only and no billed provider is called.
+  drill: Requires a 32-to-256-character token digest plus explicit staging enablement; production refuses it and the CLI exports only to localhost or the exact Terroir staging origin.
+  logging: Free text, PII, request data, credentials, invoice/OCR content, frame locals, replay text/inputs/media, and replay network bodies are suppressed.
+  export_policy: Only Railway project logs, the configured Terroir Sentry project, and the exact Terroir staging drill endpoint are allowlisted.
 evidence:
-  - Railway build command validates core configuration before Next build.
-  - Health reports readiness separately from liveness and never calls billed providers.
-  - Auth failures, scan latency/errors, list generation, and reconciliation emit metric events with safe correlation IDs.
-  - docs/operations/observability.md defines thresholds, required alert payload fields, and incident triage.
+  - Missing or malformed required values fail before build/start traffic without printing values.
+  - Optional integrations are configured or degraded; unavailable email, worker, and storage probes are never reported healthy.
+  - Auth failures, scan latency/errors, list generation, and reconciliation emit bounded metric events with opaque correlation IDs.
+  - Alert thresholds, payload fields, destination policy, drill procedure, and incident triage are documented in docs/operations/observability.md.
 known_limits:
-  - No staging deployment, forced failure drill, dashboard screenshot, or alert-notification delivery was authorized or run.
-  - The repository has no worker or email-delivery provider, so worker and email remain explicitly not_configured; jobs and invitation-delivery metrics have no truthful producer.
-  - Storage remains unknown when the database is reachable because no independent non-billed storage probe exists yet.
-rollback: Revert 1189876 to restore the prior health and observability behavior.
+  - TER-023 acceptance is not complete until one deployed staging failure delivers the configured alert and the redacted dashboard and notification evidence are recorded.
+  - The repository has no worker or email-delivery producer, so those states remain not_configured and no fabricated metrics are emitted.
+  - Storage remains unknown while the database is reachable because there is no independent non-billed storage probe.
+rollback: Revert eaba9a4, d0894bb, bc03709, 1907361, and 873bbc9 in reverse order.
