@@ -160,6 +160,7 @@ describe("fixture identity isolation", () => {
               deletedRestaurantIds.push(restaurantId);
               return { error: null };
             },
+            in: async () => ({ error: null }),
           }),
         };
       },

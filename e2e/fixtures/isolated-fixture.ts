@@ -82,10 +82,16 @@ export async function cleanupIsolatedFixture(
   const admin = existingAdmin ?? adminClient(config);
   const cleanupErrors: Error[] = [];
 
-  // Pour history has a restrictive tenant FK to wines. Delete fixture ledger
-  // rows first so the restaurant cascade cannot race that restriction. The
-  // delete trigger also gets a live open-bottle row to reverse before the rest
-  // of the fixture graph is removed.
+  // The restaurant graph contains restrictive wine relationships. Remove the
+  // fixture-owned leaf records first so cascading the restaurant cannot race
+  // those restrictions. Pour deletion also lets its reversal trigger see the
+  // live open-bottle row before the rest of the graph is removed.
+  const { error: listItemError } = await admin
+    .from("wine_list_items")
+    .delete()
+    .in("wine_id", [identity.wineId, identity.secondWineId]);
+  if (listItemError) cleanupErrors.push(listItemError);
+
   for (const restaurantId of [
     identity.restaurantId,
     identity.secondRestaurantId,

@@ -8,30 +8,17 @@ async function api(
   path: string,
   init?: { body?: unknown; idempotencyKey?: string; method?: string },
 ): Promise<ApiResult> {
-  return page.evaluate(
-    async ({ path, init }) => {
-      const response = await fetch(path, {
-        body: init?.body === undefined
-          ? undefined
-          : JSON.stringify(init.body),
-        credentials: "same-origin",
-        headers: {
-          ...(init?.body === undefined
-            ? {}
-            : { "Content-Type": "application/json" }),
-          ...(init?.idempotencyKey
-            ? { "Idempotency-Key": init.idempotencyKey }
-            : {}),
-        },
-        method: init?.method ?? "GET",
-      });
-      return {
-        body: await response.json(),
-        status: response.status,
-      };
-    },
-    { path, init },
-  );
+  const response = await page.request.fetch(path, {
+    data: init?.body,
+    headers: init?.idempotencyKey
+      ? { "Idempotency-Key": init.idempotencyKey }
+      : undefined,
+    method: init?.method ?? "GET",
+  });
+  return {
+    body: await response.json(),
+    status: response.status(),
+  };
 }
 
 test.describe("multi-restaurant isolation", () => {

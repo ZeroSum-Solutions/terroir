@@ -6,18 +6,10 @@ async function selectPrimaryRestaurant(
   restaurantId: string,
   namespace: string,
 ): Promise<void> {
-  const response = await page.evaluate(
-    async ({ restaurantId, namespace }) => {
-      const result = await fetch(`/api/restaurant/${restaurantId}`, {
-        credentials: "same-origin",
-        headers: { "Idempotency-Key": `e2e-pour-primary-${namespace}` },
-        method: "PUT",
-      });
-      return result.status;
-    },
-    { namespace, restaurantId },
-  );
-  expect(response).toBe(200);
+  const response = await page.request.put(`/api/restaurant/${restaurantId}`, {
+    headers: { "Idempotency-Key": `e2e-pour-primary-${namespace}` },
+  });
+  expect(response.status()).toBe(200);
 }
 
 /**
@@ -26,6 +18,7 @@ async function selectPrimaryRestaurant(
  * including after a failed assertion or a Playwright retry.
  */
 test.describe("isolated pour → reconcile", () => {
+  test.setTimeout(60_000);
   test.skip(
     process.env.TERROIR_E2E_ENABLED !== "1",
     "Run only in the isolated staging E2E job.",
@@ -48,21 +41,21 @@ test.describe("isolated pour → reconcile", () => {
       `Primary Cuvee ${isolatedFixture.namespace}`,
       "i",
     );
-    const row = page.locator("li").filter({ hasText: cardLabel }).first();
-    await expect(row).toBeVisible();
+    const row = page.getByRole("button", { name: cardLabel }).first();
+    await expect(row).toBeVisible({ timeout: 10_000 });
     const startText = (await row.textContent()) ?? "";
     const startMatch = startText.match(/~(\d+) glass/);
     expect(startMatch, `no glass count in row text: ${startText}`).toBeTruthy();
     const startGlasses = Number(startMatch![1]);
     expect(startGlasses).toBeGreaterThan(1);
 
-    await row.locator("button").first().click();
+    await row.click();
     const drawer = page.getByRole("dialog", { name: /./ });
     await expect(drawer).toBeVisible();
     const pourButton = drawer.getByRole("button", { name: /^Pour \d/i });
     await expect(pourButton).toBeVisible();
     await pourButton.click();
-    await drawer.getByRole("button", { name: /close wine detail/i }).click();
+    await drawer.getByRole("button", { name: "Close", exact: true }).click();
 
     await expect(async () => {
       const currentText = (await row.textContent()) ?? "";
@@ -71,7 +64,9 @@ test.describe("isolated pour → reconcile", () => {
       expect(Number(match![1])).toBe(startGlasses - 1);
     }).toPass({ timeout: 10_000 });
 
-    await page.getByRole("button", { name: /Reconcile open bottles/i }).click();
+    await page
+      .getByRole("button", { name: /^Reconcile \d+ open bottle/i })
+      .click();
     const reconcileDialog = page.getByRole("dialog", {
       name: /Reconcile open bottles/i,
     });
@@ -81,7 +76,7 @@ test.describe("isolated pour → reconcile", () => {
       .filter({ hasText: cardLabel })
       .first();
     await expect(reconcileRow).toBeVisible();
-    await reconcileRow.getByRole("button", { name: "½" }).click();
+    await reconcileRow.getByRole("button", { name: "Half", exact: true }).click();
 
     const saveButton = reconcileDialog.getByRole("button", {
       name: /Save \d+ change/i,

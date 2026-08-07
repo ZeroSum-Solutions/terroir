@@ -94,7 +94,11 @@ function observePage(page: Page, testInfo: TestInfo) {
       status: null,
     };
     network.push(record);
-    networkFailures.push(`${record.method} ${record.path}: ${failure}`);
+    const benignTelemetryAbort =
+      record.path.endsWith("/monitoring") && failure === "net::ERR_ABORTED";
+    if (!benignTelemetryAbort) {
+      networkFailures.push(`${record.method} ${record.path}: ${failure}`);
+    }
   });
   page.on("response", (response) => {
     const record = {
