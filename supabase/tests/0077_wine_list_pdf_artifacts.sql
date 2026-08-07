@@ -59,7 +59,7 @@ begin
   where schemaname = 'storage'
     and tablename = 'objects'
     and policyname = 'members can read generated exports'
-    and roles = array['authenticated']
+    and roles = array['authenticated']::name[]
     and cmd = 'SELECT'
     and qual like '%wine_list_pdf_artifact_tenant_id%';
 
