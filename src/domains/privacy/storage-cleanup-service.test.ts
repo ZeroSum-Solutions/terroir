@@ -23,7 +23,8 @@ describe("tenant storage cleanup", () => {
   it("lists and removes every governed bucket before tenant deletion", async () => {
     vi.mocked(listSupabaseObjectPaths)
       .mockResolvedValueOnce(["tenant-id/invoice.png"])
-      .mockResolvedValueOnce(["tenant-id/wine.webp"]);
+      .mockResolvedValueOnce(["tenant-id/wine.webp"])
+      .mockResolvedValueOnce(["tenant-id/list_classic.pdf"]);
     vi.mocked(removeSupabaseObjects).mockResolvedValue();
 
     await removeTenantStorageObjects({
@@ -41,6 +42,11 @@ describe("tenant storage cleanup", () => {
       bucket: "wine-images",
       prefix: "tenant-id",
     });
+    expect(listSupabaseObjectPaths).toHaveBeenNthCalledWith(3, {
+      supabase: {},
+      bucket: "generated-exports",
+      prefix: "tenant-id",
+    });
     expect(removeSupabaseObjects).toHaveBeenNthCalledWith(1, {
       supabase: {},
       bucket: "invoice-images",
@@ -50,6 +56,11 @@ describe("tenant storage cleanup", () => {
       supabase: {},
       bucket: "wine-images",
       paths: ["tenant-id/wine.webp"],
+    });
+    expect(removeSupabaseObjects).toHaveBeenNthCalledWith(3, {
+      supabase: {},
+      bucket: "generated-exports",
+      paths: ["tenant-id/list_classic.pdf"],
     });
   });
 
