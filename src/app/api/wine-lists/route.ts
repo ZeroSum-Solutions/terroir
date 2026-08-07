@@ -96,5 +96,5 @@ export async function POST(request: NextRequest) {
         return { status: 200, body: { id: list.id } };
       },
     });
-  });
+  }, { operation: "list_generation" });
 }

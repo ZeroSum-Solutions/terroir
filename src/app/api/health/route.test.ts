@@ -58,14 +58,22 @@ async function expectHealth(
   const body = await response.json();
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toBe("no-store");
-  expect(body).toEqual({
+  expect(body).toMatchObject({
     status: "ok",
     db: expected.db,
     ...(expected.dbReason ? { dbReason: expected.dbReason } : {}),
     environment: expected.environment ?? "unknown",
     ...(expected.release ? { release: expected.release } : {}),
-    timestamp: "2026-07-24T10:00:00.000Z",
+    readiness: "degraded",
+    dependencies: {
+      web: "connected",
+      database: expected.db,
+      providers: { invoice_scanning: "degraded", wine_search: "degraded" },
+      email: "not_configured",
+      worker: "not_configured",
+    },
   });
+  expect(body.timestamp).toBe("2026-07-24T10:00:00.000Z");
   expect(body).not.toHaveProperty("error");
   expect(body).not.toHaveProperty("dbError");
 }
@@ -140,12 +148,13 @@ describe("GET /api/health", () => {
     const text = await response.text();
 
     expect(response.status).toBe(200);
-    expect(JSON.parse(text)).toEqual({
+    expect(JSON.parse(text)).toMatchObject({
       status: "ok",
       db: "error",
       dbReason: "probe_failed",
       environment: "unknown",
       timestamp: "2026-07-24T10:00:00.000Z",
+      readiness: "degraded",
     });
     expect(text).not.toContain(error.message);
     expect(text).not.toContain(error.code ?? "");

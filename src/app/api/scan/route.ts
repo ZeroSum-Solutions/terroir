@@ -82,7 +82,7 @@ function isStorageNotFound(error: unknown): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  return withApiHandler(() => postInvoiceScan(request));
+  return withApiHandler(() => postInvoiceScan(request), { operation: "scan" });
 }
 
 async function postInvoiceScan(request: NextRequest) {

@@ -9,6 +9,7 @@
 # can distinguish "process is alive and serving" from "zombie".
 
 [deploy]
+buildCommand = "pnpm validate:env && pnpm build"
 startCommand = "pnpm start"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 30

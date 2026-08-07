@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import https from "node:https";
+import { inspectRuntimeConfiguration } from "@/lib/config/runtime";
+import { emitStructuredLog } from "@/lib/observability/telemetry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,15 +82,37 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json(
-    {
-      status: "ok",
-      db,
-      environment,
-      ...(release ? { release } : {}),
-      ...(dbReason ? { dbReason } : {}),
-      timestamp: new Date().toISOString(),
+  const configuration = inspectRuntimeConfiguration();
+  const readiness = db === "connected" && configuration.core === "configured"
+    ? "ready"
+    : "degraded";
+  const body = {
+    // `status` and HTTP 200 deliberately remain the Railway liveness contract.
+    status: "ok",
+    readiness,
+    db,
+    environment,
+    ...(release ? { release } : {}),
+    ...(dbReason ? { dbReason } : {}),
+    dependencies: {
+      web: "connected",
+      database: db,
+      storage: db === "connected" ? "unknown" : "degraded",
+      providers: {
+        invoice_scanning: configuration.integrations.invoice_scanning,
+        wine_search: configuration.integrations.wine_search,
+      },
+      email: configuration.integrations.email,
+      worker: configuration.integrations.worker,
+      observability: configuration.integrations.sentry,
     },
+    // Variable names only; values and user data never leave the process.
+    ...(configuration.missingCore.length > 0 ? { missingConfiguration: configuration.missingCore } : {}),
+    timestamp: new Date().toISOString(),
+  };
+  emitStructuredLog("health_check", { readiness, database: db, db_reason: dbReason });
+  return NextResponse.json(
+    body,
     { status: 200, headers: { "Cache-Control": "no-store" } },
   );
 }

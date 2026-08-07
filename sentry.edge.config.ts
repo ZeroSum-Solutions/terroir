@@ -6,6 +6,7 @@
  * like `includeLocalVariables` aren't available here.
  */
 import * as Sentry from "@sentry/nextjs";
+import { scrubSentryEvent } from "./src/lib/observability/sentry-scrub";
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
@@ -13,5 +14,6 @@ Sentry.init({
   tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
   // See sentry.server.config.ts for the sendDefaultPii=false rationale.
   sendDefaultPii: false,
+  beforeSend: scrubSentryEvent,
   enableLogs: true,
 });

@@ -8,6 +8,7 @@
  * prod issues doesn't require a repro.
  */
 import * as Sentry from "@sentry/nextjs";
+import { scrubSentryEvent } from "./src/lib/observability/sentry-scrub";
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
@@ -22,11 +23,8 @@ Sentry.init({
   // captureException site. Flip to `true` if prod debugging needs the
   // extra context — worth revisiting the moment we have EU customers.
   sendDefaultPii: false,
-  // Sentry's local-vars integration mutates stack frames into
-  // {function, vars} objects, which breaks React 19 dev overlay's
-  // `buildFakeCallStack` (it calls frame.join(...) expecting a tuple).
-  // Keep it on in prod for prod debugging context; disable in dev so
-  // the local overlay doesn't crash.
-  includeLocalVariables: process.env.NODE_ENV !== "development",
+  // Local variables can contain request data, credentials, and invoice text.
+  includeLocalVariables: false,
+  beforeSend: scrubSentryEvent,
   enableLogs: true,
 });

@@ -71,6 +71,11 @@ the current staging readiness record live in
 [`docs/STAGING-SETUP.md`](docs/STAGING-SETUP.md). Do not promote to production
 until that gate and the synthetic workflow report are both green.
 
+The public health endpoint preserves Railway liveness while publishing safe
+readiness and degraded-dependency states. See
+[`docs/operations/observability.md`](docs/operations/observability.md) for the
+configuration gate, metric names, alert thresholds, and incident runbook.
+
 ## Repo layout
 
 - `src/app/` — App Router routes. `src/app/(app)/` is the authed shell; `src/app/api/` is the JSON API.

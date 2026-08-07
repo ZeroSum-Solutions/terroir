@@ -85,7 +85,7 @@ const RECONCILE_OUTCOMES: readonly ReconcileOutcome[] = [
  * 500: unhandled RPC failure
  */
 export async function POST(request: NextRequest) {
-  return withApiHandler(() => postReconcile(request));
+  return withApiHandler(() => postReconcile(request), { operation: "reconciliation" });
 }
 
 async function postReconcile(request: NextRequest) {

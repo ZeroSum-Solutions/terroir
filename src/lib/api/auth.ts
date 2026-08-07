@@ -16,6 +16,8 @@ import {
   enforceApiRateLimit,
   type ApiRateLimitClass,
 } from "@/lib/api/rate-limit";
+import { setRestaurantId } from "@/lib/api/request-context";
+import { recordMetric } from "@/lib/observability/telemetry";
 
 export type AuthResult = {
   supabase: SupabaseClient<Database>;
@@ -41,6 +43,7 @@ async function loadAuth(): Promise<AuthResult | NextResponse> {
   if (error && !isAuthSessionMissingError(error)) throw error;
 
   if (!user) {
+    recordMetric("auth_failures", 1, { outcome: "unauthenticated" });
     return Errors.unauthorized();
   }
 
@@ -80,8 +83,11 @@ async function loadMembership(
   const membership = await resolveActiveMembership(supabase, user.id);
 
   if (!membership) {
+    recordMetric("auth_failures", 1, { outcome: "no_membership" });
     return Errors.forbidden("No restaurant membership found.");
   }
+
+  setRestaurantId(membership.restaurantId);
 
   return {
     supabase,
@@ -124,6 +130,7 @@ export async function requireOwner(
   if (result instanceof NextResponse) return result;
 
   if (result.role !== "owner") {
+    recordMetric("auth_failures", 1, { outcome: "role_denied" });
     return Errors.forbidden("Owner access required.");
   }
 
@@ -149,6 +156,7 @@ export async function requireRole(
   if (result instanceof NextResponse) return result;
 
   if (!roles.includes(result.role)) {
+    recordMetric("auth_failures", 1, { outcome: "role_denied" });
     return Errors.forbidden(`Role ${roles.join(" or ")} required.`);
   }
 
@@ -176,6 +184,7 @@ export async function requireCapability(
   if (result instanceof NextResponse) return result;
 
   if (!hasCapability(result.role, capability)) {
+    recordMetric("auth_failures", 1, { outcome: "capability_denied" });
     return Errors.forbidden(`Capability ${capability} required.`);
   }
 

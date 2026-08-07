@@ -10,6 +10,7 @@
  * watch the user's last 60 seconds of clicks leading into them.
  */
 import * as Sentry from "@sentry/nextjs";
+import { scrubSentryEvent } from "./src/lib/observability/sentry-scrub";
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
@@ -29,6 +30,7 @@ Sentry.init({
 
   // See sentry.server.config.ts for the sendDefaultPii=false rationale.
   sendDefaultPii: false,
+  beforeSend: scrubSentryEvent,
   enableLogs: true,
 
   integrations: [Sentry.replayIntegration()],
