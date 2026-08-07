@@ -6,7 +6,7 @@
     "sourceRoot": "src/app"
   },
   "routeCount": 23,
-  "controlCount": 337,
+  "controlCount": 336,
   "routes": [
     {
       "source": "src/app/page.tsx",
@@ -5726,9 +5726,9 @@
     {
       "id": "src/app/login/page.tsx#form-001",
       "source": "src/app/login/page.tsx",
-      "line": 169,
+      "line": 165,
       "kind": "form",
-      "label": "form at src/app/login/page.tsx:169",
+      "label": "form at src/app/login/page.tsx:165",
       "href": null,
       "actors": [
         "guest"
@@ -5741,7 +5741,7 @@
     {
       "id": "src/app/login/page.tsx#a-001",
       "source": "src/app/login/page.tsx",
-      "line": 173,
+      "line": 169,
       "kind": "link",
       "label": "Back to sign in",
       "href": "loginHref(\"magic\", safePostLoginPath)",
@@ -5756,9 +5756,9 @@
     {
       "id": "src/app/login/page.tsx#form-002",
       "source": "src/app/login/page.tsx",
-      "line": 181,
+      "line": 177,
       "kind": "form",
-      "label": "form at src/app/login/page.tsx:181",
+      "label": "form at src/app/login/page.tsx:177",
       "href": null,
       "actors": [
         "guest"
@@ -5771,7 +5771,7 @@
     {
       "id": "src/app/login/page.tsx#a-002",
       "source": "src/app/login/page.tsx",
-      "line": 187,
+      "line": 183,
       "kind": "link",
       "label": "Forgot password?",
       "href": "`/login?forgot=1`",
@@ -5786,7 +5786,7 @@
     {
       "id": "src/app/login/page.tsx#a-003",
       "source": "src/app/login/page.tsx",
-      "line": 193,
+      "line": 189,
       "kind": "link",
       "label": "Sign in with a magic link",
       "href": "loginHref(\"magic\", safePostLoginPath)",
@@ -5801,9 +5801,9 @@
     {
       "id": "src/app/login/page.tsx#form-003",
       "source": "src/app/login/page.tsx",
-      "line": 201,
+      "line": 197,
       "kind": "form",
-      "label": "form at src/app/login/page.tsx:201",
+      "label": "form at src/app/login/page.tsx:197",
       "href": null,
       "actors": [
         "guest"
@@ -5816,7 +5816,7 @@
     {
       "id": "src/app/login/page.tsx#a-004",
       "source": "src/app/login/page.tsx",
-      "line": 207,
+      "line": 203,
       "kind": "link",
       "label": "Already have an account? Sign in",
       "href": "loginHref(\"password\", safePostLoginPath)",
@@ -5831,9 +5831,9 @@
     {
       "id": "src/app/login/page.tsx#form-004",
       "source": "src/app/login/page.tsx",
-      "line": 215,
+      "line": 211,
       "kind": "form",
-      "label": "form at src/app/login/page.tsx:215",
+      "label": "form at src/app/login/page.tsx:211",
       "href": null,
       "actors": [
         "guest"
@@ -5846,7 +5846,7 @@
     {
       "id": "src/app/login/page.tsx#a-005",
       "source": "src/app/login/page.tsx",
-      "line": 220,
+      "line": 216,
       "kind": "link",
       "label": "Forgot password?",
       "href": "`/login?forgot=1`",
@@ -5861,7 +5861,7 @@
     {
       "id": "src/app/login/page.tsx#a-006",
       "source": "src/app/login/page.tsx",
-      "line": 226,
+      "line": 222,
       "kind": "link",
       "label": "Sign in with password",
       "href": "loginHref(\"password\", safePostLoginPath)",
@@ -5876,25 +5876,10 @@
     {
       "id": "src/app/login/page.tsx#a-007",
       "source": "src/app/login/page.tsx",
-      "line": 232,
+      "line": 228,
       "kind": "link",
       "label": "Create an account",
       "href": "loginHref(\"signup\", safePostLoginPath)",
-      "actors": [
-        "guest"
-      ],
-      "requirementId": "TER-CF-001",
-      "interactionTest": "e2e/ui-control-crawl.test.ts",
-      "transientDisabled": false,
-      "unavailableState": null
-    },
-    {
-      "id": "src/app/login/page.tsx#a-008",
-      "source": "src/app/login/page.tsx",
-      "line": 246,
-      "kind": "link",
-      "label": "Sign in as {dynamic}",
-      "href": "/api/dev-login",
       "actors": [
         "guest"
       ],
