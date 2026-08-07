@@ -1,25 +1,23 @@
 import { readFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
+import type { APIResponse } from "@playwright/test";
 import { expect, test } from "../fixtures/isolated-test";
 import type { Database } from "../../src/types/database";
 
 test.describe("wine-list PDF worker pilot", () => {
-  test.beforeAll(() => {
-    if (
-      process.env.TERROIR_E2E_ENABLED !== "1" ||
-      process.env.PDF_WORKER_E2E_ENABLED !== "1"
-    ) {
-      throw new Error(
-        "TERROIR_E2E_ENABLED=1 and PDF_WORKER_E2E_ENABLED=1 are required.",
-      );
-    }
-  });
+  test.skip(
+    process.env.TERROIR_E2E_ENABLED !== "1" ||
+      process.env.PDF_WORKER_E2E_ENABLED !== "1",
+    "TERROIR_E2E_ENABLED=1 and PDF_WORKER_E2E_ENABLED=1 are required.",
+  );
 
   test("deduplicates enqueue, denies another active tenant, and downloads PDF", async ({
     isolatedConfig,
     isolatedFixture,
     page,
   }) => {
+    test.setTimeout(300_000);
+
     const switchResponse = await page.request.put(
       `/api/restaurant/${isolatedFixture.restaurantId}`,
       {
@@ -52,7 +50,7 @@ test.describe("wine-list PDF worker pilot", () => {
     });
     expect(crossTenant.status()).toBe(404);
 
-    let artifact;
+    let artifact: APIResponse | undefined;
     for (let attempt = 0; attempt < 60; attempt += 1) {
       artifact = await page.request.post("/api/pdf", {
         data: { jobId: firstJob.jobId },
@@ -62,7 +60,33 @@ test.describe("wine-list PDF worker pilot", () => {
     }
     expect(artifact?.status()).toBe(200);
     expect(artifact?.headers()["content-type"]).toContain("application/pdf");
-    expect((await artifact!.body()).subarray(0, 4).toString()).toBe("%PDF");
+    if (!artifact) throw new Error("PDF artifact response was not received");
+    expect((await artifact.body()).subarray(0, 4).toString()).toBe("%PDF");
+
+    const switchAway = await page.request.put(
+      `/api/restaurant/${isolatedFixture.secondRestaurantId}`,
+      {
+        data: {},
+        headers: {
+          "Idempotency-Key": `e2e-pdf-switch-away-${isolatedFixture.namespace}`,
+        },
+      },
+    );
+    expect(switchAway.ok()).toBe(true);
+    const crossTenantArtifact = await page.request.post("/api/pdf", {
+      data: { jobId: firstJob.jobId },
+    });
+    expect(crossTenantArtifact.status()).toBe(404);
+    const switchBack = await page.request.put(
+      `/api/restaurant/${isolatedFixture.restaurantId}`,
+      {
+        data: {},
+        headers: {
+          "Idempotency-Key": `e2e-pdf-switch-back-${isolatedFixture.namespace}`,
+        },
+      },
+    );
+    expect(switchBack.ok()).toBe(true);
 
     await page.goto(`/lists/${isolatedFixture.listId}`, {
       waitUntil: "networkidle",

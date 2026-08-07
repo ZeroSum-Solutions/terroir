@@ -6,6 +6,7 @@ do $$
 declare
   v_bucket storage.buckets%rowtype;
   v_policy_count integer;
+  v_validator_definition text;
 begin
   select * into v_bucket
   from storage.buckets
@@ -25,11 +26,17 @@ begin
     and policyname = 'members can read generated exports'
     and roles = array['authenticated']
     and cmd = 'SELECT'
-    and qual like '%wine_list_pdf_artifact_tenant_id%'
-    and qual like '%is_member%';
+    and qual like '%wine_list_pdf_artifact_tenant_id%';
 
   if v_policy_count <> 1 then
     raise exception 'generated export read policy is missing tenant enforcement';
+  end if;
+
+  select pg_get_functiondef(
+    'public.wine_list_pdf_artifact_tenant_id(text)'::regprocedure
+  ) into v_validator_definition;
+  if v_validator_definition not like '%public.is_member(v_parts[1]::uuid)%' then
+    raise exception 'generated export path validator does not enforce membership';
   end if;
 
   if public.wine_list_pdf_artifact_tenant_id(

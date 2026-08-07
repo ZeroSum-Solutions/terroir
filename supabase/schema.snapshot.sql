@@ -13027,6 +13027,12 @@ begin
     return null;
   end if;
 
+  -- Keep this SECURITY DEFINER helper from becoming a cross-tenant existence
+  -- oracle when authenticated callers invoke it directly.
+  if not public.is_member(v_parts[1]::uuid) then
+    return null;
+  end if;
+
   if not exists (
     select 1
     from public.wine_lists as list
@@ -13051,7 +13057,6 @@ create policy "members can read generated exports"
   using (
     bucket_id = 'generated-exports'
     and public.wine_list_pdf_artifact_tenant_id(name) is not null
-    and public.is_member(public.wine_list_pdf_artifact_tenant_id(name))
   );
 
 -- Authenticated clients receive read access only. The isolated service-role

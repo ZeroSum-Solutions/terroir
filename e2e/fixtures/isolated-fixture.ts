@@ -109,18 +109,26 @@ export async function cleanupIsolatedFixture(
     .remove([identity.storagePath]);
   if (storageError) cleanupErrors.push(storageError);
 
-  const exportPaths = [
-    [identity.restaurantId, identity.listId],
-    [identity.secondRestaurantId, identity.secondListId],
-  ].flatMap(([restaurantId, listId]) =>
-    ["classic", "modern", "minimal"].map(
-      (template) => `${restaurantId}/${listId}_${template}.pdf`,
-    )
-  );
-  const { error: exportError } = await admin.storage
-    .from(GENERATED_EXPORTS_BUCKET)
-    .remove(exportPaths);
-  if (exportError) cleanupErrors.push(exportError);
+  for (const restaurantId of [
+    identity.restaurantId,
+    identity.secondRestaurantId,
+  ]) {
+    const { data: exports, error: listExportsError } = await admin.storage
+      .from(GENERATED_EXPORTS_BUCKET)
+      .list(restaurantId);
+    if (listExportsError) {
+      cleanupErrors.push(listExportsError);
+      continue;
+    }
+    const exportPaths = (exports ?? []).map(
+      (artifact) => `${restaurantId}/${artifact.name}`,
+    );
+    if (exportPaths.length === 0) continue;
+    const { error: removeExportsError } = await admin.storage
+      .from(GENERATED_EXPORTS_BUCKET)
+      .remove(exportPaths);
+    if (removeExportsError) cleanupErrors.push(removeExportsError);
+  }
 
   const user = await findUserByEmail(admin, identity.email);
   if (user) {
