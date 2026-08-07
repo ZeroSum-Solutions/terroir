@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "thresholdId": "ter-022-release-floors-v1",
+  "ratification": {
+    "status": "pending_product_owner",
+    "source": "docs/plans/2026-07-20-terroir-completion-spec.md#ter-022-establish-scanner-accuracy-and-provider-resilience",
+    "note": "The specification's proposed floors are enforced now; final product-owner ratification remains an external acceptance step before paid optimization."
+  },
+  "qualityFloors": {
+    "producerExact": 0.9,
+    "cuveeExact": 0.9,
+    "vintageExact": 0.95,
+    "formatExact": 0.95,
+    "quantityExact": 0.98,
+    "costExact": 0.98,
+    "invoiceLineRecall": 0.98,
+    "invoiceLinePrecision": 0.98,
+    "lineAssociationExact": 0.98
+  },
+  "maximumUnreviewedLowConfidenceCommits": 0,
+  "lowConfidenceCutoff": 0.75,
+  "latency": {
+    "invoiceP95MsExclusive": 90000,
+    "bottleP95MsExclusive": 30000
+  },
+  "provider": {
+    "minimumCanaries": 20,
+    "failureRateExclusive": 0.05
+  },
+  "cost": {
+    "maximumInvoiceUsd": 0.25,
+    "maximumBottleUsd": 0.05
+  },
+  "regression": {
+    "maximumQualityDrop": 0.02,
+    "maximumLatencyIncreaseMs": 0,
+    "maximumFailureRateIncrease": 0,
+    "maximumCostIncreaseUsd": 0
+  }
+}

@@ -410,6 +410,8 @@ export type Database = {
           invoice_date: string | null
           invoice_number: string | null
           item_count: number
+          low_confidence_reviewed_at: string | null
+          low_confidence_reviewed_by: string | null
           ocr_text: Json | null
           parsed_line_items: Json
           raw_image_path: string | null
@@ -428,6 +430,8 @@ export type Database = {
           invoice_date?: string | null
           invoice_number?: string | null
           item_count?: number
+          low_confidence_reviewed_at?: string | null
+          low_confidence_reviewed_by?: string | null
           ocr_text?: Json | null
           parsed_line_items: Json
           raw_image_path?: string | null
@@ -446,6 +450,8 @@ export type Database = {
           invoice_date?: string | null
           invoice_number?: string | null
           item_count?: number
+          low_confidence_reviewed_at?: string | null
+          low_confidence_reviewed_by?: string | null
           ocr_text?: Json | null
           parsed_line_items?: Json
           raw_image_path?: string | null
@@ -1185,6 +1191,22 @@ export type Database = {
       commit_invoice_scan_idempotent: {
         Args: {
           p_idempotency_key?: string
+          p_request_hash?: string
+          p_restaurant_id: string
+          p_scan_id: string
+        }
+        Returns: {
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+          wine_ids: string[]
+        }[]
+      }
+      commit_reviewed_invoice_scan_idempotent: {
+        Args: {
+          p_idempotency_key?: string
+          p_low_confidence_reviewed: boolean
           p_request_hash?: string
           p_restaurant_id: string
           p_scan_id: string

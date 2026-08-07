@@ -134,6 +134,13 @@ export async function POST(
               "Stored OCR could not be processed.",
             );
           }
+          if (error.code === "timeout") {
+            return mutationError(
+              504,
+              "provider_timeout",
+              "Extraction provider timed out.",
+            );
+          }
           if (error.code === "upstream_error") {
             return mutationError(
               502,

@@ -397,7 +397,7 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
   "api:POST:/api/scans/{param}/commit": {
     boundary: {
       kind: "dedicated-rpc",
-      rpc: "commit_invoice_scan_idempotent",
+      rpc: "commit_reviewed_invoice_scan_idempotent",
     },
     identity: {
       params: "all-validated",
@@ -406,7 +406,7 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
     },
     execution: {
       kind: "atomic-rpc",
-      rpc: "commit_invoice_scan_idempotent",
+      rpc: "commit_reviewed_invoice_scan_idempotent",
     },
     client: {
       lifecycle: "session-persistent",

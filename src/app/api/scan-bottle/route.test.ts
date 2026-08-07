@@ -385,6 +385,45 @@ describe("POST /api/scan-bottle", () => {
     );
   });
 
+  it("classifies a provider timeout as retryable without leaking its detail", async () => {
+    const supabase = makeSupabase({ data: null, error: null });
+    allow(supabase);
+    const timeout = new Error("secret provider timeout");
+    timeout.name = "TimeoutError";
+    mockGetAnthropicClient.mockReturnValue({
+      messages: { parse: vi.fn().mockRejectedValue(timeout) },
+    });
+    const form = new FormData();
+    form.append(
+      "file",
+      new File(["label"], "label.jpg", { type: "image/jpeg" }),
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/scan-bottle", {
+        method: "POST",
+        headers: { "Idempotency-Key": "provider_timeout_ter022" },
+        body: form,
+      }) as unknown as NextRequest,
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(504);
+    expect(JSON.parse(text)).toEqual({
+      error: {
+        code: "provider_timeout",
+        message: "The AI service timed out. Please try again.",
+      },
+    });
+    expect(text).not.toContain("secret");
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      timeout,
+      expect.objectContaining({
+        extra: { failure_kind: "timeout", retryable: true },
+      }),
+    );
+  });
+
   it("rejects a malformed label key before provider initialization", async () => {
     const supabase = makeSupabase({ data: null, error: null });
     allow(supabase);

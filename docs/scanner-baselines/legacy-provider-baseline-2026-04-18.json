@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "baselineId": "legacy-provider-sweep-2026-04-18",
+  "source": {
+    "commit": "5f90aaf",
+    "path": "test-results.json",
+    "gitObject": "1dd2a30eccd93a9133ecb23c2a675f6d519bfa60",
+    "testedAt": "2026-04-18T03:27:56.414Z",
+    "providerModel": "unrecorded"
+  },
+  "aggregate": {
+    "invoiceCount": 20,
+    "successCount": 18,
+    "failureCount": 2,
+    "failureRate": 0.1,
+    "p95LatencyMs": 19235,
+    "maximumLatencyMs": 19443,
+    "reportedItemCount": 82,
+    "reportedLowConfidenceItemCount": 80,
+    "meanSelfReportedConfidence": 0.2512777777777778
+  },
+  "releaseEligibility": "historical_context_only",
+  "limitations": [
+    "The historical sweep did not record a model identifier, token usage, provider cost, ground-truth outputs, field exact-match accuracy, line recall, or fixture provenance.",
+    "Self-reported confidence is not accuracy and is retained only as pre-change historical context.",
+    "The aggregate intentionally omits invoice images, OCR text, provider responses, and line-item content."
+  ]
+}

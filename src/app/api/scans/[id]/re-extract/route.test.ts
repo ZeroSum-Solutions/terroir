@@ -248,6 +248,24 @@ describe("POST /api/scans/[id]/re-extract", () => {
     });
   });
 
+  it("maps provider timeout to a nested redacted 504", async () => {
+    const db = makeSupabase();
+    authorize(db.supabase);
+    extraction.extractFromOcr.mockRejectedValue(
+      new AiExtractError("timeout", "provider-specific timeout detail", true),
+    );
+
+    const response = await call();
+
+    expect(response.status).toBe(504);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "provider_timeout",
+        message: "Extraction provider timed out.",
+      },
+    });
+  });
+
   it.each([
     ["returned", { update: { error: { message: "private update detail" } } }],
     ["thrown", { updateThrows: true }],

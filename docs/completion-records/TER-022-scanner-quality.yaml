@@ -1,0 +1,31 @@
+spec_id: TER-022
+base_commit: f7d015131cdb96f5c6614766dd6f98fd24c09ce2
+status: source_complete_real_provider_and_ratification_pending
+scope: Versioned scanner baselines, non-billed release scoring, low-confidence review enforcement, and provider failure taxonomy.
+source_evidence:
+  historical_baseline: docs/scanner-baselines/legacy-provider-baseline-2026-04-18.json
+  deterministic_baseline: docs/scanner-baselines/scanner-contract-baseline-v1.json
+  corpus: src/test/fixtures/scanner/benchmark-v1.json
+  thresholds: src/test/fixtures/scanner/thresholds-v1.json
+  scorer: src/lib/scanner/benchmark.ts
+  migration: supabase/migrations/0078_scanner_low_confidence_review.sql
+  rollback: supabase/migrations/down/0078_scanner_low_confidence_review.down.sql
+  database_acceptance: supabase/tests/0078_scanner_low_confidence_review.sql
+  runbook: docs/runbooks/scanner-quality.md
+controls:
+  - Field exact match, invoice line precision and recall, line association, p95 latency, provider failure, maximum cost, and baseline regression are hard fixture gates.
+  - The committed corpus contains only project-authored fictional records and no customer image, OCR text, or provider response.
+  - Low-confidence inventory writes require explicit review; the durable path records reviewer and timestamp in the atomic commit transaction and revokes direct client access to the bypassing RPC.
+  - Provider exceptions map to fixed retryable and non-retryable classes without exporting provider detail.
+verification:
+  required:
+    - pnpm run scanner:score
+    - pnpm exec vitest run src/lib/scanner/benchmark.test.ts src/lib/scanner/provider-failure.test.ts src/lib/scanner/ocr-service.test.ts src/lib/scanner/ai-extract.test.ts src/app/api/scan-bottle/route.test.ts src/app/api/scans/[id]/re-extract/route.test.ts src/app/api/scans/[id]/commit/route.test.ts src/app/api/inventory/save-scan/route.test.ts src/test/contracts/scanner-release-gate.test.ts
+    - pnpm snapshot:check
+    - pnpm downs:check
+external_acceptance_pending:
+  - Product-owner ratification or revision of the proposed numeric floors after reviewing the real-provider baseline.
+  - An owner-approved, consent-safe real-provider canary with at least 20 observations and redacted aggregate evidence.
+  - Staging p95, provider failure rate, and provider cost evidence; fixture values are safe mocks and do not satisfy those runtime criteria.
+  - Manual-correction browser E2E against the deployed migration and exact release SHA.
+deployment: not deployed; no provider call, database mutation, secret update, workflow dispatch, or remote change was performed.

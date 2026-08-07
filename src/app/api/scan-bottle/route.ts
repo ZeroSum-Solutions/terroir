@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/validation";
 import { ParsedBottleLabelSchema } from "@/lib/scanner/bottle-schema";
 import { BOTTLE_SYSTEM_PROMPT } from "@/lib/scanner/bottle-system-prompt";
+import { classifyScannerProviderFailure } from "@/lib/scanner/provider-failure";
 import { QrLookupBodySchema } from "@/lib/scanner/request-schemas";
 import type { BottleScanResult } from "@/lib/scanner/types";
 
@@ -208,12 +209,31 @@ async function postBottleScan(request: NextRequest) {
             },
           };
         }
-        if (error instanceof Anthropic.APIError) {
+        const failure = classifyScannerProviderFailure(error);
+        if (failure.kind === "timeout") {
+          Sentry.captureException(error, {
+            tags: { surface: "scanner", phase: "claude-call" },
+            extra: { failure_kind: failure.kind, retryable: failure.retryable },
+          });
+          return {
+            status: 504,
+            body: {
+              error: {
+                code: "provider_timeout",
+                message: "The AI service timed out. Please try again.",
+              },
+            },
+          };
+        }
+        if (
+          error instanceof Anthropic.APIError ||
+          failure.kind === "unavailable"
+        ) {
           Sentry.captureException(error, {
             tags: { surface: "scanner", phase: "claude-call" },
             extra: {
-              provider_status: error.status,
-              provider_request_id: error.requestID,
+              failure_kind: "unavailable",
+              retryable: true,
             },
           });
           return {
@@ -227,10 +247,10 @@ async function postBottleScan(request: NextRequest) {
             },
           };
         }
-        console.error("scan-bottle failed:", error);
+        console.error("scan-bottle failed with an unclassified provider error.");
         Sentry.captureException(error, {
           tags: { surface: "scanner", phase: "claude-call" },
-          extra: { file_size: file.size, file_type: file.type },
+          extra: { failure_kind: "unknown", retryable: false },
         });
         return {
           status: 500,

@@ -265,6 +265,56 @@ describe("POST /api/inventory/save-scan", () => {
     expect(calls.rpc).toHaveLength(0);
   });
 
+  it("blocks low-confidence inventory writes until review is recorded", async () => {
+    authedAsA();
+    const scan = makeScan({
+      items: [
+        makeLineItem({
+          confidence: 0.7,
+          lowFields: ["producer"],
+        }),
+      ],
+    });
+
+    const response = await POST(
+      makeJsonRequest({ scan, originalItems: scan.items }),
+    );
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "low_confidence_review_required",
+        message: "Review low-confidence scan fields before saving inventory.",
+      },
+    });
+    expect(calls.rpc).toHaveLength(0);
+    expect(calls.inventoryInserts).toHaveLength(0);
+  });
+
+  it("allows a low-confidence inventory write after explicit review", async () => {
+    authedAsA();
+    const scan = makeScan({
+      reviewedLowConfidence: true,
+      items: [
+        makeLineItem({
+          confidence: 0.7,
+          lowFields: ["producer"],
+        }),
+      ],
+    });
+    supabaseBehavior.findOrCreateWinesBatch = {
+      data: ["wine-1"],
+      error: null,
+    };
+
+    const response = await POST(
+      makeJsonRequest({ scan, originalItems: scan.items }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(calls.inventoryInserts).toHaveLength(1);
+  });
+
   it("rejects duplicate multipart data fields", async () => {
     authedAsA();
     const scan = makeScan();

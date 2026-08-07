@@ -73,18 +73,25 @@ describe("extractOcr", () => {
     expect(azure.analyzeInvoice).not.toHaveBeenCalled();
   });
 
-  it("wraps Azure throws as OcrError('upstream_error') with the original message", async () => {
-    azure.analyzeInvoice.mockRejectedValue(new Error("Azure DI 503"));
+  it("classifies upstream failures without returning provider detail", async () => {
+    azure.analyzeInvoice.mockRejectedValue({
+      status: 503,
+      message: "Azure DI private response",
+    });
 
     const err = await extractOcr(Buffer.from("stub"), "application/pdf")
       .catch((e) => e);
 
     expect(err).toBeInstanceOf(OcrError);
     expect(err.code).toBe("upstream_error");
-    expect(err.message).toBe("Azure DI 503");
+    expect(err.retryable).toBe(true);
+    expect(err.message).toBe(
+      "Invoice text extraction is temporarily unavailable. Please try again.",
+    );
+    expect(err.message).not.toContain("private");
   });
 
-  it("falls back to a generic message when Azure throws a non-Error value", async () => {
+  it("keeps unclassified provider values redacted at the upstream boundary", async () => {
     azure.analyzeInvoice.mockRejectedValue("some primitive");
 
     const err = await extractOcr(Buffer.from("stub"), "application/pdf")
@@ -92,7 +99,24 @@ describe("extractOcr", () => {
 
     expect(err).toBeInstanceOf(OcrError);
     expect(err.code).toBe("upstream_error");
-    expect(err.message).toBe("Azure OCR failed.");
+    expect(err.retryable).toBe(false);
+    expect(err.message).toBe(
+      "Invoice text extraction is temporarily unavailable. Please try again.",
+    );
+  });
+
+  it.each([
+    [{ status: 429 }, "rate_limited", true],
+    [{ name: "TimeoutError" }, "timeout", true],
+    [{ status: 422 }, "bad_input", false],
+  ] as const)("maps provider failures into the retry taxonomy", async (failure, code, retryable) => {
+    azure.analyzeInvoice.mockRejectedValue(failure);
+
+    const err = await extractOcr(Buffer.from("stub"), "application/pdf")
+      .catch((error) => error);
+
+    expect(err).toBeInstanceOf(OcrError);
+    expect(err).toMatchObject({ code, retryable });
   });
 
   it("throws OcrError('empty_text') when Azure returns a blank rawText", async () => {

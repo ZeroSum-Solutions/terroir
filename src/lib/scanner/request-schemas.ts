@@ -104,6 +104,7 @@ const ScanSchema = z.object({
       reason: z.enum(["low_confidence", "too_few_items", "both"]).optional(),
     })
     .optional(),
+  reviewedLowConfidence: z.boolean().optional(),
   rawText: z.string().optional(),
 });
 

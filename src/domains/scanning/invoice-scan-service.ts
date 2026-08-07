@@ -15,8 +15,12 @@ import type { Database } from "@/types/database";
 
 const OCR_STATUS = {
   not_configured: 500,
+  rate_limited: 429,
+  timeout: 504,
+  bad_input: 400,
   empty_text: 422,
   upstream_error: 502,
+  unknown: 500,
 } as const;
 
 const AI_STATUS = {
@@ -24,6 +28,7 @@ const AI_STATUS = {
   parse_failed: 422,
   validation_failed: 422,
   rate_limited: 429,
+  timeout: 504,
   bad_input: 400,
   upstream_error: 502,
   unknown: 500,
@@ -170,7 +175,11 @@ export async function processInvoiceScanOnce(
     } catch {}
 
     if (error instanceof OcrError) {
-      if (error.code === "upstream_error") {
+      if (
+        error.code === "upstream_error" ||
+        error.code === "timeout" ||
+        error.code === "unknown"
+      ) {
         Sentry.captureException(error, {
           tags: { stage: "ocr", code: error.code },
           extra: { fileType: mimeType },
@@ -185,6 +194,7 @@ export async function processInvoiceScanOnce(
     if (error instanceof AiExtractError) {
       if (
         error.code === "upstream_error" ||
+        error.code === "timeout" ||
         error.code === "parse_failed" ||
         error.code === "validation_failed"
       ) {

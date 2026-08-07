@@ -101,6 +101,18 @@ async function postInvoiceInventorySave(request: NextRequest) {
     ({ scan, originalItems } = parsedBody.data);
   }
 
+  const requiresLowConfidenceReview = scan.items.some(
+    (item) =>
+      item.confidence < 0.75 ||
+      (item.lowFields !== undefined && item.lowFields.length > 0),
+  );
+  if (requiresLowConfidenceReview && !scan.reviewedLowConfidence) {
+    return Errors.unprocessable(
+      "low_confidence_review_required",
+      "Review low-confidence scan fields before saving inventory.",
+    );
+  }
+
   // ── Idempotency (BND-006) ────────────────────────────────────────
   // The scanner client sends an Idempotency-Key UUID on every save
   // attempt and reuses it across network retries. A successful save

@@ -16,6 +16,7 @@ export const runtime = "nodejs";
 
 type CommitOutcome =
   | "committed"
+  | "review_required"
   | "not_found"
   | "invalid_scan"
   | "replay"
@@ -34,6 +35,7 @@ type CommitResult = {
 
 const COMMIT_OUTCOMES: readonly CommitOutcome[] = [
   "committed",
+  "review_required",
   "not_found",
   "invalid_scan",
   "replay",
@@ -65,6 +67,16 @@ export async function POST(
       );
     }
 
+    const reviewHeader = request.headers.get("X-Low-Confidence-Reviewed");
+    if (reviewHeader !== null && reviewHeader !== "true" && reviewHeader !== "false") {
+      return Errors.badRequest(
+        "Invalid low-confidence review confirmation.",
+        undefined,
+        "invalid_review_confirmation",
+      );
+    }
+    const lowConfidenceReviewed = reviewHeader === "true";
+
     const keyedArgs = rawKey
       ? {
           p_idempotency_key: rawKey,
@@ -72,10 +84,11 @@ export async function POST(
         }
       : {};
     const { data, error } = await supabase.rpc(
-      "commit_invoice_scan_idempotent",
+      "commit_reviewed_invoice_scan_idempotent",
       {
         p_restaurant_id: restaurantId,
         p_scan_id: id,
+        p_low_confidence_reviewed: lowConfidenceReviewed,
         ...keyedArgs,
       },
     );
@@ -203,6 +216,7 @@ function isCommitResult(
   > = {
     not_found: [404, "not_found"],
     invalid_scan: [400, "bad_request"],
+    review_required: [422, "low_confidence_review_required"],
     idempotency_key_reused: [409, "idempotency_key_reused"],
     idempotency_key_expired: [409, "idempotency_key_expired"],
     idempotency_outcome_unknown: [409, "idempotency_outcome_unknown"],

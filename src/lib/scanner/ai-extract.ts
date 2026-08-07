@@ -11,6 +11,7 @@
  *   - `parse_failed`   — Claude responded but returned no parsed_output.
  *     Route → 422 with rawText for manual entry.
  *   - `rate_limited`   — Anthropic.RateLimitError. Route → 429.
+ *   - `timeout`        — request deadline or abort. Route → 504.
  *   - `bad_input`      — Anthropic.BadRequestError. Route → 400.
  *   - `upstream_error` — Anthropic.APIError (not one of the above).
  *     Route → 502.
@@ -26,6 +27,7 @@ import {
 } from "./schema";
 import { SYSTEM_PROMPT } from "./system-prompt";
 import type { OcrResult } from "./ocr-service";
+import { classifyScannerProviderFailure } from "./provider-failure";
 
 export type { ParsedInvoice, ParsedLineItem };
 
@@ -34,16 +36,19 @@ export type AiExtractErrorCode =
   | "parse_failed"
   | "validation_failed"
   | "rate_limited"
+  | "timeout"
   | "bad_input"
   | "upstream_error"
   | "unknown";
 
 export class AiExtractError extends Error {
   readonly code: AiExtractErrorCode;
-  constructor(code: AiExtractErrorCode, message: string) {
+  readonly retryable: boolean;
+  constructor(code: AiExtractErrorCode, message: string, retryable = false) {
     super(message);
     this.name = "AiExtractError";
     this.code = code;
+    this.retryable = retryable;
   }
 }
 
@@ -115,6 +120,7 @@ export async function extractFromOcr(ocr: OcrResult): Promise<ParsedInvoice> {
       throw new AiExtractError(
         "rate_limited",
         "Rate limited. Wait a minute and try again.",
+        true,
       );
     }
     if (error instanceof Anthropic.BadRequestError) {
@@ -123,10 +129,19 @@ export async function extractFromOcr(ocr: OcrResult): Promise<ParsedInvoice> {
         "Could not process this invoice. Try a different photo.",
       );
     }
-    if (error instanceof Anthropic.APIError) {
+    const failure = classifyScannerProviderFailure(error);
+    if (failure.kind === "timeout") {
+      throw new AiExtractError(
+        "timeout",
+        "The AI service timed out. Please try again.",
+        failure.retryable,
+      );
+    }
+    if (error instanceof Anthropic.APIError || failure.kind === "unavailable") {
       throw new AiExtractError(
         "upstream_error",
         "The AI service encountered an error. Please try again.",
+        failure.retryable,
       );
     }
     throw new AiExtractError(

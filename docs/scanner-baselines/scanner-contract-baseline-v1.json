@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "baselineId": "terroir-scanner-contract-v1-at-f7d0151",
+  "observationKind": "synthetic_non_billed_contract",
+  "sourceRef": "f7d015131cdb96f5c6614766dd6f98fd24c09ce2",
+  "capturedAt": "2026-08-07",
+  "report": {
+    "corpusId": "terroir-synthetic-scanner-v1",
+    "fixtureRevision": "2026-08-07.1",
+    "caseCount": 20,
+    "quality": {
+      "producerExact": 1,
+      "cuveeExact": 1,
+      "vintageExact": 1,
+      "formatExact": 1,
+      "quantityExact": 1,
+      "costExact": 1,
+      "invoiceLineRecall": 1,
+      "invoiceLinePrecision": 1,
+      "lineAssociationExact": 1
+    },
+    "counts": {
+      "expectedInvoiceLines": 13,
+      "observedInvoiceLines": 13,
+      "matchedInvoiceLines": 13,
+      "unreviewedLowConfidenceCommits": 0
+    },
+    "latency": {
+      "invoiceP95Ms": 85000,
+      "bottleP95Ms": 28000
+    },
+    "provider": {
+      "canaryCount": 20,
+      "failureCount": 0,
+      "failureRate": 0
+    },
+    "cost": {
+      "maximumInvoiceUsd": 0.24,
+      "maximumBottleUsd": 0.049
+    }
+  },
+  "limitations": [
+    "This baseline proves deterministic scoring and release-gate behavior only; it is not evidence of current real-provider accuracy, latency, failure rate, or cost.",
+    "Real-provider canary execution and final product-owner threshold ratification remain required before TER-022 acceptance can close."
+  ]
+}

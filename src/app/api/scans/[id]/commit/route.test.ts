@@ -36,7 +36,7 @@ function makeSupabase(options: {
   lwin?: "reject" | "throw" | "ok";
 } = {}) {
   const rpc = vi.fn((name: string) => {
-    if (name === "commit_invoice_scan_idempotent") {
+    if (name === "commit_reviewed_invoice_scan_idempotent") {
       return Promise.resolve({
         data:
           options.commitData === undefined
@@ -65,11 +65,18 @@ function authorize(supabase: unknown) {
   });
 }
 
-function call(key?: string) {
+function call(key?: string, reviewed?: boolean, reviewHeader?: string) {
+  const headers = new Headers();
+  if (key) headers.set("Idempotency-Key", key);
+  if (reviewed !== undefined) {
+    headers.set("X-Low-Confidence-Reviewed", String(reviewed));
+  } else if (reviewHeader !== undefined) {
+    headers.set("X-Low-Confidence-Reviewed", reviewHeader);
+  }
   return POST(
     new Request(`http://localhost/api/scans/${SCAN_ID}/commit`, {
       method: "POST",
-      headers: key ? { "Idempotency-Key": key } : {},
+      headers,
     }) as NextRequest,
     { params: Promise.resolve({ id: SCAN_ID }) },
   );
@@ -88,10 +95,11 @@ describe("POST /api/scans/[id]/commit", () => {
     expect(await response.json()).toEqual(commitBody());
     expect(db.rpc).toHaveBeenNthCalledWith(
       1,
-      "commit_invoice_scan_idempotent",
+      "commit_reviewed_invoice_scan_idempotent",
       {
         p_restaurant_id: RESTAURANT_ID,
         p_scan_id: SCAN_ID,
+        p_low_confidence_reviewed: false,
       },
     );
   });
@@ -106,10 +114,11 @@ describe("POST /api/scans/[id]/commit", () => {
     expect(response.headers.get("Idempotency-Replayed")).toBe("false");
     expect(db.rpc).toHaveBeenNthCalledWith(
       1,
-      "commit_invoice_scan_idempotent",
+      "commit_reviewed_invoice_scan_idempotent",
       {
         p_restaurant_id: RESTAURANT_ID,
         p_scan_id: SCAN_ID,
+        p_low_confidence_reviewed: false,
         p_idempotency_key: "scan_commit_key_0001",
         p_request_hash: createIdempotencyRequestHash({ id: SCAN_ID }),
       },
@@ -128,6 +137,33 @@ describe("POST /api/scans/[id]/commit", () => {
         code: "invalid_idempotency_key",
         message: "Invalid Idempotency-Key.",
       },
+    });
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  it("forwards an explicit low-confidence review confirmation", async () => {
+    const db = makeSupabase();
+    authorize(db.supabase);
+
+    const response = await call("scan_commit_reviewed_0001", true);
+
+    expect(response.status).toBe(200);
+    expect(db.rpc).toHaveBeenNthCalledWith(
+      1,
+      "commit_reviewed_invoice_scan_idempotent",
+      expect.objectContaining({ p_low_confidence_reviewed: true }),
+    );
+  });
+
+  it("rejects a malformed low-confidence review header before database work", async () => {
+    const db = makeSupabase();
+    authorize(db.supabase);
+
+    const response = await call(undefined, undefined, "yes");
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "invalid_review_confirmation" },
     });
     expect(db.rpc).not.toHaveBeenCalled();
   });
@@ -159,6 +195,21 @@ describe("POST /api/scans/[id]/commit", () => {
         wine_ids: null,
       }),
       400,
+    ],
+    [
+      "an unreviewed low-confidence scan",
+      commitResult({
+        outcome: "review_required",
+        response_status: 422,
+        response_body: {
+          error: {
+            code: "low_confidence_review_required",
+            message: "Review low-confidence scan fields before committing.",
+          },
+        },
+        wine_ids: null,
+      }),
+      422,
     ],
   ])("returns the stored result for %s", async (_name, result, status) => {
     const db = makeSupabase({ commitData: [result] });

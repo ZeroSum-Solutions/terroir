@@ -154,7 +154,15 @@ export function ScanReview({
     ) {
       return;
     }
-    if (!window.confirm(`Commit ${items.length} wines to inventory? This will create inventory records.`)) return;
+    const hasLowConfidence = items.some(
+      (item) =>
+        item.confidence < 0.75 ||
+        (item.lowFields !== undefined && item.lowFields.length > 0),
+    );
+    const confirmation = hasLowConfidence
+      ? `I reviewed the low-confidence fields. Commit ${items.length} wines to inventory?`
+      : `Commit ${items.length} wines to inventory? This will create inventory records.`;
+    if (!window.confirm(confirmation)) return;
     committingRef.current = true;
     setIsCommitting(true);
     try {
@@ -164,6 +172,9 @@ export function ScanReview({
           url: `/api/scans/${id}/commit`,
           method: "POST",
           json: null,
+          headers: {
+            "X-Low-Confidence-Reviewed": String(hasLowConfidence),
+          },
         });
       if (!response.ok) {
         if (

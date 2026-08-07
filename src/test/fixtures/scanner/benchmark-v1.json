@@ -1,0 +1,218 @@
+{
+  "schemaVersion": 1,
+  "corpusId": "terroir-synthetic-scanner-v1",
+  "fixtureRevision": "2026-08-07.1",
+  "provenance": {
+    "classification": "synthetic",
+    "containsCustomerData": false,
+    "consentBasis": "Project-authored fictional wine and invoice records; no customer images, OCR text, or provider responses."
+  },
+  "cases": [
+    {
+      "id": "invoice-clean-01",
+      "modality": "invoice",
+      "conditions": ["clean"],
+      "durationMs": 41000,
+      "estimatedCostUsd": 0.18,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "line-01", "producer": "Domaine Teston", "cuvee": "Les Pierres", "vintage": 2022, "format": "750ml", "quantity": 6, "cost": 31.25 }],
+      "observedLines": [{ "associationId": "line-01", "producer": "Domaine Teston", "cuvee": "Les Pierres", "vintage": 2022, "format": "750ml", "quantity": 6, "cost": 31.25, "confidence": 0.98, "committed": true, "reviewed": false }]
+    },
+    {
+      "id": "invoice-rotation-01",
+      "modality": "invoice",
+      "conditions": ["rotation"],
+      "durationMs": 52000,
+      "estimatedCostUsd": 0.19,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "line-02", "producer": "North Star Cellars", "cuvee": "Slope No. 2", "vintage": 2021, "format": "750ml", "quantity": 12, "cost": 22.4 }],
+      "observedLines": [{ "associationId": "line-02", "producer": "North Star Cellars", "cuvee": "Slope No. 2", "vintage": 2021, "format": "750ml", "quantity": 12, "cost": 22.4, "confidence": 0.93, "committed": true, "reviewed": false }]
+    },
+    {
+      "id": "invoice-glare-01",
+      "modality": "invoice",
+      "conditions": ["glare"],
+      "durationMs": 61000,
+      "estimatedCostUsd": 0.21,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "line-03", "producer": "Fictional Ridge", "cuvee": "Sunbreak", "vintage": 2020, "format": "1.5L", "quantity": 2, "cost": 78 }],
+      "observedLines": [{ "associationId": "line-03", "producer": "Fictional Ridge", "cuvee": "Sunbreak", "vintage": 2020, "format": "1.5L", "quantity": 2, "cost": 78, "confidence": 0.84, "committed": true, "reviewed": false }]
+    },
+    {
+      "id": "invoice-blur-01",
+      "modality": "invoice",
+      "conditions": ["blur"],
+      "durationMs": 72000,
+      "estimatedCostUsd": 0.22,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "line-04", "producer": "Sample House", "cuvee": "Fog Line", "vintage": 2019, "format": "750ml", "quantity": 3, "cost": 49.99 }],
+      "observedLines": [{ "associationId": "line-04", "producer": "Sample House", "cuvee": "Fog Line", "vintage": 2019, "format": "750ml", "quantity": 3, "cost": 49.99, "confidence": 0.72, "committed": true, "reviewed": true }]
+    },
+    {
+      "id": "invoice-duplicates-01",
+      "modality": "invoice",
+      "conditions": ["duplicate-lines"],
+      "durationMs": 58000,
+      "estimatedCostUsd": 0.2,
+      "providerOutcome": "success",
+      "expectedLines": [
+        { "associationId": "line-05a", "producer": "Parallel Vines", "cuvee": "Twin Row", "vintage": 2023, "format": "750ml", "quantity": 6, "cost": 18.5 },
+        { "associationId": "line-05b", "producer": "Parallel Vines", "cuvee": "Twin Row", "vintage": 2023, "format": "750ml", "quantity": 6, "cost": 18.5 }
+      ],
+      "observedLines": [
+        { "associationId": "line-05a", "producer": "Parallel Vines", "cuvee": "Twin Row", "vintage": 2023, "format": "750ml", "quantity": 6, "cost": 18.5, "confidence": 0.96, "committed": true, "reviewed": false },
+        { "associationId": "line-05b", "producer": "Parallel Vines", "cuvee": "Twin Row", "vintage": 2023, "format": "750ml", "quantity": 6, "cost": 18.5, "confidence": 0.96, "committed": true, "reviewed": false }
+      ]
+    },
+    {
+      "id": "invoice-partial-page-01",
+      "modality": "invoice",
+      "conditions": ["partial-page"],
+      "durationMs": 67000,
+      "estimatedCostUsd": 0.23,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "line-06", "producer": "Edge Case Estate", "cuvee": "Half Sheet", "vintage": 2018, "format": "375ml", "quantity": 4, "cost": 15.75 }],
+      "observedLines": [{ "associationId": "line-06", "producer": "Edge Case Estate", "cuvee": "Half Sheet", "vintage": 2018, "format": "375ml", "quantity": 4, "cost": 15.75, "confidence": 0.82, "committed": true, "reviewed": false }]
+    },
+    {
+      "id": "invoice-handwritten-01",
+      "modality": "invoice",
+      "conditions": ["handwritten-marks"],
+      "durationMs": 81000,
+      "estimatedCostUsd": 0.24,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "line-07", "producer": "Pencil Hill", "cuvee": "Margin Note", "vintage": 2020, "format": "750ml", "quantity": 1, "cost": 64 }],
+      "observedLines": [{ "associationId": "line-07", "producer": "Pencil Hill", "cuvee": "Margin Note", "vintage": 2020, "format": "750ml", "quantity": 1, "cost": 64, "confidence": 0.74, "committed": true, "reviewed": true }]
+    },
+    {
+      "id": "invoice-non-wine-01",
+      "modality": "invoice",
+      "conditions": ["non-wine-lines"],
+      "durationMs": 46000,
+      "estimatedCostUsd": 0.17,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "line-08", "producer": "Fable Farms", "cuvee": "Red Thread", "vintage": 2022, "format": "750ml", "quantity": 8, "cost": 27 }],
+      "observedLines": [{ "associationId": "line-08", "producer": "Fable Farms", "cuvee": "Red Thread", "vintage": 2022, "format": "750ml", "quantity": 8, "cost": 27, "confidence": 0.97, "committed": true, "reviewed": false }]
+    },
+    {
+      "id": "invoice-mixed-01",
+      "modality": "invoice",
+      "conditions": ["rotation", "glare"],
+      "durationMs": 76000,
+      "estimatedCostUsd": 0.22,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "line-09", "producer": "Angle & Light", "cuvee": "Prism", "vintage": 2017, "format": "750ml", "quantity": 2, "cost": 91.3 }],
+      "observedLines": [{ "associationId": "line-09", "producer": "Angle & Light", "cuvee": "Prism", "vintage": 2017, "format": "750ml", "quantity": 2, "cost": 91.3, "confidence": 0.8, "committed": true, "reviewed": false }]
+    },
+    {
+      "id": "invoice-clean-02",
+      "modality": "invoice",
+      "conditions": ["clean"],
+      "durationMs": 39000,
+      "estimatedCostUsd": 0.16,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "line-10", "producer": "Decimal Point Wines", "cuvee": "Centime", "vintage": null, "format": "750ml", "quantity": 5, "cost": 12.34 }],
+      "observedLines": [{ "associationId": "line-10", "producer": "Decimal Point Wines", "cuvee": "Centime", "vintage": null, "format": "750ml", "quantity": 5, "cost": 12.34, "confidence": 0.99, "committed": true, "reviewed": false }]
+    },
+    {
+      "id": "invoice-partial-page-02",
+      "modality": "invoice",
+      "conditions": ["partial-page", "non-wine-lines"],
+      "durationMs": 83000,
+      "estimatedCostUsd": 0.24,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "line-11", "producer": "Crop Mark Cellars", "cuvee": "Footer", "vintage": 2021, "format": "750ml", "quantity": 9, "cost": 20 }],
+      "observedLines": [{ "associationId": "line-11", "producer": "Crop Mark Cellars", "cuvee": "Footer", "vintage": 2021, "format": "750ml", "quantity": 9, "cost": 20, "confidence": 0.79, "committed": true, "reviewed": false }]
+    },
+    {
+      "id": "invoice-handwritten-02",
+      "modality": "invoice",
+      "conditions": ["handwritten-marks", "blur"],
+      "durationMs": 85000,
+      "estimatedCostUsd": 0.24,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "line-12", "producer": "Graphite Grove", "cuvee": "Soft Focus", "vintage": 2016, "format": "750ml", "quantity": 2, "cost": 44 }],
+      "observedLines": [{ "associationId": "line-12", "producer": "Graphite Grove", "cuvee": "Soft Focus", "vintage": 2016, "format": "750ml", "quantity": 2, "cost": 44, "confidence": 0.73, "committed": false, "reviewed": false }]
+    },
+    {
+      "id": "bottle-clean-01",
+      "modality": "bottle",
+      "conditions": ["clean"],
+      "durationMs": 12000,
+      "estimatedCostUsd": 0.031,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "bottle-01", "producer": "Label Test Winery", "cuvee": "Front Face", "vintage": 2022, "format": null, "quantity": null, "cost": null }],
+      "observedLines": [{ "associationId": "bottle-01", "producer": "Label Test Winery", "cuvee": "Front Face", "vintage": 2022, "format": null, "quantity": null, "cost": null, "confidence": 0.98, "committed": true, "reviewed": false }]
+    },
+    {
+      "id": "bottle-rotation-01",
+      "modality": "bottle",
+      "conditions": ["rotation"],
+      "durationMs": 18000,
+      "estimatedCostUsd": 0.037,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "bottle-02", "producer": "Quarter Turn Wines", "cuvee": "Ninety Degrees", "vintage": 2020, "format": null, "quantity": null, "cost": null }],
+      "observedLines": [{ "associationId": "bottle-02", "producer": "Quarter Turn Wines", "cuvee": "Ninety Degrees", "vintage": 2020, "format": null, "quantity": null, "cost": null, "confidence": 0.9, "committed": true, "reviewed": false }]
+    },
+    {
+      "id": "bottle-glare-01",
+      "modality": "bottle",
+      "conditions": ["glare"],
+      "durationMs": 21000,
+      "estimatedCostUsd": 0.041,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "bottle-03", "producer": "Mirror Lake", "cuvee": "Reflection", "vintage": 2019, "format": null, "quantity": null, "cost": null }],
+      "observedLines": [{ "associationId": "bottle-03", "producer": "Mirror Lake", "cuvee": "Reflection", "vintage": 2019, "format": null, "quantity": null, "cost": null, "confidence": 0.81, "committed": true, "reviewed": false }]
+    },
+    {
+      "id": "bottle-blur-01",
+      "modality": "bottle",
+      "conditions": ["blur"],
+      "durationMs": 24000,
+      "estimatedCostUsd": 0.044,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "bottle-04", "producer": "Motion Estate", "cuvee": "Still Frame", "vintage": 2018, "format": null, "quantity": null, "cost": null }],
+      "observedLines": [{ "associationId": "bottle-04", "producer": "Motion Estate", "cuvee": "Still Frame", "vintage": 2018, "format": null, "quantity": null, "cost": null, "confidence": 0.77, "committed": true, "reviewed": false }]
+    },
+    {
+      "id": "bottle-partial-01",
+      "modality": "bottle",
+      "conditions": ["partial-page"],
+      "durationMs": 26000,
+      "estimatedCostUsd": 0.046,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "bottle-05", "producer": "Cutoff Creek", "cuvee": "Partial Label", "vintage": null, "format": null, "quantity": null, "cost": null }],
+      "observedLines": [{ "associationId": "bottle-05", "producer": "Cutoff Creek", "cuvee": "Partial Label", "vintage": null, "format": null, "quantity": null, "cost": null, "confidence": 0.74, "committed": true, "reviewed": true }]
+    },
+    {
+      "id": "bottle-handwritten-01",
+      "modality": "bottle",
+      "conditions": ["handwritten-marks"],
+      "durationMs": 20000,
+      "estimatedCostUsd": 0.039,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "bottle-06", "producer": "Chalk Door", "cuvee": "Bin Note", "vintage": 2015, "format": null, "quantity": null, "cost": null }],
+      "observedLines": [{ "associationId": "bottle-06", "producer": "Chalk Door", "cuvee": "Bin Note", "vintage": 2015, "format": null, "quantity": null, "cost": null, "confidence": 0.76, "committed": true, "reviewed": false }]
+    },
+    {
+      "id": "bottle-mixed-01",
+      "modality": "bottle",
+      "conditions": ["rotation", "glare", "blur"],
+      "durationMs": 28000,
+      "estimatedCostUsd": 0.049,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "bottle-07", "producer": "Synthetic Peak", "cuvee": "Stress Test", "vintage": 2014, "format": null, "quantity": null, "cost": null }],
+      "observedLines": [{ "associationId": "bottle-07", "producer": "Synthetic Peak", "cuvee": "Stress Test", "vintage": 2014, "format": null, "quantity": null, "cost": null, "confidence": 0.7, "committed": false, "reviewed": false }]
+    },
+    {
+      "id": "bottle-clean-02",
+      "modality": "bottle",
+      "conditions": ["clean"],
+      "durationMs": 14000,
+      "estimatedCostUsd": 0.029,
+      "providerOutcome": "success",
+      "expectedLines": [{ "associationId": "bottle-08", "producer": "Fixture Family", "cuvee": "Baseline", "vintage": 2023, "format": null, "quantity": null, "cost": null }],
+      "observedLines": [{ "associationId": "bottle-08", "producer": "Fixture Family", "cuvee": "Baseline", "vintage": 2023, "format": null, "quantity": null, "cost": null, "confidence": 0.99, "committed": true, "reviewed": false }]
+    }
+  ]
+}

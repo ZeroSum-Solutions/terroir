@@ -134,7 +134,12 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       const saved = loadScan();
       if (saved) {
         setScan(saved);
-        setStatus("results");
+        setStatus(
+          saved.quality?.manualFallbackTriggered &&
+            !saved.reviewedLowConfidence
+            ? "review"
+            : "results",
+        );
       }
     });
   }, []);
@@ -439,6 +444,16 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     setStatus("results");
   }, [rawText]);
 
+  const reviewLowConfidenceResults = useCallback(() => {
+    setScan((current) => {
+      if (!current) return current;
+      const reviewed = { ...current, reviewedLowConfidence: true };
+      saveScan(reviewed);
+      return reviewed;
+    });
+    setStatus("results");
+  }, []);
+
   const startBottleScan = useCallback(async (file: File) => {
     if (bottleScanBusyRef.current) return;
     bottleScanBusyRef.current = true;
@@ -592,7 +607,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       {status === "review" && scan && (
         <ConfidenceGateView
           quality={scan.quality!}
-          onReviewResults={() => setStatus("results")}
+          onReviewResults={reviewLowConfidenceResults}
           onManualEntry={enterManualEntry}
         />
       )}

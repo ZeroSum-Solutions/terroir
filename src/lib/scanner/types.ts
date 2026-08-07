@@ -44,6 +44,7 @@ export type Scan = {
   items: LineItem[];
   edits: Record<string, true>;
   quality?: ScanQuality;
+  reviewedLowConfidence?: boolean;
   rawText?: string;
 };
 

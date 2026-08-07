@@ -143,5 +143,6 @@ export const PersistedScanSchema = z.object({
     items: z.array(PersistedLineItemSchema),
     edits: z.record(z.string(), z.literal(true)),
     quality: PersistedScanQualitySchema.optional(),
+    reviewedLowConfidence: z.boolean().optional(),
   }),
 });

@@ -206,5 +206,18 @@ describe("extractFromOcr", () => {
 
     expect(err).toBeInstanceOf(AiExtractError);
     expect(err.code).toBe("unknown");
+    expect(err.retryable).toBe(false);
+  });
+
+  it("maps timeout failures to a retryable redacted timeout", async () => {
+    const timeout = new Error("secret timeout detail");
+    timeout.name = "TimeoutError";
+    anthropic.parse.mockRejectedValue(timeout);
+
+    const err = await extractFromOcr(okOcr()).catch((error) => error);
+
+    expect(err).toBeInstanceOf(AiExtractError);
+    expect(err).toMatchObject({ code: "timeout", retryable: true });
+    expect(err.message).not.toContain("secret");
   });
 });

@@ -18,6 +18,16 @@ export interface AzureOcrResult {
   confidence: number;
 }
 
+class AzureProviderResponseError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "AzureProviderResponseError";
+    this.status = status;
+  }
+}
+
 /**
  * Analyze an invoice image using Azure Document Intelligence's
  * prebuilt-invoice model. Returns raw text, extracted table rows,
@@ -60,7 +70,8 @@ export async function analyzeInvoice(
   if (isUnexpected(initialResponse)) {
     const status = (initialResponse as { status: string }).status;
     const body = initialResponse.body as { error?: { message?: string } };
-    throw new Error(
+    throw new AzureProviderResponseError(
+      Number(status) || 502,
       `Azure DI request failed (${status}): ${body?.error?.message ?? "Unknown error"}`,
     );
   }
@@ -74,7 +85,11 @@ export async function analyzeInvoice(
   } catch (err) {
     clearTimeout(pollTimeout);
     if (pollAbort.signal.aborted) {
-      throw new Error("Azure Document Intelligence timed out after 90 seconds.");
+      const timeoutError = new Error(
+        "Azure Document Intelligence timed out after 90 seconds.",
+      );
+      timeoutError.name = "TimeoutError";
+      throw timeoutError;
     }
     throw err;
   }
@@ -83,7 +98,10 @@ export async function analyzeInvoice(
   const analyzeResult = (result.body as { analyzeResult?: Record<string, unknown> })
     .analyzeResult;
   if (!analyzeResult) {
-    throw new Error("Azure DI returned no analyzeResult.");
+    throw new AzureProviderResponseError(
+      502,
+      "Azure DI returned no analyzeResult.",
+    );
   }
 
   const rawText = (analyzeResult.content as string) ?? "";

@@ -1,69 +1,23 @@
-# BND-030 / DEBT-007
+# TER-022 deterministic scanner score.
 #
-# Manually-triggered scoring sweep. Runs scripts/test-invoices.ts
-# against the committed test-invoices/ fixture set and publishes the
-# resulting JSON as a workflow artifact.
-#
-# *** NOT TRIGGERED ON PUSH OR PR ***
-# This workflow fires real Azure Document Intelligence + Anthropic
-# API calls. Each run costs money. Trigger manually via the GitHub
-# Actions "Run workflow" button when you want to measure scanner
-# accuracy — e.g. after a prompt or model change.
-#
-# Required secrets (add under Settings → Secrets and variables →
-# Actions) before the workflow can complete successfully:
-#   - AZURE_DOC_INTELLIGENCE_ENDPOINT
-#   - AZURE_DOC_INTELLIGENCE_KEY
-#   - ANTHROPIC_API_KEY
-#
-# INT-015: the secret names match the environment variables
-# src/lib/scanner/ocr-service.ts reads. Earlier drafts shortened
-# them to AZURE_DOC_INTEL_* — the scanner never reads that form, so
-# the workflow would have silently run with empty Azure credentials.
-#
-# Optional: commit a baseline at the repo root named
-# test-results-baseline.json. When present, the workflow compares
-# the new avgConfidence against the baseline and FAILS the run if
-# the new score dropped by more than 0.02 — a cheap regression gate
-# that you can opt into by committing a known-good baseline.
-#
-# To establish the baseline for the first time:
-#   1. Add the 3 required secrets under Settings → Secrets → Actions.
-#   2. Trigger this workflow manually (Actions tab → "Run workflow").
-#   3. Download the `scoring-opus-<sha>` artifact.
-#   4. Rename the JSON inside to test-results-baseline.json, commit to
-#      the repo root.
-#   5. Every subsequent manual run now compares against it.
-#
-# Security note: the `model` input is constrained to opus|sonnet via
-# the choice type, so injection is structurally impossible — but we
-# still pass it to run: via env: to model the safe pattern.
+# This workflow is intentionally non-billed: it reads only committed synthetic
+# fixtures and must never receive provider credentials. A real-provider canary
+# remains a separate, owner-approved release activity because it incurs cost and
+# requires consent-safe provider inputs.
 
-name: Score scanner accuracy
+name: Score scanner fixtures
 
 on:
   workflow_dispatch:
-    inputs:
-      model:
-        description: "Claude model to sweep with"
-        required: true
-        default: "opus"
-        type: choice
-        options:
-          - opus
-          - sonnet
+
+permissions:
+  contents: read
 
 jobs:
   score:
-    name: Run test-invoices sweep
+    name: Enforce scanner release floors
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    env:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      AZURE_DOC_INTELLIGENCE_ENDPOINT: ${{ secrets.AZURE_DOC_INTELLIGENCE_ENDPOINT }}
-      AZURE_DOC_INTELLIGENCE_KEY: ${{ secrets.AZURE_DOC_INTELLIGENCE_KEY }}
-      MODEL: ${{ inputs.model }}
+    timeout-minutes: 5
 
     steps:
       - name: Checkout
@@ -72,57 +26,24 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10.33.2
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24.16.0
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run scoring sweep
-        run: npx tsx scripts/test-invoices.ts --model "$MODEL"
+      - name: Score synthetic fixtures
+        run: node --experimental-strip-types scripts/score-scanner-fixtures.ts | tee scanner-score.json
 
-      - name: Resolve output filename
-        id: out
-        run: |
-          if [ "$MODEL" = "opus" ]; then
-            echo "file=test-results.json" >> "$GITHUB_OUTPUT"
-          else
-            echo "file=test-results-$MODEL.json" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Upload result artifact
+      - name: Upload scoring evidence
         uses: actions/upload-artifact@v4
-        env:
-          ARTIFACT_FILE: ${{ steps.out.outputs.file }}
         with:
-          name: scoring-${{ env.MODEL }}-${{ github.sha }}
-          path: ${{ steps.out.outputs.file }}
+          name: scanner-fixture-score-${{ github.sha }}
+          path: scanner-score.json
           if-no-files-found: error
-
-      - name: Compare against baseline (if present)
-        env:
-          CURRENT_FILE: ${{ steps.out.outputs.file }}
-        run: |
-          if [ ! -f test-results-baseline.json ]; then
-            echo "No test-results-baseline.json committed — skipping regression check."
-            exit 0
-          fi
-          CURRENT_FILE="$CURRENT_FILE" node -e '
-            const current = require("./" + process.env.CURRENT_FILE);
-            const baseline = require("./test-results-baseline.json");
-            const avg = (x) => {
-              const ok = x.results.filter(r => !r.error);
-              return ok.length ? ok.reduce((s, r) => s + r.avgConfidence, 0) / ok.length : 0;
-            };
-            const c = avg(current), b = avg(baseline);
-            console.log("avgConfidence now=" + c.toFixed(3) + " baseline=" + b.toFixed(3));
-            if (c < b - 0.02) {
-              console.error("REGRESSION: scoring dropped >0.02 vs baseline");
-              process.exit(1);
-            }
-          '
+          retention-days: 30

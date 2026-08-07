@@ -6,15 +6,16 @@
 #   3. lint         (next lint / eslint)
 #   4. unit tests   (vitest run)
 #   5. contract tests (DB security/API envelopes)
-#   6. schema drift (supabase/schema.snapshot.sql must equal a fresh
+#   6. non-billed scanner fixture score and release thresholds
+#   7. schema drift (supabase/schema.snapshot.sql must equal a fresh
 #                    concatenation of supabase/migrations/*.sql)
-#   7. types drift  (src/types/database.ts must equal the live schema's
+#   8. types drift  (src/types/database.ts must equal the live schema's
 #                    current generated types) — skipped when
 #                    SUPABASE_ACCESS_TOKEN is not set (fork PRs etc.)
-#   8. downs check  (every forward migration from 0011 onward has a
+#   9. downs check  (every forward migration from 0011 onward has a
 #                    paired supabase/migrations/down/*.down.sql file —
 #                    INT-006)
-#   9. local seed dry-run (sanitized production-like fixtures still build)
+#  10. local seed dry-run (sanitized production-like fixtures still build)
 #
 # The schema-drift step turns "someone added a migration but forgot to
 # update the snapshot" into a hard failure. To regenerate the snapshot
@@ -56,12 +57,12 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10.33.2
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24.16.0
           cache: pnpm
 
       - name: Install dependencies
@@ -87,6 +88,9 @@ jobs:
 
       - name: Contract tests
         run: pnpm run test:contracts
+
+      - name: Non-billed scanner quality gate
+        run: pnpm run scanner:score
 
       - name: Production build
         run: pnpm run build
