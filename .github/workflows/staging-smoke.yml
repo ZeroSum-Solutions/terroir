@@ -66,6 +66,7 @@ jobs:
       TERROIR_E2E_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
       TERROIR_E2E_SERVICE_ROLE_KEY_SHA256: ${{ vars.STAGING_SUPABASE_SERVICE_ROLE_KEY_SHA256 }}
       TERROIR_E2E_FORCE_FAILURE: ${{ github.event_name == 'workflow_dispatch' && inputs.force_evidence_failure && '1' || '0' }}
+      TERROIR_E2E_BROWSER_PATH: /usr/bin/google-chrome
       E2E_EVIDENCE_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
     steps:
       - uses: actions/checkout@v4
@@ -83,8 +84,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
+      - name: Verify runner Chrome
+        run: |
+          test -x "$TERROIR_E2E_BROWSER_PATH"
+          "$TERROIR_E2E_BROWSER_PATH" --version
 
       - name: Run the isolated authenticated workflow
         run: pnpm run test:e2e:isolated

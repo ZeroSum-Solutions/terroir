@@ -30,8 +30,15 @@ export default defineConfig({
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "retain-on-failure",
-    launchOptions: process.env.UI_CRAWL_BROWSER_PATH
-      ? { executablePath: process.env.UI_CRAWL_BROWSER_PATH }
+    launchOptions: (
+      process.env.TERROIR_E2E_BROWSER_PATH
+      || process.env.UI_CRAWL_BROWSER_PATH
+    )
+      ? {
+          executablePath:
+            process.env.TERROIR_E2E_BROWSER_PATH
+            ?? process.env.UI_CRAWL_BROWSER_PATH,
+        }
       : undefined,
   },
   webServer: externalBaseUrl

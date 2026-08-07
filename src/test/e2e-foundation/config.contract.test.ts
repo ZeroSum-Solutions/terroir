@@ -332,6 +332,10 @@ describe("failure evidence redaction", () => {
       /github\.event_name == 'workflow_dispatch' && inputs\.force_evidence_failure/,
     );
     expect(workflow).toContain("TERROIR_E2E_FORCE_FAILURE:");
+    expect(workflow).toContain(
+      "TERROIR_E2E_BROWSER_PATH: /usr/bin/google-chrome",
+    );
+    expect(workflow).not.toContain("playwright install --with-deps");
     expect(workflow).toMatch(
       /Encrypt browser evidence[\s\S]*?age -r[\s\S]*?rm -rf playwright-report test-results\/playwright[\s\S]*?Retain browser failure evidence[\s\S]*?if: always\(\)/,
     );
