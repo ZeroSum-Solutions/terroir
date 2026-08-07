@@ -20,6 +20,11 @@ business workflows. Adapter modules own external provider mechanics.
 - `../src/lib/supabase/server.ts`: Supabase server-client creation boundary.
 - `../src/components/background-job-progress.tsx`: shared authenticated-shell
   progress, refresh recovery, and manager retry UI for durable jobs.
+- `../src/worker/main.ts`: standalone worker process composition and signal lifecycle.
+- `../src/worker/runtime.ts`: bounded claims, lease heartbeats, execution timeout,
+  drain, and lifecycle RPC orchestration.
+- `../src/worker/supabase-job-store.ts`: service-role-only job RPC and aggregate
+  queue-health adapter.
 
 ## Database Contracts
 
@@ -68,10 +73,11 @@ business workflows. Adapter modules own external provider mechanics.
   but live isolation and synthetic stateful workflow evidence remain required
   before staging can become a production promotion gate. See
   [`STAGING-SETUP.md`](STAGING-SETUP.md).
-- Deploy the TER-021C worker or scheduled processor that consumes the
-  `background_jobs` lease RPCs. The lifecycle control plane is present, but the
-  worker still needs an operational owner, non-production service-role
-  credentials, queue health telemetry, and a kill-and-restart staging drill
-  before OCR, enrichment, or PDF routes move off their synchronous paths.
+- Obtain the required infrastructure approval, deploy the TER-021C runtime with
+  `railway.worker.toml` against staging-only credentials, and complete the
+  kill-and-restart/dead-letter drill in
+  [`runbooks/background-worker.md`](runbooks/background-worker.md). The worker
+  control plane is implemented, but no business handler or enqueue path is
+  enabled until TER-021E/F/G owns that vertical slice.
 - Finish extracting `auth`, remaining `cellar`, `insights`, and `storage`
   workflow code as those routes are touched.

@@ -22,6 +22,7 @@ production rows, object storage, sessions, or secrets.
 | Surface | Required staging state | Evidence that is safe to record |
 | --- | --- | --- |
 | Railway | A dedicated `terroir-web-staging` service which tracks only `staging` | service ID, URL, environment name, deployment SHA |
+| Railway worker | After explicit resource approval, a distinct worker service using `railway.worker.toml` and the same staging candidate SHA | service ID, environment name, deployment SHA, health state |
 | Supabase | The isolated branch/project ref `wwhxcgtcecsftcivosop` | ref only; never URL, keys, or service-role secret |
 | Data | Synthetic fixtures in a disposable namespace | fixture run ID and cleanup result |
 | Auth/email | Site URL and redirect allow-list include the staging origin; SMTP/test inbox is staging-only | configuration checklist and redacted inbox transcript |
@@ -33,6 +34,13 @@ The Railway service must set staging-owned values for
 Supabase values must be issued for `wwhxcgtcecsftcivosop`; the cookie secret
 must be unique to staging. Keep all values in Railway/Supabase, never in this
 repository or a smoke-test log.
+
+The worker service receives the same staging Supabase URL and its own
+service-role secret through Railway variables, plus the bounded `WORKER_*`
+settings documented in
+[`runbooks/background-worker.md`](runbooks/background-worker.md). It must never
+receive production credentials. The worker's `GET /health` is a separate
+readiness gate and does not change the public web health endpoint.
 
 Set `RAILWAY_GIT_COMMIT_SHA` from Railway's commit variable if it is not
 automatically provided. `GET /api/health` exposes only its presence as the
@@ -49,9 +57,13 @@ or Supabase URL.
    image upload, database write, public list, and PDF. TER-004/TER-010 own the
    disposable fixture and real-email coverage; retain their report with the
    candidate SHA.
-4. Require both the staging smoke check and the workflow report before a
+4. After the first handler-owning TER-021 slice is present, run the worker
+   kill/restart and dead-letter drill against synthetic staging data and retain
+   its exact candidate SHA and effect-count evidence.
+5. Require the staging smoke check, workflow report, and any applicable worker
+   drill before a
    release owner dispatches `Promote to production` with the exact SHA.
-5. The promotion workflow rejects any SHA other than the current `staging`
+6. The promotion workflow rejects any SHA other than the current `staging`
    tip, requires the configured `PRODUCTION_RELEASE_OWNER` actor to enter the
    exact `PROMOTE-STAGING-SHA` confirmation, runs a fresh staging smoke, then
    only fast-forwards `main`.

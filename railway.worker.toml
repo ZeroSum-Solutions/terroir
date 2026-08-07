@@ -1,0 +1,13 @@
+# TER-021C worker service Config-as-Code. In Railway, point the isolated
+# non-production worker service at this file; do not replace the web service's
+# root railway.toml.
+
+[build]
+buildCommand = "pnpm validate:worker && pnpm build"
+
+[deploy]
+startCommand = "pnpm worker"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

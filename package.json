@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.33.2",
   "engines": {
-    "node": ">=20",
-    "pnpm": ">=9"
+    "node": "24.16.0",
+    "pnpm": "10.33.2"
   },
   "scripts": {
     "dev": "next dev",
@@ -14,12 +15,14 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:staging": "node scripts/test-staging.mjs",
+    "test:worker": "vitest run src/worker",
     "test:contracts": "vitest run src/test/contracts src/lib/api/errors.contract.test.ts src/lib/api/validation.contract.test.ts src/lib/api/handler.contract.test.ts src/lib/auth/api-authorization.test.ts src/lib/api-route-inventory/verify-api-contract.test.ts",
     "test:e2e:isolated": "playwright test e2e/pour-flow.test.ts e2e/restaurant-switching.test.ts",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:ui-crawl": "TERROIR_UI_CRAWL=1 playwright test e2e/ui-control-crawl.test.ts",
     "validate:env": "node scripts/validate-runtime-config.mjs",
+    "validate:worker": "node --experimental-strip-types src/worker/validate-config.ts",
     "drill:alerts": "node scripts/run-alert-drill.mjs",
     "verify:api-contract": "node scripts/verify-api-contract.mjs",
     "verify:auth-removal": "node scripts/verify-auth-removal.mjs",
@@ -31,6 +34,7 @@
     "types:gen": "node scripts/generate-supabase-types.mjs",
     "types:check": "node scripts/generate-supabase-types.mjs && git diff --exit-code src/types/database.ts",
     "downs:check": "node scripts/check-down-migrations.mjs",
+    "worker": "node --experimental-strip-types src/worker/main.ts",
     "supabase:seed:local": "node scripts/seed-local-supabase.mjs",
     "supabase:seed:local:apply": "node scripts/seed-local-supabase.mjs --confirm",
     "supabase:seed:local:teardown": "node scripts/seed-local-supabase.mjs --teardown --confirm"

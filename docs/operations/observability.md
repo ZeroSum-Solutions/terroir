@@ -6,7 +6,14 @@ The public health endpoint is always HTTP 200 while the web process can answer. 
 
 The JSON body separates `readiness` from liveness. `readiness: "ready"` requires a configured core runtime and a successful non-billed Supabase database probe. `readiness: "degraded"` gives names-only configuration failures and dependency states. It never returns credentials, error text, request payloads, user identities, or invoice content. `environment` and `release` are deployment identifiers used by the staging SHA gate; neither contains customer data.
 
-The service currently has no distinct email-delivery service or background worker. Their `not_configured` state is intentional truth, not a passing check. Storage is `unknown` while the database is reachable because the application has not yet gained a safe, independent storage probe.
+The web health response still reports its worker integration as
+`not_configured`; the web process does not make a network dependency out of the
+worker. The separately deployed worker owns `GET /health`. It returns 503 while
+starting, draining, or after the last successful database operation becomes
+stale, and 200 only while ready. Its response contains aggregate queue state
+and timestamps, never credentials, job payloads, tenant IDs, provider content,
+or error text. Email remains `not_configured`; storage remains `unknown` while
+the database is reachable because there is no safe independent storage probe.
 
 ## Configuration and providers
 
@@ -14,7 +21,18 @@ Railway runs `pnpm validate:env` before `pnpm build`, and `pnpm start` repeats t
 
 ## Metrics and structured events
 
-The server emits redacted JSON events with `event`, environment, service, request ID, restaurant ID, operation, and outcome. The metric names currently emitted are `auth_failures`, `scan_latency_ms`, `scan_errors`, `list_generation`, and `reconciliation`. Sentry metric calls are used when available, with the same events retained for Railway log-derived metrics. Jobs and invitation delivery have no real producer yet because the app has no worker or email-delivery integration.
+The web server emits redacted JSON events with `event`, environment, service,
+request ID, restaurant ID, operation, and outcome. Its metric names are
+`auth_failures`, `scan_latency_ms`, `scan_errors`, `list_generation`, and
+`reconciliation`. Sentry metric calls are used when available, with the same
+events retained for Railway log-derived metrics.
+
+The worker emits allowlisted, redacted JSON to Railway logs with release,
+environment, worker, job, and outcome correlations. Its metrics are
+`jobs_claimed`, `jobs_succeeded`, `jobs_retried`, `jobs_failed`,
+`jobs_lease_lost`, `queue_depth`, and `dead_letter_count`. Queue events contain
+only counts and age; job events never contain metadata or results. There is no
+business-job producer until TER-021E/F/G enables one.
 
 Do not add email addresses, tokens, raw URLs, request bodies, provider responses, invoice text, headers, stack traces, or secret values as structured fields. Sentry is a second privacy boundary: request, user, context, breadcrumb, free-text, transaction, span, error-message, exception-value, and frame-local payloads are removed before send. Browser replay masks all text and inputs, blocks all media, and disables network-body capture; invoice images, OCR text, and scanner edits therefore never enter replay.
 
@@ -38,6 +56,10 @@ Configure these production and staging alerts from the named metrics and events:
 | `scan_errors` | 5 in 10 minutes | high | this document, Triage |
 | `scan_latency_ms` | p95 above 90 seconds for 10 minutes | high | this document, Triage |
 | `reconciliation` error outcome | 3 in 10 minutes | high | this document, Triage |
+| worker readiness is not `ready` | 2 consecutive checks in 5 minutes | high | [`background-worker.md`](../runbooks/background-worker.md) |
+| `queue_depth` oldest age | at least 5 minutes | high | [`background-worker.md`](../runbooks/background-worker.md) |
+| `dead_letter_count` | at least 1 | high | [`background-worker.md`](../runbooks/background-worker.md) |
+| `jobs_lease_lost` | at least 3 in 10 minutes | high | [`background-worker.md`](../runbooks/background-worker.md) |
 | `alert_drill_failure` | 1 event in 5 minutes, staging only | high | this document, Alert drill |
 
 Every alert message must include environment, severity, service, event name, first occurrence, last occurrence, count, a request or job correlation ID, and a link to this runbook. Do not include a user, email, secret, request body, or provider response. Notification rules live in Sentry or Railway rather than source control; an operator must create and exercise the corresponding staging rule before claiming the runtime drill complete.
@@ -60,5 +82,10 @@ The unit and local executable drills prove the code path and redaction contract.
 2. For `readiness=degraded`, distinguish `database` from names-only `missingConfiguration`; correct Railway variables only through the service's secret manager, then redeploy.
 3. For scan errors or latency, inspect the provider phase and metric trend. Do not replay a customer invoice or paste its contents into an incident channel.
 4. For auth failures, look for an authentication or capability-denied spike, then inspect deploy and identity-provider changes. Treat a broad spike as a possible security incident.
-5. For reconciliation events, pause the affected workflow if failures persist and preserve the correlation IDs for follow-up. Email delivery cannot be remediated here because no delivery provider exists.
-6. Record the first and last occurrence, count, environment, operator action, and resolution in the incident tracker without copying sensitive payloads.
+5. For worker readiness, queue age, lease loss, or dead letters, use the worker
+   runbook. Never paste metadata or results into an incident channel.
+6. For reconciliation events, pause the affected workflow if failures persist
+   and preserve the correlation IDs for follow-up. Email delivery cannot be
+   remediated here because no delivery provider exists.
+7. Record the first and last occurrence, count, environment, operator action,
+   and resolution in the incident tracker without copying sensitive payloads.
