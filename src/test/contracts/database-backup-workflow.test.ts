@@ -187,6 +187,27 @@ describe("database backup workflow", () => {
     );
   });
 
+  it("parses PostgreSQL sequence state without assuming display booleans", async () => {
+    const { parseSequenceState } =
+      await loadScript("collect-database-evidence");
+
+    expect(parseSequenceState("42\ttrue", "public", "wine_id_seq")).toEqual({
+      schema: "public",
+      sequence: "wine_id_seq",
+      last_value: "42",
+      is_called: true,
+    });
+    expect(parseSequenceState("1\tfalse", "auth", "token_id_seq")).toEqual({
+      schema: "auth",
+      sequence: "token_id_seq",
+      last_value: "1",
+      is_called: false,
+    });
+    expect(() =>
+      parseSequenceState("1\tt", "public", "wine_id_seq"),
+    ).toThrow(/Invalid sequence state/u);
+  });
+
   it("mechanically refuses a non-loopback restore target", async () => {
     const { assertDisposableRestoreUrl } =
       await loadScript("assert-disposable-target");
