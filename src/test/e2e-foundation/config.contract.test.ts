@@ -165,7 +165,10 @@ describe("fixture identity isolation", () => {
         };
       },
       storage: {
-        from: () => ({ remove: async () => ({ error: null }) }),
+        from: () => ({
+          list: async () => ({ data: [], error: null }),
+          remove: async () => ({ error: null }),
+        }),
       },
     };
 

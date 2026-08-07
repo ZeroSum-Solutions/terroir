@@ -2905,7 +2905,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-001",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 278,
+      "line": 299,
       "kind": "button",
       "label": "`Drag to reorder ${section.name",
       "href": null,
@@ -2922,9 +2922,9 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#input-001",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 291,
+      "line": 312,
       "kind": "input",
-      "label": "input at src/app/(app)/lists/[id]/wine-list-editor.tsx:291",
+      "label": "input at src/app/(app)/lists/[id]/wine-list-editor.tsx:312",
       "href": null,
       "actors": [
         "owner",
@@ -2939,7 +2939,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-002",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 306,
+      "line": 327,
       "kind": "button",
       "label": "{dynamic} {dynamic}",
       "href": null,
@@ -2956,7 +2956,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-003",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 329,
+      "line": 350,
       "kind": "button",
       "label": "`Rename ${section.name",
       "href": null,
@@ -2973,7 +2973,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-004",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 340,
+      "line": 361,
       "kind": "button",
       "label": "`Delete ${section.name",
       "href": null,
@@ -2990,7 +2990,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#link-001",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1190,
+      "line": 1222,
       "kind": "link",
       "label": "All lists",
       "href": "/lists",
@@ -3007,7 +3007,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-005",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1215,
+      "line": 1247,
       "kind": "button",
       "label": "{dynamic} {dynamic}",
       "href": null,
@@ -3024,7 +3024,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#a-001",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1228,
+      "line": 1260,
       "kind": "link",
       "label": "Toast Export",
       "href": "/api/export/toast-csv",
@@ -3041,7 +3041,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#a-002",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1236,
+      "line": 1268,
       "kind": "link",
       "label": "CSV",
       "href": "`/api/wine-lists/${list.id",
@@ -3058,7 +3058,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#a-003",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1245,
+      "line": 1277,
       "kind": "link",
       "label": "Preview",
       "href": "`/lists/${list.id",
@@ -3075,7 +3075,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#a-004",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1254,
+      "line": 1286,
       "kind": "link",
       "label": "Print",
       "href": "`/lists/${list.id",
@@ -3092,7 +3092,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-006",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1264,
+      "line": 1296,
       "kind": "button",
       "label": "Copy URL",
       "href": null,
@@ -3109,7 +3109,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-007",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1273,
+      "line": 1305,
       "kind": "button",
       "label": "Publish",
       "href": null,
@@ -3126,9 +3126,9 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#select-001",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1287,
+      "line": 1319,
       "kind": "select",
-      "label": "select at src/app/(app)/lists/[id]/wine-list-editor.tsx:1287",
+      "label": "select at src/app/(app)/lists/[id]/wine-list-editor.tsx:1319",
       "href": null,
       "actors": [
         "owner",
@@ -3143,7 +3143,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-008",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1339,
+      "line": 1371,
       "kind": "button",
       "label": "Add section",
       "href": null,
@@ -3160,7 +3160,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-009",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1376,
+      "line": 1408,
       "kind": "button",
       "label": "Add wine",
       "href": null,
@@ -3177,7 +3177,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-010",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1442,
+      "line": 1474,
       "kind": "button",
       "label": "Add another wine to {dynamic}",
       "href": null,
@@ -3194,7 +3194,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-011",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1467,
+      "line": 1499,
       "kind": "button",
       "label": "Close",
       "href": null,
@@ -3211,7 +3211,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-012",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1486,
+      "line": 1518,
       "kind": "button",
       "label": "Cancel",
       "href": null,
@@ -3228,7 +3228,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-013",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1493,
+      "line": 1525,
       "kind": "button",
       "label": "Remove wine",
       "href": null,
@@ -3245,7 +3245,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-014",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1516,
+      "line": 1548,
       "kind": "button",
       "label": "Close",
       "href": null,
@@ -3262,7 +3262,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-015",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1538,
+      "line": 1570,
       "kind": "button",
       "label": "Cancel",
       "href": null,
@@ -3279,7 +3279,7 @@
     {
       "id": "src/app/(app)/lists/[id]/wine-list-editor.tsx#button-016",
       "source": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
-      "line": 1545,
+      "line": 1577,
       "kind": "button",
       "label": "Delete section",
       "href": null,
