@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, X509Certificate } from "node:crypto";
 import {
   mkdtempSync,
   readFileSync,
@@ -72,7 +72,11 @@ describe("database backup workflow", () => {
   });
 
   it("fails when a non-system schema is absent from the archive", async () => {
-    const { assertSchemaCoverage, parseArchiveSchemas } =
+    const {
+      assertSchemaCoverage,
+      parseArchiveSchemas,
+      parseDumpableSchemaRows,
+    } =
       await loadScript("assert-dump-coverage");
     const archive = parseArchiveSchemas(`
 123; 0 0 SCHEMA - auth supabase_auth_admin
@@ -92,6 +96,16 @@ describe("database backup workflow", () => {
         archive,
       }),
     ).toThrow(/custom_app/u);
+    expect(parseDumpableSchemaRows("public\npublic\naudit\n")).toEqual([
+      "audit",
+      "public",
+    ]);
+    expect(() =>
+      assertSchemaCoverage({
+        source: parseDumpableSchemaRows("public\n"),
+        archive,
+      }),
+    ).not.toThrow();
   });
 
   it("writes a libpq service with safe raw INI values and no URL query drift", async () => {
@@ -105,7 +119,9 @@ describe("database backup workflow", () => {
     expect(config).toContain("host=db.example.test");
     expect(config).toContain("user=backup");
     expect(config).toContain("password=p@ss-word");
-    expect(config).toContain("sslmode=require");
+    expect(config).toContain("sslmode=verify-full");
+    expect(config).toContain("sslrootcert=");
+    expect(config).toContain("supabase-root-2021-ca.crt");
     expect(() =>
       createPgServiceConfig(
         "postgresql://backup:p%27ssword@db.example.test/postgres",
@@ -131,10 +147,21 @@ describe("database backup workflow", () => {
       ),
     ).toThrow(/session pooler port 5432/u);
     const localRestore = createPgServiceConfig(
-      "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+      "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres",
       "terroir_restore",
     );
     expect(localRestore).toContain("sslmode=disable");
+    expect(localRestore).not.toContain("sslrootcert");
+
+    const certificate = new X509Certificate(
+      readFileSync(
+        resolve(process.cwd(), "config/supabase-root-2021-ca.crt"),
+      ),
+    );
+    expect(certificate.ca).toBe(true);
+    expect(certificate.fingerprint256).toBe(
+      "80:70:25:AD:50:D4:ED:21:9D:2C:9C:7D:29:9C:00:4F:82:4E:B0:0C:F7:F6:5A:FE:F6:07:D0:7B:72:E6:CA:FA",
+    );
   });
 
   it("derives only the expected port-5432 session-pooler backup URL", async () => {
@@ -187,13 +214,15 @@ describe("database backup workflow", () => {
     expect(sql).toContain("granted_role.rolname <> 'pg_read_all_data'");
     expect(sql).toContain("grant pg_read_all_data");
     expect(sql).toContain("default_transaction_read_only = on");
+    expect(sql).toContain("statement_timeout = 0");
+    expect(sql).toContain("idle_in_transaction_session_timeout = 0");
     expect(sql).toContain(
       "password 'a-very-long-''quoted''-backup-role-password'",
     );
   });
 
   it("parses PostgreSQL sequence state without assuming display booleans", async () => {
-    const { parseSequenceState } =
+    const { parseSequenceState, parseTableInventory, snapshotSql } =
       await loadScript("collect-database-evidence");
 
     expect(parseSequenceState("42\ttrue", "public", "wine_id_seq")).toEqual({
@@ -211,6 +240,38 @@ describe("database backup workflow", () => {
     expect(() =>
       parseSequenceState("1\tt", "public", "wine_id_seq"),
     ).toThrow(/Invalid sequence state/u);
+    expect(
+      parseTableInventory(
+        "public\twines\tr\npublic\twine_partitions\tp",
+      ),
+    ).toEqual([
+      { schema: "public", table: "wines", kind: "table" },
+      {
+        schema: "public",
+        table: "wine_partitions",
+        kind: "partitioned",
+      },
+    ]);
+    expect(snapshotSql("select 1", "00000003-1")).toContain(
+      "set transaction snapshot '00000003-1'",
+    );
+    expect(() => snapshotSql("select 1", "bad'; drop table wines"))
+      .toThrow(/invalid format/u);
+  });
+
+  it("accepts only the exact privileged disposable target", async () => {
+    const { assertDisposableRestoreUrl } =
+      await loadScript("assert-disposable-target");
+    expect(() =>
+      assertDisposableRestoreUrl(
+        "postgresql://supabase_admin:password@127.0.0.1:54322/postgres",
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertDisposableRestoreUrl(
+        "postgresql://supabase_admin:password@localhost:54322/postgres",
+      ),
+    ).toThrow(/non-loopback/u);
   });
 
   it("mechanically refuses a non-loopback restore target", async () => {
@@ -218,7 +279,7 @@ describe("database backup workflow", () => {
       await loadScript("assert-disposable-target");
     expect(() =>
       assertDisposableRestoreUrl(
-        "postgresql://postgres:password@127.0.0.1:54322/postgres",
+        "postgresql://supabase_admin:password@127.0.0.1:54322/postgres",
       ),
     ).not.toThrow();
     expect(() =>
@@ -228,12 +289,12 @@ describe("database backup workflow", () => {
     ).toThrow(/non-loopback/u);
     expect(() =>
       assertDisposableRestoreUrl(
-        "postgresql://postgres:password@localhost:54322/customer_data",
+        "postgresql://supabase_admin:password@127.0.0.1:54322/customer_data",
       ),
     ).toThrow(/disposable postgres DB/u);
     expect(() =>
       assertDisposableRestoreUrl(
-        "postgresql://postgres:password@127.0.0.1:5432/postgres",
+        "postgresql://supabase_admin:password@127.0.0.1:5432/postgres",
       ),
     ).toThrow(/canonical local Supabase/u);
   });
@@ -251,7 +312,7 @@ describe("database backup workflow", () => {
 
     const { createBackupManifest } =
       await loadScript("create-manifest");
-    const manifest = createBackupManifest({
+    const manifest = await createBackupManifest({
       BACKUP_DUMP_FILE: dump,
       BACKUP_EVIDENCE_FILE: evidence,
       BACKUP_PAYLOAD_FILE: payload,
@@ -294,7 +355,7 @@ describe("database backup workflow", () => {
     writeFileSync(manifestFile, JSON.stringify(manifest));
     const { verifyBackupArtifact } =
       await loadScript("verify-artifact");
-    expect(() =>
+    await expect(
       verifyBackupArtifact({
         manifestFile,
         encryptedFile: encrypted,
@@ -302,11 +363,101 @@ describe("database backup workflow", () => {
         dumpFile: dump,
         evidenceFile: evidence,
       }),
-    ).not.toThrow();
+    ).resolves.toEqual(manifest);
     writeFileSync(encrypted, "tampered encrypted bytes");
-    expect(() =>
+    await expect(
       verifyBackupArtifact({ manifestFile, encryptedFile: encrypted }),
-    ).toThrow(/Encrypted artifact (byte length|SHA-256)/u);
+    ).rejects.toThrow(/Encrypted artifact (byte length|SHA-256)/u);
+  });
+
+  it("streams evidence for a large artifact without a whole-file read", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "terroir-stream-test-"));
+    const file = join(dir, "large.dump");
+    const content = Buffer.alloc(8 * 1024 * 1024, 0x5a);
+    writeFileSync(file, content);
+    const { streamFileEvidence } = await loadScript("file-evidence");
+
+    await expect(streamFileEvidence(file)).resolves.toEqual({
+      bytes: content.length,
+      sha256: createHash("sha256").update(content).digest("hex"),
+    });
+  });
+
+  it("builds a fail-closed data-only restore preparation", async () => {
+    const { createRestorePreparationSql } =
+      await loadScript("prepare-disposable-restore");
+    const sql = createRestorePreparationSql({
+      format_version: 1,
+      tables: [
+        { schema: "auth", table: "users", row_count: 1 },
+        {
+          schema: "supabase_migrations",
+          table: "schema_migrations",
+          row_count: 73,
+        },
+        {
+          schema: "public",
+          table: 'wine"partitions',
+          kind: "partitioned",
+          row_count: 2,
+        },
+      ],
+    });
+    expect(sql).toContain(
+      'truncate table "auth"."users", "supabase_migrations"."schema_migrations", "public"."wine""partitions" restart identity cascade;',
+    );
+    expect(sql).toContain('add column if not exists "created_by" text');
+    expect(sql).toContain(
+      'add column if not exists "idempotency_key" text',
+    );
+    expect(sql).toContain('add column if not exists "rollback" text[]');
+    expect(sql).toContain("data_type <> 'text'");
+    expect(() =>
+      createRestorePreparationSql({ format_version: 1, tables: [] }),
+    ).toThrow(/non-empty/u);
+    expect(() =>
+      createRestorePreparationSql({
+        format_version: 1,
+        tables: [
+          { schema: "public", table: "wines" },
+          { schema: "public", table: "wines" },
+        ],
+      }),
+    ).toThrow(/unique/u);
+  });
+
+  it("requires a compatible local Supabase runtime", async () => {
+    const { assertSupabaseCliVersion } =
+      await loadScript("assert-supabase-cli-version");
+    expect(() => assertSupabaseCliVersion("2.112.0")).not.toThrow();
+    expect(() => assertSupabaseCliVersion("2.113.1")).not.toThrow();
+    expect(() => assertSupabaseCliVersion("2.107.0")).toThrow(/too old/u);
+    expect(() => assertSupabaseCliVersion("latest")).toThrow(/invalid/u);
+  });
+
+  it("provides one guarded data-only restore drill entrypoint", () => {
+    const script = readFileSync(
+      resolve(process.cwd(), "scripts/backup/run-restore-drill.sh"),
+      "utf8",
+    );
+    expect(script).toContain("assert-disposable-target.mjs");
+    expect(script).toContain("assert-supabase-cli-version.mjs");
+    expect(script).toContain("supabase db reset");
+    expect(script).toContain("prepare-disposable-restore.mjs");
+    expect(script).toContain("--data-only");
+    expect(script).toContain("--disable-triggers");
+    expect(script).not.toContain("--clean");
+  });
+
+  it("validates the redacted role-state vector", async () => {
+    const { assertBackupRoleState, EXPECTED_BACKUP_ROLE_STATE } =
+      await loadScript("assert-backup-role-state");
+    expect(() =>
+      assertBackupRoleState(EXPECTED_BACKUP_ROLE_STATE),
+    ).not.toThrow();
+    expect(() =>
+      assertBackupRoleState("f|f|f|t|f|t|f|1|0|0|0|t|t"),
+    ).toThrow(/expected .* observed/u);
   });
 
   it("detects artifact tampering and compares exact restore evidence", async () => {

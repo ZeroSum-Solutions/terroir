@@ -9,12 +9,17 @@ latest backup is healthy and the most recent disposable restore drill passed.
 The workflow never receives the decryption identity. Production connection
 credentials and the offline age identity live only in ZS Vault. Never put a
 database URL, password, or age identity in command arguments or logs.
-The dump includes every non-system, non-extension-owned schema discovered at
-runtime. The job fails if the archive schema inventory omits any such source
-schema, so a later migration cannot silently fall outside a static allowlist.
+The coverage gate includes every non-system, non-extension-owned schema that
+owns a dumpable relation. Empty schemas are intentionally outside the gate
+because PostgreSQL custom archives need not represent them.
 The archive, source table counts, migration version, and ten content checksums
 are all read from one exported PostgreSQL snapshot, so concurrent production
 writes cannot create self-inconsistent evidence.
+
+Remote libpq services use `sslmode=verify-full` and the repository-pinned
+Supabase Root 2021 CA. The backup role disables PostgreSQL statement and
+idle-in-transaction timeouts; the bounded 20-minute Actions job remains the
+outer timeout and the exported-snapshot holder explicitly applies both settings.
 
 ## One-time provisioning
 
@@ -139,6 +144,30 @@ least one scheduled run.
 
 ## Disposable local restore drill
 
+The only supported drill entrypoint is the fail-closed repository script. It
+downloads and authenticates one successful run, verifies every encrypted and
+plaintext digest with streaming reads, obtains the offline age identity from
+ZS Vault without logging it, resets the exact local Supabase target, restores
+authenticated data, compares evidence, and removes plaintext on every exit.
+
+```bash
+BACKUP_RUN_ID="<successful run id>" \
+  scripts/backup/run-restore-drill.sh
+```
+
+The script requires Supabase CLI 2.112.0 or newer because older local runtime
+images do not match the production-managed auth schema. It accepts only
+`supabase_admin@127.0.0.1:54322/postgres`, verifies that account is the local
+superuser, resets the canonical stack, and prepares only tables listed in the
+authenticated source evidence. The narrow compatibility adjustment adds the
+three production migration-metadata columns when needed and rejects conflicting
+types. `pg_restore --data-only --disable-triggers` preserves all local
+Supabase-owned DDL and global event triggers while `--exit-on-error` makes any
+remaining runtime/schema mismatch fail the drill.
+
+The detailed commands below document the evidence flow for incident review;
+they are not a second supported procedure and must not be run independently.
+
 Create a proof directory under `~/Inbox/notes/terroir-backup-drills/`. Keep
 only the manifest, checksum file, authenticated GitHub run/artifact metadata,
 integrity-ledger comments, and final redacted report there.
@@ -238,8 +267,10 @@ chmod 600 "$identity_file"
 payload_file="$work_dir/backup.tar"
 age --decrypt --identity "$identity_file" \
   --output "$payload_file" "$encrypted_file"
-tar -C "$work_dir" -xf "$payload_file"
-dump_file="$(find "$work_dir" -maxdepth 1 -name '*.dump' -type f -print -quit)"
+# The entrypoint requires exactly one safe *.dump member and one
+# source-evidence.json member, then extracts each with tar -xOf. It never
+# extracts arbitrary archive paths.
+dump_file="$work_dir/<manifest-bound-dump-name>"
 source_evidence="$work_dir/source-evidence.json"
 
 BACKUP_MANIFEST_FILE="$manifest_file" \
@@ -251,20 +282,26 @@ BACKUP_EVIDENCE_FILE="$source_evidence" \
 ```
 
 Start the repository's disposable local Supabase stack. The target guard
-rejects every non-loopback URL before `pg_restore --clean` is allowed.
+rejects every target except the exact privileged local service before the
+authenticated inventory is truncated and data-only restore is allowed.
 
 ```bash
 supabase start
-export PG_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+supabase db reset
+export PG_DATABASE_URL='postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres'
 node scripts/backup/assert-disposable-target.mjs
 export PGSERVICEFILE="$work_dir/restore.pg_service.conf"
 export PGSERVICE_NAME=terroir_restore
 node scripts/backup/write-pg-service.mjs
 
+BACKUP_SOURCE_EVIDENCE_FILE="$source_evidence" \
+  node scripts/backup/prepare-disposable-restore.mjs | \
+  psql 'service=terroir_restore' -X -q -v ON_ERROR_STOP=1
+
 pg_restore \
   --dbname=service=terroir_restore \
-  --clean \
-  --if-exists \
+  --data-only \
+  --disable-triggers \
   --no-owner \
   --no-privileges \
   --exit-on-error \

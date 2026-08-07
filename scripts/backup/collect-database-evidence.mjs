@@ -6,13 +6,13 @@ import { pathToFileURL } from "node:url";
 const SERVICE_NAME = process.env.PGSERVICE ?? "terroir_backup";
 const SNAPSHOT_ID = process.env.BACKUP_SNAPSHOT_ID;
 
-function snapshotSql(sql) {
-  if (!SNAPSHOT_ID) return sql;
-  if (!/^[0-9A-Fa-f-]+$/u.test(SNAPSHOT_ID)) {
+export function snapshotSql(sql, snapshotId = SNAPSHOT_ID) {
+  if (!snapshotId) return sql;
+  if (!/^[0-9A-Fa-f-]+$/u.test(snapshotId)) {
     throw new Error("BACKUP_SNAPSHOT_ID has an invalid format.");
   }
   return `begin isolation level repeatable read read only;
-set transaction snapshot '${SNAPSHOT_ID}';
+set transaction snapshot '${snapshotId}';
 ${sql};
 commit`;
 }
@@ -61,12 +61,27 @@ function psql(sql) {
   return result.stdout.trim();
 }
 
+export function parseTableInventory(output) {
+  if (!output) return [];
+  return output.split("\n").map((line) => {
+    const [schema, table, relkind] = line.split("\t");
+    if (!schema || !table || !["r", "p"].includes(relkind)) {
+      throw new Error("Database table inventory returned a malformed row.");
+    }
+    return {
+      schema,
+      table,
+      kind: relkind === "p" ? "partitioned" : "table",
+    };
+  });
+}
+
 function listTables() {
   const output = psql(
-    `select n.nspname || E'\\t' || c.relname
+    `select n.nspname || E'\\t' || c.relname || E'\\t' || c.relkind::text
      from pg_catalog.pg_class c
      join pg_catalog.pg_namespace n on n.oid = c.relnamespace
-     where c.relkind = 'r'
+     where c.relkind in ('r', 'p')
        and n.nspname <> 'information_schema'
        and n.nspname !~ '^pg_'
        and not exists (
@@ -78,14 +93,7 @@ function listTables() {
        )
      order by n.nspname collate "C", c.relname collate "C"`,
   );
-  if (!output) return [];
-  return output.split("\n").map((line) => {
-    const [schema, table] = line.split("\t");
-    if (!schema || !table) {
-      throw new Error("Database table inventory returned a malformed row.");
-    }
-    return { schema, table };
-  });
+  return parseTableInventory(output);
 }
 
 function exactRowCount({ schema, table }) {

@@ -101,7 +101,8 @@ revoke all privileges on database postgres from terroir_backup;
 grant connect on database postgres to terroir_backup;
 grant pg_read_all_data to terroir_backup;
 alter role terroir_backup set default_transaction_read_only = on;
-alter role terroir_backup set statement_timeout = '15min';
+alter role terroir_backup set statement_timeout = 0;
+alter role terroir_backup set idle_in_transaction_session_timeout = 0;
 
 do $verify_cleanup$
 begin

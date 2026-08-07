@@ -1,16 +1,10 @@
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import { streamFileEvidence } from "./file-evidence.mjs";
 
-function fileEvidence(file) {
-  return {
-    bytes: statSync(file).size,
-    sha256: createHash("sha256").update(readFileSync(file)).digest("hex"),
-  };
-}
-
-export function createBackupManifest(env = process.env) {
+export async function createBackupManifest(env = process.env) {
   const required = [
     "BACKUP_DUMP_FILE",
     "BACKUP_EVIDENCE_FILE",
@@ -44,16 +38,20 @@ export function createBackupManifest(env = process.env) {
       github_run_attempt: env.GITHUB_RUN_ATTEMPT,
     },
     dump: {
+      name: basename(env.BACKUP_DUMP_FILE),
       format: "postgres-custom",
       pg_dump_version: env.BACKUP_PG_DUMP_VERSION,
       table_data_entries: tableEntries,
-      ...fileEvidence(env.BACKUP_DUMP_FILE),
+      ...(await streamFileEvidence(env.BACKUP_DUMP_FILE)),
     },
-    source_evidence: fileEvidence(env.BACKUP_EVIDENCE_FILE),
-    plaintext_payload: fileEvidence(env.BACKUP_PAYLOAD_FILE),
+    source_evidence: {
+      name: basename(env.BACKUP_EVIDENCE_FILE),
+      ...(await streamFileEvidence(env.BACKUP_EVIDENCE_FILE)),
+    },
+    plaintext_payload: await streamFileEvidence(env.BACKUP_PAYLOAD_FILE),
     encrypted_artifact: {
       name: basename(env.BACKUP_ENCRYPTED_FILE),
-      ...fileEvidence(env.BACKUP_ENCRYPTED_FILE),
+      ...(await streamFileEvidence(env.BACKUP_ENCRYPTED_FILE)),
     },
     encryption: {
       algorithm: "age-x25519",
@@ -65,14 +63,14 @@ export function createBackupManifest(env = process.env) {
   };
 }
 
-export function writeBackupManifest({
+export async function writeBackupManifest({
   file = process.env.BACKUP_MANIFEST_FILE,
   env = process.env,
 } = {}) {
   if (!file) throw new Error("BACKUP_MANIFEST_FILE is required.");
-  writeFileSync(
+  await writeFile(
     file,
-    `${JSON.stringify(createBackupManifest(env), null, 2)}\n`,
+    `${JSON.stringify(await createBackupManifest(env), null, 2)}\n`,
     "utf8",
   );
 }
@@ -81,5 +79,5 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  writeBackupManifest();
+  await writeBackupManifest();
 }

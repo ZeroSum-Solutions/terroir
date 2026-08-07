@@ -4,13 +4,13 @@ import { pathToFileURL } from "node:url";
 const SERVICE_NAME = process.env.PGSERVICE ?? "terroir_backup";
 const SNAPSHOT_ID = process.env.BACKUP_SNAPSHOT_ID;
 
-function snapshotSql(sql) {
-  if (!SNAPSHOT_ID) return sql;
-  if (!/^[0-9A-Fa-f-]+$/u.test(SNAPSHOT_ID)) {
+export function snapshotSql(sql, snapshotId = SNAPSHOT_ID) {
+  if (!snapshotId) return sql;
+  if (!/^[0-9A-Fa-f-]+$/u.test(snapshotId)) {
     throw new Error("BACKUP_SNAPSHOT_ID has an invalid format.");
   }
   return `begin isolation level repeatable read read only;
-set transaction snapshot '${SNAPSHOT_ID}';
+set transaction snapshot '${snapshotId}';
 ${sql};
 commit`;
 }
@@ -46,7 +46,17 @@ export function parseArchiveSchemas(listing) {
   return schemas;
 }
 
-function sourceSchemas() {
+export function parseDumpableSchemaRows(output) {
+  if (!output.trim()) return [];
+  return [...new Set(
+    output
+      .split("\n")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  )].sort();
+}
+
+function sourceDumpableSchemas() {
   const output = run("psql", [
     `service=${SERVICE_NAME}`,
     "-X",
@@ -56,10 +66,12 @@ function sourceSchemas() {
     "-v",
     "ON_ERROR_STOP=1",
     "-c",
-    snapshotSql(`select n.nspname
+    snapshotSql(`select distinct n.nspname
      from pg_catalog.pg_namespace n
+     join pg_catalog.pg_class c on c.relnamespace = n.oid
      where n.nspname <> 'information_schema'
        and n.nspname !~ '^pg_'
+       and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')
        and not exists (
          select 1
          from pg_catalog.pg_extension e
@@ -68,16 +80,13 @@ function sourceSchemas() {
        and not exists (
          select 1
          from pg_catalog.pg_depend d
-         where d.classid = 'pg_catalog.pg_namespace'::regclass
-           and d.objid = n.oid
+         where d.classid = 'pg_catalog.pg_class'::regclass
+           and d.objid = c.oid
            and d.deptype = 'e'
        )
      order by n.nspname collate "C"`),
   ]);
-  return output
-    .split("\n")
-    .map((value) => value.trim())
-    .filter(Boolean);
+  return parseDumpableSchemaRows(output);
 }
 
 export function assertSchemaCoverage({ source, archive }) {
@@ -95,7 +104,7 @@ export function assertDumpCoverage({
   if (!dumpFile) throw new Error("BACKUP_DUMP_FILE is required.");
   const listing = run("pg_restore", ["--list", dumpFile]);
   assertSchemaCoverage({
-    source: sourceSchemas(),
+    source: sourceDumpableSchemas(),
     archive: parseArchiveSchemas(listing),
   });
 }

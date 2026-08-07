@@ -112,12 +112,10 @@ jobs:
           node scripts/backup/write-pg-service.mjs
           role_state="$(
             psql "service=terroir_backup" -X -A -t -v ON_ERROR_STOP=1 \
-              -c "select r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolbypassrls, r.rolreplication, pg_has_role(current_user, 'pg_read_all_data', 'member'), pg_has_role(current_user, 'pg_write_all_data', 'member'), (select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname <> 'information_schema' and n.nspname !~ '^pg_' and not exists (select 1 from pg_catalog.pg_extension e where e.extnamespace = n.oid) and not exists (select 1 from pg_catalog.pg_depend d where d.classid = 'pg_catalog.pg_class'::regclass and d.objid = c.oid and d.deptype = 'e') and ((c.relkind in ('r', 'p', 'v', 'm', 'f') and (has_table_privilege(current_user, c.oid, 'INSERT') or has_table_privilege(current_user, c.oid, 'UPDATE') or has_table_privilege(current_user, c.oid, 'DELETE') or has_table_privilege(current_user, c.oid, 'TRUNCATE') or has_any_column_privilege(current_user, c.oid, 'INSERT') or has_any_column_privilege(current_user, c.oid, 'UPDATE'))) or (c.relkind = 'S' and has_sequence_privilege(current_user, c.oid, 'UPDATE')))), (select count(*) from pg_catalog.pg_class c where c.relowner = r.oid and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')), (select count(*) from pg_catalog.pg_auth_members m join pg_catalog.pg_roles granted_role on granted_role.oid = m.roleid where m.member = r.oid and granted_role.rolname <> 'pg_read_all_data'), (select count(*) from pg_catalog.pg_namespace n where n.nspname <> 'information_schema' and n.nspname !~ '^pg_' and not exists (select 1 from pg_catalog.pg_extension e where e.extnamespace = n.oid) and not exists (select 1 from pg_catalog.pg_depend d where d.classid = 'pg_catalog.pg_namespace'::regclass and d.objid = n.oid and d.deptype = 'e') and has_schema_privilege(current_user, n.oid, 'CREATE')) from pg_roles r where r.rolname = current_user"
+              -c "select r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolbypassrls, r.rolreplication, pg_has_role(current_user, 'pg_read_all_data', 'member'), pg_has_role(current_user, 'pg_write_all_data', 'member'), (select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname <> 'information_schema' and n.nspname !~ '^pg_' and not exists (select 1 from pg_catalog.pg_extension e where e.extnamespace = n.oid) and not exists (select 1 from pg_catalog.pg_depend d where d.classid = 'pg_catalog.pg_class'::regclass and d.objid = c.oid and d.deptype = 'e') and ((c.relkind in ('r', 'p', 'v', 'm', 'f') and (has_table_privilege(current_user, c.oid, 'INSERT') or has_table_privilege(current_user, c.oid, 'UPDATE') or has_table_privilege(current_user, c.oid, 'DELETE') or has_table_privilege(current_user, c.oid, 'TRUNCATE') or has_any_column_privilege(current_user, c.oid, 'INSERT') or has_any_column_privilege(current_user, c.oid, 'UPDATE'))) or (c.relkind = 'S' and has_sequence_privilege(current_user, c.oid, 'UPDATE')))), (select count(*) from pg_catalog.pg_class c where c.relowner = r.oid and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')), (select count(*) from pg_catalog.pg_auth_members m join pg_catalog.pg_roles granted_role on granted_role.oid = m.roleid where m.member = r.oid and granted_role.rolname <> 'pg_read_all_data'), (select count(*) from pg_catalog.pg_namespace n where n.nspname <> 'information_schema' and n.nspname !~ '^pg_' and not exists (select 1 from pg_catalog.pg_extension e where e.extnamespace = n.oid) and not exists (select 1 from pg_catalog.pg_depend d where d.classid = 'pg_catalog.pg_namespace'::regclass and d.objid = n.oid and d.deptype = 'e') and has_schema_privilege(current_user, n.oid, 'CREATE')), current_setting('statement_timeout') = '0', current_setting('idle_in_transaction_session_timeout') = '0' from pg_roles r where r.rolname = current_user"
           )"
-          if [ "$role_state" != "f|f|f|t|f|t|f|0|0|0|0" ]; then
-            echo "::error::SUPABASE_DB_URL must use the source-schema read-only backup role with BYPASSRLS and pg_read_all_data."
-            exit 1
-          fi
+          BACKUP_ROLE_STATE="$role_state" \
+            node scripts/backup/assert-backup-role-state.mjs
 
       - name: Create dump and source evidence
         id: dump
@@ -166,6 +164,8 @@ jobs:
           }
           snapshot_pid="$SNAPSHOT_HOLDER_PID"
           printf '%s\n' \
+            'set statement_timeout = 0;' \
+            'set idle_in_transaction_session_timeout = 0;' \
             'begin isolation level repeatable read read only;' \
             'select pg_export_snapshot();' \
             >&"${SNAPSHOT_HOLDER[1]}"

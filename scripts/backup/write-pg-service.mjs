@@ -1,5 +1,11 @@
 import { chmodSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+
+const SUPABASE_ROOT_CA = resolve(
+  process.cwd(),
+  "config/supabase-root-2021-ca.crt",
+);
 
 export function createPgServiceConfig(
   rawUrl,
@@ -44,9 +50,9 @@ export function createPgServiceConfig(
   }
 
   const isCanonicalLocalRestore =
-    ["127.0.0.1", "localhost", "::1"].includes(url.hostname) &&
+    url.hostname === "127.0.0.1" &&
     url.port === "54322" &&
-    decodeURIComponent(url.username) === "postgres" &&
+    decodeURIComponent(url.username) === "supabase_admin" &&
     database === "postgres";
   const values = {
     host: url.hostname,
@@ -54,7 +60,8 @@ export function createPgServiceConfig(
     dbname: decodeURIComponent(database),
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
-    sslmode: isCanonicalLocalRestore ? "disable" : "require",
+    sslmode: isCanonicalLocalRestore ? "disable" : "verify-full",
+    ...(isCanonicalLocalRestore ? {} : { sslrootcert: SUPABASE_ROOT_CA }),
   };
   return [
     `[${serviceName}]`,

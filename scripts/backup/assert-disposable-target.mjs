@@ -5,12 +5,15 @@ export function assertDisposableRestoreUrl(rawUrl) {
   if (!["postgres:", "postgresql:"].includes(url.protocol)) {
     throw new Error("Restore target must use postgresql://.");
   }
-  if (!["127.0.0.1", "localhost", "::1"].includes(url.hostname)) {
+  if (url.hostname !== "127.0.0.1") {
     throw new Error(
       "Restore drill refuses every non-loopback database target.",
     );
   }
-  if (url.port !== "54322" || decodeURIComponent(url.username) !== "postgres") {
+  if (
+    url.port !== "54322" ||
+    decodeURIComponent(url.username) !== "supabase_admin"
+  ) {
     throw new Error(
       "Restore drill target must be the canonical local Supabase postgres service on port 54322.",
     );
