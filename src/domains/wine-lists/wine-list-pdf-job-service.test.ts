@@ -74,7 +74,13 @@ describe("wine-list PDF job service", () => {
 
   it("surfaces durable idempotency conflicts without creating another job", async () => {
     const listQuery = query({ data: { id: LIST_ID }, error: null });
-    rpc.mockResolvedValue({ data: null, error: { code: "22023" } });
+    rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: "22023",
+        message: "idempotency key was reused with different job input",
+      },
+    });
     const supabase = { from: vi.fn(() => listQuery), rpc } as never;
     await expect(enqueueWineListPdfJob({
       supabase,
@@ -82,6 +88,23 @@ describe("wine-list PDF job service", () => {
       listId: LIST_ID,
       idempotencyKey: "pdf-retry-0001",
     })).rejects.toBeInstanceOf(WineListPdfJobConflictError);
+  });
+
+  it("does not mislabel other RPC validation errors as idempotency conflicts", async () => {
+    const listQuery = query({ data: { id: LIST_ID }, error: null });
+    const validationError = {
+      code: "22023",
+      message: "unsupported background job type",
+    };
+    rpc.mockResolvedValue({ data: null, error: validationError });
+    const supabase = { from: vi.fn(() => listQuery), rpc } as never;
+
+    await expect(enqueueWineListPdfJob({
+      supabase,
+      restaurantId: RESTAURANT_ID,
+      listId: LIST_ID,
+      idempotencyKey: "pdf-retry-0001",
+    })).rejects.toBe(validationError);
   });
 
   it("returns an existing terminal job when an idempotent enqueue is replayed", async () => {

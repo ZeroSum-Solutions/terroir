@@ -58,7 +58,12 @@ export async function enqueueWineListPdfJob(input: {
     p_max_attempts: 3,
   });
   if (error) {
-    if (error.code === "22023") throw new WineListPdfJobConflictError();
+    if (
+      error.code === "22023" &&
+      error.message === "idempotency key was reused with different job input"
+    ) {
+      throw new WineListPdfJobConflictError();
+    }
     throw error;
   }
   return QueuedJobSchema.parse(data);
