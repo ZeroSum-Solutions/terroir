@@ -52,12 +52,33 @@ export function compareDatabaseEvidence(source, restored) {
       entry.sha256,
     ]),
   );
+  const sourceChecksumKeys = new Set(
+    source.largest_non_empty_tables.map(tableKey),
+  );
+  for (const table of restoredChecksums.keys()) {
+    if (!sourceChecksumKeys.has(table)) {
+      failures.push(`unexpected restored content checksum for ${table}`);
+    }
+  }
   for (const entry of source.largest_non_empty_tables) {
     const table = tableKey(entry);
     if (restoredChecksums.get(table) !== entry.sha256) {
       failures.push(`content checksum differs for ${table}`);
     }
   }
+
+  const sourceNonEmptyTableCount = source.tables.filter(
+    ({ row_count }) => row_count > 0,
+  ).length;
+  const requiredContentChecksums = Math.min(10, sourceNonEmptyTableCount);
+  if (source.largest_non_empty_tables.length !== requiredContentChecksums) {
+    failures.push(
+      `source checksum inventory is incomplete (${source.largest_non_empty_tables.length} != ${requiredContentChecksums})`,
+    );
+  }
+  const checkedContentChecksums = source.largest_non_empty_tables.filter(
+    (entry) => restoredChecksums.has(tableKey(entry)),
+  ).length;
 
   const sourceSequences = new Map(
     (source.sequences ?? []).map((entry) => [sequenceKey(entry), entry]),
@@ -86,9 +107,11 @@ export function compareDatabaseEvidence(source, restored) {
     failures,
     migration_version: restored.migration_version,
     table_count: restored.tables.length,
+    source_table_count: source.tables.length,
+    source_non_empty_table_count: sourceNonEmptyTableCount,
     sequence_count: restoredSequences.size,
-    checked_content_checksums:
-      source.largest_non_empty_tables.length,
+    required_content_checksums: requiredContentChecksums,
+    checked_content_checksums: checkedContentChecksums,
     tables: restored.tables,
     sequences: restored.sequences ?? [],
     target_only_tables: targetOnlyTables,

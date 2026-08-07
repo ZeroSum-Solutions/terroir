@@ -1,7 +1,7 @@
 import { pathToFileURL } from "node:url";
 
 export const EXPECTED_BACKUP_ROLE_STATE =
-  "f|f|f|t|f|t|f|0|0|0|0|t|t";
+  "f|f|f|t|f|t|f|0|0|0|0|t|t|t";
 
 export function assertBackupRoleState(observed) {
   if (observed !== EXPECTED_BACKUP_ROLE_STATE) {

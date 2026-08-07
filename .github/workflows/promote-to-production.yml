@@ -11,47 +11,140 @@ on:
         description: Type PROMOTE-STAGING-SHA to confirm the production release
         required: true
         type: string
+      backup_run_id:
+        description: Latest completed main DB Backup run used by the restore drill
+        required: true
+        type: string
+      restore_run_id:
+        description: Successful trusted DB Restore Drill workflow run for this release
+        required: true
+        type: string
 
 concurrency:
   group: production-promotion
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   authorize-release-owner:
     name: Authorize release owner
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    permissions:
+      contents: read
     steps:
-      - name: Require the configured owner and explicit confirmation
+      - name: Require main, the configured owner, and explicit confirmation
         env:
           ACTOR: ${{ github.actor }}
           CONFIRMATION: ${{ inputs.confirmation }}
           RELEASE_OWNER: ${{ vars.PRODUCTION_RELEASE_OWNER }}
         run: |
           set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
           test -n "$RELEASE_OWNER"
           test "$ACTOR" = "$RELEASE_OWNER"
           test "$CONFIRMATION" = "PROMOTE-STAGING-SHA"
 
-  verify-staging-candidate:
-    name: Verify staging candidate
+  verify-database-recovery:
+    name: Require database recovery proof
     needs: authorize-release-owner
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout trusted release gate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.16.0
+
+      - name: Require database recovery proof
+        env:
+          BACKUP_RUN_ID: ${{ inputs.backup_run_id }}
+          CANDIDATE_SHA: ${{ inputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+          RESTORE_RUN_ID: ${{ inputs.restore_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$BACKUP_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$RESTORE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+          backup_runs_file="$RUNNER_TEMP/db-backup-runs.json"
+          backup_artifacts_file="$RUNNER_TEMP/db-backup-artifacts.json"
+          restore_run_file="$RUNNER_TEMP/db-restore-run.json"
+          restore_artifacts_file="$RUNNER_TEMP/db-restore-artifacts.json"
+          restore_proof_dir="$RUNNER_TEMP/db-restore-proof"
+          mkdir -m 700 "$restore_proof_dir"
+
+          gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/db-backup.yml/runs?branch=main&per_page=10" \
+            > "$backup_runs_file"
+          gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$BACKUP_RUN_ID/artifacts" \
+            > "$backup_artifacts_file"
+          gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$RESTORE_RUN_ID" \
+            > "$restore_run_file"
+          gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$RESTORE_RUN_ID/artifacts" \
+            > "$restore_artifacts_file"
+          gh run download "$RESTORE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "database-restore-proof-$RESTORE_RUN_ID" \
+            --dir "$restore_proof_dir"
+
+          mapfile -t proof_matches < <(
+            find "$restore_proof_dir" -type f -name release-proof.json -print
+          )
+          mapfile -t report_matches < <(
+            find "$restore_proof_dir" -type f -name restore-report.json -print
+          )
+          test "${#proof_matches[@]}" -eq 1
+          test "${#report_matches[@]}" -eq 1
+          proof_file="${proof_matches[0]}"
+          report_file="${report_matches[0]}"
+          test "$(stat -c%s "$proof_file")" -le 16384
+          test "$(stat -c%s "$report_file")" -le 1048576
+
+          BACKUP_RUNS_FILE="$backup_runs_file" \
+          BACKUP_ARTIFACTS_FILE="$backup_artifacts_file" \
+          RESTORE_RUN_FILE="$restore_run_file" \
+          RESTORE_ARTIFACTS_FILE="$restore_artifacts_file" \
+          BACKUP_RELEASE_PROOF_FILE="$proof_file" \
+          BACKUP_RESTORE_REPORT_FILE="$report_file" \
+          BACKUP_EXPECTED_RUN_ID="$BACKUP_RUN_ID" \
+          RESTORE_EXPECTED_RUN_ID="$RESTORE_RUN_ID" \
+          RELEASE_CANDIDATE_SHA="$CANDIDATE_SHA" \
+          RELEASE_TRUSTED_WORKFLOW_SHA="$GITHUB_SHA" \
+            node scripts/backup/assert-release-backup-health.mjs
+
+  verify-staging-candidate:
+    name: Verify staging candidate
+    needs: [authorize-release-owner, verify-database-recovery]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.sha }}
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
           version: 10.33.2
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24.16.0
           cache: pnpm
@@ -66,7 +159,7 @@ jobs:
           git fetch origin staging
           test "$CANDIDATE_SHA" = "$(git rev-parse origin/staging)"
 
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Require a fresh staging smoke pass for this SHA
         env:
@@ -76,11 +169,16 @@ jobs:
 
   promote:
     name: Promote the verified SHA
-    needs: [authorize-release-owner, verify-staging-candidate]
+    needs:
+      - authorize-release-owner
+      - verify-database-recovery
+      - verify-staging-candidate
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -89,6 +187,7 @@ jobs:
           CANDIDATE_SHA: ${{ inputs.sha }}
         run: |
           set -euo pipefail
-          git fetch origin main
+          git fetch origin main staging
+          test "$CANDIDATE_SHA" = "$(git rev-parse origin/staging)"
           git merge-base --is-ancestor origin/main "$CANDIDATE_SHA"
           git push origin "$CANDIDATE_SHA:main"

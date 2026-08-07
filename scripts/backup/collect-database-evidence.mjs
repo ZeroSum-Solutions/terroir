@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -196,12 +196,12 @@ function listSequences() {
   });
 }
 
-export async function collectDatabaseEvidence() {
-  const tables = listTables().map((entry) => ({
-    ...entry,
-    row_count: exactRowCount(entry),
-  }));
-  const largest = tables
+function tableKey({ schema, table }) {
+  return `${schema}\0${table}`;
+}
+
+function largestNonEmptyTables(tables) {
+  return tables
     .filter(({ row_count }) => row_count > 0)
     .sort(
       (left, right) =>
@@ -212,6 +212,60 @@ export async function collectDatabaseEvidence() {
         ),
     )
     .slice(0, 10);
+}
+
+export function selectChecksumTables(tables, checksumSource) {
+  if (checksumSource === undefined) return largestNonEmptyTables(tables);
+  if (
+    checksumSource?.format_version !== 1 ||
+    !Array.isArray(checksumSource.tables) ||
+    !Array.isArray(checksumSource.largest_non_empty_tables)
+  ) {
+    throw new Error("Checksum source evidence has an unsupported format.");
+  }
+
+  const required = Math.min(
+    10,
+    checksumSource.tables.filter(({ row_count }) => row_count > 0).length,
+  );
+  if (checksumSource.largest_non_empty_tables.length !== required) {
+    throw new Error(
+      `Checksum source evidence contains ${checksumSource.largest_non_empty_tables.length} of ${required} required tables.`,
+    );
+  }
+
+  const restoredTables = new Map(tables.map((entry) => [tableKey(entry), entry]));
+  const selected = [];
+  const observed = new Set();
+  for (const sourceEntry of checksumSource.largest_non_empty_tables) {
+    if (
+      typeof sourceEntry.schema !== "string" ||
+      typeof sourceEntry.table !== "string"
+    ) {
+      throw new Error("Checksum source evidence contains an invalid table.");
+    }
+    const key = tableKey(sourceEntry);
+    if (observed.has(key)) {
+      throw new Error("Checksum source evidence contains a duplicate table.");
+    }
+    observed.add(key);
+    const restored = restoredTables.get(key);
+    if (!restored) {
+      throw new Error(
+        `Checksum source table is missing after restore: ${sourceEntry.schema}.${sourceEntry.table}.`,
+      );
+    }
+    selected.push(restored);
+  }
+  return selected;
+}
+
+export async function collectDatabaseEvidence({ checksumSource } = {}) {
+  const tables = listTables().map((entry) => ({
+    ...entry,
+    row_count: exactRowCount(entry),
+  }));
+  const largest = selectChecksumTables(tables, checksumSource);
   const checksummed = [];
   for (const entry of largest) {
     checksummed.push({
@@ -238,11 +292,15 @@ function lexicalCompare(left, right) {
 
 export async function writeDatabaseEvidence({
   file = process.env.BACKUP_EVIDENCE_FILE,
+  checksumSourceFile = process.env.BACKUP_CHECKSUM_SOURCE_FILE,
 } = {}) {
   if (!file) throw new Error("BACKUP_EVIDENCE_FILE is required.");
+  const checksumSource = checksumSourceFile
+    ? JSON.parse(readFileSync(checksumSourceFile, "utf8"))
+    : undefined;
   writeFileSync(
     file,
-    `${JSON.stringify(await collectDatabaseEvidence(), null, 2)}\n`,
+    `${JSON.stringify(await collectDatabaseEvidence({ checksumSource }), null, 2)}\n`,
     "utf8",
   );
 }

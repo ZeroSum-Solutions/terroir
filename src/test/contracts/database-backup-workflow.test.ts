@@ -29,6 +29,9 @@ describe("database backup workflow", () => {
     expect(workflow).toContain("pg_read_all_data");
     expect(workflow).toContain("rolsuper");
     expect(workflow).toContain("pg_write_all_data");
+    expect(workflow).toContain(
+      "default_transaction_read_only=on",
+    );
     expect(workflow).toContain("e.extnamespace = n.oid");
     expect(workflow).toContain("d.deptype = 'e'");
     expect(workflow).toContain("BACKUP_PG_DUMP_VERSION");
@@ -469,6 +472,11 @@ describe("database backup workflow", () => {
     expect(script).toContain("supabase db reset");
     expect(script).toContain("prepare-disposable-restore.mjs");
     expect(script).toContain("create-restore-use-list.mjs");
+    expect(script).toContain(
+      'BACKUP_CHECKSUM_SOURCE_FILE="$source_evidence"',
+    );
+    expect(script).toContain("assert-restore-report.mjs");
+    expect(script).toContain("create-restore-release-proof.mjs");
     expect(script).toContain("--data-only");
     expect(script).toContain("--disable-triggers");
     expect(script).toContain("supabase-start.log");
@@ -555,8 +563,151 @@ describe("database backup workflow", () => {
       assertBackupRoleState(EXPECTED_BACKUP_ROLE_STATE),
     ).not.toThrow();
     expect(() =>
-      assertBackupRoleState("f|f|f|t|f|t|f|1|0|0|0|t|t"),
+      assertBackupRoleState("f|f|f|t|f|t|f|0|0|0|0|t|t"),
     ).toThrow(/expected .* observed/u);
+    expect(EXPECTED_BACKUP_ROLE_STATE).toBe(
+      "f|f|f|t|f|t|f|0|0|0|0|t|t|t",
+    );
+  });
+
+  it("checksums the authenticated source set despite larger target-only tables", async () => {
+    const { selectChecksumTables } =
+      await loadScript("collect-database-evidence");
+    const sourceTable = {
+      schema: "public",
+      table: "wines",
+      kind: "table",
+      row_count: 2,
+    };
+    const targetOnlyTables = Array.from({ length: 11 }, (_, index) => ({
+      schema: "platform",
+      table: `events_${index}`,
+      kind: "table",
+      row_count: 1_000 - index,
+    }));
+    const restoredTables = [sourceTable, ...targetOnlyTables];
+    const sourceEvidence = {
+      format_version: 1,
+      tables: [sourceTable],
+      largest_non_empty_tables: [
+        { ...sourceTable, sha256: "a".repeat(64) },
+      ],
+    };
+
+    expect(selectChecksumTables(restoredTables)).not.toContainEqual(
+      sourceTable,
+    );
+    expect(
+      selectChecksumTables(restoredTables, sourceEvidence),
+    ).toEqual([sourceTable]);
+  });
+
+  it("rejects incomplete restore checksum coverage", async () => {
+    const { assertRestoreReport } =
+      await loadScript("assert-restore-report");
+    const source = {
+      format_version: 1,
+      tables: Array.from({ length: 12 }, (_, index) => ({
+        schema: "public",
+        table: `table_${index}`,
+        row_count: index === 11 ? 0 : index + 1,
+      })),
+      largest_non_empty_tables: Array.from({ length: 10 }, (_, index) => ({
+        schema: "public",
+        table: `table_${index}`,
+        row_count: index + 1,
+        sha256: "a".repeat(64),
+      })),
+    };
+    const report = {
+      format_version: 1,
+      ok: true,
+      failures: [],
+      checked_content_checksums: 10,
+      content_checksums: source.largest_non_empty_tables,
+    };
+
+    expect(() => assertRestoreReport(source, report)).not.toThrow();
+    expect(() =>
+      assertRestoreReport(source, {
+        ...report,
+        checked_content_checksums: 9,
+        content_checksums: report.content_checksums.slice(0, 9),
+      }),
+    ).toThrow(/required 10 content checksums/u);
+    expect(() =>
+      assertRestoreReport(
+        {
+          ...source,
+          largest_non_empty_tables: source.largest_non_empty_tables.slice(
+            0,
+            9,
+          ),
+        },
+        report,
+      ),
+    ).toThrow(/Source evidence contains 9 of 10 required/u);
+  });
+
+  it("binds a release proof to the authenticated report and artifact", async () => {
+    const { createRestoreReleaseProof } =
+      await loadScript("create-restore-release-proof");
+    const checksum = {
+      schema: "public",
+      table: "wines",
+      row_count: 1,
+      sha256: "a".repeat(64),
+    };
+    const source = {
+      format_version: 1,
+      tables: [{ ...checksum, kind: "table" }],
+      largest_non_empty_tables: [checksum],
+    };
+    const report = {
+      format_version: 1,
+      verified_at: "2026-08-07T15:30:00.000Z",
+      ok: true,
+      failures: [],
+      migration_version: "0073",
+      source_table_count: 1,
+      source_non_empty_table_count: 1,
+      table_count: 2,
+      required_content_checksums: 1,
+      checked_content_checksums: 1,
+      content_checksums: [checksum],
+    };
+    const reportBytes = Buffer.from(JSON.stringify(report));
+    const proof = createRestoreReleaseProof({
+      runId: "123",
+      githubRun: {
+        conclusion: "success",
+        headSha: "b".repeat(40),
+      },
+      githubArtifacts: {
+        artifacts: [
+          {
+            id: 456,
+            expired: false,
+            digest: `sha256:${"c".repeat(64)}`,
+          },
+        ],
+      },
+      source,
+      report,
+      reportBytes,
+    });
+
+    expect(proof).toEqual(
+      expect.objectContaining({
+        backup_run_id: "123",
+        backup_artifact_id: "456",
+        restore_report_sha256: createHash("sha256")
+          .update(reportBytes)
+          .digest("hex"),
+        restore_ok: true,
+        restore_failure_count: 0,
+      }),
+    );
   });
 
   it("detects artifact tampering and compares exact restore evidence", async () => {
@@ -594,6 +745,9 @@ describe("database backup workflow", () => {
       expect.objectContaining({
         ok: true,
         table_count: 1,
+        source_table_count: 1,
+        source_non_empty_table_count: 1,
+        required_content_checksums: 1,
         checked_content_checksums: 1,
         target_only_tables: [],
         target_only_sequences: [],
@@ -652,6 +806,102 @@ describe("database backup workflow", () => {
     flattened.tables[0].kind = "table";
     expect(compareDatabaseEvidence(partitioned, flattened).failures).toContain(
       "relation kind differs for public.wines",
+    );
+  });
+
+  it("fails production promotion without current backup and restore proof", async () => {
+    const { assertReleaseBackupHealth } =
+      await loadScript("assert-release-backup-health");
+    const now = "2026-08-07T16:00:00.000Z";
+    const latestBackup = {
+      id: 123,
+      status: "completed",
+      conclusion: "success",
+      head_branch: "main",
+      head_sha: "a".repeat(40),
+      created_at: "2026-08-07T15:00:00.000Z",
+    };
+    const artifacts = {
+      artifacts: [
+        {
+          id: 456,
+          name: "terroir-db-backup-2026-08-07",
+          expired: false,
+          digest: `sha256:${"b".repeat(64)}`,
+        },
+      ],
+    };
+    const proof = {
+      format_version: 1,
+      backup_run_id: "123",
+      backup_head_sha: "a".repeat(40),
+      backup_artifact_id: "456",
+      backup_artifact_digest: `sha256:${"b".repeat(64)}`,
+      restore_report_sha256: "c".repeat(64),
+      verified_at: "2026-08-07T15:30:00.000Z",
+      migration_version: "0073",
+      restore_ok: true,
+      restore_failure_count: 0,
+      source_table_count: 49,
+      source_non_empty_table_count: 25,
+      restored_table_count: 66,
+      required_content_checksums: 10,
+      checked_content_checksums: 10,
+    };
+
+    expect(() =>
+      assertReleaseBackupHealth({
+        latestBackup,
+        artifacts,
+        proof,
+        expectedRunId: "123",
+        now,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertReleaseBackupHealth({
+        latestBackup: { ...latestBackup, conclusion: "failure" },
+        artifacts,
+        proof,
+        expectedRunId: "123",
+        now,
+      }),
+    ).toThrow(/latest DB Backup run is not successful/u);
+    expect(() =>
+      assertReleaseBackupHealth({
+        latestBackup,
+        artifacts,
+        proof: { ...proof, checked_content_checksums: 9 },
+        expectedRunId: "123",
+        now,
+      }),
+    ).toThrow(/Restore proof checksum coverage is incomplete/u);
+    expect(() =>
+      assertReleaseBackupHealth({
+        latestBackup,
+        artifacts,
+        proof: { ...proof, backup_artifact_digest: `sha256:${"d".repeat(64)}` },
+        expectedRunId: "123",
+        now,
+      }),
+    ).toThrow(/artifact digest does not match/u);
+
+    const promotion = readFileSync(
+      resolve(
+        process.cwd(),
+        ".github/workflows/promote-to-production.yml",
+      ),
+      "utf8",
+    );
+    expect(promotion).toContain("backup_run_id:");
+    expect(promotion).toContain("restore_proof_b64:");
+    expect(promotion).toContain("assert-release-backup-health.mjs");
+    expect(promotion).toContain(
+      "actions/workflows/db-backup.yml/runs?branch=main&per_page=1",
+    );
+    expect(promotion).toContain("Upload database recovery proof");
+    expect(promotion.indexOf("Require database recovery proof")).toBeLessThan(
+      promotion.indexOf("Fast-forward production only"),
     );
   });
 });

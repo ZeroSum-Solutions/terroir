@@ -179,13 +179,17 @@ pg_restore --dbname=service=terroir_restore \
 
 restored_evidence="$work_dir/restored-evidence.json"
 restore_report="$proof_dir/restore-report.json"
-PGSERVICE=terroir_restore BACKUP_EVIDENCE_FILE="$restored_evidence" \
+PGSERVICE=terroir_restore \
+BACKUP_CHECKSUM_SOURCE_FILE="$source_evidence" \
+BACKUP_EVIDENCE_FILE="$restored_evidence" \
   node scripts/backup/collect-database-evidence.mjs
 BACKUP_SOURCE_EVIDENCE_FILE="$source_evidence" \
 BACKUP_RESTORED_EVIDENCE_FILE="$restored_evidence" \
 BACKUP_RESTORE_REPORT_FILE="$restore_report" \
   node scripts/backup/compare-database-evidence.mjs
-jq -e '.ok == true and (.failures | length) == 0' "$restore_report" >/dev/null
+BACKUP_SOURCE_EVIDENCE_FILE="$source_evidence" \
+BACKUP_RESTORE_REPORT_FILE="$restore_report" \
+  node scripts/backup/assert-restore-report.mjs
 jq -n --arg supabase_cli "$supabase_version" --arg run_id "$run_id" '{
   format_version: 1,
   run_id: $run_id,
@@ -194,6 +198,13 @@ jq -n --arg supabase_cli "$supabase_version" --arg run_id "$run_id" '{
   target: "canonical-local-supabase",
   platform_ddl_preserved: true
 }' > "$proof_dir/restore-method.json"
+BACKUP_RUN_ID="$run_id" \
+BACKUP_GITHUB_RUN_FILE="$proof_dir/github-run.json" \
+BACKUP_GITHUB_ARTIFACTS_FILE="$proof_dir/github-artifacts.json" \
+BACKUP_SOURCE_EVIDENCE_FILE="$source_evidence" \
+BACKUP_RESTORE_REPORT_FILE="$restore_report" \
+BACKUP_RELEASE_PROOF_FILE="$proof_dir/release-proof.json" \
+  node scripts/backup/create-restore-release-proof.mjs
 
 cp "$manifest_file" "$checksums_file" "$proof_dir/"
 printf 'Restore drill PASS for run %s\n' "$run_id"

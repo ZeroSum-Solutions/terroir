@@ -316,14 +316,18 @@ pg_restore \
 ```
 
 Collect the restored table inventory, exact row counts, migration version, and
-deterministic checksums for the ten largest non-empty tables. The comparison
-fails on any missing table, count mismatch, migration mismatch, or checksum
+deterministic checksums for the exact authenticated source checksum set. The
+target runtime can contain larger platform-owned relations that are not part of
+the backup, so independently selecting the target's largest tables would not
+prove the required source tables. The comparison fails on any missing source
+table, count mismatch, migration mismatch, checksum-set drift, or checksum
 mismatch.
 
 ```bash
 restored_evidence="$work_dir/restored-evidence.json"
 restore_report="$proof_dir/restore-report.json"
 PGSERVICE=terroir_restore \
+BACKUP_CHECKSUM_SOURCE_FILE="$source_evidence" \
 BACKUP_EVIDENCE_FILE="$restored_evidence" \
   node scripts/backup/collect-database-evidence.mjs
 
@@ -350,7 +354,30 @@ unset PG_DATABASE_URL PGSERVICEFILE PGSERVICE_NAME
 Review `restore-report.json` before recording the drill as PASS. Its `ok` field
 must be `true`, `failures` must be empty, and
 `checked_content_checksums` must be ten unless production had fewer than ten
-non-empty tables.
+non-empty tables. The entrypoint enforces that count and also writes a redacted
+`release-proof.json` that binds the restore report's SHA-256 to the successful
+backup run, immutable artifact digest, migration version, table counts, and
+checksum coverage. The proof contains no connection string, credential,
+plaintext database content, or age identity.
+
+## Enforced production recovery gate
+
+The production promotion workflow requires the numeric backup run ID and the
+base64 encoding of `release-proof.json`. Before it can fast-forward `main`, the
+workflow queries GitHub for the latest `DB Backup` run on `main` and requires
+that exact run to be completed successfully within 30 hours. It also requires
+one unexpired artifact whose ID and immutable digest match the restore proof,
+a successful restore performed after that backup, and complete checksum
+coverage. A failed, running, stale, superseded, or unproven backup blocks the
+promotion before any production push. The validated redacted proof is retained
+with the promotion run for 90 days.
+
+Use the repository's `Promote to production` workflow after the staging SHA is
+green. Supply the proof as data, not as executable shell content; the workflow
+base64-decodes it into a mode-600 file, bounds it to 16 KiB, parses it as JSON,
+and never evaluates it. The release owner and confirmation checks remain
+independent requirements. A restore proof for a previous backup cannot satisfy
+the gate after a newer backup run starts.
 
 ## Failure and rotation handling
 
