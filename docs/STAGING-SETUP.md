@@ -52,8 +52,17 @@ or Supabase URL.
 4. Require both the staging smoke check and the workflow report before a
    release owner dispatches `Promote to production` with the exact SHA.
 5. The promotion workflow rejects any SHA other than the current `staging`
-   tip, runs a fresh staging smoke, then only fast-forwards `main`. Protect the
-   workflow's `production` environment with a named release-owner approval.
+   tip, requires the configured `PRODUCTION_RELEASE_OWNER` actor to enter the
+   exact `PROMOTE-STAGING-SHA` confirmation, runs a fresh staging smoke, then
+   only fast-forwards `main`.
+
+GitHub environment required reviewers are unavailable on the repository's
+current plan. The repository variable and exact-confirmation check are the
+enforced fallback: set `PRODUCTION_RELEASE_OWNER` to the named release owner's
+GitHub login, restrict the `production` environment to the `staging` branch,
+and never dispatch promotion from an untrusted account. If environment
+reviewers become available, enable the named reviewer as an additional gate;
+do not remove the workflow-level owner check.
 
 Configure GitHub branch protection so `staging` requires the staging-smoke
 check and `main` permits changes only from the promotion workflow. Configure

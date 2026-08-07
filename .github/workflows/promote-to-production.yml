@@ -7,13 +7,38 @@ on:
         description: Exact staging SHA to promote after an approved release decision
         required: true
         type: string
+      confirmation:
+        description: Type PROMOTE-STAGING-SHA to confirm the production release
+        required: true
+        type: string
+
+concurrency:
+  group: production-promotion
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
+  authorize-release-owner:
+    name: Authorize release owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require the configured owner and explicit confirmation
+        env:
+          ACTOR: ${{ github.actor }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          RELEASE_OWNER: ${{ vars.PRODUCTION_RELEASE_OWNER }}
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_OWNER"
+          test "$ACTOR" = "$RELEASE_OWNER"
+          test "$CONFIRMATION" = "PROMOTE-STAGING-SHA"
+
   verify-staging-candidate:
     name: Verify staging candidate
+    needs: authorize-release-owner
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -36,7 +61,7 @@ jobs:
           CANDIDATE_SHA: ${{ inputs.sha }}
         run: |
           set -euo pipefail
-          git check-ref-format --allow-onelevel "$CANDIDATE_SHA"
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
           git rev-parse --verify "$CANDIDATE_SHA^{commit}"
           git fetch origin staging
           test "$CANDIDATE_SHA" = "$(git rev-parse origin/staging)"
@@ -51,7 +76,7 @@ jobs:
 
   promote:
     name: Promote the verified SHA
-    needs: verify-staging-candidate
+    needs: [authorize-release-owner, verify-staging-candidate]
     runs-on: ubuntu-latest
     environment: production
     steps:
