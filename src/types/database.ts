@@ -1006,6 +1006,27 @@ export type Database = {
         Args: { p_fields: string[]; p_wine_id: string }
         Returns: undefined
       }
+      add_cellar_wine_idempotent: {
+        Args: {
+          p_country?: string | null
+          p_idempotency_key?: string
+          p_name: string
+          p_producer: string
+          p_quantity?: number
+          p_region?: string | null
+          p_request_hash?: string
+          p_restaurant_id: string
+          p_unit_cost?: number
+          p_varietal?: string | null
+          p_vintage?: number | null
+        }
+        Returns: {
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
       assign_cellar_section_batch: {
         Args: {
           p_restaurant_id: string
@@ -1145,6 +1166,20 @@ export type Database = {
         }
         Returns: {
           execution_started_at: string
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
+      delete_cellar_wine_idempotent: {
+        Args: {
+          p_idempotency_key?: string
+          p_request_hash?: string
+          p_restaurant_id: string
+          p_wine_id: string
+        }
+        Returns: {
           outcome: string
           replayed: boolean
           response_body: Json

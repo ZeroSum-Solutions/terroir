@@ -203,10 +203,6 @@ describe("cellar collection behavior", () => {
     const supabase = allowRole(
       [
         {
-          table: "inventory_items",
-          data: { id: INVENTORY_ID, quantity: 3, unit_cost: 25 },
-        },
-        {
           table: "wines",
           data: {
             varietal: "Pinot Noir",
@@ -217,7 +213,20 @@ describe("cellar collection behavior", () => {
         },
       ],
       [
-        { fn: "find_or_create_wines_batch", data: [WINE_ID] },
+        {
+          fn: "add_cellar_wine_idempotent",
+          data: [{
+            outcome: "added",
+            response_status: 200,
+            response_body: {
+              wineId: WINE_ID,
+              inventoryId: INVENTORY_ID,
+              quantity: 3,
+              unitCost: 25,
+            },
+            replayed: false,
+          }],
+        },
         { fn: "match_lwin_batch", data: [] },
         { fn: "enrich_wines_batch", data: 1 },
       ],
@@ -243,14 +252,14 @@ describe("cellar collection behavior", () => {
       quantity: 3,
       unitCost: 25,
     });
-    expect(supabase.calls[0]).toMatchObject({
-      action: "insert",
-      payload: expect.objectContaining({
-        wine_id: WINE_ID,
-        restaurant_id: RESTAURANT_ID,
-        added_via: "manual",
+    expect(supabase.rpc.mock.calls[0]).toEqual([
+      "add_cellar_wine_idempotent",
+      expect.objectContaining({
+        p_restaurant_id: RESTAURANT_ID,
+        p_name: "Reserve",
+        p_producer: "Domaine Test",
       }),
-    });
+    ]);
     expect(intelligence.enrichWine).toHaveBeenCalledWith({
       varietal: "Pinot Noir",
       region: "Burgundy",
@@ -258,7 +267,7 @@ describe("cellar collection behavior", () => {
       vintage: 2020,
     });
     expect(supabase.rpc.mock.calls.map(([fn]) => fn)).toEqual([
-      "find_or_create_wines_batch",
+      "add_cellar_wine_idempotent",
       "match_lwin_batch",
       "enrich_wines_batch",
     ]);
@@ -280,10 +289,6 @@ describe("cellar collection behavior", () => {
     allowRole(
       [
         {
-          table: "inventory_items",
-          data: { id: INVENTORY_ID, quantity: 1, unit_cost: 0 },
-        },
-        {
           table: "wines",
           data: {
             varietal: "Pinot Noir",
@@ -294,7 +299,20 @@ describe("cellar collection behavior", () => {
         },
       ],
       [
-        { fn: "find_or_create_wines_batch", data: [WINE_ID] },
+        {
+          fn: "add_cellar_wine_idempotent",
+          data: [{
+            outcome: "added",
+            response_status: 200,
+            response_body: {
+              wineId: WINE_ID,
+              inventoryId: INVENTORY_ID,
+              quantity: 1,
+              unitCost: 0,
+            },
+            replayed: false,
+          }],
+        },
         {
           fn: "match_lwin_batch",
           error: { message: "LWIN failed" },
@@ -339,10 +357,6 @@ describe("cellar collection behavior", () => {
     allowRole(
       [
         {
-          table: "inventory_items",
-          data: { id: INVENTORY_ID, quantity: 1, unit_cost: 0 },
-        },
-        {
           table: "wines",
           data: {
             varietal: null,
@@ -353,7 +367,20 @@ describe("cellar collection behavior", () => {
         },
       ],
       [
-        { fn: "find_or_create_wines_batch", data: [WINE_ID] },
+        {
+          fn: "add_cellar_wine_idempotent",
+          data: [{
+            outcome: "added",
+            response_status: 200,
+            response_body: {
+              wineId: WINE_ID,
+              inventoryId: INVENTORY_ID,
+              quantity: 1,
+              unitCost: 0,
+            },
+            replayed: false,
+          }],
+        },
         {
           fn: "match_lwin_batch",
           throws: new Error("transport failed"),
@@ -374,13 +401,21 @@ describe("cellar collection behavior", () => {
 
   it("does not report add-wine success for an invalid inventory result", async () => {
     allowRole(
-      [
-        {
-          table: "inventory_items",
-          data: { id: "not-a-uuid", quantity: 1, unit_cost: 0 },
-        },
-      ],
-      [{ fn: "find_or_create_wines_batch", data: [WINE_ID] }],
+      [],
+      [{
+        fn: "add_cellar_wine_idempotent",
+        data: [{
+          outcome: "added",
+          response_status: 200,
+          response_body: {
+            wineId: WINE_ID,
+            inventoryId: "not-a-uuid",
+            quantity: 1,
+            unitCost: 0,
+          },
+          replayed: false,
+        }],
+      }],
     );
 
     const response = await ADD_WINE(

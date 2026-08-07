@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createIdempotencyRequestHash } from "@/lib/api/idempotency";
 
 const mockRequireRole = vi.fn();
@@ -27,6 +27,13 @@ type ClaimRow = {
   response_headers: Record<string, string> | null;
 };
 
+type CellarDeleteRow = {
+  outcome: string;
+  response_status: number;
+  response_body: unknown;
+  replayed: boolean;
+};
+
 function request(body: unknown, key?: string): NextRequest {
   return new Request(`http://localhost/api/cellar/${INVENTORY_ID}`, {
     method: "PATCH",
@@ -48,6 +55,10 @@ function makeSupabase(options: {
     error: { code?: string; message?: string } | null;
   };
   claimRow?: ClaimRow;
+  cellarDelete?: {
+    data: CellarDeleteRow[] | null;
+    error: { code?: string; message?: string } | null;
+  };
 } = {}) {
   const claimRow = options.claimRow ?? {
     outcome: "claimed",
@@ -59,6 +70,19 @@ function makeSupabase(options: {
   const rpc = vi.fn(async (operation: string) => {
     if (operation === "claim_api_idempotency") {
       return { data: [claimRow], error: null };
+    }
+    if (operation === "delete_cellar_wine_idempotent") {
+      return options.cellarDelete ?? {
+        data: [{
+          outcome: "not_found",
+          response_status: 404,
+          response_body: {
+            error: { code: "not_found", message: "Wine not found." },
+          },
+          replayed: false,
+        }],
+        error: null,
+      };
     }
     if (
       operation === "complete_api_idempotency" ||
@@ -559,42 +583,51 @@ describe("DELETE /api/cellar/[id]", () => {
     const supabase = makeSupabase();
     allow(supabase);
 
-    const response = await DELETE({} as NextRequest, {
+    const response = await DELETE(
+      new NextRequest(`http://localhost/api/cellar/${WINE_ID}`, {
+        method: "DELETE",
+      }),
+      {
       params: Promise.resolve({ id: WINE_ID }),
-    });
+      },
+    );
 
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({
       error: { code: "not_found", message: "Wine not found." },
     });
-    expect(supabase.calls).toContainEqual({
-      method: "eq",
-      args: ["id", WINE_ID],
-    });
-    expect(supabase.calls).toContainEqual({
-      method: "eq",
-      args: ["restaurant_id", "restaurant-a"],
-    });
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      "delete_cellar_wine_idempotent",
+      expect.objectContaining({
+        p_restaurant_id: "restaurant-a",
+        p_wine_id: WINE_ID,
+      }),
+    );
   });
 
-  it("returns 500 when the tenant-scoped wine lookup provider fails", async () => {
+  it("returns 500 when the dedicated deletion RPC provider fails", async () => {
     const supabase = makeSupabase({
-      wineLookup: {
+      cellarDelete: {
         data: null,
         error: { code: "08006", message: "connection failure" },
       },
     });
     allow(supabase);
 
-    const response = await DELETE({} as NextRequest, {
+    const response = await DELETE(
+      new NextRequest(`http://localhost/api/cellar/${WINE_ID}`, {
+        method: "DELETE",
+      }),
+      {
       params: Promise.resolve({ id: WINE_ID }),
-    });
+      },
+    );
 
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
       error: {
         code: "internal_error",
-        message: "Failed to find wine.",
+        message: "Internal server error.",
       },
     });
   });

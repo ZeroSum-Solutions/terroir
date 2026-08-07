@@ -2,10 +2,16 @@ import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireRole } from "@/lib/api/auth";
 import { z } from "zod";
-import { Errors } from "@/lib/api/errors";
+import { apiError, Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
+import {
+  createIdempotencyRequestHash,
+  isValidIdempotencyKey,
+} from "@/lib/api/idempotency";
+import { apiResultResponse } from "@/lib/api/result-response";
 import { parseJson, parseParams } from "@/lib/api/validation";
+import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
 
@@ -27,6 +33,40 @@ type EditInventoryMutationBody =
       bin_location: string | null;
     }
   | { error: { code: string; message: string } };
+
+type CellarDeleteOutcome =
+  | "deleted"
+  | "not_found"
+  | "wine_has_pours"
+  | "wine_has_inventory"
+  | "wine_on_lists"
+  | "wine_from_scan"
+  | "replay"
+  | "idempotency_key_reused"
+  | "idempotency_key_expired"
+  | "idempotency_outcome_unknown"
+  | "idempotency_in_progress";
+
+type CellarDeleteResult = {
+  outcome: CellarDeleteOutcome;
+  response_status: number;
+  response_body: Json;
+  replayed: boolean;
+};
+
+const CELLAR_DELETE_OUTCOMES: readonly CellarDeleteOutcome[] = [
+  "deleted",
+  "not_found",
+  "wine_has_pours",
+  "wine_has_inventory",
+  "wine_on_lists",
+  "wine_from_scan",
+  "replay",
+  "idempotency_key_reused",
+  "idempotency_key_expired",
+  "idempotency_outcome_unknown",
+  "idempotency_in_progress",
+];
 
 /**
  * PATCH /api/cellar/[id] — edit an inventory item.
@@ -121,7 +161,7 @@ export async function PATCH(
  * a descriptive message listing which references block deletion.
  */
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Params },
 ) {
   return withApiHandler(async () => {
@@ -131,115 +171,181 @@ export async function DELETE(
 
     const parsedParams = await parseParams(params, ParamsSchema);
     if (!parsedParams.ok) return parsedParams.response;
-    const { id: wineId } = parsedParams.data;
-
-    // Verify the wine belongs to this restaurant
-    const { data: wine, error: wineError } = await supabase
-      .from("wines")
-      .select("id, name, producer, vintage")
-      .eq("id", wineId)
-      .eq("restaurant_id", restaurantId)
-      .single();
-
-    if (wineError && wineError.code !== "PGRST116") {
-      console.error("wines lookup failed:", wineError);
-      Sentry.captureException(wineError, {
-        tags: { surface: "cellar", phase: "find-wine-for-delete" },
-        extra: { restaurantId, wineId },
-      });
-      return Errors.internal("Failed to find wine.");
-    }
-
-    if (!wine) {
-      return Errors.notFound("Wine");
-    }
-
-    // Check referential integrity — pour_events FK is ON DELETE RESTRICT
-    const { count: pourCount, error: pourErr } = await supabase
-      .from("pour_events")
-      .select("*", { count: "exact", head: true })
-      .eq("wine_id", wineId);
-
-    if (pourErr) {
-      console.error("pour_events check failed:", pourErr);
-      return Errors.internal("Failed to check pour history.");
-    }
-    if (pourCount != null && pourCount > 0) {
-      return Errors.conflict(
-        "wine_has_pours",
-        `Cannot delete "${wine.producer} ${wine.name}" — it has ${pourCount} pour event${pourCount === 1 ? "" : "s"}.`,
+    const wineId = parsedParams.data.id.toLowerCase();
+    const rawKey = request.headers.get("Idempotency-Key");
+    if (rawKey !== null && !isValidIdempotencyKey(rawKey)) {
+      return Errors.badRequest(
+        "Invalid Idempotency-Key.",
+        undefined,
+        "invalid_idempotency_key",
       );
     }
 
-    // Check inventory_items — FK is ON DELETE RESTRICT
-    const { count: invCount, error: invErr } = await supabase
-      .from("inventory_items")
-      .select("*", { count: "exact", head: true })
-      .eq("wine_id", wineId);
-
-    if (invErr) {
-      console.error("inventory_items check failed:", invErr);
-      return Errors.internal("Failed to check inventory.");
+    const { data, error } = await supabase.rpc(
+      "delete_cellar_wine_idempotent",
+      {
+        p_restaurant_id: restaurantId,
+        p_wine_id: wineId,
+        ...(rawKey
+          ? {
+              p_idempotency_key: rawKey,
+              p_request_hash: createIdempotencyRequestHash({ id: wineId }),
+            }
+          : {}),
+      },
+    );
+    if (error) {
+      if (error.code === "42501") return Errors.forbidden("Forbidden.");
+      if (rawKey && error.code === "22023") {
+        return Errors.badRequest(
+          "Invalid cellar deletion request.",
+          undefined,
+          "invalid_cellar_deletion_request",
+        );
+      }
+      captureCellarDeleteError(error, "rpc", restaurantId, wineId);
+      return rawKey
+        ? apiError(
+            503,
+            "idempotency_unavailable",
+            "Request idempotency is temporarily unavailable.",
+          )
+        : Errors.internal();
     }
-    if (invCount != null && invCount > 0) {
-      return Errors.conflict(
-        "wine_has_inventory",
-        `Cannot delete "${wine.producer} ${wine.name}" — it has ${invCount} inventory item${invCount === 1 ? "" : "s"}. 86 the wine instead.`,
+
+    const result = firstCellarDeleteResult(data);
+    if (!isCellarDeleteResult(result, rawKey !== null)) {
+      captureCellarDeleteError(
+        new Error("delete_cellar_wine_idempotent returned an invalid result"),
+        "result",
+        restaurantId,
+        wineId,
       );
+      return rawKey
+        ? apiError(
+            503,
+            "idempotency_unavailable",
+            "Request idempotency is temporarily unavailable.",
+          )
+        : Errors.internal();
     }
 
-    // Check wine_list_items — FK is ON DELETE RESTRICT
-    const { count: wliCount, error: wliErr } = await supabase
-      .from("wine_list_items")
-      .select("*", { count: "exact", head: true })
-      .eq("wine_id", wineId);
-
-    if (wliErr) {
-      console.error("wine_list_items check failed:", wliErr);
-      return Errors.internal("Failed to check wine list references.");
-    }
-    if (wliCount != null && wliCount > 0) {
-      return Errors.conflict(
-        "wine_on_lists",
-        `Cannot delete "${wine.producer} ${wine.name}" — it appears on ${wliCount} wine list${wliCount === 1 ? "" : "s"}. Remove it from lists first.`,
-      );
-    }
-
-    // Check invoice_scans for scan line items referencing this wine.
-    const { data: scanRefs, error: scanErr } = await supabase
-      .from("invoice_scans")
-      .select("id")
-      .eq("restaurant_id", restaurantId)
-      .contains("parsed_line_items", JSON.stringify([{ name: wine.name }]));
-
-    if (scanErr) {
-      console.error("invoice_scans check failed:", scanErr);
-      return Errors.internal("Failed to check scan references.");
-    }
-    if (scanRefs && scanRefs.length > 0) {
-      return Errors.conflict(
-        "wine_from_scan",
-        `Cannot delete "${wine.producer} ${wine.name}" — it was imported via ${scanRefs.length} invoice scan${scanRefs.length === 1 ? "" : "s"}. Remove the scan record first.`,
-      );
-    }
-
-    // All checks passed — delete the wine. CASCADE deletes open_bottles
-    // and availability_events automatically.
-    const { error: deleteErr } = await supabase
-      .from("wines")
-      .delete()
-      .eq("id", wineId)
-      .eq("restaurant_id", restaurantId);
-
-    if (deleteErr) {
-      console.error("wines delete failed:", deleteErr);
-      Sentry.captureException(deleteErr, {
-        tags: { surface: "cellar", phase: "delete-wine" },
-        extra: { restaurantId, wineId },
-      });
-      return Errors.internal("Failed to delete wine.");
-    }
-
-    return NextResponse.json({ deleted: true });
+    return apiResultResponse({
+      status: result.response_status,
+      body: result.response_body,
+      ...(cellarDeleteHeaders(result, rawKey !== null)
+        ? { headers: cellarDeleteHeaders(result, rawKey !== null)! }
+        : {}),
+    });
   });
+}
+
+function firstCellarDeleteResult(data: unknown): CellarDeleteResult | null {
+  if (!Array.isArray(data) || data.length !== 1) return null;
+  return data[0] as CellarDeleteResult | null;
+}
+
+function isCellarDeleteResult(
+  row: CellarDeleteResult | null,
+  isKeyed: boolean,
+): row is CellarDeleteResult {
+  if (
+    !row ||
+    !CELLAR_DELETE_OUTCOMES.includes(row.outcome) ||
+    !Number.isInteger(row.response_status) ||
+    typeof row.replayed !== "boolean" ||
+    (row.outcome === "replay") !== row.replayed ||
+    !isRecord(row.response_body) ||
+    (!isKeyed && row.outcome === "replay") ||
+    (!isKeyed && row.outcome.startsWith("idempotency_"))
+  ) {
+    return false;
+  }
+  if (row.outcome === "deleted") {
+    return row.response_status === 200 && row.response_body.deleted === true;
+  }
+  const expected: Partial<Record<CellarDeleteOutcome, [number, string]>> = {
+    not_found: [404, "not_found"],
+    wine_has_pours: [409, "wine_has_pours"],
+    wine_has_inventory: [409, "wine_has_inventory"],
+    wine_on_lists: [409, "wine_on_lists"],
+    wine_from_scan: [409, "wine_from_scan"],
+    idempotency_key_reused: [409, "idempotency_key_reused"],
+    idempotency_key_expired: [409, "idempotency_key_expired"],
+    idempotency_outcome_unknown: [409, "idempotency_outcome_unknown"],
+    idempotency_in_progress: [409, "idempotency_in_progress"],
+  };
+  if (row.outcome === "replay") {
+    return (
+      (row.response_status === 200 && row.response_body.deleted === true) ||
+      (row.response_status === 404 &&
+        isErrorBody(row.response_body as Record<string, unknown>, "not_found")) ||
+      (row.response_status === 409 &&
+        [
+          "wine_has_pours",
+          "wine_has_inventory",
+          "wine_on_lists",
+          "wine_from_scan",
+        ].some((code) =>
+          isErrorBody(row.response_body as Record<string, unknown>, code),
+        ))
+    );
+  }
+  const [status, code] = expected[row.outcome] ?? [];
+  return (
+    row.response_status === status &&
+    isErrorBody(row.response_body as Record<string, unknown>, code ?? "")
+  );
+}
+
+function cellarDeleteHeaders(
+  row: CellarDeleteResult,
+  isKeyed: boolean,
+): Record<string, string> | null {
+  if (row.outcome === "idempotency_in_progress") {
+    return { "Retry-After": "1" };
+  }
+  if (!isKeyed) return null;
+  if (row.outcome === "replay") return { "Idempotency-Replayed": "true" };
+  if (
+    [
+      "deleted",
+      "not_found",
+      "wine_has_pours",
+      "wine_has_inventory",
+      "wine_on_lists",
+      "wine_from_scan",
+    ].includes(row.outcome)
+  ) {
+    return { "Idempotency-Replayed": "false" };
+  }
+  return null;
+}
+
+function isErrorBody(body: Record<string, unknown>, code: string): boolean {
+  return (
+    isRecord(body.error) &&
+    body.error.code === code &&
+    typeof body.error.message === "string"
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function captureCellarDeleteError(
+  error: unknown,
+  phase: string,
+  restaurantId: string,
+  wineId: string,
+): void {
+  try {
+    Sentry.captureException(error, {
+      tags: { surface: "cellar-delete-idempotency", phase },
+      extra: { restaurantId, wineId },
+    });
+  } catch {
+    // Observability must not replace the route's fail-closed result.
+  }
 }

@@ -32,6 +32,25 @@ export type ApiIdempotencyImplementation = {
  * hash call, binary mode, and caller evidence.
  */
 export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
+  "api:DELETE:/api/cellar/{param}": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "delete_cellar_wine_idempotent",
+    },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "delete_cellar_wine_idempotent",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/cellar/wine-detail-drawer.tsx"],
+    },
+  },
   "api:DELETE:/api/team/invite/{param}": {
     boundary: { kind: "generic-wrapper", count: 1 },
     identity: {
@@ -72,6 +91,25 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
         "src/app/(app)/cellar/cellar-list.tsx",
         "src/lib/cellar/batch-section.ts",
       ],
+    },
+  },
+  "api:POST:/api/cellar": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "add_cellar_wine_idempotent",
+    },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "add_cellar_wine_idempotent",
+    },
+    client: {
+      lifecycle: "no-first-party-caller",
+      sources: [],
     },
   },
   "api:PATCH:/api/cellar/config": {

@@ -46,6 +46,9 @@ const pourCommands = createIdempotentCommandStore({
 const undoPourCommands = createIdempotentCommandStore({
   persistence: createSessionCommandPersistence("terroir:pour-undo"),
 });
+const deleteCellarWineCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence("terroir:cellar-delete"),
+});
 const undoPourSlotsPendingReset = new Set<string>();
 
 function abandonUndoPourSlot(slot: string): void {
@@ -363,13 +366,15 @@ export function WineDetailDrawer({
       setErrorMsg(null);
       setBusy(true);
       try {
-        const res = await fetch(`/api/cellar/${row.wine_id}`, { method: "DELETE" });
-        if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as
-            | { error?: { code?: string; message?: string } }
-            | null;
+        const { response, data } =
+          await deleteCellarWineCommands.json<unknown>({
+            slot: `cellar:delete:${row.wine_id}`,
+            url: `/api/cellar/${row.wine_id}`,
+            method: "DELETE",
+          });
+        if (!response.ok) {
           throw new Error(
-            payload?.error?.message ?? `Delete failed (${res.status}).`,
+            readApiError(data, `Delete failed (${response.status}).`).message,
           );
         }
         toast.success("Wine deleted");

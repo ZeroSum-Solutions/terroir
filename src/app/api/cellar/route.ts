@@ -3,16 +3,46 @@ import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/auth";
+import { apiError, Errors } from "@/lib/api/errors";
 import {
   AddCellarWineBodySchema,
   CellarInventoryResultSchema,
 } from "@/lib/api/cellar-collection-schemas";
 import { withApiHandler } from "@/lib/api/handler";
+import {
+  createIdempotencyRequestHash,
+  isValidIdempotencyKey,
+} from "@/lib/api/idempotency";
+import { apiResultResponse } from "@/lib/api/result-response";
 import { parseJson } from "@/lib/api/validation";
 import { enrichWine } from "@/lib/wine-intelligence/enrich";
-import type { Database } from "@/types/database";
+import type { Database, Json } from "@/types/database";
 
 export const runtime = "nodejs";
+
+type CellarAddOutcome =
+  | "added"
+  | "replay"
+  | "idempotency_key_reused"
+  | "idempotency_key_expired"
+  | "idempotency_outcome_unknown"
+  | "idempotency_in_progress";
+
+type CellarAddResult = {
+  outcome: CellarAddOutcome;
+  response_status: number;
+  response_body: Json;
+  replayed: boolean;
+};
+
+const CELLAR_ADD_OUTCOMES: readonly CellarAddOutcome[] = [
+  "added",
+  "replay",
+  "idempotency_key_reused",
+  "idempotency_key_expired",
+  "idempotency_outcome_unknown",
+  "idempotency_in_progress",
+];
 
 function buildEnrichmentMetadata(result: ReturnType<typeof enrichWine>) {
   const fields: string[] = [];
@@ -53,58 +83,96 @@ export async function POST(request: NextRequest) {
 
     const parsed = await parseJson(request, AddCellarWineBodySchema);
     if (!parsed.ok) return parsed.response;
-    const {
-      name,
-      producer,
-      vintage,
-      varietal,
-      region,
-      country,
-      quantity,
-      unit_cost,
-    } = parsed.data;
+    const input = {
+      name: parsed.data.name,
+      producer: parsed.data.producer,
+      vintage: parsed.data.vintage ?? null,
+      varietal: parsed.data.varietal ?? null,
+      region: parsed.data.region ?? null,
+      country: parsed.data.country ?? null,
+      quantity: parsed.data.quantity,
+      unit_cost: parsed.data.unit_cost ?? 0,
+    };
+    const rawKey = request.headers.get("Idempotency-Key");
+    if (rawKey !== null && !isValidIdempotencyKey(rawKey)) {
+      return Errors.badRequest(
+        "Invalid Idempotency-Key.",
+        undefined,
+        "invalid_idempotency_key",
+      );
+    }
 
-    const { data: wineIds, error: batchError } = await supabase.rpc(
-      "find_or_create_wines_batch",
+    const { data, error } = await supabase.rpc(
+      "add_cellar_wine_idempotent",
       {
         p_restaurant_id: restaurantId,
-        p_wines: [
-          {
-            name,
-            producer,
-            vintage: vintage ?? null,
-            varietal: varietal ?? null,
-            region: region ?? null,
-            country: country ?? null,
-            size_ml: 750,
-          },
-        ],
+        p_name: input.name,
+        p_producer: input.producer,
+        p_vintage: input.vintage,
+        p_varietal: input.varietal,
+        p_region: input.region,
+        p_country: input.country,
+        p_quantity: input.quantity,
+        p_unit_cost: input.unit_cost,
+        ...(rawKey
+          ? {
+              p_idempotency_key: rawKey,
+              p_request_hash: createIdempotencyRequestHash({ body: input }),
+            }
+          : {}),
       },
     );
-    if (batchError) throw batchError;
-    const parsedWineId = z.string().uuid().safeParse(wineIds?.[0]);
-    if (!parsedWineId.success) {
-      throw new Error("find-or-create wine RPC returned no valid ID");
+    if (error) {
+      if (error.code === "42501") return Errors.forbidden("Forbidden.");
+      if (rawKey && error.code === "22023") {
+        return Errors.badRequest(
+          "Invalid cellar add request.",
+          undefined,
+          "invalid_cellar_add_request",
+        );
+      }
+      captureBestEffortError(error, "add-wine-rpc", { restaurantId });
+      return rawKey
+        ? apiError(
+            503,
+            "idempotency_unavailable",
+            "Request idempotency is temporarily unavailable.",
+          )
+        : Errors.internal();
     }
-    const wineId = parsedWineId.data;
 
-    const { data: rawInventoryItem, error: inventoryError } = await supabase
-      .from("inventory_items")
-      .insert({
-        wine_id: wineId,
-        restaurant_id: restaurantId,
-        quantity,
-        unit_cost: unit_cost ?? 0,
-        added_via: "manual" as const,
-      })
-      .select("id, quantity, unit_cost")
-      .maybeSingle();
-    if (inventoryError) throw inventoryError;
-    const inventoryItem =
-      CellarInventoryResultSchema.safeParse(rawInventoryItem);
-    if (!inventoryItem.success) {
-      throw new Error("Inventory insert returned an invalid result");
+    const result = firstCellarAddResult(data);
+    if (!isCellarAddResult(result, rawKey !== null)) {
+      captureBestEffortError(
+        new Error("add_cellar_wine_idempotent returned an invalid result"),
+        "add-wine-result",
+        { restaurantId },
+      );
+      return rawKey
+        ? apiError(
+            503,
+            "idempotency_unavailable",
+            "Request idempotency is temporarily unavailable.",
+          )
+        : Errors.internal();
     }
+
+    const response = apiResultResponse({
+      status: result.response_status,
+      body: result.response_body,
+      ...(cellarAddHeaders(result, rawKey !== null)
+        ? { headers: cellarAddHeaders(result, rawKey !== null)! }
+        : {}),
+    });
+    if (result.replayed) return response;
+
+    const responseBody = result.response_body as Record<string, unknown>;
+    const inventoryItem = CellarInventoryResultSchema.parse({
+      id: responseBody.inventoryId,
+      quantity: responseBody.quantity,
+      unit_cost: responseBody.unitCost,
+    });
+    const wineId = z.string().uuid().parse(responseBody.wineId);
 
     await runBestEffortLwinMatch({
       supabase,
@@ -126,13 +194,73 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      wineId,
-      inventoryId: inventoryItem.data.id,
-      quantity: inventoryItem.data.quantity,
-      unitCost: inventoryItem.data.unit_cost,
-    });
+    return response;
   });
+}
+
+function firstCellarAddResult(data: unknown): CellarAddResult | null {
+  if (!Array.isArray(data) || data.length !== 1) return null;
+  return data[0] as CellarAddResult | null;
+}
+
+function isCellarAddResult(
+  row: CellarAddResult | null,
+  isKeyed: boolean,
+): row is CellarAddResult {
+  if (
+    !row ||
+    !CELLAR_ADD_OUTCOMES.includes(row.outcome) ||
+    !Number.isInteger(row.response_status) ||
+    typeof row.replayed !== "boolean" ||
+    (row.outcome === "replay") !== row.replayed ||
+    !isRecord(row.response_body) ||
+    (!isKeyed && row.outcome !== "added")
+  ) {
+    return false;
+  }
+  if (row.outcome === "added" || row.outcome === "replay") {
+    return (
+      row.response_status === 200 &&
+      z.string().uuid().safeParse(row.response_body.wineId).success &&
+      CellarInventoryResultSchema.safeParse({
+        id: row.response_body.inventoryId,
+        quantity: row.response_body.quantity,
+        unit_cost: row.response_body.unitCost,
+      }).success
+    );
+  }
+  const expected: Record<
+    Exclude<CellarAddOutcome, "added" | "replay">,
+    string
+  > = {
+    idempotency_key_reused: "idempotency_key_reused",
+    idempotency_key_expired: "idempotency_key_expired",
+    idempotency_outcome_unknown: "idempotency_outcome_unknown",
+    idempotency_in_progress: "idempotency_in_progress",
+  };
+  return (
+    row.response_status === 409 &&
+    isRecord(row.response_body.error) &&
+    row.response_body.error.code === expected[row.outcome] &&
+    typeof row.response_body.error.message === "string"
+  );
+}
+
+function cellarAddHeaders(
+  row: CellarAddResult,
+  isKeyed: boolean,
+): Record<string, string> | null {
+  if (row.outcome === "idempotency_in_progress") {
+    return { "Retry-After": "1" };
+  }
+  if (!isKeyed) return null;
+  if (row.outcome === "replay") return { "Idempotency-Replayed": "true" };
+  if (row.outcome === "added") return { "Idempotency-Replayed": "false" };
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 async function runBestEffortLwinMatch(input: {
