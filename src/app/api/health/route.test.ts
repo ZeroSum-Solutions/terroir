@@ -1,4 +1,6 @@
 // @vitest-environment node
+import { createHash } from "node:crypto";
+import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockHttpsRequest = vi.fn();
@@ -86,6 +88,8 @@ describe("GET /api/health", () => {
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
     vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "");
     vi.stubEnv("RAILWAY_GIT_COMMIT_SHA", "");
+    vi.stubEnv("OBSERVABILITY_DRILL_ENABLED", "");
+    vi.stubEnv("OBSERVABILITY_DRILL_TOKEN_SHA256", "");
     vi.clearAllMocks();
   });
 
@@ -109,6 +113,7 @@ describe("GET /api/health", () => {
 
   it("reports only the deploy identity needed by the staging gate", async () => {
     vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "staging");
+    vi.stubEnv("OBSERVABILITY_DRILL_ENABLED", "1");
     vi.stubEnv("RAILWAY_GIT_COMMIT_SHA", "abc1234");
 
     await expectHealth({
@@ -167,5 +172,64 @@ describe("GET /api/health", () => {
 
     await expectHealth({ db: "error", dbReason: "probe_failed" });
     expect(mockHttpsRequest).not.toHaveBeenCalled();
+  });
+
+  it("emits a complete redacted alert envelope for an authorized non-production drill", async () => {
+    const token = "local-observability-drill-token";
+    vi.stubEnv(
+      "OBSERVABILITY_DRILL_TOKEN_SHA256",
+      createHash("sha256").update(token).digest("hex"),
+    );
+    vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "staging");
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    const response = await GET(
+      new NextRequest("https://terroir-web-staging.example.test/api/health?drill=readiness", {
+        headers: { "x-terroir-observability-drill": token },
+      }),
+    );
+    const body = await response.json();
+
+    expect(body).toMatchObject({
+      readiness: "degraded",
+      db: "error",
+      dbReason: "forced_failure",
+      alertDrill: {
+        environment: "staging",
+        severity: "high",
+        service: "terroir-web",
+        eventName: "readiness_degraded",
+        firstOccurrence: "2026-07-24T10:00:00.000Z",
+        lastOccurrence: "2026-07-24T10:00:00.000Z",
+        count: 1,
+        requestId: expect.stringMatching(/^[a-f0-9-]{36}$/),
+        runbook: expect.stringContaining("docs/operations/observability.md"),
+      },
+    });
+    expect(mockHttpsRequest).not.toHaveBeenCalled();
+    const event = info.mock.calls
+      .map(([value]) => String(value))
+      .find((value) => value.includes('"event":"alert_drill_failure"'));
+    expect(event).toContain('"event_name":"readiness_degraded"');
+    expect(event).toContain('"count":1');
+    expect(event).not.toContain(token);
+  });
+
+  it("never enables the alert drill in production", async () => {
+    const token = "production-must-refuse-this-token";
+    vi.stubEnv(
+      "OBSERVABILITY_DRILL_TOKEN_SHA256",
+      createHash("sha256").update(token).digest("hex"),
+    );
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "production");
+    vi.stubEnv("OBSERVABILITY_DRILL_ENABLED", "1");
+
+    const response = await GET(
+      new NextRequest("https://terroir.example.test/api/health?drill=readiness", {
+        headers: { "x-terroir-observability-drill": token },
+      }),
+    );
+    expect(await response.json()).not.toHaveProperty("alertDrill");
   });
 });

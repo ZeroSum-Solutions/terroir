@@ -13,11 +13,15 @@ type SafeFields = Record<string, SafeFieldValue>;
 
 const SENSITIVE_KEY = /(?:authorization|cookie|email|password|secret|token|api[_-]?key|dsn|url|body|error|stack)/i;
 const SAFE_ID_KEY = /(?:^|_)(?:request|restaurant|job|provider|scan|list)_id$/;
+const SAFE_STRING_VALUE = /^[A-Za-z0-9_.:/-]{1,160}$/;
 
 function redact(value: unknown, key = ""): unknown {
   if (SENSITIVE_KEY.test(key)) return "[REDACTED]";
-  if (value == null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+  if (value == null || typeof value === "number" || typeof value === "boolean") {
     return value;
+  }
+  if (typeof value === "string") {
+    return SAFE_STRING_VALUE.test(value) ? value : "[REDACTED]";
   }
   if (Array.isArray(value)) return "[REDACTED]";
   if (typeof value === "object") {
@@ -29,11 +33,11 @@ function redact(value: unknown, key = ""): unknown {
 function withCorrelation(fields: SafeFields): SafeFields {
   const context = getApiRequestContext();
   return {
+    ...fields,
     environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown",
     service: "terroir-web",
     request_id: context?.requestId,
     restaurant_id: context?.restaurantId,
-    ...fields,
   };
 }
 
@@ -56,7 +60,18 @@ export function recordMetric(name: MetricName, value = 1, fields: SafeFields = {
     const metrics = (Sentry as typeof Sentry & {
       metrics?: { count?: (name: string, value: number, options?: { tags?: Record<string, string> }) => void; distribution?: (name: string, value: number, options?: { tags?: Record<string, string> }) => void };
     }).metrics;
-    const tags = Object.fromEntries(Object.entries(safeFields).filter(([key, value]) => value !== undefined && !SENSITIVE_KEY.test(key) && (SAFE_ID_KEY.test(key) || ["environment", "service", "operation", "outcome", "status"].includes(key))).map(([key, value]) => [key, String(value)]));
+    const tags = Object.fromEntries(
+      Object.entries(safeFields)
+        .filter(
+          ([key, value]) =>
+            value !== undefined &&
+            !SENSITIVE_KEY.test(key) &&
+            (SAFE_ID_KEY.test(key) ||
+              ["environment", "service", "operation", "outcome", "status"].includes(key)) &&
+            SAFE_STRING_VALUE.test(String(value)),
+        )
+        .map(([key, value]) => [key, String(value)]),
+    );
     if (name.endsWith("_ms")) metrics?.distribution?.(name, value, { tags });
     else metrics?.count?.(name, value, { tags });
   } catch {

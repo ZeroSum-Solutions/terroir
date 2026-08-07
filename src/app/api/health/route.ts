@@ -1,5 +1,10 @@
-import { NextResponse } from "next/server";
+import { createHash, timingSafeEqual } from "node:crypto";
 import https from "node:https";
+import { NextResponse, type NextRequest } from "next/server";
+import {
+  getApiRequestContext,
+  runWithApiRequestContext,
+} from "@/lib/api/request-context";
 import { inspectRuntimeConfiguration } from "@/lib/config/runtime";
 import { emitStructuredLog } from "@/lib/observability/telemetry";
 
@@ -7,6 +12,28 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 class ProbeTimeoutError extends Error {}
+
+const ALERT_DRILL_HEADER = "x-terroir-observability-drill";
+const RUNBOOK_URL =
+  "https://github.com/wiggdevin/terroir/blob/main/docs/operations/observability.md";
+
+function isAuthorizedAlertDrill(request: NextRequest | undefined): boolean {
+  if (request?.nextUrl.searchParams.get("drill") !== "readiness") return false;
+  const environment = process.env.RAILWAY_ENVIRONMENT_NAME?.trim().toLowerCase();
+  const isNonProduction =
+    (process.env.OBSERVABILITY_DRILL_ENABLED === "1" &&
+      environment === "staging") ||
+    process.env.NODE_ENV === "development" ||
+    process.env.NODE_ENV === "test";
+  if (!isNonProduction) return false;
+
+  const expected = process.env.OBSERVABILITY_DRILL_TOKEN_SHA256?.trim();
+  const supplied = request.headers.get(ALERT_DRILL_HEADER);
+  if (!expected || !/^[a-f0-9]{64}$/i.test(expected) || !supplied) return false;
+
+  const actual = createHash("sha256").update(supplied).digest("hex");
+  return timingSafeEqual(Buffer.from(actual, "hex"), Buffer.from(expected, "hex"));
+}
 
 /**
  * Liveness + DB-readiness probe.
@@ -58,7 +85,11 @@ function probeSupabase(url: string, serviceKey: string): Promise<boolean> {
   });
 }
 
-export async function GET() {
+export async function GET(request?: NextRequest) {
+  return runWithApiRequestContext(() => getHealth(request));
+}
+
+async function getHealth(request?: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const environment = process.env.RAILWAY_ENVIRONMENT_NAME?.trim() || "unknown";
@@ -69,9 +100,15 @@ export async function GET() {
     | "upstream_non_2xx"
     | "timeout"
     | "probe_failed"
+    | "forced_failure"
     | undefined;
 
-  if (url && serviceKey) {
+  const isAlertDrill = isAuthorizedAlertDrill(request);
+
+  if (isAlertDrill) {
+    db = "error";
+    dbReason = "forced_failure";
+  } else if (url && serviceKey) {
     try {
       const ok = await probeSupabase(url, serviceKey);
       db = ok ? "connected" : "error";
@@ -86,6 +123,32 @@ export async function GET() {
   const readiness = db === "connected" && configuration.core === "configured"
     ? "ready"
     : "degraded";
+  const timestamp = new Date().toISOString();
+  const requestId = getApiRequestContext()?.requestId;
+  const alertDrill = isAlertDrill
+    ? {
+        environment,
+        severity: "high",
+        service: "terroir-web",
+        eventName: "readiness_degraded",
+        firstOccurrence: timestamp,
+        lastOccurrence: timestamp,
+        count: 1,
+        requestId,
+        runbook: RUNBOOK_URL,
+      }
+    : undefined;
+  if (alertDrill) {
+    emitStructuredLog("alert_drill_failure", {
+      severity: alertDrill.severity,
+      event_name: alertDrill.eventName,
+      first_occurrence: alertDrill.firstOccurrence,
+      last_occurrence: alertDrill.lastOccurrence,
+      count: alertDrill.count,
+      runbook: alertDrill.runbook,
+    });
+  }
+
   const body = {
     // `status` and HTTP 200 deliberately remain the Railway liveness contract.
     status: "ok",
@@ -108,9 +171,18 @@ export async function GET() {
     },
     // Variable names only; values and user data never leave the process.
     ...(configuration.missingCore.length > 0 ? { missingConfiguration: configuration.missingCore } : {}),
-    timestamp: new Date().toISOString(),
+    ...(configuration.configurationErrors.length > 0
+      ? { invalidConfiguration: configuration.configurationErrors }
+      : {}),
+    ...(alertDrill ? { alertDrill } : {}),
+    timestamp,
   };
-  emitStructuredLog("health_check", { readiness, database: db, db_reason: dbReason });
+  emitStructuredLog("health_check", {
+    readiness,
+    database: db,
+    db_reason: dbReason,
+    drill: isAlertDrill,
+  });
   return NextResponse.json(
     body,
     { status: 200, headers: { "Cache-Control": "no-store" } },

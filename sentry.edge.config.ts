@@ -7,11 +7,15 @@
  */
 import * as Sentry from "@sentry/nextjs";
 import { scrubSentryEvent } from "./src/lib/observability/sentry-scrub";
+import { resolveSampleRate } from "./src/lib/observability/sample-rate";
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV,
-  tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
+  tracesSampleRate: resolveSampleRate(
+    process.env.SENTRY_TRACES_SAMPLE,
+    process.env.NODE_ENV === "development" ? 1.0 : 0.1,
+  ),
   // See sentry.server.config.ts for the sendDefaultPii=false rationale.
   sendDefaultPii: false,
   beforeSend: scrubSentryEvent,

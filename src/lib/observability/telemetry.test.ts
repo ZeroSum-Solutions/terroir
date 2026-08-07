@@ -1,5 +1,9 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  runWithApiRequestContext,
+  setRestaurantId,
+} from "@/lib/api/request-context";
 
 const sentry = vi.hoisted(() => ({ metrics: { count: vi.fn(), distribution: vi.fn() } }));
 vi.mock("@sentry/nextjs", () => sentry);
@@ -9,20 +13,24 @@ const { emitStructuredLog, recordMetric } = await import("./telemetry");
 describe("observability telemetry", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("redacts secrets and PII from structured logs while keeping safe correlation IDs", () => {
+  it("redacts secrets and PII from structured logs while keeping safe correlation IDs", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
-    emitStructuredLog("forced_failure", {
-      request_id: "request-123",
-      restaurant_id: "restaurant-456",
-      email: "owner@example.test",
-      token: "raw-token",
-      nested: "not-allowed",
+    await runWithApiRequestContext(() => {
+      setRestaurantId("restaurant-456");
+      emitStructuredLog("forced_failure", {
+        request_id: "caller-cannot-spoof",
+        email: "owner@example.test",
+        token: "raw-token",
+        operation: "invoice text is not a safe tag",
+      });
     });
     const payload = String(info.mock.calls[0]?.[0]);
-    expect(payload).toContain('"request_id":"request-123"');
+    expect(payload).toMatch(/"request_id":"[a-f0-9-]{36}"/);
     expect(payload).toContain('"restaurant_id":"restaurant-456"');
     expect(payload).not.toContain("owner@example.test");
     expect(payload).not.toContain("raw-token");
+    expect(payload).not.toContain("invoice text is not a safe tag");
+    expect(payload).not.toContain("caller-cannot-spoof");
     expect(payload).toContain("[REDACTED]");
   });
 

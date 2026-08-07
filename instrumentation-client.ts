@@ -11,13 +11,17 @@
  */
 import * as Sentry from "@sentry/nextjs";
 import { scrubSentryEvent } from "./src/lib/observability/sentry-scrub";
+import { resolveSampleRate } from "./src/lib/observability/sample-rate";
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   environment:
     process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT ?? process.env.NODE_ENV,
 
-  tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
+  tracesSampleRate: resolveSampleRate(
+    process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE,
+    process.env.NODE_ENV === "development" ? 1.0 : 0.1,
+  ),
 
   // Session Replay — record sessions so we can see what users did
   // right before an error. 10% ambient + 100% on error is SKILL.md's
@@ -33,7 +37,16 @@ Sentry.init({
   beforeSend: scrubSentryEvent,
   enableLogs: true,
 
-  integrations: [Sentry.replayIntegration()],
+  integrations: [
+    Sentry.replayIntegration({
+      // Scanner pages render invoice text, editable wine data, and customer
+      // images. Keep replay useful for layout/timing without exporting them.
+      maskAllText: true,
+      maskAllInputs: true,
+      blockAllMedia: true,
+      networkCaptureBodies: false,
+    }),
+  ],
 });
 
 // App Router navigation instrumentation — connects client transitions

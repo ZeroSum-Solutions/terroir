@@ -33,6 +33,8 @@ pnpm lint                # ESLint
 pnpm test                # Vitest unit + route tests
 pnpm test:e2e            # Playwright end-to-end
 pnpm test:staging        # read-only pinned staging infrastructure smoke
+pnpm validate:env        # fail-fast, names-only runtime configuration check
+pnpm drill:alerts        # token-gated localhost/staging alert drill
 pnpm verify:feature-ledger # verify the authoritative feature ledger
 pnpm exec tsc --noEmit   # type-check
 pnpm run snapshot        # regenerate supabase/schema.snapshot.sql after a new migration
