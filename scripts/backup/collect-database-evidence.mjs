@@ -141,6 +141,46 @@ function migrationVersion() {
   );
 }
 
+function listSequences() {
+  const output = psql(
+    `select n.nspname || E'\\t' || c.relname
+     from pg_catalog.pg_class c
+     join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+     where c.relkind = 'S'
+       and n.nspname <> 'information_schema'
+       and n.nspname !~ '^pg_'
+       and not exists (
+         select 1
+         from pg_catalog.pg_depend d
+         where d.classid = 'pg_catalog.pg_class'::regclass
+           and d.objid = c.oid
+           and d.deptype = 'e'
+       )
+     order by n.nspname collate "C", c.relname collate "C"`,
+  );
+  if (!output) return [];
+  return output.split("\n").map((line) => {
+    const [schema, sequence] = line.split("\t");
+    if (!schema || !sequence) {
+      throw new Error("Database sequence inventory returned a malformed row.");
+    }
+    const relation = `${quoteIdentifier(schema)}.${quoteIdentifier(sequence)}`;
+    const state = psql(
+      `select last_value::text || E'\\t' || is_called::text from ${relation}`,
+    );
+    const [lastValue, isCalled] = state.split("\t");
+    if (!/^-?\d+$/u.test(lastValue) || !["t", "f"].includes(isCalled)) {
+      throw new Error(`Invalid sequence state for ${schema}.${sequence}.`);
+    }
+    return {
+      schema,
+      sequence,
+      last_value: lastValue,
+      is_called: isCalled === "t",
+    };
+  });
+}
+
 export async function collectDatabaseEvidence() {
   const tables = listTables().map((entry) => ({
     ...entry,
@@ -172,6 +212,7 @@ export async function collectDatabaseEvidence() {
       ...new Set(tables.map(({ schema }) => schema)),
     ],
     tables,
+    sequences: listSequences(),
     largest_non_empty_tables: checksummed,
   };
 }
