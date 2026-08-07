@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   validateJsonSchema,
+  verifyApiRouteSafety,
   validateReconciliationSemantics,
   verifyApiContract,
   verifyInventoryParity,
@@ -205,6 +206,76 @@ describe("source inventory parity", () => {
       "source inventory drift: added api:POST:/api/wines",
       "inventory overlap: api:POST:/api/wines is both discovered and planned",
     ]);
+  });
+});
+
+describe("TER-020B route-boundary contract", () => {
+  it("keeps the checked-in active route surface behind shared parsers and safe handlers", () => {
+    const documents = readContractDocuments();
+
+    expect(verifyApiRouteSafety(process.cwd(), documents.inventory)).toEqual([]);
+  });
+
+  it("rejects raw request bodies, query reads, and unguarded dynamic params", () => {
+    const root = fixtureRoot();
+    const source = "src/app/api/wines/[id]/route.ts";
+    writeFixture(
+      root,
+      source,
+      `export async function PATCH(request) {
+        const body = await request.json();
+        const limit = request.nextUrl.searchParams.get("limit");
+        return Response.json({ body, limit });
+      }`,
+    );
+
+    expect(
+      verifyApiRouteSafety(root, {
+        discoveredOperations: [{ source: { file: source } }],
+      }),
+    ).toEqual([
+      `${source}: active handlers must use withApiHandler`,
+      `${source}: request body must be parsed through parseJson or parseMultipart`,
+      `${source}: query input must be parsed through parseQuery`,
+      `${source}: dynamic route params must be parsed through parseParams`,
+    ]);
+  });
+
+  it("rejects raw JSON error payloads even when the handler wrapper is present", () => {
+    const root = fixtureRoot();
+    const source = "src/app/api/wines/route.ts";
+    writeFixture(
+      root,
+      source,
+      `export async function GET() {
+        return withApiHandler(() => Response.json({ error: "database password" }, { status: 500 }));
+      }`,
+    );
+
+    expect(
+      verifyApiRouteSafety(root, {
+        discoveredOperations: [{ source: { file: source } }],
+      }),
+    ).toEqual([`${source}: raw error response must use shared Errors/apiError`]);
+  });
+
+  it("keeps health and opaque dev-login response semantics as explicit exceptions", () => {
+    const root = fixtureRoot();
+    const health = "src/app/api/health/route.ts";
+    const devLogin = "src/app/api/dev-login/route.ts";
+    writeFixture(root, health, "export function GET() { return Response.json({ status: 'ok' }); }");
+    writeFixture(root, devLogin, `export function GET(request) {
+      return new Response("Not found", { status: 404 });
+    }`);
+
+    expect(
+      verifyApiRouteSafety(root, {
+        discoveredOperations: [
+          { source: { file: health } },
+          { source: { file: devLogin } },
+        ],
+      }),
+    ).toEqual([]);
   });
 });
 

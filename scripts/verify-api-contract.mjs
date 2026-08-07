@@ -101,6 +101,80 @@ export function verifyInventoryParity(projectRoot, inventory) {
   }
   return errors;
 }
+const ROUTE_SAFETY_EXCEPTIONS = new Set([
+  "src/app/api/dev-login/route.ts",
+  "src/app/api/health/route.ts",
+]);
+
+function routeSafetyError(file, message) {
+  return `${file}: ${message}`;
+}
+
+/**
+ * Enforce the boundary conventions that make TER-CF-212 and TER-CF-213
+ * mechanically reviewable for every discovered route. Health is an
+ * operational 200-status probe, and dev-login deliberately returns an opaque
+ * plaintext 404 before it is enabled; their focused route tests own those
+ * exceptional response semantics.
+ */
+export function verifyApiRouteSafety(projectRoot, inventory) {
+  const errors = [];
+  const files = new Set(
+    inventory.discoveredOperations.map((operation) => operation.source.file),
+  );
+
+  for (const file of [...files].sort()) {
+    let source;
+    try {
+      source = fs.readFileSync(path.join(projectRoot, file), "utf8");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(routeSafetyError(file, `could not read route source: ${message}`));
+      continue;
+    }
+    if (ROUTE_SAFETY_EXCEPTIONS.has(file)) continue;
+
+    if (!/\bwithApiHandler\s*\(/.test(source)) {
+      errors.push(
+        routeSafetyError(file, "active handlers must use withApiHandler"),
+      );
+    }
+    if (/\brequest\s*\.\s*(?:json|formData)\s*\(/.test(source)) {
+      errors.push(
+        routeSafetyError(
+          file,
+          "request body must be parsed through parseJson or parseMultipart",
+        ),
+      );
+    }
+    if (
+      /\brequest\s*\.\s*nextUrl\s*\.\s*searchParams\s*\.\s*(?:get|getAll|has|entries|keys|values|forEach)\s*\(/.test(
+        source,
+      )
+    ) {
+      errors.push(
+        routeSafetyError(file, "query input must be parsed through parseQuery"),
+      );
+    }
+    if (file.includes("[") && !/\bparseParams\s*\(/.test(source)) {
+      errors.push(
+        routeSafetyError(file, "dynamic route params must be parsed through parseParams"),
+      );
+    }
+    if (/(?:Next)?Response\.json\s*\(\s*\{\s*error\s*:/.test(source)) {
+      errors.push(
+        routeSafetyError(file, "raw error response must use shared Errors/apiError"),
+      );
+    }
+    if (/new\s+(?:Next)?Response\s*\([^)]*,\s*\{[\s\S]*?\bstatus\s*:\s*[45]\d\d/.test(source)) {
+      errors.push(
+        routeSafetyError(file, "raw error response must use shared Errors/apiError"),
+      );
+    }
+  }
+
+  return errors;
+}
 function actorIdentity(item) {
   const match = /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) (\/api\/\S+)$/.exec(item.actor);
   return match
@@ -279,6 +353,7 @@ export function verifyApiContract(projectRoot = process.cwd()) {
     const errors = [...inventoryErrors, ...reconciliationErrors];
     if (!inventoryErrors.length) {
       errors.push(...verifyInventoryParity(projectRoot, inventory));
+      errors.push(...verifyApiRouteSafety(projectRoot, inventory));
     }
     if (!inventoryErrors.length && !reconciliationErrors.length) {
       errors.push(
