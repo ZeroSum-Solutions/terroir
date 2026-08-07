@@ -34,8 +34,14 @@ async function shutdown(signal: string): Promise<void> {
   return shutdownPromise;
 }
 
+function shutdownAndExit(signal: string, exitCode: number): void {
+  void shutdown(signal).finally(() => {
+    setTimeout(() => process.exit(exitCode), 0);
+  });
+}
+
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.once(signal, () => void shutdown(signal));
+  process.once(signal, () => shutdownAndExit(signal, 0));
 }
 
 process.on("unhandledRejection", () => {
@@ -43,9 +49,7 @@ process.on("unhandledRejection", () => {
     error_code: "unhandled_rejection",
     outcome: "failed",
   });
-  void shutdown("unhandled_rejection").then(() => {
-    process.exitCode = 1;
-  });
+  shutdownAndExit("unhandled_rejection", 1);
 });
 
 process.on("uncaughtException", () => {
@@ -53,9 +57,7 @@ process.on("uncaughtException", () => {
     error_code: "uncaught_exception",
     outcome: "failed",
   });
-  void shutdown("uncaught_exception").then(() => {
-    process.exitCode = 1;
-  });
+  shutdownAndExit("uncaught_exception", 1);
 });
 
 try {
