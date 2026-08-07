@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextResponse } from "next/server";
 
 const requireMembership = vi.fn();
@@ -27,6 +27,7 @@ vi.mock("@/domains/wine-lists/wine-list-pdf-job-service", () => ({
 }));
 
 const { POST } = await import("./route");
+const jobErrors = await import("@/domains/wine-lists/wine-list-pdf-job-service");
 
 const RESTAURANT_ID = "11111111-1111-4111-8111-111111111111";
 const LIST_ID = "22222222-2222-4222-8222-222222222222";
@@ -57,6 +58,10 @@ describe("POST /api/pdf worker rollout", () => {
       template: "classic",
     });
     enqueue.mockResolvedValue({ id: JOB_ID, status: "queued" });
+  });
+
+  afterEach(() => {
+    delete process.env.PDF_WORKER_ENABLED;
   });
 
   it("keeps the synchronous binary response when the flag is absent", async () => {
@@ -121,6 +126,27 @@ describe("POST /api/pdf worker rollout", () => {
     const response = await POST(request({ jobId: JOB_ID }));
     expect(response.status).toBe(202);
     expect(await response.json()).toEqual({ jobId: JOB_ID, status: "retrying" });
+  });
+
+  it.each([
+    [new jobErrors.WineListPdfJobNotFoundError(), 404],
+    [new jobErrors.WineListPdfJobCancelledError(), 409],
+    [new jobErrors.WineListPdfJobFailedError(), 422],
+    [new jobErrors.WineListPdfArtifactError(), 500],
+  ])("maps a terminal artifact error to HTTP %s", async (error, status) => {
+    loadArtifact.mockRejectedValue(error);
+    const response = await POST(request({ jobId: JOB_ID }));
+    expect(response.status).toBe(status);
+  });
+
+  it("maps a durable enqueue conflict without generating synchronously", async () => {
+    process.env.PDF_WORKER_ENABLED = "1";
+    enqueue.mockRejectedValue(new jobErrors.WineListPdfJobConflictError());
+    const response = await POST(
+      request({ listId: LIST_ID }, "pdf-retry-0001"),
+    );
+    expect(response.status).toBe(409);
+    expect(generate).not.toHaveBeenCalled();
   });
 
   it("never reaches worker or synchronous business logic without auth", async () => {

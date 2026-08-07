@@ -80,6 +80,22 @@ describe("wine-list PDF worker handler", () => {
     expect(upload).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { job_type: "invoice_ocr" },
+    { subject_table: "restaurants" },
+    { restaurant_id: "../escape" },
+    { subject_id: "not-a-uuid" },
+  ])("rejects a misrouted or malformed job payload: %o", async (override) => {
+    await expect(
+      handler()(job(override), new AbortController().signal),
+    ).rejects.toMatchObject({
+      code: "invalid_pdf_job_payload",
+      retryable: false,
+    });
+    expect(generate).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
+  });
+
   it("treats a deleted list as terminal and storage outages as retryable", async () => {
     generate.mockRejectedValueOnce(new WineListPdfNotFoundError());
     await expect(

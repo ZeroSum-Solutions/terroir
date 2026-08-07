@@ -15,6 +15,8 @@ const client = readFileSync(
   "src/app/(app)/lists/[id]/wine-list-editor.tsx",
   "utf8",
 );
+const normalizedMigration = migration.toLowerCase().replace(/\s+/g, " ");
+const normalizedRollback = rollback.toLowerCase().replace(/\s+/g, " ");
 
 describe("TER-021E PDF worker contract", () => {
   it("keeps enqueueing behind a default-safe rollback flag", () => {
@@ -23,7 +25,8 @@ describe("TER-021E PDF worker contract", () => {
       route.indexOf("enqueueWineListPdfJob({"),
     );
     expect(rollback).toContain("Disable PDF_WORKER_ENABLED");
-    expect(rollback).not.toContain("public = true");
+    expect(normalizedRollback).not.toContain("public = true");
+    expect(normalizedRollback).not.toContain("public=true");
   });
 
   it("registers a durable idempotent handler before enabling the caller", () => {
@@ -41,7 +44,7 @@ describe("TER-021E PDF worker contract", () => {
     expect(migration).toContain("array['application/pdf']");
     expect(migration).toContain("wine_list_pdf_artifact_tenant_id(name)");
     expect(migration).toContain("public.is_member(");
-    expect(migration).not.toContain("for insert to authenticated");
-    expect(migration).not.toContain("for update to authenticated");
+    expect(normalizedMigration).not.toContain("for insert to authenticated");
+    expect(normalizedMigration).not.toContain("for update to authenticated");
   });
 });

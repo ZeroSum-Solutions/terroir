@@ -2,6 +2,41 @@
 
 begin;
 
+insert into auth.users (
+  id, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values (
+  '77000000-0000-4000-8000-000000000001',
+  'pdf-artifact-member@example.test',
+  '{}'::jsonb,
+  '{}'::jsonb,
+  now(),
+  now()
+);
+insert into public.restaurants (id, name) values
+  ('77100000-0000-4000-8000-000000000001', 'PDF Artifact Tenant'),
+  ('77100000-0000-4000-8000-000000000002', 'Other PDF Tenant');
+insert into public.memberships (user_id, restaurant_id, role) values (
+  '77000000-0000-4000-8000-000000000001',
+  '77100000-0000-4000-8000-000000000001',
+  'owner'
+);
+insert into public.wine_lists (id, restaurant_id, name) values
+  (
+    '77200000-0000-4000-8000-000000000001',
+    '77100000-0000-4000-8000-000000000001',
+    'Tenant List'
+  ),
+  (
+    '77200000-0000-4000-8000-000000000002',
+    '77100000-0000-4000-8000-000000000002',
+    'Other Tenant List'
+  );
+select set_config(
+  'request.jwt.claim.sub',
+  '77000000-0000-4000-8000-000000000001',
+  true
+);
+
 do $$
 declare
   v_bucket storage.buckets%rowtype;
@@ -49,13 +84,27 @@ begin
     raise exception 'generated export path validator accepted an unsafe path';
   end if;
 
+  if public.wine_list_pdf_artifact_tenant_id(
+    '77100000-0000-4000-8000-000000000001/77200000-0000-4000-8000-000000000001_classic.pdf'
+  ) is distinct from '77100000-0000-4000-8000-000000000001'::uuid then
+    raise exception 'generated export validator rejected a member path';
+  end if;
+  if public.wine_list_pdf_artifact_tenant_id(
+    '77100000-0000-4000-8000-000000000002/77200000-0000-4000-8000-000000000002_classic.pdf'
+  ) is not null then
+    raise exception 'generated export validator exposed a non-member path';
+  end if;
+
   if exists (
     select 1
     from pg_policies
     where schemaname = 'storage'
       and tablename = 'objects'
-      and policyname like '%generated export%'
       and cmd in ('INSERT', 'UPDATE', 'DELETE', 'ALL')
+      and (
+        coalesce(qual, '') like '%generated-exports%'
+        or coalesce(with_check, '') like '%generated-exports%'
+      )
   ) then
     raise exception 'generated exports have an authenticated mutation policy';
   end if;

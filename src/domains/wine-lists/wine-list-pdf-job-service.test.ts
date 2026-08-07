@@ -56,6 +56,7 @@ describe("wine-list PDF job service", () => {
       p_metadata: { template: "modern" },
       p_max_attempts: 3,
     });
+    expect(listQuery.eq).toHaveBeenCalledWith("restaurant_id", RESTAURANT_ID);
   });
 
   it("does not enqueue a cross-tenant or missing list", async () => {
@@ -161,6 +162,7 @@ describe("wine-list PDF job service", () => {
     expect(download).toHaveBeenCalledWith(
       `${RESTAURANT_ID}/${LIST_ID}_classic.pdf`,
     );
+    expect(jobQuery.eq).toHaveBeenCalledWith("restaurant_id", RESTAURANT_ID);
   });
 
   it("rejects forged result paths before Storage access", async () => {
@@ -173,7 +175,7 @@ describe("wine-list PDF job service", () => {
         subject_table: "wine_lists",
         status: "succeeded",
         result: {
-          artifact_path: `other/${LIST_ID}_classic.pdf`,
+          artifact_path: `${RESTAURANT_ID}/../other/${LIST_ID}_classic.pdf`,
           filename: "House List.pdf",
           list_id: LIST_ID,
           template: "classic",
