@@ -21,6 +21,22 @@ export function quoteIdentifier(value) {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
+export function parseSequenceState(state, schema, sequence) {
+  const [lastValue, isCalled] = state.split("\t");
+  if (
+    !/^-?\d+$/u.test(lastValue) ||
+    !["true", "false"].includes(isCalled)
+  ) {
+    throw new Error(`Invalid sequence state for ${schema}.${sequence}.`);
+  }
+  return {
+    schema,
+    sequence,
+    last_value: lastValue,
+    is_called: isCalled === "true",
+  };
+}
+
 function psql(sql) {
   const result = spawnSync(
     "psql",
@@ -168,16 +184,7 @@ function listSequences() {
     const state = psql(
       `select last_value::text || E'\\t' || is_called::text from ${relation}`,
     );
-    const [lastValue, isCalled] = state.split("\t");
-    if (!/^-?\d+$/u.test(lastValue) || !["t", "f"].includes(isCalled)) {
-      throw new Error(`Invalid sequence state for ${schema}.${sequence}.`);
-    }
-    return {
-      schema,
-      sequence,
-      last_value: lastValue,
-      is_called: isCalled === "t",
-    };
+    return parseSequenceState(state, schema, sequence);
   });
 }
 
