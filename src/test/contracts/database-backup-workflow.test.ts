@@ -1066,7 +1066,12 @@ describe("database backup workflow", () => {
       "utf8",
     );
     expect(restoreWorkflow).toContain("confirmation:");
-    expect(restoreWorkflow).toContain("PRODUCTION_RELEASE_OWNER");
+    expect(restoreWorkflow).toContain("ACTOR_ID: ${{ github.actor_id }}");
+    expect(restoreWorkflow).toContain(
+      "TRIGGERING_ACTOR: ${{ github.triggering_actor }}",
+    );
+    expect(restoreWorkflow).toContain('RECOVERY_OWNER_ID: "202901685"');
+    expect(restoreWorkflow).not.toContain("vars.PRODUCTION_RELEASE_OWNER");
     expect(restoreWorkflow).toContain("RESTORE-TRUSTED-BACKUP");
     expect(restoreWorkflow.indexOf("Require the configured recovery owner"))
       .toBeLessThan(

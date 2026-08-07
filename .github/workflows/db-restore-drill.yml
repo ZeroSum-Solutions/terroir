@@ -38,13 +38,17 @@ jobs:
       - name: Require the configured recovery owner
         env:
           ACTOR: ${{ github.actor }}
+          ACTOR_ID: ${{ github.actor_id }}
           CONFIRMATION: ${{ inputs.confirmation }}
-          RECOVERY_OWNER: ${{ vars.PRODUCTION_RELEASE_OWNER }}
+          RECOVERY_OWNER: wiggdevin
+          RECOVERY_OWNER_ID: "202901685"
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = "refs/heads/main"
-          test -n "$RECOVERY_OWNER"
           test "$ACTOR" = "$RECOVERY_OWNER"
+          test "$ACTOR_ID" = "$RECOVERY_OWNER_ID"
+          test "$TRIGGERING_ACTOR" = "$RECOVERY_OWNER"
           test "$CONFIRMATION" = "RESTORE-TRUSTED-BACKUP"
 
       - name: Checkout trusted restore implementation
