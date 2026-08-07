@@ -37,6 +37,6 @@ describe("wine-list PDF value boundaries", () => {
     expect(wineListPdfFilename("Chef's Reserve / 2026")).toBe(
       "Chefs Reserve  2026.pdf",
     );
-    expect(wineListPdfFilename("酒单")).toBe("wine-list.pdf");
+    expect(wineListPdfFilename("酒单")).toBe("Wine List.pdf");
   });
 });

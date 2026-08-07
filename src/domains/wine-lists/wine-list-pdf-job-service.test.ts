@@ -78,7 +78,8 @@ describe("wine-list PDF job service", () => {
       data: null,
       error: {
         code: "22023",
-        message: "idempotency key was reused with different job input",
+        message:
+          "RPC rejected: idempotency key was reused with different job input",
       },
     });
     const supabase = { from: vi.fn(() => listQuery), rpc } as never;

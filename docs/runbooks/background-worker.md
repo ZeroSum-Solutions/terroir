@@ -88,8 +88,10 @@ completed-job downloads available.
 
 Before setting the flag to `1`, apply migration 0077, deploy this handler,
 confirm worker health reports one registered handler, and verify the queue has
-no unsupported types. Then run the PDF browser proof and required worker drill
-against synthetic staging data.
+no unsupported types. Confirm the compatible web release is live and have pilot
+sessions reload so they can handle the `202` polling response before enabling
+the flag. Then run the PDF browser proof and required worker drill against
+synthetic staging data.
 
 ## Lifecycle and recovery
 

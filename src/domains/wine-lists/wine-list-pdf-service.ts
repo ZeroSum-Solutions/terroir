@@ -77,7 +77,7 @@ export function wineListPdfArtifactPath(input: {
 
 export function wineListPdfFilename(name: string): string {
   const safeName = name.replace(/[^a-zA-Z0-9 ]/g, "").trim();
-  return `${safeName || "wine-list"}.pdf`;
+  return `${safeName || "Wine List"}.pdf`;
 }
 
 export async function generateWineListPdf(
