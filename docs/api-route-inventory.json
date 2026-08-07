@@ -2,9 +2,20 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 65,
-  "discoveredOperationCount": 77,
+  "routeFileCount": 71,
+  "discoveredOperationCount": 87,
   "discoveredOperations": [
+    {
+      "operationId": "api:GET:/api/cellar",
+      "method": "GET",
+      "path": "/api/cellar",
+      "source": {
+        "file": "src/app/api/cellar/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
     {
       "operationId": "api:POST:/api/cellar",
       "method": "POST",
@@ -116,6 +127,17 @@
       }
     },
     {
+      "operationId": "api:GET:/api/export",
+      "method": "GET",
+      "path": "/api/export",
+      "source": {
+        "file": "src/app/api/export/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
       "operationId": "api:GET:/api/export/toast-csv",
       "method": "GET",
       "path": "/api/export/toast-csv",
@@ -198,6 +220,17 @@
       "path": "/api/insights/snoozed",
       "source": {
         "file": "src/app/api/insights/snoozed/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/inventory",
+      "method": "GET",
+      "path": "/api/inventory",
+      "source": {
+        "file": "src/app/api/inventory/route.ts",
         "exportKind": "function-declaration",
         "localName": "GET",
         "moduleSpecifier": null
@@ -292,6 +325,17 @@
       }
     },
     {
+      "operationId": "api:GET:/api/restaurant",
+      "method": "GET",
+      "path": "/api/restaurant",
+      "source": {
+        "file": "src/app/api/restaurant/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
       "operationId": "api:GET:/api/restaurant/{param}",
       "method": "GET",
       "path": "/api/restaurant/[id]",
@@ -369,6 +413,17 @@
       }
     },
     {
+      "operationId": "api:GET:/api/scans",
+      "method": "GET",
+      "path": "/api/scans",
+      "source": {
+        "file": "src/app/api/scans/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
       "operationId": "api:PATCH:/api/scans/{param}",
       "method": "PATCH",
       "path": "/api/scans/[id]",
@@ -409,6 +464,17 @@
         "file": "src/app/api/scans/[id]/re-extract/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/team",
+      "method": "GET",
+      "path": "/api/team",
+      "source": {
+        "file": "src/app/api/team/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
         "moduleSpecifier": null
       }
     },
@@ -490,6 +556,17 @@
       }
     },
     {
+      "operationId": "api:GET:/api/wine-list-items",
+      "method": "GET",
+      "path": "/api/wine-list-items",
+      "source": {
+        "file": "src/app/api/wine-list-items/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
       "operationId": "api:POST:/api/wine-list-items",
       "method": "POST",
       "path": "/api/wine-list-items",
@@ -534,6 +611,17 @@
       }
     },
     {
+      "operationId": "api:GET:/api/wine-list-sections",
+      "method": "GET",
+      "path": "/api/wine-list-sections",
+      "source": {
+        "file": "src/app/api/wine-list-sections/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
       "operationId": "api:POST:/api/wine-list-sections",
       "method": "POST",
       "path": "/api/wine-list-sections",
@@ -574,6 +662,17 @@
         "file": "src/app/api/wine-list-sections/reorder/route.ts",
         "exportKind": "function-declaration",
         "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/wine-lists",
+      "method": "GET",
+      "path": "/api/wine-lists",
+      "source": {
+        "file": "src/app/api/wine-lists/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
         "moduleSpecifier": null
       }
     },
@@ -651,6 +750,17 @@
         "file": "src/app/api/wine-lists/[id]/publish/route.ts",
         "exportKind": "function-declaration",
         "localName": "DELETE",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/wines",
+      "method": "GET",
+      "path": "/api/wines",
+      "source": {
+        "file": "src/app/api/wines/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
         "moduleSpecifier": null
       }
     },
@@ -855,38 +965,6 @@
   ],
   "plannedOperations": [
     {
-      "operationId": "api:GET:/api/cellar",
-      "method": "GET",
-      "path": "/api/cellar",
-      "sourceRequirementIds": [
-        "TER-CF-181"
-      ]
-    },
-    {
-      "operationId": "api:GET:/api/export",
-      "method": "GET",
-      "path": "/api/export",
-      "sourceRequirementIds": [
-        "TER-CF-211"
-      ]
-    },
-    {
-      "operationId": "api:GET:/api/inventory",
-      "method": "GET",
-      "path": "/api/inventory",
-      "sourceRequirementIds": [
-        "TER-CF-191"
-      ]
-    },
-    {
-      "operationId": "api:GET:/api/restaurant",
-      "method": "GET",
-      "path": "/api/restaurant",
-      "sourceRequirementIds": [
-        "TER-CF-205"
-      ]
-    },
-    {
       "operationId": "api:PATCH:/api/restaurant",
       "method": "PATCH",
       "path": "/api/restaurant",
@@ -895,27 +973,11 @@
       ]
     },
     {
-      "operationId": "api:GET:/api/scans",
-      "method": "GET",
-      "path": "/api/scans",
-      "sourceRequirementIds": [
-        "TER-CF-188"
-      ]
-    },
-    {
       "operationId": "api:GET:/api/scans/{param}",
       "method": "GET",
       "path": "/api/scans/[id]",
       "sourceRequirementIds": [
         "TER-CF-189"
-      ]
-    },
-    {
-      "operationId": "api:GET:/api/team",
-      "method": "GET",
-      "path": "/api/team",
-      "sourceRequirementIds": [
-        "TER-CF-207"
       ]
     },
     {
@@ -932,38 +994,6 @@
       "path": "/api/team/[membership_id]",
       "sourceRequirementIds": [
         "TER-CF-209"
-      ]
-    },
-    {
-      "operationId": "api:GET:/api/wine-list-items",
-      "method": "GET",
-      "path": "/api/wine-list-items",
-      "sourceRequirementIds": [
-        "TER-CF-201"
-      ]
-    },
-    {
-      "operationId": "api:GET:/api/wine-list-sections",
-      "method": "GET",
-      "path": "/api/wine-list-sections",
-      "sourceRequirementIds": [
-        "TER-CF-198"
-      ]
-    },
-    {
-      "operationId": "api:GET:/api/wine-lists",
-      "method": "GET",
-      "path": "/api/wine-lists",
-      "sourceRequirementIds": [
-        "TER-CF-194"
-      ]
-    },
-    {
-      "operationId": "api:GET:/api/wines",
-      "method": "GET",
-      "path": "/api/wines",
-      "sourceRequirementIds": [
-        "TER-CF-185"
       ]
     },
     {

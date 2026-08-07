@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireMembership } from "@/lib/api/auth";
 import { withApiHandler } from "@/lib/api/handler";
 import { generateToastCsv } from "@/lib/export/toast-csv";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database";
 
 export const runtime = "nodejs";
 
@@ -12,8 +14,13 @@ export async function GET() {
 async function getToastCsv() {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
-  const { supabase, restaurantId } = auth;
+  return streamToastCsv(auth.supabase, auth.restaurantId);
+}
 
+export async function streamToastCsv(
+  supabase: SupabaseClient<Database>,
+  restaurantId: string,
+): Promise<NextResponse> {
   // Fetch wines with their latest wine list prices (if any)
   const { data: wines, error: winesError } = await supabase
     .from("wines")

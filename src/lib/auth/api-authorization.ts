@@ -16,6 +16,7 @@ type OperationId = `api:${string}:/api/${string}`;
  * requires the named capability in the active membership.
  */
 export const API_AUTHORIZATION = {
+  "api:GET:/api/cellar": membership("cellar:view"),
   "api:POST:/api/cellar": membership("cellar:manage"),
   "api:PATCH:/api/cellar/{param}": membership("cellar:manage"),
   "api:DELETE:/api/cellar/{param}": membership("cellar:delete"),
@@ -27,6 +28,7 @@ export const API_AUTHORIZATION = {
   "api:GET:/api/cellar/grid": membership("cellar:view"),
   "api:GET:/api/dev-login": { access: "public" },
   "api:GET:/api/export/toast-csv": membership("export:read"),
+  "api:GET:/api/export": membership("export:read"),
   "api:GET:/api/health": { access: "public" },
   "api:GET:/api/insights": membership("insights:view"),
   "api:GET:/api/insights/csv": membership("insights:view"),
@@ -34,6 +36,7 @@ export const API_AUTHORIZATION = {
   "api:GET:/api/insights/pour": membership("insights:view"),
   "api:GET:/api/insights/pricing-review": membership("insights:view"),
   "api:GET:/api/insights/snoozed": membership("insights:view"),
+  "api:GET:/api/inventory": membership("cellar:view"),
   "api:POST:/api/inventory/save-bottle-scan": membership("scan:create"),
   "api:POST:/api/inventory/save-scan": membership("scan:create"),
   "api:POST:/api/open-bottles": membership("pour:record"),
@@ -42,6 +45,7 @@ export const API_AUTHORIZATION = {
   "api:POST:/api/pour": membership("pour:record"),
   "api:POST:/api/pour/undo": membership("pour:record"),
   "api:POST:/api/reconcile": membership("reconcile:manage"),
+  "api:GET:/api/restaurant": membership("restaurant:view"),
   "api:GET:/api/restaurant/{param}": membership("restaurant:view"),
   "api:PUT:/api/restaurant/{param}": membership("restaurant:switch"),
   "api:PATCH:/api/restaurant/{param}": membership("restaurant:manage"),
@@ -49,11 +53,13 @@ export const API_AUTHORIZATION = {
   "api:POST:/api/scan": membership("scan:create"),
   "api:POST:/api/scan-bottle": membership("scan:create"),
   "api:POST:/api/scan-bottle/confirm": membership("scan:create"),
+  "api:GET:/api/scans": membership("scan:create"),
   "api:PATCH:/api/scans/{param}": membership("scan:create"),
   "api:POST:/api/scans/{param}/commit": membership("scan:create"),
   "api:GET:/api/scans/{param}/image": membership("scan:create"),
   "api:POST:/api/scans/{param}/re-extract": membership("scan:create"),
   "api:POST:/api/team/accept-invite": { access: "authenticated" },
+  "api:GET:/api/team": membership("team:view"),
   "api:POST:/api/team/invite": membership("team:invite-manage"),
   "api:DELETE:/api/team/invite/{param}": membership("team:invite-manage"),
   "api:POST:/api/team/invite/{param}/resend": membership(
@@ -65,6 +71,7 @@ export const API_AUTHORIZATION = {
   "api:POST:/api/wine-list-items": membership("wine-list:manage"),
   "api:PATCH:/api/wine-list-items/{param}": membership("wine-list:manage"),
   "api:DELETE:/api/wine-list-items/{param}": membership("wine-list:manage"),
+  "api:GET:/api/wine-list-items": membership("wine-list:view"),
   "api:PATCH:/api/wine-list-items/reorder": membership("wine-list:manage"),
   "api:POST:/api/wine-list-sections": membership("wine-list:manage"),
   "api:PATCH:/api/wine-list-sections/{param}": membership(
@@ -73,18 +80,21 @@ export const API_AUTHORIZATION = {
   "api:DELETE:/api/wine-list-sections/{param}": membership(
     "wine-list:manage",
   ),
+  "api:GET:/api/wine-list-sections": membership("wine-list:view"),
   "api:PATCH:/api/wine-list-sections/reorder": membership(
     "wine-list:manage",
   ),
   "api:POST:/api/wine-lists": membership("wine-list:manage"),
   "api:PATCH:/api/wine-lists/{param}": membership("wine-list:manage"),
   "api:DELETE:/api/wine-lists/{param}": membership("wine-list:manage"),
+  "api:GET:/api/wine-lists": membership("wine-list:view"),
   "api:POST:/api/wine-lists/{param}/clone": membership("wine-list:manage"),
   "api:GET:/api/wine-lists/{param}/csv": membership("wine-list:view"),
   "api:POST:/api/wine-lists/{param}/publish": membership("wine-list:manage"),
   "api:DELETE:/api/wine-lists/{param}/publish":
     membership("wine-list:manage"),
   "api:PATCH:/api/wines/{param}": membership("wine:manage"),
+  "api:GET:/api/wines": membership("wine:view"),
   "api:PATCH:/api/wines/{param}/availability": membership("wine:manage"),
   "api:POST:/api/wines/{param}/dismiss-pricing-alert":
     membership("wine:manage"),

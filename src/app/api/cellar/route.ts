@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { requireRole } from "@/lib/api/auth";
+import { requireCapability, requireRole } from "@/lib/api/auth";
 import { apiError, Errors } from "@/lib/api/errors";
 import {
   AddCellarWineBodySchema,
@@ -43,6 +43,25 @@ const CELLAR_ADD_OUTCOMES: readonly CellarAddOutcome[] = [
   "idempotency_outcome_unknown",
   "idempotency_in_progress",
 ];
+
+/** Returns the active restaurant's cellar inventory. */
+export async function GET() {
+  return withApiHandler(async () => {
+    const auth = await requireCapability("cellar:view");
+    if (auth instanceof NextResponse) return auth;
+
+    const { data, error } = await auth.supabase
+      .from("inventory_items")
+      .select(
+        "*, wines(id, name, producer, vintage, varietal, region, country, size_ml)",
+      )
+      .eq("restaurant_id", auth.restaurantId)
+      .order("added_at", { ascending: false });
+    if (error) throw error;
+
+    return NextResponse.json({ cellar: data ?? [] });
+  });
+}
 
 function buildEnrichmentMetadata(result: ReturnType<typeof enrichWine>) {
   const fields: string[] = [];

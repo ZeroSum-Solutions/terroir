@@ -1,11 +1,36 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireRole } from "@/lib/api/auth";
+import { requireCapability, requireRole } from "@/lib/api/auth";
 import { withApiHandler } from "@/lib/api/handler";
 import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
-import { parseJson } from "@/lib/api/validation";
+import { parseJson, parseQuery } from "@/lib/api/validation";
+import { WineListSectionsQuerySchema } from "@/lib/api/compatibility-collection-schemas";
 import { CreateWineListSectionBodySchema } from "@/lib/api/wine-list-section-schemas";
 
 export const runtime = "nodejs";
+
+/** Returns sections only when their parent list belongs to the active tenant. */
+export async function GET(request: NextRequest) {
+  return withApiHandler(async () => {
+    const auth = await requireCapability("wine-list:view");
+    if (auth instanceof NextResponse) return auth;
+
+    const parsed = await parseQuery(
+      request.nextUrl.searchParams,
+      WineListSectionsQuerySchema,
+    );
+    if (!parsed.ok) return parsed.response;
+
+    const { data, error } = await auth.supabase
+      .from("wine_list_sections")
+      .select("*, wine_lists!inner(restaurant_id)")
+      .eq("wine_list_id", parsed.data.wine_list_id)
+      .eq("wine_lists.restaurant_id", auth.restaurantId)
+      .order("position", { ascending: true });
+    if (error) throw error;
+
+    return NextResponse.json({ sections: data ?? [] });
+  });
+}
 
 type CreateSectionResponse =
   | {

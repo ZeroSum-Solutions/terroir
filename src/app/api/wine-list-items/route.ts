@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { NextResponse, type NextRequest } from "next/server";
-import { requireRole } from "@/lib/api/auth";
+import { requireCapability, requireRole } from "@/lib/api/auth";
 import { apiError, Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import {
@@ -8,11 +8,38 @@ import {
   isValidIdempotencyKey,
 } from "@/lib/api/idempotency";
 import { apiResultResponse } from "@/lib/api/result-response";
-import { parseJson } from "@/lib/api/validation";
+import { parseJson, parseQuery } from "@/lib/api/validation";
+import { WineListItemsQuerySchema } from "@/lib/api/compatibility-collection-schemas";
 import { CreateWineListItemBodySchema } from "@/lib/api/wine-list-item-schemas";
 import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
+
+/** Returns section items only when the section belongs to the active tenant. */
+export async function GET(request: NextRequest) {
+  return withApiHandler(async () => {
+    const auth = await requireCapability("wine-list:view");
+    if (auth instanceof NextResponse) return auth;
+
+    const parsed = await parseQuery(
+      request.nextUrl.searchParams,
+      WineListItemsQuerySchema,
+    );
+    if (!parsed.ok) return parsed.response;
+
+    const { data, error } = await auth.supabase
+      .from("wine_list_items")
+      .select(
+        "*, wines(*), wine_list_sections!inner(wine_lists!inner(restaurant_id))",
+      )
+      .eq("section_id", parsed.data.section_id)
+      .eq("wine_list_sections.wine_lists.restaurant_id", auth.restaurantId)
+      .order("position", { ascending: true });
+    if (error) throw error;
+
+    return NextResponse.json({ items: data ?? [] });
+  });
+}
 
 type CreateItemResult = {
   outcome:

@@ -16,20 +16,10 @@ export type ApiAbusePolicy =
     };
 
 export const PLANNED_API_OPERATION_IDS = [
-  "api:GET:/api/cellar",
-  "api:GET:/api/export",
-  "api:GET:/api/inventory",
-  "api:GET:/api/restaurant",
   "api:PATCH:/api/restaurant",
-  "api:GET:/api/scans",
   "api:GET:/api/scans/{param}",
-  "api:GET:/api/team",
   "api:POST:/api/team",
   "api:DELETE:/api/team/{param}",
-  "api:GET:/api/wine-list-items",
-  "api:GET:/api/wine-list-sections",
-  "api:GET:/api/wine-lists",
-  "api:GET:/api/wines",
   "api:GET:/api/wines/{param}",
 ] as const satisfies readonly ApiOperationId[];
 

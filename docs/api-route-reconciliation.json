@@ -7,8 +7,8 @@
   "summary": {
     "activeRequirementCount": 269,
     "concreteRequirementCount": 32,
-    "exactDiscoveredCount": 17,
-    "plannedPromiseCount": 15,
+    "exactDiscoveredCount": 27,
+    "plannedPromiseCount": 5,
     "extensionDiscoveredCount": 60,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
@@ -61,8 +61,8 @@
       "method": "GET",
       "path": "/api/cellar",
       "operationId": "api:GET:/api/cellar",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     },
     {
       "requirementId": "TER-CF-182",
@@ -93,8 +93,8 @@
       "method": "GET",
       "path": "/api/wines",
       "operationId": "api:GET:/api/wines",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     },
     {
       "requirementId": "TER-CF-186",
@@ -117,8 +117,8 @@
       "method": "GET",
       "path": "/api/scans",
       "operationId": "api:GET:/api/scans",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     },
     {
       "requirementId": "TER-CF-189",
@@ -141,8 +141,8 @@
       "method": "GET",
       "path": "/api/inventory",
       "operationId": "api:GET:/api/inventory",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     },
     {
       "requirementId": "TER-CF-192",
@@ -165,8 +165,8 @@
       "method": "GET",
       "path": "/api/wine-lists",
       "operationId": "api:GET:/api/wine-lists",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     },
     {
       "requirementId": "TER-CF-195",
@@ -197,8 +197,8 @@
       "method": "GET",
       "path": "/api/wine-list-sections",
       "operationId": "api:GET:/api/wine-list-sections",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     },
     {
       "requirementId": "TER-CF-199",
@@ -221,8 +221,8 @@
       "method": "GET",
       "path": "/api/wine-list-items",
       "operationId": "api:GET:/api/wine-list-items",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     },
     {
       "requirementId": "TER-CF-202",
@@ -253,8 +253,8 @@
       "method": "GET",
       "path": "/api/restaurant",
       "operationId": "api:GET:/api/restaurant",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     },
     {
       "requirementId": "TER-CF-206",
@@ -269,8 +269,8 @@
       "method": "GET",
       "path": "/api/team",
       "operationId": "api:GET:/api/team",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     },
     {
       "requirementId": "TER-CF-208",
@@ -301,11 +301,17 @@
       "method": "GET",
       "path": "/api/export",
       "operationId": "api:GET:/api/export",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     }
   ],
   "discoveredClassifications": [
+    {
+      "operationId": "api:GET:/api/cellar",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-181",
+      "semanticAliasContext": []
+    },
     {
       "operationId": "api:POST:/api/cellar",
       "classification": "exact",
@@ -358,13 +364,7 @@
       "operationId": "api:GET:/api/cellar/grid",
       "classification": "extension",
       "concreteRequirementId": null,
-      "semanticAliasContext": [
-        {
-          "requirementId": "TER-CF-181",
-          "relationship": "partial_projection",
-          "note": "Returns a cellar grid projection but does not implement GET /api/cellar."
-        }
-      ]
+      "semanticAliasContext": []
     },
     {
       "operationId": "api:GET:/api/dev-login",
@@ -373,16 +373,16 @@
       "semanticAliasContext": []
     },
     {
+      "operationId": "api:GET:/api/export",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-211",
+      "semanticAliasContext": []
+    },
+    {
       "operationId": "api:GET:/api/export/toast-csv",
       "classification": "extension",
       "concreteRequirementId": null,
-      "semanticAliasContext": [
-        {
-          "requirementId": "TER-CF-211",
-          "relationship": "specialized_export",
-          "note": "Streams a Toast-specific CSV but does not implement GET /api/export."
-        }
-      ]
+      "semanticAliasContext": []
     },
     {
       "operationId": "api:GET:/api/health",
@@ -400,13 +400,7 @@
       "operationId": "api:GET:/api/insights/csv",
       "classification": "extension",
       "concreteRequirementId": null,
-      "semanticAliasContext": [
-        {
-          "requirementId": "TER-CF-211",
-          "relationship": "specialized_export",
-          "note": "Streams insights CSV data but does not implement GET /api/export."
-        }
-      ]
+      "semanticAliasContext": []
     },
     {
       "operationId": "api:GET:/api/insights/drink-window-alerts",
@@ -430,6 +424,12 @@
       "operationId": "api:GET:/api/insights/snoozed",
       "classification": "extension",
       "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:GET:/api/inventory",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-191",
       "semanticAliasContext": []
     },
     {
@@ -481,16 +481,16 @@
       "semanticAliasContext": []
     },
     {
+      "operationId": "api:GET:/api/restaurant",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-205",
+      "semanticAliasContext": []
+    },
+    {
       "operationId": "api:GET:/api/restaurant/{param}",
       "classification": "extension",
       "concreteRequirementId": null,
-      "semanticAliasContext": [
-        {
-          "requirementId": "TER-CF-205",
-          "relationship": "path_variant",
-          "note": "Returns restaurant metadata by path ID but does not implement GET /api/restaurant."
-        }
-      ]
+      "semanticAliasContext": []
     },
     {
       "operationId": "api:PUT:/api/restaurant/{param}",
@@ -535,6 +535,12 @@
       "semanticAliasContext": []
     },
     {
+      "operationId": "api:GET:/api/scans",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-188",
+      "semanticAliasContext": []
+    },
+    {
       "operationId": "api:PATCH:/api/scans/{param}",
       "classification": "extension",
       "concreteRequirementId": null,
@@ -556,6 +562,12 @@
       "operationId": "api:POST:/api/scans/{param}/re-extract",
       "classification": "extension",
       "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:GET:/api/team",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-207",
       "semanticAliasContext": []
     },
     {
@@ -592,13 +604,7 @@
       "operationId": "api:GET:/api/team/members",
       "classification": "extension",
       "concreteRequirementId": null,
-      "semanticAliasContext": [
-        {
-          "requirementId": "TER-CF-207",
-          "relationship": "path_variant",
-          "note": "Returns memberships and invitations at an alternate path but does not implement GET /api/team."
-        }
-      ]
+      "semanticAliasContext": []
     },
     {
       "operationId": "api:PATCH:/api/team/members/{param}",
@@ -617,6 +623,12 @@
           "note": "Revokes membership at an alternate path but does not implement DELETE /api/team/[membership_id]."
         }
       ]
+    },
+    {
+      "operationId": "api:GET:/api/wine-list-items",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-201",
+      "semanticAliasContext": []
     },
     {
       "operationId": "api:POST:/api/wine-list-items",
@@ -643,6 +655,12 @@
       "semanticAliasContext": []
     },
     {
+      "operationId": "api:GET:/api/wine-list-sections",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-198",
+      "semanticAliasContext": []
+    },
+    {
       "operationId": "api:POST:/api/wine-list-sections",
       "classification": "exact",
       "concreteRequirementId": "TER-CF-199",
@@ -664,6 +682,12 @@
       "operationId": "api:PATCH:/api/wine-list-sections/reorder",
       "classification": "extension",
       "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:GET:/api/wine-lists",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-194",
       "semanticAliasContext": []
     },
     {
@@ -694,13 +718,7 @@
       "operationId": "api:GET:/api/wine-lists/{param}/csv",
       "classification": "extension",
       "concreteRequirementId": null,
-      "semanticAliasContext": [
-        {
-          "requirementId": "TER-CF-211",
-          "relationship": "specialized_export",
-          "note": "Streams one wine list as CSV but does not implement GET /api/export."
-        }
-      ]
+      "semanticAliasContext": []
     },
     {
       "operationId": "api:POST:/api/wine-lists/{param}/publish",
@@ -712,6 +730,12 @@
       "operationId": "api:DELETE:/api/wine-lists/{param}/publish",
       "classification": "extension",
       "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:GET:/api/wines",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-185",
       "semanticAliasContext": []
     },
     {
@@ -784,13 +808,7 @@
       "operationId": "api:GET:/api/wines/availability",
       "classification": "extension",
       "concreteRequirementId": null,
-      "semanticAliasContext": [
-        {
-          "requirementId": "TER-CF-185",
-          "relationship": "partial_projection",
-          "note": "Returns an availability projection but does not implement paginated GET /api/wines."
-        }
-      ]
+      "semanticAliasContext": []
     },
     {
       "operationId": "api:POST:/api/wines/create-from-lwin",
@@ -826,13 +844,7 @@
       "operationId": "api:GET:/api/wines/search",
       "classification": "extension",
       "concreteRequirementId": null,
-      "semanticAliasContext": [
-        {
-          "requirementId": "TER-CF-185",
-          "relationship": "partial_projection",
-          "note": "Returns a search projection but does not implement paginated GET /api/wines."
-        }
-      ]
+      "semanticAliasContext": []
     }
   ],
   "crossCuttingRequirements": [
