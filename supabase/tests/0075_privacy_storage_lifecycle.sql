@@ -39,7 +39,7 @@ begin
       'managers can update wine images',
       'managers can delete wine images'
     )
-    and roles = array['authenticated']
+    and roles = array['authenticated'::name]
     and coalesce(qual, '') || coalesce(with_check, '')
       like '%storage_tenant_prefix_id%';
 

@@ -2,7 +2,9 @@ scope: Private tenant-scoped invoice and wine-image Storage, destructive deletio
 base: f9a19fdcbd3613f19ce63307c8c029b7981bd063
 implementation:
   migration: supabase/migrations/0075_privacy_storage_lifecycle.sql
+  bucket_provisioning: supabase/migrations/0076_private_media_bucket_provisioning.sql
   rollback: supabase/migrations/down/0075_privacy_storage_lifecycle.down.sql
+  bucket_provisioning_rollback: supabase/migrations/down/0076_private_media_bucket_provisioning.down.sql
   routes:
     - DELETE /api/restaurant/[id] removes tenant Storage prefixes before the atomic database deletion.
     - DELETE /api/cellar/[id] retries wine-image cleanup after a successful atomic wine deletion.
@@ -20,10 +22,17 @@ verification:
     - pnpm test -- src/app/api/restaurant/[id]/route.test.ts src/app/api/cellar/[id]/route.test.ts src/app/api/wines/[id]/image/route.test.ts src/app/api/scans/[id]/image/route.test.ts
     - pnpm snapshot:check
     - pnpm downs:check
+  staging_observed_at: 2026-08-07T18:22:39Z
+  staging_project: wwhxcgtcecsftcivosop
+  staging_results:
+    - 0075 applied; the first acceptance run correctly failed because invoice-images was absent.
+    - 0076 provisioned both private buckets; the corrected SQL acceptance transaction passed.
+    - Same-tenant signed reads passed for invoice and wine images.
+    - Cross-tenant signed read and write attempts were denied for both governed prefixes.
+    - Cross-tenant deletion left both objects readable to their owner; owner deletion then removed both.
+    - Deleting a synthetic Auth user removed membership and nulled retained wine attribution.
 staging_evidence_required:
-  - Apply and reverse-plan 0075 only on a disposable restored staging database; the paired down is intentionally fail-closed and does not make buckets public.
-  - Prove same-tenant signed-image access succeeds and cross-tenant read/write/delete fails for both buckets.
   - Exercise a synthetic owner restaurant deletion and verify both Storage prefixes are empty before recording only counts and timestamps.
   - Confirm current Azure, Anthropic, Railway, and Sentry retention settings with the account owners; no provider setting was inspected or changed by this change.
   - Confirm the Auth-user deletion procedure on a synthetic user after transferring or deleting every owned restaurant.
-deployment: not deployed; no remote database, Storage bucket, provider, or GitHub setting was changed.
+deployment: 0075 and 0076 are applied to isolated staging only; application code is not yet deployed and production was not changed.

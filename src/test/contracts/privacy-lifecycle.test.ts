@@ -9,6 +9,14 @@ const rollback = readFileSync(
   "supabase/migrations/down/0075_privacy_storage_lifecycle.down.sql",
   "utf8",
 );
+const bucketRepair = readFileSync(
+  "supabase/migrations/0076_private_media_bucket_provisioning.sql",
+  "utf8",
+);
+const bucketRepairRollback = readFileSync(
+  "supabase/migrations/down/0076_private_media_bucket_provisioning.down.sql",
+  "utf8",
+);
 const runbook = readFileSync("docs/runbooks/data-lifecycle-privacy.md", "utf8");
 const restaurantRoute = readFileSync(
   "src/app/api/restaurant/[id]/route.ts",
@@ -36,6 +44,10 @@ describe("TER-024 privacy lifecycle contracts", () => {
     expect(migration).toContain("public.is_valid_wine_image_path(name)");
     expect(migration).toContain("public.storage_tenant_prefix_id(name)");
     expect(migration).toContain("create policy \"members can read wine images\"");
+    expect(bucketRepair).toContain("'invoice-images'");
+    expect(bucketRepair).toContain("'wine-images'");
+    expect(bucketRepair).toContain("on conflict (id) do update");
+    expect(bucketRepair).toContain("public = false");
   });
 
   it("keeps user deletion from retaining application attribution identifiers", () => {
@@ -82,6 +94,8 @@ describe("TER-024 privacy lifecycle contracts", () => {
     expect(rollback).toContain("no executable reverse");
     expect(rollback).not.toContain("public = true");
     expect(rollback).not.toContain("delete from storage.objects");
+    expect(bucketRepairRollback).not.toContain("public = true");
+    expect(bucketRepairRollback).not.toContain("delete from storage.buckets");
   });
 
   it("does not interpolate storage provider errors into scanner or wine-image logs", () => {

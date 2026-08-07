@@ -12949,3 +12949,36 @@ comment on table public.background_jobs is
   'TER-024: job metadata and result are restaurant-owned operational data. Do not place invoice text, images, URLs, credentials, or personal data in either JSON payload.';
 comment on table public.invitations is
   'TER-024: invitation email and token are tenant-scoped; expired or cancelled invitations are operational cleanup candidates and are never emitted to telemetry.';
+
+-- === 0076_private_media_bucket_provisioning.sql ===
+-- TER-024 follow-up: provision both governed buckets even when an environment
+-- is missing an earlier data migration. The privacy contract must not depend
+-- on a bucket already existing before it can make that bucket private.
+
+insert into storage.buckets (
+  id,
+  name,
+  public,
+  file_size_limit,
+  allowed_mime_types
+) values
+  (
+    'invoice-images',
+    'invoice-images',
+    false,
+    10485760,
+    array['image/jpeg', 'image/png', 'image/heic', 'image/heif', 'application/pdf']
+  ),
+  (
+    'wine-images',
+    'wine-images',
+    false,
+    10485760,
+    array['image/jpeg', 'image/png', 'image/webp']
+  )
+on conflict (id) do update
+set
+  name = excluded.name,
+  public = false,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;

@@ -12,6 +12,10 @@ setting before production use.
   `<restaurant-id>/<wine-id>.<extension>`.
 - `invoice-images` and `wine-images` are private. The application stores no
   public wine-image URL. It issues authenticated signed URLs for five minutes.
+- `0076_private_media_bucket_provisioning.sql` creates either governed bucket
+  when an older environment is missing it and idempotently reapplies the
+  private ten-mebibyte MIME allowlist. Run the TER-024 SQL acceptance after
+  `0075` and `0076`; a missing bucket is a failed privacy rollout.
 - A tenant deletion removes both bucket prefixes before the database cascade.
   It fails before the database deletion if Storage cleanup fails. A retry is
   safe because the removal calls are idempotent.
@@ -86,9 +90,11 @@ credentials, raw provider responses, tokens, or object paths.
 
 ## Rollback boundary
 
-`0075_privacy_storage_lifecycle.down.sql` is intentionally a fail-closed,
-non-executable rollback record. Reverting the private buckets or broadening
-their old prefix-only policies would re-expose tenant objects. If application
-code must roll back, keep the private paths and signed-URL contract, rehearse
-the target revision against a restored staging backup, and introduce any
-necessary compatibility change as a new forward migration.
+`0075_privacy_storage_lifecycle.down.sql` and
+`0076_private_media_bucket_provisioning.down.sql` are intentionally
+fail-closed, non-executable rollback records. Reverting or deleting the private
+buckets, or broadening their old prefix-only policies, would re-expose or lose
+tenant objects. If application code must roll back, keep the private paths and
+signed-URL contract, rehearse the target revision against a restored staging
+backup, and introduce any necessary compatibility change as a new forward
+migration.

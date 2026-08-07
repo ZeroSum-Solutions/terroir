@@ -1,0 +1,5 @@
+-- TER-024 fail-closed rollback record.
+--
+-- Do not delete either governed bucket or make it public during an application
+-- rollback. Keep the private bucket contract and introduce any compatibility
+-- change through a new forward migration after a staged backup/restore drill.
