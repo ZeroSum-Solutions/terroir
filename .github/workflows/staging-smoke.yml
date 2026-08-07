@@ -65,6 +65,8 @@ jobs:
       TERROIR_E2E_SUPABASE_PUBLISHABLE_KEY_SHA256: ${{ vars.STAGING_SUPABASE_PUBLISHABLE_KEY_SHA256 }}
       TERROIR_E2E_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
       TERROIR_E2E_SERVICE_ROLE_KEY_SHA256: ${{ vars.STAGING_SUPABASE_SERVICE_ROLE_KEY_SHA256 }}
+      TERROIR_E2E_FORCE_FAILURE: ${{ github.event_name == 'workflow_dispatch' && inputs.force_evidence_failure && '1' || '0' }}
+      E2E_EVIDENCE_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -87,20 +89,32 @@ jobs:
       - name: Run the isolated authenticated workflow
         run: pnpm run test:e2e:isolated
 
-      - name: Exercise the failure evidence path
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.force_evidence_failure }}
+      - name: Encrypt browser evidence
+        if: always()
+        shell: bash
         run: |
-          mkdir -p test-results/playwright
-          printf '%s\n' 'Intentional staging evidence drill; no request or credential data captured.' > test-results/playwright/forced-evidence-drill.txt
-          exit 1
+          set -euo pipefail
+          if [[ "${E2E_EVIDENCE_AGE_RECIPIENT:-}" != age1* ]] ||
+             [[ "$E2E_EVIDENCE_AGE_RECIPIENT" == *$'\n'* ]] ||
+             [[ "$E2E_EVIDENCE_AGE_RECIPIENT" == *$'\r'* ]]; then
+            echo "::error::BACKUP_AGE_RECIPIENT must be one age X25519 public recipient."
+            exit 1
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age
+          archive="$RUNNER_TEMP/isolated-e2e-${{ matrix.slot }}.tar.gz"
+          encrypted="test-results/isolated-e2e-${{ matrix.slot }}.tar.gz.age"
+          mkdir -p test-results
+          tar -czf "$archive" playwright-report/ test-results/playwright/
+          age -r "$E2E_EVIDENCE_AGE_RECIPIENT" -o "$encrypted" "$archive"
+          rm -f "$archive"
+          rm -rf playwright-report test-results/playwright
 
       - name: Retain browser failure evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: isolated-e2e-${{ github.run_id }}-${{ matrix.slot }}
-          path: |
-            playwright-report/
-            test-results/playwright/
+          path: test-results/isolated-e2e-${{ matrix.slot }}.tar.gz.age
           if-no-files-found: error
           retention-days: 14

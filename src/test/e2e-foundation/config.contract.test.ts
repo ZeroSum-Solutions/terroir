@@ -331,22 +331,21 @@ describe("failure evidence redaction", () => {
     expect(workflow).toMatch(
       /github\.event_name == 'workflow_dispatch' && inputs\.force_evidence_failure/,
     );
+    expect(workflow).toContain("TERROIR_E2E_FORCE_FAILURE:");
     expect(workflow).toMatch(
-      /Exercise the failure evidence path[\s\S]*?exit 1[\s\S]*?Retain browser failure evidence[\s\S]*?if: always\(\)/,
+      /Encrypt browser evidence[\s\S]*?age -r[\s\S]*?rm -rf playwright-report test-results\/playwright[\s\S]*?Retain browser failure evidence[\s\S]*?if: always\(\)/,
     );
-    expect(workflow).toContain(
-      "Intentional staging evidence drill; no request or credential data captured.",
-    );
+    expect(workflow).toContain("path: test-results/isolated-e2e-");
   });
 
-  test("disables trace and video export for credentialed isolated sessions", () => {
+  test("retains trace and video only inside encrypted workflow evidence", () => {
     const config = fs.readFileSync(
       path.join(process.cwd(), "playwright.config.ts"),
       "utf8",
     );
 
-    expect(config).toContain('trace: isolatedE2e ? "off"');
-    expect(config).toContain('video: isolatedE2e ? "off"');
+    expect(config).toContain('trace: "retain-on-failure"');
+    expect(config).toContain('video: "retain-on-failure"');
   });
 });
 

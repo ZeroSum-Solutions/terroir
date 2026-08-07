@@ -35,10 +35,13 @@ async function api(
 }
 
 test.describe("multi-restaurant isolation", () => {
-  test.skip(
-    process.env.TERROIR_E2E_ENABLED !== "1",
-    "Run only in the isolated staging E2E job.",
-  );
+  test.beforeAll(() => {
+    if (process.env.TERROIR_E2E_ENABLED !== "1") {
+      throw new Error(
+        "TERROIR_E2E_ENABLED=1 and the validated staging contract are required.",
+      );
+    }
+  });
 
   test("switches every tenant-scoped surface and preserves the signed choice", async ({
     isolatedFixture,
@@ -178,5 +181,12 @@ test.describe("multi-restaurant isolation", () => {
       },
       status: 200,
     });
+
+    if (process.env.TERROIR_E2E_FORCE_FAILURE === "1") {
+      expect(
+        false,
+        "Intentional staging browser failure for encrypted evidence verification.",
+      ).toBe(true);
+    }
   });
 });
