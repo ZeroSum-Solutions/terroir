@@ -1,0 +1,45 @@
+spec_id: TER-011
+implementation_commit: 33b81a8dc373fa873321405158375791ee9c0554
+status: implemented_external_revocation_pending
+scope: Remove the temporary and development alternate-authentication surface while preserving normal Supabase authentication and isolated, non-shipping test fixtures.
+requirements_implemented:
+  - The alternate sign-in route, token validator, login affordance, public-path entry, environment examples, API policy registrations, inventory entry, and enabling test setup are removed.
+  - The active feature contract now requires that no alternate sign-in route exist outside normal Supabase authentication and assigns that requirement to TER-011.
+  - Local seeded browser tests use the normal password form; the seed resets existing fixture passwords and refuses non-loopback E2E data access.
+  - A negative browser test proves the retired URL returns 404, sets no auth cookie, and cannot unlock a subsequent protected request.
+  - CI builds the production application and rejects runtime, documentation, policy, inventory, or production-build remnants.
+requirements_not_closed:
+  - The release owner must complete the redacted deployment-variable removal, prior-token revocation, redeploy, and deployed smoke checklist in docs/runbooks/TER-011-auth-removal.md.
+tests:
+  focused: pnpm exec vitest run src/lib/supabase/proxy.test.ts src/lib/auth/api-authorization.test.ts src/lib/api-route-inventory/verify-api-contract.test.ts src/lib/api-route-inventory/reconciliation.test.ts src/lib/feature-ledger/verify-feature-ledger.test.ts src/lib/auth/real-e2e-config.test.ts (6 files, 85 passed before the final explicit absence assertion; subsequent focused sets passed)
+  full_serial: pnpm exec vitest run --maxWorkers=1 --no-file-parallelism (135 files, 1403 passed)
+  contracts: pnpm run test:contracts (8 files, 79 passed)
+  browser_negative: system-Chrome Playwright run passed (1 test); the retired request returned 404 and established no auth cookie or session.
+  real_provider_auth: skipped by design because the isolated staging and Mailpit contract was not supplied; configuration guard tests passed.
+  production_start_smoke: next start on port 3011 returned status 404 with zero Location and Set-Cookie headers for the retired URL.
+  build: pnpm run build (passed; 49 static pages; retired route absent from the route table)
+  removal_scan: pnpm run verify:auth-removal -- --require-build (637 repository files and production build output passed)
+  api_contract: pnpm run verify:api-contract (86 discovered operations, 5 planned promises, 86 classifications)
+  feature_ledger: pnpm run verify:feature-ledger (269 features)
+  typecheck: pnpm exec tsc --noEmit (passed)
+  lint: pnpm run lint (passed)
+  snapshot: pnpm run snapshot:check (73 migrations; no diff)
+  down_migrations: pnpm run downs:check (62 paired forward migrations)
+  local_seed: pnpm run supabase:seed:local (dry run passed; 3 users and deterministic fixture counts)
+  diff: git diff --check and staged gitleaks stdin scan (passed)
+review:
+  model: x-ai/grok-4.5
+  verdict: PASS
+  findings: []
+external_changes:
+  railway: none in this code-only branch
+  supabase: none in this code-only branch
+  github: none in this code-only branch
+known_limits:
+  - The default Playwright headless-shell install was unavailable; the negative browser test passed with the installed system Chrome against anonymous localhost, while the real-provider suite remained safely skipped.
+  - Live production type generation reports expected drift because production does not yet include the broader branch's pending migrations; the generated file was restored and TER-011 changes no schema.
+  - Code removal alone does not prove mutable deployment variables or the prior token are revoked; the operator checklist is a mandatory release step.
+data_change:
+  migration: none
+  backup_verified: not-applicable
+rollback: Revert 33b81a8dc373fa873321405158375791ee9c0554 to restore the prior code, but do not restore retired deployment variables or tokens.
