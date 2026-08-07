@@ -1,0 +1,197 @@
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import type { BrowserContext } from "@playwright/test";
+import { describe, expect, test } from "vitest";
+import {
+  buildFixtureIdentity,
+  readIsolatedE2eConfig,
+} from "../../../e2e/fixtures/config";
+import { injectFixtureSession } from "../../../e2e/fixtures/isolated-fixture";
+
+const STAGING_REF = "wwhxcgtcecsftcivosop";
+
+function jwt(payload: Record<string, unknown>): string {
+  const encode = (value: object) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${encode({ alg: "HS256", typ: "JWT" })}.${encode(payload)}.signature`;
+}
+
+function baseEnvironment(): Record<string, string> {
+  const publishableKey = jwt({ ref: STAGING_REF, role: "anon" });
+  const serviceRoleKey = jwt({ ref: STAGING_REF, role: "service_role" });
+  return {
+    TERROIR_E2E_ENABLED: "1",
+    TERROIR_E2E_BASE_URL: "https://terroir-web-staging.up.railway.app",
+    TERROIR_E2E_RUN_ID: "run-12345678",
+    TERROIR_E2E_SUPABASE_URL: `https://${STAGING_REF}.supabase.co`,
+    TERROIR_E2E_SUPABASE_PUBLISHABLE_KEY: publishableKey,
+    TERROIR_E2E_SUPABASE_PUBLISHABLE_KEY_SHA256: createHash("sha256")
+      .update(publishableKey)
+      .digest("hex"),
+    TERROIR_E2E_SERVICE_ROLE_KEY: serviceRoleKey,
+    TERROIR_E2E_SERVICE_ROLE_KEY_SHA256: createHash("sha256")
+      .update(serviceRoleKey)
+      .digest("hex"),
+  };
+}
+
+describe("isolated E2E configuration", () => {
+  test("accepts only the named staging application and Supabase project", () => {
+    const config = readIsolatedE2eConfig(baseEnvironment());
+
+    expect(config).toMatchObject({
+      baseUrl: "https://terroir-web-staging.up.railway.app",
+      runId: "run-12345678",
+      stagingProjectRef: STAGING_REF,
+      supabaseUrl: `https://${STAGING_REF}.supabase.co`,
+    });
+  });
+
+  test.each([
+    ["production application", { TERROIR_E2E_BASE_URL: "https://terroir-web-production.up.railway.app" }],
+    ["production database", { TERROIR_E2E_SUPABASE_URL: "https://qcfmwphlaekfkqwkfyth.supabase.co" }],
+    ["wrong service role", credentialOverride("TERROIR_E2E_SERVICE_ROLE_KEY", jwt({ ref: "qcfmwphlaekfkqwkfyth", role: "service_role" }))],
+    ["anon key used as service role", credentialOverride("TERROIR_E2E_SERVICE_ROLE_KEY", jwt({ ref: STAGING_REF, role: "anon" }))],
+  ])("rejects %s", (_label, overrides) => {
+    expect(() =>
+      readIsolatedE2eConfig({ ...baseEnvironment(), ...overrides }),
+    ).toThrow();
+  });
+
+  test("rejects credentials whose value differs from the staging fingerprint", () => {
+    const env = baseEnvironment();
+    env.TERROIR_E2E_SUPABASE_PUBLISHABLE_KEY_SHA256 = "0".repeat(64);
+
+    expect(() => readIsolatedE2eConfig(env)).toThrow(/fingerprint/i);
+  });
+
+  test("returns null unless the isolated suite is explicitly enabled", () => {
+    expect(readIsolatedE2eConfig({})).toBeNull();
+  });
+});
+
+describe("fixture identity isolation", () => {
+  test("is stable for a retry of the same test slot", () => {
+    const first = buildFixtureIdentity("run-12345678", "pour-flow", 2);
+    const rerun = buildFixtureIdentity("run-12345678", "pour-flow", 2);
+
+    expect(rerun).toEqual(first);
+  });
+
+  test("keeps parallel runs and workers in distinct namespaces", () => {
+    const identities = [
+      buildFixtureIdentity("run-12345678", "pour-flow", 0),
+      buildFixtureIdentity("run-12345678", "pour-flow", 1),
+      buildFixtureIdentity("run-87654321", "pour-flow", 0),
+    ];
+
+    expect(new Set(identities.map((value) => value.namespace))).toHaveLength(3);
+    expect(new Set(identities.map((value) => value.restaurantId))).toHaveLength(3);
+    expect(new Set(identities.map((value) => value.email))).toHaveLength(3);
+    expect(identities.every((value) => value.storagePath.startsWith(`${value.restaurantId}/`))).toBe(true);
+  });
+});
+
+describe("valid session injection", () => {
+  test("stores provider-issued SSR cookies in only the supplied browser context", async () => {
+    const env = baseEnvironment();
+    const config = readIsolatedE2eConfig(env)!;
+    const identity = buildFixtureIdentity(config.runId, "pour-flow", 0);
+    const addedCookies: Array<Record<string, unknown>> = [];
+    const accessToken = jwt({
+      aud: "authenticated",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      role: "authenticated",
+      sub: "10000000-0000-4000-8000-000000000001",
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      expect(String(input)).toContain("/auth/v1/token?grant_type=password");
+      return new Response(
+        JSON.stringify({
+          access_token: accessToken,
+          expires_in: 3600,
+          refresh_token: "synthetic-refresh-token",
+          token_type: "bearer",
+          user: {
+            aud: "authenticated",
+            email: identity.email,
+            id: "10000000-0000-4000-8000-000000000001",
+            role: "authenticated",
+          },
+        }),
+        { headers: { "Content-Type": "application/json" }, status: 200 },
+      );
+    };
+
+    try {
+      await injectFixtureSession(
+        {
+          addCookies: async (
+            cookies: Parameters<BrowserContext["addCookies"]>[0],
+          ) => {
+            addedCookies.push(...cookies);
+          },
+        } as never,
+        config,
+        {
+          ...identity,
+          password: "synthetic-password",
+          userId: "10000000-0000-4000-8000-000000000001",
+        },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(addedCookies).not.toHaveLength(0);
+    expect(addedCookies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: expect.stringContaining("auth-token"),
+          secure: true,
+          url: config.baseUrl,
+        }),
+      ]),
+    );
+  });
+});
+
+describe("fixture helper shipping boundary", () => {
+  test("application and real-auth sources cannot import the shortcut", () => {
+    const repositoryRoot = process.cwd();
+    const fixtureImport = /fixtures\/(?:isolated-fixture|isolated-test)/;
+    const sourceFiles = walk(path.join(repositoryRoot, "src"));
+    const applicationFiles = sourceFiles.filter(
+      (file) => !/\.test\.[cm]?[jt]sx?$/.test(file),
+    );
+    const authSource = fs.readFileSync(
+      path.join(repositoryRoot, "e2e/auth-real-provider.test.ts"),
+      "utf8",
+    );
+
+    expect(applicationFiles.filter((file) => fixtureImport.test(fs.readFileSync(file, "utf8")))).toEqual([]);
+    expect(authSource).not.toMatch(fixtureImport);
+    expect(
+      sourceFiles.filter(
+        (file) => file.includes(`${path.sep}app${path.sep}api${path.sep}`)
+          && /(?:^|[/\\])(?:e2e-)?fixtures?(?:[/\\]|\.)/i.test(file),
+      ),
+    ).toEqual([]);
+  });
+});
+
+function walk(directory: string): string[] {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const file = path.join(directory, entry.name);
+    return entry.isDirectory() ? walk(file) : [file];
+  });
+}
+
+function credentialOverride(name: string, value: string): Record<string, string> {
+  return {
+    [name]: value,
+    [`${name}_SHA256`]: createHash("sha256").update(value).digest("hex"),
+  };
+}

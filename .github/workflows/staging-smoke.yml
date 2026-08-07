@@ -40,3 +40,55 @@ jobs:
           STAGING_EXPECTED_SHA: ${{ inputs.sha || github.sha }}
           STAGING_SMOKE_ATTEMPTS: "20"
         run: pnpm run test:staging
+
+  isolated-e2e:
+    name: Isolated E2E (parallel ${{ matrix.slot }})
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        slot: [1, 2]
+    env:
+      CI: "1"
+      TERROIR_E2E_ENABLED: "1"
+      TERROIR_E2E_BASE_URL: https://terroir-web-staging.up.railway.app
+      TERROIR_E2E_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.slot }}
+      TERROIR_E2E_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+      TERROIR_E2E_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      TERROIR_E2E_SUPABASE_PUBLISHABLE_KEY_SHA256: ${{ vars.STAGING_SUPABASE_PUBLISHABLE_KEY_SHA256 }}
+      TERROIR_E2E_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+      TERROIR_E2E_SERVICE_ROLE_KEY_SHA256: ${{ vars.STAGING_SUPABASE_SERVICE_ROLE_KEY_SHA256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run the isolated authenticated workflow
+        run: pnpm run test:e2e:isolated
+
+      - name: Retain browser failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isolated-e2e-${{ github.run_id }}-${{ matrix.slot }}
+          path: |
+            playwright-report/
+            test-results/playwright/
+          if-no-files-found: error
+          retention-days: 14
