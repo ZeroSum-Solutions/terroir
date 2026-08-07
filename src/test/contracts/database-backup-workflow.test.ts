@@ -29,6 +29,9 @@ describe("database backup workflow", () => {
     expect(workflow).toContain("pg_read_all_data");
     expect(workflow).toContain("rolsuper");
     expect(workflow).toContain("pg_write_all_data");
+    expect(workflow).toContain(
+      "n.nspname in ('auth', 'public', 'storage')",
+    );
     expect(workflow).toContain("BACKUP_PG_DUMP_VERSION");
     expect(workflow).toContain("artifact-digest");
     expect(workflow).toContain("${api_digest#sha256:}");
