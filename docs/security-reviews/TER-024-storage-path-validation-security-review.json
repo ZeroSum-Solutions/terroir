@@ -1,0 +1,109 @@
+{
+  "schema_version": "1.0",
+  "ref": "4bd8d4635aaf484bf700722dd1247f41b4ee9d0a",
+  "base": {
+    "status": "AVAILABLE",
+    "value": "34a6c2f12d4bbadb2d5bedae0d08697800273b7b",
+    "unavailable_reason": null,
+    "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-path-validation-evidence.md:3-5"}]
+  },
+  "scope": {
+    "changed_paths": [
+      "docs/runbooks/data-lifecycle-privacy.md",
+      "src/adapters/storage/supabase-storage.test.ts",
+      "src/adapters/storage/supabase-storage.ts",
+      "src/domains/privacy/storage-cleanup-service.test.ts",
+      "src/test/contracts/privacy-lifecycle.test.ts"
+    ],
+    "captured_diff_paths": [
+      "docs/runbooks/data-lifecycle-privacy.md",
+      "src/adapters/storage/supabase-storage.test.ts",
+      "src/adapters/storage/supabase-storage.ts",
+      "src/domains/privacy/storage-cleanup-service.test.ts",
+      "src/test/contracts/privacy-lifecycle.test.ts"
+    ],
+    "path_classification": [
+      {"path": "docs/runbooks/data-lifecycle-privacy.md", "surfaces": ["export"], "evidence": [{"class": "STATIC", "citation": "docs/runbooks/data-lifecycle-privacy.md:19-27"}]},
+      {"path": "src/adapters/storage/supabase-storage.test.ts", "surfaces": [], "evidence": [{"class": "STATIC", "citation": "src/adapters/storage/supabase-storage.test.ts:89-182"}]},
+      {"path": "src/adapters/storage/supabase-storage.ts", "surfaces": ["untrusted-input", "export"], "evidence": [{"class": "STATIC", "citation": "src/adapters/storage/supabase-storage.ts:107-187"}]},
+      {"path": "src/domains/privacy/storage-cleanup-service.test.ts", "surfaces": [], "evidence": [{"class": "STATIC", "citation": "src/domains/privacy/storage-cleanup-service.test.ts:18-70"}]},
+      {"path": "src/test/contracts/privacy-lifecycle.test.ts", "surfaces": [], "evidence": [{"class": "STATIC", "citation": "src/test/contracts/privacy-lifecycle.test.ts:87-143"}]}
+    ],
+    "sensitive_surfaces": ["untrusted-input", "export"],
+    "diff_command_id": "CMD-001",
+    "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-path-validation-evidence.md:7-13"}]
+  },
+  "commands": [
+    {
+      "id": "CMD-001",
+      "purpose": "diff",
+      "command": "git diff --name-only 34a6c2f12d4bbadb2d5bedae0d08697800273b7b...4bd8d4635aaf484bf700722dd1247f41b4ee9d0a",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "scope": "34a6c2f12d4bbadb2d5bedae0d08697800273b7b...4bd8d4635aaf484bf700722dd1247f41b4ee9d0a",
+      "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-path-validation-evidence.md:7-13"}],
+      "unavailable_reason": null
+    },
+    {
+      "id": "CMD-002",
+      "purpose": "secrets-scan",
+      "command": "gitleaks detect --source . --no-banner --redact --log-opts 34a6c2f12d4bbadb2d5bedae0d08697800273b7b..4bd8d4635aaf484bf700722dd1247f41b4ee9d0a",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "scope": "34a6c2f12d4bbadb2d5bedae0d08697800273b7b..4bd8d4635aaf484bf700722dd1247f41b4ee9d0a",
+      "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-path-validation-evidence.md:15-17"}],
+      "unavailable_reason": null
+    },
+    {
+      "id": "CMD-003",
+      "purpose": "security-control-test",
+      "command": "pnpm exec vitest run src/adapters/storage/supabase-storage.test.ts src/domains/privacy/storage-cleanup-service.test.ts src/test/contracts/privacy-lifecycle.test.ts",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "scope": "TER-024 storage path validation",
+      "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-path-validation-evidence.md:19-21"}],
+      "unavailable_reason": null
+    }
+  ],
+  "exports": {
+    "state": "LISTED",
+    "items": [
+      {
+        "id": "EXP-001",
+        "destination": "Supabase Storage governed tenant buckets",
+        "data_classes": ["tenant identifiers", "object path metadata", "deletion commands"],
+        "initiating_identity": "authenticated restaurant owner through the tenant deletion endpoint",
+        "authorization_evidence": [{"class": "STATIC", "citation": "src/app/api/restaurant/[id]/route.ts:196-225"}],
+        "recipient_scope": "safe provider-returned path segments beneath the active restaurant prefix",
+        "retention_redaction": "cleanup lists only object metadata, deletes governed objects, and logs no provider payload",
+        "failure_behavior": "malformed paths and provider, depth, or entry-limit failures stop before database deletion with a fixed application error",
+        "policy_basis": {"status": "OWNER-APPROVED", "citation": "task:TER-024 complete privacy deletion", "owner": "Devin", "reason": null}
+      }
+    ],
+    "evidence": [{"class": "STATIC", "citation": "docs/runbooks/data-lifecycle-privacy.md:19-27"}],
+    "unavailable_reason": null
+  },
+  "secrets_scan": {
+    "result": "PASS",
+    "command_id": "CMD-002",
+    "scope": "RANGE",
+    "comparison": "34a6c2f12d4bbadb2d5bedae0d08697800273b7b..4bd8d4635aaf484bf700722dd1247f41b4ee9d0a",
+    "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-path-validation-evidence.md:15-17"}],
+    "unavailable_reason": null
+  },
+  "export_policy": {
+    "result": "PASS",
+    "evidence": [{"class": "STATIC", "citation": "docs/runbooks/data-lifecycle-privacy.md:19-27"}],
+    "unavailable_reason": null
+  },
+  "coverage": [
+    {"surface": "prompt-injection", "state": "NOT-APPLICABLE", "evidence": [{"class": "STATIC", "citation": "src/adapters/storage/supabase-storage.ts:107-187"}], "unavailable_reason": null},
+    {"surface": "secrets", "state": "REVIEWED", "evidence": [{"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-path-validation-evidence.md:15-17"}], "unavailable_reason": null},
+    {"surface": "authentication", "state": "NOT-APPLICABLE", "evidence": [{"class": "STATIC", "citation": "src/app/api/restaurant/[id]/route.ts:196-225"}], "unavailable_reason": null},
+    {"surface": "authorization", "state": "NOT-APPLICABLE", "evidence": [{"class": "STATIC", "citation": "src/app/api/restaurant/[id]/route.ts:196-225"}], "unavailable_reason": null},
+    {"surface": "untrusted-input", "state": "REVIEWED", "evidence": [{"class": "STATIC", "citation": "src/adapters/storage/supabase-storage.ts:117-180"}, {"class": "COMMAND", "citation": "docs/security-reviews/TER-024-storage-path-validation-evidence.md:19-21"}], "unavailable_reason": null},
+    {"surface": "export", "state": "REVIEWED", "evidence": [{"class": "STATIC", "citation": "docs/runbooks/data-lifecycle-privacy.md:19-27"}], "unavailable_reason": null}
+  ],
+  "findings": [],
+  "verdict": "PASS"
+}
