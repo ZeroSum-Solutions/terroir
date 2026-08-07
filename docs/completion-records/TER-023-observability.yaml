@@ -1,0 +1,25 @@
+spec_id: TER-023
+commit: 1189876
+status: partial
+scope: Truthful deployment configuration, public liveness with readiness state, privacy-safe observability primitives, initial operational metrics, and an alert/runbook contract.
+tests:
+  focused: src/lib/config/runtime.test.ts, src/lib/observability/telemetry.test.ts, src/lib/observability/sentry-scrub.test.ts, src/app/api/health/route.test.ts
+  full: pnpm run test (134 files, 1392 passed); pnpm run test:contracts (6 files, 50 passed)
+  gates: pnpm exec tsc --noEmit; pnpm run lint; pnpm run verify:api-contract; pnpm run verify:feature-ledger; pnpm run snapshot:check; pnpm run downs:check; pnpm run build
+deployment:
+  executed: false
+  validation: pnpm validate:env rejects missing core variables and passed with harmless placeholder values only.
+security:
+  public_health: preserves HTTP 200 liveness and emits names-only degraded details.
+  logging: structured logs redact PII and secret-shaped fields; Sentry removes request, user, context, error-message, and exception-value payloads.
+  secret_scan: project documentation verifier passed with no secret markers.
+evidence:
+  - Railway build command validates core configuration before Next build.
+  - Health reports readiness separately from liveness and never calls billed providers.
+  - Auth failures, scan latency/errors, list generation, and reconciliation emit metric events with safe correlation IDs.
+  - docs/operations/observability.md defines thresholds, required alert payload fields, and incident triage.
+known_limits:
+  - No staging deployment, forced failure drill, dashboard screenshot, or alert-notification delivery was authorized or run.
+  - The repository has no worker or email-delivery provider, so worker and email remain explicitly not_configured; jobs and invitation-delivery metrics have no truthful producer.
+  - Storage remains unknown when the database is reachable because no independent non-billed storage probe exists yet.
+rollback: Revert 1189876 to restore the prior health and observability behavior.
