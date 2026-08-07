@@ -124,6 +124,12 @@ export async function cleanupIsolatedFixture(
     .eq("id", identity.restaurantId);
   if (restaurantError) cleanupErrors.push(restaurantError);
 
+  const { error: secondRestaurantError } = await admin
+    .from("restaurants")
+    .delete()
+    .eq("id", identity.secondRestaurantId);
+  if (secondRestaurantError) cleanupErrors.push(secondRestaurantError);
+
   if (cleanupErrors.length > 0) {
     throw new AggregateError(cleanupErrors, "Unable to clean isolated E2E fixture.");
   }
@@ -240,9 +246,15 @@ async function replaceBootstrapRestaurant(
 
   const { error: restaurantError } = await admin.from("restaurants").insert({
     id: identity.restaurantId,
-    name: `Terroir E2E ${identity.namespace}`,
+    name: `Primary E2E ${identity.namespace}`,
   });
   if (restaurantError) throw restaurantError;
+
+  const { error: secondRestaurantError } = await admin.from("restaurants").insert({
+    id: identity.secondRestaurantId,
+    name: `Second E2E ${identity.namespace}`,
+  });
+  if (secondRestaurantError) throw secondRestaurantError;
 
   const { error: newMembershipError } = await admin.from("memberships").insert({
     restaurant_id: identity.restaurantId,
@@ -250,48 +262,99 @@ async function replaceBootstrapRestaurant(
     user_id: userId,
   });
   if (newMembershipError) throw newMembershipError;
+
+  const { error: secondMembershipError } = await admin.from("memberships").insert({
+    restaurant_id: identity.secondRestaurantId,
+    role: "manager",
+    user_id: userId,
+  });
+  if (secondMembershipError) throw secondMembershipError;
 }
 
 async function seedRestaurantData(
   admin: AdminClient,
   identity: FixtureIdentity,
 ): Promise<void> {
+  await seedOneRestaurant(admin, {
+    inventoryId: identity.inventoryId,
+    listId: identity.listId,
+    listLabel: `Primary List ${identity.namespace}`,
+    quantity: 3,
+    restaurantId: identity.restaurantId,
+    sectionId: identity.sectionId,
+    slug: `e2e-primary-${identity.namespace}`,
+    unitCost: 20,
+    wineId: identity.wineId,
+    wineLabel: `Primary Cuvee ${identity.namespace}`,
+    wineListItemId: identity.wineListItemId,
+  });
+  await seedOneRestaurant(admin, {
+    inventoryId: identity.secondInventoryId,
+    listId: identity.secondListId,
+    listLabel: `Second List ${identity.namespace}`,
+    quantity: 7,
+    restaurantId: identity.secondRestaurantId,
+    sectionId: identity.secondSectionId,
+    slug: `e2e-second-${identity.namespace}`,
+    unitCost: 30,
+    wineId: identity.secondWineId,
+    wineLabel: `Second Cuvee ${identity.namespace}`,
+    wineListItemId: identity.secondWineListItemId,
+  });
+}
+
+async function seedOneRestaurant(
+  admin: AdminClient,
+  fixture: {
+    inventoryId: string;
+    listId: string;
+    listLabel: string;
+    quantity: number;
+    restaurantId: string;
+    sectionId: string;
+    slug: string;
+    unitCost: number;
+    wineId: string;
+    wineLabel: string;
+    wineListItemId: string;
+  },
+): Promise<void> {
   const { error: wineError } = await admin.from("wines").insert({
-      id: identity.wineId,
-      country: "France",
-      name: `Isolation Cuvee ${identity.namespace}`,
-      producer: "Terroir E2E",
-      region: "Champagne",
-      restaurant_id: identity.restaurantId,
-      size_ml: 750,
-      vintage: 2020,
-    });
+    id: fixture.wineId,
+    country: "France",
+    name: fixture.wineLabel,
+    producer: "Terroir E2E",
+    region: "Champagne",
+    restaurant_id: fixture.restaurantId,
+    size_ml: 750,
+    vintage: 2020,
+  });
   if (wineError) throw wineError;
 
   const { error: inventoryError } = await admin.from("inventory_items").insert({
-      id: identity.inventoryId,
-      added_via: "manual",
-      quantity: 3,
-      restaurant_id: identity.restaurantId,
-      unit_cost: 20,
-      wine_id: identity.wineId,
-    });
+    id: fixture.inventoryId,
+    added_via: "manual",
+    quantity: fixture.quantity,
+    restaurant_id: fixture.restaurantId,
+    unit_cost: fixture.unitCost,
+    wine_id: fixture.wineId,
+  });
   if (inventoryError) throw inventoryError;
 
   const { error: listError } = await admin.from("wine_lists").insert({
-      id: identity.listId,
-      is_published: true,
-      name: `E2E By the Glass ${identity.namespace}`,
-      restaurant_id: identity.restaurantId,
-      slug: `e2e-${identity.namespace}`,
-    });
+    id: fixture.listId,
+    is_published: true,
+    name: fixture.listLabel,
+    restaurant_id: fixture.restaurantId,
+    slug: fixture.slug,
+  });
   if (listError) throw listError;
 
   const { error: sectionError } = await admin.from("wine_list_sections").insert({
-    id: identity.sectionId,
+    id: fixture.sectionId,
     name: "By the Glass",
     position: 0,
-    wine_list_id: identity.listId,
+    wine_list_id: fixture.listId,
   });
   if (sectionError) throw sectionError;
 
@@ -299,11 +362,11 @@ async function seedRestaurantData(
     bottle_price: 80,
     glass_pour_ml: 150,
     glass_price: 18,
-    id: identity.wineListItemId,
+    id: fixture.wineListItemId,
     position: 0,
     pour_size_mode: "fixed",
-    section_id: identity.sectionId,
-    wine_id: identity.wineId,
+    section_id: fixture.sectionId,
+    wine_id: fixture.wineId,
   });
   if (itemError) throw itemError;
 }

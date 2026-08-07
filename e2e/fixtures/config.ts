@@ -28,6 +28,12 @@ export type FixtureIdentity = {
   listId: string;
   namespace: string;
   restaurantId: string;
+  secondInventoryId: string;
+  secondListId: string;
+  secondRestaurantId: string;
+  secondSectionId: string;
+  secondWineId: string;
+  secondWineListItemId: string;
   sectionId: string;
   storagePath: string;
   wineId: string;
@@ -176,6 +182,12 @@ export function buildFixtureIdentity(
     listId: uuidFromSeed(`${seed}:list`),
     namespace,
     restaurantId,
+    secondInventoryId: uuidFromSeed(`${seed}:second-inventory`),
+    secondListId: uuidFromSeed(`${seed}:second-list`),
+    secondRestaurantId: uuidFromSeed(`${seed}:second-restaurant`),
+    secondSectionId: uuidFromSeed(`${seed}:second-section`),
+    secondWineId: uuidFromSeed(`${seed}:second-wine`),
+    secondWineListItemId: uuidFromSeed(`${seed}:second-list-item`),
     sectionId: uuidFromSeed(`${seed}:section`),
     storagePath: `${restaurantId}/${wineId}/fixture-${namespace}.webp`,
     wineId,

@@ -89,8 +89,20 @@ describe("fixture identity isolation", () => {
 
     expect(new Set(identities.map((value) => value.namespace))).toHaveLength(3);
     expect(new Set(identities.map((value) => value.restaurantId))).toHaveLength(3);
+    expect(
+      new Set(identities.map((value) => value.secondRestaurantId)),
+    ).toHaveLength(3);
     expect(new Set(identities.map((value) => value.email))).toHaveLength(3);
-    expect(identities.every((value) => value.storagePath.startsWith(`${value.restaurantId}/`))).toBe(true);
+    expect(
+      identities.every(
+        (value) => value.restaurantId !== value.secondRestaurantId,
+      ),
+    ).toBe(true);
+    expect(
+      identities.every((value) =>
+        value.storagePath.startsWith(`${value.restaurantId}/`),
+      ),
+    ).toBe(true);
   });
 });
 

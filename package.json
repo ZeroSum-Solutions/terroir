@@ -15,7 +15,7 @@
     "test": "vitest run",
     "test:staging": "node scripts/test-staging.mjs",
     "test:contracts": "vitest run src/test/contracts src/lib/api/errors.contract.test.ts src/lib/api/validation.contract.test.ts src/lib/api/handler.contract.test.ts src/lib/auth/api-authorization.test.ts src/lib/api-route-inventory/verify-api-contract.test.ts",
-    "test:e2e:isolated": "playwright test e2e/pour-flow.test.ts",
+    "test:e2e:isolated": "playwright test e2e/pour-flow.test.ts e2e/restaurant-switch.test.ts",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:ui-crawl": "TERROIR_UI_CRAWL=1 playwright test e2e/ui-control-crawl.test.ts",

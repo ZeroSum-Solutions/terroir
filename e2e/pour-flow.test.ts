@@ -18,7 +18,10 @@ test.describe("isolated pour → reconcile", () => {
     await page.goto("/cellar", { waitUntil: "networkidle" });
     await expect(page).not.toHaveURL(/\/login/);
 
-    const cardLabel = new RegExp(isolatedFixture.namespace, "i");
+    const cardLabel = new RegExp(
+      `Primary Cuvee ${isolatedFixture.namespace}`,
+      "i",
+    );
     const row = page.locator("li").filter({ hasText: cardLabel }).first();
     await expect(row).toBeVisible();
     const startText = (await row.textContent()) ?? "";
