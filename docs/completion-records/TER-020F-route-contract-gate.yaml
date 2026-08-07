@@ -1,0 +1,35 @@
+spec_id: TER-020F
+parent_spec: TER-020
+commit: d2254cb79a59161bad39d0a6f6dde6fcc9074ce6
+status: complete
+requirements_closed:
+  - Final route-contract tests derive their operation coverage from docs/api-route-inventory.json.
+  - The API verifier rejects source-discovered handlers without an API_AUTHORIZATION registration.
+  - The API verifier rejects stale authorization entries and stale or missing planned-operation registrations.
+  - Contract tests verify method/path identity, authorization/capability alignment, active-membership tenant guards where mechanically inspectable, and the explicit health and dev-login exceptions.
+scope: Generate final contract tests and reject unregistered routes.
+tests:
+  targeted: pnpm exec vitest run src/lib/api-route-inventory/verify-api-contract.test.ts src/lib/auth/api-authorization.test.ts (2 files, 24 passed)
+  contracts: pnpm run test:contracts (8 files, 74 passed)
+  full: pnpm run test (131 files, 1390 passed)
+  api_contract: pnpm run verify:api-contract (87 discovered operations, 5 planned promises, 87 classifications)
+  feature_ledger: pnpm run verify:feature-ledger (269 features match app_spec.txt)
+  typecheck: pnpm exec tsc --noEmit (passed)
+  lint: pnpm run lint (passed)
+  build: pnpm run build (passed)
+  snapshot: pnpm run snapshot:check (73 migrations; no schema snapshot diff)
+  down_migrations: pnpm run downs:check (62 forward migrations paired)
+  diff: git diff --check (passed)
+staging:
+  url: not-applicable
+  result: not-run; no deployment was authorized for this isolated contract slice.
+data_change:
+  migration: none
+  backup_verified: not-applicable
+security:
+  tenant_check: pass; membership contract entries must use a membership/capability/role guard, while the explicit restaurant-ID exceptions must authenticate before their route-local tenant check.
+  secret_scan: pass; reviewed implementation diff contains no credentials.
+known_limits:
+  - This leaf does not claim that TER-020E's five remaining planned compatibility handlers are implemented.
+  - Static handler inspection verifies guard selection and active-membership resolution, not database query execution.
+rollback: Revert this leaf's commit to remove the registration gate and final route-contract test command additions.
