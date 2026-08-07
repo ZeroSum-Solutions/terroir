@@ -18,7 +18,9 @@ setting before production use.
   `0075` and `0076`; a missing bucket is a failed privacy rollout.
 - A tenant deletion removes both bucket prefixes before the database cascade.
   It fails before the database deletion if Storage cleanup fails. A retry is
-  safe because the removal calls are idempotent.
+  safe because the removal calls are idempotent. Migration `0079` orders pour
+  events, list items, and receipt inventory ahead of the root cascade so their
+  individual-wine history guards cannot strand the tenant database graph.
 - A wine deletion removes the associated image variants after its atomic
   database deletion. If Storage is temporarily unavailable, the API returns a
   failure and a keyed retry repeats only the cleanup.
@@ -90,11 +92,12 @@ credentials, raw provider responses, tokens, or object paths.
 
 ## Rollback boundary
 
-`0075_privacy_storage_lifecycle.down.sql` and
-`0076_private_media_bucket_provisioning.down.sql` are intentionally
-fail-closed, non-executable rollback records. Reverting or deleting the private
-buckets, or broadening their old prefix-only policies, would re-expose or lose
-tenant objects. If application code must roll back, keep the private paths and
-signed-URL contract, rehearse the target revision against a restored staging
-backup, and introduce any necessary compatibility change as a new forward
-migration.
+`0075_privacy_storage_lifecycle.down.sql`,
+`0076_private_media_bucket_provisioning.down.sql`, and
+`0079_restaurant_delete_dependents.down.sql` are intentionally fail-closed,
+non-executable rollback records. Reverting or deleting the private buckets,
+broadening their old prefix-only policies, or dropping the dependency-order
+trigger would re-expose, lose, or strand tenant data. If application code must
+roll back, keep the private paths, signed-URL contract, and deletion trigger;
+rehearse the target revision against a restored staging backup, and introduce
+any necessary compatibility change as a new forward migration.

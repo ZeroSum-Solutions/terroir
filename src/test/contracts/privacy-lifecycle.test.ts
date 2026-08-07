@@ -17,6 +17,14 @@ const bucketRepairRollback = readFileSync(
   "supabase/migrations/down/0076_private_media_bucket_provisioning.down.sql",
   "utf8",
 );
+const restaurantDeleteDependents = readFileSync(
+  "supabase/migrations/0079_restaurant_delete_dependents.sql",
+  "utf8",
+);
+const restaurantDeleteDependentsRollback = readFileSync(
+  "supabase/migrations/down/0079_restaurant_delete_dependents.down.sql",
+  "utf8",
+);
 const runbook = readFileSync("docs/runbooks/data-lifecycle-privacy.md", "utf8");
 const restaurantRoute = readFileSync(
   "src/app/api/restaurant/[id]/route.ts",
@@ -80,6 +88,28 @@ describe("TER-024 privacy lifecycle contracts", () => {
     expect(restaurantRoute).toContain("Failed to remove restaurant storage.");
     expect(cellarRoute).toContain("removeWineImageObjects");
     expect(cellarRoute).toContain("requiresWineImageCleanup(result)");
+  });
+
+  it("orders restrictive tenant rows ahead of the restaurant cascade", () => {
+    expect(restaurantDeleteDependents).toContain(
+      "create or replace function public.prepare_restaurant_deletion()",
+    );
+    expect(restaurantDeleteDependents).toContain(
+      "before delete on public.restaurants",
+    );
+    expect(restaurantDeleteDependents).toContain(
+      "delete from public.pour_events",
+    );
+    expect(restaurantDeleteDependents).toContain(
+      "delete from public.wine_list_items",
+    );
+    expect(restaurantDeleteDependents).toContain(
+      "delete from public.inventory_items",
+    );
+    expect(restaurantDeleteDependentsRollback).toContain(
+      "no executable reverse",
+    );
+    expect(restaurantDeleteDependentsRollback).not.toContain("drop trigger");
   });
 
   it("documents ownership, retention, provider limits, and fail-closed rollback", () => {

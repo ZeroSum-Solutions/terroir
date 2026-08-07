@@ -1,0 +1,4 @@
+-- Fail closed: there is no executable reverse for 0079.
+-- Dropping the trigger would restore a known tenant-deletion failure and leave
+-- governed database rows after Storage cleanup. Roll forward with a corrected
+-- dependency-order migration instead.
