@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireCapability } from "@/lib/api/auth";
 import { withApiHandler } from "@/lib/api/handler";
+import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { fetchRetailPrices } from "@/lib/wine-intelligence/wine-searcher";
 
 export const runtime = "nodejs";
@@ -24,7 +25,7 @@ const REFRESH_BATCH_LIMIT = 50;
 const REFRESH_CONCURRENCY = 5;
 const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
 
-export async function POST() {
+export async function POST(request: Request) {
   return withApiHandler(async () => {
     const auth = await requireCapability("wine:manage", {
       rateLimit: "expensive",
@@ -32,13 +33,22 @@ export async function POST() {
     if (auth instanceof NextResponse) return auth;
     const { supabase, restaurantId } = auth;
 
+    return idempotentMutationResponse<unknown>({
+      request,
+      supabase,
+      restaurantId,
+      operationId: "api:POST:/api/wines/refresh-retail-batch",
+      payload: {},
+      releaseOnError: false,
+      handler: async () => {
+
     // Audit-finding M1: surface configuration status so the
     // RefreshRetailButton can stop reporting "0 wines refreshed" silently
     // when the cause is just a missing env var. Owner-only message; staff
     // can't even reach this endpoint via role guard above.
     const apiKeyConfigured = !!process.env.WINE_SEARCHER_API_KEY;
     if (!apiKeyConfigured) {
-      return NextResponse.json({
+      return success({
         total: 0,
         refreshed: 0,
         skipped: 0,
@@ -74,7 +84,7 @@ export async function POST() {
     );
 
     if (eligible.length === 0) {
-      return NextResponse.json({
+      return success({
         total: 0,
         refreshed: 0,
         skipped: 0,
@@ -186,7 +196,7 @@ export async function POST() {
       refreshed += 1;
     }
 
-    return NextResponse.json({
+    return success({
       total: eligible.length,
       refreshed,
       skipped,
@@ -196,5 +206,11 @@ export async function POST() {
       hasMore: eligible.length >= REFRESH_BATCH_LIMIT && refreshed > 0,
       apiKeyConfigured: true,
     });
+      },
+    });
   });
+}
+
+function success<T>(body: T) {
+  return { status: 200, body };
 }

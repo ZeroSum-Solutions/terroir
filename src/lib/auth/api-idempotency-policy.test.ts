@@ -31,10 +31,6 @@ const EXPECTED_PENDING_DISCOVERED = [
   "api:PATCH:/api/wines/{param}",
   "api:PATCH:/api/wines/{param}/availability",
   "api:POST:/api/wines/create-from-lwin",
-  "api:POST:/api/wines/enrich",
-  "api:POST:/api/wines/refresh-retail-batch",
-  "api:POST:/api/wines/{param}/enrich",
-  "api:POST:/api/wines/{param}/refresh-retail",
 ] as const satisfies readonly ApiOperationId[];
 
 const EXPECTED_PLANNED = [
@@ -63,7 +59,7 @@ describe("API idempotency implementation ledger", () => {
       (operationId) => !discovered.has(operationId),
     );
 
-    expect(implemented).toHaveLength(49);
+    expect(implemented).toHaveLength(53);
     expect(pending).toEqual([...EXPECTED_PENDING_DISCOVERED].sort());
     expect(planned).toEqual([...EXPECTED_PLANNED].sort());
     expect(

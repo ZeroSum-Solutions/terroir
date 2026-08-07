@@ -7,6 +7,38 @@ function source(path: string): string {
 }
 
 describe("high-risk idempotency clients", () => {
+  it("keeps enrichment and retail refresh retries bound to their exact command", () => {
+    const enrichButton = source(
+      "src/app/(app)/insights/enrich-cellar-button.tsx",
+    );
+    const refreshButton = source(
+      "src/app/(app)/insights/refresh-retail-button.tsx",
+    );
+    const drawer = source(
+      "src/app/(app)/cellar/wine-detail-drawer.tsx",
+    );
+
+    expect(enrichButton).toContain("createIdempotentCommandStore");
+    expect(enrichButton).toContain("createSessionCommandPersistence");
+    expect(enrichButton).toContain('url: "/api/wines/enrich"');
+    expect(enrichButton).toContain('slot: "batch"');
+    expect(enrichButton).not.toContain('fetch("/api/wines/enrich"');
+
+    expect(refreshButton).toContain("createIdempotentCommandStore");
+    expect(refreshButton).toContain("createSessionCommandPersistence");
+    expect(refreshButton).toContain('url: "/api/wines/refresh-retail-batch"');
+    expect(refreshButton).toContain('slot: "batch"');
+    expect(refreshButton).not.toContain(
+      'fetch("/api/wines/refresh-retail-batch"',
+    );
+
+    expect(drawer).toContain("createIdempotentCommandStore");
+    expect(drawer).toContain('"terroir:wine-enrichment"');
+    expect(drawer).toContain("slot: `enrich:${row.wine_id}`");
+    expect(drawer).toContain("url: `/api/wines/${row.wine_id}/enrich`");
+    expect(drawer).not.toContain('fetch(`/api/wines/${row.wine_id}/enrich`');
+  });
+
   it("binds scanner commands to canonical JSON or exact binary bytes", () => {
     const scanner = source("src/app/(app)/scan/scanner.tsx");
 

@@ -775,6 +775,58 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       ],
     },
   },
+  "api:POST:/api/wines/enrich": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "none",
+      body: "none",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/insights/enrich-cellar-button.tsx"],
+    },
+  },
+  "api:POST:/api/wines/refresh-retail-batch": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "none",
+      body: "none",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/insights/refresh-retail-button.tsx"],
+    },
+  },
+  "api:POST:/api/wines/{param}/enrich": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "session-persistent",
+      sources: ["src/app/(app)/cellar/wine-detail-drawer.tsx"],
+    },
+  },
+  "api:POST:/api/wines/{param}/refresh-retail": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "no-first-party-caller",
+      sources: [],
+    },
+  },
   "api:POST:/api/wines/{param}/dismiss-pricing-alert": {
     boundary: { kind: "generic-wrapper", count: 1 },
     identity: {

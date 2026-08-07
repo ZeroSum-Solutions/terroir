@@ -4,6 +4,10 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, Loader2 } from "lucide-react";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+} from "@/lib/api/idempotency-client";
 import { cn } from "@/lib/utils";
 
 /**
@@ -37,6 +41,9 @@ type EnrichResponse = {
 };
 
 const MAX_LOOP_ITERATIONS = 20; // safety cap — 20 × 2050 = 41k wines max
+const enrichCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence("terroir:wine-enrichment"),
+});
 
 export function EnrichCellarButton() {
   const router = useRouter();
@@ -61,14 +68,18 @@ export function EnrichCellarButton() {
 
     try {
       for (let i = 0; i < MAX_LOOP_ITERATIONS; i++) {
-        const res = await fetch("/api/wines/enrich", { method: "POST" });
-        if (!res.ok) {
-          const payload = await res.json().catch(() => null);
+        const { response, data } = await enrichCommands.json<EnrichResponse>({
+          slot: "batch",
+          url: "/api/wines/enrich",
+          method: "POST",
+          json: {},
+        });
+        if (!response.ok) {
           throw new Error(
-            readApiError(payload, `Enrich failed (${res.status}).`).message,
+            readApiError(data, `Enrich failed (${response.status}).`).message,
           );
         }
-        const body = (await res.json()) as EnrichResponse;
+        const body = data;
         totalEnriched += body.enriched;
         totalClaudeEnriched += body.claudeEnrichedCount;
         totalLwinMatched += body.lwinMatched;

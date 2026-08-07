@@ -1,15 +1,17 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/api/auth";
-import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseParams } from "@/lib/api/validation";
 import { WineIdParamsSchema } from "@/lib/api/wine-mutation-schemas";
 import { fetchRetailPrices } from "@/lib/wine-intelligence/wine-searcher";
+import type { Database } from "@/types/database";
 
 export const runtime = "nodejs";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   return withApiHandler(async () => {
@@ -23,6 +25,27 @@ export async function POST(
     if (!parsedParams.ok) return parsedParams.response;
     const { id } = parsedParams.data;
 
+    return idempotentMutationResponse<unknown>({
+      request,
+      supabase,
+      restaurantId,
+      operationId: "api:POST:/api/wines/{param}/refresh-retail",
+      payload: { id },
+      releaseOnError: false,
+      handler: () => refreshRetailResponse({ supabase, restaurantId, id }),
+    });
+  });
+}
+
+async function refreshRetailResponse({
+  supabase,
+  restaurantId,
+  id,
+}: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  id: string;
+}) {
     const { data: wine, error: fetchError } = await supabase
       .from("wines")
       .select("id, lwin_id")
@@ -30,16 +53,19 @@ export async function POST(
       .eq("restaurant_id", restaurantId)
       .maybeSingle();
     if (fetchError) throw fetchError;
-    if (!wine) return Errors.notFound("Wine");
+    if (!wine) return errorResult("not_found", "Wine not found.", 404);
 
     if (!wine.lwin_id) {
-      return NextResponse.json({
-        wineId: wine.id,
-        refreshed: false,
-        reason: "no_lwin",
-        message:
-          "This wine isn't matched to LWIN yet. Run cellar enrichment to attempt a match.",
-      });
+      return {
+        status: 200,
+        body: {
+          wineId: wine.id,
+          refreshed: false,
+          reason: "no_lwin",
+          message:
+            "This wine isn't matched to LWIN yet. Run cellar enrichment to attempt a match.",
+        },
+      };
     }
 
     const { data: inventory, error: inventoryError } = await supabase
@@ -67,12 +93,15 @@ export async function POST(
       invoiceCost,
     });
     if (!result) {
-      return NextResponse.json({
-        wineId: wine.id,
-        refreshed: false,
-        reason: "unavailable",
-        message: "Pricing data unavailable for this wine. Try again later.",
-      });
+      return {
+        status: 200,
+        body: {
+          wineId: wine.id,
+          refreshed: false,
+          reason: "unavailable",
+          message: "Pricing data unavailable for this wine. Try again later.",
+        },
+      };
     }
 
     const refreshedAt = result.refreshedAt.toISOString();
@@ -90,18 +119,24 @@ export async function POST(
       .select("id")
       .maybeSingle();
     if (error) throw error;
-    if (!updated) return Errors.notFound("Wine");
+    if (!updated) return errorResult("not_found", "Wine not found.", 404);
 
-    return NextResponse.json({
-      wineId: wine.id,
-      refreshed: true,
-      retail: {
-        min: result.retailMin,
-        max: result.retailMax,
-        median: result.retailMedian,
-        retailerCount: result.retailerCount,
-        refreshedAt,
+    return {
+      status: 200,
+      body: {
+        wineId: wine.id,
+        refreshed: true,
+        retail: {
+          min: result.retailMin,
+          max: result.retailMax,
+          median: result.retailMedian,
+          retailerCount: result.retailerCount,
+          refreshedAt,
+        },
       },
-    });
-  });
+    };
+}
+
+function errorResult(code: string, message: string, status: number) {
+  return { status, body: { error: { code, message } } };
 }

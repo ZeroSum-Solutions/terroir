@@ -1,17 +1,18 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/api/auth";
-import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseParams } from "@/lib/api/validation";
 import { WineIdParamsSchema } from "@/lib/api/wine-mutation-schemas";
 import { enrichWine } from "@/lib/wine-intelligence/enrich";
 import { enrichWineWithClaude } from "@/lib/wine-intelligence/enrich-claude";
-import type { Json } from "@/types/database";
+import type { Database, Json } from "@/types/database";
 
 export const runtime = "nodejs";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   return withApiHandler(async () => {
@@ -25,6 +26,27 @@ export async function POST(
     if (!parsedParams.ok) return parsedParams.response;
     const { id } = parsedParams.data;
 
+    return idempotentMutationResponse<unknown>({
+      request,
+      supabase,
+      restaurantId,
+      operationId: "api:POST:/api/wines/{param}/enrich",
+      payload: { id },
+      releaseOnError: false,
+      handler: () => enrichWineResponse({ supabase, restaurantId, id }),
+    });
+  });
+}
+
+async function enrichWineResponse({
+  supabase,
+  restaurantId,
+  id,
+}: {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  id: string;
+}) {
     const { data: wine, error: fetchError } = await supabase
       .from("wines")
       .select(
@@ -34,7 +56,7 @@ export async function POST(
       .eq("restaurant_id", restaurantId)
       .maybeSingle();
     if (fetchError) throw fetchError;
-    if (!wine) return Errors.notFound("Wine");
+    if (!wine) return errorResult("not_found", "Wine not found.", 404);
 
     const ruleResult = enrichWine({
       varietal: wine.varietal,
@@ -117,12 +139,15 @@ export async function POST(
     }
 
     if (source == null) {
-      return NextResponse.json({
-        wineId: wine.id,
-        source: null,
-        message:
-          "Couldn't infer drink window for this wine. Try editing producer/varietal/vintage and retry.",
-      });
+      return {
+        status: 200,
+        body: {
+          wineId: wine.id,
+          source: null,
+          message:
+            "Couldn't infer drink window for this wine. Try editing producer/varietal/vintage and retry.",
+        },
+      };
     }
 
     const enrichmentFields: string[] = [];
@@ -167,12 +192,20 @@ export async function POST(
       },
     );
     if (error) throw error;
-    if (updatedCount !== 1) return Errors.notFound("Wine");
+    if (updatedCount !== 1) {
+      return errorResult("not_found", "Wine not found.", 404);
+    }
 
-    return NextResponse.json({
-      wineId: wine.id,
-      source,
-      enrichment: payload,
-    });
-  });
+    return {
+      status: 200,
+      body: {
+        wineId: wine.id,
+        source,
+        enrichment: payload,
+      },
+    };
+}
+
+function errorResult(code: string, message: string, status: number) {
+  return { status, body: { error: { code, message } } };
 }

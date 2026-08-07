@@ -96,12 +96,19 @@ function watchedParams(id = VALID_ID) {
   return { params, touches: () => touches };
 }
 
+function keyedRequest(path: string) {
+  return new NextRequest(`http://localhost${path}`, {
+    method: "POST",
+    headers: { "Idempotency-Key": "11111111-1111-4111-8111-111111111111" },
+  });
+}
+
 const dynamicOperations = [
   {
     name: "POST single enrichment",
     auth: "role",
     call: (params: Promise<{ id: string }>) =>
-      ENRICH_ONE({} as Request, { params }),
+      ENRICH_ONE(request("/api/wines/id/enrich", "POST"), { params }),
   },
   {
     name: "POST image",
@@ -119,7 +126,7 @@ const dynamicOperations = [
     name: "POST single retail refresh",
     auth: "role",
     call: (params: Promise<{ id: string }>) =>
-      REFRESH_ONE({} as Request, { params }),
+      REFRESH_ONE(request("/api/wines/id/refresh-retail", "POST"), { params }),
   },
 ] as const;
 
@@ -209,7 +216,7 @@ describe("wine provider mutation request boundaries", () => {
       ),
     );
 
-    const response = await ENRICH_BATCH();
+    const response = await ENRICH_BATCH(request("/api/wines/enrich", "POST"));
 
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({
@@ -227,7 +234,7 @@ describe("wine provider mutation request boundaries", () => {
       new Error("provider secret"),
     );
 
-    const response = await ENRICH_BATCH();
+    const response = await ENRICH_BATCH(request("/api/wines/enrich", "POST"));
 
     expect(response.status).toBe(500);
     expect((await response.json()).error.message).toBe(
@@ -246,11 +253,67 @@ describe("wine provider mutation request boundaries", () => {
     });
     vi.stubEnv("WINE_SEARCHER_API_KEY", "configured-for-test");
 
-    const response = await REFRESH_BATCH();
+    const response = await REFRESH_BATCH(
+      request("/api/wines/refresh-retail-batch", "POST"),
+    );
 
     expect(response.status).toBe(500);
     expect((await response.json()).error.message).toBe(
       "Internal server error.",
     );
+  });
+
+  it.each([
+    {
+      name: "batch enrichment",
+      call: () => ENRICH_BATCH(keyedRequest("/api/wines/enrich")),
+      provider: providers.enrichRestaurantBatch,
+    },
+    {
+      name: "single enrichment",
+      call: () =>
+        ENRICH_ONE(keyedRequest(`/api/wines/${VALID_ID}/enrich`), {
+          params: Promise.resolve({ id: VALID_ID }),
+        }),
+      provider: providers.enrichWine,
+    },
+    {
+      name: "batch retail refresh",
+      call: () =>
+        REFRESH_BATCH(keyedRequest("/api/wines/refresh-retail-batch")),
+      provider: providers.fetchRetailPrices,
+    },
+    {
+      name: "single retail refresh",
+      call: () =>
+        REFRESH_ONE(keyedRequest(`/api/wines/${VALID_ID}/refresh-retail`), {
+          params: Promise.resolve({ id: VALID_ID }),
+        }),
+      provider: providers.fetchRetailPrices,
+    },
+  ])("POST $name replays a completed command before provider work", async ({ call, provider }) => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          outcome: "replay",
+          response_status: 200,
+          response_headers: {},
+          response_body: { replayed: true },
+        },
+      ],
+      error: null,
+    });
+    auth.requireRole.mockResolvedValue({
+      supabase: { from: vi.fn(), rpc },
+      restaurantId: "22222222-2222-4222-8222-222222222222",
+      role: "owner",
+    });
+
+    const response = await call();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await response.json()).toEqual({ replayed: true });
+    expect(provider).not.toHaveBeenCalled();
   });
 });

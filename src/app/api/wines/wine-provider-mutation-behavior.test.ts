@@ -188,7 +188,7 @@ describe("wine provider mutation behavior", () => {
     });
 
     const response = await ENRICH_ONE(
-      {} as Request,
+      request(`/api/wines/${WINE_ID}/enrich`, {}),
       { params: Promise.resolve({ id: WINE_ID }) },
     );
 
@@ -237,7 +237,7 @@ describe("wine provider mutation behavior", () => {
     });
 
     const response = await ENRICH_ONE(
-      {} as Request,
+      request(`/api/wines/${WINE_ID}/enrich`, {}),
       { params: Promise.resolve({ id: WINE_ID }) },
     );
 
@@ -253,7 +253,7 @@ describe("wine provider mutation behavior", () => {
     ]);
 
     const response = await ENRICH_ONE(
-      {} as Request,
+      request(`/api/wines/${WINE_ID}/enrich`, {}),
       { params: Promise.resolve({ id: WINE_ID }) },
     );
 
@@ -273,7 +273,7 @@ describe("wine provider mutation behavior", () => {
     ]);
 
     const response = await REFRESH_ONE(
-      {} as Request,
+      request(`/api/wines/${WINE_ID}/refresh-retail`, {}),
       { params: Promise.resolve({ id: WINE_ID }) },
     );
 
@@ -303,7 +303,7 @@ describe("wine provider mutation behavior", () => {
     });
 
     const response = await REFRESH_ONE(
-      {} as Request,
+      request(`/api/wines/${WINE_ID}/refresh-retail`, {}),
       { params: Promise.resolve({ id: WINE_ID }) },
     );
 
@@ -329,7 +329,7 @@ describe("wine provider mutation behavior", () => {
     });
 
     const response = await REFRESH_ONE(
-      {} as Request,
+      request(`/api/wines/${WINE_ID}/refresh-retail`, {}),
       { params: Promise.resolve({ id: WINE_ID }) },
     );
 
@@ -473,7 +473,9 @@ describe("wine provider mutation behavior", () => {
       },
     ]);
 
-    const response = await REFRESH_BATCH();
+    const response = await REFRESH_BATCH(
+      request("/api/wines/refresh-retail-batch", {}),
+    );
 
     expect(response.status).toBe(500);
     expect(providers.fetchRetailPrices).not.toHaveBeenCalled();
@@ -521,7 +523,9 @@ describe("wine provider mutation behavior", () => {
       })
       .mockResolvedValueOnce(null);
 
-    const response = await REFRESH_BATCH();
+    const response = await REFRESH_BATCH(
+      request("/api/wines/refresh-retail-batch", {}),
+    );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -553,7 +557,9 @@ describe("wine provider mutation behavior", () => {
       refreshedAt: new Date("2026-07-24T12:00:00.000Z"),
     });
 
-    const response = await REFRESH_BATCH();
+    const response = await REFRESH_BATCH(
+      request("/api/wines/refresh-retail-batch", {}),
+    );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({

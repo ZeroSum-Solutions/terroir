@@ -4,6 +4,10 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { DollarSign, Loader2 } from "lucide-react";
 import { readApiError } from "@/lib/api/client-error";
+import {
+  createIdempotentCommandStore,
+  createSessionCommandPersistence,
+} from "@/lib/api/idempotency-client";
 import { cn } from "@/lib/utils";
 
 /**
@@ -37,6 +41,9 @@ type RefreshResponse = {
 };
 
 const MAX_LOOP_ITERATIONS = 20; // safety cap — 20 × 50 = 1000 wines max
+const retailRefreshCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence("terroir:retail-refresh"),
+});
 
 export function RefreshRetailButton() {
   const router = useRouter();
@@ -59,14 +66,19 @@ export function RefreshRetailButton() {
 
     try {
       for (let i = 0; i < MAX_LOOP_ITERATIONS; i++) {
-        const res = await fetch("/api/wines/refresh-retail-batch", { method: "POST" });
-        if (!res.ok) {
-          const payload = await res.json().catch(() => null);
+        const { response, data } =
+          await retailRefreshCommands.json<RefreshResponse>({
+            slot: "batch",
+            url: "/api/wines/refresh-retail-batch",
+            method: "POST",
+            json: {},
+          });
+        if (!response.ok) {
           throw new Error(
-            readApiError(payload, `Refresh failed (${res.status}).`).message,
+            readApiError(data, `Refresh failed (${response.status}).`).message,
           );
         }
-        const body = (await res.json()) as RefreshResponse;
+        const body = data;
         // Audit-finding M1: when the API key isn't configured, the
         // route returns a structured signal so we can show a real
         // "configure WINE_SEARCHER_API_KEY" message instead of a

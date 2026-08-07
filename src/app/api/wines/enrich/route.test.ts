@@ -46,6 +46,10 @@ vi.mock("@/lib/wine-intelligence/enrich-claude", () => ({
 
 const { POST } = await import("./route");
 
+function request() {
+  return new Request("http://localhost/api/wines/enrich", { method: "POST" });
+}
+
 type Wine = {
   id: string;
   producer: string;
@@ -126,7 +130,7 @@ describe("POST /api/wines/enrich", () => {
     mockRequireCapability.mockResolvedValue(
       NextResponse.json({ error: "Unauthorized." }, { status: 401 }),
     );
-    const res = await POST();
+    const res = await POST(request());
     expect(res.status).toBe(401);
     expect(mockEnrichWine).not.toHaveBeenCalled();
   });
@@ -135,7 +139,7 @@ describe("POST /api/wines/enrich", () => {
     mockRequireCapability.mockResolvedValue(
       NextResponse.json({ error: "Forbidden." }, { status: 403 }),
     );
-    const res = await POST();
+    const res = await POST(request());
     expect(res.status).toBe(403);
     expect(mockEnrichWine).not.toHaveBeenCalled();
     expect(mockEnrichWinesWithClaudeBatch).not.toHaveBeenCalled();
@@ -146,7 +150,7 @@ describe("POST /api/wines/enrich", () => {
       winesResult: { data: null, error: { message: "DB down" } },
     });
     mockRequireCapability.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
-    const res = await POST();
+    const res = await POST(request());
     expect(res.status).toBe(500);
     expect(rpc).not.toHaveBeenCalled();
   });
@@ -176,7 +180,7 @@ describe("POST /api/wines/enrich", () => {
     });
     mockRequireCapability.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
-    const res = await POST();
+    const res = await POST(request());
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.total).toBe(3);
@@ -241,7 +245,7 @@ describe("POST /api/wines/enrich", () => {
     });
     mockRequireCapability.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
-    const res = await POST();
+    const res = await POST(request());
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ruleEnrichedCount).toBe(0);
@@ -306,7 +310,7 @@ describe("POST /api/wines/enrich", () => {
     });
     mockRequireCapability.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
-    const res = await POST();
+    const res = await POST(request());
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ruleEnrichedCount).toBe(1);
@@ -337,7 +341,7 @@ describe("POST /api/wines/enrich", () => {
     });
     mockRequireCapability.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
-    const res = await POST();
+    const res = await POST(request());
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.enriched).toBe(0);
@@ -359,7 +363,7 @@ describe("POST /api/wines/enrich", () => {
     });
     mockRequireCapability.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
-    const res = await POST();
+    const res = await POST(request());
     expect(res.status).toBe(500);
     expect(rpcCalls.filter((c) => c.fn === "enrich_wines_batch")).toHaveLength(1);
     expect(rpcCalls.find((c) => c.fn === "match_lwin_batch")).toBeUndefined();

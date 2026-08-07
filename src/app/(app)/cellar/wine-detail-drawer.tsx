@@ -53,6 +53,9 @@ const deleteCellarWineCommands = createIdempotentCommandStore({
 const wineImageCommands = createIdempotentCommandStore({
   persistence: createSessionCommandPersistence("terroir:wine-image"),
 });
+const enrichmentCommands = createIdempotentCommandStore({
+  persistence: createSessionCommandPersistence("terroir:wine-enrichment"),
+});
 const undoPourSlotsPendingReset = new Set<string>();
 
 function abandonUndoPourSlot(slot: string): void {
@@ -276,22 +279,24 @@ export function WineDetailDrawer({
       setEnrichMsg(null);
       setErrorMsg(null);
       try {
-        const res = await fetch(`/api/wines/${row.wine_id}/enrich`, {
+        const { response, data: payload } = await enrichmentCommands.json<{
+          source?: string | null;
+          message?: string;
+        }>({
+          slot: `enrich:${row.wine_id}`,
+          url: `/api/wines/${row.wine_id}/enrich`,
           method: "POST",
+          json: {},
         });
-        const payload = await res.json().catch(() => null);
-        if (!res.ok) {
+        if (!response.ok) {
           throw new Error(
             readApiError(
               payload,
-              `Enrichment failed (${res.status}).`,
+              `Enrichment failed (${response.status}).`,
             ).message,
           );
         }
-        const result = payload as {
-          source?: string | null;
-          message?: string;
-        } | null;
+        const result = payload;
         if (result?.source == null) {
           setEnrichMsg(result?.message ?? "Could not enrich this wine.");
         } else {
