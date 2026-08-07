@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   RUNTIME_VARIABLES,
   assertDeploymentConfiguration,
-  inspectRuntimeConfiguration,
 } from "./runtime";
 
 const core = {
@@ -34,12 +33,6 @@ describe("runtime configuration", () => {
       core: "configured",
       integrations: { invoice_scanning: "degraded", wine_search: "degraded", email: "not_configured", worker: "not_configured" },
     });
-  });
-
-  it("requires an all-or-nothing emergency auth bypass", () => {
-    const config = inspectRuntimeConfiguration({ ...core, TEMP_AUTH_BYPASS_EMAIL: "operator@example.test" });
-    expect(config.configurationErrors).toEqual(["TEMP_AUTH_BYPASS_* must be configured together or left unset"]);
-    expect(() => assertDeploymentConfiguration({ ...core, TEMP_AUTH_BYPASS_EMAIL: "operator@example.test" })).toThrow("TEMP_AUTH_BYPASS_*");
   });
 
   it("fails on malformed optional values without exposing them", () => {

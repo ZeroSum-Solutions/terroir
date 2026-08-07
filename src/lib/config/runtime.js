@@ -14,10 +14,6 @@ export const RUNTIME_VARIABLES = Object.freeze([
   "ANTHROPIC_API_KEY",
   "AZURE_DOC_INTELLIGENCE_ENDPOINT",
   "AZURE_DOC_INTELLIGENCE_KEY",
-  "DEV_BYPASS_EMAIL",
-  "TEMP_AUTH_BYPASS_EMAIL",
-  "TEMP_AUTH_BYPASS_TOKEN_SHA256",
-  "TEMP_AUTH_BYPASS_EXPIRES_AT",
   "SENTRY_DSN",
   "NEXT_PUBLIC_SENTRY_DSN",
   "SENTRY_AUTH_TOKEN",
@@ -40,10 +36,6 @@ const optionalText = z.preprocess(
 const optionalUrl = z.preprocess(
   emptyToUndefined,
   z.string().trim().url().optional(),
-);
-const optionalEmail = z.preprocess(
-  emptyToUndefined,
-  z.string().trim().email().optional(),
 );
 const optionalRate = z.preprocess(
   (value) => {
@@ -71,13 +63,6 @@ export const runtimeEnvironmentSchema = z.object({
   ANTHROPIC_API_KEY: optionalText,
   AZURE_DOC_INTELLIGENCE_ENDPOINT: optionalUrl,
   AZURE_DOC_INTELLIGENCE_KEY: optionalText,
-  DEV_BYPASS_EMAIL: optionalEmail,
-  TEMP_AUTH_BYPASS_EMAIL: optionalEmail,
-  TEMP_AUTH_BYPASS_TOKEN_SHA256: optionalSha256,
-  TEMP_AUTH_BYPASS_EXPIRES_AT: z.preprocess(
-    emptyToUndefined,
-    z.string().trim().datetime({ offset: true }).optional(),
-  ),
   SENTRY_DSN: optionalUrl,
   NEXT_PUBLIC_SENTRY_DSN: optionalUrl,
   SENTRY_AUTH_TOKEN: optionalText,
@@ -142,20 +127,6 @@ export function inspectRuntimeConfiguration(env = process.env) {
   const configurationErrors = [...invalid]
     .filter((name) => !CORE_VARIABLES.includes(name))
     .map((name) => `${name} (invalid)`);
-  const temporaryAuthBypass = [
-    "TEMP_AUTH_BYPASS_EMAIL",
-    "TEMP_AUTH_BYPASS_TOKEN_SHA256",
-    "TEMP_AUTH_BYPASS_EXPIRES_AT",
-  ];
-  const configuredBypass = temporaryAuthBypass.filter((name) => present(env[name]));
-  if (
-    configuredBypass.length > 0 &&
-    configuredBypass.length < temporaryAuthBypass.length
-  ) {
-    configurationErrors.push(
-      "TEMP_AUTH_BYPASS_* must be configured together or left unset",
-    );
-  }
 
   const invoiceVariables = [
     "ANTHROPIC_API_KEY",
