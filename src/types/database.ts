@@ -17,7 +17,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.15"
   }
   public: {
     Tables: {
@@ -1020,23 +1020,19 @@ export type Database = {
           response_status: number
         }[]
       }
-      add_manual_overrides: {
-        Args: { p_fields: string[]; p_wine_id: string }
-        Returns: undefined
-      }
       add_cellar_wine_idempotent: {
         Args: {
-          p_country?: string | null
+          p_country?: string
           p_idempotency_key?: string
           p_name: string
           p_producer: string
           p_quantity?: number
-          p_region?: string | null
+          p_region?: string
           p_request_hash?: string
           p_restaurant_id: string
           p_unit_cost?: number
-          p_varietal?: string | null
-          p_vintage?: number | null
+          p_varietal?: string
+          p_vintage?: number
         }
         Returns: {
           outcome: string
@@ -1044,6 +1040,10 @@ export type Database = {
           response_body: Json
           response_status: number
         }[]
+      }
+      add_manual_overrides: {
+        Args: { p_fields: string[]; p_wine_id: string }
+        Returns: undefined
       }
       assign_cellar_section_batch: {
         Args: {
@@ -1150,6 +1150,9 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      cleanup_api_idempotency: { Args: never; Returns: number }
+      cleanup_api_rate_limit_buckets: { Args: never; Returns: number }
+      cleanup_scan_idempotency: { Args: never; Returns: undefined }
       clone_wine_list_idempotent: {
         Args: {
           p_idempotency_key?: string
@@ -1164,9 +1167,6 @@ export type Database = {
           response_status: number
         }[]
       }
-      cleanup_api_idempotency: { Args: never; Returns: number }
-      cleanup_api_rate_limit_buckets: { Args: never; Returns: number }
-      cleanup_scan_idempotency: { Args: never; Returns: undefined }
       close_open_bottle_idempotent: {
         Args: {
           p_bottle_id: string
@@ -1249,6 +1249,21 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      complete_cellar_wine_delete_idempotency: {
+        Args: {
+          p_idempotency_key: string
+          p_outcome: string
+          p_request_hash: string
+          p_response_body: Json
+          p_restaurant_id: string
+        }
+        Returns: {
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
       confirm_bottle_scan_idempotent: {
         Args: {
           p_bin_location: string
@@ -1294,19 +1309,18 @@ export type Database = {
           response_status: number
         }[]
       }
-      delete_restaurant_idempotent: {
+      create_wine_list_section: {
         Args: {
-          p_active_restaurant_id?: string
-          p_idempotency_key?: string
-          p_request_hash?: string
+          p_name: string
           p_restaurant_id: string
+          p_wine_list_id: string
         }
         Returns: {
-          execution_started_at: string
-          outcome: string
-          replayed: boolean
-          response_body: Json
-          response_status: number
+          created_at: string
+          id: string
+          name: string
+          position: number
+          wine_list_id: string
         }[]
       }
       delete_cellar_wine_idempotent: {
@@ -1323,18 +1337,19 @@ export type Database = {
           response_status: number
         }[]
       }
-      create_wine_list_section: {
+      delete_restaurant_idempotent: {
         Args: {
-          p_name: string
+          p_active_restaurant_id?: string
+          p_idempotency_key?: string
+          p_request_hash?: string
           p_restaurant_id: string
-          p_wine_list_id: string
         }
         Returns: {
-          created_at: string
-          id: string
-          name: string
-          position: number
-          wine_list_id: string
+          execution_started_at: string
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
         }[]
       }
       dismiss_pricing_alert: {
