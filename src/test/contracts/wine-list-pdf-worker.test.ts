@@ -52,6 +52,7 @@ describe("TER-021E PDF worker contract", () => {
     );
     expect(workerManifest).toContain("pnpm worker:install-browser");
     expect(workerManifest).toContain("pnpm validate:worker-browser");
+    expect(workerManifest.match(/PUPPETEER_CACHE_DIR=\/app\/\.cache\/puppeteer/g)).toHaveLength(2);
     expect(browserValidator).toContain("puppeteer.executablePath()");
     expect(browserValidator).toContain("constants.X_OK");
   });

@@ -3,7 +3,7 @@
 # root railway.toml.
 
 [build]
-buildCommand = "pnpm worker:install-browser && pnpm validate:worker-browser && pnpm validate:worker && pnpm build"
+buildCommand = "PUPPETEER_CACHE_DIR=/app/.cache/puppeteer pnpm worker:install-browser && PUPPETEER_CACHE_DIR=/app/.cache/puppeteer pnpm validate:worker-browser && pnpm validate:worker && pnpm build"
 
 [deploy]
 startCommand = "pnpm worker"

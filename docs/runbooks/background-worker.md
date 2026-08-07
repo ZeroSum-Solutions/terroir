@@ -69,11 +69,13 @@ handler or an approved cleanup disposition. Health exposes
 `registered_handlers` and `accepting_jobs` so an idle control-plane deployment
 cannot be mistaken for active job processing.
 
-The worker build runs `pnpm worker:install-browser` followed by
-`pnpm validate:worker-browser`. The second command fails the image build unless
-Puppeteer's resolved executable exists and is executable. Do not enable the PDF
-queue when the build omitted this gate, even if the control-plane health check
-is otherwise ready.
+The worker manifest pins `PUPPETEER_CACHE_DIR` directly on both browser build
+commands because provider-managed runtime variables are not guaranteed to be
+present during Railpack's build phase. It runs `pnpm worker:install-browser`
+followed by `pnpm validate:worker-browser`. The second command fails the image
+build unless Puppeteer's resolved executable exists and is executable. Do not
+enable the PDF queue when the build omitted this gate, even if the control-plane
+health check is otherwise ready.
 
 ## Wine-list PDF pilot
 
