@@ -29,9 +29,8 @@ describe("database backup workflow", () => {
     expect(workflow).toContain("pg_read_all_data");
     expect(workflow).toContain("rolsuper");
     expect(workflow).toContain("pg_write_all_data");
-    expect(workflow).toContain(
-      "n.nspname in ('auth', 'public', 'storage')",
-    );
+    expect(workflow).toContain("e.extnamespace = n.oid");
+    expect(workflow).toContain("d.deptype = 'e'");
     expect(workflow).toContain("BACKUP_PG_DUMP_VERSION");
     expect(workflow).toContain('pg_bin="/usr/lib/postgresql/17/bin"');
     expect(workflow).toContain('echo "$pg_bin" >> "$GITHUB_PATH"');
@@ -117,6 +116,20 @@ describe("database backup workflow", () => {
         "postgresql://backup:password@db.example.test/postgres?sslmode=disable",
       ),
     ).toThrow(/query parameters/u);
+    expect(() =>
+      createPgServiceConfig(
+        "postgresql://terroir_backup.project-ref:password@aws-1-us-west-1.pooler.supabase.com:5432/postgres",
+        "terroir_backup",
+        "project-ref",
+      ),
+    ).not.toThrow();
+    expect(() =>
+      createPgServiceConfig(
+        "postgresql://terroir_backup.project-ref:password@aws-1-us-west-1.pooler.supabase.com:6543/postgres",
+        "terroir_backup",
+        "project-ref",
+      ),
+    ).toThrow(/session pooler port 5432/u);
   });
 
   it("derives only the expected port-5432 session-pooler backup URL", async () => {
@@ -243,6 +256,24 @@ describe("database backup workflow", () => {
     expect(manifest.encryption).toEqual(
       expect.objectContaining({ age_version: "v1.2.1" }),
     );
+
+    const manifestFile = join(dir, "db.manifest.json");
+    writeFileSync(manifestFile, JSON.stringify(manifest));
+    const { verifyBackupArtifact } =
+      await loadScript("verify-artifact");
+    expect(() =>
+      verifyBackupArtifact({
+        manifestFile,
+        encryptedFile: encrypted,
+        payloadFile: payload,
+        dumpFile: dump,
+        evidenceFile: evidence,
+      }),
+    ).not.toThrow();
+    writeFileSync(encrypted, "tampered encrypted bytes");
+    expect(() =>
+      verifyBackupArtifact({ manifestFile, encryptedFile: encrypted }),
+    ).toThrow(/Encrypted artifact (byte length|SHA-256)/u);
   });
 
   it("detects artifact tampering and compares exact restore evidence", async () => {

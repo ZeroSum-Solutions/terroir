@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 export function createPgServiceConfig(
   rawUrl,
   serviceName = "terroir_backup",
+  expectedProjectRef = process.env.BACKUP_PROJECT_REF,
 ) {
   if (!/^[A-Za-z0-9_.-]+$/u.test(serviceName)) {
     throw new Error("PGSERVICE_NAME contains unsupported characters.");
@@ -21,6 +22,20 @@ export function createPgServiceConfig(
     throw new Error(
       "SUPABASE_DB_URL query parameters and fragments are not supported.",
     );
+  }
+
+  if (expectedProjectRef) {
+    const expectedUser = `terroir_backup.${expectedProjectRef}`;
+    if (
+      !url.hostname.endsWith(".pooler.supabase.com") ||
+      url.port !== "5432" ||
+      url.pathname !== "/postgres" ||
+      decodeURIComponent(url.username) !== expectedUser
+    ) {
+      throw new Error(
+        "SUPABASE_DB_URL must use the expected backup role on the Supabase session pooler port 5432.",
+      );
+    }
   }
 
   const database = url.pathname.replace(/^\/+/, "");
