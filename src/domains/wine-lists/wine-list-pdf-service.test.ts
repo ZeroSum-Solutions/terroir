@@ -39,4 +39,11 @@ describe("wine-list PDF value boundaries", () => {
     );
     expect(wineListPdfFilename("酒单")).toBe("Wine List.pdf");
   });
+
+  it("bounds attachment filenames to the artifact download contract", () => {
+    const filename = wineListPdfFilename("A".repeat(300));
+
+    expect(filename).toHaveLength(204);
+    expect(filename).toBe(`${"A".repeat(200)}.pdf`);
+  });
 });
