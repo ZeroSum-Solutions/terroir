@@ -89,6 +89,9 @@ jobs:
           test -x "$TERROIR_E2E_BROWSER_PATH"
           "$TERROIR_E2E_BROWSER_PATH" --version
 
+      - name: Install Playwright video helper
+        run: pnpm exec playwright install ffmpeg
+
       - name: Run the isolated authenticated workflow
         run: pnpm run test:e2e:isolated
 
