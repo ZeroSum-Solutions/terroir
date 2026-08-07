@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0",
+  "ref": "9bc84a6a6fbc6f4e9e7d82b9a1a89a78d6f87d11",
+  "base": {
+    "status": "AVAILABLE",
+    "value": "f4058d8114b8cbdb02cbfef7d4e538bc60485161",
+    "unavailable_reason": null,
+    "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:3" }]
+  },
+  "scope": {
+    "changed_paths": [
+      ".github/workflows/score.yml",
+      "src/app/(app)/scan/components/scan-review.tsx",
+      "src/app/(app)/scan/views/bottle-results-view.tsx",
+      "src/app/api/inventory/save-scan/route.ts",
+      "src/app/api/scan-bottle/route.test.ts",
+      "src/app/api/scan-bottle/route.ts",
+      "src/lib/scanner/benchmark.test.ts",
+      "src/lib/scanner/benchmark.ts",
+      "src/test/contracts/scanner-release-gate.test.ts"
+    ],
+    "captured_diff_paths": [
+      ".github/workflows/score.yml",
+      "src/app/(app)/scan/components/scan-review.tsx",
+      "src/app/(app)/scan/views/bottle-results-view.tsx",
+      "src/app/api/inventory/save-scan/route.ts",
+      "src/app/api/scan-bottle/route.test.ts",
+      "src/app/api/scan-bottle/route.ts",
+      "src/lib/scanner/benchmark.test.ts",
+      "src/lib/scanner/benchmark.ts",
+      "src/test/contracts/scanner-release-gate.test.ts"
+    ],
+    "path_classification": [
+      { "path": ".github/workflows/score.yml", "surfaces": ["secrets", "export"], "evidence": [{ "class": "STATIC", "citation": ".github/workflows/score.yml:40" }] },
+      { "path": "src/app/(app)/scan/components/scan-review.tsx", "surfaces": ["authorization", "untrusted-input"], "evidence": [{ "class": "STATIC", "citation": "src/app/(app)/scan/components/scan-review.tsx:21" }] },
+      { "path": "src/app/(app)/scan/views/bottle-results-view.tsx", "surfaces": ["untrusted-input"], "evidence": [{ "class": "STATIC", "citation": "src/app/(app)/scan/views/bottle-results-view.tsx:5" }] },
+      { "path": "src/app/api/inventory/save-scan/route.ts", "surfaces": ["authorization", "untrusted-input"], "evidence": [{ "class": "STATIC", "citation": "src/app/api/inventory/save-scan/route.ts:20" }] },
+      { "path": "src/app/api/scan-bottle/route.test.ts", "surfaces": ["untrusted-input", "export"], "evidence": [{ "class": "STATIC", "citation": "src/app/api/scan-bottle/route.test.ts:428" }] },
+      { "path": "src/app/api/scan-bottle/route.ts", "surfaces": ["untrusted-input", "export"], "evidence": [{ "class": "STATIC", "citation": "src/app/api/scan-bottle/route.ts:228" }] },
+      { "path": "src/lib/scanner/benchmark.test.ts", "surfaces": ["untrusted-input"], "evidence": [{ "class": "STATIC", "citation": "src/lib/scanner/benchmark.test.ts:228" }] },
+      { "path": "src/lib/scanner/benchmark.ts", "surfaces": ["untrusted-input"], "evidence": [{ "class": "STATIC", "citation": "src/lib/scanner/benchmark.ts:17" }] },
+      { "path": "src/test/contracts/scanner-release-gate.test.ts", "surfaces": ["secrets", "authorization", "untrusted-input", "export"], "evidence": [{ "class": "STATIC", "citation": "src/test/contracts/scanner-release-gate.test.ts:51" }] }
+    ],
+    "sensitive_surfaces": ["authorization", "export", "secrets", "untrusted-input"],
+    "diff_command_id": "CMD-001",
+    "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:9" }]
+  },
+  "commands": [
+    { "id": "CMD-001", "purpose": "diff", "command": "git diff --name-only f4058d8114b8cbdb02cbfef7d4e538bc60485161...9bc84a6a6fbc6f4e9e7d82b9a1a89a78d6f87d11", "outcome": "PASS", "exit_code": 0, "scope": "f4058d8114b8cbdb02cbfef7d4e538bc60485161...9bc84a6a6fbc6f4e9e7d82b9a1a89a78d6f87d11", "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:9" }], "unavailable_reason": null },
+    { "id": "CMD-002", "purpose": "secrets-scan", "command": "gitleaks detect --source . --no-banner --redact --log-opts f4058d8114b8cbdb02cbfef7d4e538bc60485161..9bc84a6a6fbc6f4e9e7d82b9a1a89a78d6f87d11", "outcome": "PASS", "exit_code": 0, "scope": "f4058d8114b8cbdb02cbfef7d4e538bc60485161..9bc84a6a6fbc6f4e9e7d82b9a1a89a78d6f87d11", "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:13" }], "unavailable_reason": null },
+    { "id": "CMD-003", "purpose": "focused-tests", "command": "pnpm exec vitest run src/app/api/scan-bottle/route.test.ts src/lib/scanner/benchmark.test.ts src/test/contracts/scanner-release-gate.test.ts src/app/api/inventory/save-scan/route.test.ts", "outcome": "PASS", "exit_code": 0, "scope": "TER-022 independent-review fixes", "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:17" }], "unavailable_reason": null },
+    { "id": "CMD-004", "purpose": "full-tests", "command": "pnpm run test", "outcome": "PASS", "exit_code": 0, "scope": "repository", "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:21" }], "unavailable_reason": null },
+    { "id": "CMD-005", "purpose": "static-and-build-gates", "command": "pnpm run lint && pnpm exec tsc --noEmit && pnpm run build", "outcome": "PASS", "exit_code": 0, "scope": "repository", "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:25" }], "unavailable_reason": null },
+    { "id": "CMD-006", "purpose": "scanner-and-migration-gates", "command": "pnpm run scanner:score && pnpm run snapshot:check && pnpm run downs:check", "outcome": "PASS", "exit_code": 0, "scope": "TER-022 scanner and migration", "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:30" }], "unavailable_reason": null }
+  ],
+  "exports": {
+    "state": "LISTED",
+    "items": [
+      {
+        "id": "EXP-001",
+        "destination": "GitHub Actions artifact storage",
+        "data_classes": ["synthetic aggregate scanner metrics"],
+        "initiating_identity": "repository workflow dispatcher",
+        "authorization_evidence": [{ "class": "STATIC", "citation": ".github/workflows/score.yml:9" }],
+        "recipient_scope": "repository artifact readers",
+        "retention_redaction": "30-day artifact retention; corpus schema requires synthetic non-customer data",
+        "failure_behavior": "pipefail makes threshold violations fail the job before artifact upload can appear successful",
+        "policy_basis": { "status": "ALLOWLISTED", "citation": "docs/runbooks/data-lifecycle-privacy.md:45", "owner": null, "reason": null }
+      }
+    ],
+    "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:51" }],
+    "unavailable_reason": null
+  },
+  "secrets_scan": {
+    "result": "PASS",
+    "command_id": "CMD-002",
+    "scope": "RANGE",
+    "comparison": "f4058d8114b8cbdb02cbfef7d4e538bc60485161..9bc84a6a6fbc6f4e9e7d82b9a1a89a78d6f87d11",
+    "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:13" }],
+    "unavailable_reason": null
+  },
+  "export_policy": {
+    "result": "PASS",
+    "evidence": [{ "class": "STATIC", "citation": "docs/runbooks/data-lifecycle-privacy.md:45" }],
+    "unavailable_reason": null
+  },
+  "coverage": [
+    { "surface": "prompt-injection", "state": "NOT-APPLICABLE", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:38" }], "unavailable_reason": null },
+    { "surface": "secrets", "state": "REVIEWED", "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:13" }], "unavailable_reason": null },
+    { "surface": "authentication", "state": "NOT-APPLICABLE", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:42" }], "unavailable_reason": null },
+    { "surface": "authorization", "state": "REVIEWED", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:42" }], "unavailable_reason": null },
+    { "surface": "untrusted-input", "state": "REVIEWED", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:46" }], "unavailable_reason": null },
+    { "surface": "export", "state": "REVIEWED", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-022-review-fixes-evidence.md:51" }], "unavailable_reason": null }
+  ],
+  "findings": [],
+  "verdict": "PASS"
+}
