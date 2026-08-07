@@ -1,16 +1,25 @@
 const baseUrl = process.env.ALERT_DRILL_BASE_URL?.trim();
 const token = process.env.ALERT_DRILL_TOKEN?.trim();
+const STAGING_ORIGIN = "https://terroir-web-staging.up.railway.app";
 
 if (!baseUrl || !token) {
   throw new Error(
     "ALERT_DRILL_BASE_URL and ALERT_DRILL_TOKEN are required in the process environment.",
   );
 }
+if (token.length < 32 || token.length > 256) {
+  throw new Error("ALERT_DRILL_TOKEN must contain 32 to 256 characters.");
+}
 
 const target = new URL("/api/health", baseUrl);
 const isLocal = ["localhost", "127.0.0.1", "::1"].includes(target.hostname);
-if (!isLocal && !target.hostname.toLowerCase().includes("staging")) {
-  throw new Error("Alert drills are restricted to localhost or a staging hostname.");
+if (target.username || target.password) {
+  throw new Error("Alert drill URLs must not contain credentials.");
+}
+if (!isLocal && target.origin !== STAGING_ORIGIN) {
+  throw new Error(
+    `Remote alert drills are restricted to ${STAGING_ORIGIN}.`,
+  );
 }
 if (!isLocal && target.protocol !== "https:") {
   throw new Error("Remote alert drills require HTTPS.");

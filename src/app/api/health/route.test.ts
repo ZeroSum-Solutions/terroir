@@ -175,7 +175,7 @@ describe("GET /api/health", () => {
   });
 
   it("emits a complete redacted alert envelope for an authorized non-production drill", async () => {
-    const token = "local-observability-drill-token";
+    const token = "local-observability-drill-token-2026";
     vi.stubEnv(
       "OBSERVABILITY_DRILL_TOKEN_SHA256",
       createHash("sha256").update(token).digest("hex"),
@@ -216,7 +216,7 @@ describe("GET /api/health", () => {
   });
 
   it("never enables the alert drill in production", async () => {
-    const token = "production-must-refuse-this-token";
+    const token = "production-must-refuse-this-token-2026";
     vi.stubEnv(
       "OBSERVABILITY_DRILL_TOKEN_SHA256",
       createHash("sha256").update(token).digest("hex"),

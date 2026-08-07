@@ -29,7 +29,15 @@ function isAuthorizedAlertDrill(request: NextRequest | undefined): boolean {
 
   const expected = process.env.OBSERVABILITY_DRILL_TOKEN_SHA256?.trim();
   const supplied = request.headers.get(ALERT_DRILL_HEADER);
-  if (!expected || !/^[a-f0-9]{64}$/i.test(expected) || !supplied) return false;
+  if (
+    !expected ||
+    !/^[a-f0-9]{64}$/i.test(expected) ||
+    !supplied ||
+    supplied.length < 32 ||
+    supplied.length > 256
+  ) {
+    return false;
+  }
 
   const actual = createHash("sha256").update(supplied).digest("hex");
   return timingSafeEqual(Buffer.from(actual, "hex"), Buffer.from(expected, "hex"));

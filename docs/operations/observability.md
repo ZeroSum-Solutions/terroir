@@ -48,7 +48,7 @@ The drill forces only the current health response to `readiness: "degraded"`; it
 
 1. Generate a random token without printing it, set the staging service's `OBSERVABILITY_DRILL_ENABLED=1`, store only the token's SHA-256 digest as `OBSERVABILITY_DRILL_TOKEN_SHA256`, and retain the raw token in the approved secret boundary for the invocation.
 2. Set `ALERT_DRILL_BASE_URL` to the staging origin and `ALERT_DRILL_TOKEN` to the raw token in the invoking process environment. Do not put the token in an argument, URL, shell history, screenshot, or committed file.
-3. Run `pnpm drill:alerts`. The command refuses a non-staging remote hostname, requires HTTPS remotely, follows no redirects, times out after ten seconds, and fails unless the response contains the full safe alert envelope without reflecting the token.
+3. Run `pnpm drill:alerts`. The command permits only localhost or the exact `https://terroir-web-staging.up.railway.app` origin, rejects URL credentials, requires a 32-to-256-character token, follows no redirects, times out after ten seconds, and fails unless the response contains the full safe alert envelope without reflecting the token.
 4. Verify the Sentry or Railway notification contains the same environment, severity, service, event name, first/last occurrence, count, request ID, and runbook link. Capture the dashboard and delivered notification with credentials and personal data masked.
 5. Remove or rotate the staging digest after the drill. Record the release SHA, UTC time, alert-rule identifier, delivery result, and evidence paths in the release record.
 
