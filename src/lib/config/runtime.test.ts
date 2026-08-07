@@ -51,6 +51,15 @@ describe("runtime configuration", () => {
     }
   });
 
+  it("rejects a malformed manual release identity", () => {
+    expect(() =>
+      assertDeploymentConfiguration({
+        ...core,
+        TERROIR_RELEASE_SHA: "not-a-git-sha",
+      }),
+    ).toThrow("TERROIR_RELEASE_SHA (invalid)");
+  });
+
   it("requires an HTTPS public app origin in production", () => {
     expect(() =>
       assertDeploymentConfiguration({

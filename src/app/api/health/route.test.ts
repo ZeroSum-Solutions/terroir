@@ -88,6 +88,7 @@ describe("GET /api/health", () => {
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
     vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "");
     vi.stubEnv("RAILWAY_GIT_COMMIT_SHA", "");
+    vi.stubEnv("TERROIR_RELEASE_SHA", "");
     vi.stubEnv("OBSERVABILITY_DRILL_ENABLED", "");
     vi.stubEnv("OBSERVABILITY_DRILL_TOKEN_SHA256", "");
     vi.clearAllMocks();
@@ -120,6 +121,17 @@ describe("GET /api/health", () => {
       db: "unconfigured",
       environment: "staging",
       release: "abc1234",
+    });
+  });
+
+  it("reports an operator-pinned identity for a manual staging deploy", async () => {
+    vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "staging");
+    vi.stubEnv("TERROIR_RELEASE_SHA", "def5678");
+
+    await expectHealth({
+      db: "unconfigured",
+      environment: "staging",
+      release: "def5678",
     });
   });
 

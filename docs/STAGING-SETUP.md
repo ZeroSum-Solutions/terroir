@@ -42,10 +42,11 @@ settings documented in
 receive production credentials. The worker's `GET /health` is a separate
 readiness gate and does not change the public web health endpoint.
 
-Set `RAILWAY_GIT_COMMIT_SHA` from Railway's commit variable if it is not
-automatically provided. `GET /api/health` exposes only its presence as the
-public release SHA plus the Railway environment name; it exposes no credential
-or Supabase URL.
+Railway-connected deploys expose `RAILWAY_GIT_COMMIT_SHA` automatically. For a
+manual staging-only deploy, set `TERROIR_RELEASE_SHA` to the exact local Git
+commit before upload; the health route prefers Railway's immutable Git value
+when both exist. `GET /api/health` exposes only the selected public release SHA
+plus the Railway environment name; it exposes no credential or Supabase URL.
 
 ## Candidate flow
 

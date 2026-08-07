@@ -101,7 +101,8 @@ async function getHealth(request?: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const environment = process.env.RAILWAY_ENVIRONMENT_NAME?.trim() || "unknown";
-  const release = process.env.RAILWAY_GIT_COMMIT_SHA?.trim();
+  const release = process.env.RAILWAY_GIT_COMMIT_SHA?.trim()
+    || process.env.TERROIR_RELEASE_SHA?.trim();
 
   let db: "connected" | "error" | "unconfigured" = "unconfigured";
   let dbReason:

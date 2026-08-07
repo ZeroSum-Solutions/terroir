@@ -25,6 +25,7 @@ export const RUNTIME_VARIABLES = Object.freeze([
   "WINE_SEARCHER_API_KEY",
   "OBSERVABILITY_DRILL_ENABLED",
   "OBSERVABILITY_DRILL_TOKEN_SHA256",
+  "TERROIR_RELEASE_SHA",
 ]);
 
 const emptyToUndefined = (value) =>
@@ -47,6 +48,10 @@ const optionalRate = z.preprocess(
 const optionalSha256 = z.preprocess(
   emptyToUndefined,
   z.string().trim().regex(/^[a-f0-9]{64}$/i).optional(),
+);
+const optionalGitSha = z.preprocess(
+  emptyToUndefined,
+  z.string().trim().regex(/^[a-f0-9]{7,64}$/i).optional(),
 );
 
 /**
@@ -78,7 +83,8 @@ export const runtimeEnvironmentSchema = z.object({
   ),
   OBSERVABILITY_DRILL_TOKEN_SHA256: optionalSha256,
   RAILWAY_ENVIRONMENT_NAME: optionalText,
-  RAILWAY_GIT_COMMIT_SHA: optionalText,
+  RAILWAY_GIT_COMMIT_SHA: optionalGitSha,
+  TERROIR_RELEASE_SHA: optionalGitSha,
 }).passthrough();
 
 function present(value) {
