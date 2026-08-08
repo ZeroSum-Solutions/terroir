@@ -145,13 +145,13 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_wine_intelligence_pilot && matrix.slot == 1 }}
         env:
           WINE_INTELLIGENCE_E2E_ENABLED: "1"
-        run: pnpm exec playwright test e2e/wine-intelligence-staging.test.ts --workers=1
+        run: pnpm exec playwright test e2e/wine-intelligence-staging.test.ts --workers=1 --trace=on
 
       - name: Run the isolated bottle-scan pilot
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_bottle_scan_pilot && matrix.slot == 1 }}
         env:
           BOTTLE_SCAN_E2E_ENABLED: "1"
-        run: pnpm exec playwright test e2e/bottle-scan.test.ts --workers=1
+        run: pnpm exec playwright test e2e/bottle-scan.test.ts --workers=1 --trace=on
 
       - name: Encrypt browser evidence
         id: encrypt_evidence

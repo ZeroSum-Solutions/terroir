@@ -356,10 +356,10 @@ describe("failure evidence redaction", () => {
       "inputs.run_wine_intelligence_pilot && matrix.slot == 1",
     );
     expect(workflow).toContain(
-      "pnpm exec playwright test e2e/wine-intelligence-staging.test.ts --workers=1",
+      "pnpm exec playwright test e2e/wine-intelligence-staging.test.ts --workers=1 --trace=on",
     );
     expect(workflow).toContain(
-      "pnpm exec playwright test e2e/bottle-scan.test.ts --workers=1",
+      "pnpm exec playwright test e2e/bottle-scan.test.ts --workers=1 --trace=on",
     );
     expect(workflow).toContain(
       "inputs.run_bottle_scan_pilot && matrix.slot == 1",
