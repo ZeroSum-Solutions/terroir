@@ -38,6 +38,25 @@ business workflows. Adapter modules own external provider mechanics.
 - `../src/worker/supabase-job-store.ts`: service-role-only job RPC and aggregate
   queue-health adapter.
 
+## Exact API Compatibility Contract
+
+- The source inventory has no planned API operations. The five TER-020E
+  compatibility promises are implemented at their exact paths while the
+  alternate routes remain supported extensions.
+- `GET /api/wines/[id]` returns `{ wine }` with persisted enrichment fields,
+  and `GET /api/scans/[id]` returns `{ scan }` with reviewed line items. Both
+  validate the UUID after authentication and filter by the active restaurant;
+  an absent or foreign row returns the same 404 envelope.
+- `PATCH /api/restaurant` applies the same strict metadata schema as the
+  explicit-ID extension, but it can update only the caller's active restaurant.
+  `POST /api/team` applies the same normalized invitation contract as
+  `/api/team/invite`. `DELETE /api/team/[membership_id]` uses the established
+  owner-only membership-removal RPC and its last-owner and self-removal rules.
+- The three compatibility writes have independent idempotency operation IDs,
+  validated request hashes, and replay responses. The root compatibility
+  paths currently have no first-party UI callers; the existing alternate
+  paths remain the UI entry points.
+
 ## Database Contracts
 
 - Transactional inventory, pour, undo, and reconcile writes stay in Supabase

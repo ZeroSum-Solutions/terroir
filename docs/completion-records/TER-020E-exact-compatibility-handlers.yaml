@@ -1,0 +1,52 @@
+spec_id: TER-020E
+parent_spec: TER-020
+implementation_commits:
+  - 43e0614
+  - 893a218
+  - cbe93ac
+status: source_validated_staging_pending
+scope: Implement the five remaining active API promises at their exact method and path pairs without removing alternate extension routes.
+requirements_closed:
+  TER-CF-186:
+    implementation: src/app/api/wines/[id]/route.ts GET returns one active-tenant wine with persisted enrichment fields.
+    tests: src/app/api/ter-020e-compatibility-read.test.ts
+  TER-CF-189:
+    implementation: src/app/api/scans/[id]/route.ts GET returns one active-tenant scan with final line items.
+    tests: src/app/api/ter-020e-compatibility-read.test.ts
+  TER-CF-206:
+    implementation: src/app/api/restaurant/route.ts PATCH validates shared metadata and updates only the active restaurant.
+    tests: src/app/api/restaurant/compatibility-route.test.ts
+  TER-CF-208:
+    implementation: src/app/api/team/route.ts POST creates an active-tenant invitation through the shared invitation helper.
+    tests: src/app/api/team/compatibility-route.test.ts
+  TER-CF-209:
+    implementation: src/app/api/team/[membership_id]/route.ts DELETE invokes the tenant-bound membership-removal RPC.
+    tests: src/app/api/team/[membership_id]/route.test.ts
+change_contract:
+  touched_surfaces: Exact API route handlers, shared request schemas and business helpers, authorization and abuse-control manifests, idempotency implementation ledger, source inventory, and reconciliation evidence.
+  invariants: Authentication precedes parameter or body parsing; capabilities are enforced at the route decision point; every lookup and mutation is active-tenant scoped; invalid input reaches no business dependency; provider failures remain redacted; keyed retries replay without a second business effect.
+  data_effects: No schema or migration change. Successful restaurant, invitation, and membership commands retain the existing table or RPC effects of their alternate routes.
+  rollback: Revert the TER-020E commits; no database rollback is required.
+verification:
+  red_green: Each exact handler first failed because its method export or route module did not exist, then passed after the corresponding vertical implementation.
+  focused: Eleven route, authorization, idempotency, and inventory files passed 113 tests before replay-boundary strengthening; the final exact-handler replay set also passed.
+  contracts: pnpm run test:contracts passed 16 files and 139 tests.
+  full: pnpm test passed 176 files and 1665 tests; TypeScript no-emit, lint, and the Next.js production build passed on Node 24.16.0 with pnpm 10.33.2.
+  inventories: API contract passed with 92 implemented operations, zero planned promises, and 92 classifications; feature ledger passed with 269 requirements; UI controls passed across 23 routes and 345 controls.
+  migrations: Snapshot check passed with 82 migrations and 440577 bytes; all 72 forward migrations from 0011 have rollback pairs. No TER-020E migration was needed.
+security:
+  authorization: GET wine uses wine:view; GET scan uses scan:create; restaurant mutation uses restaurant:manage; invitation uses team:invite-manage; membership removal uses team:member-manage.
+  tenancy: Reads filter by resource ID and active restaurant. Writes derive the restaurant from the active membership, and the membership-removal RPC independently scopes the target to that restaurant.
+  validation: Dynamic IDs are UUID-validated and normalized; strict shared Zod schemas reject malformed restaurant and invitation bodies before database work.
+  idempotency: The three exact writes use distinct operation IDs and canonical normalized hashes; exact replay tests prove no second update, insert, or removal call.
+staging:
+  result: not-run in this isolated implementation lane; deployment and remote mutation were explicitly excluded from the task.
+  evidence_required:
+    - Exercise all five exact paths against isolated staging with owner, manager or staff as applicable, unauthenticated denial, wrong-role denial, foreign-resource 404, malformed-input 400, and keyed replay assertions.
+deployment:
+  executed: false
+  production_changed: false
+known_limits:
+  - Source, contract, and production-build evidence is complete, but no live staging request is claimed.
+  - The exact mutation paths are compatibility contracts with no first-party UI callers; current UI clients continue to use the supported alternate paths.
+rollback: Revert cbe93ac, 893a218, and 43e0614 in reverse order. No migration rollback is required.
