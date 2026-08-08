@@ -29,6 +29,11 @@ on:
         required: false
         default: false
         type: boolean
+      run_bottle_scan_pilot:
+        description: Run the isolated TER-028 bottle-scan browser and database pilot
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: staging-smoke-staging
@@ -141,6 +146,12 @@ jobs:
         env:
           WINE_INTELLIGENCE_E2E_ENABLED: "1"
         run: pnpm exec playwright test e2e/wine-intelligence-staging.test.ts --workers=1
+
+      - name: Run the isolated bottle-scan pilot
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_bottle_scan_pilot && matrix.slot == 1 }}
+        env:
+          BOTTLE_SCAN_E2E_ENABLED: "1"
+        run: pnpm exec playwright test e2e/bottle-scan.test.ts --workers=1
 
       - name: Encrypt browser evidence
         id: encrypt_evidence
