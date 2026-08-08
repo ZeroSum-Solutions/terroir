@@ -71,6 +71,15 @@ plus the Railway environment name; it exposes no credential or Supabase URL.
    exact `PROMOTE-STAGING-SHA` confirmation, runs a fresh staging smoke, then
    only fast-forwards `main`.
 
+The manual staging workflow also exposes an opt-in
+`run_wine_intelligence_pilot` input. It runs only in isolated browser slot 1
+against synthetic wine data and verifies deterministic guidance, owner/manual
+override preservation, staff denial, and cross-tenant denial. A skipped local
+test or an undispatched workflow is collection evidence only, not runtime
+proof. TER-021G separately owns migration of enrichment to the worker after the
+invoice-OCR soak; the pilot does not close that dependency or prove a live
+provider response.
+
 GitHub environment required reviewers are unavailable on the repository's
 current plan. The repository variable and exact-confirmation check are the
 enforced fallback: set `PRODUCTION_RELEASE_OWNER` to the named release owner's

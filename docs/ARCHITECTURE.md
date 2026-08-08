@@ -18,6 +18,11 @@ business workflows. Adapter modules own external provider mechanics.
   sort, low-stock, and drink-window presentation rules.
 - `../src/lib/cellar/inventory-aggregation.ts`: per-wine quantity, weighted
   average cost, newest-purchase metadata, and bottle-format aggregation.
+- `../src/lib/wine-intelligence/enrich.ts`: deterministic drink-window,
+  serving-temperature, and decant recommendations plus batched provider-result
+  normalization and LWIN fallback inputs.
+- `../src/lib/drink-window/status.ts`: shared wine-window status and visible
+  year-delta rules for the cellar list and wine-detail surface.
 - [`quantity route`](<../src/app/api/cellar/[id]/quantity/route.ts>):
   authenticated owner/manager boundary for reasoned, idempotent quantity
   adjustments.
@@ -57,6 +62,11 @@ business workflows. Adapter modules own external provider mechanics.
 - `cancel_background_job` revokes queued or active work for the creator or a
   tenant manager. `requeue_background_job` is manager-only and resets a failed
   dead letter without changing its idempotent job identity.
+- `update_wine_metadata_atomic` is the supported owner/manager wine-metadata
+  write. It tenant-binds and locks the wine row, validates the complete
+  drink-window result, and records enrichment override categories in the same
+  transaction as the manual values. Enrichment therefore cannot observe a
+  saved value without its corresponding manual-field lock.
 
 ## Background Job Progress UI
 
@@ -78,6 +88,10 @@ business workflows. Adapter modules own external provider mechanics.
 - This UI does not enqueue work or require a running worker. PDF, invoice OCR,
   and wine enrichment remain on their existing synchronous paths until their
   separately scoped TER-021 migration tasks pass staging soak tests.
+- TER-026's opt-in staging pilot covers the synchronous wine-intelligence path:
+  deterministic guidance, role visibility, single-wine re-enrichment, manual
+  preservation, and tenant denial. It is not evidence for the pending TER-021G
+  worker migration or for a live provider response.
 
 ## Remaining Handoffs
 

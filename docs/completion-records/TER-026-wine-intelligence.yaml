@@ -1,0 +1,61 @@
+spec_id: TER-026
+implementation_commits:
+  - b79c977
+status: source_verified_worker_and_runtime_evidence_pending
+scope: Complete active wine-intelligence requirements TER-CF-091 through TER-CF-101 while preserving tenant, role, and manual-field boundaries.
+requirement_evidence:
+  TER-CF-091:
+    implementation: src/lib/wine-intelligence/enrich.ts; src/app/api/wines/enrich/route.ts
+    tests: src/lib/wine-intelligence/enrich.test.ts; src/app/api/wines/enrich/route.test.ts
+  TER-CF-092-093:
+    implementation: src/lib/wine-intelligence/enrich.ts; src/app/(app)/cellar/wine-detail-drawer.tsx
+    tests: src/lib/wine-intelligence/enrich.test.ts; e2e/wine-intelligence-staging.test.ts
+  TER-CF-094:
+    implementation: src/app/(app)/cellar/wine-detail-drawer.tsx; src/components/drink-window-timeline.tsx
+    tests: src/components/drink-window-timeline.test.tsx; e2e/wine-intelligence-staging.test.ts
+  TER-CF-095:
+    implementation: src/app/api/wines/[id]/route.ts; supabase/migrations/0081_atomic_wine_metadata_overrides.sql
+    tests: src/app/api/wines/wine-mutation-behavior.test.ts; supabase/tests/0081_atomic_wine_metadata_overrides.sql; e2e/wine-intelligence-staging.test.ts
+  TER-CF-096:
+    implementation: src/lib/drink-window/status.ts; src/app/(app)/cellar/cellar-list.tsx; src/app/(app)/cellar/wine-detail-drawer.tsx
+    tests: src/lib/drink-window/status.test.ts; e2e/wine-intelligence-staging.test.ts
+  TER-CF-097-098:
+    implementation: src/app/api/wines/enrich/route.ts; src/lib/wine-intelligence/enrich.ts; supabase/migrations/0049_wines_colour.sql
+    tests: src/app/api/wines/enrich/route.test.ts; src/lib/wine-intelligence/enrich.test.ts
+  TER-CF-099:
+    implementation: src/app/api/wines/[id]/enrich/route.ts; src/app/(app)/cellar/wine-detail-drawer.tsx
+    tests: src/app/api/wines/[id]/enrich/route.test.ts; e2e/wine-intelligence-staging.test.ts
+  TER-CF-100:
+    implementation: src/app/api/wines/enrich/route.ts
+    tests: src/app/api/wines/enrich/route.test.ts
+  TER-CF-101:
+    implementation: src/app/api/wines/[id]/route.ts; supabase/migrations/0081_atomic_wine_metadata_overrides.sql; supabase/migrations/0049_wines_colour.sql
+    tests: src/app/api/wines/wine-mutation-behavior.test.ts; supabase/tests/0081_atomic_wine_metadata_overrides.sql; e2e/wine-intelligence-staging.test.ts
+verification:
+  focused: Five Vitest files and 85 tests passed across deterministic calculations, enrichment, single-wine re-enrichment, LWIN fallback, mutation behavior, and manual-field preservation.
+  full: The second full run passed 171 Vitest files and 1635 tests; TypeScript, lint, and the production build passed on Node 24.16.0 with pnpm 10.33.2. The first full run observed one unrelated team-action timing failure that immediately passed in isolation and in the second full run.
+  inventories: API contract passed with 87 implemented operations, 5 planned operations, and all 87 classified; feature ledger passed with 269 requirements; UI controls passed across 23 routes and 345 controls.
+  migrations: Snapshot generation produced 81 migrations and 426056 bytes; all 71 forward migrations from 0011 have rollback pairs; migration 0081 passed transactional PostgreSQL acceptance in an isolated local Supabase database and was removed with its down migration after proof.
+  browser_collection: Playwright collected two isolated wine-intelligence tests. Local execution skipped both because the staging-only flags and isolated configuration were intentionally absent; this is not runtime proof.
+  independent_review: Pending exact-ref verifier review.
+security:
+  route: PATCH metadata and POST re-enrichment authenticate the caller and require owner or manager before tenant-bound work.
+  database: The security-definer metadata RPC repeats authentication and manager-role checks, locks only the tenant-bound wine row, validates the final drink-window tuple, and commits manual values with their enrichment locks atomically.
+  input: HTTP schemas and SQL validation reject unsupported keys, non-integral years, out-of-range years, oversized or untrimmed strings, and inconsistent drink-window results.
+  privacy: Cross-tenant metadata writes and re-enrichment return no foreign wine data; staff cannot invoke or see re-enrichment controls.
+staging_evidence_required:
+  - Deploy an immutable integrated candidate with migration 0081 to isolated staging and record exact candidate, migration, web, and worker identifiers.
+  - Dispatch the opt-in single-slot wine-intelligence pilot and retain owner, staff, cross-tenant, database, cleanup, encryption, and artifact evidence.
+  - Record at least one live provider-backed enrichment response and failure-path evidence without storing provider prompts, secrets, or private source data.
+dependency_evidence_required:
+  - TER-021G must migrate wine enrichment to the worker only after the invoice-OCR soak and must pass its own enqueue, retry, restart, dead-letter, duplicate-delivery, and rollback evidence.
+production_evidence_required:
+  - Promote only through TER-046 after the final integrated candidate passes its complete release gate and production canaries.
+deployment:
+  executed: false
+  production_changed: false
+known_limits:
+  - No staging deployment, isolated browser runtime, or live provider call was executed from this worktree.
+  - TER-021G is explicitly open; wine enrichment remains synchronous until its separately scoped worker rollout passes staging soak.
+  - Generated Supabase types were reconciled to migration 0081 locally because remote type generation requires staging project credentials; the checked-in contract is covered by TypeScript and SQL acceptance.
+rollback: Revert the TER-026 commits in reverse order and apply supabase/migrations/down/0081_atomic_wine_metadata_overrides.down.sql before deploying application code that no longer calls the RPC.
