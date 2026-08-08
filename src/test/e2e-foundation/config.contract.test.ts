@@ -333,15 +333,21 @@ describe("failure evidence redaction", () => {
 
     expect(workflow).toMatch(/force_evidence_failure:[\s\S]*?type: boolean/);
     expect(workflow).toMatch(/run_pdf_worker_pilot:[\s\S]*?type: boolean/);
+    expect(workflow).toMatch(/run_cellar_pilot:[\s\S]*?type: boolean/);
     expect(workflow).toMatch(
       /github\.event_name == 'workflow_dispatch' && inputs\.force_evidence_failure/,
     );
     expect(workflow).toContain("TERROIR_E2E_FORCE_FAILURE:");
     expect(workflow).toContain("PDF_WORKER_E2E_ENABLED:");
+    expect(workflow).toContain("CELLAR_E2E_ENABLED:");
     expect(workflow).toContain(
       "pnpm exec playwright test e2e/lists/pdf-worker.test.ts --workers=1",
     );
     expect(workflow).toContain("inputs.run_pdf_worker_pilot && matrix.slot == 1");
+    expect(workflow).toContain(
+      "pnpm exec playwright test e2e/cellar-staging.test.ts --workers=1",
+    );
+    expect(workflow).toContain("inputs.run_cellar_pilot && matrix.slot == 1");
     expect(workflow).toContain("timeout-minutes: 25");
     expect(workflow).toContain(
       "TERROIR_E2E_BROWSER_PATH: /usr/bin/google-chrome",
