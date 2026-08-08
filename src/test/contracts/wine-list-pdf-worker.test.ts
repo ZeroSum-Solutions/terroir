@@ -14,15 +14,18 @@ const handler = readFileSync("src/worker/wine-list-pdf-handler.ts", "utf8");
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
   scripts: Record<string, string>;
 };
+const railpackConfig = JSON.parse(readFileSync("railpack.json", "utf8")) as {
+  buildAptPackages: string[];
+  deploy: {
+    aptPackages: string[];
+    variables: Record<string, string>;
+  };
+};
 const puppeteerConfig = readFileSync(".puppeteerrc.cjs", "utf8");
 const webManifest = readFileSync("railway.toml", "utf8");
 const workerManifest = readFileSync("railway.worker.toml", "utf8");
 const browserValidator = readFileSync(
   "scripts/validate-worker-browser.mjs",
-  "utf8",
-);
-const browserInstaller = readFileSync(
-  "scripts/install-worker-browser.mjs",
   "utf8",
 );
 const client = readFileSync(
@@ -52,23 +55,23 @@ describe("TER-021E PDF worker contract", () => {
     expect(client).toContain("waitForQueuedPdf");
   });
 
-  it("installs and verifies the pinned browser before building the worker image", () => {
-    expect(packageJson.scripts["worker:install-browser"]).toBe(
-      "node scripts/install-worker-browser.mjs",
-    );
-    expect(workerManifest).toContain("pnpm worker:install-browser");
+  it("installs and verifies the system browser in build and runtime images", () => {
+    expect(packageJson.scripts["worker:install-browser"]).toBeUndefined();
+    expect(workerManifest).not.toContain("pnpm worker:install-browser");
     expect(workerManifest).toContain("pnpm validate:worker-browser");
-    expect(webManifest).toContain("pnpm worker:install-browser");
+    expect(webManifest).not.toContain("pnpm worker:install-browser");
     expect(webManifest).toContain("pnpm validate:worker-browser");
-    expect(puppeteerConfig).toContain(
-      'join(__dirname, ".cache", "puppeteer")',
+    expect(railpackConfig.buildAptPackages).toContain("chromium");
+    expect(railpackConfig.deploy.aptPackages).toContain("chromium");
+    expect(railpackConfig.deploy.variables.PUPPETEER_EXECUTABLE_PATH).toBe(
+      "/usr/bin/chromium",
     );
+    expect(puppeteerConfig).toContain("chrome: { skipDownload: true }");
     expect(puppeteerConfig).toContain(
       '"chrome-headless-shell": { skipDownload: true }',
     );
-    expect(browserInstaller).toContain("await downloadBrowsers()");
-    expect(browserInstaller).toContain("constants.X_OK");
-    expect(browserValidator).toContain("puppeteer.executablePath()");
+    expect(browserValidator).toContain('process.platform === "linux"');
+    expect(browserValidator).toContain('"/usr/bin/chromium"');
     expect(browserValidator).toContain("constants.X_OK");
   });
 

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "node",
+  "buildAptPackages": ["chromium"],
+  "deploy": {
+    "aptPackages": ["chromium"],
+    "variables": {
+      "PUPPETEER_EXECUTABLE_PATH": "/usr/bin/chromium"
+    }
+  }
+}

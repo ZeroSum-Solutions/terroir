@@ -1,15 +1,14 @@
 # BND-035 — Railway service config.
 #
-# Railway uses Railpack (its current build system) to auto-detect Node,
-# pnpm, and Chromium's system dependencies from the repo. Puppeteer's browser
-# payload is installed and verified explicitly because Railpack's dependency
-# cache can otherwise retain an incomplete browser extraction.
+# Railway uses Railpack (its current build system) to auto-detect Node and pnpm.
+# railpack.json installs Debian Chromium in both the build and final images and
+# selects /usr/bin/chromium for Puppeteer. The build verifies that executable.
 #
 # Healthcheck points at the no-auth /api/health endpoint so Railway
 # can distinguish "process is alive and serving" from "zombie".
 
 [deploy]
-buildCommand = "pnpm worker:install-browser && pnpm validate:worker-browser && pnpm validate:env && pnpm build"
+buildCommand = "pnpm validate:worker-browser && pnpm validate:env && pnpm build"
 startCommand = "pnpm start"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 30

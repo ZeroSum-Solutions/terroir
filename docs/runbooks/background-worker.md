@@ -68,17 +68,15 @@ handler or an approved cleanup disposition. Health exposes
 `registered_handlers` and `accepting_jobs` so an idle control-plane deployment
 cannot be mistaken for active job processing.
 
-The repository's `.puppeteerrc.cjs` pins the browser cache inside `/app`, where
-Railpack copies it into the runtime image. Both web and worker manifests run
-`pnpm worker:install-browser` followed by `pnpm validate:worker-browser`; the
-web fallback needs the same executable as the asynchronous worker. The second
-command fails the image build unless Puppeteer's resolved executable exists and
-is executable. Do not enable the PDF queue when the build omitted this gate,
-even if the control-plane health check is otherwise ready.
-
-The installer awaits Puppeteer's download promise and installs only full Chrome;
-the headless-shell duplicate is disabled. This avoids a provider build advancing
-while an asynchronous archive extraction is still incomplete.
+The repository's `railpack.json` installs Debian's `chromium` package in both
+the build and final runtime images and sets Puppeteer's executable to
+`/usr/bin/chromium`. Both web and worker manifests run
+`pnpm validate:worker-browser`; the web fallback needs the same executable as
+the asynchronous worker. The command fails the image build unless that path is
+an executable file. `.puppeteerrc.cjs` disables Puppeteer's archive downloads,
+so a provider cache or incomplete extraction cannot silently determine runtime
+readiness. Do not enable the PDF queue when the build omitted this gate, even if
+the control-plane health check is otherwise ready.
 
 ## Wine-list PDF pilot
 
