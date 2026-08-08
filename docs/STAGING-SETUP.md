@@ -90,6 +90,13 @@ manual-field, and cross-tenant-denial evidence; retry, restart, dead-letter,
 duplicate-delivery, drain, and rollback evidence remain mandatory under the
 worker runbook. Production activation is prohibited in this task.
 
+The opt-in `run_analytics_pilot` input also runs only in isolated browser slot
+1. It seeds tenant-owned scans, invoice-linked spend, and consecutive market
+observations; applies a validated custom range; checks auto-accepted versus
+corrected line-item metrics; verifies the range-bound CSV; and confirms foreign
+tenant data stays absent. The pilot is required runtime evidence for TER-027,
+but collection alone is not a pass and it does not close TER-020 or TER-026.
+
 GitHub environment required reviewers are unavailable on the repository's
 current plan. The repository variable and exact-confirmation check are the
 enforced fallback: set `PRODUCTION_RELEASE_OWNER` to the named release owner's

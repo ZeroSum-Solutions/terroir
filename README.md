@@ -72,6 +72,9 @@ Before your first deploy, set these as Railway service variables:
 - `ANTHROPIC_API_KEY`
 - `AZURE_DOC_INTELLIGENCE_ENDPOINT`, `AZURE_DOC_INTELLIGENCE_KEY`
 - `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_AUTH_TOKEN` (optional; enables source-map uploads)
+- `PRICE_VARIANCE_HIGHLIGHT_THRESHOLD` (optional; defaults to `0.10` and
+  controls both last-paid variance badges and consecutive market-shift
+  highlighting)
 
 See `.env.example` for the full list with notes.
 

@@ -1,0 +1,85 @@
+spec_id: TER-027
+implementation_commits:
+  - 8634922
+  - ae8195f
+  - a8195b4
+  - 42443f0
+  - f6bddf6
+status: source_complete_staging_and_dependencies_pending
+scope: Complete active price-comparison and insights requirements TER-CF-165 through TER-CF-179 with exact market-shift, correction, date-range, export, tenant, and failure semantics.
+requirement_evidence:
+  TER-CF-165:
+    implementation: src/app/(app)/price-comparison/page.tsx
+    tests: src/app/(app)/price-comparison/market-shift.test.tsx; src/app/(app)/price-comparison/page-query-errors.test.ts; e2e/analytics-staging.test.ts
+  TER-CF-166:
+    implementation: src/app/(app)/price-comparison/page.tsx
+    tests: src/app/(app)/price-comparison/market-shift.test.tsx; e2e/analytics-staging.test.ts
+  TER-CF-167:
+    implementation: src/components/overpaid-flag-button.tsx; src/app/api/wines/[id]/overpaid/route.ts
+    tests: src/app/(app)/insights/wine-alert-idempotency.test.tsx; src/app/api/wines/wine-alert-idempotency.test.ts
+  TER-CF-168:
+    implementation: src/app/(app)/price-comparison/page.tsx; src/app/(app)/price-comparison/sort-controls.tsx
+    tests: src/app/(app)/price-comparison/sort-controls.test.tsx
+  TER-CF-169:
+    implementation: src/app/(app)/price-comparison/page.tsx; src/lib/insights/analytics.ts; supabase/migrations/0085_market_price_shift_observations.sql
+    tests: src/app/(app)/price-comparison/market-shift.test.tsx; src/test/contracts/market-price-shift.test.ts; supabase/tests/0085_market_price_shift_observations.sql; e2e/analytics-staging.test.ts
+  TER-CF-170:
+    implementation: src/app/(app)/insights/page.tsx
+    tests: src/app/(app)/insights/page-query-errors.test.ts; src/app/api/insights/route-family.test.ts; e2e/analytics-staging.test.ts
+  TER-CF-171:
+    implementation: src/app/(app)/insights/page.tsx; src/app/api/insights/route.ts
+    tests: src/app/api/insights/route-family.test.ts; e2e/analytics-staging.test.ts
+  TER-CF-172:
+    implementation: src/app/(app)/insights/pour-analytics-section.tsx; src/app/api/insights/pour/route.ts
+    tests: src/app/api/insights/pour/route.test.ts
+  TER-CF-173:
+    implementation: src/app/(app)/insights/pour-analytics-section.tsx; src/app/api/insights/pour/route.ts
+    tests: src/app/api/insights/pour/route.test.ts
+  TER-CF-174:
+    implementation: src/app/(app)/insights/pour-analytics-section.tsx; src/app/api/insights/pour/route.ts
+    tests: src/app/api/insights/pour/route.test.ts
+  TER-CF-175:
+    implementation: src/app/(app)/insights/page.tsx; src/lib/drink-window/alerts.ts
+    tests: src/app/(app)/insights/page-query-errors.test.ts; src/lib/drink-window/status.test.ts
+  TER-CF-176:
+    implementation: src/app/(app)/insights/page.tsx
+    tests: src/app/(app)/insights/page-query-errors.test.ts; e2e/analytics-staging.test.ts
+  TER-CF-177:
+    implementation: src/lib/insights/analytics.ts; src/app/(app)/insights/page.tsx; src/app/api/insights/route.ts; src/app/api/insights/csv/route.ts
+    tests: src/lib/insights/analytics.test.ts; src/app/api/insights/route-family.test.ts; e2e/analytics-staging.test.ts
+  TER-CF-178:
+    implementation: src/app/(app)/insights/date-range-selector.tsx; src/app/(app)/insights/date-range.ts
+    tests: src/app/(app)/insights/date-range-selector.test.tsx; src/app/(app)/insights/date-range.test.ts; e2e/analytics-staging.test.ts
+  TER-CF-179:
+    implementation: src/app/(app)/insights/page.tsx; src/app/api/insights/csv/route.ts
+    tests: src/app/api/insights/route-family.test.ts; e2e/analytics-staging.test.ts
+verification:
+  red_green: Focused tests first reproduced field-level edit inflation, last-paid variance mislabeled as market movement, the missing custom selector, range-blind CSV spend, and silent query failures; the implementation then passed the same public-seam regressions.
+  focused: Eleven analytics, route-family, UI, contract, and workflow files passed with 68 tests; TypeScript no-emit and diff checks passed.
+  database: Migration 0085 and its transactional acceptance passed in isolated PostgreSQL, proving first-observation behavior, consecutive 100-to-120 retention, unchanged-observation stability, and outer rollback.
+  static: The 0085 schema snapshot was regenerated; all rollback pairs, the staging workflow contract, actionlint, and one-test Playwright collection passed before the documentation checkpoint.
+  browser: The isolated analytics staging test is implemented and collected but has not yet run against the exact integrated staging candidate.
+  independent_review: Pending exact-HEAD review after documentation and security evidence are committed.
+security:
+  authentication: Insights APIs retain requireMembership and authenticated app-shell boundaries.
+  authorization: Every application query remains explicitly restaurant-bound; the market-observation trigger grants no new role or table privilege.
+  untrusted_input: Custom dates require exact valid UTC calendar days with from not after to; invalid custom exports return 400 before database work.
+  export: CSV fields remain escaped, include only the active tenant and date range, and are returned directly for request-lifetime handling.
+dependency_evidence_required:
+  - Close the five planned TER-020 exact-path handlers before marking TER-027 complete.
+  - Close TER-026 provider, worker, and integrated staging evidence required by the canonical dependency graph.
+staging_evidence_required:
+  - Apply migration 0085 to isolated staging and run the opt-in analytics pilot against the exact integrated release SHA.
+  - Preserve responsive browser, query-failure, tenant-isolation, custom-range, CSV, and consecutive-market-observation evidence.
+production_evidence_required:
+  - Promote only through TER-046 after the final integrated candidate passes the complete release gate and production canaries.
+deployment:
+  executed: false
+  environment: none
+  candidate: null
+  production_changed: false
+known_limits:
+  - Browser and staging proof are pending the exact integrated candidate.
+  - TER-020 and TER-026 remain hard dependencies; this record does not mark TER-027 complete ahead of them.
+  - Production remains unchanged; promotion is reserved for TER-046.
+rollback: Revert the TER-027 commits in reverse order and apply supabase/migrations/down/0085_market_price_shift_observations.down.sql before removing application changes.

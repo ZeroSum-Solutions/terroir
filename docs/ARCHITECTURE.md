@@ -18,6 +18,9 @@ business workflows. Adapter modules own external provider mechanics.
   sort, low-stock, and drink-window presentation rules.
 - `../src/lib/cellar/inventory-aggregation.ts`: per-wine quantity, weighted
   average cost, newest-purchase metadata, and bottle-format aggregation.
+- `../src/lib/insights/analytics.ts`: shared line-item correction summaries and
+  consecutive market-observation shift calculations for the page, JSON API,
+  and CSV export.
 - `../src/lib/wine-intelligence/enrich.ts`: deterministic drink-window,
   serving-temperature, and decant recommendations plus batched provider-result
   normalization and LWIN fallback inputs.
@@ -103,6 +106,23 @@ business workflows. Adapter modules own external provider mechanics.
   callable contract after direct table updates are restricted; it repeats the
   role check, rejects oversized or malformed batches, and filters every write
   by both restaurant and wine identifiers.
+- `wines_capture_previous_retail_median` retains the immediately preceding
+  positive market median and its observation time whenever a new median is
+  stored. Price-comparison highlighting uses that consecutive market movement;
+  last-paid-versus-market variance remains a separate purchasing metric.
+
+## Insights Query and Export Contract
+
+- The insights page, JSON endpoint, and CSV export derive extraction accuracy
+  from auto-accepted versus corrected line items. Multiple edited fields on one
+  line item count as one corrected item; field-level OCR confidence is not the
+  business KPI.
+- Quick ranges and validated UTC custom boundaries apply to invoice scans and
+  invoice-linked spend. The CSV link carries the active range, and malformed
+  custom ranges are rejected before tenant data is queried.
+- Page and export reads are restaurant-bound and fail closed on query errors.
+  CSV data is returned directly to the authenticated requester and follows the
+  request-lifetime handling documented in the data-lifecycle runbook.
 
 ## Background Job Progress UI
 
