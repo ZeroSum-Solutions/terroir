@@ -24,7 +24,6 @@ type Params = Promise<{ id: string }>;
 const ParamsSchema = z.strictObject({ id: z.string().uuid() });
 
 const EditInventorySchema = z.object({
-  quantity: z.number().int().min(0).optional(),
   unit_cost: z.number().min(0).optional(),
   bin_location: z.string().trim().max(50).nullable().optional(),
 });

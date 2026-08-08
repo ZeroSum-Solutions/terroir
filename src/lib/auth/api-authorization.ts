@@ -20,6 +20,7 @@ export const API_AUTHORIZATION = {
   "api:POST:/api/cellar": membership("cellar:manage"),
   "api:PATCH:/api/cellar/{param}": membership("cellar:manage"),
   "api:DELETE:/api/cellar/{param}": membership("cellar:delete"),
+  "api:PATCH:/api/cellar/{param}/quantity": membership("cellar:manage"),
   "api:PATCH:/api/cellar/{param}/section": membership("cellar:manage"),
   "api:POST:/api/cellar/batch-section": membership("cellar:manage"),
   "api:GET:/api/cellar/config": membership("cellar:view"),

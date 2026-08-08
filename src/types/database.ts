@@ -1047,6 +1047,22 @@ export type Database = {
           response_status: number
         }[]
       }
+      adjust_cellar_quantity_idempotent: {
+        Args: {
+          p_idempotency_key?: string
+          p_quantity: number
+          p_reason: string
+          p_request_hash?: string
+          p_restaurant_id: string
+          p_wine_id: string
+        }
+        Returns: {
+          outcome: string
+          replayed: boolean
+          response_body: Json
+          response_status: number
+        }[]
+      }
       add_manual_overrides: {
         Args: { p_fields: string[]; p_wine_id: string }
         Returns: undefined

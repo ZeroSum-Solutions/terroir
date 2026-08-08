@@ -4,7 +4,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Search, Settings, LayoutGrid, List as ListIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getDrinkWindowStatus, isHolding } from "@/lib/drink-window/status";
+import { isHolding } from "@/lib/drink-window/status";
+import {
+  CELLAR_COLOURS,
+  isCellarLowStock,
+  isPastDrinkWindow,
+  type CellarColour,
+  type CellarInventoryViewOptions,
+  type CellarSort,
+} from "@/lib/cellar/inventory-view";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
 import { CellarList, type CellarFilter } from "./cellar-list";
@@ -84,6 +92,11 @@ export function CellarShell({
   const [filter, setFilter] = useState<CellarFilter>(
     initialMode === "pour" ? "open" : "all",
   );
+  const [colour, setColour] = useState<CellarColour | "all">("all");
+  const [location, setLocation] = useState("");
+  const [vintageMin, setVintageMin] = useState("");
+  const [vintageMax, setVintageMax] = useState("");
+  const [sort, setSort] = useState<CellarSort>("name");
   const [view, setView] = useState<"list" | "grid">("list");
   const [selectedId, setSelectedId] = useState<string | null>(
     initialWineId && rows.some((r) => r.wine_id === initialWineId)
@@ -102,6 +115,27 @@ export function CellarShell({
 
   const canManage = role === "owner" || role === "manager";
   const isOwner = role === "owner";
+  const locationOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          rows
+            .flatMap((row) => [row.region, row.country])
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [rows],
+  );
+  const inventoryViewOptions = useMemo<CellarInventoryViewOptions>(
+    () => ({
+      colour,
+      location,
+      vintageMin: vintageMin === "" ? null : Number(vintageMin),
+      vintageMax: vintageMax === "" ? null : Number(vintageMax),
+      sort,
+    }),
+    [colour, location, vintageMin, vintageMax, sort],
+  );
 
   useEffect(() => {
     const intent = resolveCellarNavigationIntent(
@@ -155,21 +189,18 @@ export function CellarShell({
     ).length;
     const outCount = rows.filter((r) => r.is_eightysixed).length;
     const lowCount = rows.filter((r) => {
-      if (r.is_eightysixed) return false;
-      if (!r.size_ml) return false;
-      const totalMl = (r.open_remaining_ml ?? 0) + r.sealed_count * r.size_ml;
-      return totalMl < 2 * r.size_ml;
+      return isCellarLowStock(r, cellarConfig?.lowStockThreshold ?? 3);
     }).length;
 
     const drinkNowCount = rows.filter(
-      (r) => !r.is_eightysixed && getDrinkWindowStatus(r.drink_window_start, r.drink_window_end) === "past_peak",
+      (r) => isPastDrinkWindow(r),
     ).length;
     const holdCount = rows.filter(
       (r) => !r.is_eightysixed && isHolding(r.drink_window_start),
     ).length;
 
     return { openCount, outCount, lowCount, drinkNowCount, holdCount };
-  }, [rows]);
+  }, [rows, cellarConfig?.lowStockThreshold]);
 
   const FILTER_CHIPS: Array<{ id: CellarFilter; label: string; count?: number }> = [
     { id: "all", label: "All" },
@@ -307,6 +338,80 @@ export function CellarShell({
         </div>
       )}
 
+      {view === "list" && (
+        <fieldset className="mb-md grid gap-xs rounded-sm border border-border bg-white p-sm sm:grid-cols-2 lg:grid-cols-5">
+          <legend className="sr-only">Inventory filters and sorting</legend>
+          <FilterSelect
+            label="Colour"
+            value={colour}
+            onChange={(value) => setColour(value as CellarColour | "all")}
+            options={[
+              { value: "all", label: "All colours" },
+              ...CELLAR_COLOURS.map((value) => ({
+                value,
+                label: value === "rose" ? "Rosé" : `${value[0].toUpperCase()}${value.slice(1)}`,
+              })),
+            ]}
+          />
+          <FilterSelect
+            label="Region or country"
+            value={location}
+            onChange={setLocation}
+            options={[
+              { value: "", label: "All locations" },
+              ...locationOptions.map((value) => ({ value, label: value })),
+            ]}
+          />
+          <label className="flex flex-col gap-2xs text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+            Vintage range
+            <span className="grid grid-cols-2 gap-2xs">
+              <input
+                type="number"
+                inputMode="numeric"
+                aria-label="Minimum vintage"
+                placeholder="From"
+                value={vintageMin}
+                onChange={(event) => setVintageMin(event.target.value)}
+                className="h-9 min-w-0 rounded-sm border border-border px-sm text-[13px] font-normal normal-case tracking-normal text-ink"
+              />
+              <input
+                type="number"
+                inputMode="numeric"
+                aria-label="Maximum vintage"
+                placeholder="To"
+                value={vintageMax}
+                onChange={(event) => setVintageMax(event.target.value)}
+                className="h-9 min-w-0 rounded-sm border border-border px-sm text-[13px] font-normal normal-case tracking-normal text-ink"
+              />
+            </span>
+          </label>
+          <FilterSelect
+            label="Sort by"
+            value={sort}
+            onChange={(value) => setSort(value as CellarSort)}
+            options={[
+              { value: "name", label: "Name (A–Z)" },
+              { value: "price", label: "Price (high–low)" },
+              { value: "vintage", label: "Vintage (new–old)" },
+              { value: "quantity", label: "Quantity (high–low)" },
+            ]}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setColour("all");
+              setLocation("");
+              setVintageMin("");
+              setVintageMax("");
+              setSort("name");
+            }}
+            className="self-end h-9 rounded-sm border border-border px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted"
+          >
+            Clear inventory filters
+          </button>
+        </fieldset>
+      )}
+
       {/* Reconcile entry */}
       {view === "list" && canManage && reconcileItems.length > 0 && (
         <button
@@ -326,10 +431,16 @@ export function CellarShell({
           query={debouncedQuery}
           filter={filter}
           lowStockThreshold={cellarConfig?.lowStockThreshold ?? 3}
+          inventoryViewOptions={inventoryViewOptions}
           onSelectWine={(row) => setSelectedId(row.wine_id)}
           onResetFilters={() => {
             setFilter("all");
             setQuery("");
+            setColour("all");
+            setLocation("");
+            setVintageMin("");
+            setVintageMax("");
+            setSort("name");
           }}
           sections={cellarSections}
         />
@@ -397,6 +508,36 @@ export function CellarShell({
   );
 }
 
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <label className="flex flex-col gap-2xs text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+      {label}
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-9 rounded-sm border border-border bg-white px-sm text-[13px] font-normal normal-case tracking-normal text-ink"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function SearchInput({
   value,
   onChange,
@@ -437,7 +578,7 @@ function SearchInput({
             }
           }
         }}
-        placeholder="Search name, producer, region…"
+        placeholder="Search name, producer, varietal, region, vintage…"
         autoFocus={autoFocus}
         className="h-[38px] w-full rounded-sm border border-border bg-white pl-[32px] pr-[36px] text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
       />

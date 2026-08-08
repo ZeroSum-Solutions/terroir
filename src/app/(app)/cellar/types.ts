@@ -23,6 +23,7 @@ export type CellarWineRow = {
   vintage: number | null;
   varietal: string | null;
   region: string | null;
+  country: string | null;
   is_eightysixed: boolean;
   eightysixed_at: string | null;
   tasting_notes: string | null;
@@ -34,6 +35,9 @@ export type CellarWineRow = {
   bin_location: string | null;
   // BND-063/064 — cellar section from inventory_items.section
   section: string | null;
+  average_unit_cost: number | null;
+  last_purchase_at: string | null;
+  formats: Array<{ format: string; quantity: number }>;
 
   // From list_open_bottle_items RPC (only set if wine has a list-item
   // with pour size — i.e. it's by-the-glass).

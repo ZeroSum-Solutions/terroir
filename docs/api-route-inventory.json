@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 70,
-  "discoveredOperationCount": 86,
+  "routeFileCount": 71,
+  "discoveredOperationCount": 87,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/cellar",
@@ -46,6 +46,17 @@
         "file": "src/app/api/cellar/[id]/route.ts",
         "exportKind": "function-declaration",
         "localName": "DELETE",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/cellar/{param}/quantity",
+      "method": "PATCH",
+      "path": "/api/cellar/[id]/quantity",
+      "source": {
+        "file": "src/app/api/cellar/[id]/quantity/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
         "moduleSpecifier": null
       }
     },

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
 import { loadCellarGridSnapshot } from "@/lib/cellar/grid";
+import { aggregateCellarInventory } from "@/lib/cellar/inventory-aggregation";
 import { parseCellarSections } from "@/lib/cellar/sections";
 import { createWineHeroImageSignedUrls } from "@/domains/cellar/wine-image-service";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
@@ -46,13 +47,13 @@ export default async function CellarPage() {
     supabase
       .from("wines")
       .select(
-        "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, serving_temp_min, serving_temp_max, serving_temp_label, decant_minutes, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until, tasting_notes, hero_image_url, manual_overrides, colour",
+        "id, name, producer, vintage, varietal, region, country, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, serving_temp_min, serving_temp_max, serving_temp_label, decant_minutes, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until, tasting_notes, hero_image_url, manual_overrides, colour",
       )
       .eq("restaurant_id", restaurantId)
       .order("name", { ascending: true }),
     supabase
       .from("inventory_items")
-      .select("wine_id, bin_location, quantity, unit_cost, added_at, section")
+      .select("wine_id, bin_location, quantity, unit_cost, added_at, section, format")
       .eq("restaurant_id", restaurantId)
       .order("added_at", { ascending: false }),
     supabase.rpc("list_open_bottle_items", { p_restaurant_id: restaurantId }),
@@ -145,31 +146,7 @@ export default async function CellarPage() {
     }
   }
 
-  // Aggregate inventory_items per wine: sum sealed count, pick the
-  // first bin_location and section encountered, capture most-recent
-  // unit_cost (inventoryRows is ordered by added_at desc, so the
-  // first item per wine_id is the most recent).
-  const inventoryByWine = new Map<
-    string,
-    { sealed: number; bin: string | null; section: string | null; latestCost: number | null }
-  >();
-  for (const item of inventoryRows ?? []) {
-    if (!item.wine_id) continue;
-    const prev =
-      inventoryByWine.get(item.wine_id) ?? {
-        sealed: 0,
-        bin: null,
-        section: null,
-        latestCost: null,
-      };
-    prev.sealed += item.quantity ?? 0;
-    if (!prev.bin && item.bin_location) prev.bin = item.bin_location;
-    if (!prev.section && item.section) prev.section = item.section;
-    if (prev.latestCost == null && item.unit_cost != null) {
-      prev.latestCost = item.unit_cost;
-    }
-    inventoryByWine.set(item.wine_id, prev);
-  }
+  const inventoryByWine = aggregateCellarInventory(inventoryRows ?? []);
 
   // Index open-bottle RPC results by wine_id.
   const openByWine = new Map<string, OpenBottleRow>();
@@ -181,7 +158,14 @@ export default async function CellarPage() {
   // wine in the cellar shows up, with optional stock data layered on.
   const rows: CellarWineRow[] = (wineRows ?? []).map((w) => {
     const inv =
-      inventoryByWine.get(w.id) ?? { sealed: 0, bin: null, section: null, latestCost: null };
+      inventoryByWine.get(w.id) ?? {
+        sealed: 0,
+        bin: null,
+        section: null,
+        averageUnitCost: null,
+        lastPurchaseAt: null,
+        formats: [],
+      };
     const ob = openByWine.get(w.id);
     const price = priceByWine.get(w.id);
     return {
@@ -191,6 +175,7 @@ export default async function CellarPage() {
       vintage: w.vintage,
       varietal: w.varietal,
       region: w.region,
+      country: w.country,
       is_eightysixed: w.is_eightysixed ?? false,
       eightysixed_at: w.eightysixed_at,
       tasting_notes: w.tasting_notes ?? null,
@@ -199,6 +184,9 @@ export default async function CellarPage() {
       has_inventory_record: inventoryWineIds.has(w.id),
       bin_location: inv.bin,
       section: inv.section,
+      average_unit_cost: inv.averageUnitCost,
+      last_purchase_at: inv.lastPurchaseAt,
+      formats: inv.formats,
       wine_list_item_id: ob?.wine_list_item_id ?? null,
       glass_pour_ml: ob?.glass_pour_ml ?? price?.pourMl ?? null,
       pour_size_mode: ob?.pour_size_mode ?? null,
@@ -231,7 +219,7 @@ export default async function CellarPage() {
       current_glass_price: price?.glass ?? null,
       current_list_name: price?.listName ?? null,
       current_other_list_count: price?.otherListCount ?? 0,
-      current_unit_cost: inv.latestCost,
+      current_unit_cost: inv.averageUnitCost,
       restaurant_default_target_pour_cost_pct:
         restaurantRow?.default_target_pour_cost_pct ?? null,
       restaurant_default_target_markup_ratio:

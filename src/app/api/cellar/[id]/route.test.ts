@@ -245,11 +245,11 @@ describe("PATCH /api/cellar/[id]", () => {
     const supabase = makeSupabase();
     allow(supabase);
 
-    const response = await PATCH(request({ quantity: -1 }), {
+    const response = await PATCH(request({ unit_cost: -1 }), {
       params: Promise.resolve({ id: INVENTORY_ID }),
     });
 
-    await expectValidationError(response, ["quantity"]);
+    await expectValidationError(response, ["unit_cost"]);
     expect(supabase.from).not.toHaveBeenCalled();
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
@@ -279,7 +279,7 @@ describe("PATCH /api/cellar/[id]", () => {
     allow(supabase);
 
     const response = await PATCH(
-      request({ quantity: 4, bin_location: "  A-2  " }),
+      request({ unit_cost: 4, bin_location: "  A-2  " }),
       { params: Promise.resolve({ id: INVENTORY_ID }) },
     );
 
@@ -287,8 +287,7 @@ describe("PATCH /api/cellar/[id]", () => {
     expect(response.headers.get("Idempotency-Replayed")).toBeNull();
     expect(await response.json()).toEqual({
       id: INVENTORY_ID,
-      quantity: 4,
-      unit_cost: null,
+      unit_cost: 4,
       bin_location: "A-2",
     });
     expect(supabase.rpc).not.toHaveBeenCalled();
@@ -299,7 +298,7 @@ describe("PATCH /api/cellar/[id]", () => {
     allow(supabase);
 
     const response = await PATCH(
-      request({ quantity: 4 }, "bad key!"),
+      request({ unit_cost: 4 }, "bad key!"),
       { params: Promise.resolve({ id: INVENTORY_ID }) },
     );
 
@@ -321,7 +320,6 @@ describe("PATCH /api/cellar/[id]", () => {
     const response = await PATCH(
       request(
         {
-          quantity: 4,
           unit_cost: 18.5,
           bin_location: "  A-2  ",
           ignored_client_field: true,
@@ -342,7 +340,6 @@ describe("PATCH /api/cellar/[id]", () => {
         p_idempotency_key: KEY,
         p_request_hash: createIdempotencyRequestHash({
           id: INVENTORY_ID,
-          quantity: 4,
           unit_cost: 18.5,
           bin_location: "A-2",
         }),
@@ -355,7 +352,6 @@ describe("PATCH /api/cellar/[id]", () => {
         method: "update",
         args: [
           {
-            quantity: 4,
             unit_cost: 18.5,
             bin_location: "A-2",
           },
@@ -372,7 +368,6 @@ describe("PATCH /api/cellar/[id]", () => {
         p_response_status: 200,
         p_response_body: {
           id: INVENTORY_ID,
-          quantity: 4,
           unit_cost: 18.5,
           bin_location: "A-2",
         },
@@ -383,7 +378,6 @@ describe("PATCH /api/cellar/[id]", () => {
   it("replays a completed response without another inventory update", async () => {
     const replayBody = {
       id: INVENTORY_ID,
-      quantity: 4,
       unit_cost: 18.5,
       bin_location: "A-2",
     };
@@ -400,7 +394,6 @@ describe("PATCH /api/cellar/[id]", () => {
     const response = await PATCH(
       request(
         {
-          quantity: 4,
           unit_cost: 18.5,
           bin_location: "A-2",
         },
@@ -422,7 +415,7 @@ describe("PATCH /api/cellar/[id]", () => {
 
     const response = await PATCH(
       request({
-        quantity: 4,
+        unit_cost: 4,
         bin_location: "  A-2  ",
         ignored_client_field: true,
       }),
@@ -432,7 +425,7 @@ describe("PATCH /api/cellar/[id]", () => {
     expect(response.status).toBe(200);
     expect(supabase.calls).toContainEqual({
       method: "update",
-      args: [{ quantity: 4, bin_location: "A-2" }],
+      args: [{ unit_cost: 4, bin_location: "A-2" }],
     });
     expect(supabase.calls).toContainEqual({
       method: "eq",
@@ -453,7 +446,7 @@ describe("PATCH /api/cellar/[id]", () => {
     });
     allow(supabase);
 
-    const response = await PATCH(request({ quantity: 2 }), {
+    const response = await PATCH(request({ unit_cost: 2 }), {
       params: Promise.resolve({ id: INVENTORY_ID }),
     });
 
@@ -477,7 +470,7 @@ describe("PATCH /api/cellar/[id]", () => {
     });
     allow(supabase);
 
-    const response = await PATCH(request({ quantity: 2 }, KEY), {
+    const response = await PATCH(request({ unit_cost: 2 }, KEY), {
       params: Promise.resolve({ id: INVENTORY_ID }),
     });
 
@@ -514,7 +507,7 @@ describe("PATCH /api/cellar/[id]", () => {
     });
     allow(supabase);
 
-    const response = await PATCH(request({ quantity: 2 }), {
+    const response = await PATCH(request({ unit_cost: 2 }), {
       params: Promise.resolve({ id: INVENTORY_ID }),
     });
 
@@ -538,7 +531,7 @@ describe("PATCH /api/cellar/[id]", () => {
     });
     allow(supabase);
 
-    const response = await PATCH(request({ quantity: 2 }, KEY), {
+    const response = await PATCH(request({ unit_cost: 2 }, KEY), {
       params: Promise.resolve({ id: INVENTORY_ID }),
     });
 

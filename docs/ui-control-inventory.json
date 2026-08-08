@@ -6,7 +6,7 @@
     "sourceRoot": "src/app"
   },
   "routeCount": 23,
-  "controlCount": 336,
+  "controlCount": 345,
   "routes": [
     {
       "source": "src/app/page.tsx",
@@ -406,7 +406,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-list.tsx#link-001",
       "source": "src/app/(app)/cellar/cellar-list.tsx",
-      "line": 334,
+      "line": 335,
       "kind": "link",
       "label": "Scan an invoice →",
       "href": "/scan",
@@ -423,7 +423,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-list.tsx#button-001",
       "source": "src/app/(app)/cellar/cellar-list.tsx",
-      "line": 360,
+      "line": 361,
       "kind": "button",
       "label": "Clear filter & search",
       "href": null,
@@ -440,7 +440,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-list.tsx#button-002",
       "source": "src/app/(app)/cellar/cellar-list.tsx",
-      "line": 377,
+      "line": 378,
       "kind": "button",
       "label": "Select wines",
       "href": null,
@@ -457,7 +457,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-list.tsx#button-003",
       "source": "src/app/(app)/cellar/cellar-list.tsx",
-      "line": 391,
+      "line": 392,
       "kind": "button",
       "label": "Select all ({dynamic})",
       "href": null,
@@ -474,7 +474,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-list.tsx#button-004",
       "source": "src/app/(app)/cellar/cellar-list.tsx",
-      "line": 400,
+      "line": 401,
       "kind": "button",
       "label": "Clear",
       "href": null,
@@ -491,7 +491,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-list.tsx#button-005",
       "source": "src/app/(app)/cellar/cellar-list.tsx",
-      "line": 411,
+      "line": 412,
       "kind": "button",
       "label": "Assign {dynamic} to section",
       "href": null,
@@ -508,7 +508,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-list.tsx#button-006",
       "source": "src/app/(app)/cellar/cellar-list.tsx",
-      "line": 427,
+      "line": 428,
       "kind": "button",
       "label": "{dynamic}",
       "href": null,
@@ -525,7 +525,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-list.tsx#button-007",
       "source": "src/app/(app)/cellar/cellar-list.tsx",
-      "line": 449,
+      "line": 450,
       "kind": "button",
       "label": "{dynamic}",
       "href": null,
@@ -542,9 +542,9 @@
     {
       "id": "src/app/(app)/cellar/cellar-list.tsx#button-008",
       "source": "src/app/(app)/cellar/cellar-list.tsx",
-      "line": 457,
+      "line": 458,
       "kind": "button",
-      "label": "button at src/app/(app)/cellar/cellar-list.tsx:457",
+      "label": "button at src/app/(app)/cellar/cellar-list.tsx:458",
       "href": null,
       "actors": [
         "owner",
@@ -559,7 +559,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-list.tsx#button-009",
       "source": "src/app/(app)/cellar/cellar-list.tsx",
-      "line": 470,
+      "line": 471,
       "kind": "button",
       "label": "Done",
       "href": null,
@@ -576,7 +576,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-list.tsx#button-010",
       "source": "src/app/(app)/cellar/cellar-list.tsx",
-      "line": 723,
+      "line": 724,
       "kind": "button",
       "label": "!row.has_inventory_record\n              ? \"Cannot assign a wine without an inventory record\"\n              : selected\n                ? \"Deselect\"\n                : \"Select\"",
       "href": null,
@@ -593,7 +593,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-list.tsx#button-011",
       "source": "src/app/(app)/cellar/cellar-list.tsx",
-      "line": 751,
+      "line": 752,
       "kind": "button",
       "label": "Drag to reorder",
       "href": null,
@@ -610,7 +610,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-list.tsx#button-012",
       "source": "src/app/(app)/cellar/cellar-list.tsx",
-      "line": 762,
+      "line": 763,
       "kind": "button",
       "label": "{dynamic} {dynamic} {dynamic} } {dynamic} } {dynamic} {dynamic} {dynamic} {dynamic} {dynamic} {dynamic} {dynamic} glass{dynamic} left )} {dynamic} {dynamic} )} ",
       "href": null,
@@ -627,7 +627,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-shell.tsx#button-001",
       "source": "src/app/(app)/cellar/cellar-shell.tsx",
-      "line": 213,
+      "line": 244,
       "kind": "button",
       "label": "Search wines",
       "href": null,
@@ -644,7 +644,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-shell.tsx#button-002",
       "source": "src/app/(app)/cellar/cellar-shell.tsx",
-      "line": 240,
+      "line": 271,
       "kind": "button",
       "label": "Cellar settings",
       "href": null,
@@ -661,7 +661,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-shell.tsx#button-003",
       "source": "src/app/(app)/cellar/cellar-shell.tsx",
-      "line": 261,
+      "line": 292,
       "kind": "button",
       "label": "Show",
       "href": null,
@@ -678,7 +678,7 @@
     {
       "id": "src/app/(app)/cellar/cellar-shell.tsx#button-004",
       "source": "src/app/(app)/cellar/cellar-shell.tsx",
-      "line": 279,
+      "line": 310,
       "kind": "button",
       "label": "{dynamic} {dynamic} )}",
       "href": null,
@@ -693,11 +693,45 @@
       "unavailableState": null
     },
     {
+      "id": "src/app/(app)/cellar/cellar-shell.tsx#input-001",
+      "source": "src/app/(app)/cellar/cellar-shell.tsx",
+      "line": 368,
+      "kind": "input",
+      "label": "Minimum vintage",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-shell.tsx#input-002",
+      "source": "src/app/(app)/cellar/cellar-shell.tsx",
+      "line": 377,
+      "kind": "input",
+      "label": "Maximum vintage",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
       "id": "src/app/(app)/cellar/cellar-shell.tsx#button-005",
       "source": "src/app/(app)/cellar/cellar-shell.tsx",
-      "line": 312,
+      "line": 399,
       "kind": "button",
-      "label": "Reconcile {dynamic} open bottle {dynamic} →",
+      "label": "Clear inventory filters",
       "href": null,
       "actors": [
         "owner",
@@ -712,26 +746,9 @@
     {
       "id": "src/app/(app)/cellar/cellar-shell.tsx#button-006",
       "source": "src/app/(app)/cellar/cellar-shell.tsx",
-      "line": 357,
+      "line": 417,
       "kind": "button",
-      "label": "Done",
-      "href": null,
-      "actors": [
-        "owner",
-        "manager",
-        "staff"
-      ],
-      "requirementId": "TER-CF-064",
-      "interactionTest": "e2e/ui-control-crawl.test.ts",
-      "transientDisabled": false,
-      "unavailableState": null
-    },
-    {
-      "id": "src/app/(app)/cellar/cellar-shell.tsx#input-001",
-      "source": "src/app/(app)/cellar/cellar-shell.tsx",
-      "line": 422,
-      "kind": "input",
-      "label": "Search name, producer, region…",
+      "label": "Reconcile {dynamic} open bottle {dynamic} →",
       "href": null,
       "actors": [
         "owner",
@@ -746,9 +763,43 @@
     {
       "id": "src/app/(app)/cellar/cellar-shell.tsx#button-007",
       "source": "src/app/(app)/cellar/cellar-shell.tsx",
-      "line": 445,
+      "line": 468,
       "kind": "button",
-      "label": "Clear search",
+      "label": "Done",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-shell.tsx#select-001",
+      "source": "src/app/(app)/cellar/cellar-shell.tsx",
+      "line": 525,
+      "kind": "select",
+      "label": "label",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-shell.tsx#input-003",
+      "source": "src/app/(app)/cellar/cellar-shell.tsx",
+      "line": 563,
+      "kind": "input",
+      "label": "Search name, producer, varietal, region, vintage…",
       "href": null,
       "actors": [
         "owner",
@@ -763,7 +814,24 @@
     {
       "id": "src/app/(app)/cellar/cellar-shell.tsx#button-008",
       "source": "src/app/(app)/cellar/cellar-shell.tsx",
-      "line": 482,
+      "line": 586,
+      "kind": "button",
+      "label": "Clear search",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/cellar-shell.tsx#button-009",
+      "source": "src/app/(app)/cellar/cellar-shell.tsx",
+      "line": 623,
       "kind": "button",
       "label": "`${label",
       "href": null,
@@ -1475,6 +1543,74 @@
       "unavailableState": null
     },
     {
+      "id": "src/app/(app)/cellar/quantity-adjustment-modal.tsx#button-001",
+      "source": "src/app/(app)/cellar/quantity-adjustment-modal.tsx",
+      "line": 96,
+      "kind": "button",
+      "label": "Close quantity adjustment",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/quantity-adjustment-modal.tsx#input-001",
+      "source": "src/app/(app)/cellar/quantity-adjustment-modal.tsx",
+      "line": 103,
+      "kind": "input",
+      "label": "input at src/app/(app)/cellar/quantity-adjustment-modal.tsx:103",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/quantity-adjustment-modal.tsx#textarea-001",
+      "source": "src/app/(app)/cellar/quantity-adjustment-modal.tsx",
+      "line": 115,
+      "kind": "textarea",
+      "label": "Physical count, damaged bottle, transfer…",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/quantity-adjustment-modal.tsx#button-002",
+      "source": "src/app/(app)/cellar/quantity-adjustment-modal.tsx",
+      "line": 125,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
       "id": "src/app/(app)/cellar/reconcile-list.tsx#button-001",
       "source": "src/app/(app)/cellar/reconcile-list.tsx",
       "line": 145,
@@ -1664,7 +1800,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-001",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 527,
+      "line": 529,
       "kind": "button",
       "label": "Close",
       "href": null,
@@ -1681,7 +1817,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-002",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 555,
+      "line": 557,
       "kind": "button",
       "label": "Remove image",
       "href": null,
@@ -1698,9 +1834,9 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#input-001",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 571,
+      "line": 573,
       "kind": "input",
-      "label": "input at src/app/(app)/cellar/wine-detail-drawer.tsx:571",
+      "label": "input at src/app/(app)/cellar/wine-detail-drawer.tsx:573",
       "href": null,
       "actors": [
         "owner",
@@ -1715,9 +1851,9 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-003",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 664,
+      "line": 695,
       "kind": "button",
-      "label": "{dynamic}",
+      "label": "Adjust quantity",
       "href": null,
       "actors": [
         "owner",
@@ -1726,15 +1862,15 @@
       ],
       "requirementId": "TER-CF-064",
       "interactionTest": "e2e/ui-control-crawl.test.ts",
-      "transientDisabled": true,
+      "transientDisabled": false,
       "unavailableState": null
     },
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-004",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 676,
+      "line": 705,
       "kind": "button",
-      "label": "{dynamic} oz`}",
+      "label": "{dynamic}",
       "href": null,
       "actors": [
         "owner",
@@ -1749,9 +1885,9 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-005",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 690,
+      "line": 717,
       "kind": "button",
-      "label": "Pick a custom pour size",
+      "label": "{dynamic} oz`}",
       "href": null,
       "actors": [
         "owner",
@@ -1766,9 +1902,9 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-006",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 705,
+      "line": 731,
       "kind": "button",
-      "label": "Undo last pour ({dynamic} oz)",
+      "label": "Pick a custom pour size",
       "href": null,
       "actors": [
         "owner",
@@ -1783,9 +1919,9 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-007",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 717,
+      "line": 746,
       "kind": "button",
-      "label": "{dynamic}",
+      "label": "Undo last pour ({dynamic} oz)",
       "href": null,
       "actors": [
         "owner",
@@ -1800,58 +1936,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-008",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 737,
-      "kind": "button",
-      "label": "{dynamic} {dynamic}",
-      "href": null,
-      "actors": [
-        "owner",
-        "manager",
-        "staff"
-      ],
-      "requirementId": "TER-CF-064",
-      "interactionTest": "e2e/ui-control-crawl.test.ts",
-      "transientDisabled": true,
-      "unavailableState": null
-    },
-    {
-      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-009",
-      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 764,
-      "kind": "button",
-      "label": "Edit metadata",
-      "href": null,
-      "actors": [
-        "owner",
-        "manager",
-        "staff"
-      ],
-      "requirementId": "TER-CF-064",
-      "interactionTest": "e2e/ui-control-crawl.test.ts",
-      "transientDisabled": false,
-      "unavailableState": null
-    },
-    {
-      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-010",
-      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 786,
-      "kind": "button",
-      "label": "Cancel",
-      "href": null,
-      "actors": [
-        "owner",
-        "manager",
-        "staff"
-      ],
-      "requirementId": "TER-CF-064",
-      "interactionTest": "e2e/ui-control-crawl.test.ts",
-      "transientDisabled": true,
-      "unavailableState": null
-    },
-    {
-      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-011",
-      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 794,
+      "line": 758,
       "kind": "button",
       "label": "{dynamic}",
       "href": null,
@@ -1866,9 +1951,77 @@
       "unavailableState": null
     },
     {
-      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-012",
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-009",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 778,
+      "kind": "button",
+      "label": "{dynamic} {dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-010",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
       "line": 805,
+      "kind": "button",
+      "label": "Edit metadata",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": false,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-011",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 827,
+      "kind": "button",
+      "label": "Cancel",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-012",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 835,
+      "kind": "button",
+      "label": "{dynamic}",
+      "href": null,
+      "actors": [
+        "owner",
+        "manager",
+        "staff"
+      ],
+      "requirementId": "TER-CF-064",
+      "interactionTest": "e2e/ui-control-crawl.test.ts",
+      "transientDisabled": true,
+      "unavailableState": null
+    },
+    {
+      "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-013",
+      "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "line": 846,
       "kind": "button",
       "label": "Delete wine",
       "href": null,

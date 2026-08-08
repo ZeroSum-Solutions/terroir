@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 27,
     "plannedPromiseCount": 5,
-    "extensionDiscoveredCount": 59,
+    "extensionDiscoveredCount": 60,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -328,6 +328,12 @@
       "operationId": "api:DELETE:/api/cellar/{param}",
       "classification": "exact",
       "concreteRequirementId": "TER-CF-184",
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:PATCH:/api/cellar/{param}/quantity",
+      "classification": "extension",
+      "concreteRequirementId": null,
       "semanticAliasContext": []
     },
     {

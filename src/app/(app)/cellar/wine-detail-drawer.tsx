@@ -21,6 +21,7 @@ import { NoteModal } from "./note-modal";
 import { EditMetadataModal } from "./edit-metadata-modal";
 import { PourPickerModal } from "./pour-picker-modal";
 import { PricingTargetOverride } from "./pricing-target-override";
+import { QuantityAdjustmentModal } from "./quantity-adjustment-modal";
 import { DrinkWindowTimeline } from "@/components/drink-window-timeline";
 import { PriceBand } from "@/components/price-band";
 import {
@@ -100,6 +101,7 @@ export function WineDetailDrawer({
   const [enriching, setEnriching] = useState(false);
   const [enrichMsg, setEnrichMsg] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [quantityOpen, setQuantityOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wineImageBusyRef = useRef(false);
@@ -619,6 +621,36 @@ export function WineDetailDrawer({
                   Bin {row.bin_location}
                 </p>
               )}
+              <div className="mt-md grid grid-cols-2 gap-sm border-t border-border pt-md text-[12px]">
+                <div>
+                  <span className="block text-ink-subtle">Average cost</span>
+                  <span className="font-medium text-ink">
+                    {row.average_unit_cost == null
+                      ? "—"
+                      : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(row.average_unit_cost)}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-ink-subtle">Last purchase</span>
+                  <span className="font-medium text-ink">
+                    {row.last_purchase_at
+                      ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(row.last_purchase_at))
+                      : "—"}
+                  </span>
+                </div>
+              </div>
+              {row.formats.length > 0 && (
+                <div className="mt-sm border-t border-border pt-sm">
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-ink-subtle">Inventory by format</span>
+                  <ul className="mt-xs flex flex-wrap gap-xs" aria-label="Inventory by format">
+                    {row.formats.map(({ format, quantity }) => (
+                      <li key={format} className="rounded-full bg-surface-muted px-sm py-2xs text-[11px] text-ink-muted">
+                        {format}: {quantity}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </section>
 
             {/* Tasting notes */}
@@ -659,6 +691,15 @@ export function WineDetailDrawer({
 
             {/* Quick actions */}
             <section aria-label="Actions" className="mt-md flex flex-col gap-sm">
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={() => setQuantityOpen(true)}
+                  className="flex h-[44px] items-center justify-center rounded-sm border border-border-strong bg-white text-[13px] font-medium text-ink hover:bg-surface-muted"
+                >
+                  Adjust quantity
+                </button>
+              )}
               {/* BND-121: Manually open a bottle without recording a pour */}
               {row.sealed_count > 0 && (
                 <button
@@ -865,6 +906,14 @@ export function WineDetailDrawer({
             peak_year: row.peak_year,
           }}
           onClose={() => setEditOpen(false)}
+        />
+      )}
+      {quantityOpen && row && (
+        <QuantityAdjustmentModal
+          wineId={row.wine_id}
+          wineName={`${row.producer} ${row.name}`}
+          currentQuantity={row.sealed_count}
+          onClose={() => setQuantityOpen(false)}
         />
       )}
     </>

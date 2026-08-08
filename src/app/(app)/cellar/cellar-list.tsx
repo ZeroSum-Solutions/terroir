@@ -34,11 +34,17 @@ import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
 import { useToast } from "@/lib/toast";
 import {
+  applyCellarInventoryView,
+  isCellarLowStock,
+  isEnteringOrInDrinkWindow,
+  isPastDrinkWindow,
+  type CellarInventoryViewOptions,
+} from "@/lib/cellar/inventory-view";
+import {
   formatStatusLabel,
   getDrinkWindowStatus,
   getMarkerPosition,
   getYearsUntilWindowClose,
-  isClosingWindow,
   isHolding,
 } from "@/lib/drink-window/status";
 import type { CellarWineRow } from "./types";
@@ -79,6 +85,7 @@ export function CellarList({
   query,
   filter,
   lowStockThreshold,
+  inventoryViewOptions,
   onSelectWine,
   onResetFilters,
   sections,
@@ -87,6 +94,7 @@ export function CellarList({
   query: string;
   filter: CellarFilter;
   lowStockThreshold?: number;
+  inventoryViewOptions: CellarInventoryViewOptions;
   onSelectWine: (row: CellarWineRow) => void;
   onResetFilters: () => void;
   // BND-063/064 — cellar sections for grouping, DnD, and bulk assign
@@ -113,8 +121,7 @@ export function CellarList({
   );
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return rows.filter((r) => {
+    const statusFiltered = rows.filter((r) => {
       switch (filter) {
         case "open":
           if (r.open_remaining_ml === null || r.open_remaining_ml <= 0) return false;
@@ -123,17 +130,13 @@ export function CellarList({
           if (!r.is_eightysixed) return false;
           break;
         case "low": {
-          if (!r.size_ml) return false;
-          const totalMl = (r.open_remaining_ml ?? 0) + r.sealed_count * r.size_ml;
-          if (totalMl >= 2 * r.size_ml) return false;
-          if (r.is_eightysixed) return false;
+          if (!isCellarLowStock(r, lowStockThreshold ?? 3)) return false;
           break;
         }
         case "off-site":
           return false;
         case "drink-now":
-          if (!isClosingWindow(r.drink_window_end)) return false;
-          if (r.is_eightysixed) return false;
+          if (!isPastDrinkWindow(r)) return false;
           break;
         case "hold":
           if (!isHolding(r.drink_window_start)) return false;
@@ -143,15 +146,13 @@ export function CellarList({
         default:
           break;
       }
-      if (!q) return true;
-      return (
-        r.name.toLowerCase().includes(q) ||
-        r.producer.toLowerCase().includes(q) ||
-        (r.varietal ?? "").toLowerCase().includes(q) ||
-        (r.region ?? "").toLowerCase().includes(q)
-      );
+      return true;
     });
-  }, [rows, query, filter]);
+    return applyCellarInventoryView(statusFiltered, {
+      ...inventoryViewOptions,
+      query,
+    });
+  }, [rows, query, filter, lowStockThreshold, inventoryViewOptions]);
   const selectableFiltered = useMemo(
     () => filtered.filter((row) => row.has_inventory_record),
     [filtered],
@@ -696,8 +697,8 @@ function CellarRow({
     row.open_remaining_ml !== null
       ? (row.open_remaining_ml / ML_PER_OZ).toFixed(1)
       : null;
-  const isLowStock = lowStockThreshold != null && row.sealed_count > 0 && row.sealed_count < lowStockThreshold && !row.is_eightysixed;
-  const isPeakWindow = row.peak_year != null && row.peak_year === new Date().getFullYear() && !row.is_eightysixed;
+  const isLowStock = lowStockThreshold != null && isCellarLowStock(row, lowStockThreshold);
+  const isPeakWindow = isEnteringOrInDrinkWindow(row);
 
   let chip: { label: string; tone: "neutral" | "ok" | "warn" | "danger" | "muted" };
   if (row.is_eightysixed) {
