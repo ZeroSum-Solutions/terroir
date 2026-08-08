@@ -2106,7 +2106,7 @@
     {
       "id": "src/app/(app)/insights/date-range-selector.tsx#button-001",
       "source": "src/app/(app)/insights/date-range-selector.tsx",
-      "line": 70,
+      "line": 79,
       "kind": "button",
       "label": "{dynamic}",
       "href": null,
@@ -2123,9 +2123,9 @@
     {
       "id": "src/app/(app)/insights/date-range-selector.tsx#input-001",
       "source": "src/app/(app)/insights/date-range-selector.tsx",
-      "line": 101,
+      "line": 110,
       "kind": "input",
-      "label": "input at src/app/(app)/insights/date-range-selector.tsx:101",
+      "label": "input at src/app/(app)/insights/date-range-selector.tsx:110",
       "href": null,
       "actors": [
         "owner",
@@ -2140,9 +2140,9 @@
     {
       "id": "src/app/(app)/insights/date-range-selector.tsx#input-002",
       "source": "src/app/(app)/insights/date-range-selector.tsx",
-      "line": 113,
+      "line": 122,
       "kind": "input",
-      "label": "input at src/app/(app)/insights/date-range-selector.tsx:113",
+      "label": "input at src/app/(app)/insights/date-range-selector.tsx:122",
       "href": null,
       "actors": [
         "owner",
@@ -2157,7 +2157,7 @@
     {
       "id": "src/app/(app)/insights/date-range-selector.tsx#button-002",
       "source": "src/app/(app)/insights/date-range-selector.tsx",
-      "line": 122,
+      "line": 131,
       "kind": "button",
       "label": "Apply",
       "href": null,
@@ -2191,7 +2191,7 @@
     {
       "id": "src/app/(app)/insights/page.tsx#link-001",
       "source": "src/app/(app)/insights/page.tsx",
-      "line": 433,
+      "line": 466,
       "kind": "link",
       "label": "Go to scanner",
       "href": "/scan",
@@ -2208,10 +2208,10 @@
     {
       "id": "src/app/(app)/insights/page.tsx#a-001",
       "source": "src/app/(app)/insights/page.tsx",
-      "line": 455,
+      "line": 488,
       "kind": "link",
       "label": "Export CSV",
-      "href": "/api/insights/csv",
+      "href": "exportHref",
       "actors": [
         "owner",
         "manager",
@@ -2225,7 +2225,7 @@
     {
       "id": "src/app/(app)/insights/page.tsx#link-002",
       "source": "src/app/(app)/insights/page.tsx",
-      "line": 557,
+      "line": 590,
       "kind": "link",
       "label": "{dynamic} {dynamic}",
       "href": "`/cellar?wine=${w.wine_id",
@@ -2242,7 +2242,7 @@
     {
       "id": "src/app/(app)/insights/page.tsx#link-003",
       "source": "src/app/(app)/insights/page.tsx",
-      "line": 907,
+      "line": 936,
       "kind": "link",
       "label": "Scan an invoice",
       "href": "/scan",
@@ -2259,7 +2259,7 @@
     {
       "id": "src/app/(app)/insights/page.tsx#link-004",
       "source": "src/app/(app)/insights/page.tsx",
-      "line": 928,
+      "line": 958,
       "kind": "link",
       "label": "`View scan from ${scan.distributor_name",
       "href": "`/scan/${scan.id",
@@ -3806,7 +3806,7 @@
     {
       "id": "src/app/(app)/price-comparison/page.tsx#link-001",
       "source": "src/app/(app)/price-comparison/page.tsx",
-      "line": 288,
+      "line": 337,
       "kind": "link",
       "label": "Go to scanner",
       "href": "/scan",
@@ -3823,7 +3823,7 @@
     {
       "id": "src/app/(app)/price-comparison/page.tsx#link-002",
       "source": "src/app/(app)/price-comparison/page.tsx",
-      "line": 349,
+      "line": 408,
       "kind": "link",
       "label": "`View top savings opportunity: ${comparable[0].wine.producer",
       "href": "`/cellar?wine=${comparable[0].wine.id",
@@ -3840,7 +3840,7 @@
     {
       "id": "src/app/(app)/price-comparison/page.tsx#link-003",
       "source": "src/app/(app)/price-comparison/page.tsx",
-      "line": 428,
+      "line": 488,
       "kind": "link",
       "label": "`View ${comp.wine.producer",
       "href": "`/cellar?wine=${comp.wine.id",
@@ -3857,7 +3857,7 @@
     {
       "id": "src/app/(app)/price-comparison/page.tsx#link-004",
       "source": "src/app/(app)/price-comparison/page.tsx",
-      "line": 564,
+      "line": 629,
       "kind": "link",
       "label": "`View ${comp.wine.producer",
       "href": "`/cellar?wine=${comp.wine.id",
@@ -3874,7 +3874,7 @@
     {
       "id": "src/app/(app)/price-comparison/page.tsx#link-005",
       "source": "src/app/(app)/price-comparison/page.tsx",
-      "line": 691,
+      "line": 766,
       "kind": "link",
       "label": "`View ${comp.wine.producer",
       "href": "`/cellar?wine=${comp.wine.id",
@@ -3891,7 +3891,7 @@
     {
       "id": "src/app/(app)/price-comparison/page.tsx#link-006",
       "source": "src/app/(app)/price-comparison/page.tsx",
-      "line": 766,
+      "line": 844,
       "kind": "link",
       "label": "`View ${comp.wine.producer",
       "href": "`/cellar?wine=${comp.wine.id",
