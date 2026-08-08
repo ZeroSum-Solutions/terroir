@@ -14,6 +14,13 @@ business workflows. Adapter modules own external provider mechanics.
   `record_pour`.
 - `../src/domains/cellar/reconcile-service.ts`: reconcile transaction
   orchestration around `reconcile_open_bottles_batch`.
+- `../src/lib/cellar/inventory-view.ts`: deterministic cellar search, filter,
+  sort, low-stock, and drink-window presentation rules.
+- `../src/lib/cellar/inventory-aggregation.ts`: per-wine quantity, weighted
+  average cost, newest-purchase metadata, and bottle-format aggregation.
+- [`quantity route`](<../src/app/api/cellar/[id]/quantity/route.ts>):
+  authenticated owner/manager boundary for reasoned, idempotent quantity
+  adjustments.
 - `../src/adapters/ocr/index.ts`: Azure Document Intelligence boundary.
 - `../src/adapters/llm/index.ts`: Anthropic invoice extraction boundary.
 - `../src/adapters/pdf/index.ts`: Puppeteer HTML-to-PDF boundary.
@@ -30,6 +37,11 @@ business workflows. Adapter modules own external provider mechanics.
 
 - Transactional inventory, pour, undo, and reconcile writes stay in Supabase
   RPCs. App code calls RPCs through domain services.
+- `adjust_cellar_quantity_idempotent` is the only supported manual bottle-count
+  mutation. It checks the authenticated tenant manager role, locks the tenant's
+  wine and inventory rows, applies the aggregate count change, and records one
+  reasoned `availability_events` audit row in the same transaction. Optional
+  idempotency keys replay the stored response without applying a second change.
 - Public wine-list reads stay explicitly protected by RLS policies and contract
   tests.
 - Long-running OCR, wine enrichment, and PDF workflows have

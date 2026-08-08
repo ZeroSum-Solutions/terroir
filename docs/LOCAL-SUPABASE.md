@@ -106,13 +106,9 @@ manager+local@terroir.test
 staff+local@terroir.test
 ```
 
-All are created with this local-only password:
-
-```text
-Terroir-local-123!
-```
-
-The password can be overridden with:
+All are created with the local-only seed password configured by
+`LOCAL_SEED_USER_PASSWORD`. Use that same value for browser tests. The password
+can be overridden when seeding with:
 
 ```text
 LOCAL_SEED_USER_PASSWORD=<new local password>
@@ -139,6 +135,15 @@ form. It refuses non-loopback Supabase targets. Opt in explicitly and run:
 ```bash
 LOCAL_E2E_ENABLED=1 \
 LOCAL_SEED_USER_EMAIL=owner+local@terroir.test \
-LOCAL_SEED_USER_PASSWORD='Terroir-local-123!' \
 pnpm exec playwright test e2e/pour-flow.test.ts
+```
+
+The isolated cellar browser test uses the same loopback-only guard and seeded
+owner account. It covers search, filters, sorting, wine detail, quantity
+adjustment, audit persistence, and the staff-role denial path:
+
+```bash
+LOCAL_E2E_ENABLED=1 \
+LOCAL_SEED_USER_EMAIL=owner+local@terroir.test \
+pnpm exec playwright test e2e/cellar-local.test.ts
 ```
