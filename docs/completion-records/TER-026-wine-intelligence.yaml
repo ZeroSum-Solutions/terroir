@@ -1,6 +1,8 @@
 spec_id: TER-026
 implementation_commits:
   - b79c977
+  - f8e1b77
+  - 8a246df
 status: source_verified_worker_and_runtime_evidence_pending
 scope: Complete active wine-intelligence requirements TER-CF-091 through TER-CF-101 while preserving tenant, role, and manual-field boundaries.
 requirement_evidence:
@@ -32,12 +34,12 @@ requirement_evidence:
     implementation: src/app/api/wines/[id]/route.ts; supabase/migrations/0081_atomic_wine_metadata_overrides.sql; supabase/migrations/0049_wines_colour.sql
     tests: src/app/api/wines/wine-mutation-behavior.test.ts; supabase/tests/0081_atomic_wine_metadata_overrides.sql; e2e/wine-intelligence-staging.test.ts
 verification:
-  focused: Five Vitest files and 85 tests passed across deterministic calculations, enrichment, single-wine re-enrichment, LWIN fallback, mutation behavior, and manual-field preservation.
+  focused: Six Vitest files and 101 tests passed across deterministic calculations, enrichment, single-wine re-enrichment, LWIN fallback, mutation boundaries, and manual-field preservation.
   full: The second full run passed 171 Vitest files and 1635 tests; TypeScript, lint, and the production build passed on Node 24.16.0 with pnpm 10.33.2. The first full run observed one unrelated team-action timing failure that immediately passed in isolation and in the second full run.
   inventories: API contract passed with 87 implemented operations, 5 planned operations, and all 87 classified; feature ledger passed with 269 requirements; UI controls passed across 23 routes and 345 controls.
-  migrations: Snapshot generation produced 81 migrations and 426056 bytes; all 71 forward migrations from 0011 have rollback pairs; migration 0081 passed transactional PostgreSQL acceptance in an isolated local Supabase database and was removed with its down migration after proof.
+  migrations: Snapshot generation produced 81 migrations and 431125 bytes; all 71 forward migrations from 0011 have rollback pairs; migration 0081 passed transactional PostgreSQL acceptance in an isolated local Supabase database, its security corrections survived the down migration, and the forward migration reapplied cleanly after rollback proof.
   browser_collection: Playwright collected two isolated wine-intelligence tests. Local execution skipped both because the staging-only flags and isolated configuration were intentionally absent; this is not runtime proof.
-  independent_review: The first exact-ref verifier returned REWORK for a staff database bypass and two stale evidence paths. Both findings were corrected test-first; final exact-ref re-verification is pending.
+  independent_review: The first exact-ref verifier returned REWORK for a staff database bypass and two stale evidence paths. Both were corrected test-first; the final exact-ref verifier returned PASS at aa0eb57 with no P0, P1, or P2 source finding.
 security:
   route: PATCH metadata and POST re-enrichment authenticate the caller and require owner or manager before tenant-bound work.
   database: Security-definer metadata and enrichment RPCs repeat authentication and manager-role checks, bind every wine row to the requested tenant, and expose execute only to authenticated callers. Wine UPDATE RLS independently requires owner or manager, preventing direct staff mutation of intelligence or manual-lock fields.
