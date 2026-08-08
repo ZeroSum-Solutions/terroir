@@ -32,6 +32,19 @@ export type ApiIdempotencyImplementation = {
  * hash call, binary mode, and caller evidence.
  */
 export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
+  "api:DELETE:/api/team/{param}": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "all-validated",
+      body: "none",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "no-first-party-caller",
+      sources: [],
+    },
+  },
   "api:DELETE:/api/cellar/{param}": {
     boundary: {
       kind: "dedicated-rpc",
@@ -190,6 +203,19 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
         "src/app/(app)/cellar/auto-eightysix-panel.tsx",
         "src/app/(app)/cellar/pricing-targets-panel.tsx",
       ],
+    },
+  },
+  "api:PATCH:/api/restaurant": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "no-first-party-caller",
+      sources: [],
     },
   },
   "api:PUT:/api/restaurant/{param}": {
@@ -498,6 +524,19 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
     client: {
       lifecycle: "session-persistent",
       sources: ["src/app/(app)/team/team-actions.tsx"],
+    },
+  },
+  "api:POST:/api/team": {
+    boundary: { kind: "generic-wrapper", count: 1 },
+    identity: {
+      params: "none",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: { kind: "fail-closed", releaseOnError: false },
+    client: {
+      lifecycle: "no-first-party-caller",
+      sources: [],
     },
   },
   "api:DELETE:/api/team/members/{param}": {

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireMembership } from "@/lib/api/auth";
+import { requireCapability, requireMembership } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseJson, parseParams } from "@/lib/api/validation";
@@ -11,6 +12,36 @@ import { SCORED_FIELDS } from "@/lib/scanner/scored-fields";
 import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
+
+/** Returns one active-tenant invoice scan with its reviewed line items. */
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  return withApiHandler(async () => {
+    const auth = await requireCapability("scan:create", {
+      rateLimit: "standard",
+    });
+    if (auth instanceof NextResponse) return auth;
+
+    const parsedParams = await parseParams(params, ScanIdParamsSchema);
+    if (!parsedParams.ok) return parsedParams.response;
+    const id = parsedParams.data.id.toLowerCase();
+
+    const { data, error } = await auth.supabase
+      .from("invoice_scans")
+      .select(
+        "id, distributor_name, invoice_number, invoice_date, status, item_count, accuracy_score, created_at, final_line_items",
+      )
+      .eq("id", id)
+      .eq("restaurant_id", auth.restaurantId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return Errors.notFound("Scan");
+
+    return NextResponse.json({ scan: data });
+  });
+}
 
 export async function PATCH(
   request: NextRequest,

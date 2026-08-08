@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 71,
-  "discoveredOperationCount": 87,
+  "routeFileCount": 72,
+  "discoveredOperationCount": 92,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/cellar",
@@ -336,6 +336,17 @@
       }
     },
     {
+      "operationId": "api:PATCH:/api/restaurant",
+      "method": "PATCH",
+      "path": "/api/restaurant",
+      "source": {
+        "file": "src/app/api/restaurant/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
       "operationId": "api:GET:/api/restaurant/{param}",
       "method": "GET",
       "path": "/api/restaurant/[id]",
@@ -424,6 +435,17 @@
       }
     },
     {
+      "operationId": "api:GET:/api/scans/{param}",
+      "method": "GET",
+      "path": "/api/scans/[id]",
+      "source": {
+        "file": "src/app/api/scans/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
       "operationId": "api:PATCH:/api/scans/{param}",
       "method": "PATCH",
       "path": "/api/scans/[id]",
@@ -475,6 +497,28 @@
         "file": "src/app/api/team/route.ts",
         "exportKind": "function-declaration",
         "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/team",
+      "method": "POST",
+      "path": "/api/team",
+      "source": {
+        "file": "src/app/api/team/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:DELETE:/api/team/{param}",
+      "method": "DELETE",
+      "path": "/api/team/[membership_id]",
+      "source": {
+        "file": "src/app/api/team/[membership_id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "DELETE",
         "moduleSpecifier": null
       }
     },
@@ -765,6 +809,17 @@
       }
     },
     {
+      "operationId": "api:GET:/api/wines/{param}",
+      "method": "GET",
+      "path": "/api/wines/[id]",
+      "source": {
+        "file": "src/app/api/wines/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
       "operationId": "api:PATCH:/api/wines/{param}",
       "method": "PATCH",
       "path": "/api/wines/[id]",
@@ -963,46 +1018,5 @@
       }
     }
   ],
-  "plannedOperations": [
-    {
-      "operationId": "api:PATCH:/api/restaurant",
-      "method": "PATCH",
-      "path": "/api/restaurant",
-      "sourceRequirementIds": [
-        "TER-CF-206"
-      ]
-    },
-    {
-      "operationId": "api:GET:/api/scans/{param}",
-      "method": "GET",
-      "path": "/api/scans/[id]",
-      "sourceRequirementIds": [
-        "TER-CF-189"
-      ]
-    },
-    {
-      "operationId": "api:POST:/api/team",
-      "method": "POST",
-      "path": "/api/team",
-      "sourceRequirementIds": [
-        "TER-CF-208"
-      ]
-    },
-    {
-      "operationId": "api:DELETE:/api/team/{param}",
-      "method": "DELETE",
-      "path": "/api/team/[membership_id]",
-      "sourceRequirementIds": [
-        "TER-CF-209"
-      ]
-    },
-    {
-      "operationId": "api:GET:/api/wines/{param}",
-      "method": "GET",
-      "path": "/api/wines/[id]",
-      "sourceRequirementIds": [
-        "TER-CF-186"
-      ]
-    }
-  ]
+  "plannedOperations": []
 }

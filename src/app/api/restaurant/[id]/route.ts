@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/idempotency";
 import { apiResultResponse } from "@/lib/api/result-response";
 import { parseJson, parseParams } from "@/lib/api/validation";
+import { UpdateRestaurantBodySchema } from "@/lib/api/restaurant-schemas";
 import {
   verifyActiveRestaurantMembership,
   writeActiveRestaurantResponseCookie,
@@ -114,20 +115,6 @@ export async function PUT(
   });
 }
 
-// BND-037b + BND-040: PATCH accepts auto-86 columns AND pricing target
-// columns. BND-173: added eightysix_strategy for hide-vs-mark on /list/[slug].
-const PatchSchema = z
-  .object({
-    name: z.string().trim().min(1).max(200).optional(),
-    auto_eightysix_from_inventory: z.boolean().optional(),
-    eightysix_ml_threshold: z.number().int().min(0).max(5000).optional(),
-    default_target_pour_cost_pct: z.number().gt(0).lt(100).optional(),
-    default_target_markup_ratio: z.number().gte(1).lte(10).optional(),
-    // BND-173 — how 86'd wines appear on public lists
-    eightysix_strategy: z.enum(["hide", "mark"]).optional(),
-  })
-  .strict();
-
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Params },
@@ -141,7 +128,7 @@ export async function PATCH(
     const { id } = parsedParams.data;
     if (id !== restaurantId) return Errors.forbidden("Forbidden.");
 
-    const parsed = await parseJson(request, PatchSchema, {
+    const parsed = await parseJson(request, UpdateRestaurantBodySchema, {
       message: "Invalid body.",
     });
     if (!parsed.ok) return parsed.response;

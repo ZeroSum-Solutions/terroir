@@ -384,16 +384,16 @@ describe("reconciliation semantics", () => {
 
   it("rejects incorrect realization, summary, ledger, and plan leaf state", () => {
     const documents = readContractDocuments();
-    const planned = documents.reconciliation.concreteRequirements.find(
-      (item) => item.realization === "planned_exact_path",
+    const discovered = documents.reconciliation.concreteRequirements.find(
+      (item) => item.realization === "discovered_exact_path",
     )!;
-    planned.realization = "discovered_exact_path";
-    documents.reconciliation.summary.plannedPromiseCount -= 1;
+    discovered.realization = "planned_exact_path";
+    documents.reconciliation.summary.exactDiscoveredCount -= 1;
     documents.ledger.items[0].status = "amended";
     documents.reconciliation.planLeaves[0].id = "TER-020B";
 
     const errors = validateReconciliationSemantics(documents).join("\n");
-    expect(errors).toContain("discovered realization is inconsistent");
+    expect(errors).toContain("planned realization is inconsistent");
     expect(errors).toContain(
       "reconciliation summary must be derived from contract documents",
     );
@@ -428,9 +428,9 @@ describe("checked-in API contract gate", () => {
 
     expect(result.errors).toEqual([]);
     expect(result.summary).toEqual({
-      discoveredOperationCount: 87,
-      plannedOperationCount: 5,
-      classificationCount: 87,
+      discoveredOperationCount: 92,
+      plannedOperationCount: 0,
+      classificationCount: 92,
     });
     expect(paths.map((file) => readFileSync(resolve(file), "utf8"))).toEqual(
       before,

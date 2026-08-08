@@ -7,8 +7,8 @@
   "summary": {
     "activeRequirementCount": 269,
     "concreteRequirementCount": 32,
-    "exactDiscoveredCount": 27,
-    "plannedPromiseCount": 5,
+    "exactDiscoveredCount": 32,
+    "plannedPromiseCount": 0,
     "extensionDiscoveredCount": 60,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
@@ -101,8 +101,8 @@
       "method": "GET",
       "path": "/api/wines/[id]",
       "operationId": "api:GET:/api/wines/{param}",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     },
     {
       "requirementId": "TER-CF-187",
@@ -125,8 +125,8 @@
       "method": "GET",
       "path": "/api/scans/[id]",
       "operationId": "api:GET:/api/scans/{param}",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     },
     {
       "requirementId": "TER-CF-190",
@@ -261,8 +261,8 @@
       "method": "PATCH",
       "path": "/api/restaurant",
       "operationId": "api:PATCH:/api/restaurant",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     },
     {
       "requirementId": "TER-CF-207",
@@ -277,16 +277,16 @@
       "method": "POST",
       "path": "/api/team",
       "operationId": "api:POST:/api/team",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     },
     {
       "requirementId": "TER-CF-209",
       "method": "DELETE",
       "path": "/api/team/[membership_id]",
       "operationId": "api:DELETE:/api/team/{param}",
-      "realization": "planned_exact_path",
-      "implementationLeaf": "TER-020E"
+      "realization": "discovered_exact_path",
+      "implementationLeaf": null
     },
     {
       "requirementId": "TER-CF-210",
@@ -487,6 +487,12 @@
       "semanticAliasContext": []
     },
     {
+      "operationId": "api:PATCH:/api/restaurant",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-206",
+      "semanticAliasContext": []
+    },
+    {
       "operationId": "api:GET:/api/restaurant/{param}",
       "classification": "extension",
       "concreteRequirementId": null,
@@ -502,13 +508,7 @@
       "operationId": "api:PATCH:/api/restaurant/{param}",
       "classification": "extension",
       "concreteRequirementId": null,
-      "semanticAliasContext": [
-        {
-          "requirementId": "TER-CF-206",
-          "relationship": "path_variant",
-          "note": "Updates restaurant metadata by path ID but does not implement PATCH /api/restaurant."
-        }
-      ]
+      "semanticAliasContext": []
     },
     {
       "operationId": "api:DELETE:/api/restaurant/{param}",
@@ -538,6 +538,12 @@
       "operationId": "api:GET:/api/scans",
       "classification": "exact",
       "concreteRequirementId": "TER-CF-188",
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:GET:/api/scans/{param}",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-189",
       "semanticAliasContext": []
     },
     {
@@ -571,6 +577,18 @@
       "semanticAliasContext": []
     },
     {
+      "operationId": "api:POST:/api/team",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-208",
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:DELETE:/api/team/{param}",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-209",
+      "semanticAliasContext": []
+    },
+    {
       "operationId": "api:POST:/api/team/accept-invite",
       "classification": "extension",
       "concreteRequirementId": null,
@@ -580,13 +598,7 @@
       "operationId": "api:POST:/api/team/invite",
       "classification": "extension",
       "concreteRequirementId": null,
-      "semanticAliasContext": [
-        {
-          "requirementId": "TER-CF-208",
-          "relationship": "path_variant",
-          "note": "Invites a member at an alternate path but does not implement POST /api/team."
-        }
-      ]
+      "semanticAliasContext": []
     },
     {
       "operationId": "api:DELETE:/api/team/invite/{param}",
@@ -616,13 +628,7 @@
       "operationId": "api:DELETE:/api/team/members/{param}",
       "classification": "extension",
       "concreteRequirementId": null,
-      "semanticAliasContext": [
-        {
-          "requirementId": "TER-CF-209",
-          "relationship": "path_variant",
-          "note": "Revokes membership at an alternate path but does not implement DELETE /api/team/[membership_id]."
-        }
-      ]
+      "semanticAliasContext": []
     },
     {
       "operationId": "api:GET:/api/wine-list-items",
@@ -736,6 +742,12 @@
       "operationId": "api:GET:/api/wines",
       "classification": "exact",
       "concreteRequirementId": "TER-CF-185",
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:GET:/api/wines/{param}",
+      "classification": "exact",
+      "concreteRequirementId": "TER-CF-186",
       "semanticAliasContext": []
     },
     {

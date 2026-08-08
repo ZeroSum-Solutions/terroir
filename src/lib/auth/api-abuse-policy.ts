@@ -15,13 +15,7 @@ export type ApiAbusePolicy =
       idempotency: "none" | "supported";
     };
 
-export const PLANNED_API_OPERATION_IDS = [
-  "api:PATCH:/api/restaurant",
-  "api:GET:/api/scans/{param}",
-  "api:POST:/api/team",
-  "api:DELETE:/api/team/{param}",
-  "api:GET:/api/wines/{param}",
-] as const satisfies readonly ApiOperationId[];
+export const PLANNED_API_OPERATION_IDS = [] as const satisfies readonly ApiOperationId[];
 
 const RATE_LIMIT_OVERRIDES = {
   "api:POST:/api/pdf": "expensive",

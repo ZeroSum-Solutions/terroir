@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { requireRole } from "@/lib/api/auth";
+import { requireCapability, requireRole } from "@/lib/api/auth";
+import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { idempotentMutationResponse } from "@/lib/api/idempotent-mutation";
 import { parseJson, parseParams } from "@/lib/api/validation";
@@ -35,6 +36,32 @@ function isInvalidDrinkWindow(error: unknown): boolean {
     (error.message.includes("drink-window") ||
       error.message.includes("peak year"))
   );
+}
+
+/** Returns one active-tenant wine with its persisted enrichment fields. */
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Params },
+) {
+  return withApiHandler(async () => {
+    const auth = await requireCapability("wine:view");
+    if (auth instanceof NextResponse) return auth;
+
+    const parsedParams = await parseParams(params, WineIdParamsSchema);
+    if (!parsedParams.ok) return parsedParams.response;
+    const id = parsedParams.data.id.toLowerCase();
+
+    const { data, error } = await auth.supabase
+      .from("wines")
+      .select("*")
+      .eq("id", id)
+      .eq("restaurant_id", auth.restaurantId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return Errors.notFound("Wine");
+
+    return NextResponse.json({ wine: data });
+  });
 }
 
 export async function PATCH(

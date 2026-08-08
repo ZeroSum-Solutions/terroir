@@ -29,11 +29,7 @@ const inventory = JSON.parse(
 
 const EXPECTED_PENDING_DISCOVERED = [] as const satisfies readonly ApiOperationId[];
 
-const EXPECTED_PLANNED = [
-  "api:DELETE:/api/team/{param}",
-  "api:PATCH:/api/restaurant",
-  "api:POST:/api/team",
-] as const satisfies readonly ApiOperationId[];
+const EXPECTED_PLANNED = [] as const satisfies readonly ApiOperationId[];
 
 describe("API idempotency implementation ledger", () => {
   it("partitions every supported operation into implemented, pending, or planned", () => {
@@ -55,7 +51,7 @@ describe("API idempotency implementation ledger", () => {
       (operationId) => !discovered.has(operationId),
     );
 
-    expect(implemented).toHaveLength(57);
+    expect(implemented).toHaveLength(60);
     expect(pending).toEqual([...EXPECTED_PENDING_DISCOVERED].sort());
     expect(planned).toEqual([...EXPECTED_PLANNED].sort());
     expect(
