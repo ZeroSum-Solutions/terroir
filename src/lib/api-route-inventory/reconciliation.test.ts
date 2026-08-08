@@ -316,10 +316,10 @@ describe("TER-020Ab active API requirement reconciliation", () => {
     ).toContain("must NOT have additional properties");
 
     const invalidLeaf = structuredClone(reconciliation);
-    const planned = invalidLeaf.concreteRequirements.find(
-      (item) => item.realization === "planned_exact_path",
+    const discovered = invalidLeaf.concreteRequirements.find(
+      (item) => item.realization === "discovered_exact_path",
     )!;
-    planned.implementationLeaf = null;
+    discovered.implementationLeaf = "TER-020E";
     expect(
       validateJsonSchema(reconciliationSchema, invalidLeaf, "reconciliation")
         .join("\n"),
