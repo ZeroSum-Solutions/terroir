@@ -5,6 +5,11 @@ import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { parseQuery } from "@/lib/api/validation";
+import {
+  dateRangeSince,
+  dateRangeUntil,
+  isValidCustomDateRange,
+} from "@/app/(app)/insights/date-range";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,24 +37,17 @@ async function getPourInsights(request: NextRequest) {
   const parsed = await parseQuery(request.nextUrl.searchParams, QuerySchema);
   if (!parsed.ok) return parsed.response;
   const { range, topN, from, to } = parsed.data;
+  if (range === "custom" && !isValidCustomDateRange(from, to)) {
+    return Errors.badRequest(
+      "Invalid custom date range.",
+      undefined,
+      "invalid_date_range",
+    );
+  }
 
   try {
-    let since: Date | null = null;
-    let until: Date | null = null;
-
-    if (range === "custom") {
-      if (from) {
-        since = new Date(from + "T00:00:00");
-      }
-      if (to) {
-        until = new Date(to + "T23:59:59.999");
-      }
-    } else if (range !== "all") {
-      const days = parseInt(range.replace("d", ""), 10);
-      since = new Date();
-      since.setDate(since.getDate() - days);
-      since.setHours(0, 0, 0, 0);
-    }
+    const since = dateRangeSince(range, from);
+    const until = dateRangeUntil(range, to);
 
     const pourQuery = supabase
       .from("pour_events")

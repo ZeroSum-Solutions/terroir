@@ -92,7 +92,7 @@ describe("GET /api/insights/pour", () => {
     },
   );
 
-  it("preserves one-sided custom ranges, tenant filters, and response shape", async () => {
+  it("rejects a one-sided custom range before querying tenant data", async () => {
     const supabase = makeSupabase({
       pour_events: { data: [], error: null },
       inventory_items: { data: [], error: null },
@@ -103,6 +103,24 @@ describe("GET /api/insights/pour", () => {
     const response = await GET(
       new NextRequest(
         "http://localhost/api/insights/pour?range=custom&from=2026-01-02&topN=2",
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("uses UTC custom boundaries, tenant filters, and the stable response shape", async () => {
+    const supabase = makeSupabase({
+      pour_events: { data: [], error: null },
+      inventory_items: { data: [], error: null },
+      wine_list_items: { data: [], error: null },
+    });
+    allow(supabase);
+
+    const response = await GET(
+      new NextRequest(
+        "http://localhost/api/insights/pour?range=custom&from=2026-01-02&to=2026-01-31&topN=2",
       ),
     );
 
@@ -118,7 +136,12 @@ describe("GET /api/insights/pour", () => {
     expect(supabase.calls).toContainEqual({
       table: "pour_events",
       method: "gte",
-      args: ["occurred_at", new Date("2026-01-02T00:00:00").toISOString()],
+      args: ["occurred_at", "2026-01-02T00:00:00.000Z"],
+    });
+    expect(supabase.calls).toContainEqual({
+      table: "pour_events",
+      method: "lte",
+      args: ["occurred_at", "2026-01-31T23:59:59.999Z"],
     });
     expect(
       supabase.calls.filter(
