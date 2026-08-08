@@ -4,7 +4,8 @@ implementation_commits:
   - f8e1b77
   - 8a246df
   - 9b7528b
-status: source_verified_worker_and_runtime_evidence_pending
+  - 08d3145
+status: staging_verified_worker_and_provider_evidence_pending
 scope: Complete active wine-intelligence requirements TER-CF-091 through TER-CF-101 while preserving tenant, role, and manual-field boundaries.
 requirement_evidence:
   TER-CF-091:
@@ -39,26 +40,34 @@ verification:
   full: The second full run passed 171 Vitest files and 1635 tests; TypeScript, lint, and the production build passed on Node 24.16.0 with pnpm 10.33.2. The first full run observed one unrelated team-action timing failure that immediately passed in isolation and in the second full run.
   inventories: API contract passed with 87 implemented operations, 5 planned operations, and all 87 classified; feature ledger passed with 269 requirements; UI controls passed across 23 routes and 345 controls.
   migrations: The source checkpoint produced 81 migrations and a 431580-byte snapshot. Integrated follow-up reproduced the fresh-CLI ACL failure, added explicit minimum SELECT and UPDATE wine privileges governed by RLS, and then passed both 0081 and 0082 transactional acceptance, restricted privilege-matrix checks, down migrations, and ordered reapply; the integrated snapshot contains 82 migrations and 440577 bytes.
-  browser_collection: Playwright collected two isolated wine-intelligence tests. Local execution skipped both because the staging-only flags and isolated configuration were intentionally absent; this is not runtime proof.
-  independent_review: The first exact-ref verifier returned REWORK for a staff database bypass and two stale evidence paths. Both were corrected test-first; the final exact-ref verifier returned PASS at aa0eb57 with no P0, P1, or P2 source finding.
+  browser: The exact 08d3145 staging run 31243072440 passed both isolated wine-intelligence tests on one Chrome worker in 26.3 seconds. It proved owner guidance, deterministic enrichment, atomic manual drink-window preservation after re-enrichment, staff UI and API denial, and cross-tenant 404 behavior; successful traces plus console, network, and database attachments were encrypted and retained in artifact 9017663089 through 2026-08-22.
+  independent_review: The first exact-ref verifier returned REWORK for a staff database bypass and two stale evidence paths. Both were corrected test-first; the source verifier returned PASS at aa0eb57, and the exact integrated verifier returned PASS at f0c9348 with no P0, P1, or P2 source finding.
 security:
   route: PATCH metadata and POST re-enrichment authenticate the caller and require owner or manager before tenant-bound work.
   database: Security-definer metadata and enrichment RPCs repeat authentication and manager-role checks, bind every wine row to the requested tenant, and expose execute only to authenticated callers. Wine UPDATE RLS independently requires owner or manager, preventing direct staff mutation of intelligence or manual-lock fields.
   input: HTTP schemas and SQL validation reject unsupported keys, non-integral years, out-of-range years, oversized or untrimmed strings, and inconsistent drink-window results.
   privacy: Cross-tenant metadata writes and re-enrichment return no foreign wine data; staff cannot invoke or see re-enrichment controls.
+staging_evidence:
+  candidate: 08d31451c1742be94f8263fb3c1f61fe7c46ae3f
+  migration_history: 20260808053800:atomic_wine_metadata_overrides on isolated staging branch wwhxcgtcecsftcivosop
+  web_deployment: 328631a5-4aa4-40f3-b4f2-083a697c255e
+  worker_deployment: 9e3dbca2-dd8a-46d8-875f-989e88b3ea01
+  workflow_run: 31243072440
+  browser_job: 93067143792
+  encrypted_artifact: 9017663089; isolated-e2e-31243072440-1; 2311262 bytes; expires 2026-08-22
 staging_evidence_required:
-  - Deploy an immutable integrated candidate with migration 0081 to isolated staging and record exact candidate, migration, web, and worker identifiers.
-  - Dispatch the opt-in single-slot wine-intelligence pilot and retain owner, staff, cross-tenant, database, cleanup, encryption, and artifact evidence.
   - Record at least one live provider-backed enrichment response and failure-path evidence without storing provider prompts, secrets, or private source data.
 dependency_evidence_required:
   - TER-021G must migrate wine enrichment to the worker only after the invoice-OCR soak and must pass its own enqueue, retry, restart, dead-letter, duplicate-delivery, and rollback evidence.
 production_evidence_required:
   - Promote only through TER-046 after the final integrated candidate passes its complete release gate and production canaries.
 deployment:
-  executed: false
+  executed: true
+  environment: isolated staging
+  candidate: 08d31451c1742be94f8263fb3c1f61fe7c46ae3f
   production_changed: false
 known_limits:
-  - No staging deployment, isolated browser runtime, or live provider call was executed from this worktree.
+  - No live provider call is claimed; the staging health report showed wine_search degraded and the isolated enrichment correctly used the deterministic rule engine.
   - TER-021G is explicitly open; wine enrichment remains synchronous until its separately scoped worker rollout passes staging soak.
-  - Generated Supabase types were reconciled to migration 0081 locally because remote type generation requires staging project credentials; the checked-in contract is covered by TypeScript and SQL acceptance.
+  - Production remains unchanged; promotion is reserved for TER-046.
 rollback: Revert the TER-026 commits in reverse order and apply supabase/migrations/down/0081_atomic_wine_metadata_overrides.down.sql before deploying application code that no longer calls the RPC.
