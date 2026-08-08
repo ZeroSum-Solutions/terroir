@@ -77,10 +77,12 @@ business workflows. Adapter modules own external provider mechanics.
 - Public wine-list reads stay explicitly protected by RLS policies and contract
   tests.
 - Long-running OCR, wine enrichment, and PDF workflows have
-  `public.background_jobs` as the durable retry and status model. Authenticated
-  staff enqueue through `enqueue_background_job`; creators can read their own
-  current-tenant jobs, and managers can read every job in their tenant. Direct
-  client inserts, updates, and deletes are revoked.
+  `public.background_jobs` as the durable retry and status model. The
+  `enqueue_background_job` RPC repeats job-type authorization at the database
+  boundary: invoice OCR and PDF generation require tenant staff membership,
+  while paid-provider wine enrichment requires a tenant manager. Creators can
+  read their own current-tenant jobs, and managers can read every job in their
+  tenant. Direct client inserts, updates, and deletes are revoked.
 - Worker processes claim due jobs through `claim_background_jobs`. A claim is
   atomic, increments the attempt count, and returns a worker-bound lease token.
   Only that active token can heartbeat, complete, or fail the job. Retryable

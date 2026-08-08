@@ -297,6 +297,20 @@ describe("GET /api/insights/csv", () => {
     expect(supabase.from).not.toHaveBeenCalled();
   });
 
+  it("rejects an unknown range before querying tenant data", async () => {
+    const supabase = allow();
+
+    const response = await getInsightsCsv(
+      new Request("http://localhost/api/insights/csv?range=everything"),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "validation_error", message: "Invalid input." },
+    });
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
   it("exports the selected custom range and line-item correction accuracy", async () => {
     const supabase = allow(
       makeSupabase({

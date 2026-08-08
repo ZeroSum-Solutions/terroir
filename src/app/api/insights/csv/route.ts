@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
+import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { parseQuery } from "@/lib/api/validation";
 import {
   dateRangeSince,
   dateRangeUntil,
@@ -12,6 +14,14 @@ import { summarizeLineItemCorrections } from "@/lib/insights/analytics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const QuerySchema = z.object({
+  range: z
+    .enum(["7d", "30d", "90d", "ytd", "all", "custom"])
+    .default("all"),
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+});
 
 function escapeField(value: string): string {
   const neutralized = /^\s*[=+\-@]/.test(value) ? `'${value}` : value;
@@ -46,9 +56,12 @@ async function getInsightsCsv(request?: Request) {
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
   const searchParams = request ? new URL(request.url).searchParams : null;
-  const range = searchParams?.get("range") ?? "all";
-  const from = searchParams?.get("from") ?? undefined;
-  const to = searchParams?.get("to") ?? undefined;
+  const parsed = await parseQuery(
+    searchParams ?? new URLSearchParams(),
+    QuerySchema,
+  );
+  if (!parsed.ok) return parsed.response;
+  const { range, from, to } = parsed.data;
   if (range === "custom" && !isValidCustomDateRange(from, to)) {
     return Errors.badRequest(
       "Invalid custom date range.",
