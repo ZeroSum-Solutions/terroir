@@ -77,6 +77,27 @@ export const API_IDEMPOTENCY_IMPLEMENTATIONS = {
       sources: [],
     },
   },
+  "api:PATCH:/api/cellar/{param}/quantity": {
+    boundary: {
+      kind: "dedicated-rpc",
+      rpc: "adjust_cellar_quantity_idempotent",
+    },
+    identity: {
+      params: "all-validated",
+      body: "all-validated",
+      binary: "none",
+    },
+    execution: {
+      kind: "atomic-rpc",
+      rpc: "adjust_cellar_quantity_idempotent",
+    },
+    client: {
+      lifecycle: "session-persistent",
+      sources: [
+        "src/app/(app)/cellar/quantity-adjustment-modal.tsx",
+      ],
+    },
+  },
   "api:PATCH:/api/cellar/{param}/section": {
     boundary: { kind: "generic-wrapper", count: 1 },
     identity: {

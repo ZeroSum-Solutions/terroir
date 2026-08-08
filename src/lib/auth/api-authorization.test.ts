@@ -190,7 +190,7 @@ describe("API authorization manifest", () => {
       .sort();
 
     expect(none).toHaveLength(32);
-    expect(supported).toHaveLength(59);
+    expect(supported).toHaveLength(60);
     expect(none).toContain("api:POST:/api/pdf");
     expect(
       none.filter((operationId) => !operationId.startsWith("api:GET:")),
