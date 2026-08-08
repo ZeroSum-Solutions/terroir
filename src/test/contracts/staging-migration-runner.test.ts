@@ -295,6 +295,28 @@ describe("guarded staging migration runner", () => {
     expect(JSON.stringify(log.mock.calls)).not.toContain(TOKEN);
   });
 
+  test("treats a mutation HTTP 5xx as ambiguous and does not retry", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(queryResponse(baselineState()))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: TOKEN }), { status: 503 }),
+      );
+
+    let message = "";
+    try {
+      await runStagingMigrations({ env: environment(), fetchImpl, log: vi.fn() });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(message).toContain("HTTP 503");
+    expect(message).toMatch(/state is unknown/i);
+    expect(message).toMatch(/reconcile before retrying/i);
+    expect(message).not.toContain(TOKEN);
+  });
+
   test.each([401, 403, 429, 500, 503])(
     "reports HTTP %i without returning provider response content",
     async (status) => {

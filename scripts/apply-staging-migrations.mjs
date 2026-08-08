@@ -58,6 +58,11 @@ async function requestJson(fetchImpl, token, url, body, purpose) {
     throw new Error(`Supabase ${purpose} request failed without a response.`);
   }
   if (!response.ok) {
+    if (purpose === "mutation" && response.status >= 500) {
+      throw new Error(
+        `Supabase mutation failed with HTTP ${response.status}; mutation state is unknown. Reconcile before retrying.`,
+      );
+    }
     throw new Error(`Supabase ${purpose} failed with HTTP ${response.status}.`);
   }
   if (purpose === "mutation") {
