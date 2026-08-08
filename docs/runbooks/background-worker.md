@@ -36,7 +36,6 @@ Supabase project. Never copy the production key into staging.
 | Variable | Default | Contract |
 | --- | ---: | --- |
 | `TERROIR_RELEASE_SHA` | Railway Git SHA | Exact commit for local CLI deployments; overrides provider metadata in release logs. |
-| `PUPPETEER_CACHE_DIR` | provider cache | Set to `/app/.cache/puppeteer` so the build-installed browser is retained in the runtime image. |
 | `WORKER_ID` | generated host/replica ID | 1-128 safe identifier characters |
 | `WORKER_CONCURRENCY` | 4 | maximum active jobs, 1-20 |
 | `WORKER_CLAIM_LIMIT` | 4 | per-poll claim bound, never above concurrency |
@@ -69,13 +68,13 @@ handler or an approved cleanup disposition. Health exposes
 `registered_handlers` and `accepting_jobs` so an idle control-plane deployment
 cannot be mistaken for active job processing.
 
-The worker manifest pins `PUPPETEER_CACHE_DIR` directly on both browser build
-commands because provider-managed runtime variables are not guaranteed to be
-present during Railpack's build phase. It runs `pnpm worker:install-browser`
-followed by `pnpm validate:worker-browser`. The second command fails the image
-build unless Puppeteer's resolved executable exists and is executable. Do not
-enable the PDF queue when the build omitted this gate, even if the control-plane
-health check is otherwise ready.
+The repository's `.puppeteerrc.cjs` pins the browser cache inside `/app`, where
+Railpack copies it into the runtime image. Both web and worker manifests run
+`pnpm worker:install-browser` followed by `pnpm validate:worker-browser`; the
+web fallback needs the same executable as the asynchronous worker. The second
+command fails the image build unless Puppeteer's resolved executable exists and
+is executable. Do not enable the PDF queue when the build omitted this gate,
+even if the control-plane health check is otherwise ready.
 
 ## Wine-list PDF pilot
 
