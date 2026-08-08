@@ -342,7 +342,7 @@ describe("failure evidence redaction", () => {
       "pnpm exec playwright test e2e/lists/pdf-worker.test.ts --workers=1",
     );
     expect(workflow).toContain("inputs.run_pdf_worker_pilot && matrix.slot == 1");
-    expect(workflow).toContain("timeout-minutes: 20");
+    expect(workflow).toContain("timeout-minutes: 25");
     expect(workflow).toContain(
       "TERROIR_E2E_BROWSER_PATH: /usr/bin/google-chrome",
     );
