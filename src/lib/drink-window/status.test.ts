@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatStatusLabel,
+  getDrinkWindowGuidanceYears,
   getDrinkWindowStatus,
   getMarkerPosition,
   getYearsUntilWindowClose,
@@ -73,6 +74,22 @@ describe("getYearsUntilWindowClose", () => {
 
   it("returns negative years past peak", () => {
     expect(getYearsUntilWindowClose(2020, NOW)).toBe(-6);
+  });
+});
+
+describe("getDrinkWindowGuidanceYears", () => {
+  it("counts a hold cue from the opening year, not the closing year", () => {
+    expect(getDrinkWindowGuidanceYears(2030, 2040, NOW)).toBe(4);
+  });
+
+  it("counts active and past-window cues from the closing year", () => {
+    expect(getDrinkWindowGuidanceYears(2020, 2030, NOW)).toBe(4);
+    expect(getDrinkWindowGuidanceYears(2010, 2020, NOW)).toBe(-6);
+  });
+
+  it("returns null when the window is incomplete", () => {
+    expect(getDrinkWindowGuidanceYears(null, 2030, NOW)).toBeNull();
+    expect(getDrinkWindowGuidanceYears(2020, null, NOW)).toBeNull();
   });
 });
 
@@ -180,8 +197,8 @@ describe("formatStatusLabel", () => {
   });
 
   it("formats hold with years until ready", () => {
-    expect(formatStatusLabel("hold", -3)).toBe("Hold · ready in 3 yrs");
-    expect(formatStatusLabel("hold", -1)).toBe("Hold · ready in 1 yr");
+    expect(formatStatusLabel("hold", 3)).toBe("Hold · ready in 3 yrs");
+    expect(formatStatusLabel("hold", 1)).toBe("Hold · ready in 1 yr");
   });
 
   it("returns plain status when years missing", () => {

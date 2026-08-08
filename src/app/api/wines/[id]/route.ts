@@ -24,6 +24,19 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
+function isInvalidDrinkWindow(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "22023" &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    (error.message.includes("drink-window") ||
+      error.message.includes("peak year"))
+  );
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Params },
@@ -63,94 +76,40 @@ async function updateWineResponse({
   id: string;
   updates: z.infer<typeof EditWineBodySchema>;
 }) {
+  // TER-026 / TER-CF-095 + TER-CF-101: the metadata write and the
+  // corresponding manual-field locks must commit in one transaction. A
+  // previous two-statement flow could persist the manual value and then
+  // fail before recording its override, allowing enrichment to overwrite it.
+  const { data: rows, error } = await supabase.rpc(
+    "update_wine_metadata_atomic",
+    {
+      p_restaurant_id: restaurantId,
+      p_wine_id: id,
+      p_updates: updates,
+    },
+  );
+  if (isUniqueViolation(error)) {
+    return errorResult(
+      "wine_collision",
+      "A matching wine already exists.",
+      409,
+    );
+  }
+  if (isInvalidDrinkWindow(error)) {
+    const message = (error as { message: string }).message;
+    return errorResult(
+      "invalid_drink_window",
+      message.includes("peak year")
+        ? "Peak year must fall within the drink window."
+        : "Drink-window start must not be after its end.",
+      422,
+    );
+  }
+  if (error) throw error;
+  const data = rows?.[0] ?? null;
+  if (!data) return errorResult("not_found", "Wine not found.", 404);
 
-    const enrichableFieldMap: Record<string, string> = {
-      region: "region",
-      varietal: "varietal",
-      drink_window_start: "drink_window",
-      drink_window_end: "drink_window",
-      peak_year: "drink_window",
-    };
-    const overriddenFields = new Set<string>();
-    for (const key of Object.keys(updates)) {
-      const mapped = enrichableFieldMap[key];
-      if (mapped) overriddenFields.add(mapped);
-    }
-
-    if (overriddenFields.has("drink_window")) {
-      const { data: current, error: currentError } = await supabase
-        .from("wines")
-        .select("drink_window_start, drink_window_end, peak_year")
-        .eq("id", id)
-        .eq("restaurant_id", restaurantId)
-        .maybeSingle();
-      if (currentError) throw currentError;
-      if (!current) return errorResult("not_found", "Wine not found.", 404);
-
-      const start =
-        updates.drink_window_start !== undefined
-          ? updates.drink_window_start
-          : current.drink_window_start;
-      const end =
-        updates.drink_window_end !== undefined
-          ? updates.drink_window_end
-          : current.drink_window_end;
-      const peak =
-        updates.peak_year !== undefined
-          ? updates.peak_year
-          : current.peak_year;
-      if (start !== null && end !== null && start > end) {
-        return errorResult(
-          "invalid_drink_window",
-          "Drink-window start must not be after its end.",
-          422,
-        );
-      }
-      if (
-        peak !== null &&
-        ((start !== null && peak < start) || (end !== null && peak > end))
-      ) {
-        return errorResult(
-          "invalid_drink_window",
-          "Peak year must fall within the drink window.",
-          422,
-        );
-      }
-    }
-
-    const { data, error } = await supabase
-      .from("wines")
-      .update(updates)
-      .eq("id", id)
-      .eq("restaurant_id", restaurantId)
-      .select(
-        "id, producer, name, vintage, varietal, region, tasting_notes, drink_window_start, drink_window_end, peak_year, updated_at",
-      )
-      .maybeSingle();
-    if (isUniqueViolation(error)) {
-      return errorResult(
-        "wine_collision",
-        "A matching wine already exists.",
-        409,
-      );
-    }
-    if (error) throw error;
-    if (!data) return errorResult("not_found", "Wine not found.", 404);
-
-    if (overriddenFields.size > 0) {
-      const { error: overrideError } = await supabase.rpc(
-        "add_manual_overrides",
-        {
-          p_wine_id: id,
-          p_fields: [...overriddenFields],
-        },
-      );
-      if (overrideError) {
-        throw overrideError;
-      }
-    }
-
-    return { status: 200, body: data };
+  return { status: 200, body: data };
 }
 
 function errorResult(code: string, message: string, status: number) {

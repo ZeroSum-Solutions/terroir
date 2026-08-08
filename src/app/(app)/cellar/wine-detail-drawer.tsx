@@ -26,8 +26,8 @@ import { DrinkWindowTimeline } from "@/components/drink-window-timeline";
 import { PriceBand } from "@/components/price-band";
 import {
   formatStatusLabel,
+  getDrinkWindowGuidanceYears,
   getDrinkWindowStatus,
-  getYearsUntilWindowClose,
 } from "@/lib/drink-window/status";
 import {
   formatPricingStatusLabel,
@@ -670,7 +670,7 @@ export function WineDetailDrawer({
               <PricingSection row={row} canManage={canManage} />
             )}
 
-            {row.drink_window_end != null && (
+            {row.drink_window_start != null && row.drink_window_end != null && (
               <DrinkWindowSection row={row} />
             )}
             {row.serving_temp_label && row.serving_temp_min != null && row.serving_temp_max != null && (
@@ -1122,7 +1122,10 @@ function ServingTempSection({ row }: { row: CellarWineRow }) {
  */
 function DrinkWindowSection({ row }: { row: CellarWineRow }) {
   const status = getDrinkWindowStatus(row.drink_window_start, row.drink_window_end);
-  const yearsLeft = getYearsUntilWindowClose(row.drink_window_end);
+  const guidanceYears = getDrinkWindowGuidanceYears(
+    row.drink_window_start,
+    row.drink_window_end,
+  );
 
   // BND-071 — status pill color mapping.
   const pillStyle = (() => {
@@ -1167,13 +1170,13 @@ function DrinkWindowSection({ row }: { row: CellarWineRow }) {
         <span
           className={`inline-flex items-center rounded-full border px-sm py-2xs text-[11px] font-semibold ${pillStyle}`}
         >
-          {formatStatusLabel(status, yearsLeft)}
+          {formatStatusLabel(status, guidanceYears)}
         </span>
-        {yearsLeft !== null && (
+        {guidanceYears !== null && status !== "hold" && (
           <span className="text-ink-subtle">
-            {yearsLeft >= 0
-              ? `${yearsLeft} year${yearsLeft === 1 ? "" : "s"} left`
-              : `${Math.abs(yearsLeft)} year${Math.abs(yearsLeft) === 1 ? "" : "s"} past`}
+            {guidanceYears >= 0
+              ? `${guidanceYears} year${guidanceYears === 1 ? "" : "s"} left`
+              : `${Math.abs(guidanceYears)} year${Math.abs(guidanceYears) === 1 ? "" : "s"} past`}
           </span>
         )}
       </div>

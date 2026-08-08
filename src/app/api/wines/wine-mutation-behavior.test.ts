@@ -202,7 +202,7 @@ describe("wine mutation behavior", () => {
   });
 
   it("returns 404 when a metadata update affects no tenant row", async () => {
-    setRoleAuth([{ table: "wines", data: null }]);
+    setRoleAuth([], [{ fn: "update_wine_metadata_atomic", data: [] }]);
 
     const response = await UPDATE_WINE(
       request(`/api/wines/${WINE_ID}`, "PATCH", { name: "Reserve" }),
@@ -213,8 +213,11 @@ describe("wine mutation behavior", () => {
   });
 
   it("returns a redacted 500 for a metadata provider failure", async () => {
-    setRoleAuth([
-      { table: "wines", error: { message: "provider unavailable" } },
+    setRoleAuth([], [
+      {
+        fn: "update_wine_metadata_atomic",
+        error: { message: "provider unavailable" },
+      },
     ]);
 
     const response = await UPDATE_WINE(
@@ -229,9 +232,9 @@ describe("wine mutation behavior", () => {
   });
 
   it("maps a metadata identity conflict to wine_collision", async () => {
-    setRoleAuth([
+    setRoleAuth([], [
       {
-        table: "wines",
+        fn: "update_wine_metadata_atomic",
         error: { message: "duplicate", code: "23505" },
       },
     ]);
@@ -246,13 +249,12 @@ describe("wine mutation behavior", () => {
   });
 
   it("validates a partial drink-window patch against stored values", async () => {
-    const supabase = setRoleAuth([
+    const supabase = setRoleAuth([], [
       {
-        table: "wines",
-        data: {
-          drink_window_start: 2025,
-          drink_window_end: 2035,
-          peak_year: 2030,
+        fn: "update_wine_metadata_atomic",
+        error: {
+          code: "22023",
+          message: "drink-window start must not be after its end",
         },
       },
     ]);
@@ -266,24 +268,22 @@ describe("wine mutation behavior", () => {
 
     expect(response.status).toBe(422);
     expect((await response.json()).error.code).toBe("invalid_drink_window");
-    expect(supabase.calls).toHaveLength(1);
-    expect(supabase.calls[0].action).toBe("query");
+    expect(supabase.calls).toEqual([]);
   });
 
-  it("records manual override categories after metadata changes", async () => {
-    const supabase = setRoleAuth(
-      [
-        {
-          table: "wines",
-          data: {
+  it("persists metadata and manual override categories atomically", async () => {
+    const supabase = setRoleAuth([], [
+      {
+        fn: "update_wine_metadata_atomic",
+        data: [
+          {
             id: WINE_ID,
             name: "Reserve",
             region: "Napa",
           },
-        },
-      ],
-      [{ fn: "add_manual_overrides", data: null }],
-    );
+        ],
+      },
+    ]);
 
     const response = await UPDATE_WINE(
       request(`/api/wines/${WINE_ID}`, "PATCH", { region: "Napa" }),
@@ -291,27 +291,22 @@ describe("wine mutation behavior", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(supabase.rpc).toHaveBeenCalledWith("add_manual_overrides", {
+    expect(supabase.calls).toEqual([]);
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+    expect(supabase.rpc).toHaveBeenCalledWith("update_wine_metadata_atomic", {
       p_wine_id: WINE_ID,
-      p_fields: ["region"],
+      p_restaurant_id: RESTAURANT_ID,
+      p_updates: { region: "Napa" },
     });
   });
 
-  it("does not report metadata success when override tracking fails", async () => {
-    setRoleAuth(
-      [
-        {
-          table: "wines",
-          data: { id: WINE_ID, region: "Napa" },
-        },
-      ],
-      [
-        {
-          fn: "add_manual_overrides",
-          error: { message: "override tracking failed" },
-        },
-      ],
-    );
+  it("does not report metadata success when the atomic write fails", async () => {
+    const supabase = setRoleAuth([], [
+      {
+        fn: "update_wine_metadata_atomic",
+        error: { message: "atomic metadata write failed" },
+      },
+    ]);
 
     const response = await UPDATE_WINE(
       request(`/api/wines/${WINE_ID}`, "PATCH", { region: "Napa" }),
@@ -319,6 +314,7 @@ describe("wine mutation behavior", () => {
     );
 
     expect(response.status).toBe(500);
+    expect(supabase.calls).toEqual([]);
   });
 
   it("returns 500 when availability cache repair lookup fails", async () => {

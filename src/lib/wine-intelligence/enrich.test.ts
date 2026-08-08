@@ -14,6 +14,7 @@ describe("enrichWine", () => {
     expect(result.servingTempMin).toBe(60);
     expect(result.servingTempMax).toBe(65);
     expect(result.servingTempLabel).toBe("Cool room temperature");
+    expect(result.decantMinutes).toBe(90);
   });
 
   it("uses generic varietal rule when region has no specific rule", () => {
@@ -37,6 +38,8 @@ describe("enrichWine", () => {
     });
     expect(result.drinkWindowStart).toBeNull();
     expect(result.servingTempMin).toBeNull();
+    expect(result.servingTempMax).toBeNull();
+    expect(result.decantMinutes).toBeNull();
   });
 
   it("returns null drink windows when vintage is null", () => {

@@ -42,9 +42,9 @@ import {
 } from "@/lib/cellar/inventory-view";
 import {
   formatStatusLabel,
+  getDrinkWindowGuidanceYears,
   getDrinkWindowStatus,
   getMarkerPosition,
-  getYearsUntilWindowClose,
   isHolding,
 } from "@/lib/drink-window/status";
 import type { CellarWineRow } from "./types";
@@ -826,9 +826,9 @@ function DrinkWindowIndicator({
 }) {
   if (start == null || end == null) return null;
   const status = getDrinkWindowStatus(start, end);
-  const yearsLeft = getYearsUntilWindowClose(end);
+  const guidanceYears = getDrinkWindowGuidanceYears(start, end);
   const markerPct = getMarkerPosition(start, end);
-  const label = formatStatusLabel(status, yearsLeft);
+  const label = formatStatusLabel(status, guidanceYears);
 
   const tone: "warn" | "muted" | "ok" =
     status === "drink_now" || status === "past_peak"

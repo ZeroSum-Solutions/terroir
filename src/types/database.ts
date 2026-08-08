@@ -1889,6 +1889,26 @@ export type Database = {
           response_status: number
         }[]
       }
+      update_wine_metadata_atomic: {
+        Args: {
+          p_restaurant_id: string
+          p_updates: Json
+          p_wine_id: string
+        }
+        Returns: {
+          drink_window_end: number | null
+          drink_window_start: number | null
+          id: string
+          name: string
+          peak_year: number | null
+          producer: string
+          region: string | null
+          tasting_notes: string | null
+          updated_at: string
+          varietal: string | null
+          vintage: number | null
+        }[]
+      }
       wine_published_list_slugs: {
         Args: { p_restaurant_id: string; p_wine_id: string }
         Returns: {

@@ -53,6 +53,23 @@ export function getYearsUntilWindowClose(
 }
 
 /**
+ * Year delta used by the visible guidance cue. A held wine is described from
+ * the opening year ("ready in N years"); active and closed windows are
+ * described from the closing year. Keeping this calculation beside the
+ * status classifier prevents list and detail surfaces from drifting.
+ */
+export function getDrinkWindowGuidanceYears(
+  start: number | null | undefined,
+  end: number | null | undefined,
+  currentYear: number = new Date().getFullYear(),
+): number | null {
+  const status = getDrinkWindowStatus(start, end, currentYear);
+  if (status === "unknown") return null;
+  if (status === "hold") return (start as number) - currentYear;
+  return (end as number) - currentYear;
+}
+
+/**
  * Position of the current year along the drink window axis, as a
  * percentage 0-100 (clamped). Used by the timeline component to place
  * the marker. Returns 0 when window is unknown.

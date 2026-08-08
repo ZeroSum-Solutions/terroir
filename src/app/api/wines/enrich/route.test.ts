@@ -79,6 +79,8 @@ function buildSupabase(opts: {
   unmatchedResult?: FromResult;
   rpcEnrichResult?: { data: number | null; error: unknown };
   rpcLwinResult?: { data: unknown[]; error: unknown };
+  lwinMatchedWinesResult?: { data: unknown[] | null; error: unknown };
+  lwinCatalogResult?: { data: unknown[] | null; error: unknown };
 }) {
   const rpcCalls: Array<{ fn: string; args: unknown }> = [];
   const rpc = vi.fn((fn: string, args: unknown) => {
@@ -107,12 +109,23 @@ function buildSupabase(opts: {
       );
     },
   });
-  const from = vi.fn(() => ({
+  const from = vi.fn((table: string) => ({
     select: () => ({
       eq: () => ({
         or: () => ({ limit: () => limitForWines() }),
         is: () => ({ limit: () => limitForWines() }),
       }),
+      in: () =>
+        table === "lwin_catalog"
+          ? Promise.resolve(
+              opts.lwinCatalogResult ?? { data: [], error: null },
+            )
+          : {
+              not: () =>
+                Promise.resolve(
+                  opts.lwinMatchedWinesResult ?? { data: [], error: null },
+                ),
+            },
     }),
   }));
 
@@ -327,6 +340,87 @@ describe("POST /api/wines/enrich", () => {
     const ids = args.p_enrichments.map((r) => r.id);
     expect(ids).toContain("w-1");
     expect(ids).toContain("w-3");
+  });
+
+  it("falls back to tenant-matched LWIN catalog metadata when Claude has no opinion", async () => {
+    const wines: Wine[] = [
+      {
+        id: "w-1",
+        producer: "Obscure Estate",
+        name: "Unknown Cuvee",
+        varietal: "Obscure",
+        region: null,
+        country: null,
+        vintage: 2020,
+      },
+    ];
+    mockEnrichWine.mockReturnValue(RULE_MISS);
+    mockEnrichWinesWithClaudeBatch.mockResolvedValueOnce([null]);
+
+    const { supabase, rpcCalls } = buildSupabase({
+      winesResult: { data: wines, error: null },
+      unmatchedResult: { data: [], error: null },
+      rpcEnrichResult: { data: 1, error: null },
+      rpcLwinResult: {
+        data: [{ wine_id: "w-1", lwin_id: "1000001", score: 0.96 }],
+        error: null,
+      },
+      lwinMatchedWinesResult: {
+        data: [{ id: "w-1", lwin_id: "1000001" }],
+        error: null,
+      },
+      lwinCatalogResult: {
+        data: [
+          {
+            lwin_id: "1000001",
+            region: "Mosel",
+            country: "Germany",
+            varietal: "Riesling",
+            colour: "white",
+          },
+        ],
+        error: null,
+      },
+    });
+    mockRequireCapability.mockResolvedValue({
+      supabase,
+      restaurantId: "r-1",
+      role: "owner",
+    });
+
+    const res = await POST(request());
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      lwinFallbackCount: 1,
+      claudeAttemptedCount: 1,
+      claudeEnrichedCount: 0,
+      enriched: 1,
+    });
+    const enrichCall = rpcCalls.find((call) => call.fn === "enrich_wines_batch");
+    const args = enrichCall?.args as {
+      p_restaurant_id: string;
+      p_enrichments: Array<Record<string, unknown>>;
+    };
+    expect(args.p_restaurant_id).toBe("r-1");
+    expect(args.p_enrichments).toEqual([
+      expect.objectContaining({
+        id: "w-1",
+        region: "Mosel",
+        country: "Germany",
+        varietal: "Riesling",
+        colour: "white",
+        enrichment_metadata: expect.objectContaining({
+          source: "lwin_fallback",
+          fields_enriched: expect.arrayContaining([
+            "region",
+            "country",
+            "varietal",
+            "colour",
+          ]),
+        }),
+      }),
+    ]);
   });
 
   it("skips the RPC entirely when no wine matches any rule and Claude returns all nulls", async () => {
