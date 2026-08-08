@@ -50,6 +50,24 @@ plus the Railway environment name; it exposes no credential or Supabase URL.
 
 ## Candidate flow
 
+The staging workflow has one guarded, manual-only database lane for migrations
+0084 through 0086. Leave `staging_migration_confirmation` blank for ordinary
+staging pushes. For the exact integrated candidate, the configured release
+owner may enter `MIGRATE-wwhxcgtcecsftcivosop-0084-0086`. The runner hard-codes
+that isolated ref, requires the `staging` Git ref, configured staging Supabase
+origin, and exact checked-out candidate SHA, verifies the existing 0080 through
+0082 history,
+applies all three migrations in one transaction, and reconciles their fixed
+source hashes before smoke begins. Drift, partial history, an ambiguous write,
+or a simultaneous wine-enrichment worker pilot fails closed. The Management
+API token is supplied only to that guarded step; `SUPABASE_PROJECT_ID` and the
+E2E service-role key are never used for schema administration.
+
+This schema rehearsal does not activate TER-021G. Keep
+`WINE_ENRICHMENT_HANDLER_ENABLED=0` and
+`WINE_ENRICHMENT_WORKER_ENABLED=0`, and do not dispatch the enrichment-worker
+pilot until the canonical TER-021F soak dependency is recorded.
+
 1. Merge the candidate into `staging`, or upload the exact immutable candidate
    to the staging environment during an integration rehearsal. Record the
    candidate SHA and deployment ID; never upload it to the production

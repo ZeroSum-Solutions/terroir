@@ -341,6 +341,9 @@ describe("failure evidence redaction", () => {
     expect(workflow).toMatch(/run_bottle_scan_pilot:[\s\S]*?type: boolean/);
     expect(workflow).toMatch(/run_analytics_pilot:[\s\S]*?type: boolean/);
     expect(workflow).toMatch(
+      /staging_migration_confirmation:[\s\S]*?required: false[\s\S]*?default: ""[\s\S]*?type: string/,
+    );
+    expect(workflow).toMatch(
       /github\.event_name == 'workflow_dispatch' && inputs\.force_evidence_failure/,
     );
     expect(workflow).toContain("TERROIR_E2E_FORCE_FAILURE:");
@@ -385,6 +388,17 @@ describe("failure evidence redaction", () => {
     );
     expect(workflow).toContain("group: staging-smoke-staging");
     expect(workflow).toContain("cancel-in-progress: false");
+    expect(workflow).toContain("permissions:\n  contents: read");
+    expect(workflow).toMatch(
+      /migration-guard:[\s\S]*?environment: staging[\s\S]*?STAGING_MIGRATION_CONFIRMATION:[\s\S]*?SUPABASE_ACCESS_TOKEN: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}[\s\S]*?pnpm run staging:migrate/,
+    );
+    expect(workflow).toMatch(
+      /smoke:[\s\S]*?needs: migration-guard[\s\S]*?Confirm the deployed candidate on staging/,
+    );
+    expect(workflow).toContain(
+      "STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}",
+    );
+    expect(workflow).not.toContain("SUPABASE_PROJECT_ID");
     expect(workflow).toContain("timeout-minutes: 25");
     expect(workflow).toContain(
       "TERROIR_E2E_BROWSER_PATH: /usr/bin/google-chrome",

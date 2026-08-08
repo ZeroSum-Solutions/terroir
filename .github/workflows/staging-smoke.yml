@@ -1,5 +1,8 @@
 name: Staging smoke
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [staging]
@@ -8,6 +11,11 @@ on:
       sha:
         description: Candidate SHA that Railway must be serving
         required: true
+        type: string
+      staging_migration_confirmation:
+        description: Exact isolated-staging confirmation; blank performs no migration
+        required: false
+        default: ""
         type: string
       force_evidence_failure:
         description: Intentionally fail after Playwright to verify retained evidence
@@ -50,8 +58,44 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  migration-guard:
+    name: Guarded isolated-staging migrations
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+
+      - name: Credential-free migration no-op
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.staging_migration_confirmation == '' }}
+        env:
+          STAGING_MIGRATION_CONFIRMATION: ""
+        run: pnpm run staging:migrate
+
+      - name: Apply the exact isolated-staging migration set
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.staging_migration_confirmation != '' }}
+        env:
+          RUN_WINE_ENRICHMENT_WORKER_PILOT: ${{ inputs.run_wine_enrichment_worker_pilot && 'true' || 'false' }}
+          STAGING_EXPECTED_SHA: ${{ inputs.sha }}
+          STAGING_MIGRATION_CONFIRMATION: ${{ inputs.staging_migration_confirmation }}
+          STAGING_RELEASE_OWNER: ${{ vars.PRODUCTION_RELEASE_OWNER }}
+          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: pnpm run staging:migrate
+
   smoke:
     name: Required staging smoke
+    needs: migration-guard
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
