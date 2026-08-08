@@ -211,6 +211,8 @@ async function lwinEnrichFallback(
 export type EnrichRestaurantBatchInput = {
   supabase: SupabaseClient<Database>;
   restaurantId: string;
+  signal?: AbortSignal;
+  throwOnProviderFailure?: boolean;
 };
 
 /**
@@ -239,7 +241,13 @@ export type EnrichRestaurantBatchResult =
 export async function enrichRestaurantBatch(
   input: EnrichRestaurantBatchInput,
 ): Promise<EnrichRestaurantBatchResult> {
-  const { supabase, restaurantId } = input;
+  const {
+    supabase,
+    restaurantId,
+    signal,
+    throwOnProviderFailure = false,
+  } = input;
+  signal?.throwIfAborted();
 
   // ARCH-021: delta-fetch only wines that actually need enrichment.
   // BND-039: also include `producer, name` so Claude fallback has enough signal.
@@ -259,6 +267,7 @@ export async function enrichRestaurantBatch(
     });
     return { error: "Failed to fetch wines.", status: 500 };
   }
+  signal?.throwIfAborted();
 
   // BND-031 / DEBT-008 / BND-039 — Tier 1 (rule engine, deterministic, free).
   const ruleEnriched: EnrichmentPayloadRow[] = [];
@@ -301,7 +310,10 @@ export async function enrichRestaurantBatch(
   const claudeNullResults: Array<{ id: string; producer: string; name: string }> = [];
 
   if (claudeWork.length > 0) {
-    const batchResults = await enrichWinesWithClaudeBatch(claudeWork);
+    const batchResults = await enrichWinesWithClaudeBatch(claudeWork, {
+      signal,
+      throwOnFailure: throwOnProviderFailure,
+    });
     for (let i = 0; i < claudeWork.length; i++) {
       const result = batchResults[i];
       if (!result || result.drinkWindowStart == null) {
@@ -328,6 +340,7 @@ export async function enrichRestaurantBatch(
       });
     }
   }
+  signal?.throwIfAborted();
 
   // BND-277 — Tier 3 (LWIN catalog fallback, free, best-effort).
   const lwinFallbackResults = await lwinEnrichFallback(
@@ -340,6 +353,7 @@ export async function enrichRestaurantBatch(
 
   let enriched = 0;
   if (payload.length > 0) {
+    signal?.throwIfAborted();
     const { data: count, error: rpcError } = await supabase.rpc(
       "enrich_wines_batch",
       { p_restaurant_id: restaurantId, p_enrichments: payload },
@@ -362,6 +376,7 @@ export async function enrichRestaurantBatch(
     .eq("restaurant_id", restaurantId)
     .is("lwin_id", null)
     .limit(ENRICH_BATCH_LIMIT);
+  signal?.throwIfAborted();
   if (unmatchedError) {
     Sentry.captureException(unmatchedError, {
       tags: { surface: "wines-enrich", phase: "fetch-unmatched-lwin" },

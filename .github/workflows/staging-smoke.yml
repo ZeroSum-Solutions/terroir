@@ -29,6 +29,11 @@ on:
         required: false
         default: false
         type: boolean
+      run_wine_enrichment_worker_pilot:
+        description: Run the dependency-gated TER-021G enrichment worker pilot
+        required: false
+        default: false
+        type: boolean
       run_bottle_scan_pilot:
         description: Run the isolated TER-028 bottle-scan browser and database pilot
         required: false
@@ -146,6 +151,12 @@ jobs:
         env:
           WINE_INTELLIGENCE_E2E_ENABLED: "1"
         run: pnpm exec playwright test e2e/wine-intelligence-staging.test.ts --workers=1 --trace=on
+
+      - name: Run the isolated wine-enrichment worker pilot
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_wine_enrichment_worker_pilot && matrix.slot == 1 }}
+        env:
+          WINE_ENRICHMENT_WORKER_E2E_ENABLED: "1"
+        run: pnpm exec playwright test e2e/wine-enrichment-worker.test.ts --workers=1 --trace=on
 
       - name: Run the isolated bottle-scan pilot
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_bottle_scan_pilot && matrix.slot == 1 }}

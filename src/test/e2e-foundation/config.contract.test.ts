@@ -335,6 +335,9 @@ describe("failure evidence redaction", () => {
     expect(workflow).toMatch(/run_pdf_worker_pilot:[\s\S]*?type: boolean/);
     expect(workflow).toMatch(/run_cellar_pilot:[\s\S]*?type: boolean/);
     expect(workflow).toMatch(/run_wine_intelligence_pilot:[\s\S]*?type: boolean/);
+    expect(workflow).toMatch(
+      /run_wine_enrichment_worker_pilot:[\s\S]*?type: boolean/,
+    );
     expect(workflow).toMatch(/run_bottle_scan_pilot:[\s\S]*?type: boolean/);
     expect(workflow).toMatch(
       /github\.event_name == 'workflow_dispatch' && inputs\.force_evidence_failure/,
@@ -343,6 +346,9 @@ describe("failure evidence redaction", () => {
     expect(workflow).toContain('PDF_WORKER_E2E_ENABLED: "1"');
     expect(workflow).toContain('CELLAR_E2E_ENABLED: "1"');
     expect(workflow).toContain('WINE_INTELLIGENCE_E2E_ENABLED: "1"');
+    expect(workflow).toContain(
+      'WINE_ENRICHMENT_WORKER_E2E_ENABLED: "1"',
+    );
     expect(workflow).toContain('BOTTLE_SCAN_E2E_ENABLED: "1"');
     expect(workflow).toContain(
       "pnpm exec playwright test e2e/lists/pdf-worker.test.ts --workers=1",
@@ -359,10 +365,16 @@ describe("failure evidence redaction", () => {
       "pnpm exec playwright test e2e/wine-intelligence-staging.test.ts --workers=1 --trace=on",
     );
     expect(workflow).toContain(
+      "pnpm exec playwright test e2e/wine-enrichment-worker.test.ts --workers=1 --trace=on",
+    );
+    expect(workflow).toContain(
       "pnpm exec playwright test e2e/bottle-scan.test.ts --workers=1 --trace=on",
     );
     expect(workflow).toContain(
       "inputs.run_bottle_scan_pilot && matrix.slot == 1",
+    );
+    expect(workflow).toContain(
+      "inputs.run_wine_enrichment_worker_pilot && matrix.slot == 1",
     );
     expect(workflow).toContain("group: staging-smoke-staging");
     expect(workflow).toContain("cancel-in-progress: false");
@@ -379,6 +391,9 @@ describe("failure evidence redaction", () => {
     );
     expect(workflow).toMatch(
       /Run the isolated wine-intelligence pilot[\s\S]*?inputs\.run_wine_intelligence_pilot && matrix\.slot == 1[\s\S]*?WINE_INTELLIGENCE_E2E_ENABLED: "1"[\s\S]*?e2e\/wine-intelligence-staging\.test\.ts/,
+    );
+    expect(workflow).toMatch(
+      /Run the isolated wine-enrichment worker pilot[\s\S]*?inputs\.run_wine_enrichment_worker_pilot && matrix\.slot == 1[\s\S]*?WINE_ENRICHMENT_WORKER_E2E_ENABLED: "1"[\s\S]*?e2e\/wine-enrichment-worker\.test\.ts/,
     );
     expect(workflow).toMatch(
       /Run the isolated bottle-scan pilot[\s\S]*?inputs\.run_bottle_scan_pilot && matrix\.slot == 1[\s\S]*?BOTTLE_SCAN_E2E_ENABLED: "1"[\s\S]*?e2e\/bottle-scan\.test\.ts/,

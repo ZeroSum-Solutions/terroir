@@ -57,6 +57,8 @@ describe("high-risk idempotency clients", () => {
     expect(enrichButton).toContain("createSessionCommandPersistence");
     expect(enrichButton).toContain('url: "/api/wines/enrich"');
     expect(enrichButton).toContain('slot: "batch"');
+    expect(enrichButton).toContain("response.status === 202");
+    expect(enrichButton).toContain("Wine enrichment is queued");
     expect(enrichButton).not.toContain('fetch("/api/wines/enrich"');
 
     expect(refreshButton).toContain("createIdempotentCommandStore");
@@ -71,6 +73,8 @@ describe("high-risk idempotency clients", () => {
     expect(drawer).toContain('"terroir:wine-enrichment"');
     expect(drawer).toContain("slot: `enrich:${row.wine_id}`");
     expect(drawer).toContain("url: `/api/wines/${row.wine_id}/enrich`");
+    expect(drawer).toContain("response.status === 202");
+    expect(drawer).toContain("Wine enrichment is queued");
     expect(drawer).not.toContain('fetch(`/api/wines/${row.wine_id}/enrich`');
   });
 

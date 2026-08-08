@@ -286,6 +286,8 @@ export function WineDetailDrawer({
       setErrorMsg(null);
       try {
         const { response, data: payload } = await enrichmentCommands.json<{
+          jobId?: string;
+          status?: string;
           source?: string | null;
           message?: string;
         }>({
@@ -301,6 +303,12 @@ export function WineDetailDrawer({
               `Enrichment failed (${response.status}).`,
             ).message,
           );
+        }
+        if (response.status === 202) {
+          setEnrichMsg(
+            "Wine enrichment is queued. Progress will appear in Background work.",
+          );
+          return;
         }
         const result = payload;
         if (result?.source == null) {

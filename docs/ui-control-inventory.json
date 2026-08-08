@@ -1800,7 +1800,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-001",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 529,
+      "line": 537,
       "kind": "button",
       "label": "Close",
       "href": null,
@@ -1817,7 +1817,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-002",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 557,
+      "line": 565,
       "kind": "button",
       "label": "Remove image",
       "href": null,
@@ -1834,9 +1834,9 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#input-001",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 573,
+      "line": 581,
       "kind": "input",
-      "label": "input at src/app/(app)/cellar/wine-detail-drawer.tsx:573",
+      "label": "input at src/app/(app)/cellar/wine-detail-drawer.tsx:581",
       "href": null,
       "actors": [
         "owner",
@@ -1851,7 +1851,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-003",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 695,
+      "line": 703,
       "kind": "button",
       "label": "Adjust quantity",
       "href": null,
@@ -1868,7 +1868,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-004",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 705,
+      "line": 713,
       "kind": "button",
       "label": "{dynamic}",
       "href": null,
@@ -1885,7 +1885,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-005",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 717,
+      "line": 725,
       "kind": "button",
       "label": "{dynamic} oz`}",
       "href": null,
@@ -1902,7 +1902,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-006",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 731,
+      "line": 739,
       "kind": "button",
       "label": "Pick a custom pour size",
       "href": null,
@@ -1919,7 +1919,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-007",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 746,
+      "line": 754,
       "kind": "button",
       "label": "Undo last pour ({dynamic} oz)",
       "href": null,
@@ -1936,7 +1936,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-008",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 758,
+      "line": 766,
       "kind": "button",
       "label": "{dynamic}",
       "href": null,
@@ -1953,7 +1953,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-009",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 778,
+      "line": 786,
       "kind": "button",
       "label": "{dynamic} {dynamic}",
       "href": null,
@@ -1970,7 +1970,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-010",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 805,
+      "line": 813,
       "kind": "button",
       "label": "Edit metadata",
       "href": null,
@@ -1987,7 +1987,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-011",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 827,
+      "line": 835,
       "kind": "button",
       "label": "Cancel",
       "href": null,
@@ -2004,7 +2004,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-012",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 835,
+      "line": 843,
       "kind": "button",
       "label": "{dynamic}",
       "href": null,
@@ -2021,7 +2021,7 @@
     {
       "id": "src/app/(app)/cellar/wine-detail-drawer.tsx#button-013",
       "source": "src/app/(app)/cellar/wine-detail-drawer.tsx",
-      "line": 846,
+      "line": 854,
       "kind": "button",
       "label": "Delete wine",
       "href": null,
@@ -2174,7 +2174,7 @@
     {
       "id": "src/app/(app)/insights/enrich-cellar-button.tsx#button-001",
       "source": "src/app/(app)/insights/enrich-cellar-button.tsx",
-      "line": 106,
+      "line": 117,
       "kind": "button",
       "label": "{dynamic} {dynamic}",
       "href": null,

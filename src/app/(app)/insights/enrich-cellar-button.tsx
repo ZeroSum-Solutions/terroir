@@ -38,6 +38,8 @@ type EnrichResponse = {
   claudeRemaining: number;
   lwinMatched: number;
   hasMore: boolean;
+  jobId?: string;
+  status?: string;
 };
 
 const MAX_LOOP_ITERATIONS = 20; // safety cap — 20 × 2050 = 41k wines max
@@ -55,11 +57,13 @@ export function EnrichCellarButton() {
     lwinMatched: number;
   } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   const onClick = async () => {
     setBusy(true);
     setErrorMsg(null);
+    setStatusMsg(null);
     setProgress({ iterations: 0, enriched: 0, claudeEnriched: 0, lwinMatched: 0 });
 
     let totalEnriched = 0;
@@ -78,6 +82,13 @@ export function EnrichCellarButton() {
           throw new Error(
             readApiError(data, `Enrich failed (${response.status}).`).message,
           );
+        }
+        if (response.status === 202) {
+          setProgress(null);
+          setStatusMsg(
+            "Wine enrichment is queued. Progress will appear in Background work.",
+          );
+          return;
         }
         const body = data;
         totalEnriched += body.enriched;
@@ -145,6 +156,12 @@ export function EnrichCellarButton() {
       {errorMsg && (
         <p role="alert" className="text-[12px] text-error">
           {errorMsg}
+        </p>
+      )}
+
+      {statusMsg && (
+        <p role="status" className="text-[12px] text-ink-muted">
+          {statusMsg}
         </p>
       )}
     </div>

@@ -1,0 +1,47 @@
+spec_id: TER-021G
+parent_spec: TER-021
+base_commit: 235a88dead961453b886928a9e68e8a358084d8e
+status: source_validated_dependency_and_staging_blocked
+scope: Dependency-gated migration of bulk and single-wine enrichment from synchronous request handling to the durable worker.
+dependency:
+  required: A canonical TER-021F completion record proving the invoice-OCR soak before any wine-enrichment worker activation.
+  observed: No TER-021F completion record or invoice-OCR soak artifact exists at the pinned base commit.
+  enforcement: Both WINE_ENRICHMENT_HANDLER_ENABLED and WINE_ENRICHMENT_WORKER_ENABLED default off and require literal 1; the synchronous request path remains the default.
+requirements_implemented:
+  - Bulk and single-wine routes enqueue one durable wine_enrichment job only when the web gate is explicitly enabled and a valid Idempotency-Key is present.
+  - Single-wine enqueue verifies the subject belongs to the authenticated restaurant before returning a job reference.
+  - The worker handler validates job type, restaurant, subject table, subject ID, and allowlisted scope before executing shared enrichment services.
+  - Provider aborts preserve the runtime abort reason; transient failures are retryable and terminal authentication or client failures are safely classified without provider response data.
+  - Worker service-role RPC access retains explicit tenant filtering and manual-field preservation; authenticated staff remain denied.
+  - Duplicate enqueue replay resolves to one durable job, and repeated handler delivery converges on the same enrichment effect.
+database:
+  forward: supabase/migrations/0084_wine_enrichment_worker_authority.sql
+  rollback: supabase/migrations/down/0084_wine_enrichment_worker_authority.down.sql
+  acceptance: supabase/tests/0084_wine_enrichment_worker_authority.sql
+  local_evidence: A fresh local Supabase applied 0084; acceptance passed, the down migration removed service-role execution, and the forward migration plus acceptance passed again.
+security:
+  authorization: HTTP routes retain authenticated membership and manager gates; database functions preserve tenant predicates and grant worker execution only to service_role.
+  untrusted_input: Idempotency keys, job metadata, UUIDs, subjects, scopes, and provider output are schema-validated before effects or stored results.
+  export: The existing Anthropic enrichment boundary receives the same wine fields as the synchronous implementation; provider bodies, prompts, credentials, and raw errors are excluded from job results and telemetry.
+  secrets: The service-role key remains worker-only and no new credential or secret is committed.
+verification:
+  focused: Rollout, enqueue, handler, routes, provider failure classification, client 202 handling, migration contract, workflow contract, and local SQL acceptance tests passed.
+  full: 178 Vitest files and 1672 tests passed; TypeScript, lint, and the production build passed on Node 24.16.0 with pnpm 10.33.2.
+  inventories: API contract passed with 87 implemented operations and 5 planned promises; feature ledger passed with 269 requirements; UI inventory passed with 23 routes and 345 controls.
+  browser_collection: The opt-in isolated browser pilot is collected but intentionally not run while the dependency is open.
+  independent_review: Pending exact-checkpoint verifier review.
+staging_evidence_required:
+  - Attach the canonical TER-021F invoice-OCR soak record before activation.
+  - Prove exact-SHA bulk and single-wine enqueue, same-key replay, tenant denial, successful completion, and manual-field preservation using synthetic data.
+  - Prove bounded retry, worker restart and lease recovery, terminal dead letter and requeue, duplicate-delivery effect count, drain, and synchronous rollback.
+  - Retain safe deployment, job, attempt, transition, alert, and effect-count evidence without prompts, provider responses, tenant IDs, or secrets.
+production_evidence_required:
+  - Production activation and deployment are out of scope until dependency, staging, and TER-046 integrated release gates pass.
+deployment:
+  executed: false
+  staging_changed: false
+  production_changed: false
+rollback: Keep or set WINE_ENRICHMENT_WORKER_ENABLED=0, preserve the synchronous web path, leave the handler enabled until durable work drains, then disable the handler or roll back application code and apply the paired 0084 down migration when required.
+known_limits:
+  - No staging activation, provider call, retry, restart, dead-letter, duplicate-delivery runtime drill, or rollback drill is claimed.
+  - Source validation cannot satisfy the missing TER-021F soak dependency.

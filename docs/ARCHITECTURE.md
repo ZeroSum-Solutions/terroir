@@ -83,6 +83,13 @@ business workflows. Adapter modules own external provider mechanics.
   Only that active token can heartbeat, complete, or fail the job. Retryable
   failures and expired leases use bounded exponential backoff; attempt-exhausted
   or non-retryable failures enter the visible `failed` dead-letter state.
+- `wine-enrichment-job-service` is the only web enqueue boundary for
+  `wine_enrichment`. It tenant-checks single-wine subjects, assigns a durable
+  idempotency identity, and records only an allowlisted scope in job metadata.
+  The worker handler revalidates the job type, subject table, subject ID,
+  restaurant, and scope before calling the shared batch or single-wine domain
+  service. Provider failures are classified as safe retryable or terminal
+  codes; provider response bodies never enter job results or telemetry.
 - `cancel_background_job` revokes queued or active work for the creator or a
   tenant manager. `requeue_background_job` is manager-only and resets a failed
   dead letter without changing its idempotent job identity.
@@ -114,9 +121,11 @@ business workflows. Adapter modules own external provider mechanics.
   database `requeue_background_job` RPC independently requires a current-tenant
   owner or manager and binds both restaurant and job IDs. An ambiguous retry
   response triggers a read before the UI reports failure.
-- This UI does not enqueue work or require a running worker. PDF, invoice OCR,
-  and wine enrichment remain on their existing synchronous paths until their
-  separately scoped TER-021 migration tasks pass staging soak tests.
+- This UI does not enqueue work or require a running worker. Wine enrichment
+  preserves its synchronous path by default. TER-021G's durable enqueue and
+  handler are source-ready behind independent default-off gates, and may not
+  be activated until TER-021F's invoice-OCR soak is recorded and TER-021G's
+  own staging evidence is complete.
 - TER-026's opt-in staging pilot covers the synchronous wine-intelligence path:
   deterministic guidance, role visibility, single-wine re-enrichment, manual
   preservation, and tenant denial. It is not evidence for the pending TER-021G
@@ -132,7 +141,8 @@ business workflows. Adapter modules own external provider mechanics.
   `railway.worker.toml` against staging-only credentials, and complete the
   kill-and-restart/dead-letter drill in
   [`runbooks/background-worker.md`](runbooks/background-worker.md). The worker
-  control plane is implemented, but no business handler or enqueue path is
-  enabled until TER-021E/F/G owns that vertical slice.
+  control plane and PDF handler are implemented. The wine-enrichment handler
+  and enqueue path remain disabled until the TER-021F soak dependency and
+  TER-021G staging gates are satisfied.
 - Finish extracting `auth`, remaining `cellar`, `insights`, and `storage`
   workflow code as those routes are touched.

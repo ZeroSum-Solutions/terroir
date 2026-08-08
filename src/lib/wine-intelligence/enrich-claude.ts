@@ -51,6 +51,23 @@ export type WineForClaude = {
   country: string | null;
 };
 
+export type WineEnrichmentProviderOptions = {
+  signal?: AbortSignal;
+  throwOnFailure?: boolean;
+};
+
+export class WineEnrichmentProviderError extends Error {
+  readonly code: string;
+  readonly retryable: boolean;
+
+  constructor(code: string, retryable: boolean) {
+    super("Wine enrichment provider failed");
+    this.name = "WineEnrichmentProviderError";
+    this.code = code;
+    this.retryable = retryable;
+  }
+}
+
 type ClaudeResponse = {
   drinkWindowStart: number | null;
   drinkWindowEnd: number | null;
@@ -98,6 +115,7 @@ Return ONLY the JSON object. No prose, no markdown fences.`;
  */
 export async function enrichWineWithClaude(
   wine: WineForClaude,
+  options: WineEnrichmentProviderOptions = {},
 ): Promise<EnrichmentResult | null> {
   // Vintage required — non-vintage wines have no meaningful drink window
   // and the prompt's null-on-NV branch handles that anyway, but skipping
@@ -105,40 +123,54 @@ export async function enrichWineWithClaude(
   if (wine.vintage == null) return null;
 
   const userMessage = formatWineForPrompt(wine);
+  options.signal?.throwIfAborted();
 
   let raw: string;
   try {
     const client = getAnthropicClient();
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: MAX_TOKENS_SINGLE,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
-    });
+    const response = await client.messages.create(
+      {
+        model: MODEL,
+        max_tokens: MAX_TOKENS_SINGLE,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: userMessage }],
+      },
+      { signal: options.signal },
+    );
     const block = response.content[0];
     if (block?.type !== "text") {
       Sentry.captureMessage("Claude response had no text block", {
         level: "warning",
         tags: { surface: "wines-enrich-claude", parseError: "true" },
       });
+      throwProviderFailure(options, true);
       return null;
     }
     raw = block.text.trim();
   } catch (err) {
+    if (options.signal?.aborted) throw options.signal.reason;
+    if (err instanceof WineEnrichmentProviderError) throw err;
     const status = (err as { status?: number })?.status;
     const rateLimited = status === 429 || status === 529;
-    Sentry.captureException(err, {
-      tags: {
-        surface: "wines-enrich-claude",
-        rateLimited: String(rateLimited),
-        parseError: "false",
+    captureProviderRequestFailure({
+      error: err,
+      options,
+      surface: "wines-enrich-claude",
+      rateLimited,
+      safeExtra: { wineCount: 1 },
+      legacyExtra: {
+        wine: {
+          producer: wine.producer,
+          name: wine.name,
+          vintage: wine.vintage,
+        },
       },
-      extra: { wine: { producer: wine.producer, name: wine.name, vintage: wine.vintage } },
     });
+    throwProviderFailure(options, isRetryableProviderFailure(err));
     return null;
   }
 
-  return parseClaudeResponse(raw);
+  return parseClaudeResponse(raw, options);
 }
 
 // ── Batched Claude (BND-262) ──
@@ -183,8 +215,10 @@ Return ONLY the JSON array. No prose, no markdown fences.`;
  */
 export async function enrichWinesWithClaudeBatch(
   wines: WineForClaude[],
+  options: WineEnrichmentProviderOptions = {},
 ): Promise<(EnrichmentResult | null)[]> {
   if (wines.length === 0) return [];
+  options.signal?.throwIfAborted();
 
   const userMessage = wines.map((w, i) =>
     `${i + 1}. ${formatWineForPrompt(w)}`
@@ -193,12 +227,15 @@ export async function enrichWinesWithClaudeBatch(
   let raw: string;
   try {
     const client = getAnthropicClient();
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: Math.max(1024, wines.length * MAX_TOKENS_PER_WINE),
-      system: BATCH_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
-    });
+    const response = await client.messages.create(
+      {
+        model: MODEL,
+        max_tokens: Math.max(1024, wines.length * MAX_TOKENS_PER_WINE),
+        system: BATCH_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: userMessage }],
+      },
+      { signal: options.signal },
+    );
     const block = response.content[0];
     if (block?.type !== "text") {
       Sentry.captureMessage("Batched Claude response had no text block", {
@@ -206,20 +243,24 @@ export async function enrichWinesWithClaudeBatch(
         tags: { surface: "wines-enrich-claude-batch", parseError: "true" },
         extra: { wineCount: wines.length },
       });
+      throwProviderFailure(options, true);
       return wines.map(() => null);
     }
     raw = block.text.trim();
   } catch (err) {
+    if (options.signal?.aborted) throw options.signal.reason;
+    if (err instanceof WineEnrichmentProviderError) throw err;
     const status = (err as { status?: number })?.status;
     const rateLimited = status === 429 || status === 529;
-    Sentry.captureException(err, {
-      tags: {
-        surface: "wines-enrich-claude-batch",
-        rateLimited: String(rateLimited),
-        parseError: "false",
-      },
-      extra: { wineCount: wines.length },
+    captureProviderRequestFailure({
+      error: err,
+      options,
+      surface: "wines-enrich-claude-batch",
+      rateLimited,
+      safeExtra: { wineCount: wines.length },
+      legacyExtra: { wineCount: wines.length },
     });
+    throwProviderFailure(options, isRetryableProviderFailure(err));
     return wines.map(() => null);
   }
 
@@ -238,8 +279,11 @@ export async function enrichWinesWithClaudeBatch(
   } catch (err) {
     Sentry.captureException(err, {
       tags: { surface: "wines-enrich-claude-batch", parseError: "true" },
-      extra: { rawResponse: raw.slice(0, 1000), wineCount: wines.length },
+      extra: options.throwOnFailure
+        ? { wineCount: wines.length }
+        : { rawResponse: raw.slice(0, 1000), wineCount: wines.length },
     });
+    throwProviderFailure(options, true);
     return wines.map(() => null);
   }
 
@@ -255,8 +299,11 @@ export async function enrichWinesWithClaudeBatch(
       Sentry.captureMessage("Batched Claude response item failed validation", {
         level: "warning",
         tags: { surface: "wines-enrich-claude-batch", parseError: "true" },
-        extra: { index: i, item: JSON.stringify(parsedArray[i]).slice(0, 200) },
+        extra: options.throwOnFailure
+          ? { index: i, wineCount: wines.length }
+          : { index: i, item: JSON.stringify(parsedArray[i]).slice(0, 200) },
       });
+      throwProviderFailure(options, true);
       results.push(null);
       continue;
     }
@@ -276,9 +323,65 @@ export async function enrichWinesWithClaudeBatch(
   return results;
 }
 
+function throwProviderFailure(
+  options: WineEnrichmentProviderOptions,
+  retryable: boolean,
+): void {
+  if (!options.throwOnFailure) return;
+  throw new WineEnrichmentProviderError(
+    retryable
+      ? "wine_enrichment_provider_unavailable"
+      : "wine_enrichment_provider_configuration",
+    retryable,
+  );
+}
+
+function isRetryableProviderFailure(error: unknown): boolean {
+  const status = (error as { status?: unknown })?.status;
+  if (typeof status === "number" && [400, 401, 403, 404].includes(status)) {
+    return false;
+  }
+  if (
+    error instanceof Error &&
+    error.message.includes("ANTHROPIC_API_KEY missing")
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function captureProviderRequestFailure(input: {
+  error: unknown;
+  options: WineEnrichmentProviderOptions;
+  surface: string;
+  rateLimited: boolean;
+  safeExtra: Record<string, unknown>;
+  legacyExtra: Record<string, unknown>;
+}): void {
+  const context = {
+    tags: {
+      surface: input.surface,
+      rateLimited: String(input.rateLimited),
+      parseError: "false",
+    },
+    extra: input.options.throwOnFailure ? input.safeExtra : input.legacyExtra,
+  };
+  if (input.options.throwOnFailure) {
+    Sentry.captureMessage("Wine enrichment provider request failed", {
+      level: "warning",
+      ...context,
+    });
+    return;
+  }
+  Sentry.captureException(input.error, context);
+}
+
 // ── Shared helpers ──
 
-function parseClaudeResponse(raw: string): EnrichmentResult | null {
+function parseClaudeResponse(
+  raw: string,
+  options: WineEnrichmentProviderOptions,
+): EnrichmentResult | null {
   let parsed: ClaudeResponse;
   try {
     const cleaned = raw
@@ -290,8 +393,11 @@ function parseClaudeResponse(raw: string): EnrichmentResult | null {
   } catch (err) {
     Sentry.captureException(err, {
       tags: { surface: "wines-enrich-claude", parseError: "true" },
-      extra: { rawResponse: raw.slice(0, 500) },
+      extra: options.throwOnFailure
+        ? undefined
+        : { rawResponse: raw.slice(0, 500) },
     });
+    throwProviderFailure(options, true);
     return null;
   }
 
@@ -299,8 +405,9 @@ function parseClaudeResponse(raw: string): EnrichmentResult | null {
     Sentry.captureMessage("Claude response failed schema validation", {
       level: "warning",
       tags: { surface: "wines-enrich-claude", parseError: "true" },
-      extra: { parsed },
+      extra: options.throwOnFailure ? undefined : { parsed },
     });
+    throwProviderFailure(options, true);
     return null;
   }
 

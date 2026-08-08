@@ -80,6 +80,16 @@ proof. TER-021G separately owns migration of enrichment to the worker after the
 invoice-OCR soak; the pilot does not close that dependency or prove a live
 provider response.
 
+The same workflow exposes a separate opt-in
+`run_wine_enrichment_worker_pilot` input. Do not dispatch it until the
+canonical TER-021F completion record proves the invoice-OCR soak and the exact
+candidate has the wine-enrichment handler deployed before its web enqueue flag
+is enabled. A collected or skipped browser test is not staging evidence. The
+pilot must retain exact-SHA enqueue, replay, completion, effect-count,
+manual-field, and cross-tenant-denial evidence; retry, restart, dead-letter,
+duplicate-delivery, drain, and rollback evidence remain mandatory under the
+worker runbook. Production activation is prohibited in this task.
+
 GitHub environment required reviewers are unavailable on the repository's
 current plan. The repository variable and exact-confirmation check are the
 enforced fallback: set `PRODUCTION_RELEASE_OWNER` to the named release owner's

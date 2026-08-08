@@ -8,11 +8,13 @@ available concurrency, heartbeats active leases, applies a per-job timeout,
 records retryable or terminal failures through the database state machine,
 and stops taking claims before a bounded signal drain.
 
-TER-021E registers the `wine_list_pdf` handler. Invoice OCR and wine enrichment
-remain unregistered until TER-021F/G provide their own idempotent handlers and
-tests. A row whose type has no deployed handler records `unsupported_job_type`
-as a non-retryable failure; the worker never guesses or runs a synchronous web
-path.
+TER-021E registers the `wine_list_pdf` handler. TER-021G's idempotent
+`wine_enrichment` handler is source-ready but remains unregistered unless its
+literal handler flag is enabled. Its web enqueue has a separate default-off
+flag. Keep both off until the canonical TER-021F invoice-OCR soak is recorded
+and this runbook's TER-021G staging evidence is complete. A row whose type has
+no deployed handler records `unsupported_job_type` as a non-retryable failure;
+the worker never guesses or runs a synchronous web path.
 
 The source-ready runtime is not deployment proof. Creating a Railway worker
 service or paying for queue infrastructure requires the product owner's
@@ -56,6 +58,15 @@ The web service separately owns `PDF_WORKER_ENABLED`. Missing, `0`, or any
 value except literal `1` keeps PDF generation synchronous. Do not put this flag
 on the worker as a handler kill switch: queued and retrying work must remain
 processable during web rollback.
+
+Wine enrichment uses two independent flags. Set
+`WINE_ENRICHMENT_HANDLER_ENABLED=1` only on a worker after the dependency gate,
+deploy it, and confirm `wine_enrichment` appears in `registered_handlers` before
+setting `WINE_ENRICHMENT_WORKER_ENABLED=1` on the web service. Missing, `0`, or
+any value except literal `1` preserves synchronous enrichment. Never enable web
+enqueues before a compatible handler is healthy. During rollback, disable web
+enqueues first and leave the handler enabled until queued, retrying, and active
+wine-enrichment jobs drain.
 
 `pnpm validate:worker` validates names and shapes before build. Its error only
 lists invalid variable names. The `GET /health` response is 200 only after a
@@ -132,6 +143,37 @@ cleanup; its lease expires and the next worker recovers it through the claim
 RPC. Every business handler must therefore make its output idempotent by the
 durable job ID or business idempotency key and honor its abort signal.
 
+## Wine-enrichment rollout
+
+TER-021G is dependency-gated. Before any staging activation, attach the
+canonical TER-021F completion record proving the invoice-OCR soak. Source,
+unit, SQL, or build evidence does not satisfy that dependency.
+
+After the dependency is closed, use only synthetic tenant-owned wines and:
+
+1. Apply migration `0084_wine_enrichment_worker_authority.sql`, run its SQL
+   acceptance test, and verify authenticated staff remain denied while the
+   worker service role can invoke only the tenant-bound enrichment RPCs.
+2. Deploy the handler flag first. Confirm the exact candidate SHA is healthy,
+   the handler is registered, and no unsupported queued type exists.
+3. Enable the web enqueue flag and prove bulk and single-wine routes return one
+   durable job for the same idempotency key while cross-tenant subjects remain
+   undisclosed.
+4. Prove a successful job preserves every manual-field lock, applies its
+   handler-owned wine effect once, and records no provider body, prompt, tenant
+   ID, or secret in result data or logs.
+5. Exercise a retryable provider failure through bounded backoff and a terminal
+   provider failure into the dead-letter state. Record only safe error codes.
+6. Repeat the kill/restart and duplicate-delivery drill below for
+   `wine_enrichment`, proving one business effect after lease recovery.
+7. Set the web flag back to `0`, prove new requests use synchronous enrichment,
+   and drain durable work before considering the rollout complete.
+
+Retain the exact SHA, deployment IDs, job IDs, attempt/state transitions,
+effect counts, redacted queue/health evidence, and rollback result. Until all
+items exist, the handler and enqueue flags remain `0` and production is out of
+scope.
+
 ## Metrics, alerts, and triage
 
 Railway logs are the approved worker telemetry destination. Events use an
@@ -178,9 +220,10 @@ this drill.
 
 ## Rollback
 
-Set `PDF_WORKER_ENABLED=0` on the web service before stopping the worker. This
-immediately restores synchronous generation for new requests. Let queued,
-retrying, and active PDF jobs drain with the handler still deployed, then
+Set `PDF_WORKER_ENABLED=0` and `WINE_ENRICHMENT_WORKER_ENABLED=0` on the web
+service before stopping the worker. This immediately restores synchronous
+generation and enrichment for new requests. Let queued, retrying, and active
+PDF and wine-enrichment jobs drain with their handlers still deployed, then
 remove the worker service or roll it back to the prior known-good SHA.
 Queued and retrying rows remain durable; do not delete or rewrite them during
 an application rollback. If a handler is rolled back, keep its enqueue path

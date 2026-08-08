@@ -87,9 +87,10 @@ project. Its credential boundary, config, metrics, drain behavior, and required
 kill/restart and dead-letter drill are in
 [`docs/runbooks/background-worker.md`](docs/runbooks/background-worker.md).
 TER-021E registers the wine-list PDF handler; its web enqueue remains off by
-default through `PDF_WORKER_ENABLED`. TER-021F/G must register their handlers
-before enabling invoice OCR or wine enrichment. An unregistered job is
-deliberately dead-lettered.
+default through `PDF_WORKER_ENABLED`. TER-021G's wine-enrichment enqueue and
+handler are source-ready behind separate literal-`1` flags, but both must stay
+off until the required TER-021F invoice-OCR soak is recorded and TER-021G's
+own staging drill passes. An unregistered job is deliberately dead-lettered.
 
 The public health endpoint preserves Railway liveness while publishing safe
 readiness and degraded-dependency states. See
