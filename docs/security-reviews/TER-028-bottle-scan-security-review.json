@@ -9,12 +9,14 @@
   },
   "scope": {
     "changed_paths": [
+      ".github/workflows/staging-smoke.yml",
       "docs/ARCHITECTURE.md",
       "docs/completion-records/TER-028-bottle-scan.yaml",
       "docs/security-reviews/TER-028-bottle-scan-security-evidence.md",
       "docs/security-reviews/TER-028-bottle-scan-security-review.json",
       "e2e/bottle-scan.test.ts",
       "src/app/(app)/scan-bottle/idempotency.test.tsx",
+      "src/test/e2e-foundation/config.contract.test.ts",
       "src/test/contracts/bottle-scan-provenance.test.ts",
       "supabase/migrations/0082_bottle_scan_inventory_provenance.sql",
       "supabase/migrations/down/0082_bottle_scan_inventory_provenance.down.sql",
@@ -22,12 +24,14 @@
       "supabase/tests/0082_bottle_scan_provenance.sql"
     ],
     "captured_diff_paths": [
+      ".github/workflows/staging-smoke.yml",
       "docs/ARCHITECTURE.md",
       "docs/completion-records/TER-028-bottle-scan.yaml",
       "docs/security-reviews/TER-028-bottle-scan-security-evidence.md",
       "docs/security-reviews/TER-028-bottle-scan-security-review.json",
       "e2e/bottle-scan.test.ts",
       "src/app/(app)/scan-bottle/idempotency.test.tsx",
+      "src/test/e2e-foundation/config.contract.test.ts",
       "src/test/contracts/bottle-scan-provenance.test.ts",
       "supabase/migrations/0082_bottle_scan_inventory_provenance.sql",
       "supabase/migrations/down/0082_bottle_scan_inventory_provenance.down.sql",
@@ -35,12 +39,14 @@
       "supabase/tests/0082_bottle_scan_provenance.sql"
     ],
     "path_classification": [
+      {"path":".github/workflows/staging-smoke.yml","surfaces":[],"evidence":[{"class":"STATIC","citation":".github/workflows/staging-smoke.yml:27-31"}]},
       {"path":"docs/ARCHITECTURE.md","surfaces":["authentication","authorization","untrusted-input"],"evidence":[{"class":"STATIC","citation":"docs/ARCHITECTURE.md:33-45"}]},
       {"path":"docs/completion-records/TER-028-bottle-scan.yaml","surfaces":["authentication","authorization","untrusted-input"],"evidence":[{"class":"STATIC","citation":"docs/completion-records/TER-028-bottle-scan.yaml:43-64"}]},
       {"path":"docs/security-reviews/TER-028-bottle-scan-security-evidence.md","surfaces":[],"evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-028-bottle-scan-security-evidence.md:1-55"}]},
       {"path":"docs/security-reviews/TER-028-bottle-scan-security-review.json","surfaces":[],"evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-028-bottle-scan-security-evidence.md:1-55"}]},
       {"path":"e2e/bottle-scan.test.ts","surfaces":["authorization","untrusted-input"],"evidence":[{"class":"STATIC","citation":"e2e/bottle-scan.test.ts:51-98"}]},
       {"path":"src/app/(app)/scan-bottle/idempotency.test.tsx","surfaces":[],"evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-028-bottle-scan-security-evidence.md:11-14"}]},
+      {"path":"src/test/e2e-foundation/config.contract.test.ts","surfaces":[],"evidence":[{"class":"STATIC","citation":"src/test/e2e-foundation/config.contract.test.ts:334-374"}]},
       {"path":"src/test/contracts/bottle-scan-provenance.test.ts","surfaces":[],"evidence":[{"class":"STATIC","citation":"src/test/contracts/bottle-scan-provenance.test.ts:28-68"}]},
       {"path":"supabase/migrations/0082_bottle_scan_inventory_provenance.sql","surfaces":["authentication","authorization","untrusted-input"],"evidence":[{"class":"STATIC","citation":"supabase/migrations/0082_bottle_scan_inventory_provenance.sql:15-103"}]},
       {"path":"supabase/migrations/down/0082_bottle_scan_inventory_provenance.down.sql","surfaces":["authentication","authorization","untrusted-input"],"evidence":[{"class":"STATIC","citation":"supabase/migrations/down/0082_bottle_scan_inventory_provenance.down.sql:15-103"}]},

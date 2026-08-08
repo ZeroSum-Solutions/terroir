@@ -1,7 +1,7 @@
 # TER-028 bottle-scan security evidence
 
 Review environment: local isolated worktree with Supabase PostgreSQL, Node
-24.16.0, and pnpm 10.33.2. Base: `5638b63`. Reviewed source ref: `89e151e`.
+24.16.0, and pnpm 10.33.2. Base: `5638b63`. Reviewed source ref: `cb51274`.
 
 CMD-001 is the final `git diff --name-only 5638b63...HEAD` capture. It exits 0
 and accounts for every path listed in the structured security report.
@@ -30,6 +30,12 @@ CMD-006 runs TypeScript no-emit, focused ESLint, snapshot generation, the
 down-migration pair gate, and Playwright collection. It exits 0. Playwright
 collects one isolated mobile test; the browser test is not executed here and
 is not runtime evidence.
+
+The staging workflow now exposes an explicit dispatch-only bottle-scan pilot
+input, enables the E2E guard only for matrix slot 1, and runs the isolated test
+with one worker. Its config contract reproduced the missing wiring red, then
+passed with all 16 checks after the workflow change; TypeScript, focused ESLint,
+and YAML parsing also pass.
 
 Manual review found no open security defect. The changed RPC keeps the 0066
 authentication, current-tenant staff role, tenant-owned wine, canonical hash,
