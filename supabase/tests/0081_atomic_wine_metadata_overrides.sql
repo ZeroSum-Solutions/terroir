@@ -90,6 +90,20 @@ begin
   ) then
     raise exception 'authenticated callers cannot execute atomic metadata writes';
   end if;
+  if has_function_privilege(
+    'anon',
+    'public.enrich_wines_batch(uuid,jsonb)',
+    'EXECUTE'
+  ) then
+    raise exception 'anonymous callers can execute wine enrichment';
+  end if;
+  if not has_function_privilege(
+    'authenticated',
+    'public.enrich_wines_batch(uuid,jsonb)',
+    'EXECUTE'
+  ) then
+    raise exception 'authenticated managers cannot execute wine enrichment';
+  end if;
 end;
 $$;
 
@@ -173,6 +187,36 @@ begin
   raise exception 'staff metadata write was allowed';
 end;
 $$;
+
+do $$
+begin
+  begin
+    perform public.enrich_wines_batch(
+      '81100000-0000-4000-8000-000000000001',
+      '[{"id":"81200000-0000-4000-8000-000000000001","serving_temp_min":77}]'::jsonb
+    );
+  exception when sqlstate '42501' then
+    return;
+  end;
+  raise exception 'staff enrichment RPC was allowed';
+end;
+$$;
+
+do $$
+declare
+  v_count integer;
+begin
+  update public.wines
+  set serving_temp_min = 76,
+      manual_overrides = array[]::text[]
+  where id = '81200000-0000-4000-8000-000000000001'
+    and restaurant_id = '81100000-0000-4000-8000-000000000001';
+  get diagnostics v_count = row_count;
+  if v_count <> 0 then
+    raise exception 'staff direct intelligence update was allowed';
+  end if;
+end;
+$$;
 reset role;
 
 select set_config(
@@ -193,6 +237,14 @@ begin
   );
   if v_count <> 0 then
     raise exception 'cross-tenant wine was disclosed or updated';
+  end if;
+
+  select public.enrich_wines_batch(
+    '81100000-0000-4000-8000-000000000001',
+    '[{"id":"81200000-0000-4000-8000-000000000002","serving_temp_min":77}]'::jsonb
+  ) into v_count;
+  if v_count <> 0 then
+    raise exception 'cross-tenant wine was enriched';
   end if;
 end;
 $$;
