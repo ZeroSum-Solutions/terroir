@@ -92,7 +92,7 @@ export function createWineEnrichmentJobHandler(
           supabase,
           restaurantId: parsed.restaurantId,
           signal,
-          throwOnProviderFailure: true,
+          strictWorkerExecution: true,
         });
         throwIfAborted(signal);
         if ("error" in result) {

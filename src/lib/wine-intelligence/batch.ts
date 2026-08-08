@@ -108,10 +108,15 @@ async function lwinEnrichFallback(
   supabase: SupabaseClient<Database>,
   restaurantId: string,
   wines: Array<{ id: string; producer: string; name: string }>,
+  policy: {
+    signal?: AbortSignal;
+    strictWorkerExecution: boolean;
+  },
 ): Promise<EnrichmentPayloadRow[]> {
   if (wines.length === 0) return [];
 
   const wineIds = wines.map((w) => w.id);
+  policy.signal?.throwIfAborted();
 
   // Run match_lwin_batch to assign LWIN IDs to unmatched wines.
   const { data: matches, error: matchError } = await supabase.rpc(
@@ -121,8 +126,16 @@ async function lwinEnrichFallback(
       p_wine_ids: wineIds,
     },
   );
+  policy.signal?.throwIfAborted();
   if (matchError) {
-    captureLwinFallbackError(matchError, "match-lwin");
+    captureBatchFailure({
+      error: matchError,
+      phase: "lwin-fallback-match-lwin",
+      strictWorkerExecution: policy.strictWorkerExecution,
+      legacyExtra: {},
+      safeExtra: { wineCount: wineIds.length },
+    });
+    if (policy.strictWorkerExecution) throw matchError;
     return [];
   }
 
@@ -138,8 +151,16 @@ async function lwinEnrichFallback(
     .select("id, lwin_id")
     .in("id", Array.from(matchedIds))
     .not("lwin_id", "is", null);
+  policy.signal?.throwIfAborted();
   if (matchedWinesError) {
-    captureLwinFallbackError(matchedWinesError, "fetch-matched-wines");
+    captureBatchFailure({
+      error: matchedWinesError,
+      phase: "lwin-fallback-fetch-matched-wines",
+      strictWorkerExecution: policy.strictWorkerExecution,
+      legacyExtra: {},
+      safeExtra: { wineCount: matchedIds.size },
+    });
+    if (policy.strictWorkerExecution) throw matchedWinesError;
     return [];
   }
 
@@ -152,8 +173,16 @@ async function lwinEnrichFallback(
     .from("lwin_catalog")
     .select("lwin_id, region, country, varietal, colour")
     .in("lwin_id", lwinIds);
+  policy.signal?.throwIfAborted();
   if (catalogError) {
-    captureLwinFallbackError(catalogError, "fetch-catalog");
+    captureBatchFailure({
+      error: catalogError,
+      phase: "lwin-fallback-fetch-catalog",
+      strictWorkerExecution: policy.strictWorkerExecution,
+      legacyExtra: {},
+      safeExtra: { lwinCount: lwinIds.length },
+    });
+    if (policy.strictWorkerExecution) throw catalogError;
     return [];
   }
 
@@ -213,6 +242,7 @@ export type EnrichRestaurantBatchInput = {
   restaurantId: string;
   signal?: AbortSignal;
   throwOnProviderFailure?: boolean;
+  strictWorkerExecution?: boolean;
 };
 
 /**
@@ -246,6 +276,7 @@ export async function enrichRestaurantBatch(
     restaurantId,
     signal,
     throwOnProviderFailure = false,
+    strictWorkerExecution = false,
   } = input;
   signal?.throwIfAborted();
 
@@ -259,16 +290,18 @@ export async function enrichRestaurantBatch(
     .or("drink_window_start.is.null,serving_temp_min.is.null")
     .limit(ENRICH_BATCH_LIMIT);
 
+  signal?.throwIfAborted();
   if (error) {
-    console.error("wines fetch failed:", error);
-    Sentry.captureException(error, {
-      tags: { surface: "wines-enrich", phase: "fetch" },
-      extra: { restaurantId },
+    captureBatchFailure({
+      error,
+      phase: "fetch",
+      strictWorkerExecution,
+      legacyExtra: { restaurantId },
+      safeExtra: {},
     });
+    if (strictWorkerExecution) throw error;
     return { error: "Failed to fetch wines.", status: 500 };
   }
-  signal?.throwIfAborted();
-
   // BND-031 / DEBT-008 / BND-039 — Tier 1 (rule engine, deterministic, free).
   const ruleEnriched: EnrichmentPayloadRow[] = [];
   const claudeCandidates: typeof wines = [];
@@ -312,7 +345,7 @@ export async function enrichRestaurantBatch(
   if (claudeWork.length > 0) {
     const batchResults = await enrichWinesWithClaudeBatch(claudeWork, {
       signal,
-      throwOnFailure: throwOnProviderFailure,
+      throwOnFailure: strictWorkerExecution || throwOnProviderFailure,
     });
     for (let i = 0; i < claudeWork.length; i++) {
       const result = batchResults[i];
@@ -347,7 +380,9 @@ export async function enrichRestaurantBatch(
     supabase,
     restaurantId,
     claudeNullResults,
+    { signal, strictWorkerExecution },
   );
+  signal?.throwIfAborted();
 
   const payload = [...ruleEnriched, ...claudeResults, ...lwinFallbackResults];
 
@@ -358,12 +393,16 @@ export async function enrichRestaurantBatch(
       "enrich_wines_batch",
       { p_restaurant_id: restaurantId, p_enrichments: payload },
     );
+    signal?.throwIfAborted();
     if (rpcError) {
-      console.error("enrich_wines_batch failed:", rpcError);
-      Sentry.captureException(rpcError, {
-        tags: { surface: "wines-enrich", phase: "enrich_wines_batch-rpc" },
-        extra: { restaurantId, payloadSize: payload.length },
+      captureBatchFailure({
+        error: rpcError,
+        phase: "enrich_wines_batch-rpc",
+        strictWorkerExecution,
+        legacyExtra: { restaurantId, payloadSize: payload.length },
+        safeExtra: { payloadSize: payload.length },
       });
+      if (strictWorkerExecution) throw rpcError;
       return { error: "Failed to enrich wines.", status: 500 };
     }
     enriched = count ?? 0;
@@ -378,10 +417,14 @@ export async function enrichRestaurantBatch(
     .limit(ENRICH_BATCH_LIMIT);
   signal?.throwIfAborted();
   if (unmatchedError) {
-    Sentry.captureException(unmatchedError, {
-      tags: { surface: "wines-enrich", phase: "fetch-unmatched-lwin" },
-      extra: { restaurantId },
+    captureBatchFailure({
+      error: unmatchedError,
+      phase: "fetch-unmatched-lwin",
+      strictWorkerExecution,
+      legacyExtra: { restaurantId },
+      safeExtra: {},
     });
+    if (strictWorkerExecution) throw unmatchedError;
     return { error: "Failed to fetch unmatched wines.", status: 500 };
   }
 
@@ -395,11 +438,16 @@ export async function enrichRestaurantBatch(
         p_wine_ids: unmatchedIds,
       },
     );
+    signal?.throwIfAborted();
     if (matchError) {
-      Sentry.captureException(matchError, {
-        tags: { surface: "wines-enrich", phase: "match-unmatched-lwin" },
-        extra: { restaurantId, wineCount: unmatchedIds.length },
+      captureBatchFailure({
+        error: matchError,
+        phase: "match-unmatched-lwin",
+        strictWorkerExecution,
+        legacyExtra: { restaurantId, wineCount: unmatchedIds.length },
+        safeExtra: { wineCount: unmatchedIds.length },
       });
+      if (strictWorkerExecution) throw matchError;
       return { error: "Failed to match wines to LWIN.", status: 500 };
     }
     lwinMatched = matches?.length ?? 0;
@@ -422,9 +470,25 @@ export async function enrichRestaurantBatch(
   };
 }
 
-function captureLwinFallbackError(error: unknown, phase: string): void {
-  console.error(`LWIN enrichment fallback failed during ${phase}:`, error);
-  Sentry.captureException(error, {
-    tags: { surface: "wines-enrich", phase: `lwin-fallback-${phase}` },
+function captureBatchFailure(input: {
+  error: unknown;
+  phase: string;
+  strictWorkerExecution: boolean;
+  legacyExtra: Record<string, unknown>;
+  safeExtra: Record<string, unknown>;
+}): void {
+  const tags = { surface: "wines-enrich", phase: input.phase };
+  if (input.strictWorkerExecution) {
+    Sentry.captureMessage("Wine enrichment database operation failed", {
+      level: "warning",
+      tags,
+      extra: input.safeExtra,
+    });
+    return;
+  }
+  console.error(`Wine enrichment failed during ${input.phase}:`, input.error);
+  Sentry.captureException(input.error, {
+    tags,
+    extra: input.legacyExtra,
   });
 }

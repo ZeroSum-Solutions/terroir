@@ -67,7 +67,7 @@ describe("wine-enrichment worker handler", () => {
       supabase,
       restaurantId: RESTAURANT_ID,
       signal: expect.any(AbortSignal),
-      throwOnProviderFailure: true,
+      strictWorkerExecution: true,
     });
   });
 
