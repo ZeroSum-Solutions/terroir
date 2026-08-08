@@ -8,11 +8,13 @@ import {
   ExportCsvButton,
   type PriceComparisonCsvRow,
 } from "./export-csv-button";
+import { marketPriceShiftPct } from "@/lib/insights/analytics";
 
 export const metadata: Metadata = { title: "Price comparison" };
 
-const VARIANCE_HIGHLIGHT_THRESHOLD =
+const PRICE_VARIANCE_HIGHLIGHT_THRESHOLD =
   parseFloat(process.env.PRICE_VARIANCE_HIGHLIGHT_THRESHOLD ?? "0.10") || 0.10;
+const MARKET_SHIFT_HIGHLIGHT_THRESHOLD = PRICE_VARIANCE_HIGHLIGHT_THRESHOLD;
 
 function formatPrice(n: number) {
   return "$" + n.toFixed(2);
@@ -20,6 +22,29 @@ function formatPrice(n: number) {
 
 function formatPct(n: number) {
   return (n * 100).toFixed(0) + "%";
+}
+
+function isHighlightedMarketShift(value: number | null): boolean {
+  return value != null && Math.abs(value) > MARKET_SHIFT_HIGHLIGHT_THRESHOLD;
+}
+
+function MarketShiftValue({ value }: { value: number | null }) {
+  if (value == null) return <span className="text-ink-subtle">—</span>;
+  const direction = value >= 0 ? "rose" : "fell";
+  const label = `Market ${direction} ${formatPct(Math.abs(value))}`;
+  if (!isHighlightedMarketShift(value)) {
+    return <span className="text-ink-subtle">{label}</span>;
+  }
+  return (
+    <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
+      {value >= 0 ? (
+        <TrendingUp className="h-3 w-3" strokeWidth={2.5} />
+      ) : (
+        <TrendingDown className="h-3 w-3" strokeWidth={2.5} />
+      )}
+      {label}
+    </span>
+  );
 }
 
 function formatInvoiceDate(iso: string | null): string | null {
@@ -72,6 +97,7 @@ type WineComparison = {
   lastPaid: number;
   marketPrice: number | null;
   variancePct: number | null;
+  marketShiftPct: number | null;
   flagged: boolean;
 };
 
@@ -93,23 +119,39 @@ export default async function PriceComparisonPage({
   const { supabase, restaurantId: rid } = auth;
 
   // Fetch inventory items with wine retail data + invoice scan details
-  const { data: items } = await supabase
+  const { data: items, error: itemsError } = await supabase
     .from("inventory_items")
     .select(
-      "unit_cost, quantity, wine_id, wines(id, name, producer, vintage, varietal, retail_median, retail_min, retail_max, enrichment_metadata, overpaid_flag), invoice_scan_id, invoice_scans(distributor_name, invoice_date)",
+      "unit_cost, quantity, wine_id, wines(id, name, producer, vintage, varietal, retail_median, retail_previous_median, retail_previous_refreshed_at, retail_min, retail_max, enrichment_metadata, overpaid_flag), invoice_scan_id, invoice_scans(distributor_name, invoice_date)",
     )
     .eq("restaurant_id", rid);
+  if (itemsError) throw itemsError;
 
   // BND-138: also fetch wines without inventory items that still have retail data
-  const { data: winesWithRetail } = await supabase
+  const { data: winesWithRetail, error: retailError } = await supabase
     .from("wines")
-    .select("id, retail_median, retail_min, retail_max, enrichment_metadata")
+    .select(
+      "id, retail_median, retail_previous_median, retail_previous_refreshed_at, retail_min, retail_max, enrichment_metadata",
+    )
     .eq("restaurant_id", rid)
     .not("retail_median", "is", null);
+  if (retailError) throw retailError;
 
-  const retailByWineId = new Map<string, { median: number | null; min: number | null; max: number | null }>();
+  const retailByWineId = new Map<string, {
+    median: number | null;
+    previousMedian: number | null;
+    previousRefreshedAt: string | null;
+    min: number | null;
+    max: number | null;
+  }>();
   for (const w of winesWithRetail ?? []) {
-    retailByWineId.set(w.id, { median: w.retail_median, min: w.retail_min, max: w.retail_max });
+    retailByWineId.set(w.id, {
+      median: w.retail_median,
+      previousMedian: w.retail_previous_median,
+      previousRefreshedAt: w.retail_previous_refreshed_at,
+      min: w.retail_min,
+      max: w.retail_max,
+    });
   }
 
   // Group by wine, then compute comparison data
@@ -119,6 +161,7 @@ export default async function PriceComparisonPage({
     const wine = item.wines as {
       id: string; name: string; producer: string; vintage: number | null; varietal: string | null;
       retail_median: number | null; retail_min: number | null; retail_max: number | null;
+      retail_previous_median: number | null; retail_previous_refreshed_at: string | null;
       enrichment_metadata: Record<string, unknown> | null;
       overpaid_flag: boolean | null;
     } | null;
@@ -148,6 +191,7 @@ export default async function PriceComparisonPage({
         lastPaid: 0,
         marketPrice: null,
         variancePct: null,
+        marketShiftPct: null,
         flagged: wine.overpaid_flag ?? false,
       };
       wineMap.set(wine.id, entry);
@@ -183,6 +227,10 @@ export default async function PriceComparisonPage({
     // BND-138: variance = (lastPaid - marketPrice) / marketPrice
     const variancePct =
       marketPrice && marketPrice > 0 ? (lastPaid - marketPrice) / marketPrice : null;
+    const marketShift = marketPriceShiftPct(
+      marketPrice,
+      retail?.previousMedian ?? null,
+    );
 
     return {
       ...entry,
@@ -194,6 +242,7 @@ export default async function PriceComparisonPage({
       lastPaid,
       marketPrice,
       variancePct,
+      marketShiftPct: marketShift,
     };
   });
 
@@ -345,6 +394,16 @@ export default async function PriceComparisonPage({
                 </div>
               </div>
             )}
+            {comparisons.filter((c) => isHighlightedMarketShift(c.marketShiftPct)).length > 0 && (
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                  Market shifts
+                </div>
+                <div className="mt-xs font-mono text-[20px] font-medium text-warning">
+                  {comparisons.filter((c) => isHighlightedMarketShift(c.marketShiftPct)).length}
+                </div>
+              </div>
+            )}
             {comparable[0] && comparable[0].potentialSavings > 0 && (
               <Link
                 href={`/cellar?wine=${comparable[0].wine.id}`}
@@ -390,6 +449,7 @@ export default async function PriceComparisonPage({
                   <th scope="col" className="pb-sm text-right font-semibold">Savings</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Last paid</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Market</th>
+                  <th scope="col" className="pb-sm text-right font-semibold">Market shift</th>
                   <th scope="col" className="pb-sm text-right font-semibold">Variance</th>
                 </tr>
               </thead>
@@ -415,10 +475,10 @@ export default async function PriceComparisonPage({
                     <tr
                       key={`${comp.wine.id}-${price.distributor}-${i}`}
                       className={`border-t border-dashed border-border ${
-                        price.unitCost === comp.cheapest
-                          ? "bg-success-soft/40"
-                          : comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD
-                            ? "bg-warning-soft/15"
+                        isHighlightedMarketShift(comp.marketShiftPct)
+                          ? "bg-warning-soft/15"
+                          : price.unitCost === comp.cheapest
+                            ? "bg-success-soft/40"
                             : ""
                       }`}
                     >
@@ -502,16 +562,21 @@ export default async function PriceComparisonPage({
                             : <span className="text-ink-subtle">—</span>}
                         </td>
                       ) : null}
+                      {i === 0 ? (
+                        <td className="py-sm text-right align-top font-mono" rowSpan={distPrices.length}>
+                          <MarketShiftValue value={comp.marketShiftPct} />
+                        </td>
+                      ) : null}
                       {/* BND-138: Variance */}
                       {i === 0 ? (
                         <td className="py-sm text-right align-top font-mono" rowSpan={distPrices.length}>
                           {comp.variancePct != null ? (
-                            comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD ? (
+                            comp.variancePct > PRICE_VARIANCE_HIGHLIGHT_THRESHOLD ? (
                               <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
                                 <TrendingUp className="h-3 w-3" strokeWidth={2.5} />
                                 +{formatPct(comp.variancePct)}
                               </span>
-                            ) : comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD ? (
+                            ) : comp.variancePct < -PRICE_VARIANCE_HIGHLIGHT_THRESHOLD ? (
                               <span className="inline-flex items-center gap-xs rounded-pill bg-success-soft px-sm py-xs text-[11px] font-semibold text-success">
                                 <TrendingDown className="h-3 w-3" strokeWidth={2.5} />
                                 {formatPct(comp.variancePct)}
@@ -554,7 +619,7 @@ export default async function PriceComparisonPage({
                 <div
                   key={comp.wine.id}
                   className={`rounded-md border bg-surface p-md ${
-                    comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD
+                    isHighlightedMarketShift(comp.marketShiftPct)
                       ? "border-warning bg-warning-soft/10"
                       : "border-border"
                   }`}
@@ -604,7 +669,7 @@ export default async function PriceComparisonPage({
                         <span className="font-mono text-[14px] font-medium text-ink-subtle tabular-nums">
                           {formatPrice(comp.marketPrice)}
                         </span>
-                        {comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD && (
+                        {comp.variancePct != null && Math.abs(comp.variancePct) > PRICE_VARIANCE_HIGHLIGHT_THRESHOLD && (
                           <span
                             className={`ml-sm rounded-pill px-sm py-2xs text-[11px] font-semibold ${
                               comp.variancePct > 0
@@ -619,6 +684,15 @@ export default async function PriceComparisonPage({
                       </>
                     )}
                   </div>
+
+                  {comp.marketShiftPct != null && (
+                    <div className="mb-sm flex items-center justify-between rounded-sm border border-dashed border-border px-sm py-sm">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                        Market shift
+                      </span>
+                      <MarketShiftValue value={comp.marketShiftPct} />
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-xs">
                     {distPrices.map((price) => (
@@ -670,6 +744,7 @@ export default async function PriceComparisonPage({
                   <th scope="col" className="px-md py-sm text-left font-semibold">Distributor</th>
                   <th scope="col" className="px-md py-sm text-right font-semibold">Unit cost</th>
                   <th scope="col" className="px-md py-sm text-right font-semibold">Market</th>
+                  <th scope="col" className="px-md py-sm text-right font-semibold">Market shift</th>
                   <th scope="col" className="px-md py-sm text-right font-semibold">Variance</th>
                 </tr>
               </thead>
@@ -681,7 +756,7 @@ export default async function PriceComparisonPage({
                     <tr
                       key={comp.wine.id}
                       className={`border-t border-dashed border-border ${
-                        comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD
+                        isHighlightedMarketShift(comp.marketShiftPct)
                           ? "bg-warning-soft/15"
                           : ""
                       }`}
@@ -722,14 +797,17 @@ export default async function PriceComparisonPage({
                           ? formatPrice(comp.marketPrice)
                           : <span className="text-ink-subtle">—</span>}
                       </td>
+                      <td className="px-md py-sm text-right font-mono">
+                        <MarketShiftValue value={comp.marketShiftPct} />
+                      </td>
                       {/* BND-138: Variance */}
                       <td className="px-md py-sm text-right font-mono">
                         {comp.variancePct != null ? (
-                          comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD ? (
+                          comp.variancePct > PRICE_VARIANCE_HIGHLIGHT_THRESHOLD ? (
                             <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
                               +{formatPct(comp.variancePct)}
                             </span>
-                          ) : comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD ? (
+                          ) : comp.variancePct < -PRICE_VARIANCE_HIGHLIGHT_THRESHOLD ? (
                             <span className="inline-flex items-center gap-xs rounded-pill bg-success-soft px-sm py-xs text-[11px] font-semibold text-success">
                               {formatPct(comp.variancePct)}
                             </span>
@@ -756,7 +834,7 @@ export default async function PriceComparisonPage({
                 <div
                   key={comp.wine.id}
                   className={`rounded-md border bg-surface p-md ${
-                    comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD
+                    isHighlightedMarketShift(comp.marketShiftPct)
                       ? "border-warning bg-warning-soft/10"
                       : "border-border"
                   }`}
@@ -792,7 +870,7 @@ export default async function PriceComparisonPage({
                         <span className="font-mono text-[13px] text-ink-subtle tabular-nums">
                           {formatPrice(comp.marketPrice)}
                         </span>
-                        {comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD && (
+                        {comp.variancePct != null && Math.abs(comp.variancePct) > PRICE_VARIANCE_HIGHLIGHT_THRESHOLD && (
                           <span
                             className={`rounded-pill px-sm py-2xs text-[11px] font-semibold ${
                               comp.variancePct > 0
@@ -805,6 +883,14 @@ export default async function PriceComparisonPage({
                           </span>
                         )}
                       </div>
+                    </div>
+                  )}
+                  {comp.marketShiftPct != null && (
+                    <div className="mt-sm flex items-center justify-between border-t border-dashed border-border pt-sm">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                        Market shift
+                      </span>
+                      <MarketShiftValue value={comp.marketShiftPct} />
                     </div>
                   )}
                   <div className="mt-sm flex items-baseline justify-between border-t border-dashed border-border pt-sm text-[13px] text-ink-muted">

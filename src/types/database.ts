@@ -900,6 +900,8 @@ export type Database = {
           retail_max: number | null
           retail_median: number | null
           retail_min: number | null
+          retail_previous_median: number | null
+          retail_previous_refreshed_at: string | null
           retail_refreshed_at: string | null
           retail_retailer_count: number | null
           review_excerpt: string | null
@@ -943,6 +945,8 @@ export type Database = {
           retail_max?: number | null
           retail_median?: number | null
           retail_min?: number | null
+          retail_previous_median?: number | null
+          retail_previous_refreshed_at?: string | null
           retail_refreshed_at?: string | null
           retail_retailer_count?: number | null
           review_excerpt?: string | null
@@ -986,6 +990,8 @@ export type Database = {
           retail_max?: number | null
           retail_median?: number | null
           retail_min?: number | null
+          retail_previous_median?: number | null
+          retail_previous_refreshed_at?: string | null
           retail_refreshed_at?: string | null
           retail_retailer_count?: number | null
           review_excerpt?: string | null
