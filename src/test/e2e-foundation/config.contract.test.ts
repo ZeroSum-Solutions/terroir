@@ -339,6 +339,7 @@ describe("failure evidence redaction", () => {
       /run_wine_enrichment_worker_pilot:[\s\S]*?type: boolean/,
     );
     expect(workflow).toMatch(/run_bottle_scan_pilot:[\s\S]*?type: boolean/);
+    expect(workflow).toMatch(/run_analytics_pilot:[\s\S]*?type: boolean/);
     expect(workflow).toMatch(
       /github\.event_name == 'workflow_dispatch' && inputs\.force_evidence_failure/,
     );
@@ -376,6 +377,12 @@ describe("failure evidence redaction", () => {
     expect(workflow).toContain(
       "inputs.run_wine_enrichment_worker_pilot && matrix.slot == 1",
     );
+    expect(workflow).toContain(
+      "inputs.run_analytics_pilot && matrix.slot == 1",
+    );
+    expect(workflow).toContain(
+      "pnpm exec playwright test e2e/analytics-staging.test.ts --workers=1 --trace=on",
+    );
     expect(workflow).toContain("group: staging-smoke-staging");
     expect(workflow).toContain("cancel-in-progress: false");
     expect(workflow).toContain("timeout-minutes: 25");
@@ -397,6 +404,9 @@ describe("failure evidence redaction", () => {
     );
     expect(workflow).toMatch(
       /Run the isolated bottle-scan pilot[\s\S]*?inputs\.run_bottle_scan_pilot && matrix\.slot == 1[\s\S]*?BOTTLE_SCAN_E2E_ENABLED: "1"[\s\S]*?e2e\/bottle-scan\.test\.ts/,
+    );
+    expect(workflow).toMatch(
+      /Run the isolated analytics pilot[\s\S]*?inputs\.run_analytics_pilot && matrix\.slot == 1[\s\S]*?ANALYTICS_E2E_ENABLED: "1"[\s\S]*?e2e\/analytics-staging\.test\.ts/,
     );
     expect(workflow).toMatch(
       /Encrypt browser evidence[\s\S]*?id: encrypt_evidence[\s\S]*?rm -f "\$archive" "\$encrypted" "\$encrypted\.sha256"[\s\S]*?evidence_paths=\(\)[\s\S]*?No browser evidence directory was produced before failure[\s\S]*?age -r[\s\S]*?sha256sum "\$encrypted"[\s\S]*?rm -rf playwright-report test-results\/playwright/,
