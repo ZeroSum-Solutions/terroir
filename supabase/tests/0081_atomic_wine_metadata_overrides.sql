@@ -76,6 +76,15 @@ insert into public.wines (
 
 do $$
 begin
+  if not has_table_privilege('authenticated', 'public.wines', 'SELECT') then
+    raise exception 'authenticated callers cannot select tenant-scoped wines';
+  end if;
+  if not has_table_privilege('authenticated', 'public.wines', 'UPDATE') then
+    raise exception 'authenticated managers cannot reach wine UPDATE RLS';
+  end if;
+  if has_table_privilege('anon', 'public.wines', 'UPDATE') then
+    raise exception 'anonymous callers can update wines';
+  end if;
   if has_function_privilege(
     'anon',
     'public.update_wine_metadata_atomic(uuid,uuid,jsonb)',

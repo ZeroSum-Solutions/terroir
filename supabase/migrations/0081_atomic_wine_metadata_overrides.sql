@@ -13,6 +13,12 @@ create policy "owners and managers can update their wines"
   using (public.is_member_with_role(restaurant_id, 'manager'))
   with check (public.is_member_with_role(restaurant_id, 'manager'));
 
+-- Supabase CLI's fresh local bootstrap can leave application-created tables
+-- without data privileges. Grant only the table capabilities this policy and
+-- the existing member-scoped SELECT policy are designed to govern; RLS remains
+-- the server-side authorization boundary for every authenticated statement.
+grant select, update on public.wines to authenticated;
+
 -- Reinstall the manual-override-aware batch function with an explicit
 -- database authorization check. SECURITY DEFINER is required so the function
 -- can retain a narrow callable contract while the table policy independently
