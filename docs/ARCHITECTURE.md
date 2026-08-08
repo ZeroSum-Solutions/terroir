@@ -67,6 +67,11 @@ business workflows. Adapter modules own external provider mechanics.
   drink-window result, and records enrichment override categories in the same
   transaction as the manual values. Enrichment therefore cannot observe a
   saved value without its corresponding manual-field lock.
+- Wine-row UPDATE RLS and `enrich_wines_batch` independently require the shared
+  owner/manager role. The batch RPC is security-definer only to keep a narrow
+  callable contract after direct table updates are restricted; it repeats the
+  role check, rejects oversized or malformed batches, and filters every write
+  by both restaurant and wine identifiers.
 
 ## Background Job Progress UI
 

@@ -12,7 +12,7 @@ requirement_evidence:
     tests: src/lib/wine-intelligence/enrich.test.ts; e2e/wine-intelligence-staging.test.ts
   TER-CF-094:
     implementation: src/app/(app)/cellar/wine-detail-drawer.tsx; src/components/drink-window-timeline.tsx
-    tests: src/components/drink-window-timeline.test.tsx; e2e/wine-intelligence-staging.test.ts
+    tests: src/lib/drink-window/status.test.ts; e2e/wine-intelligence-staging.test.ts
   TER-CF-095:
     implementation: src/app/api/wines/[id]/route.ts; supabase/migrations/0081_atomic_wine_metadata_overrides.sql
     tests: src/app/api/wines/wine-mutation-behavior.test.ts; supabase/tests/0081_atomic_wine_metadata_overrides.sql; e2e/wine-intelligence-staging.test.ts
@@ -24,7 +24,7 @@ requirement_evidence:
     tests: src/app/api/wines/enrich/route.test.ts; src/lib/wine-intelligence/enrich.test.ts
   TER-CF-099:
     implementation: src/app/api/wines/[id]/enrich/route.ts; src/app/(app)/cellar/wine-detail-drawer.tsx
-    tests: src/app/api/wines/[id]/enrich/route.test.ts; e2e/wine-intelligence-staging.test.ts
+    tests: src/app/api/wines/wine-provider-mutation-behavior.test.ts; src/app/api/wines/wine-provider-mutation-boundaries.test.ts; e2e/wine-intelligence-staging.test.ts
   TER-CF-100:
     implementation: src/app/api/wines/enrich/route.ts
     tests: src/app/api/wines/enrich/route.test.ts
@@ -37,10 +37,10 @@ verification:
   inventories: API contract passed with 87 implemented operations, 5 planned operations, and all 87 classified; feature ledger passed with 269 requirements; UI controls passed across 23 routes and 345 controls.
   migrations: Snapshot generation produced 81 migrations and 426056 bytes; all 71 forward migrations from 0011 have rollback pairs; migration 0081 passed transactional PostgreSQL acceptance in an isolated local Supabase database and was removed with its down migration after proof.
   browser_collection: Playwright collected two isolated wine-intelligence tests. Local execution skipped both because the staging-only flags and isolated configuration were intentionally absent; this is not runtime proof.
-  independent_review: Pending exact-ref verifier review.
+  independent_review: The first exact-ref verifier returned REWORK for a staff database bypass and two stale evidence paths. Both findings were corrected test-first; final exact-ref re-verification is pending.
 security:
   route: PATCH metadata and POST re-enrichment authenticate the caller and require owner or manager before tenant-bound work.
-  database: The security-definer metadata RPC repeats authentication and manager-role checks, locks only the tenant-bound wine row, validates the final drink-window tuple, and commits manual values with their enrichment locks atomically.
+  database: Security-definer metadata and enrichment RPCs repeat authentication and manager-role checks, bind every wine row to the requested tenant, and expose execute only to authenticated callers. Wine UPDATE RLS independently requires owner or manager, preventing direct staff mutation of intelligence or manual-lock fields.
   input: HTTP schemas and SQL validation reject unsupported keys, non-integral years, out-of-range years, oversized or untrimmed strings, and inconsistent drink-window results.
   privacy: Cross-tenant metadata writes and re-enrichment return no foreign wine data; staff cannot invoke or see re-enrichment controls.
 staging_evidence_required:
