@@ -14,10 +14,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function escapeField(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
-    return `"${value.replace(/"/g, '""')}"`;
+  const neutralized = /^\s*[=+\-@]/.test(value) ? `'${value}` : value;
+  if (
+    neutralized.includes(",") ||
+    neutralized.includes('"') ||
+    neutralized.includes("\n") ||
+    neutralized.includes("\r")
+  ) {
+    return `"${neutralized.replace(/"/g, '""')}"`;
   }
-  return value;
+  return neutralized;
 }
 
 function formatMoney(n: number): string {

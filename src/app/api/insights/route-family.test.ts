@@ -304,7 +304,7 @@ describe("GET /api/insights/csv", () => {
           data: [
             {
               id: "scan-a",
-              distributor_name: "Acme",
+              distributor_name: "=2+2",
               item_count: 2,
               accuracy_score: 0.9,
               edits: { "item-a:name": true, "item-a:producer": true },
@@ -321,7 +321,7 @@ describe("GET /api/insights/csv", () => {
                 quantity: 2,
                 unit_cost: 15,
                 wine_id: "wine-a",
-                wines: { varietal: "Cabernet" },
+                wines: { varietal: "@SUM(A1:A2)" },
               },
             ],
             error: null,
@@ -332,7 +332,7 @@ describe("GET /api/insights/csv", () => {
                 quantity: 2,
                 unit_cost: 15,
                 invoice_scan_id: "scan-a",
-                invoice_scans: { distributor_name: "Acme" },
+                invoice_scans: { distributor_name: "=2+2" },
               },
             ],
             error: null,
@@ -356,15 +356,15 @@ describe("GET /api/insights/csv", () => {
       [
         "=== SCAN ACTIVITY ===",
         "Date,Distributor,Items Scanned,Auto-Accepted Items,Corrected Items,Accuracy,Value",
-        "2026-01-02,Acme,2,1,1,50%,$20",
+        "2026-01-02,'=2+2,2,1,1,50%,$20",
         "",
         "=== DISTRIBUTOR BREAKDOWN ===",
         "Distributor,Scans,Spend,Share",
-        "Acme,1,$30,100%",
+        "'=2+2,1,$30,100%",
         "",
         "=== VARIETAL BREAKDOWN ===",
         "Varietal,Value,Share",
-        "Cabernet,$30,100%",
+        "'@SUM(A1:A2),$30,100%",
       ].join("\n"),
     );
     expect(
