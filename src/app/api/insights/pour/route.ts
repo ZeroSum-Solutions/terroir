@@ -141,7 +141,7 @@ async function getPourInsights(request: NextRequest) {
       });
 
     // --- Top wines by revenue ---
-    const winePrice = new Map<string, { glassPrice: number; pourMl: number }>();
+    const winePrice = new Map<string, number>();
     for (const item of (listItems ?? []) as unknown as Array<{
       wine_id: string;
       glass_price: number | null;
@@ -167,11 +167,8 @@ async function getPourInsights(request: NextRequest) {
         ? sections.wine_lists[0]
         : sections.wine_lists;
       if (lists?.restaurant_id !== restaurantId) continue;
-      if (item.glass_price == null || item.glass_pour_ml == null) continue;
-      winePrice.set(item.wine_id, {
-        glassPrice: item.glass_price,
-        pourMl: item.glass_pour_ml,
-      });
+      if (item.glass_price == null) continue;
+      winePrice.set(item.wine_id, item.glass_price);
     }
 
     const revenueByWine = new Map<string, number>();
@@ -181,8 +178,7 @@ async function getPourInsights(request: NextRequest) {
       if (!price) continue;
       revenueByWine.set(
         event.wine_id,
-        (revenueByWine.get(event.wine_id) ?? 0) +
-          price.glassPrice * (event.ml_delta / price.pourMl),
+        (revenueByWine.get(event.wine_id) ?? 0) + price,
       );
     }
 

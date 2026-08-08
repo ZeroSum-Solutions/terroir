@@ -246,15 +246,19 @@ export default async function PriceComparisonPage({
     };
   });
 
+  const compareVariance = (a: WineComparison, b: WineComparison) => {
+    const va = a.variancePct ?? (so === "asc" ? Infinity : -Infinity);
+    const vb = b.variancePct ?? (so === "asc" ? Infinity : -Infinity);
+    if (va !== vb) return so === "asc" ? va - vb : vb - va;
+    const producer = a.wine.producer.localeCompare(b.wine.producer);
+    return producer !== 0 ? producer : a.wine.name.localeCompare(b.wine.name);
+  };
+
   // Comparable wines (2+ distributors) — default sort by potential dollar savings desc (BND-140)
   const comparable = comparisons
     .filter((c) => c.distributorCount >= 2)
     .sort((a, b) => {
-      if (sf === "variance") {
-        const va = a.variancePct ?? (so === "asc" ? Infinity : -Infinity);
-        const vb = b.variancePct ?? (so === "asc" ? Infinity : -Infinity);
-        if (va !== vb) return so === "asc" ? va - vb : vb - va;
-      }
+      if (sf === "variance") return compareVariance(a, b);
       if (b.potentialSavings !== a.potentialSavings) {
         return b.potentialSavings - a.potentialSavings;
       }
@@ -265,6 +269,7 @@ export default async function PriceComparisonPage({
   const singleSource = comparisons
     .filter((c) => c.distributorCount < 2)
     .sort((a, b) => {
+      if (sf === "variance") return compareVariance(a, b);
       const cmp = a.wine.producer.localeCompare(b.wine.producer);
       return cmp !== 0 ? cmp : a.wine.name.localeCompare(b.wine.name);
     });
@@ -428,13 +433,14 @@ export default async function PriceComparisonPage({
         </div>
       )}
 
+      <div className="mb-md flex justify-end">
+        <SortControls current={{ field: sf, dir: so }} />
+      </div>
+
       {/* Comparable wines — multi-distributor */}
       {comparable.length > 0 && (
         <div className="mb-xl">
-          <div className="mb-md flex items-center justify-between">
-            <h2 className="text-[15px] font-semibold text-ink">Price comparisons</h2>
-            <SortControls current={{ field: sf, dir: so }} />
-          </div>
+          <h2 className="mb-md text-[15px] font-semibold text-ink">Price comparisons</h2>
 
           {/* Desktop table */}
           <div className="hidden md:block">
