@@ -323,7 +323,7 @@ describe("TER-020Ab active API requirement reconciliation", () => {
     expect(
       validateJsonSchema(reconciliationSchema, invalidLeaf, "reconciliation")
         .join("\n"),
-    ).toContain("must be equal to constant");
+    ).toContain("must be null");
     expect(collectKeys(reconciliationSchema).has("disposition")).toBe(false);
   });
 });
