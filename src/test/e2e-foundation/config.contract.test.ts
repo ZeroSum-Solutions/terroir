@@ -338,8 +338,8 @@ describe("failure evidence redaction", () => {
       /github\.event_name == 'workflow_dispatch' && inputs\.force_evidence_failure/,
     );
     expect(workflow).toContain("TERROIR_E2E_FORCE_FAILURE:");
-    expect(workflow).toContain("PDF_WORKER_E2E_ENABLED:");
-    expect(workflow).toContain("CELLAR_E2E_ENABLED:");
+    expect(workflow).toContain('PDF_WORKER_E2E_ENABLED: "1"');
+    expect(workflow).toContain('CELLAR_E2E_ENABLED: "1"');
     expect(workflow).toContain(
       "pnpm exec playwright test e2e/lists/pdf-worker.test.ts --workers=1",
     );
@@ -348,13 +348,21 @@ describe("failure evidence redaction", () => {
       "pnpm exec playwright test e2e/cellar-staging.test.ts --workers=1",
     );
     expect(workflow).toContain("inputs.run_cellar_pilot && matrix.slot == 1");
+    expect(workflow).toContain("group: staging-smoke-staging");
+    expect(workflow).toContain("cancel-in-progress: false");
     expect(workflow).toContain("timeout-minutes: 25");
     expect(workflow).toContain(
       "TERROIR_E2E_BROWSER_PATH: /usr/bin/google-chrome",
     );
     expect(workflow).not.toContain("playwright install --with-deps");
     expect(workflow).toMatch(
-      /Encrypt browser evidence[\s\S]*?id: encrypt_evidence[\s\S]*?rm -f "\$archive" "\$encrypted" "\$encrypted\.sha256"[\s\S]*?age -r[\s\S]*?sha256sum "\$encrypted"[\s\S]*?rm -rf playwright-report test-results\/playwright/,
+      /Run the PDF worker browser and load pilot[\s\S]*?inputs\.run_pdf_worker_pilot && matrix\.slot == 1[\s\S]*?PDF_WORKER_E2E_ENABLED: "1"[\s\S]*?e2e\/lists\/pdf-worker\.test\.ts/,
+    );
+    expect(workflow).toMatch(
+      /Run the isolated cellar pilot[\s\S]*?inputs\.run_cellar_pilot && matrix\.slot == 1[\s\S]*?CELLAR_E2E_ENABLED: "1"[\s\S]*?e2e\/cellar-staging\.test\.ts/,
+    );
+    expect(workflow).toMatch(
+      /Encrypt browser evidence[\s\S]*?id: encrypt_evidence[\s\S]*?rm -f "\$archive" "\$encrypted" "\$encrypted\.sha256"[\s\S]*?evidence_paths=\(\)[\s\S]*?No browser evidence directory was produced before failure[\s\S]*?age -r[\s\S]*?sha256sum "\$encrypted"[\s\S]*?rm -rf playwright-report test-results\/playwright/,
     );
     expect(workflow).toContain(
       "if: ${{ always() && steps.encrypt_evidence.outcome == 'success' }}",

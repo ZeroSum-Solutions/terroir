@@ -107,6 +107,22 @@ describe("PATCH /api/cellar/[id]/quantity", () => {
     });
   });
 
+  it("accepts an unkeyed adjustment without creating idempotency arguments", async () => {
+    const rpc = allow();
+    const response = await PATCH(
+      request({ quantity: 3, reason: "Physical count" }),
+      { params: Promise.resolve({ id: WINE_ID }) },
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Idempotency-Replayed")).toBeNull();
+    expect(rpc).toHaveBeenCalledWith("adjust_cellar_quantity_idempotent", {
+      p_restaurant_id: RESTAURANT_ID,
+      p_wine_id: WINE_ID,
+      p_quantity: 3,
+      p_reason: "Physical count",
+    });
+  });
+
   it("maps the RPC authorization guard to forbidden for a cross-tenant wine", async () => {
     const rpc = allow({ data: null, error: { code: "42501", message: "forbidden" } });
     const response = await PATCH(request({ quantity: 3, reason: "Count" }), {

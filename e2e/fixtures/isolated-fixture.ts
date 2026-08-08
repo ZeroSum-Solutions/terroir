@@ -104,6 +104,23 @@ export async function cleanupIsolatedFixture(
     if (error) cleanupErrors.push(error);
   }
 
+  const fixtureRestaurantIds = [
+    identity.restaurantId,
+    identity.secondRestaurantId,
+    identity.foreignRestaurantId,
+  ];
+  for (const table of [
+    "availability_events",
+    "inventory_items",
+    "wines",
+  ] as const) {
+    const { error } = await admin
+      .from(table)
+      .delete()
+      .in("restaurant_id", fixtureRestaurantIds);
+    if (error) cleanupErrors.push(error);
+  }
+
   const { error: storageError } = await admin.storage
     .from(STORAGE_BUCKET)
     .remove([identity.storagePath]);
@@ -141,7 +158,7 @@ export async function cleanupIsolatedFixture(
       cleanupErrors.push(membershipError);
       canDeleteUser = false;
     } else {
-      const fixtureRestaurantIds = new Set([
+      const fixtureRestaurantIdSet = new Set([
         identity.restaurantId,
         identity.secondRestaurantId,
       ]);
@@ -156,7 +173,7 @@ export async function cleanupIsolatedFixture(
           membership?.restaurants as { name: string } | null
         )?.name;
         if (
-          !fixtureRestaurantIds.has(restaurantId)
+          !fixtureRestaurantIdSet.has(restaurantId)
           && restaurantName !== expectedBootstrapName
         ) {
           cleanupErrors.push(

@@ -26,8 +26,8 @@ on:
         type: boolean
 
 concurrency:
-  group: staging-smoke-${{ github.ref }}
-  cancel-in-progress: true
+  group: staging-smoke-staging
+  cancel-in-progress: false
 
 jobs:
   smoke:
@@ -76,8 +76,6 @@ jobs:
       TERROIR_E2E_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
       TERROIR_E2E_SERVICE_ROLE_KEY_SHA256: ${{ vars.STAGING_SUPABASE_SERVICE_ROLE_KEY_SHA256 }}
       TERROIR_E2E_FORCE_FAILURE: ${{ github.event_name == 'workflow_dispatch' && inputs.force_evidence_failure && '1' || '0' }}
-      PDF_WORKER_E2E_ENABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.run_pdf_worker_pilot && '1' || '0' }}
-      CELLAR_E2E_ENABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.run_cellar_pilot && '1' || '0' }}
       TERROIR_E2E_BROWSER_PATH: /usr/bin/google-chrome
       E2E_EVIDENCE_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
     steps:
@@ -123,10 +121,14 @@ jobs:
 
       - name: Run the PDF worker browser and load pilot
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_pdf_worker_pilot && matrix.slot == 1 }}
+        env:
+          PDF_WORKER_E2E_ENABLED: "1"
         run: pnpm exec playwright test e2e/lists/pdf-worker.test.ts --workers=1
 
       - name: Run the isolated cellar pilot
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_cellar_pilot && matrix.slot == 1 }}
+        env:
+          CELLAR_E2E_ENABLED: "1"
         run: pnpm exec playwright test e2e/cellar-staging.test.ts --workers=1
 
       - name: Encrypt browser evidence
@@ -145,13 +147,24 @@ jobs:
           encrypted="test-results/isolated-e2e-${{ matrix.slot }}.tar.gz.age"
           mkdir -p test-results
           rm -f "$archive" "$encrypted" "$encrypted.sha256"
-          tar -czf "$archive" playwright-report/ test-results/playwright/
+          evidence_paths=()
+          if [[ -d playwright-report ]]; then
+            evidence_paths+=(playwright-report/)
+          fi
+          if [[ -d test-results/playwright ]]; then
+            evidence_paths+=(test-results/playwright/)
+          fi
+          if (( ${#evidence_paths[@]} == 0 )); then
+            printf '%s\n' 'No browser evidence directory was produced before failure.' > test-results/no-browser-evidence.txt
+            evidence_paths+=(test-results/no-browser-evidence.txt)
+          fi
+          tar -czf "$archive" "${evidence_paths[@]}"
           age -r "$E2E_EVIDENCE_AGE_RECIPIENT" -o "$encrypted" "$archive"
           test -s "$encrypted"
           head -n 1 "$encrypted" | grep -Fx 'age-encryption.org/v1'
           sha256sum "$encrypted" > "$encrypted.sha256"
           rm -f "$archive"
-          rm -rf playwright-report test-results/playwright
+          rm -rf playwright-report test-results/playwright test-results/no-browser-evidence.txt
 
       - name: Retain browser failure evidence
         if: ${{ always() && steps.encrypt_evidence.outcome == 'success' }}
