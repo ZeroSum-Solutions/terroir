@@ -121,4 +121,73 @@ test.describe("wine-list PDF worker pilot", () => {
       `${isolatedFixture.listId}_minimal.pdf`,
     );
   });
+
+  test("drains a 10-request PDF load into one canonical artifact", async ({
+    isolatedConfig,
+    isolatedFixture,
+    page,
+  }) => {
+    test.setTimeout(300_000);
+
+    const switchResponse = await page.request.put(
+      `/api/restaurant/${isolatedFixture.restaurantId}`,
+      {
+        data: {},
+        headers: {
+          "Idempotency-Key": `e2e-pdf-load-switch-${isolatedFixture.namespace}`,
+        },
+      },
+    );
+    expect(switchResponse.ok()).toBe(true);
+
+    const responses = await Promise.all(
+      Array.from({ length: 10 }, (_, index) =>
+        page.request.post("/api/pdf", {
+          data: { listId: isolatedFixture.listId, template: "minimal" },
+          headers: {
+            "Idempotency-Key": `e2e-pdf-load-${isolatedFixture.namespace}-${index}`,
+          },
+        }),
+      ),
+    );
+    expect(responses.map((response) => response.status())).toEqual(
+      Array(10).fill(202),
+    );
+    const jobIds = await Promise.all(
+      responses.map(async (response) =>
+        ((await response.json()) as { jobId: string }).jobId,
+      ),
+    );
+    expect(new Set(jobIds).size).toBe(10);
+
+    const admin = createClient<Database>(
+      isolatedConfig.supabaseUrl,
+      isolatedConfig.serviceRoleKey,
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    );
+    let succeeded = 0;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const { data: jobs, error } = await admin
+        .from("background_jobs")
+        .select("id,status,attempt_count")
+        .in("id", jobIds);
+      if (error) throw error;
+      succeeded = (jobs ?? []).filter(
+        (job) => job.status === "succeeded" && job.attempt_count === 1,
+      ).length;
+      if (succeeded === 10) break;
+      await page.waitForTimeout(1_000);
+    }
+    expect(succeeded).toBe(10);
+
+    const { data: artifacts, error: artifactError } = await admin.storage
+      .from("generated-exports")
+      .list(isolatedFixture.restaurantId);
+    if (artifactError) throw artifactError;
+    expect(
+      artifacts?.filter(
+        (entry) => entry.name === `${isolatedFixture.listId}_minimal.pdf`,
+      ),
+    ).toHaveLength(1);
+  });
 });

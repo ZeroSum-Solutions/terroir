@@ -14,6 +14,11 @@ on:
         required: false
         default: false
         type: boolean
+      run_pdf_worker_pilot:
+        description: Run the worker-backed PDF browser and 10-request load pilot
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: staging-smoke-${{ github.ref }}
@@ -66,6 +71,7 @@ jobs:
       TERROIR_E2E_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
       TERROIR_E2E_SERVICE_ROLE_KEY_SHA256: ${{ vars.STAGING_SUPABASE_SERVICE_ROLE_KEY_SHA256 }}
       TERROIR_E2E_FORCE_FAILURE: ${{ github.event_name == 'workflow_dispatch' && inputs.force_evidence_failure && '1' || '0' }}
+      PDF_WORKER_E2E_ENABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.run_pdf_worker_pilot && '1' || '0' }}
       TERROIR_E2E_BROWSER_PATH: /usr/bin/google-chrome
       E2E_EVIDENCE_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
     steps:
@@ -108,6 +114,10 @@ jobs:
 
       - name: Run the isolated authenticated workflow
         run: pnpm run test:e2e:isolated
+
+      - name: Run the PDF worker browser and load pilot
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_pdf_worker_pilot }}
+        run: pnpm exec playwright test e2e/lists/pdf-worker.test.ts --workers=1
 
       - name: Encrypt browser evidence
         id: encrypt_evidence

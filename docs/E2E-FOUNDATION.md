@@ -42,6 +42,12 @@ an unexpected origin, a production project ref, a credential fingerprint
 mismatch, console or page errors, failed network requests, and unexpected 5xx
 responses all fail the job.
 
+The dispatch-only `run_pdf_worker_pilot` input adds the worker-backed PDF
+browser test and its 10-request queue-load test after the normal isolated
+workflow. It remains off for ordinary staging pushes and must be enabled only
+after the compatible staging web and worker releases are healthy and
+`PDF_WORKER_ENABLED=1` is active on the web service.
+
 Playwright retains trace, screenshot, video, console, network, page-error, and
 5xx evidence as workflow artifacts. The real magic-link, signup, password
 reset, and callback paths remain owned by the separate real-provider auth job.
