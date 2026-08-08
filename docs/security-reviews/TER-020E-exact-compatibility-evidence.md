@@ -11,7 +11,7 @@ CMD-002 is `gitleaks detect --source . --no-banner --redact --log-opts
 235a88dead961453b886928a9e68e8a358084d8e..HEAD`. It exits 0 across the
 committed range with no detected secret.
 
-CMD-003 runs the four exact-handler suites. It exits 0 with four files and 16
+CMD-003 runs the four exact-handler suites. It exits 0 with four files and 24
 tests passing. The tests cover authentication-before-input ordering, malformed
 input rejection, active-tenant filters, opaque missing-resource responses,
 provider-error redaction, normalized idempotency hashes, and replay without a
