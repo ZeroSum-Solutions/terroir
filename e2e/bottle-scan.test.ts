@@ -23,16 +23,29 @@ test.describe("TER-028 isolated mobile bottle scan", () => {
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
     const secondScanWineId = randomUUID();
-    const { error: secondScanWineError } = await admin.from("wines").insert({
-      country: "France",
-      id: secondScanWineId,
-      name: `Rapid Scan Cuvee ${isolatedFixture.namespace}`,
-      producer: "Terroir E2E",
-      region: "Burgundy",
-      restaurant_id: isolatedFixture.restaurantId,
-      size_ml: 750,
-      vintage: 2021,
-    });
+    const correctedWineId = randomUUID();
+    const { error: secondScanWineError } = await admin.from("wines").insert([
+      {
+        country: "France",
+        id: secondScanWineId,
+        name: `Rapid Scan Cuvee ${isolatedFixture.namespace}`,
+        producer: "Terroir E2E",
+        region: "Burgundy",
+        restaurant_id: isolatedFixture.restaurantId,
+        size_ml: 750,
+        vintage: 2021,
+      },
+      {
+        country: "France",
+        id: correctedWineId,
+        name: `Corrected Scan Cuvee ${isolatedFixture.namespace}`,
+        producer: "Terroir E2E",
+        region: "Burgundy",
+        restaurant_id: isolatedFixture.restaurantId,
+        size_ml: 750,
+        vintage: 2022,
+      },
+    ]);
     if (secondScanWineError) throw secondScanWineError;
 
     const selected = await page.request.put(
@@ -126,10 +139,13 @@ test.describe("TER-028 isolated mobile bottle scan", () => {
     await page.getByRole("button", { name: "Correct" }).click();
     await page
       .getByLabel("Search for the correct wine")
-      .fill(`Primary Cuvee ${isolatedFixture.namespace}`);
+      .fill(`Corrected Scan Cuvee ${isolatedFixture.namespace}`);
     await expect(
       page.getByRole("button", {
-        name: new RegExp(`Primary Cuvee ${isolatedFixture.namespace}`, "i"),
+        name: new RegExp(
+          `Corrected Scan Cuvee ${isolatedFixture.namespace}`,
+          "i",
+        ),
       }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Cancel" }).click();
@@ -137,13 +153,19 @@ test.describe("TER-028 isolated mobile bottle scan", () => {
     await page.getByRole("button", { name: "Correct" }).click();
     await page
       .getByLabel("Search for the correct wine")
-      .fill(`Primary Cuvee ${isolatedFixture.namespace}`);
+      .fill(`Corrected Scan Cuvee ${isolatedFixture.namespace}`);
     await page
       .getByRole("button", {
-        name: new RegExp(`Primary Cuvee ${isolatedFixture.namespace}`, "i"),
+        name: new RegExp(
+          `Corrected Scan Cuvee ${isolatedFixture.namespace}`,
+          "i",
+        ),
       })
       .click();
     await expect(page.getByText("Match found")).toBeVisible();
+    await expect(
+      page.getByText(`Corrected Scan Cuvee ${isolatedFixture.namespace}`),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "Confirm" }).click();
     await page.getByLabel("Section").fill("Reserve");
@@ -172,7 +194,7 @@ test.describe("TER-028 isolated mobile bottle scan", () => {
       .from("inventory_items")
       .select("added_via,bin_location,quantity,section,unit_cost")
       .eq("restaurant_id", isolatedFixture.restaurantId)
-      .in("wine_id", [isolatedFixture.wineId, secondScanWineId])
+      .in("wine_id", [correctedWineId, secondScanWineId])
       .eq("added_via", "bottle_scan")
       .order("bin_location");
     if (scannedError) throw scannedError;
@@ -192,6 +214,16 @@ test.describe("TER-028 isolated mobile bottle scan", () => {
         unit_cost: 0,
       },
     ]);
+
+    const { data: uncorrectedScans, error: uncorrectedScansError } =
+      await admin
+        .from("inventory_items")
+        .select("id")
+        .eq("restaurant_id", isolatedFixture.restaurantId)
+        .eq("wine_id", isolatedFixture.wineId)
+        .eq("added_via", "bottle_scan");
+    if (uncorrectedScansError) throw uncorrectedScansError;
+    expect(uncorrectedScans).toEqual([]);
 
     const { data: foreignScans, error: foreignScansError } = await admin
       .from("inventory_items")
