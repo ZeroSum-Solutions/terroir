@@ -47,6 +47,11 @@ business workflows. Adapter modules own external provider mechanics.
   wine and inventory rows, applies the aggregate count change, and records one
   reasoned `availability_events` audit row in the same transaction. Optional
   idempotency keys replay the stored response without applying a second change.
+- `confirm_bottle_scan_idempotent` is the supported bottle-scan inventory
+  insertion boundary. It independently checks the authenticated tenant staff
+  role and tenant-owned wine, stores section and bin location with quantity one
+  and `added_via = bottle_scan`, and binds the insert to the exact replayable
+  confirmation response.
 - Public wine-list reads stay explicitly protected by RLS policies and contract
   tests.
 - Long-running OCR, wine enrichment, and PDF workflows have

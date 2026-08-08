@@ -1,0 +1,57 @@
+spec_id: TER-028
+implementation_commits:
+  - 38d2744
+  - 5330733
+  - 89e151e
+status: source_validated_dependency_and_staging_pending
+scope: Prove active bottle-scanning requirements TER-CF-057 through TER-CF-063 while preserving scanner quality, tenant isolation, idempotency, and lifecycle cleanup.
+requirement_evidence:
+  TER-CF-057:
+    implementation: src/app/(app)/scan-bottle/page.tsx
+    tests: src/app/(app)/scan-bottle/idempotency.test.tsx; e2e/bottle-scan.test.ts
+  TER-CF-058:
+    implementation: src/app/(app)/scan-bottle/page.tsx; src/app/api/scan-bottle/route.ts
+    tests: src/app/(app)/scan-bottle/idempotency.test.tsx; src/app/api/scan-bottle/route.test.ts; e2e/bottle-scan.test.ts
+  TER-CF-059:
+    implementation: src/app/(app)/scan-bottle/page.tsx; src/app/api/wines/search/route.ts
+    tests: src/app/(app)/scan-bottle/idempotency.test.tsx; e2e/bottle-scan.test.ts
+  TER-CF-060:
+    implementation: src/app/(app)/scan-bottle/page.tsx; src/app/api/scan-bottle/confirm/route.ts
+    tests: src/app/(app)/scan-bottle/idempotency.test.tsx; src/app/api/scan-bottle/confirm/route.test.ts; e2e/bottle-scan.test.ts
+  TER-CF-061:
+    implementation: src/app/api/scan-bottle/confirm/route.ts; supabase/migrations/0082_bottle_scan_inventory_provenance.sql
+    tests: src/app/api/scan-bottle/confirm/route.test.ts; src/test/contracts/bottle-scan-provenance.test.ts; supabase/tests/0082_bottle_scan_provenance.sql; e2e/bottle-scan.test.ts
+  TER-CF-062:
+    implementation: src/app/api/scan-bottle/route.ts; src/app/api/scan-bottle/confirm/route.ts; supabase/migrations/0082_bottle_scan_inventory_provenance.sql
+    tests: src/app/api/scan-bottle/route.test.ts; src/app/api/scan-bottle/confirm/route.test.ts; supabase/tests/0066_confirm_bottle_scan_idempotency.sql; e2e/bottle-scan.test.ts
+  TER-CF-063:
+    implementation: src/app/(app)/scan-bottle/page.tsx
+    tests: src/app/(app)/scan-bottle/idempotency.test.tsx; e2e/bottle-scan.test.ts
+verification:
+  red_green: The isolated Supabase database first reproduced an inventory row with quantity 1, unit cost 0, the requested location, and added_via manual; migration 0082 changed only that atomic RPC insertion to bottle_scan, after which the same transactional acceptance passed.
+  focused: Six bottle-scan route, boundary, component, and contract files passed with 61 tests; the strengthened follow-up set passed four files and 32 tests.
+  database: Migrations through 0080 plus 0082 applied in isolated Supabase PostgreSQL; keyed fresh and exact replay created one bottle_scan inventory row, and the 0082 down migration restored the byte-identical 0066 function before a successful reapply.
+  static: TypeScript no-emit, focused lint, schema snapshot generation, the 71-pair down-migration gate, and one-test Playwright collection passed on Node 24.16.0 with pnpm 10.33.2.
+  browser: The isolated mobile test is collected but has not yet executed against staging; browser runtime evidence is unavailable and is not recorded as a pass.
+  independent_review: Fable 5 at medium reasoning returned PASS after the exact contiguous RPC source and corrective follow-up were reviewed; no P0, P1, or P2 finding remained.
+security:
+  route: Existing membership enforcement and request schemas reject unauthenticated, malformed, and foreign-tenant lookup or confirmation requests before a write is exposed.
+  database: The security-definer RPC derives auth.uid, independently checks current-tenant staff membership and tenant-owned wine, binds keyed claims to the caller and request hash, and grants execute only to authenticated users.
+  idempotency: Fresh keyed confirmation and exact replay return the same stored status, body, and execution start while creating one row.
+  data_lifecycle: Isolated fixture teardown deletes availability events, inventory items, and wines for every fixture restaurant before deleting the tenant graph.
+staging_evidence_required:
+  - Apply migration 0082 to the isolated staging branch after dependency migration 0081 is integrated.
+  - Execute e2e/bottle-scan.test.ts at the mobile viewport and retain its trace, network, console, and database assertions.
+  - Confirm malformed lookup and foreign lookup or confirmation create no bottle_scan rows, correction persists the corrected wine, and two distinct rapid scans create exactly two rows.
+dependency_evidence_required:
+  - Close the five planned TER-020 exact-path handlers before marking TER-028 complete.
+production_evidence_required:
+  - Promote only through TER-046 after the final integrated candidate passes its complete release gate and production canaries.
+deployment:
+  executed: false
+  environment: none
+  production_changed: false
+known_limits:
+  - Browser runtime is collected but not executed in this source-only checkpoint.
+  - Canonical TER-020 contract closure remains a hard dependency even though the TER-028 surfaces are source-validated.
+rollback: Revert the TER-028 commits in reverse order and apply supabase/migrations/down/0082_bottle_scan_inventory_provenance.down.sql before removing the application changes.
