@@ -21,6 +21,10 @@ const browserValidator = readFileSync(
   "scripts/validate-worker-browser.mjs",
   "utf8",
 );
+const browserInstaller = readFileSync(
+  "scripts/install-worker-browser.mjs",
+  "utf8",
+);
 const client = readFileSync(
   "src/app/(app)/lists/[id]/wine-list-editor.tsx",
   "utf8",
@@ -50,7 +54,7 @@ describe("TER-021E PDF worker contract", () => {
 
   it("installs and verifies the pinned browser before building the worker image", () => {
     expect(packageJson.scripts["worker:install-browser"]).toBe(
-      "puppeteer browsers install chrome",
+      "node scripts/install-worker-browser.mjs",
     );
     expect(workerManifest).toContain("pnpm worker:install-browser");
     expect(workerManifest).toContain("pnpm validate:worker-browser");
@@ -59,6 +63,11 @@ describe("TER-021E PDF worker contract", () => {
     expect(puppeteerConfig).toContain(
       'join(__dirname, ".cache", "puppeteer")',
     );
+    expect(puppeteerConfig).toContain(
+      '"chrome-headless-shell": { skipDownload: true }',
+    );
+    expect(browserInstaller).toContain("await downloadBrowsers()");
+    expect(browserInstaller).toContain("constants.X_OK");
     expect(browserValidator).toContain("puppeteer.executablePath()");
     expect(browserValidator).toContain("constants.X_OK");
   });

@@ -76,6 +76,10 @@ command fails the image build unless Puppeteer's resolved executable exists and
 is executable. Do not enable the PDF queue when the build omitted this gate,
 even if the control-plane health check is otherwise ready.
 
+The installer awaits Puppeteer's download promise and installs only full Chrome;
+the headless-shell duplicate is disabled. This avoids a provider build advancing
+while an asynchronous archive extraction is still incomplete.
+
 ## Wine-list PDF pilot
 
 Migration `0077_wine_list_pdf_artifacts.sql` creates the private
