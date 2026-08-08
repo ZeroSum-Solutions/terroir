@@ -1,0 +1,148 @@
+{
+  "schema_version": "1.0",
+  "ref": "HEAD",
+  "base": {
+    "status": "AVAILABLE",
+    "value": "f78ef0a",
+    "unavailable_reason": null,
+    "evidence": [{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:5-8"}]
+  },
+  "scope": {
+    "changed_paths": [
+      ".github/workflows/staging-smoke.yml",
+      "docs/STAGING-SETUP.md",
+      "docs/security-reviews/TER-003-staging-migration-evidence.md",
+      "docs/security-reviews/TER-003-staging-migration-security-review.json",
+      "package.json",
+      "scripts/apply-staging-migrations.mjs",
+      "scripts/staging-migration-plan.mjs",
+      "src/test/contracts/staging-migration-runner.test.ts",
+      "src/test/e2e-foundation/config.contract.test.ts"
+    ],
+    "captured_diff_paths": [
+      ".github/workflows/staging-smoke.yml",
+      "docs/STAGING-SETUP.md",
+      "docs/security-reviews/TER-003-staging-migration-evidence.md",
+      "docs/security-reviews/TER-003-staging-migration-security-review.json",
+      "package.json",
+      "scripts/apply-staging-migrations.mjs",
+      "scripts/staging-migration-plan.mjs",
+      "src/test/contracts/staging-migration-runner.test.ts",
+      "src/test/e2e-foundation/config.contract.test.ts"
+    ],
+    "path_classification": [
+      {"path":".github/workflows/staging-smoke.yml","surfaces":["secrets","authentication","authorization","export"],"evidence":[{"class":"STATIC","citation":".github/workflows/staging-smoke.yml:61-94"},{"class":"STATIC","citation":".github/workflows/staging-smoke.yml:123-158"}]},
+      {"path":"docs/STAGING-SETUP.md","surfaces":["secrets","authentication","authorization","export"],"evidence":[{"class":"STATIC","citation":"docs/STAGING-SETUP.md:51-71"}]},
+      {"path":"docs/security-reviews/TER-003-staging-migration-evidence.md","surfaces":[],"evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:1-87"}]},
+      {"path":"docs/security-reviews/TER-003-staging-migration-security-review.json","surfaces":[],"evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:3-13"}]},
+      {"path":"package.json","surfaces":[],"evidence":[{"class":"STATIC","citation":"package.json:11-19"}]},
+      {"path":"scripts/apply-staging-migrations.mjs","surfaces":["secrets","authentication","authorization","untrusted-input","export"],"evidence":[{"class":"STATIC","citation":"scripts/apply-staging-migrations.mjs:16-19"},{"class":"STATIC","citation":"scripts/apply-staging-migrations.mjs:40-75"},{"class":"STATIC","citation":"scripts/apply-staging-migrations.mjs:89-116"}]},
+      {"path":"scripts/staging-migration-plan.mjs","surfaces":["authorization","untrusted-input","export"],"evidence":[{"class":"STATIC","citation":"scripts/staging-migration-plan.mjs:14-62"},{"class":"STATIC","citation":"scripts/staging-migration-plan.mjs:129-166"},{"class":"STATIC","citation":"scripts/staging-migration-plan.mjs:169-287"}]},
+      {"path":"src/test/contracts/staging-migration-runner.test.ts","surfaces":["secrets","authentication","authorization","untrusted-input","export"],"evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:44-46"}]},
+      {"path":"src/test/e2e-foundation/config.contract.test.ts","surfaces":["secrets","authorization","export"],"evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:22-27"}]}
+    ],
+    "sensitive_surfaces": ["secrets","authentication","authorization","untrusted-input","export"],
+    "diff_command_id": "CMD-001",
+    "evidence": [{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:37-38"}]
+  },
+  "commands": [
+    {"id":"CMD-001","purpose":"diff","command":"git diff --name-only f78ef0a...HEAD","outcome":"PASS","exit_code":0,"scope":"f78ef0a...HEAD","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:37-38"}],"unavailable_reason":null},
+    {"id":"CMD-002","purpose":"secrets-scan","command":"gitleaks detect --source . --no-banner --redact --log-opts f78ef0a..HEAD","outcome":"PASS","exit_code":0,"scope":"f78ef0a..HEAD","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:40-42"}],"unavailable_reason":null},
+    {"id":"CMD-003","purpose":"recheck:SEC-001","command":"generate the fixed migration SQL and execute it with a final rollback against isolated local PostgreSQL","outcome":"PASS","exit_code":0,"scope":"SEC-001","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:55-60"}],"unavailable_reason":null},
+    {"id":"CMD-004","purpose":"recheck:SEC-002","command":"pnpm exec vitest run src/test/e2e-foundation/config.contract.test.ts and pnpm exec actionlint .github/workflows/staging-smoke.yml","outcome":"PASS","exit_code":0,"scope":"SEC-002","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:22-27"}],"unavailable_reason":null},
+    {"id":"CMD-005","purpose":"recheck:SEC-003","command":"pnpm exec vitest run src/test/contracts/staging-migration-runner.test.ts","outcome":"PASS","exit_code":0,"scope":"SEC-003","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:29-33"}],"unavailable_reason":null},
+    {"id":"CMD-006","purpose":"full-and-static-gates","command":"Node 24 full Vitest, TypeScript, ESLint, Next build, snapshot, downs, API, feature, UI, and workflow gates","outcome":"PASS","exit_code":0,"scope":"guarded staging migration candidate","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:44-53"}],"unavailable_reason":null}
+  ],
+  "exports": {
+    "state": "LISTED",
+    "items": [
+      {
+        "id":"EXP-001",
+        "destination":"Supabase Management API for the fixed isolated staging project",
+        "data_classes":["fixed migration and acceptance SQL","migration names versions and source hashes","schema privilege and function-state metadata"],
+        "initiating_identity":"Configured release owner dispatching the exact staging-branch candidate",
+        "authorization_evidence":[{"class":"STATIC","citation":"scripts/apply-staging-migrations.mjs:89-116"},{"class":"STATIC","citation":".github/workflows/staging-smoke.yml:85-94"}],
+        "recipient_scope":"Only project wwhxcgtcecsftcivosop through a hard-coded HTTPS Management API path",
+        "retention_redaction":"Migration source and hash markers are intentionally durable in staging history; acceptance fixtures roll back and token and provider bodies are not persisted or logged",
+        "failure_behavior":"Wrong actor branch SHA origin confirmation history schema or source hash fails before mutation; ambiguous mutation state is never retried automatically",
+        "policy_basis":{"status":"ALLOWLISTED","citation":"docs/STAGING-SETUP.md:19-36","owner":null,"reason":null}
+      },
+      {
+        "id":"EXP-002",
+        "destination":"GitHub Actions workflow logs and encrypted staging evidence artifacts",
+        "data_classes":["fixed migration status and versions","synthetic encrypted browser evidence"],
+        "initiating_identity":"Configured staging workflow actor",
+        "authorization_evidence":[{"class":"STATIC","citation":".github/workflows/staging-smoke.yml:3-4"},{"class":"STATIC","citation":".github/workflows/staging-smoke.yml:61-94"}],
+        "recipient_scope":"Repository workflow readers and existing encrypted-artifact readers",
+        "retention_redaction":"Fixed status excludes credentials and provider bodies; existing encrypted browser artifacts retain for 14 days",
+        "failure_behavior":"Missing controls fail the workflow and no plaintext browser artifact is uploaded",
+        "policy_basis":{"status":"ALLOWLISTED","citation":"docs/runbooks/data-lifecycle-privacy.md:64","owner":null,"reason":null}
+      }
+    ],
+    "evidence": [{"class":"STATIC","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:83-87"}],
+    "unavailable_reason": null
+  },
+  "secrets_scan": {
+    "result":"PASS",
+    "command_id":"CMD-002",
+    "scope":"RANGE",
+    "comparison":"f78ef0a..HEAD",
+    "evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:40-42"}],
+    "unavailable_reason":null
+  },
+  "export_policy": {
+    "result":"PASS",
+    "evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:83-87"}],
+    "unavailable_reason":null
+  },
+  "coverage": [
+    {"surface":"prompt-injection","state":"NOT-APPLICABLE","evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:64-68"}],"unavailable_reason":null},
+    {"surface":"secrets","state":"REVIEWED","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:40-42"},{"class":"STATIC","citation":".github/workflows/staging-smoke.yml:85-94"}],"unavailable_reason":null},
+    {"surface":"authentication","state":"REVIEWED","evidence":[{"class":"STATIC","citation":"scripts/apply-staging-migrations.mjs:89-116"}],"unavailable_reason":null},
+    {"surface":"authorization","state":"REVIEWED","evidence":[{"class":"STATIC","citation":"scripts/staging-migration-plan.mjs:169-287"},{"class":"STATIC","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:70-81"}],"unavailable_reason":null},
+    {"surface":"untrusted-input","state":"REVIEWED","evidence":[{"class":"STATIC","citation":"scripts/apply-staging-migrations.mjs:21-38"},{"class":"STATIC","citation":"scripts/staging-migration-plan.mjs:129-166"}],"unavailable_reason":null},
+    {"surface":"export","state":"REVIEWED","evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:83-87"}],"unavailable_reason":null}
+  ],
+  "findings": [
+    {
+      "id":"SEC-001",
+      "origin":"MANUAL",
+      "severity":"MEDIUM",
+      "surface":"authorization",
+      "evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:17-20"}],
+      "exploit_or_failure":"The initial baseline proof depended on a database comment never created by the pre-0086 migration, so a correct staging baseline would be rejected and the rehearsal could not safely proceed.",
+      "disposition":"FIXED",
+      "recheck":{"status":"PASS","command_id":"CMD-003","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:55-60"}],"unavailable_reason":null},
+      "owner":{"status":"NOT-REQUIRED","name":null,"evidence":[],"unavailable_reason":null},
+      "acceptance":{"status":"NOT-REQUIRED","evidence":[],"unavailable_reason":null},
+      "compensating_control":null
+    },
+    {
+      "id":"SEC-002",
+      "origin":"MANUAL",
+      "severity":"HIGH",
+      "surface":"secrets",
+      "evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:22-27"}],
+      "exploit_or_failure":"Mutable third-party Action tags executed before a broad Management API token was exposed, allowing a compromised upstream tag to persist code and steal the token or replace the migration command.",
+      "disposition":"FIXED",
+      "recheck":{"status":"PASS","command_id":"CMD-004","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:22-27"}],"unavailable_reason":null},
+      "owner":{"status":"NOT-REQUIRED","name":null,"evidence":[],"unavailable_reason":null},
+      "acceptance":{"status":"NOT-REQUIRED","evidence":[],"unavailable_reason":null},
+      "compensating_control":null
+    },
+    {
+      "id":"SEC-003",
+      "origin":"MANUAL",
+      "severity":"MEDIUM",
+      "surface":"authorization",
+      "evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:29-33"}],
+      "exploit_or_failure":"A mutation HTTP 5xx was not explicitly classified as an unknown state, which could encourage a blind replay after the database had already committed.",
+      "disposition":"FIXED",
+      "recheck":{"status":"PASS","command_id":"CMD-005","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-003-staging-migration-evidence.md:29-33"}],"unavailable_reason":null},
+      "owner":{"status":"NOT-REQUIRED","name":null,"evidence":[],"unavailable_reason":null},
+      "acceptance":{"status":"NOT-REQUIRED","evidence":[],"unavailable_reason":null},
+      "compensating_control":null
+    }
+  ],
+  "verdict": "PASS"
+}

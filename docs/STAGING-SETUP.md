@@ -56,12 +56,14 @@ staging pushes. For the exact integrated candidate, the configured release
 owner may enter `MIGRATE-wwhxcgtcecsftcivosop-0084-0086`. The runner hard-codes
 that isolated ref, requires the `staging` Git ref, configured staging Supabase
 origin, and exact checked-out candidate SHA, verifies the existing 0080 through
-0082 history,
-applies all three migrations in one transaction, and reconciles their fixed
-source hashes before smoke begins. Drift, partial history, an ambiguous write,
-or a simultaneous wine-enrichment worker pilot fails closed. The Management
-API token is supplied only to that guarded step; `SUPABASE_PROJECT_ID` and the
-E2E service-role key are never used for schema administration.
+0082 history, applies all three migrations in one transaction, and reconciles
+their fixed source hashes before smoke begins. Drift, partial history, an
+ambiguous write, or a simultaneous wine-enrichment worker pilot fails closed.
+The Management API token is supplied only to that guarded step;
+`SUPABASE_PROJECT_ID` and the
+E2E service-role key are never used for schema administration. External
+workflow actions are pinned to immutable commits, dependency lifecycle scripts
+are disabled, and the E2E service-role key is scoped only to browser test steps.
 
 This schema rehearsal does not activate TER-021G. Keep
 `WINE_ENRICHMENT_HANDLER_ENABLED=0` and
