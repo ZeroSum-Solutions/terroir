@@ -6,7 +6,8 @@
 -- the API/UI manager boundary bypassable through the Supabase data API. Wine
 -- mutations are a wine:manage capability, so database UPDATE authority must
 -- match the shared owner/manager capability map.
-drop policy "members can update their wines" on public.wines;
+drop policy if exists "members can update their wines" on public.wines;
+drop policy if exists "owners and managers can update their wines" on public.wines;
 create policy "owners and managers can update their wines"
   on public.wines for update to authenticated
   using (public.is_member_with_role(restaurant_id, 'manager'))
