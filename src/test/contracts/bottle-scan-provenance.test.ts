@@ -13,6 +13,18 @@ const acceptance = readFileSync(
   "supabase/tests/0082_bottle_scan_provenance.sql",
   "utf8",
 );
+const baseline = readFileSync(
+  "supabase/migrations/0066_confirm_bottle_scan_idempotency.sql",
+  "utf8",
+);
+
+function functionDefinition(source: string) {
+  const start = source.indexOf(
+    "create or replace function public.confirm_bottle_scan_idempotent(",
+  );
+  if (start < 0) throw new Error("Bottle confirmation definition not found");
+  return source.slice(start);
+}
 
 describe("bottle scan inventory provenance migration", () => {
   it("keeps scanned-bottle insertion inside the hardened atomic confirmation RPC", () => {
@@ -26,15 +38,19 @@ describe("bottle scan inventory provenance migration", () => {
     );
     expect(migration).toContain("insert into public.inventory_items");
     expect(migration).toContain("'bottle_scan'::public.added_via");
-    expect(migration).not.toMatch(/\n\s*'manual'\s*\n\s*\)/);
+    expect(functionDefinition(migration)).toBe(
+      functionDefinition(baseline).replace(
+        "      'manual'\n    )",
+        "      'bottle_scan'::public.added_via\n    )",
+      ),
+    );
   });
 
   it("restores the prior provenance behavior when reversed", () => {
     expect(down).toContain(
       "create or replace function public.confirm_bottle_scan_idempotent(",
     );
-    expect(down).toMatch(/\n\s*'manual'\s*\n\s*\)/);
-    expect(down).not.toContain("'bottle_scan'::public.added_via");
+    expect(functionDefinition(down)).toBe(functionDefinition(baseline));
   });
 
   it("locks the created row's quantity, cost, location, and provenance in live SQL acceptance", () => {
@@ -45,6 +61,8 @@ describe("bottle scan inventory provenance migration", () => {
     expect(acceptance).toContain(
       "v_item.added_via <> 'bottle_scan'::public.added_via",
     );
+    expect(acceptance).toContain("v_replay.outcome <> 'replay'");
+    expect(acceptance).toContain("not v_replay.replayed");
     expect(acceptance).toContain("rollback;");
   });
 });

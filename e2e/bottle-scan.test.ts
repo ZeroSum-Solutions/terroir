@@ -17,6 +17,23 @@ test.describe("TER-028 isolated mobile bottle scan", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
+    const admin = createClient<Database>(
+      isolatedConfig.supabaseUrl,
+      isolatedConfig.serviceRoleKey,
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    );
+    const secondScanWineId = randomUUID();
+    const { error: secondScanWineError } = await admin.from("wines").insert({
+      country: "France",
+      id: secondScanWineId,
+      name: `Rapid Scan Cuvee ${isolatedFixture.namespace}`,
+      producer: "Terroir E2E",
+      region: "Burgundy",
+      restaurant_id: isolatedFixture.restaurantId,
+      size_ml: 750,
+      vintage: 2021,
+    });
+    if (secondScanWineError) throw secondScanWineError;
 
     const selected = await page.request.put(
       `/api/restaurant/${isolatedFixture.restaurantId}`,
@@ -30,6 +47,15 @@ test.describe("TER-028 isolated mobile bottle scan", () => {
     );
     expect(selected.status()).toBe(200);
 
+    const malformedLookup = await page.request.post("/api/scan-bottle", {
+      data: { qr_payload: "not-a-wine-id" },
+      headers: {
+        "Idempotency-Key":
+          `e2e-bottle-scan-malformed-${isolatedFixture.namespace}-${randomUUID()}`,
+      },
+    });
+    expect(malformedLookup.status()).toBe(400);
+
     const foreignLookup = await page.request.post("/api/scan-bottle", {
       data: { qr_payload: isolatedFixture.secondWineId },
       headers: {
@@ -42,7 +68,24 @@ test.describe("TER-028 isolated mobile bottle scan", () => {
       error: { code: "not_found" },
     });
 
-    await page.addInitScript((wineId: string) => {
+    const foreignConfirmation = await page.request.post(
+      "/api/scan-bottle/confirm",
+      {
+        data: {
+          bin_location: "X-1",
+          section: "Foreign",
+          wine_id: isolatedFixture.secondWineId,
+        },
+        headers: {
+          "Idempotency-Key":
+            `e2e-bottle-confirm-foreign-${isolatedFixture.namespace}-${randomUUID()}`,
+        },
+      },
+    );
+    expect(foreignConfirmation.status()).toBe(404);
+
+    await page.addInitScript((wineIds: string[]) => {
+      let detectorIndex = 0;
       Object.defineProperty(HTMLMediaElement.prototype, "readyState", {
         configurable: true,
         get: () => 2,
@@ -57,15 +100,17 @@ test.describe("TER-028 isolated mobile bottle scan", () => {
         configurable: true,
         value: class BarcodeDetector {
           private delivered = false;
+          private readonly wineId =
+            wineIds[Math.min(detectorIndex++, wineIds.length - 1)];
 
           async detect() {
             if (this.delivered) return [];
             this.delivered = true;
-            return [{ rawValue: wineId }];
+            return [{ rawValue: this.wineId }];
           }
         },
       });
-    }, isolatedFixture.wineId);
+    }, [isolatedFixture.wineId, secondScanWineId]);
 
     await page.goto("/scan-bottle", { waitUntil: "domcontentloaded" });
     await expect(page.getByText("Match found")).toBeVisible();
@@ -78,6 +123,28 @@ test.describe("TER-028 isolated mobile bottle scan", () => {
       ),
     ).toBe(true);
 
+    await page.getByRole("button", { name: "Correct" }).click();
+    await page
+      .getByLabel("Search for the correct wine")
+      .fill(`Primary Cuvee ${isolatedFixture.namespace}`);
+    await expect(
+      page.getByRole("button", {
+        name: new RegExp(`Primary Cuvee ${isolatedFixture.namespace}`, "i"),
+      }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByText("Match found")).toBeVisible();
+    await page.getByRole("button", { name: "Correct" }).click();
+    await page
+      .getByLabel("Search for the correct wine")
+      .fill(`Primary Cuvee ${isolatedFixture.namespace}`);
+    await page
+      .getByRole("button", {
+        name: new RegExp(`Primary Cuvee ${isolatedFixture.namespace}`, "i"),
+      })
+      .click();
+    await expect(page.getByText("Match found")).toBeVisible();
+
     await page.getByRole("button", { name: "Confirm" }).click();
     await page.getByLabel("Section").fill("Reserve");
     await page.getByLabel("Bin location").fill("R-1");
@@ -86,6 +153,9 @@ test.describe("TER-028 isolated mobile bottle scan", () => {
 
     await page.getByRole("button", { name: "Scan another bottle" }).click();
     await expect(page.getByText("Match found")).toBeVisible();
+    await expect(
+      page.getByText(`Rapid Scan Cuvee ${isolatedFixture.namespace}`),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Confirm" }).click();
     await page.getByLabel("Section").fill("Main Cellar");
     await page.getByLabel("Bin location").fill("M-2");
@@ -98,16 +168,11 @@ test.describe("TER-028 isolated mobile bottle scan", () => {
     await expect(page.getByText("Main Cellar")).toBeVisible();
     await expect(page.getByText("M-2")).toBeVisible();
 
-    const admin = createClient<Database>(
-      isolatedConfig.supabaseUrl,
-      isolatedConfig.serviceRoleKey,
-      { auth: { autoRefreshToken: false, persistSession: false } },
-    );
     const { data: scanned, error: scannedError } = await admin
       .from("inventory_items")
       .select("added_via,bin_location,quantity,section,unit_cost")
       .eq("restaurant_id", isolatedFixture.restaurantId)
-      .eq("wine_id", isolatedFixture.wineId)
+      .in("wine_id", [isolatedFixture.wineId, secondScanWineId])
       .eq("added_via", "bottle_scan")
       .order("bin_location");
     if (scannedError) throw scannedError;

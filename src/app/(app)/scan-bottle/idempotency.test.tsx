@@ -136,6 +136,8 @@ describe("bottle scan idempotency callers", () => {
         "readyState",
         originalReadyState,
       );
+    } else {
+      Reflect.deleteProperty(HTMLMediaElement.prototype, "readyState");
     }
     if (originalSrcObject) {
       Object.defineProperty(
