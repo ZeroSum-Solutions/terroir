@@ -21,7 +21,7 @@ production rows, object storage, sessions, or secrets.
 
 | Surface | Required staging state | Evidence that is safe to record |
 | --- | --- | --- |
-| Railway | A dedicated `terroir-web-staging` service which tracks only `staging` | service ID, URL, environment name, deployment SHA |
+| Railway | A dedicated staging environment and web service instance; upload or source only an immutable staging candidate | environment ID, service ID, URL, deployment SHA |
 | Railway worker | After explicit resource approval, a distinct worker service using `railway.worker.toml` and the same staging candidate SHA | service ID, environment name, deployment SHA, health state |
 | Supabase | The isolated branch/project ref `wwhxcgtcecsftcivosop` | ref only; never URL, keys, or service-role secret |
 | Data | Synthetic fixtures in a disposable namespace | fixture run ID and cleanup result |
@@ -50,8 +50,10 @@ plus the Railway environment name; it exposes no credential or Supabase URL.
 
 ## Candidate flow
 
-1. Merge the candidate into `staging`; Railway deploys that branch to the
-   dedicated staging service.
+1. Merge the candidate into `staging`, or upload the exact immutable candidate
+   to the staging environment during an integration rehearsal. Record the
+   candidate SHA and deployment ID; never upload it to the production
+   environment during this step.
 2. The `Staging smoke / Required staging smoke` GitHub check waits for the
    deployed SHA and requires `pnpm run test:staging` to pass.
 3. Run synthetic authenticated workflows on staging only: magic-link/reset,
@@ -104,32 +106,48 @@ delete production resources or existing backup artifacts.
 
 Before every promotion, compare redacted configuration metadata:
 
-- Railway project, environment, service ID, source branch, deployment SHA, and
-  variable **names** (not values).
+- Railway project, environment ID, service instance, source branch or manual
+  upload record, deployment SHA, and variable **names** (not values).
 - Supabase staging ref, auth Site URL/redirect allow-list, storage policy names,
   and migration version.
-- Staging and production must differ in Railway service ID, Supabase
-  project/branch ref, service-role-key fingerprint, and cookie-secret
-  fingerprint. Store only yes/no comparisons or one-way fingerprints.
+- Staging and production must differ in Railway environment ID and deployment,
+  Supabase project/branch ref, service-role-key fingerprint, and cookie-secret
+  fingerprint. Railway can represent both environments with one logical
+  service ID; isolation is established by their distinct environment-scoped
+  instances and variables. Store only yes/no comparisons or one-way
+  fingerprints.
 
 The staging smoke command is an infrastructure gate, not a substitute for the
 synthetic stateful workflow report. If it fails, promotion is blocked.
 
-## Current verification status (2026-08-07)
+## Current verification status (2026-08-08)
 
-Read-only inspection found a live Railway staging environment and URL, but not
-a completed TER-003 configuration:
+Staging is operational and isolated at the infrastructure, data, and browser
+fixture boundaries:
 
-- Railway staging environment `cc3e7aff-417e-4d8d-9d25-690617aba8ab` serves
-  `https://terroir-web-staging.up.railway.app` from service
-  `15194296-9cfb-4bc4-a1f6-d333fadb8a3a`.
-- Its latest deployment was sourced from `main` at
-  `224808678643cd12fcfabefbe53094c2a364febc`, not a `staging` candidate.
-- `/api/health` returned HTTP 200 but `db: "unconfigured"`; this is a failed
-  staging smoke result, not deployment evidence.
-- The staging environment has the required Supabase variable names, but this
-  check intentionally did not read their values. It therefore cannot prove
-  their branch/project identity or distinct secret values.
+- Railway environment `cc3e7aff-417e-4d8d-9d25-690617aba8ab` serves
+  `https://terroir-web-staging.up.railway.app`. Web deployment
+  `45034ec8-faf4-43a9-acc4-0e8fb5c39451` and worker deployment
+  `c9e0b052-2f72-4d53-a00e-6e251936140e` both serve exact candidate
+  `8d895fb5f7b73fbbbc063a9e196b3275b980dba2`.
+- `/api/health` reports `environment: "staging"`, `db: "connected"`, and that
+  exact release. The worker reports the same environment and release, with
+  queue depth zero and zero dead letters after the load pilot.
+- GitHub Actions run `31232010892` passed the exact-SHA smoke, both parallel
+  isolated authenticated workflows, the single-slot browser PDF download, the
+  10-request worker load pilot, cleanup, evidence encryption, and artifact
+  retention.
+- Controlled-failure run `31235962292` failed both browser jobs by design only
+  after the exact-SHA smoke passed. Both jobs then encrypted and retained their
+  diagnostic artifacts, proving failure evidence survives a red test result.
+- The `staging` branch requires `Staging smoke / Required staging smoke`, the
+  production GitHub environment permits only the `staging` branch, and the
+  workflow-level release owner is configured. TER-005 still owns the final
+  aggregate `main` release-check policy.
+- The isolated Supabase ref remains `wwhxcgtcecsftcivosop`; fixture workflows
+  verify key fingerprints, use synthetic namespaces, and clean up their Auth,
+  database, and Storage state.
 
-Until those findings are corrected and the stateful synthetic workflow report
-exists, TER-003 remains in progress and production promotion must stay blocked.
+Real magic-link, password-reset email, and provider-inbox evidence remain owned
+by TER-010. Production promotion remains blocked until the final integrated
+candidate satisfies TER-005 and TER-046.

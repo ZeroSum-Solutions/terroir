@@ -1,38 +1,41 @@
 spec_id: TER-003
 parent_spec: TER
-status: in_progress
+status: staging_operational_auth_email_evidence_pending
 scope: Add a production-guarded, read-only staging smoke command and controlled SHA promotion workflow; record live staging isolation evidence without reading or copying secrets/data.
 requirements_closed:
   - Staging smoke rejects non-staging targets before network access.
   - Promotion requires the exact staging SHA plus a fresh smoke pass before main can advance.
+  - The isolated staging environment serves a connected database and exact web and worker candidate SHA.
+  - Parallel authenticated browser fixtures use separate synthetic namespaces and clean up their Auth, database, and Storage state.
+  - Browser diagnostics are encrypted and retained even when a test fails.
 tests:
   targeted: pnpm exec vitest run src/test/staging-smoke.test.ts src/health-endpoint.test.ts
   staging_command: pnpm run test:staging
-  full: pnpm run test (132 files, 1398 passed); pnpm exec tsc --noEmit; pnpm run lint; pnpm run build
+  full: pnpm run test (165 files, 1606 passed); pnpm run lint; pnpm run build
   contracts: pnpm run verify:api-contract (87 discovered operations); pnpm run verify:feature-ledger (269 features); pnpm run snapshot:check; pnpm run downs:check; git diff --check
 staging:
   url: https://terroir-web-staging.up.railway.app
-  result: blocked; 2026-08-07 read-only GET /api/health returned HTTP 200 with db=unconfigured.
+  result: passed; exact-SHA health, parallel isolated browser, worker PDF load, cleanup, and encrypted evidence gates are green.
   railway_environment_id: cc3e7aff-417e-4d8d-9d25-690617aba8ab
   railway_service_id: 15194296-9cfb-4bc4-a1f6-d333fadb8a3a
   supabase_branch_ref: wwhxcgtcecsftcivosop
-  deployment_source: main at 224808678643cd12fcfabefbe53094c2a364febc, not a staging candidate.
+  exact_candidate: 8d895fb5f7b73fbbbc063a9e196b3275b980dba2
+  web_deployment: 45034ec8-faf4-43a9-acc4-0e8fb5c39451
+  worker_service_id: 134e2444-4c0a-4f5f-9636-6571e0b27fe3
+  worker_deployment: c9e0b052-2f72-4d53-a00e-6e251936140e
 data_change:
   migration: none
   production_data: not-read and not-copied
-  staging_data: no mutation performed
+  staging_data: Synthetic Auth, database, and Storage fixtures were created in isolated namespaces and removed by workflow teardown.
 security:
   secret_handling: Railway variable values were never read or logged; only key names were compared.
   production_guard: test:staging accepts only https://terroir-web-staging.up.railway.app and sends GET requests only.
 evidence:
-  - Railway lists a live staging environment at the pinned URL with a successful deployment.
-  - The active Railway staging deployment is sourced from main, so it cannot prove candidate isolation.
-  - Health reports an unconfigured database, so HTTP liveness is insufficient and the smoke gate fails closed.
-  - The staging environment has Supabase variable names but their values/fingerprints and auth/storage/email setup remain unverified.
+  - GitHub run 31232010892 passed exact-SHA smoke, both isolated E2E shards, the browser PDF download, the 10-request load pilot, cleanup, encryption, and retention.
+  - Controlled red run 31235962292 passed exact-SHA smoke, intentionally failed both browser jobs, then successfully encrypted and retained both evidence artifacts.
+  - Staging branch protection requires Staging smoke / Required staging smoke; the production environment branch policy allows only staging.
+  - Production remained on its previous verified deployment while the staging candidate and worker were exercised.
 remaining_gates:
-  - Create/configure a dedicated Railway staging service that tracks staging only, with a separate production service/source trigger.
-  - Wire the isolated Supabase branch credentials and unique staging cookie secret until health reports db=connected and environment=staging.
-  - Set the staging auth Site URL, redirect allow-list, SMTP/test inbox, and staging-only storage policy.
-  - Add synthetic fixture coverage for auth, upload, write, public list, and PDF; run it against staging and retain cleanup evidence.
-  - Require the staging-smoke GitHub status check and production-environment approval in branch protection.
-rollback: Revert the staging smoke and promotion workflow commits to remove repository enforcement. No infrastructure, data, production deployment, or secret was changed by this record.
+  - Complete TER-010 real magic-link, password-reset email, redirect allow-list, and provider-inbox evidence.
+  - Complete TER-005 aggregate main release-check policy before TER-046 promotion.
+rollback: Keep production on its prior verified deployment, disable staging-only feature flags, and redeploy the previous successful staging SHA. Database rollback remains a separately approved operation.
