@@ -30,8 +30,9 @@ requirement_evidence:
 verification:
   red_green: The isolated Supabase database first reproduced an inventory row with quantity 1, unit cost 0, the requested location, and added_via manual; migration 0082 changed only that atomic RPC insertion to bottle_scan, after which the same transactional acceptance passed.
   focused: Six bottle-scan route, boundary, component, and contract files passed with 61 tests; the strengthened follow-up set passed four files and 32 tests.
+  full: 172 Vitest files and 1637 tests passed; TypeScript no-emit, lint, and the 50-page production build passed on Node 24.16.0 with pnpm 10.33.2.
   database: Migrations through 0080 plus 0082 applied in isolated Supabase PostgreSQL; keyed fresh and exact replay created one bottle_scan inventory row, and the 0082 down migration restored the byte-identical 0066 function before a successful reapply.
-  static: TypeScript no-emit, focused lint, schema snapshot generation, the 71-pair down-migration gate, and one-test Playwright collection passed on Node 24.16.0 with pnpm 10.33.2.
+  static: Snapshot generation passed with 81 migrations and 426861 bytes; all 71 forward migrations from 0011 have rollback pairs; API contract passed with 87 implemented operations, 5 planned operations, and all 87 classified; feature ledger passed with 269 requirements; UI controls passed across 23 routes and 345 controls; one-test Playwright collection passed.
   browser: The isolated mobile test is collected but has not yet executed against staging; browser runtime evidence is unavailable and is not recorded as a pass.
   independent_review: Fable 5 at medium reasoning returned PASS after the exact contiguous RPC source and corrective follow-up were reviewed; no P0, P1, or P2 finding remained.
 security:
