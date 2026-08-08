@@ -389,6 +389,32 @@ describe("failure evidence redaction", () => {
     expect(workflow).toContain("group: staging-smoke-staging");
     expect(workflow).toContain("cancel-in-progress: false");
     expect(workflow).toContain("permissions:\n  contents: read");
+    expect(workflow).not.toMatch(
+      /uses: (?:actions\/checkout|actions\/setup-node|pnpm\/action-setup|actions\/upload-artifact)@v\d/,
+    );
+    expect(workflow).toContain(
+      "actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4",
+    );
+    expect(workflow).toContain(
+      "pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4",
+    );
+    expect(workflow).toContain(
+      "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4",
+    );
+    expect(workflow).toContain(
+      "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4",
+    );
+    expect(workflow).toContain("pnpm install --frozen-lockfile --ignore-scripts");
+    const isolatedJobStart = workflow.indexOf("  isolated-e2e:");
+    const isolatedStepsStart = workflow.indexOf("    steps:", isolatedJobStart);
+    expect(isolatedJobStart).toBeGreaterThanOrEqual(0);
+    expect(isolatedStepsStart).toBeGreaterThan(isolatedJobStart);
+    expect(workflow.slice(isolatedJobStart, isolatedStepsStart)).not.toContain(
+      "TERROIR_E2E_SERVICE_ROLE_KEY:",
+    );
+    expect(workflow).toMatch(
+      /Run the isolated authenticated workflow[\s\S]*?env:[\s\S]*?TERROIR_E2E_SERVICE_ROLE_KEY: \$\{\{ secrets\.STAGING_SUPABASE_SERVICE_ROLE_KEY \}\}[\s\S]*?pnpm run test:e2e:isolated/,
+    );
     expect(workflow).toMatch(
       /migration-guard:[\s\S]*?environment: staging[\s\S]*?STAGING_MIGRATION_CONFIRMATION:[\s\S]*?SUPABASE_ACCESS_TOKEN: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}[\s\S]*?pnpm run staging:migrate/,
     );
