@@ -1,7 +1,7 @@
 spec_id: TER-021E
 parent_spec: TER-021
-base_commit: f7d015131cdb96f5c6614766dd6f98fd24c09ce2
-status: source_complete_runtime_evidence_pending
+base_commit: 8d895fb5f7b73fbbbc063a9e196b3275b980dba2
+status: staging_validated_production_pending
 scope: Worker-backed wine-list PDF generation behind a default-safe rollback flag, with durable enqueue identity and private bounded artifacts.
 requirements_implemented:
   - Missing or non-literal PDF_WORKER_ENABLED values preserve the existing synchronous PDF response.
@@ -23,13 +23,22 @@ security:
   secrets: The service-role key remains isolated to the worker process and is never returned in health, job result, or telemetry.
 rollback: Set PDF_WORKER_ENABLED=0 on the web service, allow queued and active PDF jobs to drain with the handler deployed, then roll back the worker if required.
 verification:
-  focused: 10 files and 76 tests passed across route, enqueue service, PDF value boundaries, worker handler, rollback flag, legacy synchronous path, shared boundary, privacy, and contract coverage.
-  full: 161 files and 1555 tests passed; contract, lint, TypeScript, and production-build gates passed on Node 24.16.0 with pnpm 10.33.2.
-  static: Schema snapshot (76 migrations), 66 paired down migrations, 86 API operations, 269 feature-ledger entries, and 336 UI controls passed their drift gates.
-  browser_collection: pnpm exec playwright test e2e/lists --list reports one isolated PDF worker test.
-  documentation: Project documentation verifier and whitespace gate passed for the README, worker runbook, and privacy lifecycle runbook.
-staging_evidence_required:
-  - Apply migration 0077 to the isolated staging project and prove same-tenant download plus cross-tenant denial.
-  - Deploy the exact candidate to the approved staging web and worker services, verify one registered handler, then enable PDF_WORKER_ENABLED only on staging.
-  - Prove enqueue latency, duplicate delivery, browser download content, 10-client load, kill/restart recovery, poison dead-letter, alert delivery, and rollback to the synchronous path.
-deployment: Not deployed; no remote database, Storage, Railway, GitHub, or production setting was changed by this slice.
+  focused: Route, enqueue service, PDF boundary, worker handler, rollback flag, synchronous fallback, privacy, browser-gate, and workflow-contract tests passed.
+  full: 165 files and 1606 tests passed; lint and production-build gates passed on Node 24.16.0 with pnpm 10.33.2.
+  browser_collection: GitHub Actions run 31232010892 passed exact-SHA staging smoke, both isolated authenticated E2E slots, the single-slot browser download, and the 10-request worker load pilot; encrypted browser evidence was retained.
+  linux_browser_gate: Railway worker build c9e0b052-2f72-4d53-a00e-6e251936140e launched Puppeteer against /usr/bin/chromium, rendered the local readiness title, and closed successfully.
+  independent_review: x-ai/grok-4.5 returned PASS on the exact 8d895fb5f7b73fbbbc063a9e196b3275b980dba2 workflow, browser test, validator, Railpack, and service manifests.
+staging_evidence:
+  exact_candidate: 8d895fb5f7b73fbbbc063a9e196b3275b980dba2
+  web_deployment: 45034ec8-faf4-43a9-acc4-0e8fb5c39451
+  worker_deployment: c9e0b052-2f72-4d53-a00e-6e251936140e
+  github_run: 31232010892
+  authenticated_boundaries: Same-tenant enqueue and download passed, replay returned one durable job, cross-tenant job and artifact access returned 404, and the private artifact began with %PDF.
+  load: Ten distinct jobs drained successfully into one canonical artifact; the worker returned to queue depth zero with zero dead letters.
+  lease_recovery: A job claimed by a stopped synthetic replica expired its lease, was recovered by the replacement worker, and succeeded on attempt two with one canonical artifact.
+  dead_letter: A bounded staging storage fault produced the 30-second and 60-second retries, terminal dead-letter state, and action-required alert; after storage restoration the same job requeued and succeeded.
+  rollback: With PDF_WORKER_ENABLED=0, an authenticated request returned the synchronous application/pdf response with no durable job; staging was then restored to worker mode.
+staging_evidence_required: []
+production_evidence_required:
+  - Promote only through TER-046 after the final integrated candidate passes its complete release gate and production canaries.
+deployment: Staging web and worker serve exact commit 8d895fb5f7b73fbbbc063a9e196b3275b980dba2. Production remains unchanged on the previously restored release.
