@@ -3806,7 +3806,7 @@
     {
       "id": "src/app/(app)/price-comparison/page.tsx#link-001",
       "source": "src/app/(app)/price-comparison/page.tsx",
-      "line": 337,
+      "line": 342,
       "kind": "link",
       "label": "Go to scanner",
       "href": "/scan",
@@ -3823,7 +3823,7 @@
     {
       "id": "src/app/(app)/price-comparison/page.tsx#link-002",
       "source": "src/app/(app)/price-comparison/page.tsx",
-      "line": 408,
+      "line": 413,
       "kind": "link",
       "label": "`View top savings opportunity: ${comparable[0].wine.producer",
       "href": "`/cellar?wine=${comparable[0].wine.id",
@@ -3840,7 +3840,7 @@
     {
       "id": "src/app/(app)/price-comparison/page.tsx#link-003",
       "source": "src/app/(app)/price-comparison/page.tsx",
-      "line": 488,
+      "line": 494,
       "kind": "link",
       "label": "`View ${comp.wine.producer",
       "href": "`/cellar?wine=${comp.wine.id",
@@ -3857,7 +3857,7 @@
     {
       "id": "src/app/(app)/price-comparison/page.tsx#link-004",
       "source": "src/app/(app)/price-comparison/page.tsx",
-      "line": 629,
+      "line": 635,
       "kind": "link",
       "label": "`View ${comp.wine.producer",
       "href": "`/cellar?wine=${comp.wine.id",
@@ -3874,7 +3874,7 @@
     {
       "id": "src/app/(app)/price-comparison/page.tsx#link-005",
       "source": "src/app/(app)/price-comparison/page.tsx",
-      "line": 766,
+      "line": 772,
       "kind": "link",
       "label": "`View ${comp.wine.producer",
       "href": "`/cellar?wine=${comp.wine.id",
@@ -3891,7 +3891,7 @@
     {
       "id": "src/app/(app)/price-comparison/page.tsx#link-006",
       "source": "src/app/(app)/price-comparison/page.tsx",
-      "line": 844,
+      "line": 850,
       "kind": "link",
       "label": "`View ${comp.wine.producer",
       "href": "`/cellar?wine=${comp.wine.id",

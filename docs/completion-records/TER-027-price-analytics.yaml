@@ -7,6 +7,7 @@ implementation_commits:
   - f6bddf6
   - d5fd7e8
   - 91c544b
+  - cb969dd
 status: source_complete_staging_and_dependencies_pending
 scope: Complete active price-comparison and insights requirements TER-CF-165 through TER-CF-179 with exact market-shift, correction, date-range, export, tenant, and failure semantics.
 requirement_evidence:
@@ -57,12 +58,12 @@ requirement_evidence:
     tests: src/app/api/insights/route-family.test.ts; e2e/analytics-staging.test.ts
 verification:
   red_green: Focused tests first reproduced field-level edit inflation, last-paid variance mislabeled as market movement, the missing custom selector, range-blind CSV spend, and silent query failures; the implementation then passed the same public-seam regressions.
-  focused: Eleven analytics, route-family, UI, contract, and workflow files passed with 68 tests; TypeScript no-emit and diff checks passed.
-  full: 180 Vitest files and 1661 tests passed; TypeScript no-emit, lint, and the 50-page production build passed on Node 24.16.0 with pnpm 10.33.2.
+  focused: Eleven analytics, route-family, UI, contract, and workflow files passed with 71 tests, including non-empty section volume, top-N truncation, exact glass-price-times-pour-count revenue, and server-rendered variance ordering across comparable and single-source wines; TypeScript no-emit and diff checks passed.
+  full: 180 Vitest files and 1664 tests passed; TypeScript no-emit, lint, and the 50-page production build passed on Node 24.16.0 with pnpm 10.33.2.
   database: Migration 0085 and its transactional acceptance passed in isolated PostgreSQL, proving first-observation behavior, consecutive 100-to-120 retention, unchanged-observation stability, and outer rollback.
   static: Snapshot verification passed with 83 migrations and 441862 bytes; all 73 forward migrations from 0011 have rollback pairs; API contract passed with 87 implemented operations and 5 planned operations; the 269-feature ledger, 23-route and 345-control UI inventory, staging workflow contract, actionlint, one-test Playwright collection, canonical-document verifier, security-report validator, and exact-range gitleaks scan passed.
   browser: The isolated analytics staging test is implemented and collected but has not yet run against the exact integrated staging candidate.
-  independent_review: Pending exact-HEAD review after documentation and security evidence are committed.
+  independent_review: The first exact-HEAD review returned FAIL on volume-prorated revenue, missing non-empty calculation fixtures, and incomplete single-source variance sorting. Commit cb969dd corrected all three findings with red-to-green tests; exact corrected-HEAD re-review remains pending.
 security:
   authentication: Insights APIs retain requireMembership and authenticated app-shell boundaries.
   authorization: Every application query remains explicitly restaurant-bound; the market-observation trigger grants no new role or table privilege.

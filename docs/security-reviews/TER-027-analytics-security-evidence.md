@@ -2,13 +2,13 @@
 
 ## Scope and commands
 
-The reviewed source candidate was `91c544b` against base `235a88d`. `git diff
+The reviewed source candidate was `cb969dd` against base `235a88d`. `git diff
 --name-only 235a88d...HEAD` exited 0 and accounted for every path listed in the
 structured review. Documentation and this security record are classified in the
 same final path map.
 
 `gitleaks detect --source . --no-banner --redact --log-opts 235a88d..HEAD`
-exited 0 at the source candidate after scanning eight commits and about 51.54 KB;
+exited 0 at the source candidate after scanning ten commits and about 82.61 KB;
 it reported no leaks. The same exact range command is rerun after the security
 record commit so the record itself is included in the final handoff scan.
 
@@ -24,7 +24,7 @@ transaction in isolated PostgreSQL. The command exited 0 after `BEGIN`, schema
 and trigger creation, all assertions, and `ROLLBACK`; no fixture or schema state
 escaped the proof transaction.
 
-On Node 24.16.0 and pnpm 10.33.2, the full suite passed 180 files and 1,661
+On Node 24.16.0 and pnpm 10.33.2, the full suite passed 180 files and 1,664
 tests. TypeScript no-emit, ESLint, the production build with 50 static pages,
 the 83-migration snapshot check, 73 paired down migrations, API contract,
 feature ledger, actionlint, Playwright collection, UI-control inventory, and
