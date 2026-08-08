@@ -26,7 +26,7 @@ security:
   secrets: The service-role key remains worker-only and no new credential or secret is committed.
 verification:
   focused: Rollout, enqueue, handler, routes, provider failure classification, client 202 handling, migration contract, workflow contract, and local SQL acceptance tests passed.
-  full: 178 Vitest files and 1672 tests passed; TypeScript, lint, and the production build passed on Node 24.16.0 with pnpm 10.33.2.
+  full: 179 Vitest files and 1676 tests passed; TypeScript, lint, and the production build passed on Node 24.16.0 with pnpm 10.33.2.
   inventories: API contract passed with 87 implemented operations and 5 planned promises; feature ledger passed with 269 requirements; UI inventory passed with 23 routes and 345 controls.
   browser_collection: The opt-in isolated browser pilot is collected but intentionally not run while the dependency is open.
   independent_review: Pending exact-checkpoint verifier review.

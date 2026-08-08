@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "ref": "315e9b68034479c50e8d2a43d8bee8e9d2d76408",
+  "ref": "5789b9e04defd0a52f34f3ed862e87b8d112ed0a",
   "base": {
     "status": "AVAILABLE",
     "value": "235a88dead961453b886928a9e68e8a358084d8e",
@@ -28,6 +28,7 @@
       "src/lib/api/idempotency-client-callers.test.ts",
       "src/lib/jobs/wine-enrichment-worker-rollout.test.ts",
       "src/lib/jobs/wine-enrichment-worker-rollout.ts",
+      "src/lib/wine-intelligence/batch-worker.test.ts",
       "src/lib/wine-intelligence/batch.ts",
       "src/lib/wine-intelligence/enrich-claude-worker.test.ts",
       "src/lib/wine-intelligence/enrich-claude.ts",
@@ -63,6 +64,7 @@
       "src/lib/api/idempotency-client-callers.test.ts",
       "src/lib/jobs/wine-enrichment-worker-rollout.test.ts",
       "src/lib/jobs/wine-enrichment-worker-rollout.ts",
+      "src/lib/wine-intelligence/batch-worker.test.ts",
       "src/lib/wine-intelligence/batch.ts",
       "src/lib/wine-intelligence/enrich-claude-worker.test.ts",
       "src/lib/wine-intelligence/enrich-claude.ts",
@@ -98,6 +100,7 @@
       { "path": "src/lib/api/idempotency-client-callers.test.ts", "surfaces": ["untrusted-input"], "evidence": [{ "class": "STATIC", "citation": "src/lib/api/idempotency-client-callers.test.ts:1" }] },
       { "path": "src/lib/jobs/wine-enrichment-worker-rollout.test.ts", "surfaces": ["authorization", "export"], "evidence": [{ "class": "STATIC", "citation": "src/lib/jobs/wine-enrichment-worker-rollout.test.ts:1" }] },
       { "path": "src/lib/jobs/wine-enrichment-worker-rollout.ts", "surfaces": ["authorization", "export"], "evidence": [{ "class": "STATIC", "citation": "src/lib/jobs/wine-enrichment-worker-rollout.ts:1" }] },
+      { "path": "src/lib/wine-intelligence/batch-worker.test.ts", "surfaces": ["authorization", "untrusted-input", "export"], "evidence": [{ "class": "STATIC", "citation": "src/lib/wine-intelligence/batch-worker.test.ts:64" }] },
       { "path": "src/lib/wine-intelligence/batch.ts", "surfaces": ["prompt-injection", "authorization", "untrusted-input", "export"], "evidence": [{ "class": "STATIC", "citation": "src/lib/wine-intelligence/batch.ts:241" }] },
       { "path": "src/lib/wine-intelligence/enrich-claude-worker.test.ts", "surfaces": ["prompt-injection", "secrets", "untrusted-input", "export"], "evidence": [{ "class": "STATIC", "citation": "src/lib/wine-intelligence/enrich-claude-worker.test.ts:64" }] },
       { "path": "src/lib/wine-intelligence/enrich-claude.ts", "surfaces": ["prompt-injection", "secrets", "untrusted-input", "export"], "evidence": [{ "class": "STATIC", "citation": "src/lib/wine-intelligence/enrich-claude.ts:116" }] },
@@ -121,20 +124,20 @@
     {
       "id": "CMD-001",
       "purpose": "diff",
-      "command": "git diff --name-only 235a88dead961453b886928a9e68e8a358084d8e...315e9b68034479c50e8d2a43d8bee8e9d2d76408",
+      "command": "git diff --name-only 235a88dead961453b886928a9e68e8a358084d8e...5789b9e04defd0a52f34f3ed862e87b8d112ed0a",
       "outcome": "PASS",
       "exit_code": 0,
-      "scope": "235a88dead961453b886928a9e68e8a358084d8e...315e9b68034479c50e8d2a43d8bee8e9d2d76408",
+      "scope": "235a88dead961453b886928a9e68e8a358084d8e...5789b9e04defd0a52f34f3ed862e87b8d112ed0a",
       "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:7" }],
       "unavailable_reason": null
     },
     {
       "id": "CMD-002",
       "purpose": "secrets-scan",
-      "command": "gitleaks detect --source . --no-banner --redact --log-opts 235a88dead961453b886928a9e68e8a358084d8e..315e9b68034479c50e8d2a43d8bee8e9d2d76408",
+      "command": "gitleaks detect --source . --no-banner --redact --log-opts 235a88dead961453b886928a9e68e8a358084d8e..5789b9e04defd0a52f34f3ed862e87b8d112ed0a",
       "outcome": "PASS",
       "exit_code": 0,
-      "scope": "235a88dead961453b886928a9e68e8a358084d8e..315e9b68034479c50e8d2a43d8bee8e9d2d76408",
+      "scope": "235a88dead961453b886928a9e68e8a358084d8e..5789b9e04defd0a52f34f3ed862e87b8d112ed0a",
       "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:9" }],
       "unavailable_reason": null
     },
@@ -151,11 +154,21 @@
     {
       "id": "CMD-004",
       "purpose": "focused-security-tests",
-      "command": "pnpm exec vitest run src/app/api/wines/enrichment-worker-routes.test.ts src/domains/wine-intelligence/wine-enrichment-job-service.test.ts src/lib/jobs/wine-enrichment-worker-rollout.test.ts src/lib/wine-intelligence/enrich-claude-worker.test.ts src/test/contracts/wine-enrichment-worker-migration.test.ts src/worker/handlers.test.ts src/worker/wine-enrichment-handler.test.ts",
+      "command": "pnpm exec vitest run src/app/api/wines/enrichment-worker-routes.test.ts src/domains/wine-intelligence/wine-enrichment-job-service.test.ts src/lib/jobs/wine-enrichment-worker-rollout.test.ts src/lib/wine-intelligence/batch-worker.test.ts src/lib/wine-intelligence/enrich-claude-worker.test.ts src/test/contracts/wine-enrichment-worker-migration.test.ts src/worker/handlers.test.ts src/worker/wine-enrichment-handler.test.ts",
       "outcome": "PASS",
       "exit_code": 0,
       "scope": "TER-021G sensitive source paths",
       "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:13" }],
+      "unavailable_reason": null
+    },
+    {
+      "id": "CMD-005",
+      "purpose": "recheck:SEC-002",
+      "command": "pnpm exec vitest run src/lib/wine-intelligence/batch-worker.test.ts",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "scope": "SEC-002",
+      "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:15" }],
       "unavailable_reason": null
     }
   ],
@@ -218,14 +231,14 @@
         "policy_basis": { "status": "ALLOWLISTED", "citation": "docs/runbooks/data-lifecycle-privacy.md:64", "owner": null, "reason": null }
       }
     ],
-    "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:25" }],
+    "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:27" }],
     "unavailable_reason": null
   },
   "secrets_scan": {
     "result": "PASS",
     "command_id": "CMD-002",
     "scope": "RANGE",
-    "comparison": "235a88dead961453b886928a9e68e8a358084d8e..315e9b68034479c50e8d2a43d8bee8e9d2d76408",
+    "comparison": "235a88dead961453b886928a9e68e8a358084d8e..5789b9e04defd0a52f34f3ed862e87b8d112ed0a",
     "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:9" }],
     "unavailable_reason": null
   },
@@ -240,12 +253,12 @@
     "unavailable_reason": null
   },
   "coverage": [
-    { "surface": "prompt-injection", "state": "REVIEWED", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:17" }], "unavailable_reason": null },
+    { "surface": "prompt-injection", "state": "REVIEWED", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:19" }], "unavailable_reason": null },
     { "surface": "secrets", "state": "REVIEWED", "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:9" }], "unavailable_reason": null },
-    { "surface": "authentication", "state": "REVIEWED", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:21" }], "unavailable_reason": null },
-    { "surface": "authorization", "state": "REVIEWED", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:21" }], "unavailable_reason": null },
-    { "surface": "untrusted-input", "state": "REVIEWED", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:23" }], "unavailable_reason": null },
-    { "surface": "export", "state": "REVIEWED", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:25" }], "unavailable_reason": null }
+    { "surface": "authentication", "state": "REVIEWED", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:23" }], "unavailable_reason": null },
+    { "surface": "authorization", "state": "REVIEWED", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:23" }], "unavailable_reason": null },
+    { "surface": "untrusted-input", "state": "REVIEWED", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:25" }], "unavailable_reason": null },
+    { "surface": "export", "state": "REVIEWED", "evidence": [{ "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:27" }], "unavailable_reason": null }
   ],
   "findings": [
     {
@@ -254,7 +267,7 @@
       "severity": "HIGH",
       "surface": "export",
       "evidence": [
-        { "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:27" },
+        { "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:29" },
         { "class": "STATIC", "citation": "src/lib/wine-intelligence/enrich-claude.ts:353" }
       ],
       "exploit_or_failure": "A strict worker provider failure could re-export customer wine fields or a provider response body through Sentry, and malformed single-wine output could be acknowledged as a successful no-op.",
@@ -263,6 +276,27 @@
         "status": "PASS",
         "command_id": "CMD-003",
         "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:11" }],
+        "unavailable_reason": null
+      },
+      "owner": { "status": "NOT-REQUIRED", "name": null, "evidence": [], "unavailable_reason": null },
+      "acceptance": { "status": "NOT-REQUIRED", "evidence": [], "unavailable_reason": null },
+      "compensating_control": null
+    },
+    {
+      "id": "SEC-002",
+      "origin": "MANUAL",
+      "severity": "HIGH",
+      "surface": "export",
+      "evidence": [
+        { "class": "STATIC", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:31" },
+        { "class": "STATIC", "citation": "src/lib/wine-intelligence/batch.ts:107" }
+      ],
+      "exploit_or_failure": "Strict bulk database and LWIN failures could re-export raw errors or restaurant IDs, swallow transient failures as success, and continue to later database work after an abort during a mutating LWIN RPC.",
+      "disposition": "FIXED",
+      "recheck": {
+        "status": "PASS",
+        "command_id": "CMD-005",
+        "evidence": [{ "class": "COMMAND", "citation": "docs/security-reviews/TER-021G-wine-enrichment-worker-evidence.md:15" }],
         "unavailable_reason": null
       },
       "owner": { "status": "NOT-REQUIRED", "name": null, "evidence": [], "unavailable_reason": null },

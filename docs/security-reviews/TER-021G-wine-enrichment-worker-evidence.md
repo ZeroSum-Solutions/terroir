@@ -1,16 +1,18 @@
 # TER-021G security evidence
 
-Reviewed source checkpoint: `315e9b68034479c50e8d2a43d8bee8e9d2d76408`
+Reviewed source checkpoint: `5789b9e04defd0a52f34f3ed862e87b8d112ed0a`
 
 ## Command evidence
 
-`CMD-001` ran `git diff --name-only 235a88dead961453b886928a9e68e8a358084d8e...315e9b68034479c50e8d2a43d8bee8e9d2d76408` from the repository root and exited 0. It returned the 33 paths recorded in the JSON report's `changed_paths` and `captured_diff_paths` arrays.
+`CMD-001` ran `git diff --name-only 235a88dead961453b886928a9e68e8a358084d8e...5789b9e04defd0a52f34f3ed862e87b8d112ed0a` from the repository root and exited 0. It returned the 34 paths recorded in the JSON report's `changed_paths` and `captured_diff_paths` arrays.
 
-`CMD-002` ran `gitleaks detect --source . --no-banner --redact --log-opts 235a88dead961453b886928a9e68e8a358084d8e..315e9b68034479c50e8d2a43d8bee8e9d2d76408` from the repository root and exited 0. Gitleaks reported one commit scanned, approximately 82.82 KB scanned, and no leaks found.
+`CMD-002` ran `gitleaks detect --source . --no-banner --redact --log-opts 235a88dead961453b886928a9e68e8a358084d8e..5789b9e04defd0a52f34f3ed862e87b8d112ed0a` from the repository root and exited 0. Gitleaks reported three commits scanned, approximately 115.95 KB scanned, and no leaks found.
 
 `CMD-003` ran `pnpm exec vitest run src/lib/wine-intelligence/enrich-claude-worker.test.ts` with Node 24.16.0 and pnpm 10.33.2 and exited 0. One file and seven tests passed, including strict malformed-response retry and telemetry redaction checks.
 
-`CMD-004` ran `pnpm exec vitest run src/app/api/wines/enrichment-worker-routes.test.ts src/domains/wine-intelligence/wine-enrichment-job-service.test.ts src/lib/jobs/wine-enrichment-worker-rollout.test.ts src/lib/wine-intelligence/enrich-claude-worker.test.ts src/test/contracts/wine-enrichment-worker-migration.test.ts src/worker/handlers.test.ts src/worker/wine-enrichment-handler.test.ts` with the pinned toolchain and exited 0. Seven files and 32 tests passed.
+`CMD-004` ran `pnpm exec vitest run src/app/api/wines/enrichment-worker-routes.test.ts src/domains/wine-intelligence/wine-enrichment-job-service.test.ts src/lib/jobs/wine-enrichment-worker-rollout.test.ts src/lib/wine-intelligence/batch-worker.test.ts src/lib/wine-intelligence/enrich-claude-worker.test.ts src/test/contracts/wine-enrichment-worker-migration.test.ts src/worker/handlers.test.ts src/worker/wine-enrichment-handler.test.ts` with the pinned toolchain and exited 0. Eight files and 36 tests passed.
+
+`CMD-005` ran `pnpm exec vitest run src/lib/wine-intelligence/batch-worker.test.ts` with the pinned toolchain and exited 0. One file and four tests passed, covering strict database failure retry, LWIN-phase retry, abort after the mutating LWIN RPC, and aggregate-only telemetry.
 
 ## Surface review
 
@@ -24,6 +26,8 @@ Untrusted input is reviewed. Route params use the UUID schema, the idempotency h
 
 Exports are reviewed. The durable Supabase job contains IDs plus the allowlisted scope only. The existing Anthropic destination receives the same bounded wine fields as synchronous enrichment. Strict worker Sentry and Railway telemetry contain safe codes and aggregate counts, not wine fields, prompts, provider bodies, credentials, tenant IDs, or raw errors. The opt-in staging browser trace uses synthetic data, is encrypted before GitHub artifact upload, and retains the existing 14-day limit.
 
-The review found one pre-report high-severity telemetry issue: strict worker failures passed raw provider errors and wine identifiers to the existing Sentry calls. The regression test in `CMD-003` failed before the fix and now proves those values are absent; malformed single-wine provider output is also retryable rather than a successful no-op.
+The review found one pre-report high-severity provider telemetry issue: strict worker failures passed raw provider errors and wine identifiers to existing Sentry calls. The regression test in `CMD-003` failed before the fix and now proves those values are absent; malformed single-wine provider output is also retryable rather than a successful no-op.
+
+Independent verification then found a second high-severity strict-batch issue: database and LWIN failures could export raw errors or restaurant IDs, LWIN fallback swallowed transient failures, and an abort was not observed immediately after the mutating LWIN RPC. The `CMD-005` regressions now prove strict failures are retried, telemetry contains only fixed phases and aggregate counts, and no later database phase runs after that abort.
 
 No production or staging service was contacted, changed, or activated. Missing TER-021F soak evidence remains a deployment blocker rather than a source-security finding because both activation flags are default off.
