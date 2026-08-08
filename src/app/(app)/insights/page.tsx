@@ -14,7 +14,13 @@ import { PricingReviewCard } from "./pricing-review-card";
 import { SnoozedAlertsCard, type SnoozedRow } from "./snoozed-alerts-card";
 import PourAnalyticsSection from "./pour-analytics-section";
 import DateRangeSelector from "./date-range-selector";
-import { dateRangeSince, dateRangeUntil, dateRangeLabel } from "./date-range";
+import {
+  dateRangeSince,
+  dateRangeUntil,
+  dateRangeLabel,
+  isValidCustomDateRange,
+} from "./date-range";
+import { summarizeLineItemCorrections } from "@/lib/insights/analytics";
 
 type NullableDateRange = { range?: string; from?: string; to?: string };
 type SearchParams = Promise<NullableDateRange>;
@@ -282,15 +288,19 @@ export default async function DashboardPage({
   const { supabase, restaurantId: rid, restaurantName, user, userRole } = auth;
 
   // ── Date range from URL search params ──────────────────────────────
-  const range = sp.range ?? "all";
+  const requestedRange = sp.range ?? "all";
+  const range =
+    requestedRange === "custom" && !isValidCustomDateRange(sp.from, sp.to)
+      ? "all"
+      : requestedRange;
   const rangeSince = dateRangeSince(range, sp.from);
   const rangeUntil = dateRangeUntil(range, sp.to);
   const activeRangeLabel = dateRangeLabel(range, sp.from, sp.to);
 
   const [drinkWindowAlerts, pricingAlerts, snoozedRows] = await Promise.all([
     fetchDrinkWindowAlerts(supabase, rid),
-    fetchPricingAlerts(supabase, rid).catch(function () { return []; }),
-    fetchSnoozedAlerts(supabase, rid).catch(function () { return [] as SnoozedRow[]; }),
+    fetchPricingAlerts(supabase, rid),
+    fetchSnoozedAlerts(supabase, rid),
   ]);
   const firstName = parseFirstName(user.email ?? "") || "there";
   const canEnrich = userRole === "owner" || userRole === "manager";
@@ -299,7 +309,7 @@ export default async function DashboardPage({
   let scanQuery = supabase
     .from("invoice_scans")
     .select(
-      "id, distributor_name, item_count, accuracy_score, created_at, final_line_items",
+      "id, distributor_name, item_count, edits, created_at, final_line_items",
     )
     .eq("restaurant_id", rid)
     .order("created_at", { ascending: false });
@@ -310,11 +320,29 @@ export default async function DashboardPage({
   if (rangeUntil) {
     scanQuery = scanQuery.lte("created_at", rangeUntil.toISOString());
   }
+  let scanItemsQuery = supabase
+    .from("inventory_items")
+    .select(
+      "quantity, unit_cost, invoice_scan_id, invoice_scans!inner(distributor_name, created_at)",
+    )
+    .eq("restaurant_id", rid);
+  if (rangeSince) {
+    scanItemsQuery = scanItemsQuery.gte(
+      "invoice_scans.created_at",
+      rangeSince.toISOString(),
+    );
+  }
+  if (rangeUntil) {
+    scanItemsQuery = scanItemsQuery.lte(
+      "invoice_scans.created_at",
+      rangeUntil.toISOString(),
+    );
+  }
 
   const [
-    { data: scans },
-    { data: inventoryItems },
-    { data: scanItems },
+    { data: scans, error: scansError },
+    { data: inventoryItems, error: inventoryError },
+    { data: scanItems, error: scanItemsError },
     initPastDrinkWindow,
   ] =
     await Promise.all([
@@ -323,12 +351,12 @@ export default async function DashboardPage({
         .from("inventory_items")
         .select("quantity, unit_cost, wine_id, wines(varietal)")
         .eq("restaurant_id", rid),
-      supabase
-        .from("inventory_items")
-        .select("quantity, unit_cost, invoice_scan_id, invoice_scans!inner(distributor_name)")
-        .eq("restaurant_id", rid),
-      fetchPastDrinkWindow(supabase, rid).catch(function () { return [] as PastDrinkWindowRow[]; }),
+      scanItemsQuery,
+      fetchPastDrinkWindow(supabase, rid),
     ]);
+  if (scansError) throw scansError;
+  if (inventoryError) throw inventoryError;
+  if (scanItemsError) throw scanItemsError;
 
   const allScans = scans ?? [];
   const items = inventoryItems ?? [];
@@ -363,7 +391,9 @@ export default async function DashboardPage({
   }
 
   for (const item of scanItems ?? []) {
-    const distName = (item.invoice_scans as { distributor_name: string })?.distributor_name;
+    const distName = (
+      item.invoice_scans as { distributor_name: string; created_at: string }
+    )?.distributor_name;
     if (!distName) continue;
     const existing = distMap.get(distName) ?? { scans: 0, spend: 0 };
     existing.spend += item.quantity * item.unit_cost;
@@ -391,23 +421,23 @@ export default async function DashboardPage({
       : 0;
 
   // ── #149: Extraction accuracy (auto-accepted vs corrected) ─────────
-  let totalItemCount = 0;
-  let totalAutoAcceptedFields = 0;
-  for (const s of allScans) {
-    const itemCount = s.item_count ?? 0;
-    const acc = s.accuracy_score ?? 0;
-    totalItemCount += itemCount;
-    totalAutoAcceptedFields += itemCount * acc;
-  }
-  const extractionAccuracyPct =
-    totalItemCount > 0
-      ? Math.round((totalAutoAcceptedFields / totalItemCount) * 100)
-      : 0;
+  const correctionSummary = summarizeLineItemCorrections(allScans);
+  const totalItemCount = correctionSummary.total;
+  const extractionAccuracyPct = correctionSummary.accuracyPct;
 
   const latestScanAccuracy =
-    allScans.length > 0 && allScans[0].accuracy_score != null
-      ? Math.round(allScans[0].accuracy_score * 100)
+    allScans.length > 0
+      ? summarizeLineItemCorrections([allScans[0]]).accuracyPct
       : null;
+
+  const exportParams = new URLSearchParams();
+  if (range !== "all") exportParams.set("range", range);
+  if (range === "custom" && sp.from && sp.to) {
+    exportParams.set("from", sp.from);
+    exportParams.set("to", sp.to);
+  }
+  const exportQuery = exportParams.toString();
+  const exportHref = "/api/insights/csv" + (exportQuery ? `?${exportQuery}` : "");
 
   // Empty state
   if (allScans.length === 0 && items.length === 0) {
@@ -418,6 +448,9 @@ export default async function DashboardPage({
           <p className="mt-xs text-[15px] text-ink-muted">
             {restaurantName}
           </p>
+          <div className="mt-md">
+            <DateRangeSelector />
+          </div>
         </header>
         <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-border-strong bg-surface-muted px-lg py-3xl text-center">
           <BarChart3
@@ -453,7 +486,7 @@ export default async function DashboardPage({
             </p>
           </div>
           <a
-            href="/api/insights/csv"
+            href={exportHref}
             download="insights-export.csv"
             className="flex h-[34px] items-center gap-xs rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
           >
@@ -662,12 +695,7 @@ export default async function DashboardPage({
                   )
                   : (function () {
                       const avgPct = Math.round(
-                        (allScans.reduce(
-                          function (s, sc) { return s + (sc.accuracy_score ?? 0); },
-                          0,
-                        ) /
-                          allScans.length) *
-                          100,
+                        extractionAccuracyPct,
                       );
                       return (
                         <div
@@ -728,7 +756,8 @@ export default async function DashboardPage({
               </div>
               <p className="mt-sm text-[12px] text-ink-subtle">
                 {totalItemCount} line items processed ·{" "}
-                {Math.round(totalAutoAcceptedFields)} auto-accepted
+                {correctionSummary.autoAccepted} auto-accepted ·{" "}
+                {correctionSummary.corrected} corrected
               </p>
               {latestScanAccuracy !== null && (
                 <div className="mt-md flex items-center gap-sm rounded-md bg-surface-muted px-sm py-sm">
@@ -924,6 +953,7 @@ export default async function DashboardPage({
                   function (sum, it) { return sum + (it.qty ?? 0) * (it.unitCost ?? 0); },
                   0,
                 );
+                const scanAccuracyPct = summarizeLineItemCorrections([scan]).accuracyPct;
                 return (
                   <Link
                     key={scan.id}
@@ -950,13 +980,13 @@ export default async function DashboardPage({
                         )}
                       </div>
                     </div>
-                    {scan.accuracy_score != null && (
+                    {scan.item_count > 0 && (
                       <span
                         className={`font-mono text-[12px] ${accuracyColor(
-                          Math.round(scan.accuracy_score * 100),
+                          scanAccuracyPct,
                         )}`}
                       >
-                        {Math.round(scan.accuracy_score * 100)}%
+                        {scanAccuracyPct}%
                       </span>
                     )}
                     <TimeAgo
@@ -979,7 +1009,7 @@ async function fetchSnoozedAlerts(
   restaurantId: string,
 ): Promise<SnoozedRow[]> {
   const nowIso = new Date().toISOString();
-  const { data: wines } = await supabase
+  const { data: wines, error } = await supabase
     .from("wines")
     .select(
       "id, name, producer, vintage, alert_snoozed_until, pricing_dismissed_until",
@@ -988,6 +1018,7 @@ async function fetchSnoozedAlerts(
     .or(
       `alert_snoozed_until.gt.${nowIso},pricing_dismissed_until.gt.${nowIso}`,
     );
+  if (error) throw error;
 
   const rows: SnoozedRow[] = (wines ?? [])
     .map(function (w) {

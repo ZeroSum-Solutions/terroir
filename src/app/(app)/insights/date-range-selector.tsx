@@ -3,6 +3,7 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { Calendar } from "lucide-react";
+import { isValidCustomDateRange } from "./date-range";
 
 type RangeOption = "7d" | "30d" | "90d" | "ytd" | "all" | "custom";
 
@@ -11,6 +12,7 @@ const RANGE_OPTIONS: { value: RangeOption; label: string }[] = [
   { value: "30d", label: "30d" },
   { value: "90d", label: "90d" },
   { value: "ytd", label: "YTD" },
+  { value: "custom", label: "Custom" },
   { value: "all", label: "All" },
 ];
 
@@ -29,9 +31,16 @@ export default function DateRangeSelector() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const currentRange = (searchParams.get("range") as RangeOption | null) ?? "all";
-  const currentFrom = searchParams.get("from") ?? "";
-  const currentTo = searchParams.get("to") ?? "";
+  const requestedRange = (searchParams.get("range") as RangeOption | null) ?? "all";
+  const requestedFrom = searchParams.get("from") ?? "";
+  const requestedTo = searchParams.get("to") ?? "";
+  const currentRange =
+    requestedRange === "custom" &&
+    !isValidCustomDateRange(requestedFrom, requestedTo)
+      ? "all"
+      : requestedRange;
+  const currentFrom = currentRange === "custom" ? requestedFrom : "";
+  const currentTo = currentRange === "custom" ? requestedTo : "";
 
   const [showCustom, setShowCustom] = useState(currentRange === "custom");
   const [draftFrom, setDraftFrom] = useState(
@@ -70,7 +79,7 @@ export default function DateRangeSelector() {
             <button
               key={opt.value}
               role="radio"
-              aria-checked={isActive && !showCustom}
+              aria-checked={isActive}
               onClick={function () {
                 if (opt.value === "custom") {
                   setShowCustom(!showCustom);

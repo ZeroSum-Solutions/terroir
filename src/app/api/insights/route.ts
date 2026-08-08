@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { summarizeLineItemCorrections } from "@/lib/insights/analytics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +26,9 @@ async function getInsights() {
     ] = await Promise.all([
       supabase
         .from("invoice_scans")
-        .select("id, distributor_name, item_count, accuracy_score, created_at")
+        .select(
+          "id, distributor_name, item_count, accuracy_score, edits, created_at",
+        )
         .eq("restaurant_id", restaurantId)
         .order("created_at", { ascending: false }),
       supabase
@@ -55,12 +58,11 @@ async function getInsights() {
     const totalBottles = items.reduce((s, i) => s + i.quantity, 0);
     const scanCount = monthScans.length;
 
-    // Accuracy
+    // Auto-acceptance accuracy is line-item based. Field-level OCR confidence is
+    // retained on recentScans for API compatibility, but is not the KPI.
+    const correctionSummary = summarizeLineItemCorrections(allScans);
     const avgAccuracy =
-      allScans.length > 0
-        ? allScans.reduce((s, sc) => s + (sc.accuracy_score ?? 0), 0) /
-          allScans.length
-        : null;
+      correctionSummary.total > 0 ? correctionSummary.accuracyPct / 100 : null;
 
     // Varietal breakdown
     const varietalMap = new Map<string, number>();

@@ -20,6 +20,24 @@ export function dateRangeLabel(
   }
 }
 
+function utcCalendarBoundary(value: string, endOfDay: boolean): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const suffix = endOfDay ? "T23:59:59.999Z" : "T00:00:00.000Z";
+  const date = new Date(value + suffix);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10) === value ? date : null;
+}
+
+export function isValidCustomDateRange(
+  from: string | undefined,
+  to: string | undefined,
+): boolean {
+  if (!from || !to) return false;
+  const since = utcCalendarBoundary(from, false);
+  const until = utcCalendarBoundary(to, true);
+  return since != null && until != null && since.getTime() <= until.getTime();
+}
+
 export function dateRangeSince(
   range: string | undefined,
   from: string | undefined,
@@ -50,11 +68,7 @@ export function dateRangeSince(
       return d;
     }
     case "custom":
-      if (from) {
-        const d = new Date(from + "T00:00:00");
-        if (!Number.isNaN(d.getTime())) return d;
-      }
-      return null;
+      return from ? utcCalendarBoundary(from, false) : null;
     default:
       return null;
   }
@@ -65,6 +79,5 @@ export function dateRangeUntil(
   to: string | undefined,
 ): Date | null {
   if (range !== "custom" || !to) return null;
-  const d = new Date(to + "T23:59:59.999");
-  return Number.isNaN(d.getTime()) ? null : d;
+  return utcCalendarBoundary(to, true);
 }

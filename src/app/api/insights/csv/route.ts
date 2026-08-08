@@ -3,6 +3,12 @@ import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import {
+  dateRangeSince,
+  dateRangeUntil,
+  isValidCustomDateRange,
+} from "@/app/(app)/insights/date-range";
+import { summarizeLineItemCorrections } from "@/lib/insights/analytics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,39 +31,67 @@ function formatMoney(n: number): string {
  * Items Scanned, Accuracy, Value. Includes distributor breakdown
  * and varietal breakdown sections.
  */
-export async function GET() {
-  return withApiHandler(getInsightsCsv);
+export async function GET(request?: Request) {
+  return withApiHandler(() => getInsightsCsv(request));
 }
 
-async function getInsightsCsv() {
+async function getInsightsCsv(request?: Request) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
   const { supabase, restaurantId } = auth;
+  const searchParams = request ? new URL(request.url).searchParams : null;
+  const range = searchParams?.get("range") ?? "all";
+  const from = searchParams?.get("from") ?? undefined;
+  const to = searchParams?.get("to") ?? undefined;
+  if (range === "custom" && !isValidCustomDateRange(from, to)) {
+    return Errors.badRequest(
+      "Invalid custom date range.",
+      undefined,
+      "invalid_date_range",
+    );
+  }
+  const rangeSince = dateRangeSince(range, from);
+  const rangeUntil = dateRangeUntil(range, to);
 
   try {
+    let scanQuery = supabase
+      .from("invoice_scans")
+      .select(
+        "id, distributor_name, item_count, edits, created_at, final_line_items",
+      )
+      .eq("restaurant_id", restaurantId)
+      .order("created_at", { ascending: false });
+    const inventoryQuery = supabase
+      .from("inventory_items")
+      .select("quantity, unit_cost, wine_id, wines(varietal)")
+      .eq("restaurant_id", restaurantId);
+    let scanItemsQuery = supabase
+      .from("inventory_items")
+      .select(
+        "quantity, unit_cost, invoice_scan_id, invoice_scans!inner(distributor_name, created_at)",
+      )
+      .eq("restaurant_id", restaurantId);
+
+    if (rangeSince) {
+      const since = rangeSince.toISOString();
+      scanQuery = scanQuery.gte("created_at", since);
+      scanItemsQuery = scanItemsQuery.gte("invoice_scans.created_at", since);
+    }
+    if (rangeUntil) {
+      const until = rangeUntil.toISOString();
+      scanQuery = scanQuery.lte("created_at", until);
+      scanItemsQuery = scanItemsQuery.lte("invoice_scans.created_at", until);
+    }
+
     // Fetch the same data as the insights page
     const [
       { data: scans, error: scansError },
       { data: inventoryItems, error: inventoryError },
       { data: scanItems, error: scanItemsError },
     ] = await Promise.all([
-      supabase
-        .from("invoice_scans")
-        .select(
-          "id, distributor_name, item_count, accuracy_score, created_at, final_line_items",
-        )
-        .eq("restaurant_id", restaurantId)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("inventory_items")
-        .select("quantity, unit_cost, wine_id, wines(varietal)")
-        .eq("restaurant_id", restaurantId),
-      supabase
-        .from("inventory_items")
-        .select(
-          "quantity, unit_cost, invoice_scan_id, invoice_scans!inner(distributor_name)",
-        )
-        .eq("restaurant_id", restaurantId),
+      scanQuery,
+      inventoryQuery,
+      scanItemsQuery,
     ]);
     if (scansError) throw scansError;
     if (inventoryError) throw inventoryError;
@@ -70,7 +104,9 @@ async function getInsightsCsv() {
 
     // ── Section 1: Scan Activity ──────────────────────────────────────
     lines.push("=== SCAN ACTIVITY ===");
-    lines.push("Date,Distributor,Items Scanned,Accuracy,Value");
+    lines.push(
+      "Date,Distributor,Items Scanned,Auto-Accepted Items,Corrected Items,Accuracy,Value",
+    );
 
     for (const scan of allScans) {
       const lineItems = (scan.final_line_items ?? []) as Array<{
@@ -81,10 +117,8 @@ async function getInsightsCsv() {
         (sum, it) => sum + (it.qty ?? 0) * (it.unitCost ?? 0),
         0,
       );
-      const accuracyPct =
-        scan.accuracy_score != null
-          ? Math.round(scan.accuracy_score * 100) + "%"
-          : "";
+      const correctionSummary = summarizeLineItemCorrections([scan]);
+      const accuracyPct = correctionSummary.accuracyPct + "%";
 
       const date = new Date(scan.created_at).toISOString().split("T")[0];
 
@@ -93,6 +127,8 @@ async function getInsightsCsv() {
           date,
           escapeField(scan.distributor_name),
           scan.item_count,
+          correctionSummary.autoAccepted,
+          correctionSummary.corrected,
           accuracyPct,
           scanValue > 0 ? formatMoney(scanValue) : "",
         ].join(","),
@@ -110,7 +146,7 @@ async function getInsightsCsv() {
     }
     for (const item of scanItems ?? []) {
       const distName = (
-        item.invoice_scans as { distributor_name: string }
+        item.invoice_scans as { distributor_name: string; created_at: string }
       )?.distributor_name;
       if (!distName) continue;
       const existing = distMap.get(distName) ?? { scans: 0, spend: 0 };

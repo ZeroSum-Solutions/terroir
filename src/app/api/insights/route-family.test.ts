@@ -64,6 +64,14 @@ function makeSupabase(
         calls.push({ table, method: "order", args });
         return query;
       },
+      gte: (...args: unknown[]) => {
+        calls.push({ table, method: "gte", args });
+        return query;
+      },
+      lte: (...args: unknown[]) => {
+        calls.push({ table, method: "lte", args });
+        return query;
+      },
       or: (...args: unknown[]) => {
         calls.push({ table, method: "or", args });
         return query;
@@ -190,6 +198,7 @@ describe("GET /api/insights", () => {
               distributor_name: "Acme",
               item_count: 2,
               accuracy_score: 0.9,
+              edits: { "item-a:name": true, "item-a:producer": true },
               created_at: createdAt,
             },
           ],
@@ -217,7 +226,7 @@ describe("GET /api/insights", () => {
       totalBottles: 2,
       scanCount: 1,
       totalScans: 1,
-      avgAccuracy: 0.9,
+      avgAccuracy: 0.5,
       varietalBreakdown: [{ name: "Cabernet", value: 60 }],
       recentScans: [
         {
@@ -275,7 +284,20 @@ describe("GET /api/insights/csv", () => {
     },
   );
 
-  it("preserves the exact CSV sections, filename, and tenant filters", async () => {
+  it("rejects a malformed custom range before querying tenant data", async () => {
+    const supabase = allow();
+
+    const response = await getInsightsCsv(
+      new Request(
+        "http://localhost/api/insights/csv?range=custom&from=2026-02-31&to=2026-01-01",
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("exports the selected custom range and line-item correction accuracy", async () => {
     const supabase = allow(
       makeSupabase({
         invoice_scans: {
@@ -285,6 +307,7 @@ describe("GET /api/insights/csv", () => {
               distributor_name: "Acme",
               item_count: 2,
               accuracy_score: 0.9,
+              edits: { "item-a:name": true, "item-a:producer": true },
               created_at: "2026-01-02T00:00:00.000Z",
               final_line_items: [{ qty: 2, unitCost: 10 }],
             },
@@ -318,7 +341,11 @@ describe("GET /api/insights/csv", () => {
       }),
     );
 
-    const response = await getInsightsCsv();
+    const response = await getInsightsCsv(
+      new Request(
+        "http://localhost/api/insights/csv?range=custom&from=2026-01-01&to=2026-01-31",
+      ),
+    );
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("text/csv; charset=utf-8");
@@ -328,8 +355,8 @@ describe("GET /api/insights/csv", () => {
     expect(await response.text()).toBe(
       [
         "=== SCAN ACTIVITY ===",
-        "Date,Distributor,Items Scanned,Accuracy,Value",
-        "2026-01-02,Acme,2,90%,$20",
+        "Date,Distributor,Items Scanned,Auto-Accepted Items,Corrected Items,Accuracy,Value",
+        "2026-01-02,Acme,2,1,1,50%,$20",
         "",
         "=== DISTRIBUTOR BREAKDOWN ===",
         "Distributor,Scans,Spend,Share",
@@ -348,6 +375,26 @@ describe("GET /api/insights/csv", () => {
           call.args[1] === "restaurant-a",
       ),
     ).toHaveLength(3);
+    expect(supabase.calls).toContainEqual({
+      table: "invoice_scans",
+      method: "gte",
+      args: ["created_at", "2026-01-01T00:00:00.000Z"],
+    });
+    expect(supabase.calls).toContainEqual({
+      table: "invoice_scans",
+      method: "lte",
+      args: ["created_at", "2026-01-31T23:59:59.999Z"],
+    });
+    expect(supabase.calls).toContainEqual({
+      table: "inventory_items",
+      method: "gte",
+      args: ["invoice_scans.created_at", "2026-01-01T00:00:00.000Z"],
+    });
+    expect(supabase.calls).toContainEqual({
+      table: "inventory_items",
+      method: "lte",
+      args: ["invoice_scans.created_at", "2026-01-31T23:59:59.999Z"],
+    });
   });
 });
 
