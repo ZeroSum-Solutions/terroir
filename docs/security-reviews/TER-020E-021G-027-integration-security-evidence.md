@@ -84,3 +84,8 @@ formula-neutralized, and fails before queries for invalid ranges. Synthetic
 browser evidence is encrypted before upload, plaintext is deleted, and the
 encrypted artifact is retained for 14 days. No unresolved security finding or
 accepted risk remains.
+
+The final release verifier also checked citation resolvability. It found three
+TER-020E static ranges whose end lines exceeded their source files; the ranges
+were corrected to the exact existing end lines without changing any source or
+security conclusion. All structured security reports were then revalidated.
