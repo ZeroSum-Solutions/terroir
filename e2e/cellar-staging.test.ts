@@ -195,18 +195,16 @@ test.describe("TER-025 isolated staging cellar", () => {
       .eq("user_id", isolatedFixture.userId);
     if (roleError) throw roleError;
 
-    const configResponse = await page.request.get("/cellar/config", {
-      maxRedirects: 0,
-    });
-    expect([302, 303, 307, 308]).toContain(configResponse.status());
-    const location = configResponse.headers().location;
-    expect(location).toBeDefined();
-    expect(new URL(location!, isolatedConfig.baseUrl).pathname).toBe("/cellar");
-    await page.goto("/cellar", { waitUntil: "domcontentloaded" });
     const wineLabel = new RegExp(
       `Primary Cuvee ${isolatedFixture.namespace}`,
       "i",
     );
+    await page.goto("/cellar/config", { waitUntil: "commit" });
+    await expect.poll(() => {
+      const url = new URL(page.url());
+      return `${url.pathname}${url.search}${url.hash}`;
+    }).toBe("/cellar");
+    await expect(page.getByRole("button", { name: wineLabel })).toBeVisible();
     await page.getByRole("button", { name: wineLabel }).click();
     const drawer = page.getByRole("dialog", { name: wineLabel });
     await expect(drawer).toBeVisible();
