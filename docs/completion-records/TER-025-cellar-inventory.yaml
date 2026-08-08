@@ -1,8 +1,10 @@
 spec_id: TER-025
 implementation_commits:
-  - adeb426
-  - e3bc843
-status: source_complete_local_browser_runtime_pending
+  - 629725a
+  - 5c2dca8
+  - ff4f799
+  - f781d44
+status: staging_validated_production_pending
 scope: Complete active cellar and inventory requirements TER-CF-064 through TER-CF-090 while preserving tenant and role boundaries.
 requirement_evidence:
   TER-CF-064:
@@ -39,19 +41,35 @@ requirement_evidence:
     implementation: src/lib/cellar/inventory-view.ts; src/app/(app)/cellar/cellar-list.tsx
     tests: src/lib/cellar/inventory-view.test.ts; src/app/api/cellar/cellar-collection-behavior.test.ts
 verification:
-  focused: Inventory view and aggregation, quantity modal and route, route contract, role registration, and SQL acceptance tests passed locally.
-  full: pnpm test; pnpm exec tsc --noEmit; pnpm lint; pnpm build.
-  inventories: pnpm verify:api-contract; pnpm verify:feature-ledger; pnpm verify:ui-controls.
-  migrations: pnpm snapshot:check; pnpm downs:check; transactional SQL acceptance for migration 0080.
-  browser_source: e2e/cellar-local.test.ts
+  focused: Inventory view and aggregation, quantity modal and route, route contract, role registration, staging configuration, and SQL acceptance tests passed.
+  full: 171 Vitest files and 1631 tests passed; TypeScript, lint, and the 50-page production build passed on Node 24.16.0 with pnpm 10.33.2.
+  inventories: API contract passed with 87 implemented operations, 5 planned operations, and all 87 classified; feature ledger passed with 269 requirements; UI controls passed across 23 routes and 345 controls.
+  migrations: Snapshot check passed with 80 migrations and 417777 bytes; all 70 forward migrations from 0011 have rollback pairs; migration 0080 passed transactional PostgreSQL acceptance locally and on the isolated staging branch.
+  browser: GitHub Actions run 31239212549 passed exact-SHA smoke, both ordinary isolated browser slots, the slot-1-only cellar pilot, fixture cleanup, evidence encryption, and artifact retention.
+  independent_review: Fable 5 at medium reasoning returned PASS with no P0, P1, or P2 findings on the core implementation and final staging-pilot corrections.
 security:
   route: Authentication and owner/manager authorization are enforced before the dedicated RPC.
   database: The security-definer RPC rechecks tenant role and tenant-bound resource ownership, locks affected rows, and grants execute only to authenticated users.
   input: UUID, integer range, trimmed reason length, and idempotency-key/hash identity are validated at both HTTP and SQL boundaries.
   audit: Changed quantities create one availability event with actor, delta, and reason; no-op requests create none.
+staging_evidence:
+  exact_candidate: f781d4467c6d98783320b55936ad57fc913d5766
+  migration_history: 20260808032000:audited_cellar_quantity_adjustments on isolated staging branch wwhxcgtcecsftcivosop
+  web_deployment: 1b700d2a-eabb-4700-83f3-eddd2d7600d8
+  worker_deployment: 22301f04-3210-47b0-bfeb-b0d1f013806c
+  github_run: 31239212549
+  runtime_health: Web reported ready with the database connected and the exact release; worker reported the exact release with Chromium ready, queue depth zero, and zero dead letters.
+  owner_browser: Search, region and vintage filtering, quantity sorting, detail aggregation, and one reasoned quantity adjustment passed; the database contained quantity 2 and exactly one actor-bound delta -1 audit event.
+  staff_browser: Staff was redirected away from cellar configuration, saw no quantity-adjustment control, and received 403 from the quantity API.
+  tenant_browser: The same route succeeded for the selected second restaurant, returned 404 for that wine after switching back to the primary restaurant, and returned 404 for an unowned foreign restaurant.
+  tenant_database: The foreign inventory remained exactly 4, no audit event existed for the foreign wine, and fixture teardown removed audit, inventory, and wine rows for all isolated restaurants.
+staging_evidence_required: []
+production_evidence_required:
+  - Promote only through TER-046 after the final integrated candidate passes its complete release gate and production canaries.
 deployment:
-  executed: false
+  executed: true
+  environment: staging
   production_changed: false
 known_limits:
-  - The deterministic cellar browser test was collected, but Chromium and WebKit launch were blocked in this execution environment by the macOS bootstrap sandbox. Browser runtime proof remains pending on a host that permits Playwright launch.
+  - Production validation remains intentionally deferred to the final TER-046 integrated release and canary gate.
 rollback: Revert the TER-025 commits in reverse order and apply supabase/migrations/down/0080_audited_cellar_quantity_adjustments.down.sql before removing the application route.
