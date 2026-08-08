@@ -182,7 +182,7 @@ test.describe("TER-028 isolated mobile bottle scan", () => {
     await page.getByLabel("Section").fill("Main Cellar");
     await page.getByLabel("Bin location").fill("M-2");
     await page.getByRole("button", { name: "Save location" }).click();
-    await expect(page.getByText("2 scanned")).toBeVisible();
+    await expect(page.getByText("2 scanned", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "End session (2 scanned)" }).click();
     await expect(page.getByText("2 bottles scanned in this session.")).toBeVisible();
     await expect(page.getByText("Reserve")).toBeVisible();
