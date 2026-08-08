@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "ref": "HEAD",
+  "base": {
+    "status": "AVAILABLE",
+    "value": "e6b93db",
+    "unavailable_reason": null,
+    "evidence": [{"class":"COMMAND","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:3-5"}]
+  },
+  "scope": {
+    "changed_paths": [
+      "docs/completion-records/TER-026-wine-intelligence.yaml",
+      "docs/security-reviews/TER-026-integration-acl-security-evidence.md",
+      "docs/security-reviews/TER-026-integration-acl-security-review.json",
+      "docs/security-reviews/TER-026-wine-intelligence-security-evidence.md",
+      "supabase/migrations/0081_atomic_wine_metadata_overrides.sql",
+      "supabase/migrations/down/0081_atomic_wine_metadata_overrides.down.sql",
+      "supabase/schema.snapshot.sql",
+      "supabase/tests/0081_atomic_wine_metadata_overrides.sql"
+    ],
+    "captured_diff_paths": [
+      "docs/completion-records/TER-026-wine-intelligence.yaml",
+      "docs/security-reviews/TER-026-integration-acl-security-evidence.md",
+      "docs/security-reviews/TER-026-integration-acl-security-review.json",
+      "docs/security-reviews/TER-026-wine-intelligence-security-evidence.md",
+      "supabase/migrations/0081_atomic_wine_metadata_overrides.sql",
+      "supabase/migrations/down/0081_atomic_wine_metadata_overrides.down.sql",
+      "supabase/schema.snapshot.sql",
+      "supabase/tests/0081_atomic_wine_metadata_overrides.sql"
+    ],
+    "path_classification": [
+      {"path":"docs/completion-records/TER-026-wine-intelligence.yaml","surfaces":["authorization"],"evidence":[{"class":"STATIC","citation":"docs/completion-records/TER-026-wine-intelligence.yaml:32-45"}]},
+      {"path":"docs/security-reviews/TER-026-integration-acl-security-evidence.md","surfaces":[],"evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:1-38"}]},
+      {"path":"docs/security-reviews/TER-026-integration-acl-security-review.json","surfaces":[],"evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:1-38"}]},
+      {"path":"docs/security-reviews/TER-026-wine-intelligence-security-evidence.md","surfaces":["authorization"],"evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-026-wine-intelligence-security-evidence.md:55-69"}]},
+      {"path":"supabase/migrations/0081_atomic_wine_metadata_overrides.sql","surfaces":["authentication","authorization","untrusted-input"],"evidence":[{"class":"STATIC","citation":"supabase/migrations/0081_atomic_wine_metadata_overrides.sql:7-21"}]},
+      {"path":"supabase/migrations/down/0081_atomic_wine_metadata_overrides.down.sql","surfaces":["authorization"],"evidence":[{"class":"STATIC","citation":"supabase/migrations/down/0081_atomic_wine_metadata_overrides.down.sql:1-7"}]},
+      {"path":"supabase/schema.snapshot.sql","surfaces":["authentication","authorization","untrusted-input"],"evidence":[{"class":"STATIC","citation":"supabase/schema.snapshot.sql:13472-13493"}]},
+      {"path":"supabase/tests/0081_atomic_wine_metadata_overrides.sql","surfaces":[],"evidence":[{"class":"STATIC","citation":"supabase/tests/0081_atomic_wine_metadata_overrides.sql:78-106"}]}
+    ],
+    "sensitive_surfaces": ["authentication","authorization","untrusted-input"],
+    "diff_command_id": "CMD-001",
+    "evidence": [{"class":"COMMAND","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:7-8"}]
+  },
+  "commands": [
+    {"id":"CMD-001","purpose":"diff","command":"git diff --name-only e6b93db...HEAD","outcome":"PASS","exit_code":0,"scope":"e6b93db...HEAD","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:7-8"}],"unavailable_reason":null},
+    {"id":"CMD-002","purpose":"secrets-scan","command":"gitleaks detect --source . --no-banner --redact --log-opts e6b93db..HEAD","outcome":"PASS","exit_code":0,"scope":"e6b93db..HEAD","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:10-11"}],"unavailable_reason":null},
+    {"id":"CMD-003","purpose":"security-control-test","command":"apply 0081 and run 0081 plus 0082 transactional SQL acceptance on the restricted local ACL matrix","outcome":"PASS","exit_code":0,"scope":"TER-026 minimum privileges, RLS, RPC, tenant, and manual-preservation controls","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:13-25"}],"unavailable_reason":null},
+    {"id":"CMD-004","purpose":"rollback-recheck","command":"apply 0082 down and 0081 down, reapply 0081 then 0082, and rerun both acceptances","outcome":"PASS","exit_code":0,"scope":"TER-026 and TER-028 integrated rollback and reapply","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:27-30"}],"unavailable_reason":null},
+    {"id":"CMD-005","purpose":"authorization-matrix","command":"query information_schema.role_table_grants for wines and sensitive tables","outcome":"PASS","exit_code":0,"scope":"authenticated and anonymous public-table privileges","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:32-35"}],"unavailable_reason":null}
+  ],
+  "exports": {"state":"NONE","items":[],"evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:37-38"}],"unavailable_reason":null},
+  "secrets_scan": {"result":"PASS","command_id":"CMD-002","scope":"RANGE","comparison":"e6b93db..HEAD","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:10-11"}],"unavailable_reason":null},
+  "export_policy": {"result":"PASS","evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:37-38"}],"unavailable_reason":null},
+  "coverage": [
+    {"surface":"prompt-injection","state":"NOT-APPLICABLE","evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:37-38"}],"unavailable_reason":null},
+    {"surface":"secrets","state":"REVIEWED","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:10-11"}],"unavailable_reason":null},
+    {"surface":"authentication","state":"REVIEWED","evidence":[{"class":"STATIC","citation":"supabase/migrations/0081_atomic_wine_metadata_overrides.sql:19-35"}],"unavailable_reason":null},
+    {"surface":"authorization","state":"REVIEWED","evidence":[{"class":"COMMAND","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:13-35"}],"unavailable_reason":null},
+    {"surface":"untrusted-input","state":"REVIEWED","evidence":[{"class":"STATIC","citation":"supabase/migrations/0081_atomic_wine_metadata_overrides.sql:145-228"}],"unavailable_reason":null},
+    {"surface":"export","state":"NOT-APPLICABLE","evidence":[{"class":"STATIC","citation":"docs/security-reviews/TER-026-integration-acl-security-evidence.md:37-38"}],"unavailable_reason":null}
+  ],
+  "findings": [],
+  "verdict": "PASS"
+}

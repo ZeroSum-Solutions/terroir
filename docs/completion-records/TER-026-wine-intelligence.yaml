@@ -3,6 +3,7 @@ implementation_commits:
   - b79c977
   - f8e1b77
   - 8a246df
+  - 9b7528b
 status: source_verified_worker_and_runtime_evidence_pending
 scope: Complete active wine-intelligence requirements TER-CF-091 through TER-CF-101 while preserving tenant, role, and manual-field boundaries.
 requirement_evidence:
@@ -37,7 +38,7 @@ verification:
   focused: Six Vitest files and 101 tests passed across deterministic calculations, enrichment, single-wine re-enrichment, LWIN fallback, mutation boundaries, and manual-field preservation.
   full: The second full run passed 171 Vitest files and 1635 tests; TypeScript, lint, and the production build passed on Node 24.16.0 with pnpm 10.33.2. The first full run observed one unrelated team-action timing failure that immediately passed in isolation and in the second full run.
   inventories: API contract passed with 87 implemented operations, 5 planned operations, and all 87 classified; feature ledger passed with 269 requirements; UI controls passed across 23 routes and 345 controls.
-  migrations: Snapshot generation produced 81 migrations; the committed snapshot is 431580 bytes. All 71 forward migrations from 0011 have rollback pairs; migration 0081 passed transactional PostgreSQL acceptance in an isolated local Supabase database, its security corrections survived the down migration, and the forward migration reapplied cleanly after rollback proof.
+  migrations: The source checkpoint produced 81 migrations and a 431580-byte snapshot. Integrated follow-up reproduced the fresh-CLI ACL failure, added explicit minimum SELECT and UPDATE wine privileges governed by RLS, and then passed both 0081 and 0082 transactional acceptance, restricted privilege-matrix checks, down migrations, and ordered reapply; the integrated snapshot contains 82 migrations and 440577 bytes.
   browser_collection: Playwright collected two isolated wine-intelligence tests. Local execution skipped both because the staging-only flags and isolated configuration were intentionally absent; this is not runtime proof.
   independent_review: The first exact-ref verifier returned REWORK for a staff database bypass and two stale evidence paths. Both were corrected test-first; the final exact-ref verifier returned PASS at aa0eb57 with no P0, P1, or P2 source finding.
 security:

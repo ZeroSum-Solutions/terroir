@@ -50,6 +50,16 @@ denial, cross-tenant metadata and enrichment denial, malformed fields, and the
 unchanged non-manual enrichment path. Manual review found no remaining security
 defect in the reviewed diff.
 
+Integrated follow-up qualified the initial direct-update proof: that source
+harness inherited authenticated wine-table CRUD from an earlier ad hoc grant.
+On the fresh Supabase CLI privilege matrix, authenticated lacked SELECT and
+UPDATE, so the statement failed before reaching RLS. The integrated fix
+reproduced that failure, granted only SELECT and UPDATE on `public.wines` to
+authenticated, and added privilege assertions. Staff then reached manager-only
+RLS and affected zero rows; anonymous UPDATE remained absent. Authenticated
+CRUD stayed absent on `api_idempotency`, `open_bottles`, and `pour_events`, with
+only the existing SELECT exception on `background_jobs`.
+
 The workflow addition references only the existing encrypted isolated-test
 secrets and adds no credential value or destination. Its pilot is manual,
 opt-in, single-slot, and gated behind the existing exact-SHA staging smoke. The
