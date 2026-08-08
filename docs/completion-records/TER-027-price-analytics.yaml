@@ -63,7 +63,7 @@ verification:
   database: Migration 0085 and its transactional acceptance passed in isolated PostgreSQL, proving first-observation behavior, consecutive 100-to-120 retention, unchanged-observation stability, and outer rollback.
   static: Snapshot verification passed with 83 migrations and 441862 bytes; all 73 forward migrations from 0011 have rollback pairs; API contract passed with 87 implemented operations and 5 planned operations; the 269-feature ledger, 23-route and 345-control UI inventory, staging workflow contract, actionlint, one-test Playwright collection, canonical-document verifier, security-report validator, and exact-range gitleaks scan passed.
   browser: The isolated analytics staging test is implemented and collected but has not yet run against the exact integrated staging candidate.
-  independent_review: The first exact-HEAD review returned FAIL on volume-prorated revenue, missing non-empty calculation fixtures, and incomplete single-source variance sorting. Commit cb969dd corrected all three findings with red-to-green tests; exact corrected-HEAD re-review remains pending.
+  independent_review: The first exact-HEAD review returned FAIL on volume-prorated revenue, missing non-empty calculation fixtures, and incomplete single-source variance sorting. Commit cb969dd corrected all three findings with red-to-green tests and exact corrected-HEAD re-review returned PASS at 16dc550c50095ca72813cf00973aacbad2297dd6. Integrated review then found that unknown CSV ranges fell through to all-time export; 1924d7e added strict enum parsing before queries and the independent re-review returned PASS.
 security:
   authentication: Insights APIs retain requireMembership and authenticated app-shell boundaries.
   authorization: Every application query remains explicitly restaurant-bound; the market-observation trigger grants no new role or table privilege.
@@ -71,7 +71,7 @@ security:
   export: CSV fields remain escaped, include only the active tenant and date range, and are returned directly for request-lifetime handling.
   review: docs/security-reviews/TER-027-analytics-security-review.json records PASS after fixing and rechecking spreadsheet-formula injection in tenant-controlled CSV fields.
 dependency_evidence_required:
-  - Close the five planned TER-020 exact-path handlers before marking TER-027 complete.
+  - TER-020 exact-path handlers are closed in the integrated candidate; preserve the zero-planned API contract gate.
   - Close TER-026 provider, worker, and integrated staging evidence required by the canonical dependency graph.
 staging_evidence_required:
   - Apply migration 0085 to isolated staging and run the opt-in analytics pilot against the exact integrated release SHA.
@@ -85,6 +85,6 @@ deployment:
   production_changed: false
 known_limits:
   - Browser and staging proof are pending the exact integrated candidate.
-  - TER-020 and TER-026 remain hard dependencies; this record does not mark TER-027 complete ahead of them.
+  - TER-026 provider, worker, and integrated staging evidence remains a hard dependency; this record does not mark TER-027 complete ahead of it.
   - Production remains unchanged; promotion is reserved for TER-046.
 rollback: Revert the TER-027 commits in reverse order and apply supabase/migrations/down/0085_market_price_shift_observations.down.sql before removing application changes.

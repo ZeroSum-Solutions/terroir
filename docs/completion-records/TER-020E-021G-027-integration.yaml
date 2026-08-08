@@ -1,0 +1,50 @@
+spec_id: TER-020E-021G-027-INTEGRATION
+base_commit: 235a88dead961453b886928a9e68e8a358084d8e
+source_candidate: 1924d7e3cd7e7f860d86356be2ce9a5154421c59
+status: source_complete_staging_pending_and_worker_dependency_blocked
+scope: Integrate the exact compatibility handlers, dependency-gated wine-enrichment worker migration, and price analytics without losing tenant, authorization, migration, workflow, or evidence contracts.
+integrated_commits:
+  - TER-020E: b07eb0c269f39cb5f758f546912491347621a4df
+  - TER-021G: b36bcc9b9905befad0452cec4ffed897a35a2d18
+  - TER-027: 16dc550c50095ca72813cf00973aacbad2297dd6
+  - integrated_security_fix: 1924d7e3cd7e7f860d86356be2ce9a5154421c59
+conflict_resolution:
+  schema_snapshot: Regenerated from the authoritative migration set; 0084, 0085, and 0086 are present exactly once.
+  staging_workflow_contract: Preserved both wine-enrichment-worker and analytics pilot inputs, commands, and single-slot guards.
+  staging_documentation: Preserved the worker dependency gate and analytics pilot procedure.
+security:
+  initial_review: FAIL with direct-RPC staff bypass of manager-only wine enrichment and unknown CSV range falling through to all-time export.
+  corrections: Migration 0086 enforces job-type authorization at the security-definer enqueue RPC; the CSV route strictly parses its range enum before tenant queries.
+  recheck: Independent exact-commit review at 1924d7e3cd7e7f860d86356be2ce9a5154421c59 returned PASS with no P0, P1, or P2 finding and export-policy PASS.
+  report: docs/security-reviews/TER-020E-021G-027-integration-security-review.json
+verification:
+  full: 192 Vitest files and 1726 tests passed; TypeScript no-emit, ESLint, and the 50-page production build passed on Node 24.16.0 with pnpm 10.33.2.
+  contracts: 19 contract files and 147 tests passed; API inventory has 92 implemented and zero planned operations; the 269-requirement feature ledger and 23-route, 345-control UI inventory passed.
+  database: Isolated PostgreSQL passed 0084, 0085, and 0086 acceptance; 0086 proved manager success, staff wine-enrichment denial without persistence, allowed staff invoice OCR, paired rollback, prior lifecycle compatibility, reapply, and repeated acceptance.
+  schema: Snapshot is exact at 85 migrations and 452319 generator bytes; all 75 forward migrations from 0011 onward have unique paired downs.
+  static: Actionlint, exact-range gitleaks, security-report validators, canonical document checks, conflict-marker checks, and both opt-in Playwright collections passed.
+  browser: The worker and analytics tests collect, but exact-candidate browser runtime is not claimed until the isolated staging workflow runs.
+  independent_review: Corrected integrated source at 1924d7e3cd7e7f860d86356be2ce9a5154421c59 returned PASS with no P0, P1, or P2 finding.
+dependencies:
+  closed:
+    - TER-020E exact-path API handlers and the zero-planned contract gate.
+    - TER-027 source and integrated security corrections.
+  blocked:
+    - TER-021G activation remains default-off until canonical TER-021F invoice-OCR soak evidence exists.
+    - TER-026 provider, worker, and integrated staging evidence remains open in the canonical dependency graph.
+staging_evidence_required:
+  - Push the exact integrated candidate and deploy web plus worker to isolated staging after applying 0084, 0085, and 0086.
+  - Keep WINE_ENRICHMENT_HANDLER_ENABLED and WINE_ENRICHMENT_WORKER_ENABLED disabled while TER-021F is absent; do not dispatch the worker pilot.
+  - Run the eligible analytics and baseline isolated workflows against the exact release SHA and preserve encrypted evidence.
+production_evidence_required:
+  - Production remains unchanged until TER-046 and every canonical dependency and promotion gate passes.
+deployment:
+  executed: false
+  environment: none
+  candidate: null
+  production_changed: false
+known_limits:
+  - Playwright collection is not browser runtime proof.
+  - TER-021G activation and its retry, restart, dead-letter, duplicate-delivery, drain, and rollback drills remain dependency-blocked.
+  - TER-026 external provider and integrated staging evidence remains open.
+rollback: Keep both wine-enrichment worker flags disabled; revert 1924d7e before the integrated lane commits when required, applying paired down migrations 0086, 0085, and 0084 in reverse order only when the corresponding application code is removed.

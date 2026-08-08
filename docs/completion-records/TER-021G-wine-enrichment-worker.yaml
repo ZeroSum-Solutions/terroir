@@ -29,7 +29,7 @@ verification:
   full: 179 Vitest files and 1676 tests passed; TypeScript, lint, and the production build passed on Node 24.16.0 with pnpm 10.33.2.
   inventories: API contract passed with 87 implemented operations and 5 planned promises; feature ledger passed with 269 requirements; UI inventory passed with 23 routes and 345 controls.
   browser_collection: The opt-in isolated browser pilot is collected but intentionally not run while the dependency is open.
-  independent_review: The first exact-checkpoint review found unsafe strict-batch telemetry, swallowed LWIN failures, and an abort gap. After test-first correction, the separate verifier returned PASS at fa80eeff7f1137efa6ee51e6c1b0776abc385271; dependency and staging activation remain blocked.
+  independent_review: The first exact-checkpoint review found unsafe strict-batch telemetry, swallowed LWIN failures, and an abort gap. After test-first correction, the separate verifier returned PASS at fa80eeff7f1137efa6ee51e6c1b0776abc385271. Integrated review then found that the older generic enqueue RPC still admitted staff-created wine-enrichment jobs; 1924d7e added job-type authorization at that database boundary and the independent re-review returned PASS. Dependency and staging activation remain blocked.
 staging_evidence_required:
   - Attach the canonical TER-021F invoice-OCR soak record before activation.
   - Prove exact-SHA bulk and single-wine enqueue, same-key replay, tenant denial, successful completion, and manual-field preservation using synthetic data.

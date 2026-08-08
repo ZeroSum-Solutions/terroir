@@ -120,8 +120,9 @@ business workflows. Adapter modules own external provider mechanics.
   line item count as one corrected item; field-level OCR confidence is not the
   business KPI.
 - Quick ranges and validated UTC custom boundaries apply to invoice scans and
-  invoice-linked spend. The CSV link carries the active range, and malformed
-  custom ranges are rejected before tenant data is queried.
+  invoice-linked spend. The CSV link carries the active range; unknown quick
+  ranges and malformed custom ranges are rejected before tenant data is
+  queried.
 - Page and export reads are restaurant-bound and fail closed on query errors.
   CSV data is returned directly to the authenticated requester and follows the
   request-lifetime handling documented in the data-lifecycle runbook.
