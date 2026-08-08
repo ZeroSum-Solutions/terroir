@@ -43,9 +43,11 @@ mismatch, console or page errors, failed network requests, and unexpected 5xx
 responses all fail the job.
 
 The dispatch-only `run_pdf_worker_pilot` input adds the worker-backed PDF
-browser test and its 10-request queue-load test after the normal isolated
-workflow. It remains off for ordinary staging pushes and must be enabled only
-after the compatible staging web and worker releases are healthy and
+browser test and its 10-request queue-load test on matrix slot 1 after the
+normal isolated workflow. The single pilot avoids doubling load while the
+other matrix slot continues to prove ordinary parallel fixture isolation. It
+remains off for ordinary staging pushes and must be enabled only after the
+compatible staging web and worker releases are healthy and
 `PDF_WORKER_ENABLED=1` is active on the web service.
 
 Playwright retains trace, screenshot, video, console, network, page-error, and

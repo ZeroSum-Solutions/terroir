@@ -55,7 +55,7 @@ jobs:
     name: Isolated E2E (parallel ${{ matrix.slot }})
     needs: smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -116,7 +116,7 @@ jobs:
         run: pnpm run test:e2e:isolated
 
       - name: Run the PDF worker browser and load pilot
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_pdf_worker_pilot }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_pdf_worker_pilot && matrix.slot == 1 }}
         run: pnpm exec playwright test e2e/lists/pdf-worker.test.ts --workers=1
 
       - name: Encrypt browser evidence

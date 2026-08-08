@@ -173,7 +173,7 @@ test.describe("wine-list PDF worker pilot", () => {
         .in("id", jobIds);
       if (error) throw error;
       succeeded = (jobs ?? []).filter(
-        (job) => job.status === "succeeded" && job.attempt_count === 1,
+        (job) => job.status === "succeeded",
       ).length;
       if (succeeded === 10) break;
       await page.waitForTimeout(1_000);

@@ -73,6 +73,11 @@ describe("TER-021E PDF worker contract", () => {
     expect(browserValidator).toContain('process.platform === "linux"');
     expect(browserValidator).toContain('"/usr/bin/chromium"');
     expect(browserValidator).toContain("constants.X_OK");
+    expect(browserValidator).toContain("puppeteer.launch({");
+    expect(browserValidator).toContain("headless: true");
+    expect(browserValidator).toContain('"--no-sandbox"');
+    expect(browserValidator).toContain('"--disable-setuid-sandbox"');
+    expect(browserValidator).toContain("worker-browser-ready");
   });
 
   it("keeps artifacts private, bounded, and tenant-readable only", () => {

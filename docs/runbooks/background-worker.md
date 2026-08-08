@@ -73,10 +73,12 @@ the build and final runtime images and sets Puppeteer's executable to
 `/usr/bin/chromium`. Both web and worker manifests run
 `pnpm validate:worker-browser`; the web fallback needs the same executable as
 the asynchronous worker. The command fails the image build unless that path is
-an executable file. `.puppeteerrc.cjs` disables Puppeteer's archive downloads,
-so a provider cache or incomplete extraction cannot silently determine runtime
-readiness. Do not enable the PDF queue when the build omitted this gate, even if
-the control-plane health check is otherwise ready.
+an executable file and can launch headless with the worker's sandbox flags,
+load a local data document, and emit its DOM. `.puppeteerrc.cjs` disables
+Puppeteer's archive downloads, so a provider cache or incomplete extraction
+cannot silently determine runtime readiness. Do not enable the PDF queue when
+the build omitted this gate, even if the control-plane health check is
+otherwise ready.
 
 ## Wine-list PDF pilot
 
