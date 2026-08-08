@@ -49,4 +49,4 @@ deployment:
 known_limits:
   - Source, contract, and production-build evidence is complete, but no live staging request is claimed.
   - The exact mutation paths are compatibility contracts with no first-party UI callers; current UI clients continue to use the supported alternate paths.
-rollback: Revert cbe93ac, 893a218, and 43e0614 in reverse order. No migration rollback is required.
+rollback: Revert the full TER-020E commit range beginning with 43e0614, including its tests and documentation, in reverse order. No migration rollback is required.

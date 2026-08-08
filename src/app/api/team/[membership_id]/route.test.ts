@@ -43,7 +43,7 @@ function database(
             {
               outcome: "removed",
               response_status: 200,
-              response_body: { ok: true },
+              response_body: { success: true },
               replayed: false,
               execution_started_at: "2026-08-07T00:00:00.000Z",
             },
@@ -114,7 +114,7 @@ describe("DELETE /api/team/[membership_id] compatibility handler", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true });
+    expect(await response.json()).toEqual({ success: true });
     expect(response.headers.get("Idempotency-Replayed")).toBe("false");
     expect(db.rpc).toHaveBeenNthCalledWith(1, "claim_api_idempotency", {
       p_restaurant_id: RESTAURANT_ID,
@@ -183,7 +183,7 @@ describe("DELETE /api/team/[membership_id] compatibility handler", () => {
           outcome: "replay",
           response_status: 200,
           response_headers: {},
-          response_body: { ok: true },
+          response_body: { success: true },
         },
       ],
     });
