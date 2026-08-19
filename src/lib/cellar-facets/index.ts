@@ -31,7 +31,7 @@ export type CellarFacetRow = {
   sealed_count: number;
 };
 
-export type FacetCount = { value: string; label: string; count: number };
+export type FacetCount = { value: string; label: string; count: number; isUnknown: boolean };
 export type FacetCounts = Record<FacetDimension, FacetCount[]>;
 
 export type CellarFacetGroup<T extends CellarFacetRow = CellarFacetRow> = {
@@ -83,7 +83,7 @@ export function groupRows<T extends CellarFacetRow>(
   const buckets = new Map<string, { label: string; wines: T[] }>();
   for (const row of rows) {
     const raw = groupValue(row, groupBy);
-    const key = raw === null ? UNKNOWN_FACET_VALUE : normalize(raw);
+    const key = raw === null ? UNKNOWN_FACET_VALUE : "v:" + normalize(raw);
     const label = raw === null ? "Unknown" : raw;
     const bucket = buckets.get(key) ?? { label, wines: [] };
     bucket.wines.push(row);
@@ -123,11 +123,18 @@ function countDimension<T extends CellarFacetRow>(
   const counts = new Map<string, FacetCount>();
   for (const row of rows) {
     const raw = dimensionValue(row, dimension);
-    const value = raw === null ? UNKNOWN_FACET_VALUE : raw;
-    const key = value === UNKNOWN_FACET_VALUE ? value : normalize(value);
+    const isUnknown = raw === null;
+    const key = isUnknown ? UNKNOWN_FACET_VALUE : "v:" + normalize(raw);
     const current = counts.get(key);
     if (current) current.count += 1;
-    else counts.set(key, { value, label: raw === null ? "Unknown" : raw, count: 1 });
+    else {
+      counts.set(key, {
+        value: isUnknown ? UNKNOWN_FACET_VALUE : raw,
+        label: isUnknown ? "Unknown" : raw,
+        count: 1,
+        isUnknown,
+      });
+    }
   }
   return [...counts.values()].sort((left, right) => compareCounts(left, right, dimension));
 }
@@ -146,8 +153,7 @@ function groupValue(row: CellarFacetRow, groupBy: CellarGroupBy): string | null 
 }
 
 function compareCounts(left: FacetCount, right: FacetCount, dimension: FacetDimension) {
-  if (left.value === UNKNOWN_FACET_VALUE) return 1;
-  if (right.value === UNKNOWN_FACET_VALUE) return -1;
+  if (left.isUnknown !== right.isUnknown) return left.isUnknown ? 1 : -1;
   if (dimension === "vintage") return Number(right.value) - Number(left.value);
   if (dimension === "format") return Number(left.value) - Number(right.value);
   return left.label.localeCompare(right.label, undefined, { sensitivity: "base" });

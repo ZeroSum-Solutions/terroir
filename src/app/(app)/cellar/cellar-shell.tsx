@@ -81,15 +81,53 @@ export function CellarShell({
   useEffect(() => {
     urlStateRef.current = urlState;
   }, [urlState]);
-  const replaceUrlState = useCallback(
-    (patch: Partial<CellarUrlState>) => {
+  const applyUrlState = useCallback(
+    (patch: Partial<CellarUrlState>, mode: "replace" | "push") => {
       const next = { ...urlStateRef.current, ...patch };
       urlStateRef.current = next;
       const params = serializeCellarUrlState(next);
-      router.replace(`/cellar?${params.toString()}`, { scroll: false });
+      const href = `/cellar?${params.toString()}`;
+      if (mode === "push") router.push(href, { scroll: false });
+      else router.replace(href, { scroll: false });
     },
     [router],
   );
+  const replaceUrlState = useCallback(
+    (patch: Partial<CellarUrlState>) => applyUrlState(patch, "replace"),
+    [applyUrlState],
+  );
+  // Opening the drawer pushes a history entry so Back closes it.
+  const openWine = useCallback(
+    (wineId: string) => applyUrlState({ wine: wineId }, "push"),
+    [applyUrlState],
+  );
+
+  // A deep-linked wine id that doesn't exist in this cellar would otherwise
+  // pin a dead wine= param to the URL with no visible way to clear it.
+  useEffect(() => {
+    if (urlState.wine && !rows.some((row) => row.wine_id === urlState.wine)) {
+      replaceUrlState({ wine: null });
+    }
+  }, [urlState.wine, rows, replaceUrlState]);
+
+  // Search input draft: filters client-side per keystroke, syncs to the URL
+  // on a debounce so typing doesn't trigger an RSC refetch per character.
+  const [qDraft, setQDraft] = useState(urlState.q);
+  const lastPushedQ = useRef(urlState.q);
+  useEffect(() => {
+    if (urlState.q !== lastPushedQ.current) {
+      lastPushedQ.current = urlState.q;
+      setQDraft(urlState.q);
+    }
+  }, [urlState.q]);
+  useEffect(() => {
+    if (qDraft === urlStateRef.current.q) return;
+    const id = setTimeout(() => {
+      lastPushedQ.current = qDraft;
+      replaceUrlState({ q: qDraft });
+    }, 250);
+    return () => clearTimeout(id);
+  }, [qDraft, replaceUrlState]);
 
   const [initialMode] = useState(() => mode ?? "");
   const [view, setView] = useState<"list" | "grid">("list");
@@ -203,8 +241,8 @@ export function CellarShell({
 
         <div className="hidden md:block">
           <SearchInput
-            value={urlState.q}
-            onChange={(q) => replaceUrlState({ q })}
+            value={qDraft}
+            onChange={setQDraft}
             inputRef={searchInputRef}
           />
         </div>
@@ -323,10 +361,10 @@ export function CellarShell({
       {view === "list" ? (
         <CellarList
           rows={rows}
-          query={urlState.q}
+          query={qDraft}
           filter={urlState.filter}
           lowStockThreshold={cellarConfig?.lowStockThreshold ?? 3}
-          onSelectWine={(row) => replaceUrlState({ wine: row.wine_id })}
+          onSelectWine={(row) => openWine(row.wine_id)}
           onResetFilters={() => {
             replaceUrlState({
               q: "",
@@ -365,8 +403,8 @@ export function CellarShell({
         <div className="fixed inset-x-0 top-14 z-30 border-b border-border bg-surface px-md py-sm shadow-md md:hidden">
           <div className="flex items-center gap-sm">
             <SearchInput
-              value={urlState.q}
-              onChange={(q) => replaceUrlState({ q })}
+              value={qDraft}
+              onChange={setQDraft}
               inputRef={searchInputRef}
               autoFocus
               onEscape={() => setSearchOpen(false)}

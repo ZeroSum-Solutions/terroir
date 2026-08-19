@@ -1,5 +1,4 @@
 import {
-  UNKNOWN_FACET_VALUE,
   type CellarFacets,
   type CellarGroupBy,
   type FacetCount,
@@ -138,7 +137,7 @@ function FacetSelect({
   );
   const renderedOptions =
     value && !selected
-      ? [...options, { value, label: value, count: 0 }]
+      ? [...options, { value, label: value, count: 0, isUnknown: false }]
       : options;
   return (
     <label className="shrink-0">
@@ -154,7 +153,7 @@ function FacetSelect({
           <option
             key={option.value}
             value={option.value}
-            disabled={option.value === UNKNOWN_FACET_VALUE}
+            disabled={option.isUnknown}
           >
             {option.label} ({option.count})
           </option>
@@ -179,7 +178,7 @@ function NumberFacetSelect({
 }) {
   const renderedOptions =
     value != null && !options.some((option) => Number(option.value) === value)
-      ? [...options, { value: String(value), label: String(value), count: 0 }]
+      ? [...options, { value: String(value), label: String(value), count: 0, isUnknown: false }]
       : options;
   return (
     <label className="shrink-0">
@@ -192,7 +191,7 @@ function NumberFacetSelect({
       >
         <option value="">{label}</option>
         {renderedOptions
-          .filter((option) => option.value !== UNKNOWN_FACET_VALUE)
+          .filter((option) => !option.isUnknown)
           .map((option) => (
             <option key={option.value} value={option.value}>
               {formatLabel(option)}

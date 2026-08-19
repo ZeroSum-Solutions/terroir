@@ -8,27 +8,42 @@ vi.mock("@/lib/api/auth", () => ({
 
 const { GET } = await import("./route");
 
-function makeSupabase() {
+function makeSupabase(options?: {
+  wines?: Array<Record<string, unknown>>;
+  openBottles?: Array<Record<string, unknown>>;
+  inventory?: Array<Record<string, unknown>>;
+}) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
-  const chain = {
-    select: (...args: unknown[]) => record("select", args),
-    eq: (...args: unknown[]) => record("eq", args),
-    order: (...args: unknown[]) => record("order", args),
-    limit: (...args: unknown[]) => record("limit", args),
-    or: (...args: unknown[]) => record("or", args),
-    ilike: (...args: unknown[]) => record("ilike", args),
-    gte: (...args: unknown[]) => record("gte", args),
-    lte: (...args: unknown[]) => record("lte", args),
-    then: (
-      resolve: (value: { data: unknown[]; error: null }) => unknown,
-    ) => resolve({ data: [{ id: "wine-1" }], error: null }),
-  };
-  function record(method: string, args: unknown[]) {
-    calls.push({ method, args });
+  const wines = options?.wines ?? [{ id: "wine-1" }];
+  const inventory = options?.inventory ?? [];
+  function makeChain(table: string) {
+    const rows = table === "inventory_items" ? inventory : wines;
+    const chain = {
+      select: (...args: unknown[]) => record(`${table}.select`, args),
+      eq: (...args: unknown[]) => record(`${table}.eq`, args),
+      in: (...args: unknown[]) => record(`${table}.in`, args),
+      order: (...args: unknown[]) => record(`${table}.order`, args),
+      limit: (...args: unknown[]) => record(`${table}.limit`, args),
+      or: (...args: unknown[]) => record(`${table}.or`, args),
+      ilike: (...args: unknown[]) => record(`${table}.ilike`, args),
+      gte: (...args: unknown[]) => record(`${table}.gte`, args),
+      lte: (...args: unknown[]) => record(`${table}.lte`, args),
+      gt: (...args: unknown[]) => record(`${table}.gt`, args),
+      then: (
+        resolve: (value: { data: unknown[]; error: null }) => unknown,
+      ) => resolve({ data: rows, error: null }),
+    };
+    function record(method: string, args: unknown[]) {
+      calls.push({ method, args });
+      return chain;
+    }
     return chain;
   }
   return {
-    supabase: { from: vi.fn(() => chain) },
+    supabase: {
+      from: vi.fn((table: string) => makeChain(table)),
+      rpc: vi.fn(async () => ({ data: options?.openBottles ?? [], error: null })),
+    },
     calls,
   };
 }
@@ -52,16 +67,16 @@ describe("GET /api/wines/search", () => {
 
     expect(response.status).toBe(200);
     expect(calls).toContainEqual({
-      method: "select",
+      method: "wines.select",
       args: ["id, name, producer, vintage, varietal, region"],
     });
-    expect(calls).toContainEqual({ method: "ilike", args: ["producer", "Jamet"] });
-    expect(calls).toContainEqual({ method: "ilike", args: ["region", "Rhone"] });
-    expect(calls).toContainEqual({ method: "ilike", args: ["country", "France"] });
-    expect(calls).toContainEqual({ method: "ilike", args: ["varietal", "Syrah"] });
-    expect(calls).toContainEqual({ method: "gte", args: ["vintage", 2016] });
-    expect(calls).toContainEqual({ method: "lte", args: ["vintage", 2020] });
-    expect(calls).toContainEqual({ method: "eq", args: ["size_ml", 750] });
+    expect(calls).toContainEqual({ method: "wines.ilike", args: ["producer", "Jamet"] });
+    expect(calls).toContainEqual({ method: "wines.ilike", args: ["region", "Rhone"] });
+    expect(calls).toContainEqual({ method: "wines.ilike", args: ["country", "France"] });
+    expect(calls).toContainEqual({ method: "wines.ilike", args: ["varietal", "Syrah"] });
+    expect(calls).toContainEqual({ method: "wines.gte", args: ["vintage", 2016] });
+    expect(calls).toContainEqual({ method: "wines.lte", args: ["vintage", 2020] });
+    expect(calls).toContainEqual({ method: "wines.eq", args: ["size_ml", 750] });
   });
 
   it("returns the membership response without querying", async () => {
@@ -87,7 +102,7 @@ describe("GET /api/wines/search", () => {
     );
     expect(response.status).toBe(200);
     expect(calls).toContainEqual({
-      method: "or",
+      method: "wines.or",
       args: [
         'name.ilike."%clos,producer.eq.hacked\\%%",producer.ilike."%clos,producer.eq.hacked\\%%"',
       ],
@@ -120,8 +135,98 @@ describe("GET /api/wines/search", () => {
     );
     expect(response.status).toBe(200);
     expect(calls).toContainEqual({
-      method: "ilike",
+      method: "wines.ilike",
       args: ["producer", "100\\%\\_Wines"],
     });
+  });
+
+  it("filter=out narrows to 86'd wines at the database", async () => {
+    const { supabase, calls } = makeSupabase();
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r1" });
+    const response = await GET(
+      new NextRequest("http://localhost/api/wines/search?filter=out"),
+    );
+    expect(response.status).toBe(200);
+    expect(calls).toContainEqual({ method: "wines.eq", args: ["is_eightysixed", true] });
+  });
+
+  it("filter=drink-now applies the shared closing-window predicate", async () => {
+    const { supabase, calls } = makeSupabase();
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r1" });
+    const response = await GET(
+      new NextRequest("http://localhost/api/wines/search?filter=drink-now"),
+    );
+    expect(response.status).toBe(200);
+    expect(calls).toContainEqual({ method: "wines.eq", args: ["is_eightysixed", false] });
+    const year = new Date().getFullYear();
+    expect(calls).toContainEqual({
+      method: "wines.lte",
+      args: ["drink_window_end", year + 2],
+    });
+  });
+
+  it("filter=hold keeps only future-window wines", async () => {
+    const { supabase, calls } = makeSupabase();
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r1" });
+    const response = await GET(
+      new NextRequest("http://localhost/api/wines/search?filter=hold"),
+    );
+    expect(response.status).toBe(200);
+    expect(calls).toContainEqual({
+      method: "wines.gt",
+      args: ["drink_window_start", new Date().getFullYear()],
+    });
+  });
+
+  it("filter=open keeps only wines with an open bottle remaining", async () => {
+    const { supabase } = makeSupabase({
+      wines: [{ id: "wine-open" }, { id: "wine-sealed" }],
+      openBottles: [
+        { wine_id: "wine-open", open_remaining_ml: 400, size_ml: 750 },
+        { wine_id: "wine-sealed", open_remaining_ml: 0, size_ml: 750 },
+      ],
+    });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r1" });
+    const response = await GET(
+      new NextRequest("http://localhost/api/wines/search?filter=open"),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([{ id: "wine-open" }]);
+    expect(supabase.rpc).toHaveBeenCalledWith("list_open_bottle_items", {
+      p_restaurant_id: "r1",
+    });
+  });
+
+  it("filter=low mirrors the cellar total-ml predicate", async () => {
+    const { supabase } = makeSupabase({
+      wines: [{ id: "wine-low" }, { id: "wine-stocked" }, { id: "wine-no-list" }],
+      openBottles: [
+        { wine_id: "wine-low", open_remaining_ml: 100, size_ml: 750 },
+        { wine_id: "wine-stocked", open_remaining_ml: 0, size_ml: 750 },
+      ],
+      inventory: [
+        { wine_id: "wine-low", quantity: 1 },
+        { wine_id: "wine-stocked", quantity: 6 },
+        { wine_id: "wine-no-list", quantity: 0 },
+      ],
+    });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r1" });
+    const response = await GET(
+      new NextRequest("http://localhost/api/wines/search?filter=low"),
+    );
+    expect(response.status).toBe(200);
+    // wine-low: 100 + 1*750 = 850 < 1500 → low. wine-stocked: 4500 → not low.
+    // wine-no-list has no list item (no size_ml) → excluded, matching /cellar.
+    expect(await response.json()).toEqual([{ id: "wine-low" }]);
+  });
+
+  it("rejects an unknown filter value", async () => {
+    const { supabase } = makeSupabase();
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r1" });
+    const response = await GET(
+      new NextRequest("http://localhost/api/wines/search?filter=fancy"),
+    );
+    expect(response.status).toBe(400);
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 });

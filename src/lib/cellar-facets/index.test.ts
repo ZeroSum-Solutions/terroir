@@ -94,15 +94,15 @@ describe("facetCounts", () => {
     });
 
     expect(counts.producer).toEqual([
-      { value: "Alpha Estate", label: "Alpha Estate", count: 1 },
-      { value: "Beta Cellars", label: "Beta Cellars", count: 1 },
+      { value: "Alpha Estate", label: "Alpha Estate", count: 1, isUnknown: false },
+      { value: "Beta Cellars", label: "Beta Cellars", count: 1, isUnknown: false },
     ]);
     expect(counts.region).toEqual([
-      { value: "Napa", label: "Napa", count: 1 },
-      { value: "Sonoma", label: "Sonoma", count: 1 },
+      { value: "Napa", label: "Napa", count: 1, isUnknown: false },
+      { value: "Sonoma", label: "Sonoma", count: 1, isUnknown: false },
     ]);
     expect(counts.country).toEqual([
-      { value: "USA", label: "USA", count: 1 },
+      { value: "USA", label: "USA", count: 1, isUnknown: false },
     ]);
   });
 
