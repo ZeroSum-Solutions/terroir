@@ -4,12 +4,19 @@
  *
  * Usage:
  *   cd terroir
- *   npx tsx scripts/test-invoices.ts                 # default: claude-opus-4-7
- *   npx tsx scripts/test-invoices.ts --model sonnet  # claude-sonnet-4-6
+ *   npx tsx scripts/test-invoices.ts                   # default: claude-opus-5
+ *   npx tsx scripts/test-invoices.ts --model sonnet    # claude-sonnet-5 (what prod runs)
+ *   npx tsx scripts/test-invoices.ts --model baseline  # claude-sonnet-4-6 (the model
+ *                                                      # prod ran before 2026-08-19)
+ *
+ * `baseline` exists so a model change can be shown not to regress rather than
+ * assumed not to: run it and `sonnet`, then diff. `opus` is the quality
+ * ceiling, not a candidate — prod does not run Opus.
  *
  * Output filename mirrors the model:
- *   opus    → test-results.json
- *   sonnet  → test-results-sonnet.json
+ *   opus      → test-results.json
+ *   sonnet    → test-results-sonnet.json
+ *   baseline  → test-results-baseline.json
  *
  * Requires ANTHROPIC_API_KEY in .env.local.
  *
@@ -44,8 +51,9 @@ if (existsSync(envPath)) {
 
 // ── Model selection (--model opus|sonnet, default opus) ─────────────────
 const MODELS: Record<string, string> = {
-  opus: "claude-opus-4-7",
-  sonnet: "claude-sonnet-4-6",
+  opus: "claude-opus-5",
+  sonnet: "claude-sonnet-5",
+  baseline: "claude-sonnet-4-6",
 };
 const args = process.argv.slice(2);
 const modelFlagIdx = args.indexOf("--model");

@@ -19,6 +19,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { getAnthropicClient } from "@/lib/ai/anthropic-client";
+import { INVOICE_EXTRACTION } from "@/lib/ai/models";
 import {
   ParsedInvoiceSchema,
   type ParsedInvoice,
@@ -97,9 +98,12 @@ export async function extractFromOcr(ocr: OcrResult): Promise<ParsedInvoice> {
   let response;
   try {
     response = await client.messages.parse({
-      model: "claude-sonnet-4-6",
-      max_tokens: 16000,
-      output_config: { format: zodOutputFormat(ParsedInvoiceSchema) },
+      model: INVOICE_EXTRACTION.model,
+      max_tokens: INVOICE_EXTRACTION.maxTokens,
+      output_config: {
+        format: zodOutputFormat(ParsedInvoiceSchema),
+        effort: INVOICE_EXTRACTION.effort,
+      },
       system: SYSTEM_PROMPT,
       messages: [
         {

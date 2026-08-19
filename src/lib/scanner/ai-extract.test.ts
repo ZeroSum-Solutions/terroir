@@ -146,8 +146,9 @@ describe("extractFromOcr", () => {
     expect(parsed.lineItems[0].name).toBe("Pinot Noir");
     // Sanity: the route's intended args were forwarded.
     const callArgs = anthropic.parse.mock.calls[0][0];
-    expect(callArgs.model).toBe("claude-sonnet-4-6");
+    expect(callArgs.model).toBe("claude-sonnet-5");
     expect(callArgs.max_tokens).toBe(16000);
+    expect(callArgs.output_config.effort).toBe("medium");
     expect(callArgs.messages[0].role).toBe("user");
     expect(callArgs.messages[0].content).toContain("<invoice_text>");
   });

@@ -4,6 +4,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAnthropicClient } from "@/lib/ai/anthropic-client";
+import { BOTTLE_SCAN } from "@/lib/ai/models";
 import { requireMembership } from "@/lib/api/auth";
 import { apiError, Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
@@ -110,10 +111,11 @@ async function postBottleScan(request: NextRequest) {
 
   try {
     const response = await anthropic.messages.parse({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2000,
+      model: BOTTLE_SCAN.model,
+      max_tokens: BOTTLE_SCAN.maxTokens,
       output_config: {
         format: zodOutputFormat(ParsedBottleLabelSchema),
+        effort: BOTTLE_SCAN.effort,
       },
       system: BOTTLE_SYSTEM_PROMPT,
       messages: [
