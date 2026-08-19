@@ -24,21 +24,24 @@ describe("Claude model profile contract", () => {
   it("pins the bottle scan profile", () => {
     expect(BOTTLE_SCAN).toEqual({
       model: "claude-sonnet-5",
-      effort: "low",
+      effort: "medium",
       maxTokens: 4000,
     });
   });
 
   it("pins the wine enrichment profile", () => {
+    // Held at the incumbent on purpose: every newer candidate lost a blind
+    // quality eval. See the rationale block in models.ts before changing this.
     expect(WINE_ENRICHMENT).toEqual({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-sonnet-4-5-20250929",
       maxTokens: 400,
     });
     expect(WINE_ENRICHMENT_TOKENS_PER_WINE).toBe(300);
   });
 
   it("omits effort on models that do not support the parameter", () => {
-    // Haiku 4.5 is absent from Anthropic's effort-supported model list.
+    // claude-sonnet-4-5-20250929 is absent from Anthropic's effort-supported
+    // model list, so sending the parameter would be silently ignored.
     expect(WINE_ENRICHMENT.effort).toBeUndefined();
   });
 

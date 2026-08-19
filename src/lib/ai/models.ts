@@ -65,10 +65,16 @@ export const INVOICE_EXTRACTION: ModelProfile = {
 /**
  * Bottle-label identification from a phone photo (vision).
  *
- * Low effort: the extraction is short, the user is waiting on it, and the
- * route returns the parse to the client for confirmation rather than
- * persisting it — a wrong vintage is caught by a human before it becomes a
- * row. Adaptive thinking still engages on genuinely hard labels.
+ * Medium, not low. This path has no eval — there is no labelled corpus of
+ * bottle photographs to grade against, so there is no evidence to justify
+ * stepping below the quality-neutral setting. The enrichment eval, which could
+ * be measured, found low effort produced more factual errors than medium on
+ * the same model (5 vs 3), so low is not a free saving. Revisit with a labelled
+ * set; the route already returns a `confidence` field to grade against.
+ *
+ * The route returns the parse to the client for confirmation rather than
+ * persisting it, so a wrong vintage is caught by a human before it becomes a
+ * row — but that is a safety net, not a reason to spend less.
  *
  * The cap moved 2000 → 4000 purely for thinking headroom: `max_tokens` is a
  * ceiling, not a charge, so unused budget costs nothing, but a truncated
@@ -76,28 +82,46 @@ export const INVOICE_EXTRACTION: ModelProfile = {
  */
 export const BOTTLE_SCAN: ModelProfile = {
   model: "claude-sonnet-5",
-  effort: "low",
+  effort: "medium",
   maxTokens: 4000,
 };
 
 /**
  * Sommelier enrichment — drink window, peak year, tasting note, decant time.
  *
- * This is the bulk-cost path: onboarding an existing cellar runs it over every
- * wine, so it dominates AI COGS at exactly the moment a customer has paid
- * nothing yet. Haiku 4.5 is 3x cheaper than the Sonnet 4.5 it replaces, stays
- * on the old tokenizer (so the cut is a real 3x, not eroded to ~2x), and
- * defaults to thinking OFF — behaviourally identical to the model it replaces,
- * which keeps the existing per-wine token budgets valid.
+ * DELIBERATELY NOT REFRESHED. This is the one path where the newer models lost.
  *
- * GATE: this trades capability for cost on user-visible prose. Qualify it on a
- * blind set (obscure producers, mature vintages, recent releases, non-European
- * wines, incomplete records) before the first paying cellar import. If it does
- * not hold, move to `claude-sonnet-5` at low effort and raise the per-wine
- * caps to leave thinking headroom.
+ * A blind eval (22 wines across obscure producers, mature vintages, releases
+ * after Haiku's knowledge cutoff, non-European wines, and underspecified
+ * records) scored every candidate against this incumbent. An independent model
+ * graded anonymised output pairs in randomised order:
+ *
+ *   candidate                 wins vs 4.5   factual errors (cand. vs 4.5)
+ *   claude-haiku-4-5             4 - 16            8 vs 2
+ *   claude-sonnet-5 @ low        6 - 15            5 vs 3
+ *   claude-sonnet-5 @ medium     8 - 13            3 vs 3
+ *
+ * Haiku's failure mode was systematic, not random: it truncates the ageing
+ * curve of benchmark long-lived wines (Vin de Constance closed out at 2035,
+ * Monte Bello at 2045, Musar at 2028). That is precisely the error a wine
+ * director notices first, on prose shown to their staff.
+ *
+ * Cost was never the deciding factor once measured: a 2,000-wine cellar runs
+ * $6.04 on this model against $4.88 on Sonnet 5 and $1.95 on Haiku. The whole
+ * spread is under five dollars per cellar, one time — far too small to buy a
+ * measurable quality regression with.
+ *
+ * MIGRATION RISK: Sonnet 4.5 is a legacy model and will eventually be retired.
+ * `claude-sonnet-5` at medium effort is the designated successor — it reached
+ * factual parity (3 errors each) and lost only on grader preference. Re-run the
+ * eval when retirement is announced rather than swapping under time pressure.
+ *
+ * Known defect, independent of model choice: this prompt caps `reviewExcerpt`
+ * at 200 characters and Sonnet 4.5 overran it on 4 of 22 wines. Both candidates
+ * respected it. Enforce the cap in code rather than trusting the prompt.
  */
 export const WINE_ENRICHMENT: ModelProfile = {
-  model: "claude-haiku-4-5-20251001",
+  model: "claude-sonnet-4-5-20250929",
   maxTokens: 400,
 };
 
