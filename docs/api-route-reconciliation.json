@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 60,
+    "extensionDiscoveredCount": 61,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -806,6 +806,12 @@
     },
     {
       "operationId": "api:GET:/api/wines/lwin-search",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/wines/merge",
       "classification": "extension",
       "concreteRequirementId": null,
       "semanticAliasContext": []

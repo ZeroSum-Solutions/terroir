@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
+import { findDuplicateSuspects } from "@/lib/lineage/rollups";
 import { CellarShell } from "./cellar-shell";
 import type { CellarWineRow } from "./types";
 
@@ -55,7 +56,7 @@ export default async function CellarPage() {
     supabase
       .from("wines")
       .select(
-        "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, serving_temp_min, serving_temp_max, serving_temp_label, decant_minutes, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until, tasting_notes, hero_image_url, manual_overrides, colour",
+        "id, name, producer, vintage, varietal, region, lineage_id, size_ml, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, serving_temp_min, serving_temp_max, serving_temp_label, decant_minutes, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until, tasting_notes, hero_image_url, manual_overrides, colour",
       )
       .eq("restaurant_id", restaurantId)
       .order("name", { ascending: true }),
@@ -169,6 +170,31 @@ export default async function CellarPage() {
     openByWine.set(ob.wine_id, ob);
   }
 
+  // OPP-1 (wave 0) — duplicate suspects: same lineage + vintage + format
+  // pairs are merge candidates (EV-1.2). Computed here so the list can chip
+  // them and the drawer can offer the merge.
+  const suspectIdsByWine = new Map<string, string[]>();
+  for (const suspect of findDuplicateSuspects(
+    (wineRows ?? []).map((w) => ({
+      id: w.id,
+      lineageId: w.lineage_id,
+      producer: w.producer,
+      name: w.name,
+      vintage: w.vintage,
+      sizeMl: w.size_ml,
+      quantity: 0,
+      value: 0,
+      unitCost: null,
+    })),
+  )) {
+    for (const id of suspect.wineIds) {
+      suspectIdsByWine.set(
+        id,
+        suspect.wineIds.filter((other) => other !== id),
+      );
+    }
+  }
+
   // Build the unified row list. The wines table is canonical — every
   // wine in the cellar shows up, with optional stock data layered on.
   const rows: CellarWineRow[] = (wineRows ?? []).map((w) => {
@@ -183,6 +209,9 @@ export default async function CellarPage() {
       vintage: w.vintage,
       varietal: w.varietal,
       region: w.region,
+      lineage_id: w.lineage_id,
+      wine_size_ml: w.size_ml,
+      duplicate_wine_ids: suspectIdsByWine.get(w.id) ?? [],
       is_eightysixed: w.is_eightysixed ?? false,
       eightysixed_at: w.eightysixed_at,
       tasting_notes: w.tasting_notes ?? null,

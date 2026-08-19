@@ -28,6 +28,15 @@ export type CellarWineRow = {
   tasting_notes: string | null;
   hero_image_url: string | null;
 
+  // OPP-1 (wave 0) — lineage identity. lineage_id groups vintage siblings
+  // of one producer-cuvée; wine_size_ml is the wine's own bottle format
+  // (distinct from the open-bottle `size_ml` below, which only exists for
+  // BTG wines); duplicate_wine_ids lists same-lineage/vintage/format twins
+  // proposed for merge (EV-1.2).
+  lineage_id: string | null;
+  wine_size_ml: number;
+  duplicate_wine_ids: string[];
+
   // From inventory_items (aggregate)
   sealed_count: number;
   bin_location: string | null;

@@ -37,11 +37,15 @@ export function WineDetailDrawer({
   canManage,
   isOwner,
   onClose,
+  duplicateRows,
 }: {
   row: CellarWineRow | null;
   canManage: boolean;
   isOwner?: boolean;
   onClose: () => void;
+  // OPP-1 (EV-1.2) — same-lineage/vintage/format twins of `row`, offered
+  // for merge below. Provided by the shell from the page's suspect scan.
+  duplicateRows?: CellarWineRow[];
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -67,6 +71,40 @@ export function WineDetailDrawer({
 
   // BND-058: delete wine confirmation state
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+
+  // OPP-1 (EV-1.2) — merge-duplicate confirmation state: the wine_id of the
+  // duplicate awaiting confirmation, or null.
+  const [mergeConfirm, setMergeConfirm] = useState<string | null>(null);
+  const doMerge = useCallback(
+    async (sourceId: string) => {
+      if (!row) return;
+      setErrorMsg(null);
+      setBusy(true);
+      try {
+        const res = await fetch("/api/wines/merge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          // The open drawer's wine is kept; the duplicate collapses into it.
+          body: JSON.stringify({ source_id: sourceId, target_id: row.wine_id }),
+        });
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => null)) as {
+            error?: { message?: string };
+          } | null;
+          throw new Error(payload?.error?.message ?? `Merge failed (${res.status})`);
+        }
+        toast.success("Duplicate merged — stock and history combined.");
+        setMergeConfirm(null);
+        startTransition(() => router.refresh());
+        onClose();
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : "Merge failed.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [row, router, startTransition, toast, onClose],
+  );
 
   useFocusTrap({
     containerRef: dialogRef,
@@ -619,6 +657,56 @@ export function WineDetailDrawer({
                   <Edit3 className="h-4 w-4" strokeWidth={2} aria-hidden />
                   Edit metadata
                 </button>
+              )}
+
+              {/* OPP-1 (EV-1.2): merge duplicate — manager+ */}
+              {canManage && row.duplicate_wine_ids.length > 0 && (duplicateRows ?? []).length > 0 && (
+                <div
+                  data-merge-duplicates
+                  className="flex flex-col gap-xs rounded-sm border border-warning/30 bg-warning-soft/40 p-sm"
+                >
+                  <p className="text-[13px] font-medium text-ink">
+                    Possible duplicate record{(duplicateRows ?? []).length === 1 ? "" : "s"}
+                  </p>
+                  <p className="text-[12px] text-ink-muted">
+                    Same wine, same vintage, same format. Merging combines stock
+                    and keeps the full history. Different vintages are never
+                    merged — they stay linked as siblings.
+                  </p>
+                  {(duplicateRows ?? []).map((dup) =>
+                    mergeConfirm === dup.wine_id ? (
+                      <div key={dup.wine_id} className="flex gap-xs">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setMergeConfirm(null)}
+                          className="flex-1 h-[36px] rounded-sm border border-border bg-white text-[13px] font-medium text-ink hover:bg-surface-muted disabled:opacity-60"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => doMerge(dup.wine_id)}
+                          className="flex-1 h-[36px] rounded-sm bg-accent text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+                        >
+                          {busy ? "Merging..." : "Confirm merge"}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        key={dup.wine_id}
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setMergeConfirm(dup.wine_id)}
+                        className="flex h-[36px] items-center justify-center rounded-sm border border-border-strong bg-white px-sm text-[13px] font-medium text-ink hover:bg-surface-muted disabled:opacity-60"
+                      >
+                        Merge &ldquo;{dup.producer} {dup.name}
+                        {dup.vintage ? ` ${dup.vintage}` : ""}&rdquo; into this record
+                      </button>
+                    ),
+                  )}
+                </div>
               )}
 
               {/* BND-058: Delete wine — owner only */}

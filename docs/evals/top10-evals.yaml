@@ -1,0 +1,199 @@
+# Top-10 opportunity evals — merge gates for the gauntlet loop.
+# Source spec: ~/Desktop/Terroir Planning/18-terroir-top10-product-spec.md (v1.0, 2026-08-19)
+# Protocol: each eval becomes >=1 failing test FIRST (vitest or playwright @opp-N tag),
+# then implementation makes it pass. An opportunity lands only when its evals AND the
+# global gates are green. Never hand-edit docs/feature-ledger.json.
+version: 1
+global_gates:
+  - npm run lint
+  - npm test
+  - npm run test:contracts
+  - npm run snapshot:check
+  - npm run types:check
+  - npm run downs:check
+  - npm run verify:feature-ledger
+foundations:
+  - id: F-1
+    name: reason_codes pre-seeded
+    evals:
+      - id: EV-F1.1
+        then: >-
+          creating a restaurant seeds active reason codes (comp_guest, spill, training, spoilage, adjustment, other); comp/spoilage APIs reject requests without a valid code (422)
+  - id: F-2
+    name: lineage keys
+    evals:
+      - id: EV-F2.1
+        then: >-
+          wines.lineage_id exists with down migration; backfill job groups by LWIN7 else normalised producer+name; ambiguous rows left null
+
+opportunities:
+  - id: OPP-1
+    branch: feat/opp-01-lineage
+    e2e_tag: "@opp-1"
+    evals:
+      - id: EV-1.1
+        given: >-
+          two wines, same producer+cuvee, vintages 2016 and 2019
+        then: >-
+          both resolve to one lineage; cellar shows one lineage row expandable to two vintage rows with per-vintage cost basis intact
+      - id: EV-1.2
+        given: >-
+          same lineage+vintage+format duplicate pair
+        then: >-
+          detector proposes merge; merged record preserves combined qty and audit trail
+      - id: EV-1.3
+        given: >-
+          cross-vintage pair
+        then: >-
+          UI offers only "Link as vintage sibling"; POST merge across vintages returns 422 server-side
+      - id: EV-1.4
+        then: >-
+          lineage rollup (qty, value, vintage span) matches sum of children exactly (property test)
+  - id: OPP-2
+    branch: feat/opp-02-cellar-health
+    e2e_tag: "@opp-2"
+    depends_on: [OPP-1]
+    evals:
+      - id: EV-2.1
+        then: >-
+          every stocked wine classifies into exactly one of window_risk|hold|dead_stock|cash_trap|healthy (partition property test)
+      - id: EV-2.2
+        given: >-
+          demo cellar seed
+        then: >-
+          dead_stock + cash_trap combined flag < 40% of total cellar value (anti-96% calibration)
+      - id: EV-2.3
+        then: >-
+          each flagged row carries a human-readable reason string naming the rule that fired
+      - id: EV-2.4
+        then: >-
+          thresholds read from cellar_config; changing one reclassifies on next job run
+  - id: OPP-3
+    branch: feat/opp-03-dashboard-drilldown
+    e2e_tag: "@opp-3"
+    evals:
+      - id: EV-3.1
+        then: >-
+          e2e sweep - every [data-metric] element on /insights is or contains an <a href> resolving 200 to a filtered view (zero dead-end numbers)
+      - id: EV-3.2
+        then: >-
+          "Today" strip shows top 3 exceptions, each deep-linked to its object
+      - id: EV-3.3
+        then: >-
+          drill-down from a metric lands on a view whose visible filter state matches the metric's definition
+  - id: OPP-4
+    branch: feat/opp-04-taxonomy
+    e2e_tag: "@opp-4"
+    evals:
+      - id: EV-4.1
+        then: >-
+          cellar filters by producer, region, country, varietal, vintage-range, format; combinable; facet counts correct against seed
+      - id: EV-4.2
+        then: >-
+          group-by producer|region|varietal|vintage renders rollups equal to sum of members
+      - id: EV-4.3
+        then: >-
+          filter state round-trips through URL params (reload + back-button safe); API list endpoints accept identical params (contract test)
+  - id: OPP-5
+    branch: feat/opp-05-reconciliation
+    e2e_tag: "@opp-5"
+    depends_on: [OPP-1, F-1]
+    evals:
+      - id: EV-5.1
+        then: >-
+          queue unifies unplaced items, unmatched scan lines, duplicate suspects; header states grain explicitly (N items / M units / $V at risk)
+      - id: EV-5.2
+        then: >-
+          rows ordered by capital at risk desc (qty x last cost), not recency
+      - id: EV-5.3
+        given: >-
+          a scan line matching an existing wine by producer+cuvee+vintage+format
+        then: >-
+          suggestion cites identity basis (LWIN or field match), not string similarity
+      - id: EV-5.4
+        then: >-
+          bulk-accept then undo restores prior state via compensating availability_events (byte-equal item states)
+  - id: OPP-6
+    branch: feat/opp-06-bins
+    e2e_tag: "@opp-6"
+    evals:
+      - id: EV-6.1
+        then: >-
+          bins CRUD works; management view renders seeded bins (anti-/locations test - never an empty state with data present)
+      - id: EV-6.2
+        then: >-
+          "find this bottle" returns bin path + qty per bin for a seeded wine
+      - id: EV-6.3
+        given: >-
+          intake of a wine whose lineage already occupies a bin
+        then: >-
+          put-away suggests that bin; else zone default by type
+      - id: EV-6.4
+        then: >-
+          no pseudo-bins - unplaced stock appears only in the OPP-5 queue, and bin code renders on public list when enabled
+  - id: OPP-7
+    branch: feat/opp-07-staff-analytics
+    e2e_tag: "@opp-7"
+    depends_on: [F-1, OPP-10]
+    evals:
+      - id: EV-7.1
+        then: >-
+          pour/comp/adjustment events persist acting_member_id derived server-side from session; client-supplied member ids are ignored
+      - id: EV-7.2
+        then: >-
+          comp without valid reason code returns 422; with code, event links code
+      - id: EV-7.3
+        then: >-
+          member analytics show comp rate vs house median (z-score); NO industry-benchmark string appears anywhere (grep gate)
+      - id: EV-7.4
+        then: >-
+          analytics routes 403 for non-manager roles; anomaly copy is neutral (variance investigation framing)
+  - id: OPP-8
+    branch: feat/opp-08-branded-menus
+    e2e_tag: "@opp-8"
+    evals:
+      - id: EV-8.1
+        then: >-
+          logo upload creates brand_kit with extracted palette (deterministic on fixture image)
+      - id: EV-8.2
+        then: >-
+          MENU_DESIGN lane returns 3-4 structured theme JSONs validating against theme schema (zod); no raw CSS accepted
+      - id: EV-8.3
+        then: >-
+          applying a theme changes /list/[slug] and PDF output from one stored theme source
+      - id: EV-8.4
+        then: >-
+          a theme failing WCAG AA contrast is rejected server-side with actionable error
+  - id: OPP-9
+    branch: feat/opp-09-pricing-timing
+    e2e_tag: "@opp-9"
+    depends_on: [OPP-1, OPP-2]
+    evals:
+      - id: EV-9.1
+        then: >-
+          every recommendation carries class (discount_to_move|raise_appreciating|feature_btg|hold) + rationale + evidence fields
+      - id: EV-9.2
+        given: >-
+          fixture wine classified hold/appreciating (allocated Meursault fixture)
+        then: >-
+          recommender can never emit discount_to_move for it (the Meursault rule, unit + property test)
+      - id: EV-9.3
+        then: >-
+          feature_btg recommendations carry a day-of-week timing derived from event history
+      - id: EV-9.4
+        then: >-
+          recommendations view P95 < 2s on demo cellar seed (perf test)
+  - id: OPP-10
+    branch: feat/opp-10-partial-bottles
+    e2e_tag: "@opp-10"
+    depends_on: [F-1]
+    evals:
+      - id: EV-10.1
+        then: >-
+          open_bottles carry preservation_method + opened_by; theoretical remaining = size_ml - sum(pours), live
+      - id: EV-10.2
+        then: >-
+          close-out records actual remaining; per-bottle variance persisted; spoilage write-off requires reason code (422 without)
+      - id: EV-10.3
+        then: >-
+          yield report shows actual vs theoretical pours per bottle grouped by preservation method

@@ -69,6 +69,77 @@ export type Database = {
           },
         ]
       }
+      background_jobs: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          created_by: string | null
+          error_code: string | null
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          job_type: string
+          max_attempts: number
+          metadata: Json
+          restaurant_id: string
+          result: Json
+          run_after: string
+          started_at: string | null
+          status: string
+          subject_id: string | null
+          subject_table: string | null
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          created_by?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          job_type: string
+          max_attempts?: number
+          metadata?: Json
+          restaurant_id: string
+          result?: Json
+          run_after?: string
+          started_at?: string | null
+          status?: string
+          subject_id?: string | null
+          subject_table?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          created_by?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          job_type?: string
+          max_attempts?: number
+          metadata?: Json
+          restaurant_id?: string
+          result?: Json
+          run_after?: string
+          started_at?: string | null
+          status?: string
+          subject_id?: string | null
+          subject_table?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "background_jobs_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cellar_config: {
         Row: {
           columns: number
@@ -473,6 +544,44 @@ export type Database = {
           },
         ]
       }
+      reason_codes: {
+        Row: {
+          active: boolean
+          category: string
+          code: string
+          created_at: string
+          id: string
+          label: string
+          restaurant_id: string
+        }
+        Insert: {
+          active?: boolean
+          category: string
+          code: string
+          created_at?: string
+          id?: string
+          label: string
+          restaurant_id: string
+        }
+        Update: {
+          active?: boolean
+          category?: string
+          code?: string
+          created_at?: string
+          id?: string
+          label?: string
+          restaurant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reason_codes_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       restaurants: {
         Row: {
           auto_eightysix_from_inventory: boolean
@@ -537,6 +646,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "scan_idempotency_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wine_lineages: {
+        Row: {
+          created_at: string
+          cuvee_norm: string
+          id: string
+          lwin7: string | null
+          producer_norm: string
+          restaurant_id: string
+        }
+        Insert: {
+          created_at?: string
+          cuvee_norm: string
+          id?: string
+          lwin7?: string | null
+          producer_norm: string
+          restaurant_id: string
+        }
+        Update: {
+          created_at?: string
+          cuvee_norm?: string
+          id?: string
+          lwin7?: string | null
+          producer_norm?: string
+          restaurant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wine_lineages_restaurant_id_fkey"
             columns: ["restaurant_id"]
             isOneToOne: false
             referencedRelation: "restaurants"
@@ -711,6 +855,7 @@ export type Database = {
           id: string
           is_eightysixed: boolean
           last_enriched_at: string | null
+          lineage_id: string | null
           lwin_id: string | null
           manual_overrides: string[] | null
           name: string
@@ -754,6 +899,7 @@ export type Database = {
           id?: string
           is_eightysixed?: boolean
           last_enriched_at?: string | null
+          lineage_id?: string | null
           lwin_id?: string | null
           manual_overrides?: string[] | null
           name: string
@@ -797,6 +943,7 @@ export type Database = {
           id?: string
           is_eightysixed?: boolean
           last_enriched_at?: string | null
+          lineage_id?: string | null
           lwin_id?: string | null
           manual_overrides?: string[] | null
           name?: string
@@ -826,6 +973,13 @@ export type Database = {
           vintage?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "wines_lineage_id_fkey"
+            columns: ["lineage_id"]
+            isOneToOne: false
+            referencedRelation: "wine_lineages"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "wines_restaurant_id_fkey"
             columns: ["restaurant_id"]
@@ -935,6 +1089,10 @@ export type Database = {
           wine_id: string
         }[]
       }
+      merge_wines: {
+        Args: { p_source_wine_id: string; p_target_wine_id: string }
+        Returns: Json
+      }
       reconcile_open_bottle: {
         Args: { p_new_remaining_ml: number; p_note?: string; p_wine_id: string }
         Returns: {
@@ -984,6 +1142,10 @@ export type Database = {
       }
       reorder_wine_list_items: {
         Args: { p_ordered_ids: string[] }
+        Returns: undefined
+      }
+      seed_reason_codes: {
+        Args: { p_restaurant_id: string }
         Returns: undefined
       }
       set_wine_availability: {
