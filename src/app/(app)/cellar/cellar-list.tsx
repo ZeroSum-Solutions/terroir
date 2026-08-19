@@ -411,18 +411,149 @@ export function CellarList({
           </div>
         </DndContext>
       ) : (
-        <ul className="flex flex-col divide-y divide-border rounded-md border border-border bg-white">
-          {filtered.map((row) => (
-            <CellarRow
-              key={row.wine_id}
-              row={row}
-              lowStockThreshold={lowStockThreshold}
-              onSelect={() => onSelectWine(row)}
-            />
-          ))}
-        </ul>
+        <div className="flex flex-col divide-y divide-border rounded-md border border-border bg-white">
+          <LineageBlockList
+            wines={filtered}
+            renderRow={(row) => (
+              <CellarRow
+                row={row}
+                lowStockThreshold={lowStockThreshold}
+                onSelect={() => onSelectWine(row)}
+              />
+            )}
+          />
+        </div>
       )}
     </div>
+  );
+}
+
+/**
+ * OPP-1 (wave 0, EV-1.1) — lineage grouping. Wines sharing a lineage
+ * (one producer-cuvée) render as a single expandable block: a header row
+ * with the rollup (vintage span, total bottles) above per-vintage child
+ * rows. Wines whose lineage has a single member — or none — render as
+ * plain rows in their original position, so cellars without vintage
+ * siblings look exactly as before.
+ */
+type LineageBlock =
+  | { kind: "single"; row: CellarWineRow }
+  | {
+      kind: "lineage";
+      lineageId: string;
+      producer: string;
+      name: string;
+      totalBottles: number;
+      span: [number, number] | null;
+      rows: CellarWineRow[];
+    };
+
+function buildLineageBlocks(wines: CellarWineRow[]): LineageBlock[] {
+  const counts = new Map<string, number>();
+  for (const w of wines) {
+    if (w.lineage_id) counts.set(w.lineage_id, (counts.get(w.lineage_id) ?? 0) + 1);
+  }
+  const emitted = new Set<string>();
+  const blocks: LineageBlock[] = [];
+  for (const w of wines) {
+    const lid = w.lineage_id;
+    if (!lid || (counts.get(lid) ?? 0) < 2) {
+      blocks.push({ kind: "single", row: w });
+      continue;
+    }
+    if (emitted.has(lid)) continue;
+    emitted.add(lid);
+    const members = wines
+      .filter((x) => x.lineage_id === lid)
+      .sort((a, b) => (b.vintage ?? -1) - (a.vintage ?? -1));
+    const vints = members
+      .map((m) => m.vintage)
+      .filter((v): v is number => v != null);
+    blocks.push({
+      kind: "lineage",
+      lineageId: lid,
+      producer: members[0].producer,
+      name: members[0].name,
+      totalBottles: members.reduce((acc, m) => acc + m.sealed_count, 0),
+      span: vints.length ? [Math.min(...vints), Math.max(...vints)] : null,
+      rows: members,
+    });
+  }
+  return blocks;
+}
+
+function LineageBlockList({
+  wines,
+  renderRow,
+}: {
+  wines: CellarWineRow[];
+  renderRow: (row: CellarWineRow) => React.ReactNode;
+}) {
+  const blocks = useMemo(() => buildLineageBlocks(wines), [wines]);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const toggle = useCallback((lineageId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(lineageId)) next.delete(lineageId);
+      else next.add(lineageId);
+      return next;
+    });
+  }, []);
+
+  return (
+    <>
+      {blocks.map((block) =>
+        block.kind === "single" ? (
+          <div key={block.row.wine_id}>{renderRow(block.row)}</div>
+        ) : (
+          <div key={`lineage-${block.lineageId}`} data-lineage-id={block.lineageId}>
+            <button
+              type="button"
+              data-lineage-header
+              onClick={() => toggle(block.lineageId)}
+              aria-expanded={!collapsed.has(block.lineageId)}
+              className="flex w-full items-center gap-sm px-md py-sm text-left bg-surface-muted/60 hover:bg-surface-muted transition-colors"
+            >
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 shrink-0 text-ink-subtle transition-transform",
+                  collapsed.has(block.lineageId) && "-rotate-90",
+                )}
+                strokeWidth={2}
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+                  {block.producer}
+                </span>
+                <span className="block truncate font-serif text-[15px] text-ink">
+                  {block.name}
+                </span>
+              </span>
+              <span
+                data-lineage-rollup
+                className="inline-flex shrink-0 items-center rounded-full bg-accent-soft px-sm py-2xs text-[11px] font-medium text-accent"
+              >
+                {block.rows.length} wines
+                {block.span ? ` · ${block.span[0]}–${block.span[1]}` : ""}
+                {` · ${block.totalBottles} btls`}
+              </span>
+            </button>
+            {!collapsed.has(block.lineageId) && (
+              <div
+                data-lineage-children
+                className="ml-md border-l-2 border-accent-soft divide-y divide-border"
+              >
+                {block.rows.map((row) => (
+                  <div key={row.wine_id}>{renderRow(row)}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        ),
+      )}
+    </>
   );
 }
 
@@ -467,17 +598,19 @@ function SectionGroup({
       {/* Wine rows in this section */}
       {wines.length > 0 ? (
         <div className="divide-y divide-border">
-          {wines.map((row) => (
-            <DraggableWineRow
-              key={row.wine_id}
-              row={row}
-              lowStockThreshold={lowStockThreshold}
-              onSelect={() => onSelectWine(row)}
-              selectMode={selectMode}
-              selected={selectedIds.has(row.wine_id)}
-              onToggleSelect={() => onToggleSelect(row.wine_id)}
-            />
-          ))}
+          <LineageBlockList
+            wines={wines}
+            renderRow={(row) => (
+              <DraggableWineRow
+                row={row}
+                lowStockThreshold={lowStockThreshold}
+                onSelect={() => onSelectWine(row)}
+                selectMode={selectMode}
+                selected={selectedIds.has(row.wine_id)}
+                onToggleSelect={() => onToggleSelect(row.wine_id)}
+              />
+            )}
+          />
         </div>
       ) : (
         <div className="px-md py-lg text-center text-[13px] text-ink-muted">
@@ -646,6 +779,15 @@ function CellarRow({
               )}
               {isPeakWindow && (
                 <span className="inline-flex items-center rounded-full bg-accent-soft px-sm py-2xs text-[11px] font-medium text-accent">Peak Window</span>
+              )}
+              {/* OPP-1 (EV-1.2) — same lineage + vintage + format twin detected */}
+              {row.duplicate_wine_ids.length > 0 && (
+                <span
+                  data-duplicate-suspect
+                  className="inline-flex items-center rounded-full bg-warning-soft px-sm py-2xs text-[11px] font-medium text-warning"
+                >
+                  Possible duplicate
+                </span>
               )}
               {glassesLeft !== null && glassesLeft > 0 && !row.is_eightysixed && (
                 <span className="text-ink-muted">

@@ -366,6 +366,11 @@ export function CellarShell({
         canManage={canManage}
         isOwner={isOwner}
         onClose={() => setSelectedId(null)}
+        duplicateRows={
+          selected
+            ? rows.filter((r) => selected.duplicate_wine_ids.includes(r.wine_id))
+            : undefined
+        }
       />
 
       <ReconcileModal
