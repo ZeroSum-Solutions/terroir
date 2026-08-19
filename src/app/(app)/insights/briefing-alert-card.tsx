@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { DrinkWindowTimeline } from "@/components/drink-window-timeline";
 import { getYearsUntilWindowClose } from "@/lib/drink-window/status";
 import type { DrinkWindowAlertRow } from "@/lib/drink-window/alerts";
+import { metricHref } from "./metric-href";
 
 /**
  * BND-039 — BriefingAlertCard
@@ -77,6 +78,7 @@ export function BriefingAlertCard({
 
   return (
     <article
+      data-metric={`drink-window-${alert.wine_id}`}
       className={cn(
         "rounded-md border border-border bg-white p-md md:p-lg",
         "border-l-[3px] border-l-warning",
@@ -116,7 +118,7 @@ export function BriefingAlertCard({
 
           <div className="mt-md flex flex-wrap items-center gap-xs">
             <Link
-              href={`/cellar?wine=${alert.wine_id}`}
+              href={metricHref("wine", alert.wine_id)}
               className="inline-flex h-[38px] items-center gap-xs rounded-sm bg-accent px-md text-[13px] font-medium text-white hover:bg-accent-hover"
             >
               View {alert.bottle_count} bottle{alert.bottle_count === 1 ? "" : "s"}

@@ -10,6 +10,7 @@ import {
   type PricingStatus,
 } from "@/lib/pricing/status";
 import type { PricingAlertRow } from "@/lib/pricing/alerts";
+import { metricHref } from "./metric-href";
 
 /**
  * BND-040 — PricingReviewCard
@@ -157,7 +158,10 @@ function PricingReviewRow({
   const ratioDisplay = formatRatioDisplay(alert);
 
   return (
-    <li className="flex items-center justify-between gap-md py-sm">
+    <li
+      data-metric={`pricing-${alert.wine_id}`}
+      className="flex items-center justify-between gap-md py-sm"
+    >
       <div className="min-w-0 flex-1">
         <span className="font-serif text-[14px] text-ink">
           {alert.producer}, {alert.name}
@@ -176,7 +180,7 @@ function PricingReviewRow({
           {ratioDisplay}
         </span>
         <Link
-          href={`/cellar?wine=${alert.wine_id}`}
+          href={metricHref("wine", alert.wine_id)}
           className="inline-flex h-[30px] items-center gap-2xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-bg-secondary"
         >
           Review
