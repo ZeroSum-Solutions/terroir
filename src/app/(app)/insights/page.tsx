@@ -3,7 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { BarChart3, ScanLine, History, Activity, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { fetchDrinkWindowAlerts } from "@/lib/drink-window/alerts";
-import { isClosingWindow } from "@/lib/drink-window/status";
+import { DRINK_NOW_THRESHOLD_YEARS } from "@/lib/drink-window/status";
 import { fetchPricingAlerts } from "@/lib/pricing/alerts";
 import { accuracyColor } from "@/lib/scanner/accuracy-color";
 import { timeAgo } from "@/lib/time";
@@ -322,7 +322,8 @@ export default async function DashboardPage({
     { data: scans },
     { data: inventoryItems },
     { data: scanItems },
-    { data: wineStates },
+    { count: rawEightysixedCount },
+    { count: rawDrinkNowCount },
     initPastDrinkWindow,
   ] =
     await Promise.all([
@@ -335,10 +336,23 @@ export default async function DashboardPage({
         .from("inventory_items")
         .select("quantity, unit_cost, invoice_scan_id, invoice_scans!inner(distributor_name)")
         .eq("restaurant_id", rid),
+      // Server-side counts: a .select() read is capped at the PostgREST row
+      // limit, which silently truncates on large cellars.
       supabase
         .from("wines")
-        .select("id, is_eightysixed, drink_window_end")
-        .eq("restaurant_id", rid),
+        .select("id", { count: "exact", head: true })
+        .eq("restaurant_id", rid)
+        .eq("is_eightysixed", true),
+      // Mirrors isClosingWindow(end): end != null && end <= year + threshold.
+      supabase
+        .from("wines")
+        .select("id", { count: "exact", head: true })
+        .eq("restaurant_id", rid)
+        .eq("is_eightysixed", false)
+        .lte(
+          "drink_window_end",
+          new Date().getFullYear() + DRINK_NOW_THRESHOLD_YEARS,
+        ),
       fetchPastDrinkWindow(supabase, rid).catch(function () { return [] as PastDrinkWindowRow[]; }),
     ]);
 
@@ -348,10 +362,8 @@ export default async function DashboardPage({
 
   const inventoryValue = items.reduce(function (s, i) { return s + i.quantity * i.unit_cost; }, 0);
   const totalBottles = items.reduce(function (s, i) { return s + i.quantity; }, 0);
-  const eightysixedCount = (wineStates ?? []).filter((wine) => wine.is_eightysixed).length;
-  const drinkNowCount = (wineStates ?? []).filter(
-    (wine) => !wine.is_eightysixed && isClosingWindow(wine.drink_window_end),
-  ).length;
+  const eightysixedCount = rawEightysixedCount ?? 0;
+  const drinkNowCount = rawDrinkNowCount ?? 0;
   const todayExceptions = buildTodayExceptions(
     drinkWindowAlerts,
     pastDrinkWindowWines,

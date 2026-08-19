@@ -27,11 +27,14 @@ test.describe("@opp-3 insights drill-down", () => {
     const email = process.env.DEV_BYPASS_EMAIL;
     if (!email) throw new Error("DEV_BYPASS_EMAIL not set");
     const admin = adminClient();
-    const { data: users, error: userError } = await admin.auth.admin.listUsers({
-      perPage: 200,
-    });
-    if (userError) throw userError;
-    const user = users.users.find((candidate) => candidate.email === email);
+    let user: { id: string } | undefined;
+    for (let page = 1; !user; page++) {
+      const { data: users, error: userError } =
+        await admin.auth.admin.listUsers({ page, perPage: 200 });
+      if (userError) throw userError;
+      user = users.users.find((candidate) => candidate.email === email);
+      if (users.users.length < 200) break;
+    }
     if (!user) throw new Error(`Dev user ${email} not found`);
     const { data, error } = await admin
       .from("memberships")
