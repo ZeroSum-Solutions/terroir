@@ -27,20 +27,24 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { getAnthropicClient } from "@/lib/ai/anthropic-client";
+import {
+  WINE_ENRICHMENT,
+  WINE_ENRICHMENT_TOKENS_PER_WINE,
+} from "@/lib/ai/models";
 import type { EnrichmentResult } from "./enrich";
 
 /**
- * Pinned to the same model family the scan/extract routes use.
- * Sonnet is the right tier for this — drink-window inference is
- * judgment + general knowledge, not reasoning. Don't pay for Opus.
+ * Model, effort and caps live in the shared profile — see
+ * `@/lib/ai/models` for why enrichment runs a cheaper tier than the
+ * scanner paths and what has to be true before that stays acceptable.
  */
-const MODEL = "claude-sonnet-4-5-20250929";
+const MODEL = WINE_ENRICHMENT.model;
 
 /** Per-wine max tokens for the single-wine function (backwards compat). */
-const MAX_TOKENS_SINGLE = 400;
+const MAX_TOKENS_SINGLE = WINE_ENRICHMENT.maxTokens;
 
 /** Per-wine token budget multiplier for batched calls. */
-const MAX_TOKENS_PER_WINE = 300;
+const MAX_TOKENS_PER_WINE = WINE_ENRICHMENT_TOKENS_PER_WINE;
 
 export type WineForClaude = {
   producer: string;
