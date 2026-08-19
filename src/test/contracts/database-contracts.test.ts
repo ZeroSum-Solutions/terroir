@@ -65,3 +65,56 @@ describe("database security contracts", () => {
     expect(schema).not.toContain('create policy "members can delete background jobs"');
   });
 });
+
+// Wave 0 (top-10 build): F-1 reason codes, F-2/OPP-1 vintage lineage.
+// Spec: docs/evals/top10-evals.yaml (EV-F1.1, EV-F2.1, EV-1.2, EV-1.3).
+describe("wave-0 lineage and reason-code contracts", () => {
+  it("EV-F1.1: reason_codes exist, are seeded on signup, and are backfilled", () => {
+    expect(schema).toContain("create table public.reason_codes");
+    expect(schema).toContain(
+      "category in ('comp', 'spill', 'training', 'spoilage', 'adjustment', 'other')",
+    );
+    // One code namespace per restaurant.
+    expect(schema).toMatch(
+      /create unique index reason_codes_restaurant_code_idx\s+on public\.reason_codes \(restaurant_id, code\)/,
+    );
+    expect(schema).toContain('create policy "members can read reason_codes"');
+    // Seeding: a dedicated function, called from the signup trigger, plus a
+    // one-time backfill for restaurants that existed before this migration.
+    expect(schema).toMatch(
+      /create or replace function public\.seed_reason_codes\(p_restaurant_id uuid\)/,
+    );
+    expect(schema).toContain("perform public.seed_reason_codes(new_restaurant_id);");
+    expect(schema).toContain("-- Backfill: seed reason codes for existing restaurants");
+  });
+
+  it("EV-F2.1: wine_lineages exist with one identity per key, and wines carry lineage_id", () => {
+    expect(schema).toContain("create table public.wine_lineages");
+    // LWIN7-keyed lineages and name-keyed lineages are each unique per restaurant.
+    expect(schema).toMatch(
+      /create unique index wine_lineages_lwin7_idx\s+on public\.wine_lineages \(restaurant_id, lwin7\)\s+where lwin7 is not null/,
+    );
+    expect(schema).toMatch(
+      /create unique index wine_lineages_name_idx\s+on public\.wine_lineages \(restaurant_id, producer_norm, cuvee_norm\)\s+where lwin7 is null/,
+    );
+    expect(schema).toMatch(
+      /alter table public\.wines\s+add column lineage_id uuid references public\.wine_lineages\(id\) on delete set null/,
+    );
+    // Derivation is a trigger so every creation path (cellar add, scan commit,
+    // create-from-lwin) gets a lineage without app-side coordination.
+    expect(schema).toMatch(
+      /create trigger wines_derive_lineage\s+before insert or update of lwin_id, producer, name\s+on public\.wines/,
+    );
+  });
+
+  it("EV-1.3: merge_wines is a role-checked RPC that refuses cross-vintage merges", () => {
+    expect(schema).toMatch(
+      /create or replace function public\.merge_wines\([\s\S]*?security definer[\s\S]*?is_member_with_role\(v_restaurant_id, 'manager'\)/,
+    );
+    // The vintage/format/lineage guards live in the RPC itself — the UI hiding
+    // the button is not the enforcement layer.
+    expect(schema).toContain("cross_vintage_merge");
+    expect(schema).toContain("format_mismatch_merge");
+    expect(schema).toContain("lineage_mismatch_merge");
+  });
+});
