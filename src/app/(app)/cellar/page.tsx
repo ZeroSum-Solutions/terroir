@@ -56,7 +56,7 @@ export default async function CellarPage() {
     supabase
       .from("wines")
       .select(
-        "id, name, producer, vintage, varietal, region, lineage_id, size_ml, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, serving_temp_min, serving_temp_max, serving_temp_label, decant_minutes, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until, tasting_notes, hero_image_url, manual_overrides, colour",
+        "id, name, producer, vintage, varietal, region, country, lineage_id, size_ml, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, serving_temp_min, serving_temp_max, serving_temp_label, decant_minutes, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until, tasting_notes, hero_image_url, manual_overrides, colour",
       )
       .eq("restaurant_id", restaurantId)
       .order("name", { ascending: true }),
@@ -209,6 +209,7 @@ export default async function CellarPage() {
       vintage: w.vintage,
       varietal: w.varietal,
       region: w.region,
+      country: w.country,
       lineage_id: w.lineage_id,
       wine_size_ml: w.size_ml,
       duplicate_wine_ids: suspectIdsByWine.get(w.id) ?? [],

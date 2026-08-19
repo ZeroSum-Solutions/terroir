@@ -1,18 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Search, Settings, LayoutGrid, List as ListIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDrinkWindowStatus, isHolding } from "@/lib/drink-window/status";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
-import { CellarList, type CellarFilter } from "./cellar-list";
+import { CellarList } from "./cellar-list";
 import { WineDetailDrawer } from "./wine-detail-drawer";
 import { ReconcileModal } from "./reconcile-modal";
 import { AutoEightysixModal } from "./auto-eightysix-modal";
 import { CellarGridView, CellarSetup } from "./cellar-grid";
 import { resolveCellarNavigationIntent } from "./cellar-navigation";
+import {
+  parseCellarUrlState,
+  serializeCellarUrlState,
+  type CellarUrlFilter,
+  type CellarUrlState,
+} from "@/lib/cellar-facets/url-state";
 
 type CellarSection = { id: string; name: string };
 
@@ -67,30 +73,32 @@ export function CellarShell({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const mode = searchParams.get("mode");
-  const wineId = searchParams.get("wine");
+  const urlState = useMemo(
+    () => parseCellarUrlState(searchParams),
+    [searchParams],
+  );
+  const urlStateRef = useRef(urlState);
+  useEffect(() => {
+    urlStateRef.current = urlState;
+  }, [urlState]);
+  const replaceUrlState = useCallback(
+    (patch: Partial<CellarUrlState>) => {
+      const next = { ...urlStateRef.current, ...patch };
+      urlStateRef.current = next;
+      const params = serializeCellarUrlState(next);
+      router.replace(`/cellar?${params.toString()}`, { scroll: false });
+    },
+    [router],
+  );
 
   const [initialMode] = useState(() => mode ?? "");
-  const [initialWineId] = useState(() => wineId ?? "");
-
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  useEffect(() => {
-    const id = setTimeout(() => setDebouncedQuery(query), 150);
-    return () => clearTimeout(id);
-  }, [query]);
-
-  const [filter, setFilter] = useState<CellarFilter>(
-    initialMode === "pour" ? "open" : "all",
-  );
   const [view, setView] = useState<"list" | "grid">("list");
-  const [selectedId, setSelectedId] = useState<string | null>(
-    initialWineId && rows.some((r) => r.wine_id === initialWineId)
-      ? initialWineId
-      : null,
-  );
   const selected = useMemo(
-    () => (selectedId ? rows.find((r) => r.wine_id === selectedId) ?? null : null),
-    [rows, selectedId],
+    () =>
+      urlState.wine
+        ? rows.find((row) => row.wine_id === urlState.wine) ?? null
+        : null,
+    [rows, urlState.wine],
   );
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -104,26 +112,20 @@ export function CellarShell({
   useEffect(() => {
     const intent = resolveCellarNavigationIntent(
       mode,
-      wineId,
+      null,
       new Set(rows.map((row) => row.wine_id)),
     );
     if (!intent.shouldConsumeParams) return;
 
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("mode");
-    params.delete("wine");
-    const next = params.toString();
     const frame = requestAnimationFrame(() => {
-      if (intent.filter) setFilter(intent.filter);
-      if (intent.selectedWineId) setSelectedId(intent.selectedWineId);
       if (intent.shouldFocusSearch) setSearchOpen(true);
-      router.replace(next ? `/cellar?${next}` : "/cellar", { scroll: false });
+      replaceUrlState({ filter: intent.filter ?? urlState.filter });
     });
 
     return () => {
       cancelAnimationFrame(frame);
     };
-  }, [mode, wineId, rows, router, searchParams]);
+  }, [mode, replaceUrlState, rows, urlState.filter]);
 
   useEffect(() => {
     function handleSlash(e: KeyboardEvent) {
@@ -169,7 +171,7 @@ export function CellarShell({
     return { openCount, outCount, lowCount, drinkNowCount, holdCount };
   }, [rows]);
 
-  const FILTER_CHIPS: Array<{ id: CellarFilter; label: string; count?: number }> = [
+  const FILTER_CHIPS: Array<{ id: CellarUrlFilter; label: string; count?: number }> = [
     { id: "all", label: "All" },
     { id: "open", label: "Open", count: alerts.openCount },
     { id: "out", label: "86'd", count: alerts.outCount },
@@ -201,8 +203,8 @@ export function CellarShell({
 
         <div className="hidden md:block">
           <SearchInput
-            value={query}
-            onChange={setQuery}
+            value={urlState.q}
+            onChange={(q) => replaceUrlState({ q })}
             inputRef={searchInputRef}
           />
         </div>
@@ -258,7 +260,7 @@ export function CellarShell({
           </span>
           <button
             type="button"
-            onClick={() => setFilter("low")}
+            onClick={() => replaceUrlState({ filter: "low" })}
             className="font-medium underline-offset-2 hover:underline"
           >
             Show
@@ -278,11 +280,11 @@ export function CellarShell({
               key={c.id}
               type="button"
               role="tab"
-              aria-selected={filter === c.id}
-              onClick={() => setFilter(c.id)}
+              aria-selected={urlState.filter === c.id}
+              onClick={() => replaceUrlState({ filter: c.id })}
               className={cn(
                 "inline-flex h-[32px] shrink-0 items-center gap-xs rounded-full border px-md text-[12px] font-medium transition-colors",
-                filter === c.id
+                urlState.filter === c.id
                   ? "border-accent bg-accent text-white"
                   : "border-border bg-white text-ink-muted hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft",
               )}
@@ -292,7 +294,7 @@ export function CellarShell({
                 <span
                   className={cn(
                     "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-xs font-mono text-[10px]",
-                    filter === c.id
+                    urlState.filter === c.id
                       ? "bg-white/25 text-white"
                       : "bg-bg-tertiary text-ink-muted",
                   )}
@@ -321,14 +323,35 @@ export function CellarShell({
       {view === "list" ? (
         <CellarList
           rows={rows}
-          query={debouncedQuery}
-          filter={filter}
+          query={urlState.q}
+          filter={urlState.filter}
           lowStockThreshold={cellarConfig?.lowStockThreshold ?? 3}
-          onSelectWine={(row) => setSelectedId(row.wine_id)}
+          onSelectWine={(row) => replaceUrlState({ wine: row.wine_id })}
           onResetFilters={() => {
-            setFilter("all");
-            setQuery("");
+            replaceUrlState({
+              q: "",
+              filter: "all",
+              producer: null,
+              region: null,
+              country: null,
+              varietal: null,
+              vintageMin: null,
+              vintageMax: null,
+              format: null,
+            });
           }}
+          facets={{
+            producer: urlState.producer,
+            region: urlState.region,
+            country: urlState.country,
+            varietal: urlState.varietal,
+            vintageMin: urlState.vintageMin,
+            vintageMax: urlState.vintageMax,
+            format: urlState.format,
+          }}
+          groupBy={urlState.groupBy}
+          onFacetsChange={replaceUrlState}
+          onGroupByChange={(groupBy) => replaceUrlState({ groupBy })}
           sections={cellarSections}
         />
       ) : cellarConfig ? (
@@ -342,8 +365,8 @@ export function CellarShell({
         <div className="fixed inset-x-0 top-14 z-30 border-b border-border bg-surface px-md py-sm shadow-md md:hidden">
           <div className="flex items-center gap-sm">
             <SearchInput
-              value={query}
-              onChange={setQuery}
+              value={urlState.q}
+              onChange={(q) => replaceUrlState({ q })}
               inputRef={searchInputRef}
               autoFocus
               onEscape={() => setSearchOpen(false)}
@@ -361,11 +384,11 @@ export function CellarShell({
 
       {/* Drawer + modals */}
       <WineDetailDrawer
-        key={selectedId ?? "none"}
+        key={urlState.wine ?? "none"}
         row={selected}
         canManage={canManage}
         isOwner={isOwner}
-        onClose={() => setSelectedId(null)}
+        onClose={() => replaceUrlState({ wine: null })}
         duplicateRows={
           selected
             ? rows.filter((r) => selected.duplicate_wine_ids.includes(r.wine_id))
