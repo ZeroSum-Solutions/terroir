@@ -188,6 +188,21 @@ describe("POST /api/wines/merge", () => {
     expect(res.status).toBe(422);
   });
 
+  it("V3: maps a lost merge race (RPC wine_not_found) to 404, forbidden to 403", async () => {
+    for (const [msg, status] of [
+      ["wine_not_found: both wines must exist in the same restaurant", 404],
+      ["forbidden: manager role required to merge wines", 403],
+    ] as const) {
+      const supabase = makeSupabase(
+        [wine({ id: SOURCE_ID }), wine({ id: TARGET_ID })],
+        { data: null, error: { message: msg } },
+      );
+      authOk(supabase);
+      const res = await POST(makeRequest({ source_id: SOURCE_ID, target_id: TARGET_ID }));
+      expect(res.status).toBe(status);
+    }
+  });
+
   it("propagates auth failures untouched", async () => {
     mockRequireRole.mockResolvedValue(NextResponse.json({ error: "nope" }, { status: 403 }));
     const res = await POST(makeRequest({ source_id: SOURCE_ID, target_id: TARGET_ID }));

@@ -93,9 +93,16 @@ export async function POST(request: NextRequest) {
 
   if (rpcError) {
     // Defense in depth: the RPC re-checks the guards under lock; a race can
-    // surface one here even after a clean preflight.
+    // surface one here even after a clean preflight (verify finding V3:
+    // concurrent A→B and B→A merges race the preflight).
     if (GUARD_CODES.test(rpcError.message)) {
       return Errors.unprocessable("merge_rejected", rpcError.message);
+    }
+    if (rpcError.message.startsWith("wine_not_found")) {
+      return Errors.notFound("Wine");
+    }
+    if (rpcError.message.startsWith("forbidden")) {
+      return Errors.forbidden(rpcError.message);
     }
     console.error("merge_wines rpc failed:", rpcError);
     Sentry.captureException(rpcError, {

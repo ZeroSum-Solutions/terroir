@@ -117,4 +117,18 @@ describe("wave-0 lineage and reason-code contracts", () => {
     expect(schema).toContain("format_mismatch_merge");
     expect(schema).toContain("lineage_mismatch_merge");
   });
+
+  it("wave-0 verify fixes stay in place (0055: V1 upgrade, V2 dedupe, V6 revoke)", () => {
+    // V1 — a name-keyed lineage is upgraded in place when LWIN arrives, so
+    // vintage siblings never fork into two identities.
+    expect(schema).toContain(
+      "upgrade a matching name-keyed lineage in place (sets lwin7)",
+    );
+    // V2 — merge dedupes per-section list rows before repointing.
+    expect(schema).toContain("deduped_wine_list_items");
+    // V6 — seeding is infrastructure, not a client-callable RPC.
+    expect(schema).toMatch(
+      /revoke execute on function public\.seed_reason_codes\(uuid\)\s+from public, anon, authenticated/,
+    );
+  });
 });
