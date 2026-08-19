@@ -118,17 +118,27 @@ describe("wave-0 lineage and reason-code contracts", () => {
     expect(schema).toContain("lineage_mismatch_merge");
   });
 
-  it("wave-0 verify fixes stay in place (0055: V1 upgrade, V2 dedupe, V6 revoke)", () => {
-    // V1 — a name-keyed lineage is upgraded in place when LWIN arrives, so
-    // vintage siblings never fork into two identities.
-    expect(schema).toContain(
-      "upgrade a matching name-keyed lineage in place (sets lwin7)",
+  it("wave-0 verify fixes stay in place (0055/0056)", () => {
+    // V1 — the actual upgrade statement, not its comment: a name-keyed
+    // lineage is claimed in place when LWIN arrives.
+    expect(schema).toMatch(
+      /update public\.wine_lineages\s+set lwin7 = v_lwin7\s+where restaurant_id = new\.restaurant_id\s+and lwin7 is null/,
     );
-    // V2 — merge dedupes per-section list rows before repointing.
-    expect(schema).toContain("deduped_wine_list_items");
+    // V2 — the actual dedupe DELETE before the list repoint.
+    expect(schema).toMatch(
+      /delete from public\.wine_list_items s\s+where s\.wine_id = p_source_wine_id\s+and exists/,
+    );
+    expect(schema).toContain("'deduped_wine_list_items',   v_deduped_list_items");
     // V6 — seeding is infrastructure, not a client-callable RPC.
     expect(schema).toMatch(
       /revoke execute on function public\.seed_reason_codes\(uuid\)\s+from public, anon, authenticated/,
     );
+    // S3 — lineage_id is derivation-owned: the trigger watches it, so a
+    // client-supplied value is always recomputed.
+    expect(schema).toMatch(
+      /before insert or update of lwin_id, producer, name, lineage_id\s+on public\.wines/,
+    );
+    // S1 — per-identity advisory lock serializes cross-path derivation.
+    expect(schema).toContain("pg_advisory_xact_lock");
   });
 });

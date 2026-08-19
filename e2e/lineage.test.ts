@@ -153,7 +153,13 @@ test.describe("@opp-1 vintage lineage", () => {
     ).toBeVisible();
 
     // Open the keeper 2019's drawer → merge panel lists the twin.
-    await block.getByText(CUVEE, { exact: true }).first().click();
+    // (Click inside the children container — the lineage HEADER also carries
+    // the exact cuvée text, and clicking it would collapse the block.)
+    await block
+      .locator("[data-lineage-children]")
+      .getByText(CUVEE, { exact: true })
+      .first()
+      .click();
     const mergePanel = page.locator("[data-merge-duplicates]");
     await expect(mergePanel).toBeVisible();
     await mergePanel.getByRole("button", { name: /Merge .*dup/ }).click();
