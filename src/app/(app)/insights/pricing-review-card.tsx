@@ -73,31 +73,31 @@ export function PricingReviewCard({
   return (
     <article
       className={cn(
-        "rounded-md border border-border bg-white p-md md:p-lg",
-        "border-l-[3px] border-l-warning",
+        "rounded-card border border-hairline bg-white p-md md:p-lg",
+        "border-l-[3px] border-l-primary",
       )}
     >
       <h3 className="font-serif text-[18px] text-ink md:text-[20px]">
         {firstName !== "there" ? `Hey ${firstName} — ` : ""}
         {alerts.length} wine{alerts.length === 1 ? "" : "s"} off your pricing targets
       </h3>
-      <p className="mt-xs text-[12px] text-ink-muted">
+      <p className="mt-xs text-[12px] text-grey">
         Worth a review when ready
         {bottleCount > 0 && (
           <>
             {" "}
-            · <span className="font-mono">{bottleCount}</span> on bottle
+            · <span className="tabular">{bottleCount}</span> on bottle
           </>
         )}
         {glassCount > 0 && (
           <>
             {" "}
-            · <span className="font-mono">{glassCount}</span> on glass
+            · <span className="tabular">{glassCount}</span> on glass
           </>
         )}
       </p>
 
-      <ul className="mt-md flex flex-col divide-y divide-border">
+      <ul className="mt-md flex flex-col divide-y divide-hairline">
         {alerts.slice(0, 5).map((alert) => (
           <PricingReviewRow
             key={alert.wine_list_item_id}
@@ -109,18 +109,18 @@ export function PricingReviewCard({
       </ul>
 
       {alerts.length > 5 && (
-        <p className="mt-sm text-[12px] text-ink-muted">
+        <p className="mt-sm text-[12px] text-grey">
           + {alerts.length - 5} more — view full pricing review →
         </p>
       )}
 
       {errorMsg && (
-        <p role="alert" className="mt-sm text-[12px] text-error">
+        <p role="alert" className="mt-sm text-[12px] text-primary">
           {errorMsg}
         </p>
       )}
 
-      <p className="mt-md border-t border-border pt-md text-[11px] italic text-ink-tertiary">
+      <p className="mt-md border-t border-hairline pt-md text-[11px] italic text-grey">
         Heuristic — based on your house targets + category bands. Velocity-driven
         recommendations available after 12 weeks of pour data.
       </p>
@@ -163,25 +163,25 @@ function PricingReviewRow({
       className="flex items-center justify-between gap-md py-sm"
     >
       <div className="min-w-0 flex-1">
-        <span className="font-serif text-[14px] text-ink">
+        <span className="font-serif text-[17px] font-medium text-ink">
           {alert.producer}, {alert.name}
         </span>
         {alert.vintage && (
-          <span className="ml-xs font-mono text-[11px] text-ink-tertiary">
+          <span className="ml-xs text-[11px] font-light text-grey">
             {alert.vintage}
           </span>
         )}
-        <span className="block text-[11px] text-ink-muted md:inline md:ml-xs">
+        <span className="block text-[11px] text-grey md:inline md:ml-xs">
           {reasons.length > 0 && `· ${reasons.join(" · ")}`}
         </span>
       </div>
       <div className="flex items-center gap-xs">
-        <span className="hidden font-mono text-[12px] text-ink-tertiary md:inline">
+        <span className="hidden tabular text-[12px] text-grey md:inline">
           {ratioDisplay}
         </span>
         <Link
           href={metricHref("wine", alert.wine_id)}
-          className="inline-flex h-[30px] items-center gap-2xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-bg-secondary"
+          className="inline-flex h-[30px] items-center gap-2xs rounded-pill border border-ink/25 bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface"
         >
           Review
           <ChevronRight className="h-3 w-3" strokeWidth={2} aria-hidden />
@@ -191,7 +191,7 @@ function PricingReviewRow({
           onClick={onSnooze}
           disabled={busy}
           aria-label="Snooze 30 days"
-          className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-sm text-ink-muted hover:bg-bg-secondary disabled:opacity-60"
+          className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-pill text-grey hover:bg-bridge-surface disabled:opacity-60"
         >
           <X className="h-3 w-3" strokeWidth={2} aria-hidden />
         </button>

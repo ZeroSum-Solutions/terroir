@@ -213,7 +213,7 @@ export function TeamActions({
                 setInviteEmail("");
                 setInviteError(null);
               }}
-              className="flex h-[34px] items-center gap-xs rounded-sm bg-accent px-md text-[13px] font-medium text-white hover:bg-accent-hover"
+              className="flex h-[34px] items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
             >
               <Link2 className="h-3.5 w-3.5" strokeWidth={2} />
               Create invite link
@@ -224,31 +224,31 @@ export function TeamActions({
         {memberActionError && (
           <div
             role="alert"
-            className="mb-sm flex items-start justify-between gap-sm rounded-sm border border-danger/30 bg-danger-soft px-sm py-xs text-[13px] text-danger"
+            className="mb-sm flex items-start justify-between gap-sm rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"
           >
             <span>{memberActionError}</span>
             <button
               type="button"
               onClick={() => setMemberActionError(null)}
               aria-label="Dismiss error"
-              className="-mr-2xs flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-danger/70 hover:bg-danger/10 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+              className="-mr-2xs flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-primary/70 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             </button>
           </div>
         )}
 
-        <div className="rounded-md border border-border bg-surface">
+        <div className="overflow-hidden rounded-card border border-hairline bg-canvas">
           <table className="w-full text-[13px]">
             <thead>
-              <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-                <th className="px-md py-sm text-left font-semibold">User</th>
-                <th className="px-md py-sm text-left font-semibold">Role</th>
-                <th className="px-md py-sm text-right font-semibold">
+              <tr className="bg-bridge-surface text-[11px] font-medium uppercase tracking-[0.18em] text-grey">
+                <th className="px-md py-sm text-left font-medium">User</th>
+                <th className="px-md py-sm text-left font-medium">Role</th>
+                <th className="px-md py-sm text-right font-medium">
                   Joined
                 </th>
                 {isOwner && (
-                  <th className="w-[48px] px-sm py-sm font-semibold" />
+                  <th className="w-[48px] px-sm py-sm font-medium" />
                 )}
               </tr>
             </thead>
@@ -256,7 +256,7 @@ export function TeamActions({
               {members.map((member) => (
                 <tr
                   key={member.id}
-                  className="border-t border-dashed border-border"
+                  className="border-t border-hairline hover:bg-bridge-surface"
                 >
                   <td className="px-md py-sm font-medium text-ink">
                     {member.user_id === currentUserId
@@ -268,19 +268,19 @@ export function TeamActions({
                       <select
                         value={member.role}
                         onChange={(e) => changeRole(member.id, e.target.value)}
-                        className="rounded-sm border border-border bg-white px-sm py-xs text-[13px] text-ink"
+                        className="rounded-pill border border-hairline bg-white px-sm py-xs text-[13px] text-ink"
                       >
                         <option value="owner">Owner</option>
                         <option value="manager">Manager</option>
                         <option value="staff">Staff</option>
                       </select>
                     ) : (
-                      <span className="inline-flex items-center rounded-pill bg-surface-sunken px-sm py-xs text-[11px] font-medium capitalize text-ink-muted">
+                      <span className="inline-flex items-center rounded-pill bg-beige px-sm py-xs text-[11px] font-medium capitalize text-ink-soft">
                         {member.role}
                       </span>
                     )}
                   </td>
-                  <td className="px-md py-sm text-right font-mono text-[12px] text-ink-subtle">
+                  <td className="px-md py-sm text-right font-mono text-[12px] text-grey">
                     <TimeAgo iso={member.created_at} />
                   </td>
                   {isOwner && (
@@ -294,7 +294,7 @@ export function TeamActions({
                               removeMember(member.id);
                             }
                           }}
-                          className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-subtle hover:bg-surface-muted hover:text-danger"
+                          className="flex h-8 w-8 items-center justify-center rounded-md text-grey hover:bg-bridge-surface hover:text-primary"
                         >
                           <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
                         </button>
@@ -311,23 +311,23 @@ export function TeamActions({
       {/* Pending invitations */}
       {invitations.length > 0 && (
         <div className="mb-xl">
-          <h2 className="mb-md text-[15px] font-semibold text-ink-muted">
+          <h2 className="mb-md text-[15px] font-semibold text-grey">
             Pending invitations ({invitations.length})
           </h2>
-          <div className="rounded-md border border-border bg-surface">
+          <div className="overflow-hidden rounded-card border border-hairline bg-canvas">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-                  <th className="px-md py-sm text-left font-semibold">Email</th>
-                  <th className="px-md py-sm text-left font-semibold">Role</th>
-                  <th className="px-md py-sm text-left font-semibold">
+                <tr className="bg-bridge-surface text-[11px] font-medium uppercase tracking-[0.18em] text-grey">
+                  <th className="px-md py-sm text-left font-medium">Email</th>
+                  <th className="px-md py-sm text-left font-medium">Role</th>
+                  <th className="px-md py-sm text-left font-medium">
                     Created
                   </th>
-                  <th className="px-md py-sm text-right font-semibold">
+                  <th className="px-md py-sm text-right font-medium">
                     Expires
                   </th>
                   {isOwner && (
-                    <th className="w-[200px] px-sm py-sm font-semibold" />
+                    <th className="w-[200px] px-sm py-sm font-medium" />
                   )}
                 </tr>
               </thead>
@@ -338,11 +338,11 @@ export function TeamActions({
                   return (
                     <tr
                       key={inv.id}
-                      className={`border-t border-dashed border-border ${expiry.status === "expired" ? "opacity-60" : ""}`}
+                      className={`border-t border-hairline hover:bg-bridge-surface ${expiry.status === "expired" ? "opacity-60" : ""}`}
                     >
                       <td className="px-md py-sm text-ink">
                         {inv.email ?? (
-                          <span className="text-ink-subtle italic">
+                          <span className="text-grey italic">
                             (no email)
                           </span>
                         )}
@@ -350,7 +350,7 @@ export function TeamActions({
                       <td className="px-md py-sm capitalize text-ink">
                         {inv.role}
                       </td>
-                      <td className="px-md py-sm font-mono text-[12px] text-ink-muted">
+                      <td className="px-md py-sm font-mono text-[12px] text-grey">
                         <TimeAgo iso={inv.created_at} />
                       </td>
                       <td
@@ -361,20 +361,20 @@ export function TeamActions({
                         }).format(new Date(inv.expires_at))}
                       >
                         {expiry.status === "expired" ? (
-                          <span className="inline-flex items-center rounded-pill bg-danger-soft px-sm py-xs text-[11px] font-semibold text-danger">
+                          <span className="inline-flex items-center rounded-pill bg-blush-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-primary">
                             Expired
                           </span>
                         ) : expiry.status === "soon" ? (
                           <span className="inline-flex items-center gap-xs">
-                            <span className="rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
+                            <span className="rounded-pill bg-amber-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-amber">
                               Expires soon
                             </span>
-                            <span className="font-mono text-ink-muted">
+                            <span className="font-mono text-grey">
                               {expiry.label}
                             </span>
                           </span>
                         ) : (
-                          <span className="font-mono text-ink-subtle">
+                          <span className="font-mono text-grey">
                             {expiry.label}
                           </span>
                         )}
@@ -386,7 +386,7 @@ export function TeamActions({
                               type="button"
                               onClick={() => copyInvitationLink(inv)}
                               aria-label={`Copy invite link for ${inv.email ?? "invitation"}`}
-                              className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                              className="inline-flex h-[28px] items-center gap-xs rounded-pill border border-beige-deep bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash"
                             >
                               {justCopied ? (
                                 <Check className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -399,7 +399,7 @@ export function TeamActions({
                               type="button"
                               onClick={() => resendInvitation(inv.id)}
                               aria-label={`Resend invitation for ${inv.email ?? "invitation"}`}
-                              className="inline-flex h-[28px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                              className="inline-flex h-[28px] items-center gap-xs rounded-pill border border-beige-deep bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash"
                             >
                               <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                               Resend
@@ -416,7 +416,7 @@ export function TeamActions({
                                 }
                               }}
                               aria-label={`Revoke invitation for ${inv.email ?? "invitation"}`}
-                              className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-sm border border-border-strong bg-white text-ink-subtle hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+                              className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-pill border border-beige-deep bg-white text-grey hover:bg-blush-wash hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                             >
                               <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                             </button>
@@ -502,7 +502,7 @@ function InviteModal({
     >
       <div
         ref={trapRef}
-        className="mx-md w-full max-w-[420px] rounded-md border border-border bg-surface p-lg shadow-lg"
+        className="glass mx-md w-full max-w-[420px] rounded-lg p-lg"
       >
         <h3
           id="invite-modal-title"
@@ -510,7 +510,7 @@ function InviteModal({
         >
           Invite team member
         </h3>
-        <p className="mt-xs text-[13px] text-ink-muted">
+        <p className="mt-xs text-[13px] text-grey">
           Create a shareable link. Anyone with the link can join your
           restaurant as the selected role.
         </p>
@@ -520,7 +520,7 @@ function InviteModal({
             <div className="mt-lg">
               <label
                 htmlFor="invite-email"
-                className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle"
+                className="block text-caption font-medium uppercase text-grey"
               >
                 Email
               </label>
@@ -539,9 +539,9 @@ function InviteModal({
                     onCreate();
                   }
                 }}
-                className="mt-xs w-full rounded-sm border border-border bg-white px-md py-sm text-[14px] text-ink"
+                className="mt-xs w-full rounded-pill border border-hairline bg-white px-md py-sm text-[14px] text-ink"
               />
-              <p className="mt-xs text-[12px] text-ink-subtle">
+              <p className="mt-xs text-[12px] text-grey">
                 The link will only work for this address.
               </p>
             </div>
@@ -549,7 +549,7 @@ function InviteModal({
             <div className="mt-md">
               <label
                 htmlFor="invite-role"
-                className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle"
+                className="block text-caption font-medium uppercase text-grey"
               >
                 Role
               </label>
@@ -559,12 +559,12 @@ function InviteModal({
                 onChange={(e) =>
                   setInviteRole(e.target.value as "manager" | "staff")
                 }
-                className="mt-xs w-full rounded-sm border border-border bg-white px-md py-sm text-[14px] text-ink"
+                className="mt-xs w-full rounded-pill border border-hairline bg-white px-md py-sm text-[14px] text-ink"
               >
                 <option value="manager">Manager</option>
                 <option value="staff">Staff</option>
               </select>
-              <p className="mt-xs text-[12px] text-ink-subtle">
+              <p className="mt-xs text-[12px] text-grey">
                 {inviteRole === "manager"
                   ? "Can scan, create wine lists, and publish."
                   : "Can scan invoices only."}
@@ -574,7 +574,7 @@ function InviteModal({
             {error && (
               <p
                 role="alert"
-                className="mt-md rounded-sm border border-danger/30 bg-danger-soft px-sm py-xs text-[13px] text-danger"
+                className="mt-md rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"
               >
                 {error}
               </p>
@@ -584,7 +584,7 @@ function InviteModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-[38px] items-center rounded-sm border border-border-strong bg-white px-md text-[14px] font-medium text-ink hover:bg-surface-muted"
+                className="flex h-[38px] items-center rounded-pill border border-beige-deep bg-white px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
               >
                 Cancel
               </button>
@@ -592,7 +592,7 @@ function InviteModal({
                 type="button"
                 onClick={onCreate}
                 disabled={creating || inviteEmail.trim().length === 0}
-                className="flex h-[38px] items-center gap-xs rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+                className="flex h-[38px] items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
               >
                 {creating && (
                   <Loader2
@@ -606,7 +606,7 @@ function InviteModal({
           </>
         ) : (
           <>
-            <div className="mt-lg rounded-sm border border-border bg-surface-muted p-md">
+            <div className="mt-lg rounded-md border border-hairline bg-bridge-surface p-md">
               <p className="break-all font-mono text-[12px] text-ink">
                 {inviteUrl}
               </p>
@@ -615,14 +615,14 @@ function InviteModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-[38px] items-center rounded-sm border border-border-strong bg-white px-md text-[14px] font-medium text-ink hover:bg-surface-muted"
+                className="flex h-[38px] items-center rounded-pill border border-beige-deep bg-white px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
               >
                 Done
               </button>
               <button
                 type="button"
                 onClick={onCopy}
-                className="flex h-[38px] items-center gap-xs rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
+                className="flex h-[38px] items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
               >
                 {copied ? (
                   <Check className="h-4 w-4" strokeWidth={2} />

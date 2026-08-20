@@ -20,10 +20,10 @@ export function TemplatePicker({ current, onChange, disabled }: TemplatePickerPr
           onClick={() => onChange(t)}
           disabled={disabled}
           className={cn(
-            "flex items-center justify-between rounded-sm px-sm py-xs text-[14px] transition-colors disabled:pointer-events-none",
+            "flex items-center justify-between rounded-pill px-sm py-xs text-[14px] transition-colors disabled:pointer-events-none",
             current === t
-              ? "bg-surface-muted font-medium text-ink shadow-sm"
-              : "text-ink-muted hover:bg-surface-muted hover:text-ink",
+              ? "bg-bridge-surface font-medium text-ink"
+              : "text-ink-muted hover:bg-bridge-surface hover:text-ink",
           )}
         >
           <span
@@ -37,7 +37,7 @@ export function TemplatePicker({ current, onChange, disabled }: TemplatePickerPr
           </span>
           {current === t && (
             <Check
-              className="h-3.5 w-3.5 text-accent"
+              className="h-3.5 w-3.5 text-primary"
               strokeWidth={2.5}
             />
           )}

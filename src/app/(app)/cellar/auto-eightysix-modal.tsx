@@ -71,16 +71,16 @@ export function AutoEightysixModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-md border-t border-x border-border bg-surface shadow-lg md:max-h-[80vh] md:max-w-[560px] md:rounded-md md:border">
-        <header className="flex shrink-0 items-center justify-between border-b border-border px-md py-md md:px-lg">
-          <h2 id={headingId} className="font-serif text-[18px] text-ink">
+      <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-lg border-t border-x border-hairline bg-canvas md:max-h-[80vh] md:max-w-[560px] md:rounded-card md:border">
+        <header className="flex shrink-0 items-center justify-between border-b border-hairline px-md py-md md:px-lg">
+          <h2 id={headingId} className="font-serif text-[18px] font-medium text-ink">
             Cellar settings
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close settings"
-            className="flex h-9 w-9 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted"
+            className="flex h-9 w-9 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
@@ -104,7 +104,7 @@ export function AutoEightysixModal({
           <Link
             href="/cellar/config"
             onClick={onClose}
-            className="flex items-center justify-center gap-xs rounded-sm border border-border bg-white py-sm text-[14px] font-medium text-ink transition-colors hover:bg-surface-muted"
+            className="flex items-center justify-center gap-xs rounded-pill border border-ink/25 bg-white py-sm text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface"
           >
             <Layers className="h-4 w-4" strokeWidth={2} aria-hidden />
             Manage cellar sections

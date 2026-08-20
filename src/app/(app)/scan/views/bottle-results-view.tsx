@@ -62,14 +62,14 @@ export function BottleResultsView({
         <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
           Wine identified
         </h1>
-        <p className="mt-xs text-[14px] text-ink-muted md:text-[15px]">
+        <p className="mt-xs text-[14px] text-grey md:text-[15px]">
           Confirm the details and add quantity and cost.
         </p>
       </header>
 
       {lowConfidence && (
-        <div className="mb-md flex items-start gap-sm rounded-md border border-warning/30 bg-warning-soft/60 px-md py-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={2} />
+        <div className="mb-md flex items-start gap-sm rounded-card border border-primary/20 bg-blush-wash/60 px-md py-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-primary" strokeWidth={2} />
           <div className="text-[13px] text-ink">
             <span className="font-medium">Low confidence ({Math.round(result.confidence * 100)}%).</span>{" "}
             The label may have been hard to read. Please review all fields carefully.
@@ -77,18 +77,18 @@ export function BottleResultsView({
         </div>
       )}
 
-      <div className="rounded-md border border-border bg-white p-md md:p-lg">
+      <div className="rounded-card border border-hairline bg-white p-md md:p-lg">
         {/* Confidence badge */}
         <div className="mb-md flex items-center justify-between">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+          <span className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
             From label
           </span>
-          <span className={`rounded-pill px-sm py-2xs font-mono text-[12px] font-medium ${
+          <span className={`rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide ${
             result.confidence >= 0.9
-              ? "bg-success-soft text-success"
+              ? "bg-sage-wash text-sage-ink"
               : result.confidence >= 0.75
-                ? "bg-surface-muted text-ink-muted"
-                : "bg-warning-soft text-warning"
+                ? "bg-powder-wash text-powder-ink"
+                : "bg-blush-wash text-primary"
           }`}>
             {Math.round(result.confidence * 100)}%
           </span>
@@ -97,14 +97,14 @@ export function BottleResultsView({
         {/* Editable fields */}
         <div className="flex flex-col gap-md">
           <div>
-            <label className="mb-xs block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <label className="mb-xs block text-caption font-medium uppercase tracking-[0.18em] text-grey">
               Wine name
             </label>
-            <TextInput value={name} onCommit={setName} label="Wine name" />
+            <TextInput value={name} onCommit={setName} label="Wine name" className="font-serif text-[17px] font-medium" />
           </div>
 
           <div>
-            <label className="mb-xs block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <label className="mb-xs block text-caption font-medium uppercase tracking-[0.18em] text-grey">
               Producer
             </label>
             <TextInput value={producer} onCommit={setProducer} label="Producer" />
@@ -112,19 +112,19 @@ export function BottleResultsView({
 
           <div className="grid grid-cols-2 gap-sm md:grid-cols-3">
             <div>
-              <label className="mb-xs block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              <label className="mb-xs block text-caption font-medium uppercase tracking-[0.18em] text-grey">
                 Vintage
               </label>
               <VintageInput value={vintage} onCommit={setVintage} />
             </div>
             <div>
-              <label className="mb-xs block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              <label className="mb-xs block text-caption font-medium uppercase tracking-[0.18em] text-grey">
                 Varietal
               </label>
               <TextInput value={varietal} onCommit={setVarietal} label="Varietal" />
             </div>
             <div className="col-span-2 md:col-span-1">
-              <label className="mb-xs block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              <label className="mb-xs block text-caption font-medium uppercase tracking-[0.18em] text-grey">
                 Region
               </label>
               <TextInput value={region} onCommit={setRegion} label="Region" />
@@ -132,28 +132,28 @@ export function BottleResultsView({
           </div>
 
           {result.notes && (
-            <div className="rounded bg-surface-muted px-md py-sm text-[13px] text-ink-muted">
+            <div className="rounded-lg bg-bridge-surface px-md py-sm text-[13px] text-grey">
               {result.notes}
             </div>
           )}
         </div>
 
         {/* Separator */}
-        <div className="my-lg border-t border-dashed border-border" />
+        <div className="my-lg border-t border-dashed border-hairline" />
 
         {/* User-provided fields */}
-        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+        <div className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
           You provide
         </div>
         <div className="mt-md grid grid-cols-2 gap-md">
           <div>
-            <label className="mb-xs block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <label className="mb-xs block text-caption font-medium uppercase tracking-[0.18em] text-grey">
               Quantity
             </label>
             <QtyStepper value={qty} onChange={setQty} />
           </div>
           <div>
-            <label className="mb-xs block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <label className="mb-xs block text-caption font-medium uppercase tracking-[0.18em] text-grey">
               Unit cost
             </label>
             <MoneyInput value={unitCost} onCommit={setUnitCost} />
@@ -166,7 +166,7 @@ export function BottleResultsView({
         <button
           type="button"
           onClick={onScanAnother}
-          className="flex h-12 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted md:h-[38px]"
+          className="flex h-12 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface md:h-[38px]"
         >
           <RotateCcw className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           Scan another
@@ -175,7 +175,7 @@ export function BottleResultsView({
           type="button"
           onClick={handleSave}
           disabled={isSaving || !name.trim() || !producer.trim()}
-          className="flex h-12 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-50 md:h-[38px]"
+          className="flex h-12 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-50 md:h-[38px]"
         >
           {isSaving ? (
             <>Saving...</>

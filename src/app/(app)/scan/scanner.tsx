@@ -542,9 +542,9 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         />
       )}
       {toast && (
-        <div role="alert" aria-live="assertive" className="fixed inset-x-md bottom-[88px] z-30 mx-auto max-w-[420px] rounded-md bg-surface-inverse px-md py-sm text-[14px] text-white shadow-lg md:bottom-lg">
+        <div role="alert" aria-live="assertive" className="glass fixed inset-x-md bottom-[88px] z-30 mx-auto max-w-[420px] rounded-card px-md py-sm text-[14px] text-ink md:bottom-lg">
           <div className="flex items-center gap-sm">
-            <Check className="h-4 w-4 text-success" strokeWidth={2.25} aria-hidden="true" />
+            <Check className="h-4 w-4 text-sage-ink" strokeWidth={2.25} aria-hidden="true" />
             {toast}
           </div>
         </div>

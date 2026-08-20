@@ -64,8 +64,8 @@ export default async function BinsPage() {
   return (
     <section>
       <header className="mb-lg md:mb-xl">
-        <h1 className="font-serif text-[28px] text-ink">Bins</h1>
-        <p className="mt-xs text-[15px] text-ink-muted">{restaurantName}</p>
+        <h1 className="font-serif text-heading-sm text-ink">Bins</h1>
+        <p className="mt-xs text-[15px] text-grey">{restaurantName}</p>
       </header>
       <BinManager
         bins={viewModels}

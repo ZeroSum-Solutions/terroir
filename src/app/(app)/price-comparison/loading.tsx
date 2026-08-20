@@ -7,7 +7,7 @@ export default function PriceComparisonLoading() {
         <Skeleton className="h-[28px] w-44 mb-xs" />
         <Skeleton className="h-[15px] w-56" />
       </header>
-      <div className="flex flex-col divide-y divide-border rounded-md border border-border bg-white">
+      <div className="flex flex-col divide-y divide-hairline rounded-card border border-hairline bg-white">
         {Array.from({ length: 8 }, (_, i) => (
           <div key={i} className="flex items-center justify-between px-md py-md">
             <div className="space-y-xs">

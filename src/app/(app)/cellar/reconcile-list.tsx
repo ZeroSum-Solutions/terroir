@@ -65,7 +65,7 @@ export function ReconcileList({
 
   if (initialItems.length === 0) {
     return (
-      <div className="rounded-md border border-border bg-white px-md py-lg text-center text-[13px] text-ink-muted">
+      <div className="rounded-card border border-hairline bg-white px-md py-lg text-center text-[13px] text-grey">
         No open bottles to reconcile. Open one by pouring a glass.
       </div>
     );
@@ -76,7 +76,7 @@ export function ReconcileList({
       {error && (
         <div
           role="alert"
-          className="mb-md rounded-sm border border-danger/30 bg-danger-soft px-md py-sm text-[13px] text-danger"
+          className="mb-md rounded-md border border-primary/30 bg-blush-wash px-md py-sm text-[13px] text-primary"
         >
           {error}
         </div>
@@ -96,16 +96,16 @@ export function ReconcileList({
         ))}
       </ul>
 
-      <div className="fixed bottom-[72px] left-0 right-0 z-30 border-t border-border bg-white px-lg py-sm md:static md:mt-lg md:border-0 md:px-0 md:py-0">
+      <div className="fixed bottom-[72px] left-0 right-0 z-30 border-t border-hairline bg-white px-lg py-sm md:static md:mt-lg md:border-0 md:px-0 md:py-0">
         <button
           type="button"
           onClick={onSaveAll}
           disabled={changedCount === 0 || saving}
           className={cn(
-            "h-[48px] w-full rounded-sm font-medium transition-colors",
+            "h-[48px] w-full rounded-pill font-medium transition-colors",
             changedCount > 0 && !saving
-              ? "bg-accent text-white hover:bg-accent-hover"
-              : "bg-surface-muted text-ink-subtle",
+              ? "bg-primary text-white hover:bg-primary-hover"
+              : "bg-bridge-surface text-grey",
           )}
         >
           {saving
@@ -147,25 +147,25 @@ function ReconcileRow({
 
   return (
     <li
-      className={`rounded-md border p-md ${
+      className={`rounded-card border p-md ${
         isVarianceFlagged
-          ? "border-warning/50 bg-warning-soft/20"
-          : "border-border bg-white"
+          ? "border-primary/40 bg-blush-wash"
+          : "border-hairline bg-white"
       }`}
     >
       <div className="mb-sm">
         <div className="flex items-start justify-between gap-sm">
           <div className="min-w-0">
-            <div className="font-serif text-[15px] text-ink leading-snug">
+            <div className="font-serif text-[17px] font-medium text-ink leading-snug">
               {item.producer} {item.name}
               {item.vintage !== null && (
-                <span className="ml-xs font-mono text-[12px] text-ink-muted">
+                <span className="ml-xs font-sans text-[12px] font-light text-grey">
                   {item.vintage}
                 </span>
               )}
             </div>
-            <div className="mt-2xs flex flex-wrap items-center gap-xs text-[12px] text-ink-muted">
-              <span className="rounded-pill bg-surface-muted px-sm py-2xs font-mono">
+            <div className="mt-2xs flex flex-wrap items-center gap-xs text-[12px] text-grey">
+              <span className="rounded-pill bg-beige px-sm py-2xs font-mono">
                 {formatBottleSize(item.size_ml)}
               </span>
               {item.opened_at && (
@@ -178,13 +178,13 @@ function ReconcileRow({
         </div>
       </div>
 
-      <div className="mb-sm rounded-sm bg-surface-muted px-sm py-sm">
+      <div className="mb-sm rounded-md bg-bridge-surface px-sm py-sm">
         <div className="flex flex-wrap items-baseline gap-sm">
-          <span className="text-[12px] text-ink-muted">Tracked:</span>
+          <span className="text-[12px] text-grey">Tracked:</span>
           <span className="font-mono text-[15px] font-semibold text-ink tabular-nums">
             {trackedOz.toFixed(1)} oz
           </span>
-          <span className="text-[12px] text-ink-subtle tabular-nums">
+          <span className="text-[12px] text-grey tabular-nums">
             ({item.open_remaining_ml} ml ~{glassesLeft} glass
             {glassesLeft === 1 ? "" : "es"})
           </span>
@@ -193,7 +193,7 @@ function ReconcileRow({
 
       <div className="mb-sm">
         <div className="flex flex-wrap items-center gap-sm">
-          <label className="flex items-center gap-xs text-[13px] text-ink-muted">
+          <label className="flex items-center gap-xs text-[13px] text-grey">
             <span>Actual:</span>
             <input
               type="number"
@@ -218,20 +218,20 @@ function ReconcileRow({
                   note: pending?.note,
                 });
               }}
-              className="h-[40px] w-[96px] rounded-sm border border-border bg-white px-sm text-[14px] font-mono tabular-nums outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
+              className="h-[40px] w-[96px] rounded-pill border border-hairline bg-white px-sm text-[14px] font-mono tabular-nums outline-none focus:border-primary focus:ring-2 focus:ring-blush-wash"
               aria-label="Actual remaining volume in ml"
             />
           </label>
-          <span className="text-[13px] text-ink-subtle tabular-nums">
+          <span className="text-[13px] text-grey tabular-nums">
             = {currentOz.toFixed(1)} oz
           </span>
         </div>
         {hasVariance && (
           <div
-            className={`mt-xs inline-flex items-center gap-xs rounded-pill px-sm py-2xs text-[12px] font-semibold ${
+            className={`mt-xs inline-flex items-center gap-xs rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide ${
               Math.abs(varianceOz) > varianceThresholdOz
-                ? "bg-warning-soft text-warning"
-                : "bg-surface-muted text-ink-subtle"
+                ? "bg-primary text-white"
+                : "bg-bridge-surface text-grey"
             }`}
           >
             {varianceOz > 0 ? "↑" : varianceOz < 0 ? "↓" : "="}{" "}
@@ -256,10 +256,10 @@ function ReconcileRow({
                 })
               }
               className={cn(
-                "h-[44px] rounded-sm border text-[12px] font-medium transition-colors",
+                "h-[44px] rounded-pill border text-[12px] font-medium transition-colors",
                 isActive
-                  ? "border-accent bg-accent text-white"
-                  : "border-border bg-white text-ink hover:bg-surface-muted",
+                  ? "border-primary bg-primary text-white"
+                  : "border-hairline bg-white text-ink hover:bg-bridge-surface",
               )}
             >
               {f.label}
@@ -270,7 +270,7 @@ function ReconcileRow({
 
       <div className="flex flex-wrap items-center gap-sm">
         <label className="flex w-full items-center gap-xs sm:w-auto sm:flex-1">
-          <span className="text-[12px] text-ink-muted whitespace-nowrap">
+          <span className="text-[12px] text-grey whitespace-nowrap">
             Note:
           </span>
           <input
@@ -284,7 +284,7 @@ function ReconcileRow({
               })
             }
             placeholder="spill, miscount, etc."
-            className="h-[32px] flex-1 rounded-sm border border-border bg-white px-sm text-[13px] outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
+            className="h-[32px] flex-1 rounded-pill border border-hairline bg-white px-sm text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-blush-wash"
           />
         </label>
       </div>

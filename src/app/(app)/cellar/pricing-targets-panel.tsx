@@ -100,16 +100,16 @@ export function PricingTargetsPanel({
   return (
     <section
       aria-labelledby="pricing-targets-heading"
-      className="rounded-md border border-border bg-white p-md md:p-lg"
+      className="rounded-lg border border-hairline bg-white p-md md:p-lg"
     >
       <div className="mb-md">
         <h2
           id="pricing-targets-heading"
-          className="font-serif text-[16px] text-ink"
+          className="font-serif text-[16px] font-medium text-ink"
         >
           House pricing targets
         </h2>
-        <p className="mt-xs text-[13px] text-ink-muted">
+        <p className="mt-xs text-[13px] text-grey">
           Drives every pricing recommendation in the app. Each wine can
           still override these in the wine-detail drawer (allocation wines
           like Krug typically use a lower markup than the house default).
@@ -118,7 +118,7 @@ export function PricingTargetsPanel({
 
       <div className="grid grid-cols-1 gap-md md:grid-cols-2">
         <label className="flex flex-col gap-xs">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-tertiary">
+          <span className="text-caption font-medium uppercase text-grey">
             Glass pour cost target
           </span>
           <div className="flex items-center gap-xs">
@@ -134,17 +134,17 @@ export function PricingTargetsPanel({
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               }}
               aria-label="Glass pour cost percentage target"
-              className="h-[34px] w-[80px] rounded-sm border border-border bg-white px-sm text-right font-mono text-[14px]"
+              className="h-[34px] w-[80px] rounded-pill border border-hairline bg-white px-sm text-right font-mono text-[14px]"
             />
-            <span className="text-[12px] text-ink-muted">%</span>
-            <span className="ml-xs text-[11px] text-ink-tertiary">
+            <span className="text-[12px] text-grey">%</span>
+            <span className="ml-xs text-[11px] text-grey">
               industry typical 18–25%
             </span>
           </div>
         </label>
 
         <label className="flex flex-col gap-xs">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-tertiary">
+          <span className="text-caption font-medium uppercase text-grey">
             Bottle markup target
           </span>
           <div className="flex items-center gap-xs">
@@ -160,10 +160,10 @@ export function PricingTargetsPanel({
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               }}
               aria-label="Bottle markup ratio target"
-              className="h-[34px] w-[80px] rounded-sm border border-border bg-white px-sm text-right font-mono text-[14px]"
+              className="h-[34px] w-[80px] rounded-pill border border-hairline bg-white px-sm text-right font-mono text-[14px]"
             />
-            <span className="text-[12px] text-ink-muted">× retail</span>
-            <span className="ml-xs text-[11px] text-ink-tertiary">
+            <span className="text-[12px] text-grey">× retail</span>
+            <span className="ml-xs text-[11px] text-grey">
               fine-dining typical 2.5–3.0×
             </span>
           </div>
@@ -174,14 +174,14 @@ export function PricingTargetsPanel({
         <div
           role="alert"
           className={cn(
-            "mt-md rounded-sm border border-danger/30 bg-danger-soft px-md py-sm text-[13px] text-danger",
+            "mt-md rounded-md border border-primary/30 bg-blush-wash px-md py-sm text-[13px] text-primary",
           )}
         >
           {error}
         </div>
       )}
 
-      <p className="mt-md border-t border-border pt-sm text-[11px] italic text-ink-tertiary">
+      <p className="mt-md border-t border-hairline pt-sm text-[11px] italic text-grey">
         Changes save on blur or Enter. Targets apply across Insights pricing
         review, Cellar drawer pricing section, and the AddWineModal price
         suggestions.

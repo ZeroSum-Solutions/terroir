@@ -63,11 +63,11 @@ export function NoteModal({
       ref={dialogRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-lg"
     >
-      <div className="w-full max-w-[420px] rounded-md border border-border bg-white p-lg shadow-lg">
-        <h2 id={headingId} className="font-serif text-[20px] text-ink">
+      <div className="w-full max-w-[420px] rounded-card border border-hairline bg-white p-lg">
+        <h2 id={headingId} className="font-serif text-[20px] font-medium text-ink">
           {verb} {wineName}?
         </h2>
-        <p className="mt-xs text-[13px] text-ink-muted">
+        <p className="mt-xs text-[13px] text-grey">
           Optional note — shows up in the audit log.
         </p>
         <textarea
@@ -78,20 +78,20 @@ export function NoteModal({
           rows={3}
           placeholder="e.g., last bottle just poured"
           autoFocus
-          className="mt-sm w-full rounded-sm border border-border bg-surface px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+          className="mt-sm w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
         />
         <div className="mt-md flex justify-end gap-sm">
           <button
             type="button"
             onClick={handleCancel}
-            className="h-[38px] rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted"
+            className="h-[38px] rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleConfirm}
-            className="h-[38px] rounded-sm bg-accent px-md text-[13px] font-medium text-white hover:bg-accent-hover"
+            className="h-[38px] rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
           >
             {verb}
           </button>

@@ -77,7 +77,7 @@ export function PriceBand({
       {/* Axis labels */}
       {showAxis && (
         <div
-          className={`absolute inset-x-0 top-0 flex justify-between font-mono ${axisFontSize} tracking-[0.04em] text-ink-subtle`}
+          className={`absolute inset-x-0 top-0 flex justify-between font-mono ${axisFontSize} tracking-[0.04em] text-grey`}
         >
           <span>${minPrice}</span>
           {!isMini && <span>${Math.round(targetPrice)}</span>}
@@ -85,24 +85,25 @@ export function PriceBand({
         </div>
       )}
 
-      {/* 3-zone track. Same gradient grammar as the drink-window timeline
-          but with different semantic mapping (below-band / target / above-band). */}
+      {/* 3-zone track — blush (below band, risk) → sage (target, healthy) →
+          powder (above band, informational). Same grammar as the
+          drink-window timeline, different semantic mapping. */}
       <div
         className={`absolute inset-x-0 ${trackTopOffset} ${trackHeight} overflow-hidden rounded-full`}
         style={{
           background:
-            "linear-gradient(90deg, var(--color-bg-tertiary) 0%, var(--color-bg-tertiary) 18%, #E3EFE8 18%, #FBF3DC 50%, #F2D896 82%, #E8DCD0 82%, #E8DCD0 100%)",
+            "linear-gradient(90deg, #f2e6e2 0%, #f2e6e2 18%, #e6e4d4 18%, #e6e4d4 82%, #e2eaf3 82%, #e2eaf3 100%)",
         }}
       />
 
       {/* Target markup tick — center of band */}
       {!isMini && (
         <div
-          className="absolute top-[28px] h-[22px] w-px bg-ink-subtle"
+          className="absolute top-[28px] h-[22px] w-px bg-grey"
           style={{ left: `${targetTickPct}%` }}
         >
           <span
-            className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap font-mono text-[9px] text-ink-subtle"
+            className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap font-mono text-[9px] text-grey"
           >
             {targetMarkup.toFixed(1)}×
           </span>
@@ -114,7 +115,7 @@ export function PriceBand({
         <div className="absolute inset-x-0 top-[50px] flex justify-center" style={{ pointerEvents: "none" }}>
           <span
             className="text-[9px] font-semibold uppercase tracking-[0.08em]"
-            style={{ color: "rgba(26,26,26,0.45)" }}
+            style={{ color: "var(--color-grey)" }}
           >
             Target band
           </span>
@@ -127,14 +128,14 @@ export function PriceBand({
         style={{
           left: `${markerPct}%`,
           transform: "translateX(-50%)",
-          background: "var(--color-accent)",
+          background: "var(--color-primary)",
         }}
       >
         <span
           className="absolute left-1/2 -top-[6px] block h-[12px] w-[12px] -translate-x-1/2 rounded-full"
           style={{
-            background: "var(--color-accent)",
-            boxShadow: "0 0 0 3px var(--color-bg-primary, #FAFAF8)",
+            background: "var(--color-primary)",
+            boxShadow: "0 0 0 3px var(--color-canvas, #ffffff)",
           }}
         />
       </div>
@@ -146,7 +147,7 @@ export function PriceBand({
           style={{
             left: `${markerPct}%`,
             transform: "translateX(-50%)",
-            color: "var(--color-accent)",
+            color: "var(--color-primary)",
             whiteSpace: "nowrap",
           }}
         >

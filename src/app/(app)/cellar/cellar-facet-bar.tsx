@@ -37,7 +37,7 @@ export function CellarFacetBar({
   return (
     <div
       data-cellar-facet-bar
-      className="mb-md flex items-center gap-xs overflow-x-auto rounded-sm border border-border bg-white p-xs md:flex-wrap"
+      className="mb-md flex items-center gap-xs overflow-x-auto rounded-md border border-hairline bg-white p-xs md:flex-wrap"
     >
       <FacetSelect
         label="Producer"
@@ -114,7 +114,7 @@ export function CellarFacetBar({
               health: null,
             })
           }
-          className="h-11 shrink-0 rounded-sm px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft md:h-9"
+          className="h-11 shrink-0 rounded-pill px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 md:h-9"
         >
           Clear facets
         </button>
@@ -205,4 +205,4 @@ function NumberFacetSelect({
 }
 
 const selectClassName =
-  "h-11 max-w-[180px] rounded-sm border border-border bg-white px-sm text-[12px] text-ink outline-none hover:bg-surface-muted focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft md:h-9";
+  "h-11 max-w-[180px] rounded-pill border border-ink/20 bg-white px-sm text-[12px] text-ink outline-none hover:bg-bridge-surface focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15 md:h-9";

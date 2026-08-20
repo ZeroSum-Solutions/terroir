@@ -155,7 +155,7 @@ export function PricingTargetOverride({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between rounded-sm px-2xs py-2xs text-[12px] font-medium text-ink-muted hover:bg-bg-secondary"
+        className="flex w-full items-center justify-between rounded-pill px-2xs py-2xs text-[12px] font-medium text-grey hover:bg-bridge-surface"
       >
         <span>
           {hasOverride
@@ -173,10 +173,10 @@ export function PricingTargetOverride({
       </button>
 
       {open && (
-        <div className="mt-xs rounded-sm border border-border bg-bg-secondary p-sm">
+        <div className="mt-xs rounded-lg border border-hairline bg-bridge-surface p-sm">
           <div className="grid grid-cols-2 gap-sm">
             <label className="flex flex-col gap-2xs">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-tertiary">
+              <span className="text-caption font-medium uppercase text-grey">
                 Pour cost %
               </span>
               <div className="flex items-center gap-2xs">
@@ -195,17 +195,17 @@ export function PricingTargetOverride({
                       (e.target as HTMLInputElement).blur();
                   }}
                   aria-label="Per-wine pour cost target"
-                  className="h-[30px] w-full rounded-sm border border-border bg-white px-xs text-right font-mono text-[13px]"
+                  className="h-[30px] w-full rounded-pill border border-hairline bg-white px-xs text-right font-mono text-[13px]"
                 />
-                <span className="text-[11px] text-ink-tertiary">%</span>
+                <span className="text-[11px] text-grey">%</span>
               </div>
-              <span className="text-[10px] text-ink-tertiary">
+              <span className="text-[10px] text-grey">
                 house: {housePourCostPct}%
               </span>
             </label>
 
             <label className="flex flex-col gap-2xs">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-tertiary">
+              <span className="text-caption font-medium uppercase text-grey">
                 Markup
               </span>
               <div className="flex items-center gap-2xs">
@@ -224,11 +224,11 @@ export function PricingTargetOverride({
                       (e.target as HTMLInputElement).blur();
                   }}
                   aria-label="Per-wine markup ratio target"
-                  className="h-[30px] w-full rounded-sm border border-border bg-white px-xs text-right font-mono text-[13px]"
+                  className="h-[30px] w-full rounded-pill border border-hairline bg-white px-xs text-right font-mono text-[13px]"
                 />
-                <span className="text-[11px] text-ink-tertiary">×</span>
+                <span className="text-[11px] text-grey">×</span>
               </div>
-              <span className="text-[10px] text-ink-tertiary">
+              <span className="text-[10px] text-grey">
                 house: {houseMarkupRatio.toFixed(1)}×
               </span>
             </label>
@@ -239,7 +239,7 @@ export function PricingTargetOverride({
               type="button"
               onClick={() => void onResetToHouse()}
               disabled={busy}
-              className="mt-sm inline-flex items-center gap-2xs text-[11px] font-medium text-ink-muted hover:text-ink disabled:opacity-60"
+              className="mt-sm inline-flex items-center gap-2xs text-[11px] font-medium text-grey hover:text-ink disabled:opacity-60"
             >
               <RotateCcw className="h-3 w-3" strokeWidth={2} aria-hidden />
               Use house defaults
@@ -249,13 +249,13 @@ export function PricingTargetOverride({
           {error && (
             <p
               role="alert"
-              className="mt-xs text-[11px] text-error"
+              className="mt-xs text-[11px] text-primary"
             >
               {error}
             </p>
           )}
 
-          <p className="mt-xs text-[10px] italic text-ink-tertiary">
+          <p className="mt-xs text-[10px] italic text-grey">
             Useful for allocation wines (Champagne, grower Burgundy) that
             deviate from the house default. Save on blur or Enter.
           </p>

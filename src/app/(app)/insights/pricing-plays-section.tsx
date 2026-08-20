@@ -27,11 +27,11 @@ export function PricingPlaysSection({
         <div>
           <h2
             id="pricing-plays-heading"
-            className="text-[10px] font-semibold uppercase tracking-[0.08em] text-accent"
+            className="text-caption font-medium uppercase text-grey"
           >
             Pricing plays
           </h2>
-          <p className="mt-2xs text-[12px] text-ink-muted">
+          <p className="mt-2xs text-[12px] text-grey">
             Wine-aware actions from margin, movement, market, and pour history
           </p>
         </div>
@@ -39,13 +39,13 @@ export function PricingPlaysSection({
       </div>
 
       {recommendations.length === 0 ? (
-        <div className="rounded-md border border-dashed border-border-strong bg-surface-muted px-lg py-xl text-center">
-          <p className="text-[13px] text-ink-muted">
+        <div className="rounded-card border border-dashed border-beige-deep bg-bridge-surface px-lg py-xl text-center">
+          <p className="text-[13px] text-grey">
             No pricing plays yet. Recompute after cellar health and pour data are current.
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-md border border-border bg-surface">
+        <div className="overflow-hidden rounded-card border border-hairline bg-white">
           {PRICING_RECOMMENDATION_CLASSES.map((recommendationClass) => {
             const rows = recommendations.filter(
               (row) => row.class === recommendationClass,
@@ -76,18 +76,18 @@ function PricingGroup({
     <section
       data-pricing-class={recommendationClass}
       aria-labelledby={`pricing-class-${recommendationClass}`}
-      className="border-b border-border last:border-b-0"
+      className="border-b border-hairline last:border-b-0"
     >
-      <div className="flex items-center justify-between bg-surface-muted px-md py-sm">
+      <div className="flex items-center justify-between bg-beige px-md py-sm">
         <h3
           id={`pricing-class-${recommendationClass}`}
-          className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink"
+          className="text-caption font-medium uppercase text-ink-soft"
         >
           {LABELS[recommendationClass]}
         </h3>
-        <span className="font-mono text-[11px] text-ink-subtle">{rows.length}</span>
+        <span className="tabular text-[11px] text-grey">{rows.length}</span>
       </div>
-      <ul className="divide-y divide-dashed divide-border bg-white">
+      <ul className="divide-y divide-hairline bg-white">
         {rows.map((row) => <PricingRow key={row.wineId} row={row} />)}
       </ul>
     </section>
@@ -104,26 +104,26 @@ function PricingRow({ row }: { row: PricingPlay }) {
         href={metricHref("wine", row.wineId)}
         className="group min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
       >
-        <span className="block truncate font-serif text-[15px] text-ink group-hover:text-accent">
+        <span className="block truncate font-serif text-[17px] font-medium text-ink group-hover:text-primary">
           {row.wine.producer}, {row.wine.name}
         </span>
-        <span className="mt-2xs block font-mono text-[11px] text-ink-subtle">
+        <span className="mt-2xs block text-[11px] font-light text-grey">
           {row.wine.vintage ?? "NV"}
         </span>
       </Link>
       <div>
         <p className="text-[13px] leading-relaxed text-ink">{row.rationale}</p>
-        <p className="mt-2xs text-[11px] text-ink-muted">
+        <p className="mt-2xs text-[11px] text-grey">
           {formatEvidence(row)}
         </p>
       </div>
       <div className="md:text-right">
         {row.timing ? (
-          <span className="inline-flex rounded-sm border border-border-strong bg-surface-muted px-sm py-xs text-[11px] font-semibold text-ink">
+          <span className="inline-flex rounded-pill bg-powder-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-powder-ink">
             {row.timing}
           </span>
         ) : (
-          <span className="text-[11px] text-ink-subtle">No timing action</span>
+          <span className="text-[11px] text-grey">No timing action</span>
         )}
       </div>
     </li>

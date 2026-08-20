@@ -69,7 +69,7 @@ export function DrinkWindowTimeline({
       {/* Axis labels */}
       {showAxis && (
         <div
-          className={`absolute inset-x-0 top-0 flex justify-between font-mono ${axisFontSize} tracking-[0.04em] text-ink-subtle`}
+          className={`absolute inset-x-0 top-0 flex justify-between font-mono ${axisFontSize} tracking-[0.04em] text-grey`}
         >
           <span>{start}</span>
           {!isMini && <span>{Math.round((start + end) / 2)}</span>}
@@ -77,12 +77,12 @@ export function DrinkWindowTimeline({
         </div>
       )}
 
-      {/* 3-zone track. */}
+      {/* 3-zone track — sage (in window) → powder (approaching) → blush (past peak). */}
       <div
         className={`absolute inset-x-0 ${trackTopOffset} ${trackHeight} overflow-hidden rounded-full`}
         style={{
           background:
-            "linear-gradient(90deg, #E3EFE8 0%, #FBF3DC 60%, #F2D896 88%, #E8DCD0 100%)",
+            "linear-gradient(90deg, #e6e4d4 0%, #e2eaf3 60%, #f2e6e2 88%, #f2e6e2 100%)",
         }}
       />
 
@@ -99,11 +99,11 @@ export function DrinkWindowTimeline({
           }}
         >
           <div
-            className="rotate-45 border border-ink-subtle"
+            className="rotate-45 border border-grey"
             style={{
               width: "8px",
               height: "8px",
-              background: "var(--color-accent)",
+              background: "var(--color-primary)",
               opacity: 0.7,
             }}
           />
@@ -118,7 +118,7 @@ export function DrinkWindowTimeline({
         >
           <span
             className="text-[9px] font-semibold uppercase tracking-[0.08em]"
-            style={{ color: "rgba(26,26,26,0.45)" }}
+            style={{ color: "var(--color-grey)" }}
           >
             Optimal · {start}–{end}
           </span>
@@ -131,14 +131,14 @@ export function DrinkWindowTimeline({
         style={{
           left: `${markerPct}%`,
           transform: "translateX(-50%)",
-          background: "var(--color-accent)",
+          background: "var(--color-primary)",
         }}
       >
         <span
           className="absolute left-1/2 -top-[6px] block h-[12px] w-[12px] -translate-x-1/2 rounded-full"
           style={{
-            background: "var(--color-accent)",
-            boxShadow: "0 0 0 3px var(--color-bg-primary, #FAFAF8)",
+            background: "var(--color-primary)",
+            boxShadow: "0 0 0 3px var(--color-canvas, #ffffff)",
           }}
         />
       </div>
@@ -149,7 +149,7 @@ export function DrinkWindowTimeline({
         style={{
           left: `${markerPct}%`,
           transform: "translateX(-50%)",
-          color: "var(--color-accent)",
+          color: "var(--color-primary)",
           whiteSpace: "nowrap",
         }}
       >

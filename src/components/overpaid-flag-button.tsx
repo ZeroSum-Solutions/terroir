@@ -26,7 +26,7 @@ export function OverpaidFlagButton({
       disabled: isPending,
       "aria-label": flagged ? "Remove overpaid flag" : "Flag as overpaid",
       title: flagged ? "Remove overpaid flag" : "Flag as overpaid for follow-up",
-      className: "inline-flex items-center justify-center rounded-sm p-xs transition-colors " + (flagged ? "text-error hover:text-error-hover bg-error-soft/50 hover:bg-error-soft" : "text-ink-subtle hover:text-error hover:bg-error-soft/30"),
+      className: "inline-flex items-center justify-center rounded-pill p-xs transition-colors " + (flagged ? "text-primary bg-blush-wash hover:bg-blush-wash" : "text-grey hover:text-primary hover:bg-blush-wash/60"),
     },
       React.createElement(Flag, {
         className: "h-4 w-4 " + (isPending ? "animate-pulse" : ""),

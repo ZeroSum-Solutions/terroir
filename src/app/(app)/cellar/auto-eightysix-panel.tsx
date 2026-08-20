@@ -102,17 +102,17 @@ export function AutoEightysixPanel({
   return (
     <section
       aria-labelledby="auto86-heading"
-      className="mb-lg rounded-md border border-border bg-white p-md md:p-lg"
+      className="mb-lg rounded-lg border border-hairline bg-white p-md md:p-lg"
     >
       <div className="flex flex-col gap-sm md:flex-row md:items-start md:justify-between md:gap-lg">
         <div className="min-w-0">
           <h2
             id="auto86-heading"
-            className="font-serif text-[16px] text-ink"
+            className="font-serif text-[16px] font-medium text-ink"
           >
             Auto-86 on low inventory
           </h2>
-          <p className="mt-xs text-[13px] text-ink-muted">
+          <p className="mt-xs text-[13px] text-grey">
             Automatically 86 a wine when its total remaining (open bottle +
             sealed stock) drops below the threshold. Manual restore always
             stays available.
@@ -127,15 +127,15 @@ export function AutoEightysixPanel({
             checked={enabled}
             disabled={saving}
             onChange={(e) => void onToggle(e.target.checked)}
-            className="h-5 w-5 rounded-sm border-border"
+            className="h-5 w-5 rounded-sm border-hairline"
           />
           <span>{enabled ? "Enabled" : "Disabled"}</span>
         </label>
       </div>
 
       {enabled && (
-        <div className="mt-md flex flex-wrap items-center gap-sm border-t border-border/60 pt-md">
-          <label className="flex items-center gap-xs text-[13px] text-ink-muted">
+        <div className="mt-md flex flex-wrap items-center gap-sm border-t border-hairline pt-md">
+          <label className="flex items-center gap-xs text-[13px] text-grey">
             Threshold
             <input
               type="number"
@@ -149,25 +149,25 @@ export function AutoEightysixPanel({
                   (e.target as HTMLInputElement).blur();
                 }
               }}
-              className="ml-xs h-[32px] w-[80px] rounded-sm border border-border bg-white px-sm text-right font-mono text-[13px]"
+              className="ml-xs h-[32px] w-[80px] rounded-pill border border-hairline bg-white px-sm text-right font-mono text-[13px]"
             />
-            <span className="text-[11px] text-ink-subtle">ml</span>
-            <span className="text-[11px] text-ink-subtle">
+            <span className="text-[11px] text-grey">ml</span>
+            <span className="text-[11px] text-grey">
               ≈ {(thresholdMl / ML_PER_OZ).toFixed(1)} oz
             </span>
           </label>
-          <p className="text-[12px] text-ink-subtle">
+          <p className="text-[12px] text-grey">
             Default is one 5 oz glass pour (148 ml).
           </p>
         </div>
       )}
 
       {/* BND-173: 86 display strategy on public wine lists */}
-      <div className="mt-md border-t border-border/60 pt-md">
-        <h3 className="font-serif text-[14px] text-ink">
+      <div className="mt-md border-t border-hairline pt-md">
+        <h3 className="font-serif text-[14px] font-medium text-ink">
           86&rsquo;d wine display on public lists
         </h3>
-        <p className="mt-xs text-[13px] text-ink-muted">
+        <p className="mt-xs text-[13px] text-grey">
           When a wine is 86&rsquo;d, choose whether to hide it entirely
           or show it grayed out with a strikethrough on published wine
           lists.
@@ -202,7 +202,7 @@ export function AutoEightysixPanel({
         <div
           role="alert"
           className={cn(
-            "mt-md rounded-sm border border-danger/30 bg-danger-soft px-md py-sm text-[13px] text-danger",
+            "mt-md rounded-md border border-primary/30 bg-blush-wash px-md py-sm text-[13px] text-primary",
           )}
         >
           {error}

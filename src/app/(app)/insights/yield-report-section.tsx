@@ -21,24 +21,24 @@ export function YieldReportSection({ groups }: { groups: YieldGroup[] }) {
   return (
     <section className="mb-lg md:mb-xl" aria-labelledby="yield-report-heading">
       <div className="mb-md flex items-baseline justify-between gap-sm">
-        <h2 id="yield-report-heading" className="text-[10px] font-semibold uppercase tracking-[0.08em] text-accent">
+        <h2 id="yield-report-heading" className="text-caption font-medium uppercase text-grey">
           Partial-bottle yield
         </h2>
-        <span className="text-[12px] text-ink-muted">Actual excludes write-offs</span>
+        <span className="text-[12px] text-grey">Actual excludes write-offs</span>
       </div>
       <div className="grid gap-md md:grid-cols-2">
         {groups.map((group) => {
           const href = "/cellar";
           return (
-            <article key={group.preservationMethod} className="rounded-md border border-border bg-surface p-md">
-              <h3 className="text-[14px] font-semibold text-ink">{LABELS[group.preservationMethod]}</h3>
+            <article key={group.preservationMethod} className="rounded-lg border border-hairline bg-bridge-surface p-md">
+              <h3 className="text-[14px] font-medium text-ink">{LABELS[group.preservationMethod]}</h3>
               <div className="mt-sm grid grid-cols-2 gap-xs text-[12px] md:grid-cols-4">
                 <Metric name={`${group.preservationMethod}-closed`} href={href} value={`${group.bottlesClosed} closed`} />
                 <Metric name={`${group.preservationMethod}-variance`} href={href} value={`${formatMl(group.averageVarianceMl)} avg variance`} />
                 <Metric name={`${group.preservationMethod}-actual`} href={href} value={`${formatMl(group.actualPouredMl)} actual`} />
                 <Metric name={`${group.preservationMethod}-theoretical`} href={href} value={`${formatMl(group.theoreticalPouredMl)} theoretical`} />
               </div>
-              <ul className="mt-md divide-y divide-dashed divide-border">
+              <ul className="mt-md divide-y divide-hairline">
                 {group.bottles.map((bottle) => (
                   <li key={bottle.bottleId} className="grid grid-cols-2 gap-xs py-xs text-[12px]">
                     <Metric name={`${bottle.bottleId}-actual`} href={metricHref("wine", bottle.wineId)} value={`${formatMl(bottle.actualPouredMl)} actual`} />
@@ -57,7 +57,7 @@ export function YieldReportSection({ groups }: { groups: YieldGroup[] }) {
 function Metric({ name, href, value }: { name: string; href: string; value: string }) {
   return (
     <span data-metric={`yield-${name}`}>
-      <Link href={href} className="block rounded-sm font-mono text-ink-muted hover:bg-surface-muted hover:text-accent">
+      <Link href={href} className="block rounded-sm tabular text-grey hover:bg-beige hover:text-primary">
         {value}
       </Link>
     </span>

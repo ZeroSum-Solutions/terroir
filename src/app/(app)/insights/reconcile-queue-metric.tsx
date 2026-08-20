@@ -24,19 +24,19 @@ export function ReconcileQueueMetric() {
 
   return (
     <div data-metric="reconcile-queue-count" className="mb-lg md:mb-xl">
-      <Link href="/reconcile-queue" className="group flex min-h-11 items-center justify-between gap-md rounded-md border border-border bg-surface px-md py-sm transition-colors hover:border-border-strong hover:bg-surface-muted">
+      <Link href="/reconcile-queue" className="group flex min-h-11 items-center justify-between gap-md rounded-lg border border-hairline bg-bridge-surface px-md py-sm transition-colors hover:bg-beige">
         <span className="flex min-w-0 items-center gap-sm">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-warning-soft text-warning">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-pill bg-amber-wash text-amber">
             <ClipboardCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden />
           </span>
           <span>
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">Reconciliation queue</span>
-            <span className="mt-2xs block text-[12px] text-ink-muted">Inventory records needing review</span>
+            <span className="block text-caption font-medium uppercase text-grey">Reconciliation queue</span>
+            <span className="mt-2xs block text-[12px] text-grey">Inventory records needing review</span>
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-sm">
-          <span className="font-mono text-[22px] font-medium tabular-nums text-ink" aria-label={metricLabel(count)}>{metricValue(count)}</span>
-          <ArrowUpRight className="h-4 w-4 text-ink-subtle transition-colors group-hover:text-accent" aria-hidden />
+          <span className="font-serif text-[22px] font-normal tabular text-ink" aria-label={metricLabel(count)}>{metricValue(count)}</span>
+          <ArrowUpRight className="h-4 w-4 text-grey transition-colors group-hover:text-primary" aria-hidden />
         </span>
       </Link>
     </div>

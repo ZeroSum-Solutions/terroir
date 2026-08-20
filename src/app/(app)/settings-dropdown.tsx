@@ -59,13 +59,13 @@ export function SettingsDropdown() {
         aria-label="Settings"
         aria-expanded={open}
         aria-haspopup="true"
-        className="flex h-10 w-10 items-center justify-center rounded-sm text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink md:h-auto md:w-auto md:border md:border-border-strong md:bg-white md:px-md md:py-sm"
+        className="flex h-10 w-10 items-center justify-center rounded-pill text-grey transition-colors hover:bg-bridge-surface hover:text-ink md:h-auto md:w-auto md:border md:border-beige-deep md:bg-white md:px-md md:py-sm"
       >
         <Settings className="h-5 w-5 md:h-4 md:w-4" strokeWidth={1.75} aria-hidden="true" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-xs w-[180px] rounded-md border border-border bg-surface shadow-lg" role="menu">
+        <div className="absolute right-0 top-full z-30 mt-xs w-[180px] rounded-card border border-hairline bg-canvas" role="menu">
           <div className="flex flex-col py-xs">
             <Link
               ref={(el) => { itemsRef.current[0] = el; }}

@@ -108,19 +108,19 @@ export function BrandKitPanel({
   return (
     <section
       aria-label="Brand kit"
-      className="mt-xl rounded-md border border-border bg-white p-md md:p-lg"
+      className="mt-xl rounded-card border border-hairline bg-white p-md md:p-lg"
     >
       <div className="flex flex-col gap-md sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-xs">
-            <Palette className="h-4 w-4 text-accent" aria-hidden />
+            <Palette className="h-4 w-4 text-primary" aria-hidden />
             <h2 className="font-serif text-[20px] font-medium text-ink">Brand kit</h2>
           </div>
           <p className="mt-xs max-w-xl text-[13px] text-ink-muted">
             Upload a logo, extract its palette, then generate accessible menu themes.
           </p>
         </div>
-        <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-xs rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted">
+        <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-xs rounded-pill border border-hairline bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface">
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
           {uploading ? "Extracting…" : "Upload logo"}
           <input
@@ -139,7 +139,7 @@ export function BrandKitPanel({
       </div>
 
       {(logoUrl || palette) && (
-        <div className="mt-md flex flex-wrap items-center gap-md rounded-sm bg-surface-muted p-sm">
+        <div className="mt-md flex flex-wrap items-center gap-md rounded-md bg-bridge-surface p-sm">
           {logoUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoUrl} alt="Uploaded restaurant logo" className="h-12 w-24 object-contain" />
@@ -150,7 +150,7 @@ export function BrandKitPanel({
                 key={colour}
                 data-palette-swatch
                 title={colour}
-                className="h-8 w-8 rounded-sm border border-black/10 shadow-sm"
+                className="h-8 w-8 rounded-md border border-black/10"
                 style={{ backgroundColor: colour }}
               />
             ))}
@@ -163,13 +163,13 @@ export function BrandKitPanel({
           type="button"
           disabled={!palette || generating}
           onClick={() => void generateThemes()}
-          className="inline-flex h-10 items-center gap-xs rounded-sm bg-accent px-md text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+          className="inline-flex h-10 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-50"
         >
           {generating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Sparkles className="h-4 w-4" aria-hidden />}
           {generating ? "Designing…" : "Generate themes"}
         </button>
         {status && (
-          <p role="status" className={`text-[13px] ${status.kind === "error" ? "text-danger" : "text-success"}`}>
+          <p role="status" className={`text-[13px] ${status.kind === "error" ? "text-primary" : "text-sage-ink"}`}>
             {status.message}
           </p>
         )}
@@ -180,24 +180,24 @@ export function BrandKitPanel({
           {proposals.map((theme, index) => (
             <article
               key={index}
-              className="overflow-hidden rounded-md border border-border shadow-sm"
+              className="overflow-hidden rounded-card border border-hairline"
               style={themeCssVariables(theme)}
             >
-              <div className="bg-surface p-md text-ink">
-                <p className="text-[10px] uppercase tracking-[0.10em] text-ink-muted">Wine list</p>
+              <div className="bg-canvas p-md text-ink">
+                <p className="text-caption uppercase text-grey">Wine list</p>
                 <h3 className="mt-xs font-serif text-[20px]">{theme.name}</h3>
-                <div className="mt-md border-t border-border pt-sm">
-                  <p className="font-serif text-[15px]">Estate Pinot Noir <span className="font-sans text-[12px] text-ink-muted">2021</span></p>
+                <div className="mt-md border-t border-hairline pt-sm">
+                  <p className="font-serif text-[17px]">Estate Pinot Noir <span className="font-sans text-[12px] text-ink-muted">2021</span></p>
                   <p className="mt-xs text-[12px] text-ink-muted">Willamette Valley</p>
                 </div>
               </div>
-              <div className="flex items-center gap-xs border-t border-border bg-white p-sm">
+              <div className="flex items-center gap-xs border-t border-hairline bg-white p-sm">
                 <button
                   type="button"
                   aria-label={`Apply ${theme.name}`}
                   disabled={applying !== null}
                   onClick={() => void applyTheme(theme)}
-                  className="h-9 flex-1 rounded-sm bg-accent px-sm text-[12px] font-medium text-white disabled:opacity-50"
+                  className="h-9 flex-1 rounded-pill bg-primary px-sm text-[12px] font-medium text-white disabled:opacity-50"
                 >
                   {applying === theme.name ? "Applying…" : appliedTheme?.name === theme.name ? "Applied" : "Apply"}
                 </button>
@@ -205,7 +205,7 @@ export function BrandKitPanel({
                   type="button"
                   disabled={generating}
                   onClick={() => void generateThemes(theme)}
-                  className="h-9 rounded-sm border border-border-strong px-sm text-[12px] font-medium text-ink hover:bg-surface-muted disabled:opacity-50"
+                  className="h-9 rounded-pill border border-hairline px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50"
                 >
                   Refine
                 </button>

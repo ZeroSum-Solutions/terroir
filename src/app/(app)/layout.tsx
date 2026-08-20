@@ -21,24 +21,23 @@ export default async function AppLayout({
   return (
     <RestaurantProvider restaurantId={restaurantId} restaurantName={restaurantName} userRole={userRole}>
       <ToastWrapper>
-    <div className="flex min-h-screen flex-col bg-surface">
-      {/* Top bar — minimal on mobile, full nav on md+ */}
-      <header className="sticky top-0 z-10 flex h-14 items-center border-b border-border bg-surface/95 px-md backdrop-blur-sm md:h-16 md:px-lg">
+    <div className="flex min-h-screen flex-col bg-canvas">
+      {/* Top bar — minimal on mobile, full nav on md+. Glass Nav per DESIGN.md. */}
+      <header className="glass sticky top-0 z-10 flex h-[54px] items-center px-md md:px-lg">
         <Link
           href="/"
-          className="font-serif text-[20px] text-accent md:text-[22px]"
-          style={{ fontWeight: 500 }}
+          className="font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink"
         >
-          Terroir
+          TERR<span className="text-primary">OIR</span>
         </Link>
 
         {/* Desktop nav */}
-        <nav className="ml-xl hidden items-center gap-2xs md:flex" aria-label="Primary">
+        <nav className="ml-xl hidden items-center gap-lg md:flex" aria-label="Primary">
           <DesktopNavLinks role={userRole} />
         </nav>
 
         <div className="ml-auto flex items-center gap-sm md:gap-md">
-          <span className="hidden text-[12px] tabular text-ink-muted md:inline">
+          <span className="hidden text-[12px] font-light tabular text-grey md:inline">
             {user.email}
           </span>
           <SettingsDropdown />
@@ -55,7 +54,7 @@ export default async function AppLayout({
           Was 6-7 tabs (truncating at ~55px on a 390px phone); now ~97px
           per tab. */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 flex border-t border-border bg-surface/95 backdrop-blur-sm md:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 flex border-t border-hairline bg-canvas/95 backdrop-blur-sm md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Primary mobile"
       >

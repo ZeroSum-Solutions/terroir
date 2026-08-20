@@ -419,23 +419,22 @@ export function WineDetailDrawer({
           role="dialog"
           aria-modal="true"
           aria-labelledby={headingId}
-          className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-lg bg-surface md:absolute md:inset-y-0 md:right-0 md:left-auto md:w-[420px] md:rounded-none md:border-l md:border-border"
+          className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-lg bg-canvas md:absolute md:inset-y-0 md:right-0 md:left-auto md:w-[420px] md:rounded-none md:border-l md:border-hairline"
           style={{ maxHeight: "calc(100dvh - 3.5rem)" }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-border px-md py-sm">
-            <h2 id={headingId} className="text-[15px] font-semibold text-ink leading-snug">
-              <span className="font-serif">{row.producer}</span>{" "}
-              <span className="font-medium">{row.name}</span>
+          <div className="flex items-center justify-between border-b border-hairline px-md py-sm">
+            <h2 id={headingId} className="font-serif text-[17px] font-medium text-ink leading-snug">
+              <span>{row.producer}</span> <span>{row.name}</span>
               {row.vintage != null && (
-                <span className="font-normal text-ink-muted"> {row.vintage}</span>
+                <span className="ml-1 font-sans text-[13px] font-light text-grey"> {row.vintage}</span>
               )}
             </h2>
             <button
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted"
+              className="flex h-8 w-8 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
             >
               <X className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
@@ -449,7 +448,7 @@ export function WineDetailDrawer({
             {/* Hero image */}
             {row.hero_image_url && (
               <section aria-label="Hero image" className="mb-md">
-                <div className="relative rounded-md overflow-hidden border border-border bg-surface-muted">
+                <div className="relative rounded-lg overflow-hidden border border-hairline bg-bridge-surface">
                   <Image
                     src={row.hero_image_url}
                     alt={`${row.producer} ${row.name}`}
@@ -463,7 +462,7 @@ export function WineDetailDrawer({
                       type="button"
                       onClick={handleImageDelete}
                       disabled={uploading}
-                      className="absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-sm bg-black/50 text-white hover:bg-black/70 disabled:opacity-40"
+                      className="absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-pill bg-black/50 text-white hover:bg-black/70 disabled:opacity-40"
                       aria-label="Remove image"
                     >
                       <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -485,7 +484,7 @@ export function WineDetailDrawer({
                 />
                 <label
                   htmlFor="hero-image-upload"
-                  className="flex h-[48px] w-full cursor-pointer items-center justify-center gap-xs rounded-sm border border-dashed border-border-strong bg-white text-[13px] font-medium text-ink-muted hover:bg-surface-muted transition-colors"
+                  className="flex h-[48px] w-full cursor-pointer items-center justify-center gap-xs rounded-lg border border-dashed border-beige-deep bg-white text-[13px] font-medium text-grey hover:bg-bridge-surface transition-colors"
                 >
                   {uploading ? (
                     <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
@@ -500,7 +499,7 @@ export function WineDetailDrawer({
             {/* Stock breakdown */}
             <section
               aria-label="Stock"
-              className="rounded-md border border-border bg-white p-md"
+              className="rounded-lg border border-hairline bg-white p-md"
             >
               <div className="grid grid-cols-3 gap-md text-center">
                 <Stat
@@ -515,7 +514,7 @@ export function WineDetailDrawer({
                 />
               </div>
               {glassesLeft !== null && (
-                <p className="mt-sm text-center text-[12px] text-ink-muted">
+                <p className="mt-sm text-center text-[12px] text-grey">
                   ~{glassesLeft} glass{glassesLeft === 1 ? "" : "es"} left
                   {row.glass_pour_ml &&
                     ` · pour size ${(row.glass_pour_ml / ML_PER_OZ).toFixed(1)} oz`}
@@ -524,14 +523,14 @@ export function WineDetailDrawer({
               {row.bin_placements.map((placement) => (
                 <p
                   key={placement.binId}
-                  className="mt-2xs text-center font-mono text-[12px] text-ink-subtle"
+                  className="mt-2xs text-center font-mono text-[12px] text-grey"
                 >
                   Bin {placement.zone ? `${placement.zone} › ` : ""}
                   {placement.code} · {placement.quantity}
                 </p>
               ))}
               {row.unplaced_count > 0 && (
-                <p className="mt-2xs text-center font-mono text-[12px] text-ink-subtle">
+                <p className="mt-2xs text-center font-mono text-[12px] text-grey">
                   Unplaced {row.unplaced_count}
                   {row.bin_location && <> · marked {row.bin_location}</>}
                   {row.suggested_bin && (
@@ -546,10 +545,10 @@ export function WineDetailDrawer({
             {row.tasting_notes && (
               <section
                 aria-label="Tasting notes"
-                className="mt-md rounded-md border border-border bg-white p-md"
+                className="mt-md rounded-lg border border-hairline bg-white p-md"
               >
-                <h3 className="text-[13px] font-semibold text-ink mb-sm">Tasting notes</h3>
-                <p className="text-[13px] text-ink-muted leading-relaxed whitespace-pre-wrap">
+                <h3 className="text-caption font-medium uppercase text-grey mb-sm">Tasting notes</h3>
+                <p className="text-[13px] text-ink-soft leading-relaxed whitespace-pre-wrap">
                   {row.tasting_notes}
                 </p>
               </section>
@@ -572,7 +571,7 @@ export function WineDetailDrawer({
             {errorMsg && (
               <div
                 role="alert"
-                className="mt-md rounded-sm border border-danger/30 bg-danger-soft px-md py-sm text-[13px] text-danger"
+                className="mt-md rounded-md border border-primary/30 bg-blush-wash px-md py-sm text-[13px] text-primary"
               >
                 {errorMsg}
               </div>
@@ -600,13 +599,13 @@ export function WineDetailDrawer({
                 onComplete={() => startTransition(() => router.refresh())}
               />
               {(row.sealed_count > 0 || canPour) && (
-                <label className="text-[12px] text-ink-muted">
+                <label className="text-[12px] text-grey">
                   Preservation method
                   <select
                     aria-label="Preservation method"
                     value={preservationMethod}
                     onChange={(event) => setPreservationMethod(event.target.value as PreservationMethod)}
-                    className="mt-xs h-10 w-full rounded-sm border border-border bg-white px-sm text-[13px] text-ink"
+                    className="mt-xs h-10 w-full rounded-pill border border-hairline bg-white px-sm text-[13px] text-ink"
                   >
                     <option value="none">None</option>
                     <option value="coravin">Coravin</option>
@@ -621,7 +620,7 @@ export function WineDetailDrawer({
                   type="button"
                   disabled={openBottleBusy}
                   onClick={doOpenBottle}
-                  className="flex h-[48px] items-center justify-center gap-xs rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted transition-colors disabled:opacity-60"
+                  className="flex h-[48px] items-center justify-center gap-xs rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface transition-colors disabled:opacity-60"
                 >
                   <PackageOpen className="h-4 w-4" strokeWidth={2} aria-hidden />
                   {openBottleBusy ? "Opening..." : "Open bottle"}
@@ -634,8 +633,8 @@ export function WineDetailDrawer({
                     disabled={busy || outOfStock}
                     onClick={() => row.glass_pour_ml && doPour(row.glass_pour_ml)}
                     className={cn(
-                      "h-[56px] flex-1 rounded-sm bg-accent text-[15px] font-medium text-white transition-colors",
-                      "hover:bg-accent-hover disabled:opacity-60",
+                      "h-[56px] flex-1 rounded-pill bg-primary text-[15px] font-medium text-white transition-colors",
+                      "hover:bg-primary-hover disabled:opacity-60",
                     )}
                   >
                     {outOfStock
@@ -648,7 +647,7 @@ export function WineDetailDrawer({
                       onClick={() => setPickerOpen(true)}
                       disabled={busy || outOfStock}
                       aria-label="Pick a custom pour size"
-                      className="flex h-[56px] w-[56px] items-center justify-center rounded-sm border border-border bg-white text-ink-muted hover:bg-surface-muted disabled:opacity-60"
+                      className="flex h-[56px] w-[56px] items-center justify-center rounded-pill border border-hairline bg-white text-grey hover:bg-bridge-surface disabled:opacity-60"
                     >
                       <ChevronDown className="h-5 w-5" strokeWidth={2} aria-hidden />
                     </button>
@@ -662,7 +661,7 @@ export function WineDetailDrawer({
                   type="button"
                   disabled={busy}
                   onClick={doUndo}
-                  className="flex h-[40px] items-center justify-center gap-xs rounded-sm border border-warning/40 bg-warning-soft text-[13px] font-medium text-warning-text transition-colors hover:bg-warning-soft/70 disabled:opacity-60"
+                  className="flex h-[40px] items-center justify-center gap-xs rounded-pill border border-amber/40 bg-amber-wash text-[13px] font-medium text-amber transition-colors hover:bg-amber-wash/70 disabled:opacity-60"
                 >
                   <Undo2 className="h-4 w-4" strokeWidth={2} aria-hidden />
                   Undo last pour ({(lastPour.ml / ML_PER_OZ).toFixed(1)} oz)
@@ -677,10 +676,10 @@ export function WineDetailDrawer({
                     setPendingDirection(row.is_eightysixed ? "restored" : "eightysixed")
                   }
                   className={cn(
-                    "flex h-[48px] items-center justify-center gap-xs rounded-sm border text-[14px] font-medium transition-colors disabled:opacity-60",
+                    "flex h-[48px] items-center justify-center gap-xs rounded-pill border text-[14px] font-medium transition-colors disabled:opacity-60",
                     row.is_eightysixed
-                      ? "border-accent bg-accent text-white hover:bg-accent-hover"
-                      : "border-border-strong bg-white text-ink hover:bg-surface-muted",
+                      ? "border-primary bg-primary text-white hover:bg-primary-hover"
+                      : "border-ink/25 bg-white text-ink hover:bg-bridge-surface",
                   )}
                 >
                   <PowerOff className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -695,10 +694,10 @@ export function WineDetailDrawer({
                     disabled={enriching}
                     onClick={doEnrich}
                     className={cn(
-                      "flex h-[40px] items-center justify-center gap-xs rounded-sm border text-[13px] font-medium transition-colors disabled:opacity-60",
+                      "flex h-[40px] items-center justify-center gap-xs rounded-pill border text-[13px] font-medium transition-colors disabled:opacity-60",
                       enrichMsg
-                        ? "border-success/30 bg-success-soft text-success"
-                        : "border-border-strong bg-white text-ink hover:bg-surface-muted",
+                        ? "border-sage-ink/30 bg-sage-wash text-sage-ink"
+                        : "border-ink/25 bg-white text-ink hover:bg-bridge-surface",
                     )}
                   >
                     {enriching ? (
@@ -711,7 +710,7 @@ export function WineDetailDrawer({
                     {enriching ? "Enriching..." : enrichMsg ? "Enriched!" : "Re-enrich"}
                   </button>
                   {enrichMsg && (
-                    <p className="text-[11px] text-ink-muted">{enrichMsg}</p>
+                    <p className="text-[11px] text-grey">{enrichMsg}</p>
                   )}
                 </div>
               )}
@@ -720,7 +719,7 @@ export function WineDetailDrawer({
                 <button
                   type="button"
                   onClick={() => setEditOpen(true)}
-                  className="flex h-[40px] items-center justify-center gap-xs rounded-sm border border-border-strong bg-white text-[13px] font-medium text-ink hover:bg-surface-muted transition-colors"
+                  className="flex h-[40px] items-center justify-center gap-xs rounded-pill border border-ink/25 bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface transition-colors"
                 >
                   <Edit3 className="h-4 w-4" strokeWidth={2} aria-hidden />
                   Edit metadata
@@ -731,12 +730,12 @@ export function WineDetailDrawer({
               {canManage && row.duplicate_wine_ids.length > 0 && (duplicateRows ?? []).length > 0 && (
                 <div
                   data-merge-duplicates
-                  className="flex flex-col gap-xs rounded-sm border border-warning/30 bg-warning-soft/40 p-sm"
+                  className="flex flex-col gap-xs rounded-lg border border-amber/30 bg-amber-wash/40 p-sm"
                 >
                   <p className="text-[13px] font-medium text-ink">
                     Possible duplicate record{(duplicateRows ?? []).length === 1 ? "" : "s"}
                   </p>
-                  <p className="text-[12px] text-ink-muted">
+                  <p className="text-[12px] text-grey">
                     Same wine, same vintage, same format. Merging combines stock
                     and keeps the full history. Different vintages are never
                     merged — they stay linked as siblings.
@@ -748,7 +747,7 @@ export function WineDetailDrawer({
                           type="button"
                           disabled={busy}
                           onClick={() => setMergeConfirm(null)}
-                          className="flex-1 h-[36px] rounded-sm border border-border bg-white text-[13px] font-medium text-ink hover:bg-surface-muted disabled:opacity-60"
+                          className="flex-1 h-[36px] rounded-pill border border-hairline bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
                         >
                           Cancel
                         </button>
@@ -756,7 +755,7 @@ export function WineDetailDrawer({
                           type="button"
                           disabled={busy}
                           onClick={() => doMerge(dup.wine_id)}
-                          className="flex-1 h-[36px] rounded-sm bg-accent text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+                          className="flex-1 h-[36px] rounded-pill bg-primary text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
                         >
                           {busy ? "Merging..." : "Confirm merge"}
                         </button>
@@ -767,7 +766,7 @@ export function WineDetailDrawer({
                         type="button"
                         disabled={busy}
                         onClick={() => setMergeConfirm(dup.wine_id)}
-                        className="flex h-[36px] items-center justify-center rounded-sm border border-border-strong bg-white px-sm text-[13px] font-medium text-ink hover:bg-surface-muted disabled:opacity-60"
+                        className="flex h-[36px] items-center justify-center rounded-pill border border-ink/25 bg-white px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
                       >
                         Merge &ldquo;{dup.producer} {dup.name}
                         {dup.vintage ? ` ${dup.vintage}` : ""}&rdquo; into this record
@@ -781,11 +780,11 @@ export function WineDetailDrawer({
               {isOwner && (
                 <>
                   {deleteConfirm ? (
-                    <div className="flex flex-col gap-xs rounded-sm border border-danger/30 bg-danger-soft p-sm">
-                      <p className="text-[13px] font-medium text-danger">
+                    <div className="flex flex-col gap-xs rounded-lg border border-primary/30 bg-blush-wash p-sm">
+                      <p className="text-[13px] font-medium text-primary">
                         Permanently delete this wine?
                       </p>
-                      <p className="text-[12px] text-danger/80">
+                      <p className="text-[12px] text-primary/80">
                         This action cannot be undone. Consider using &ldquo;86 this wine&rdquo; instead.
                       </p>
                       <div className="flex gap-xs mt-xs">
@@ -793,7 +792,7 @@ export function WineDetailDrawer({
                           type="button"
                           disabled={busy}
                           onClick={() => setDeleteConfirm(false)}
-                          className="flex-1 h-[36px] rounded-sm border border-border bg-white text-[13px] font-medium text-ink hover:bg-surface-muted disabled:opacity-60"
+                          className="flex-1 h-[36px] rounded-pill border border-hairline bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
                         >
                           Cancel
                         </button>
@@ -801,7 +800,7 @@ export function WineDetailDrawer({
                           type="button"
                           disabled={busy}
                           onClick={doDelete}
-                          className="flex-1 h-[36px] rounded-sm bg-danger text-[13px] font-medium text-white hover:opacity-90 disabled:opacity-60"
+                          className="flex-1 h-[36px] rounded-pill bg-primary text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
                         >
                           {busy ? "Deleting..." : "Delete"}
                         </button>
@@ -812,7 +811,7 @@ export function WineDetailDrawer({
                       type="button"
                       disabled={busy}
                       onClick={() => setDeleteConfirm(true)}
-                      className="flex h-[40px] items-center justify-center gap-xs rounded-sm border border-danger/30 bg-white text-[13px] font-medium text-danger hover:bg-danger-soft transition-colors disabled:opacity-60"
+                      className="flex h-[40px] items-center justify-center gap-xs rounded-pill border border-primary/30 bg-white text-[13px] font-medium text-primary hover:bg-blush-wash transition-colors disabled:opacity-60"
                     >
                       <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
                       Delete wine
@@ -887,14 +886,14 @@ function Stat({
 }) {
   return (
     <div className="flex flex-col items-center gap-2xs">
-      <span className="text-[11px] uppercase tracking-[0.04em] text-ink-muted">
+      <span className="text-caption font-medium uppercase text-grey">
         {label}
       </span>
       <span
         className={cn(
           "text-[14px] font-semibold leading-none",
-          tone === "warn" && "text-warning-text",
-          tone === "ok" && "text-success",
+          tone === "warn" && "text-amber",
+          tone === "ok" && "text-sage-ink",
           !tone && "text-ink",
         )}
       >
@@ -937,9 +936,9 @@ function PricingSection({
   return (
     <section
       aria-label="Pricing"
-      className="mt-md rounded-md border border-border bg-white p-md"
+      className="mt-md rounded-lg border border-hairline bg-white p-md"
     >
-      <h3 className="text-[13px] font-semibold text-ink mb-sm">Pricing</h3>
+      <h3 className="text-caption font-medium uppercase text-grey mb-sm">Pricing</h3>
 
       <div className="space-y-sm">
         {/* Glass pour row */}
@@ -948,12 +947,12 @@ function PricingSection({
             <div>
               <p className="text-[14px] font-medium text-ink">
                 ${row.current_glass_price.toFixed(2)}{" "}
-                <span className="font-normal text-ink-muted">
+                <span className="font-normal text-grey">
                   / {(row.glass_pour_ml / ML_PER_OZ).toFixed(1)} oz glass
                 </span>
               </p>
               {glassStatus !== "on_target" && glassStatus !== "unknown" && (
-                <p className="text-[12px] text-ink-muted">
+                <p className="text-[12px] text-grey">
                   {formatPricingStatusLabel(glassStatus)}
                 </p>
               )}
@@ -973,10 +972,10 @@ function PricingSection({
             <div>
               <p className="text-[14px] font-medium text-ink">
                 ${row.current_bottle_price.toFixed(2)}{" "}
-                <span className="font-normal text-ink-muted">/ bottle</span>
+                <span className="font-normal text-grey">/ bottle</span>
               </p>
               {bottleStatus !== "on_target" && bottleStatus !== "unknown" && (
-                <p className="text-[12px] text-ink-muted">
+                <p className="text-[12px] text-grey">
                   {formatPricingStatusLabel(bottleStatus)}
                 </p>
               )}
@@ -991,7 +990,7 @@ function PricingSection({
         )}
 
         {isRetailStale(row.retail_refreshed_at ?? undefined) && (
-          <p className="text-[11px] text-ink-subtle">
+          <p className="text-[11px] text-grey">
             Retail data is over 30 days old. May not reflect current pricing.
           </p>
         )}
@@ -1039,10 +1038,10 @@ function DecantTimeSection({ row }: { row: CellarWineRow }) {
   return (
     <section
       aria-label="Decant time"
-      className="mt-md rounded-md border border-border bg-white p-md"
+      className="mt-md rounded-lg border border-hairline bg-white p-md"
     >
-      <h3 className="text-[13px] font-semibold text-ink mb-xs">Decant time</h3>
-      <p className="text-[14px] text-ink-muted">
+      <h3 className="text-caption font-medium uppercase text-grey mb-xs">Decant time</h3>
+      <p className="text-[14px] text-ink-soft">
         {display}
       </p>
     </section>
@@ -1057,14 +1056,14 @@ function ServingTempSection({ row }: { row: CellarWineRow }) {
   return (
     <section
       aria-label="Serving temperature"
-      className="mt-md rounded-md border border-border bg-white p-md"
+      className="mt-md rounded-lg border border-hairline bg-white p-md"
     >
-      <h3 className="text-[13px] font-semibold text-ink mb-xs">Serving temperature</h3>
-      <p className="text-[14px] text-ink-muted">
+      <h3 className="text-caption font-medium uppercase text-grey mb-xs">Serving temperature</h3>
+      <p className="text-[14px] text-ink-soft">
         {row.serving_temp_min}–{row.serving_temp_max}°F
       </p>
       {row.serving_temp_label && (
-        <p className="mt-2xs text-[12px] text-ink-subtle">{row.serving_temp_label}</p>
+        <p className="mt-2xs text-[12px] text-grey">{row.serving_temp_label}</p>
       )}
     </section>
   );
@@ -1079,34 +1078,34 @@ function DrinkWindowSection({ row }: { row: CellarWineRow }) {
   const status = getDrinkWindowStatus(row.drink_window_start, row.drink_window_end);
   const yearsLeft = getYearsUntilWindowClose(row.drink_window_end);
 
-  // BND-071 — status pill color mapping.
+  // BND-071 — status pill color mapping (contract badge tokens).
   const pillStyle = (() => {
     switch (status) {
       case "hold":
-        return "bg-surface-muted text-ink-muted border-border";
+        return "bg-bridge-surface text-grey";
       case "optimal":
-        return "bg-success-soft text-success border-success/30";
+        return "bg-sage-wash text-sage-ink";
       case "drink_now":
-        return "bg-warning-soft text-warning border-warning/30";
+        return "bg-powder-wash text-powder-ink";
       case "past_peak":
-        return "bg-danger-soft text-danger border-danger/30";
+        return "bg-blush-wash text-primary";
       default:
-        return "bg-surface-muted text-ink-muted border-border";
+        return "bg-bridge-surface text-grey";
     }
   })();
 
   return (
     <section
       aria-label="Drink window"
-      className="mt-md rounded-md border border-border bg-white p-md"
+      className="mt-md rounded-lg border border-hairline bg-white p-md"
     >
-      <h3 className="text-[13px] font-semibold text-ink mb-sm">Drink window</h3>
+      <h3 className="text-caption font-medium uppercase text-grey mb-sm">Drink window</h3>
 
       {/* BND-071 — start / peak / end year labels above the timeline. */}
-      <div className="mb-xs flex items-center justify-between text-[11px] font-mono text-ink-subtle">
+      <div className="mb-xs flex items-center justify-between text-[11px] font-mono text-grey">
         <span>Start {row.drink_window_start}</span>
         {row.peak_year != null && (
-          <span className="text-accent font-medium">Peak {row.peak_year}</span>
+          <span className="text-primary font-medium">Peak {row.peak_year}</span>
         )}
         <span>End {row.drink_window_end}</span>
       </div>
@@ -1118,14 +1117,14 @@ function DrinkWindowSection({ row }: { row: CellarWineRow }) {
       />
 
       <div className="mt-sm flex items-center justify-between text-[12px]">
-        {/* BND-071 — status pill replacing plain span. */}
+        {/* BND-071 — status pill, contract badge mapping. */}
         <span
-          className={`inline-flex items-center rounded-full border px-sm py-2xs text-[11px] font-semibold ${pillStyle}`}
+          className={`inline-flex items-center rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide ${pillStyle}`}
         >
           {formatStatusLabel(status, yearsLeft)}
         </span>
         {yearsLeft !== null && (
-          <span className="text-ink-subtle">
+          <span className="text-grey">
             {yearsLeft >= 0
               ? `${yearsLeft} year${yearsLeft === 1 ? "" : "s"} left`
               : `${Math.abs(yearsLeft)} year${Math.abs(yearsLeft) === 1 ? "" : "s"} past`}
@@ -1134,10 +1133,10 @@ function DrinkWindowSection({ row }: { row: CellarWineRow }) {
       </div>
 
       {row.review_excerpt && (
-        <blockquote className="mt-sm border-l-2 border-accent-soft pl-sm text-[12px] text-ink-muted italic leading-relaxed">
+        <blockquote className="mt-sm border-l-2 border-blush-wash pl-sm text-[12px] text-grey italic leading-relaxed">
           {row.review_excerpt}
           {row.rating && row.rating_source && (
-            <cite className="mt-2xs block not-italic font-medium text-ink-subtle">
+            <cite className="mt-2xs block not-italic font-medium text-grey">
               {row.rating} pts — {row.rating_source}
             </cite>
           )}
