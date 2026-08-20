@@ -1,6 +1,6 @@
 # Terroir
 
-Restaurant wine-management SaaS. Photograph an invoice on your phone → Azure Document Intelligence extracts the text → Claude structures it into typed line items → save to your cellar. Also: wine-list editor with publishable public menus, bottle-label scan, team management.
+Restaurant wine-management SaaS. Photograph an invoice on your phone → Azure Document Intelligence extracts the text → Claude structures it into typed line items → save to your cellar. The app also covers physical bin placement, cellar health, reconciliation, partial-bottle close-out, pricing and staff analytics, branded wine lists, bottle-label scan, and team management.
 
 Single Next.js 16 (App Router) deployable backed by Supabase (Postgres + Auth). No separate microservices.
 
@@ -32,9 +32,13 @@ pnpm start               # serve the production build locally
 pnpm lint                # ESLint
 pnpm test                # Vitest unit + route tests
 pnpm test:e2e            # Playwright end-to-end
+pnpm verify:api-contract  # verify discovered API routes against the checked-in inventory
+pnpm verify:product-conformance # check TER-CF classification artifact drift
 pnpm verify:feature-ledger # verify the authoritative feature ledger
 pnpm exec tsc --noEmit   # type-check
 pnpm run snapshot        # regenerate supabase/schema.snapshot.sql after a new migration
+pnpm run types:check     # regenerate and diff the Supabase TypeScript types
+pnpm run downs:check     # verify migrations 0011+ have paired down files
 ```
 
 [`app_spec.txt`](app_spec.txt) is the source requirement inventory.
@@ -44,6 +48,10 @@ completion and status ledger for all 269 active core requirements.
 not determine completion status. Run `pnpm verify:feature-ledger` after changing
 the ledger or its source requirements; CI runs the same verification before the
 typecheck, lint, and test gates.
+
+[`docs/PRODUCT-CONTRACT-CONFORMANCE.md`](docs/PRODUCT-CONTRACT-CONFORMANCE.md)
+defines the separate product-conformance classification artifact and drift
+gate. Neither that gate nor API inventory parity proves release behavior.
 
 For a sanitized local Supabase dataset, see
 [`docs/LOCAL-SUPABASE.md`](docs/LOCAL-SUPABASE.md). The seed script defaults to
@@ -59,21 +67,34 @@ Before your first deploy, set these as Railway service variables:
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 - `ANTHROPIC_API_KEY`
 - `AZURE_DOC_INTELLIGENCE_ENDPOINT`, `AZURE_DOC_INTELLIGENCE_KEY`
-- `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_AUTH_TOKEN` (optional; enables source-map uploads)
+- `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `NEXT_PUBLIC_SENTRY_ENVIRONMENT`, `SENTRY_AUTH_TOKEN` (optional; enables monitoring and source-map uploads)
 
 See `.env.example` for the full list with notes.
 
-**No staging environment yet** — every push to `main` auto-deploys directly to production. For a prototype this is fine; the moment you have paying customers, add a `staging` branch + a second Railway service (same Nixpacks config, different Supabase project or schema). 10-minute setup in Railway's UI: new service from GitHub, track the `staging` branch, duplicate the env vars pointing at a staging Supabase project.
+The protected `staging` branch has a separately deployed Railway and Supabase
+environment. Its required smoke check binds the deployed candidate to the Git
+SHA. A separate PR-preview health workflow exists, but `main` branch protection
+does not currently require it. Do not use a PR preview with production data,
+provider credentials, or a production service-role key. See
+[`docs/STAGING-SETUP.md`](docs/STAGING-SETUP.md) for the current gate state,
+isolation requirements, and promotion blockers.
 
 ## Repo layout
 
-- `src/app/` — App Router routes. `src/app/(app)/` is the authed shell; `src/app/api/` is the JSON API.
-- `src/lib/scanner/` — invoice parsing domain (OCR wrapper, Claude extraction, scoring).
-- `src/lib/wine-intelligence/` — drink-window and serving-temp rule engine.
-- `src/lib/wine-list/` — list templates + section/item types.
-- `src/lib/api/` — cross-cutting route helpers (auth, rate-limit, idempotency).
-- `supabase/migrations/` — forward-only SQL migrations. Regenerate `schema.snapshot.sql` after each.
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the canonical component and
+database-boundary map. App Router pages and handlers live in `src/app/`, domain
+workflows in `src/domains/`, provider adapters in `src/adapters/`, shared
+application modules in `src/lib/`, and database migrations in
+`supabase/migrations/`.
+
+## Documentation
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) owns module and database boundaries.
+- [`docs/LOCAL-SUPABASE.md`](docs/LOCAL-SUPABASE.md) owns sanitized local seed setup and coverage.
+- [`docs/STAGING-SETUP.md`](docs/STAGING-SETUP.md) owns preview and staging setup.
+- [`docs/PRODUCT-CONTRACT-CONFORMANCE.md`](docs/PRODUCT-CONTRACT-CONFORMANCE.md) owns the TER-CF conformance artifact.
+- [`docs/runbooks/database-backup-restore.md`](docs/runbooks/database-backup-restore.md) owns backup and restore operations.
 
 ## Design
 
-See `DESIGN.md` at the repo root. The prototype in `Wine Scanner Dashboard/` is the visual reference.
+See [`DESIGN.md`](DESIGN.md) at the repo root.

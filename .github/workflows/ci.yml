@@ -2,19 +2,21 @@
 #
 # Minimum-viable CI for Terroir. Gates every PR on these checks:
 #   1. feature ledger verification (authoritative completion contract)
-#   2. typecheck    (tsc --noEmit)
-#   3. lint         (next lint / eslint)
-#   4. unit tests   (vitest run)
-#   5. contract tests (DB security/API envelopes)
-#   6. schema drift (supabase/schema.snapshot.sql must equal a fresh
+#   2. API contract parity (route inventory matches current source)
+#   3. product conformance drift (classifications match current source)
+#   4. typecheck    (tsc --noEmit)
+#   5. lint         (next lint / eslint)
+#   6. unit tests   (vitest run)
+#   7. contract tests (DB security/API envelopes)
+#   8. schema drift (supabase/schema.snapshot.sql must equal a fresh
 #                    concatenation of supabase/migrations/*.sql)
-#   7. types drift  (src/types/database.ts must equal the live schema's
+#   9. types drift  (src/types/database.ts must equal the live schema's
 #                    current generated types) — skipped when
 #                    SUPABASE_ACCESS_TOKEN is not set (fork PRs etc.)
-#   8. downs check  (every forward migration from 0011 onward has a
+#  10. downs check  (every forward migration from 0011 onward has a
 #                    paired supabase/migrations/down/*.down.sql file —
 #                    INT-006)
-#   9. local seed dry-run (sanitized production-like fixtures still build)
+#  11. local seed dry-run (sanitized production-like fixtures still build)
 #
 # The schema-drift step turns "someone added a migration but forgot to
 # update the snapshot" into a hard failure. To regenerate the snapshot

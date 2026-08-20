@@ -1,184 +1,125 @@
-# Staging environment — setup guide
+# Staging and preview safety
 
-Addresses **INT-018** (no staging environment). Currently `main` auto-deploys
-to production on Railway with only the CI gates (typecheck / lint / vitest /
-schema drift / types drift / downs drift) standing between a developer's
-laptop and a live customer.
+This guide records the current GitHub, Railway, and Supabase gate state. It does
+not authorize a deployment, migration, promotion, rollback, or production data
+operation.
 
-This document is the setup playbook. Executing it requires Railway dashboard
-access + a Supabase-admin decision on branch vs. separate project.
+## Current GitHub state
 
----
+Verified through the GitHub API on 2026-08-20:
 
-## Goal
+- `origin/staging` exists and is protected. It requires the strict
+  `Staging smoke / Required staging smoke` check, enforces administrators and
+  linear history, and blocks force pushes and branch deletion.
+- The staging branch contains the `Staging smoke` and `Promote to production`
+  workflow files. Those files do not exist on `main`.
+- The staging smoke workflow is operational. It binds the deployed Railway
+  candidate to the expected SHA before its isolated browser jobs can run.
+- The latest staging-tip run, GitHub Actions run `31283879947`, failed the
+  exact-candidate smoke for staging SHA
+  `a94b196ad7b5947afec76c6174644cd520bfc932`. Its authenticated E2E jobs were
+  skipped. That tip is not a promotable candidate.
+- GitHub Actions run `31232010892` succeeded for the earlier candidate
+  `8d895fb5f7b73fbbbc063a9e196b3275b980dba2`. That evidence proves only its
+  recorded candidate and does not override the red check on the current tip.
+- `main` branch protection currently requires
+  `Typecheck / Lint / Test / Schema`. It does not require the PR-preview health
+  check or the staging-smoke check.
 
-`main → staging → prod` promotion, where the same commit is exercised
-against a staging Railway service + staging Supabase before a manual
-promotion to prod.
+The promotion workflow on `origin/staging` is not a usable production gate in
+its current location. It requires a `main` ref, but `main` does not contain the
+workflow file. Do not dispatch it or reproduce its push step manually. Promotion
+remains blocked until the reviewed workflow exists on `main`, its environment
+and release-owner restrictions are verified, and the exact current staging SHA
+has fresh smoke and database-recovery evidence.
 
-## Option A — Full staging (recommended)
+## Fixed staging environment
 
-**What it gets us:** genuine pre-prod smoke. Catches Chromium version
-drift, Railway runtime shifts, Supabase RLS surprises, SDK majors —
-anything the unit tests don't cover but a real HTTP+DB integration
-does.
+The separately deployed staging origin is
+`https://terroir-web-staging.up.railway.app`.
 
-**Steps:**
+Staging must keep all of these boundaries:
 
-1. **Create a second Railway service** in the same project, name it
-   `terroir-web-staging`. Point it at a new `staging` git branch
-   (create locally: `git branch staging main && git push -u origin
-   staging`). Configure the service's deploy trigger to `staging`
-   only.
+- a Railway staging environment and staging-scoped service variables;
+- an isolated Supabase branch or project with its own URL and credentials;
+- synthetic data in disposable namespaces, with cleanup evidence;
+- staging-only Auth redirects, Storage policies, email/test inboxes, and
+  provider credentials; and
+- a cookie secret that is not shared with production.
 
-2. **Supabase staging** — pick one:
-   - **Supabase branches** (GA as of 2025): create a branch from
-     prod. Each branch gets its own database + auth schema but shares
-     project-level settings. Cheapest to maintain.
-   - **Separate Supabase project**: more isolation, higher monthly
-     cost, more env-var management. Overkill unless we're testing
-     migrations that could corrupt prod data.
+The current `origin/staging` workflow and its retained evidence remain the
+source for the detailed fixed-staging procedure. Because those files are not on
+`main`, this document does not copy their mutation commands or claim that the
+main branch can run them.
 
-3. **Wire env vars on the staging service** (Railway dashboard →
-   Variables):
-   - `NEXT_PUBLIC_SUPABASE_URL` → staging branch/project URL
-   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` → staging
-   - `SUPABASE_SERVICE_ROLE_KEY` → staging
-   - `ACTIVE_RESTAURANT_COOKIE_SECRET` → new random `openssl rand
-     -base64 48` (don't share with prod)
-   - `ANTHROPIC_API_KEY` → either a separate staging key or same
-     (same is acceptable; no PII difference)
-   - `AZURE_DOC_INTELLIGENCE_*` → same
-   - `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` → same DSN, BUT add
-     `SENTRY_ENVIRONMENT=staging` so Sentry dashboards separate
-     staging noise from prod incidents.
+## PR preview environments
 
-4. **Promotion workflow** — add `.github/workflows/promote-to-prod.yml`
-   that's triggered manually from the Actions tab:
-   ```yaml
-   on:
-     workflow_dispatch:
-       inputs:
-         sha: { required: true }
-   jobs:
-     promote:
-       steps:
-         - run: |
-             git push origin ${{ inputs.sha }}:main
-   ```
-   The CI gates already run on the push-to-main, and Railway deploys
-   on the push.
+The repository's PR-preview workflow can prove that Railway reported a
+deployment for the PR HEAD and that the trusted Railway service domain returned
+HTTP 200 from `/api/health`. Its success does not prove database, provider,
+tenant, Auth, or Storage isolation.
 
-5. **Automerge to staging** — add a branch-protection rule on
-   `staging` that auto-merges from `main` when `main`'s CI is green.
-   Or manually: `git push origin main:staging` after each landed PR.
+Standard Railway PR environments are blocked for Terroir when they inherit
+production variables. Do not enable or use one until every preview has:
 
-6. **Developer-facing preview URL**: `https://terroir-web-staging.up.
-   railway.app`. Add to `.council/progress.md` + this README so cold-
-   start developers know where to smoke-test.
+- a preview-specific Supabase branch or project with separate publishable and
+  service-role credentials;
+- no production service-role key, database URL, rows, Auth users, sessions, or
+  Storage objects;
+- synthetic or disposable data only;
+- preview-scoped provider credentials, quotas, and callback URLs; and
+- a preview-specific cookie secret and explicit cleanup lifecycle.
 
-## Option B — Cheaper half-step (enforced CI gate)
+If Railway cannot supply those boundaries per preview, use the fixed isolated
+staging environment instead. A preview that points at production Supabase or
+uses production provider credentials is unsafe even when `/api/health` returns
+200.
 
-**What it gets us:** per-PR preview deploys with a health check.
-Doesn't replace prod staging, but catches Chromium / runtime shifts
-before merge.
+The strict workflow in this change fails closed when PR metadata is missing,
+Railway reports failure or error, or polling ends without a valid preview. The
+success log phrase is exactly `Preview ready — curling <preview>/api/health`,
+followed by `Preview /api/health returned 200`. The workflow is operational,
+but it is advisory until GitHub branch protection requires
+`Preview health / Railway preview /api/health` on `main`.
 
-**Status:** The CI workflow is **already in place** as
-`.github/workflows/preview-health.yml`. It accepts preview metadata only
-from the authenticated `railway-app[bot]` comment on the current PR,
-binds that comment's environment ID to a Railway-bot deployment for the
-PR HEAD SHA, waits up to 5 minutes for it to reach `success`, then curls
-the comment's Railway-provided service domain at `/api/health`.
+## Supabase staging choices
 
-**Fail-closed behavior:** the check fails when GitHub does not provide
-complete PR metadata, Railway reports deployment `failure` or `error`,
-or polling exhausts without a valid preview. A Railway deployment that
-reaches `success` passes only when its preview `/api/health` returns
-HTTP 200. User-authored comments, unrelated deployments, and
-`railway.com` dashboard/log URLs cannot satisfy the gate. If the
-Railway project setup below is incomplete, PRs fail this check rather
-than report a false-green result.
+Supabase documents two branch lifecycles: ephemeral preview branches and
+long-lived persistent branches. Each branch is a separate environment with its
+own database, API endpoint, credentials, Auth, and Storage. New branches are
+data-less by default; production data is not copied. Supabase recommends a
+persistent branch for staging or QA because it is not paused or deleted when a
+pull request closes. See the official
+[Branching guide](https://supabase.com/docs/guides/deployment/branching) and
+[branch configuration guide](https://supabase.com/docs/guides/deployment/branching/configuration).
 
-**External setup required for passing PRs:**
+Branching requires a Pro plan. Supabase bills branch compute and other usage;
+branch usage is not covered by the Spend Cap, and compute credits do not apply.
+The current published Micro compute rate starts at $0.01344 per branch-hour,
+with disk, egress, and Storage charged by use. Verify pricing before creating or
+retaining a branch. See the official
+[branch usage guide](https://supabase.com/docs/guides/platform/manage-your-usage/branching).
 
-1. **Enable Railway PR Environments** in Railway **Project Settings →
-   Environments → Enable PR Environments**. This is the current path
-   in Railway's [PR Environments guide](https://docs.railway.com/guides/preview-deployments-with-pr-environments).
+A separate Supabase project provides a stronger administrative boundary but
+adds its own project configuration and plan usage. Terroir already has an
+isolated fixed-staging Supabase resource. Do not create another branch or
+project until an owner confirms that the existing resource cannot meet the
+required isolation.
 
-2. **Keep one public Terroir web service on a Railway-provided domain.**
-   Railway provisions PR domains only when the corresponding base
-   service already uses a Railway-provided domain. The gate requires
-   exactly one `https://*.up.railway.app` service URL in Railway's PR
-   comment; zero or multiple public service URLs fail closed.
+## Promotion and rollback gates
 
-3. **For bot-authored PRs, enable Bot PR Environments** under **Project
-   Settings → Environments → PR Environments**. Railway does not
-   create environments for bot PRs by default.
+Production promotion requires all of the following evidence for one exact SHA:
 
-4. **Gate merge** on the `Preview health / Railway preview /api/health`
-   check via a branch-protection rule on `main` (Settings →
-   Branches → main → Require status checks to pass).
+1. The SHA is the protected `origin/staging` tip.
+2. Railway staging serves that SHA and the required staging smoke check passes.
+3. Stateful tests use only isolated synthetic data and retain cleanup evidence.
+4. The required backup and disposable restore drill are current and bound to
+   the release decision.
+5. The reviewed promotion workflow exists on `main`, the configured release
+   owner authorizes the action, and the production environment restrictions are
+   verified live.
 
-Option B doesn't catch Supabase-side regressions (RLS changes,
-migration issues) since the preview still hits prod Supabase. But it
-catches the most common class of "works on my laptop, breaks on
-Railway" surprises.
-
-### Verifying the gate end-to-end
-
-After flipping the Railway toggle + adding the branch-protection
-rule, verify both are wired correctly by opening a throwaway PR and
-watching for:
-
-1. **The Railway GitHub bot comments on the PR.** The comment author is
-   `railway-app` / `railway-app[bot]`, the body lists the PR environment,
-   and its Terroir row contains a `Web` link on `*.up.railway.app`.
-   User-authored lookalike comments are ignored.
-
-2. **The `Preview health` workflow runs.** Check the Actions tab on
-   the PR — `Preview health / Railway preview /api/health` should
-   start polling. Logs show `Polling for Railway preview on
-   <repo> @ <sha> ...` for up to 5 min.
-
-3. **`/api/health` is curled on the service URL from the trusted bot
-   comment.** Log shows `Preview ready — curling
-   https://<service>.up.railway.app/api/health`. Railway dashboard and
-   deployment-log URLs are metadata only and are never health targets.
-   A 200 reply logs `✅ Preview /api/health returned 200` and the check
-   passes.
-
-4. **The status check is required in the PR UI.** The "Merge pull
-   request" button is disabled until the check reports success, and
-   the check appears in the required-checks list at the bottom of
-   the PR.
-
-If step 1 passes but step 2 doesn't, check the workflow file is present
-on the PR's base branch (`main`). If the bot comment has zero or
-multiple `*.up.railway.app` links, correct the Railway service/domain
-setup; the gate intentionally will not guess. If steps 1-3 pass but
-step 4 doesn't, the branch-protection rule didn't take — the check name
-to require is exactly `Preview health / Railway preview /api/health`
-(job name inside `preview-health.yml`, not the workflow name).
-
-## Tracking
-
-Once either path is chosen and executed, update:
-- `.council/architecture_index.md` → flip the "no staging wired up"
-  note to describe the actual setup
-- `.council/issue_backlog.md` → mark INT-018 resolved with the
-  commit SHA that stood up the staging service
-- `README.md` → add a "Development" section pointing at the staging
-  URL
-
-## Why this is still open as a finding
-
-This doc scopes the work. Option B's **CI side is landed and fails
-closed** — the preview-health workflow will not pass without a valid
-Railway preview and a 200 response from its `/api/health`. The Railway
-Project Settings PR-Environments configuration and a single
-Railway-provided public service domain are therefore required before
-PRs can satisfy the gate. Option A still requires dashboard-level
-access + a call on Supabase branch vs. separate project.
-
-INT-018 moves from "open" to "half-scoped" once the workflow lands,
-and closes fully when either path is activated on the Railway side.
+Rollback is also a production operation. Record the failed and prior-known-good
+SHAs, deployment state, migration state, and incident approval before acting.
+Do not copy or restore database data as part of an application rollback without
+a separate approved restore procedure.
