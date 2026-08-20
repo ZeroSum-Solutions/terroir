@@ -93,9 +93,9 @@ test.describe("@opp-4 navigable wine taxonomy", () => {
     if (error) throw error;
     wineIds = data!.map((row) => row.id);
     const { error: inventoryError } = await admin.from("inventory_items").insert([
-      { restaurant_id: restaurantId, wine_id: wineIds[0], quantity: 2 },
-      { restaurant_id: restaurantId, wine_id: wineIds[1], quantity: 4 },
-      { restaurant_id: restaurantId, wine_id: wineIds[2], quantity: 1 },
+      { restaurant_id: restaurantId, wine_id: wineIds[0], quantity: 2, unit_cost: 40 },
+      { restaurant_id: restaurantId, wine_id: wineIds[1], quantity: 4, unit_cost: 30 },
+      { restaurant_id: restaurantId, wine_id: wineIds[2], quantity: 1, unit_cost: 60 },
     ]);
     if (inventoryError) throw inventoryError;
   });
@@ -115,15 +115,21 @@ test.describe("@opp-4 navigable wine taxonomy", () => {
     await expect(page.getByText(names[0], { exact: true })).toBeVisible();
     await expect(page.getByText(names[1], { exact: true })).toBeVisible();
     await expect(page.getByText(names[2], { exact: true })).toHaveCount(0);
-    await expect(page).toHaveURL(new RegExp(`region=${encodeURIComponent(regionA)}`));
+    // URLSearchParams serializes spaces as "+", encodeURIComponent as "%20".
+    const regionParam = regionA.split(" ").map(encodeURIComponent).join("(?:\\+|%20)");
+    await expect(page).toHaveURL(new RegExp(`region=${regionParam}`));
 
     await page.reload();
     await expect(page.getByLabel("Region")).toHaveValue(regionA);
     await expect(page.getByText(names[2], { exact: true })).toHaveCount(0);
 
     await page.getByLabel("Region").selectOption("");
+    // Wait for the region clear to commit to the URL before the next
+    // filter interaction; back-to-back changes race the RSC navigation.
+    await expect(page).not.toHaveURL(/region=/);
     await page.getByLabel("Group by").selectOption("producer");
     await expect(page).toHaveURL(/group_by=producer/);
+    await expect(page).not.toHaveURL(/region=/);
 
     const alpha = page.locator("[data-cellar-taxonomy-group]", { hasText: producerA });
     const beta = page.locator("[data-cellar-taxonomy-group]", { hasText: producerB });

@@ -21,7 +21,7 @@ describe("fetchPricingRecommendations", () => {
           selectedDay: null,
         },
         timing: null,
-        computed_at: "2026-08-19T12:00:00.000Z",
+        computed_at: "2026-08-19T12:00:00.000+00:00",
         wines: { name: "Meursault", producer: "Fixture", vintage: 2020 },
       }],
       error: null,

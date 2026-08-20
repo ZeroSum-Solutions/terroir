@@ -32,6 +32,12 @@ describe("database security contracts", () => {
     expect(schema).toContain('create policy "public can read restaurants with published lists"');
   });
 
+  it("lets members update their scans so ledger CAS writes are not RLS no-ops", () => {
+    expect(schema).toMatch(
+      /create policy "members can update their scans"[\s\S]*?on public\.invoice_scans for update to authenticated[\s\S]*?with check \(public\.is_member\(restaurant_id\)\)/,
+    );
+  });
+
   it("keeps transactional pour and reconcile writes behind role-checked RPCs", () => {
     expect(schema).toMatch(
       /create or replace function public\.record_pour\([\s\S]*?security definer[\s\S]*?is_member_with_role\(v_restaurant_id, 'staff'\)/,

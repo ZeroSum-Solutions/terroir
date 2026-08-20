@@ -33,7 +33,8 @@ const StoredRowSchema = z.object({
   rationale: z.string().trim().min(1),
   evidence: EvidenceSchema,
   timing: z.string().trim().min(1).nullable(),
-  computed_at: z.iso.datetime(),
+  // PostgREST serializes timestamptz with a +00:00 offset, not Z.
+  computed_at: z.iso.datetime({ offset: true }),
   wines: z.union([WineSchema, z.array(WineSchema).min(1).max(1)]),
 });
 
