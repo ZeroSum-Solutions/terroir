@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 72,
-  "discoveredOperationCount": 85,
+  "routeFileCount": 74,
+  "discoveredOperationCount": 87,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/bins",
@@ -55,6 +55,17 @@
       "path": "/api/cellar",
       "source": {
         "file": "src/app/api/cellar/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/cellar-health/recompute",
+      "method": "POST",
+      "path": "/api/cellar-health/recompute",
+      "source": {
+        "file": "src/app/api/cellar-health/recompute/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null
@@ -286,6 +297,17 @@
       "path": "/api/open-bottles/[id]/close",
       "source": {
         "file": "src/app/api/open-bottles/[id]/close/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/open-bottles/close",
+      "method": "POST",
+      "path": "/api/open-bottles/close",
+      "source": {
+        "file": "src/app/api/open-bottles/close/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null

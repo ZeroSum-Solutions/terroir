@@ -1,3 +1,5 @@
+import type { CellarHealthSegment } from "@/lib/cellar-health/classify";
+
 /**
  * CellarWineRow — unified row shape that absorbs the per-wine data from
  * what used to be three separate pages (Pour / Availability / Reconcile).
@@ -28,6 +30,7 @@ export type CellarWineRow = {
   eightysixed_at: string | null;
   tasting_notes: string | null;
   hero_image_url: string | null;
+  healthSegment: CellarHealthSegment | null;
 
   // OPP-1 (wave 0) — lineage identity. lineage_id groups vintage siblings
   // of one producer-cuvée; wine_size_ml is the wine's own bottle format
@@ -65,6 +68,15 @@ export type CellarWineRow = {
   size_ml: number | null;
   open_remaining_ml: number | null;
   opened_at: string | null;
+  open_bottle_id: string | null;
+  preservation_method: "coravin" | "argon" | "vacuum" | "none";
+  opened_by: string | null;
+  theoretical_remaining_ml: number | null;
+  closeout_reason_codes: Array<{
+    id: string;
+    label: string;
+    category: string;
+  }>;
 
   // BND-039 — drink-window enrichment metadata. All nullable so a wine
   // without enrichment data renders with no timeline / no panel; the

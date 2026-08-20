@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextResponse, type NextRequest } from "next/server";
 
 const mockRequireMembership = vi.fn();
+const mockCreateClient = vi.fn();
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: (...args: unknown[]) => mockCreateClient(...args),
+}));
 vi.mock("@/lib/api/auth", () => ({
   requireMembership: (...args: unknown[]) => mockRequireMembership(...args),
 }));
@@ -31,6 +35,8 @@ function makeSupabase(opts: {
   };
   autoEightysixedWineIds?: string[];
   publishedSlugs?: Array<{ slug: string }>;
+  wineInRestaurant?: boolean;
+  preservationError?: { code?: string; message?: string } | null;
 }) {
   const calls: RpcCall[] = [];
   const rpc = vi.fn((fn: string, args: unknown) => {
@@ -47,6 +53,13 @@ function makeSupabase(opts: {
     return Promise.resolve({ data: null, error: null });
   });
   const from = vi.fn((table: string) => {
+    if (table === "open_bottles") {
+      const updateChain = {
+        eq: () => updateChain,
+        is: async () => ({ error: opts.preservationError ?? null }),
+      };
+      return { update: () => updateChain };
+    }
     const chain: Record<string, unknown> = {};
     const thenable = {
       select: () => thenable,
@@ -54,6 +67,10 @@ function makeSupabase(opts: {
       is: () => thenable,
       gte: () => thenable,
       in: () => thenable,
+      maybeSingle: async () => ({
+        data: opts.wineInRestaurant === false ? null : { id: WINE_ID },
+        error: null,
+      }),
       then: (resolve: (v: unknown) => void) => {
         if (table === "availability_events") {
           resolve({
@@ -70,7 +87,8 @@ function makeSupabase(opts: {
     Object.assign(chain, thenable);
     return chain;
   });
-  return { supabase: { rpc, from }, calls };
+  const supabase = { rpc, from };
+  return { supabase, calls };
 }
 
 function makeRequest(body: unknown): NextRequest {
@@ -86,6 +104,8 @@ const WINE_ID = "a1b2c3d4-e5f6-4789-8abc-def012345678";
 describe("POST /api/pour", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-role-secret");
   });
 
   it("401s when unauthenticated", async () => {
@@ -106,6 +126,7 @@ describe("POST /api/pour", () => {
       user: { id: "u-1" },
       role: "staff",
     });
+    mockCreateClient.mockReturnValue(supabase);
     const res = await POST(makeRequest({ ml: "five oz" }));
     expect(res.status).toBe(400);
   });
@@ -132,6 +153,84 @@ describe("POST /api/pour", () => {
     const body = await res.json();
     expect(body.open_bottle.remaining_ml).toBe(602);
     expect(mockRevalidate).toHaveBeenCalledWith("/availability");
+  });
+
+  it("EV-10.1: applies a supplied preservation method to the bottle returned by record_pour", async () => {
+    const { supabase } = makeSupabase({
+      recordPour: {
+        data: {
+          wine_id: WINE_ID,
+          remaining_ml: 602,
+          opened_at: "2026-04-22T00:00:00Z",
+        },
+        error: null,
+      },
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "staff",
+    });
+    mockCreateClient.mockReturnValue(supabase);
+
+    const response = await POST(makeRequest({
+      wine_id: WINE_ID,
+      ml: 148,
+      preservation_method: "argon",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(supabase.from).toHaveBeenCalledWith("open_bottles");
+  });
+
+  it("rejects a wine outside the active restaurant before recording a pour", async () => {
+    const { supabase, calls } = makeSupabase({
+      recordPour: { data: null, error: null },
+      wineInRestaurant: false,
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "staff",
+    });
+
+    const response = await POST(makeRequest({ wine_id: WINE_ID, ml: 148 }));
+
+    expect(response.status).toBe(404);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("returns the recorded pour with a warning when preservation update fails", async () => {
+    const { supabase, calls } = makeSupabase({
+      recordPour: {
+        data: {
+          wine_id: WINE_ID,
+          remaining_ml: 602,
+          opened_at: "2026-04-22T00:00:00Z",
+        },
+        error: null,
+      },
+      preservationError: { code: "XX000", message: "provider detail" },
+    });
+    mockRequireMembership.mockResolvedValue({
+      supabase,
+      restaurantId: "r-A",
+      user: { id: "u-1" },
+      role: "staff",
+    });
+    mockCreateClient.mockReturnValue(supabase);
+
+    const response = await POST(makeRequest({
+      wine_id: WINE_ID,
+      ml: 148,
+      preservation_method: "argon",
+    }));
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).warning.code).toBe("preservation_update_failed");
+    expect(calls.filter((call) => call.fn === "record_pour")).toHaveLength(1);
   });
 
   it("returns 409 on no inventory", async () => {

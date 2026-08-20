@@ -8,7 +8,7 @@ import { getDrinkWindowStatus, isHolding } from "@/lib/drink-window/status";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
 import { CellarList } from "./cellar-list";
-import { WineDetailDrawer } from "./wine-detail-drawer";
+import { drawerStateKey, WineDetailDrawer } from "./wine-detail-drawer";
 import { ReconcileModal } from "./reconcile-modal";
 import { AutoEightysixModal } from "./auto-eightysix-modal";
 import { CellarGridView, CellarSetup } from "./cellar-grid";
@@ -376,6 +376,7 @@ export function CellarShell({
               vintageMin: null,
               vintageMax: null,
               format: null,
+              health: null,
             });
           }}
           facets={{
@@ -386,6 +387,7 @@ export function CellarShell({
             vintageMin: urlState.vintageMin,
             vintageMax: urlState.vintageMax,
             format: urlState.format,
+            health: urlState.health,
           }}
           groupBy={urlState.groupBy}
           onFacetsChange={replaceUrlState}
@@ -422,7 +424,7 @@ export function CellarShell({
 
       {/* Drawer + modals */}
       <WineDetailDrawer
-        key={urlState.wine ?? "none"}
+        key={drawerStateKey(selected)}
         row={selected}
         canManage={canManage}
         isOwner={isOwner}

@@ -1,16 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
-import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { parseJson } from "@/lib/api/validation";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { PRESERVATION_METHODS } from "@/lib/partial-bottles/math";
 
 export const runtime = "nodejs";
 
 const BodySchema = z.object({
   wine_id: z.string().uuid(),
+  preservation_method: z.enum(PRESERVATION_METHODS).default("none"),
 });
 
 /**
@@ -44,7 +46,7 @@ async function postOpenBottle(request: NextRequest) {
     message: "Invalid body.",
   });
   if (!parsed.ok) return parsed.response;
-  const { wine_id } = parsed.data;
+  const { wine_id, preservation_method } = parsed.data;
 
   // Verify the wine belongs to this restaurant and get its size
   const { data: wine, error: wineErr } = await supabase
@@ -97,41 +99,39 @@ async function postOpenBottle(request: NextRequest) {
     .maybeSingle();
   if (existingError) throw existingError;
 
+  const service = createServiceRoleClient();
+  if (!service) return Errors.internal("Failed to open bottle.");
+
   // Decrement sealed inventory
-  const { error: decErr } = await supabase
+  const { error: decErr } = await service
     .from("inventory_items")
     .update({ quantity: sealedItem.quantity - 1 })
-    .eq("id", sealedItem.id);
+    .eq("id", sealedItem.id)
+    .eq("restaurant_id", restaurantId);
 
   if (decErr) {
-    console.error("Failed to decrement inventory:", decErr);
-    Sentry.captureException(decErr, {
-      tags: { surface: "open-bottles", phase: "decrement" },
-      extra: { wine_id, inventory_item_id: sealedItem.id },
-    });
+    console.error("Failed to decrement inventory while opening bottle.");
     return Errors.internal("Failed to open bottle.");
   }
 
   if (existingBottle) {
     // There's already an open bottle — just replace it with the new one
-    const { data: updated, error: updateErr } = await supabase
+    const { data: updated, error: updateErr } = await service
       .from("open_bottles")
       .update({
         remaining_ml: sizeMl,
         opened_at: new Date().toISOString(),
         opened_by: user.id,
+        preservation_method,
         closed_at: null,
       })
       .eq("id", existingBottle.id)
-      .select("id, wine_id, remaining_ml, opened_at")
+      .eq("restaurant_id", restaurantId)
+      .select("id, wine_id, remaining_ml, opened_at, opened_by, preservation_method")
       .single();
 
     if (updateErr || !updated) {
-      console.error("Failed to replace open bottle:", updateErr);
-      Sentry.captureException(updateErr ?? new Error("No data returned from open_bottles update"), {
-        tags: { surface: "open-bottles", phase: "replace" },
-        extra: { wine_id },
-      });
+      console.error("Failed to replace open bottle.");
       return Errors.internal("Failed to open bottle.");
     }
 
@@ -140,23 +140,20 @@ async function postOpenBottle(request: NextRequest) {
   }
 
   // Create a new open bottle without a pour_events row
-  const { data: created, error: insertErr } = await supabase
+  const { data: created, error: insertErr } = await service
     .from("open_bottles")
     .insert({
       wine_id,
       restaurant_id: restaurantId,
       remaining_ml: sizeMl,
       opened_by: user.id,
+      preservation_method,
     })
-    .select("id, wine_id, remaining_ml, opened_at")
+    .select("id, wine_id, remaining_ml, opened_at, opened_by, preservation_method")
     .single();
 
   if (insertErr || !created) {
-    console.error("Failed to create open bottle:", insertErr);
-    Sentry.captureException(insertErr ?? new Error("No data returned from open_bottles insert"), {
-      tags: { surface: "open-bottles", phase: "insert" },
-      extra: { wine_id },
-    });
+    console.error("Failed to create open bottle.");
     return Errors.internal("Failed to open bottle.");
   }
 
