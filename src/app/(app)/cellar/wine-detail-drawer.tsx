@@ -514,6 +514,7 @@ export function WineDetailDrawer({
               {row.unplaced_count > 0 && (
                 <p className="mt-2xs text-center font-mono text-[12px] text-ink-subtle">
                   Unplaced {row.unplaced_count}
+                  {row.bin_location && <> · marked {row.bin_location}</>}
                   {row.suggested_bin && (
                     <> · Suggested {row.suggested_bin.zone ? `${row.suggested_bin.zone} › ` : ""}
                       {row.suggested_bin.code}</>

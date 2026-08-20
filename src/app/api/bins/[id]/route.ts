@@ -15,7 +15,9 @@ type Params = Promise<{ id: string }>;
 const ParamsSchema = z.strictObject({ id: z.string().uuid() });
 const PatchSchema = z.strictObject({
   code: z.string().trim().min(1).max(50).optional(),
-  zone: z.string().trim().max(100).nullable().optional(),
+  zone: z.string().trim().max(100)
+    .transform((value) => (value === "" ? null : value))
+    .nullable().optional(),
   capacity: z.number().int().positive().nullable().optional(),
   priority: z.number().int().optional(),
   retired_at: z.string().datetime({ offset: true }).nullable().optional(),
@@ -27,13 +29,21 @@ type BinSnapshot = Pick<
   Database["public"]["Tables"]["bins"]["Row"],
   "code" | "zone" | "capacity" | "priority" | "retired_at"
 >;
-type FailurePhase = "read-code" | "update" | "mirror-code" | "rollback-code";
+type FailurePhase =
+  | "read-code"
+  | "update"
+  | "mirror-code"
+  | "rollback-code"
+  | "mirror-converge"
+  | "mirror-reconcile";
 
 const SAFE_FAILURE_MESSAGES: Record<FailurePhase, string> = {
   "read-code": "Bin code lookup failed.",
   update: "Bin update failed.",
   "mirror-code": "Bin code mirror failed.",
   "rollback-code": "Bin code rollback failed.",
+  "mirror-converge": "Bin code mirror convergence failed.",
+  "mirror-reconcile": "Bin code mirror reconciliation failed.",
 };
 
 function reportFailure(
@@ -178,7 +188,20 @@ async function renameBin(
   const { error: mirrorError } = await mirrorCode(
     supabase, restaurantId, binId, updates.code,
   );
-  if (!mirrorError) return NextResponse.json(data);
+  if (!mirrorError) {
+    // The optimistic predicate only guards the bins update: a concurrent
+    // rename can land between our update and our mirror, leaving its
+    // authoritative code newer than the text we just mirrored. Re-read
+    // and converge the mirror onto whatever code is authoritative now.
+    const { data: latest } = await currentBin(supabase, restaurantId, binId);
+    if (latest && latest.code !== updates.code) {
+      const { error: remirrorError } = await mirrorCode(
+        supabase, restaurantId, binId, latest.code,
+      );
+      if (remirrorError) reportFailure("mirror-converge", restaurantId, binId);
+    }
+    return NextResponse.json(data);
+  }
   reportFailure("mirror-code", restaurantId, binId);
 
   const { data: rollbackData, error: rollbackError } = await rollbackBin(
@@ -191,6 +214,15 @@ async function renameBin(
   );
   if (rollbackError || !rollbackData) {
     reportFailure("rollback-code", restaurantId, binId);
+    // The bin may be stranded on the new code with stale mirrored text.
+    // Best-effort: converge the mirror onto whatever code is authoritative.
+    const { data: latest } = await currentBin(supabase, restaurantId, binId);
+    if (latest) {
+      const { error: reconcileError } = await mirrorCode(
+        supabase, restaurantId, binId, latest.code,
+      );
+      if (reconcileError) reportFailure("mirror-reconcile", restaurantId, binId);
+    }
   }
   return Errors.internal("Failed to mirror bin code.");
 }

@@ -10,7 +10,9 @@ export const runtime = "nodejs";
 
 const BinBodySchema = z.strictObject({
   code: z.string().trim().min(1).max(50),
-  zone: z.string().trim().max(100).nullable().optional(),
+  zone: z.string().trim().max(100)
+    .transform((value) => (value === "" ? null : value))
+    .nullable().optional(),
   capacity: z.number().int().positive().nullable().optional(),
   priority: z.number().int().optional(),
 });

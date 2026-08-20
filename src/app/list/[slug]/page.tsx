@@ -187,6 +187,9 @@ export default async function PublicWineListPage({
   const wineIds = visibleSections.flatMap((section) =>
     section.wine_list_items.flatMap((item) => item.wines?.id ?? []),
   );
+  // NOTE: this page is ISR (revalidate above) — when a settings UI for
+  // show_bin_codes ships, its mutation must revalidatePath(`/list/${slug}`)
+  // so toggling the flag off revokes cached bin codes immediately.
   const binCodesByWine = list.show_bin_codes
     ? await fetchPublicBinCodes(list.restaurant_id, wineIds)
     : {};

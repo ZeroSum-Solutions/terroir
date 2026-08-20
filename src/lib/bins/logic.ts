@@ -71,6 +71,11 @@ export function findBottleMatches(
   return [...matches.values()];
 }
 
+/**
+ * Suggests where the NEXT bottle should go (single-slot capacity
+ * check). It does not size against the full unplaced quantity —
+ * bulk placement flows arrive with the OPP-5 reconciliation queue.
+ */
 export function suggestPutAway(input: {
   wine: Readonly<PutAwayWine>;
   inventoryRows: readonly BottleInventoryRow[];
