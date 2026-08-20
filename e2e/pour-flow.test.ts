@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * BND-038 E2E — full oz-native-inventory cycle.
@@ -11,7 +11,7 @@ import { createClient } from "@supabase/supabase-js";
  *
  * Path exercised:
  *   1. Authenticate via /api/dev-login (DEV_BYPASS_EMAIL in .env.local).
- *   2. Call list_open_bottle_items RPC directly (service-role) to find
+ *   2. Call list_open_bottle_items RPC directly (as the dev user) to find
  *      a by-the-glass wine with sealed inventory or an open bottle.
  *   3. Navigate to /cellar, tap the wine row → drawer opens → tap the
  *      primary "Pour Xoz" button. Verify the row's "~N glasses left"
@@ -91,10 +91,42 @@ test.describe("BND-038 pour → reconcile", () => {
     return row.restaurant_id as string;
   }
 
+  // list_open_bottle_items guards on is_member(auth.uid()), so a
+  // service-role call always returns []. Mint a real session for the
+  // dev user instead (same generate-link + verify flow as /api/dev-login).
+  let cachedUserClient: SupabaseClient | null = null;
+  async function userClient() {
+    if (cachedUserClient) return cachedUserClient;
+    const email = process.env.DEV_BYPASS_EMAIL;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    if (!email || !url || !anonKey) {
+      throw new Error(
+        "pour-flow E2E requires DEV_BYPASS_EMAIL, NEXT_PUBLIC_SUPABASE_URL, " +
+          "and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.",
+      );
+    }
+    const { data, error } = await adminClient().auth.admin.generateLink({
+      type: "magiclink",
+      email,
+    });
+    if (error) throw error;
+    const client = createClient(url, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { error: verifyError } = await client.auth.verifyOtp({
+      type: "magiclink",
+      token_hash: data.properties.hashed_token,
+    });
+    if (verifyError) throw verifyError;
+    cachedUserClient = client;
+    return client;
+  }
+
   async function fetchItems(_page: Page): Promise<OpenBottleItem[]> {
-    const admin = adminClient();
+    const user = await userClient();
     const restaurantId = await resolveRestaurantId();
-    const { data, error } = await admin.rpc("list_open_bottle_items", {
+    const { data, error } = await user.rpc("list_open_bottle_items", {
       p_restaurant_id: restaurantId,
     });
     expect(error, error?.message).toBeNull();
@@ -187,9 +219,9 @@ test.describe("BND-038 pour → reconcile", () => {
 
     // --- Step 1: land on /cellar and find the wine row ----------------
     await page.goto("/cellar");
-    // Each row is rendered as <li> with a button trigger. Pick the
-    // first row matching the chosen wine's producer.
-    const row = page.locator("li").filter({ hasText: cardLabel }).first();
+    // Each row's trigger button carries the full row text (producer,
+    // name, chips, glass count). Pick the first one for the chosen wine.
+    const row = page.getByRole("button").filter({ hasText: cardLabel }).first();
     await expect(row).toBeVisible();
     const startText = (await row.textContent()) ?? "";
     const startMatch = startText.match(/~(\d+) glass/);
@@ -198,7 +230,7 @@ test.describe("BND-038 pour → reconcile", () => {
     expect(startGlasses).toBeGreaterThan(0);
 
     // --- Step 2: open the drawer and tap the primary pour button -----
-    await row.locator("button").first().click();
+    await row.click();
     const drawer = page.getByRole("dialog", { name: /./ }); // any dialog
     await expect(drawer).toBeVisible();
     const pourBtn = drawer.getByRole("button", { name: /^Pour \d/i });
@@ -208,7 +240,7 @@ test.describe("BND-038 pour → reconcile", () => {
     // Server component refresh should land the committed state back
     // into the row. Poll until the glass count drops by exactly one.
     // Close the drawer first so the row text reads cleanly.
-    await drawer.getByRole("button", { name: /close wine detail/i }).click();
+    await drawer.getByRole("button", { name: /^close$/i }).click();
     await expect(async () => {
       const currentText = (await row.textContent()) ?? "";
       const m = currentText.match(/~(\d+) glass/);
@@ -217,7 +249,7 @@ test.describe("BND-038 pour → reconcile", () => {
     }).toPass({ timeout: 10_000 });
 
     // --- Step 3: reconcile to half via the Cellar reconcile modal -----
-    await page.getByRole("button", { name: /Reconcile open bottles/i }).click();
+    await page.getByRole("button", { name: /Reconcile \d+ open bottle/i }).click();
     const reconcileDialog = page.getByRole("dialog", {
       name: /Reconcile open bottles/i,
     });
@@ -228,7 +260,7 @@ test.describe("BND-038 pour → reconcile", () => {
       .filter({ hasText: cardLabel })
       .first();
     await expect(reconcileRow).toBeVisible();
-    await reconcileRow.getByRole("button", { name: "½" }).click();
+    await reconcileRow.getByRole("button", { name: "Half" }).click();
 
     const saveBtn = reconcileDialog.getByRole("button", {
       name: /Save \d+ change/i,

@@ -146,14 +146,17 @@ async function insertBin(admin: Admin, restaurantId: string): Promise<string> {
 }
 
 async function insertWines(admin: Admin, restaurantId: string) {
+  // wines_dedup_idx forbids identical (producer, name, vintage, size) rows, so
+  // duplicate suspects share a lineage via identical LWIN with distinct names,
+  // and the ambiguous trio shares its name norm across distinct vintages.
   const specs = [
-    { name: "Duplicate", vintage: 2019, lwin_id: `8${LWIN_BASE}01` },
-    { name: "Duplicate", vintage: 2019, lwin_id: `8${LWIN_BASE}01` },
+    { name: "Duplicate Alpha", vintage: 2019, lwin_id: `8${LWIN_BASE}01` },
+    { name: "Duplicate Beta", vintage: 2019, lwin_id: `8${LWIN_BASE}01` },
     { name: "Unplaced", vintage: 2020, lwin_id: `8${LWIN_BASE}02` },
     { name: "Field Match", vintage: 2021, lwin_id: `8${LWIN_BASE}03` },
     { name: "Ambiguous", vintage: 2022, lwin_id: `8${LWIN_BASE}04` },
-    { name: "Ambiguous", vintage: 2022, lwin_id: `8${LWIN_BASE}05` },
-    { name: "Ambiguous", vintage: 2022, lwin_id: null },
+    { name: "Ambiguous", vintage: 2023, lwin_id: `8${LWIN_BASE}05` },
+    { name: "Ambiguous", vintage: 2024, lwin_id: null },
   ];
   const rows = await checked(admin.from("wines").insert(specs.map((spec) => ({
     restaurant_id: restaurantId,
@@ -164,7 +167,7 @@ async function insertWines(admin: Admin, restaurantId: string) {
   return {
     wineIds: rows.map((row) => row.id),
     lineageIds: [...new Set(rows.flatMap((row) => row.lineage_id ? [row.lineage_id] : []))],
-    duplicateIds: rows.filter((row) => row.name === "Duplicate").map((row) => row.id),
+    duplicateIds: rows.filter((row) => row.name.startsWith("Duplicate")).map((row) => row.id),
     unplacedId: rows.find((row) => row.name === "Unplaced")!.id,
     scanWineId: rows.find((row) => row.name === "Field Match")!.id,
     ambiguousId: rows.find((row) => row.name === "Ambiguous" && row.lwin_id === null)!.id,
@@ -188,10 +191,11 @@ async function insertInventory(admin: Admin, restaurantId: string, fixture: Awai
   await checked(admin.from("inventory_items").insert([
     { restaurant_id: restaurantId, wine_id: first, bin_id: null, quantity: 1, unit_cost: 9, format: "750ml", added_at: "2026-01-01" },
     { restaurant_id: restaurantId, wine_id: first, bin_id: null, quantity: 1, unit_cost: 11, format: "750ml", added_at: "2026-02-01" },
-    { restaurant_id: restaurantId, wine_id: second, bin_id: activeBinId, quantity: 3, unit_cost: 20, format: "750ml" },
-    { restaurant_id: restaurantId, wine_id: fixture.unplacedId, bin_id: null, quantity: 1, unit_cost: 50, format: "750ml" },
-    { restaurant_id: restaurantId, wine_id: fixture.ambiguousId, bin_id: null, quantity: 4, unit_cost: 30, format: "750ml" },
-    { restaurant_id: restaurantId, wine_id: fixture.scanWineId, invoice_scan_id: invoiceScanId, bin_id: activeBinId, quantity: 2, unit_cost: 15, format: "750ml" },
+    // Bulk inserts null-fill omitted columns, bypassing the added_at default.
+    { restaurant_id: restaurantId, wine_id: second, bin_id: activeBinId, quantity: 3, unit_cost: 20, format: "750ml", added_at: "2026-03-01" },
+    { restaurant_id: restaurantId, wine_id: fixture.unplacedId, bin_id: null, quantity: 1, unit_cost: 50, format: "750ml", added_at: "2026-03-01" },
+    { restaurant_id: restaurantId, wine_id: fixture.ambiguousId, bin_id: null, quantity: 4, unit_cost: 30, format: "750ml", added_at: "2026-03-01" },
+    { restaurant_id: restaurantId, wine_id: fixture.scanWineId, invoice_scan_id: invoiceScanId, bin_id: activeBinId, quantity: 2, unit_cost: 15, format: "750ml", added_at: "2026-03-01" },
   ]).select("id"));
 }
 
