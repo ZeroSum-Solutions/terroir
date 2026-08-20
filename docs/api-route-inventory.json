@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 77,
-  "discoveredOperationCount": 90,
+  "routeFileCount": 80,
+  "discoveredOperationCount": 93,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/bins",
