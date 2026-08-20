@@ -264,6 +264,44 @@ export type Database = {
           },
         ]
       }
+      brand_kits: {
+        Row: {
+          created_at: string
+          id: string
+          logo_url: string | null
+          palette: Json
+          proposals: Json | null
+          restaurant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          palette?: Json
+          proposals?: Json | null
+          restaurant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          palette?: Json
+          proposals?: Json | null
+          restaurant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_kits_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: true
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cellar_config: {
         Row: {
           columns: number
@@ -732,6 +770,54 @@ export type Database = {
           },
         ]
       }
+      pricing_recommendations: {
+        Row: {
+          class: string
+          computed_at: string
+          evidence: Json
+          id: string
+          rationale: string
+          restaurant_id: string
+          timing: string | null
+          wine_id: string
+        }
+        Insert: {
+          class: string
+          computed_at?: string
+          evidence?: Json
+          id?: string
+          rationale: string
+          restaurant_id: string
+          timing?: string | null
+          wine_id: string
+        }
+        Update: {
+          class?: string
+          computed_at?: string
+          evidence?: Json
+          id?: string
+          rationale?: string
+          restaurant_id?: string
+          timing?: string | null
+          wine_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pricing_recommendations_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pricing_recommendations_wine_id_fkey"
+            columns: ["wine_id"]
+            isOneToOne: false
+            referencedRelation: "wines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reason_codes: {
         Row: {
           active: boolean
@@ -933,6 +1019,67 @@ export type Database = {
           },
         ]
       }
+      stock_adjustments: {
+        Row: {
+          acting_user_id: string
+          bottles: number
+          created_at: string
+          id: string
+          kind: string
+          ml: number
+          note: string | null
+          reason_code_id: string
+          restaurant_id: string
+          wine_id: string
+        }
+        Insert: {
+          acting_user_id: string
+          bottles?: number
+          created_at?: string
+          id?: string
+          kind: string
+          ml?: number
+          note?: string | null
+          reason_code_id: string
+          restaurant_id: string
+          wine_id: string
+        }
+        Update: {
+          acting_user_id?: string
+          bottles?: number
+          created_at?: string
+          id?: string
+          kind?: string
+          ml?: number
+          note?: string | null
+          reason_code_id?: string
+          restaurant_id?: string
+          wine_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_adjustments_reason_code_id_fkey"
+            columns: ["reason_code_id"]
+            isOneToOne: false
+            referencedRelation: "reason_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_adjustments_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_adjustments_wine_id_fkey"
+            columns: ["wine_id"]
+            isOneToOne: false
+            referencedRelation: "wines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wine_lineages: {
         Row: {
           created_at: string
@@ -1082,6 +1229,7 @@ export type Database = {
           show_bin_codes: boolean
           slug: string | null
           template: string
+          theme: Json | null
           updated_at: string
         }
         Insert: {
@@ -1096,6 +1244,7 @@ export type Database = {
           show_bin_codes?: boolean
           slug?: string | null
           template?: string
+          theme?: Json | null
           updated_at?: string
         }
         Update: {
@@ -1110,6 +1259,7 @@ export type Database = {
           show_bin_codes?: boolean
           slug?: string | null
           template?: string
+          theme?: Json | null
           updated_at?: string
         }
         Relationships: [

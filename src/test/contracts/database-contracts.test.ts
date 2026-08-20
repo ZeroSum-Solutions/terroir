@@ -185,3 +185,35 @@ describe("wave-2 health, reconcile, and close-out contracts", () => {
     );
   });
 });
+
+describe("wave-3 staff events, brand kits, and pricing recommendations", () => {
+  it("EV-7.1/7.2: stock_adjustments require a reason code and self-attribution", () => {
+    expect(schema).toContain("create table public.stock_adjustments");
+    expect(schema).toContain("kind in ('comp', 'adjustment')");
+    expect(schema).toContain(
+      "reason_code_id  uuid        not null references public.reason_codes(id) on delete restrict",
+    );
+    expect(schema).toContain("and acting_user_id = auth.uid()");
+    expect(schema).toContain(
+      "revoke update, delete on public.stock_adjustments from authenticated;",
+    );
+  });
+
+  it("EV-8.1/8.3: brand kit is unique per restaurant; theme lives on the list", () => {
+    expect(schema).toContain("create table public.brand_kits");
+    expect(schema).toMatch(/create table public\.brand_kits[\s\S]*?unique \(restaurant_id\)/);
+    expect(schema).toContain("add column theme jsonb;");
+  });
+
+  it("EV-9.1: recommendations carry class + rationale + evidence, job-write-only", () => {
+    expect(schema).toContain(
+      "class in ('discount_to_move', 'raise_appreciating', 'feature_btg', 'hold')",
+    );
+    expect(schema).toContain(
+      "revoke insert, update, delete on public.pricing_recommendations from authenticated, anon;",
+    );
+    expect(schema).toContain(
+      "job_type in ('invoice_ocr', 'wine_enrichment', 'wine_list_pdf', 'cellar_health', 'pricing_recommendations')",
+    );
+  });
+});
