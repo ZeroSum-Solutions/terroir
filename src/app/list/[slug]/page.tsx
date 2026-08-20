@@ -10,6 +10,10 @@ import {
   requireSupabasePublicConfig,
 } from "@/lib/supabase/config";
 import { cn } from "@/lib/utils";
+import {
+  buildBinCodesByWine,
+  type PublicBinCodeRow,
+} from "./public-bin-codes";
 
 /** Anon client for public pages — respects RLS, no auth session needed. */
 function createAnonClient() {
@@ -23,6 +27,34 @@ function createAnonClient() {
     config.url,
     config.publishableKey,
   );
+}
+
+async function fetchPublicBinCodes(restaurantId: string, wineIds: string[]) {
+  const config = getSupabasePublicConfig();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (wineIds.length === 0) return {};
+  if (!config || !serviceRoleKey) {
+    console.error("public bin-code lookup is not configured");
+    return {};
+  }
+
+  const admin = createSupabaseClient<Database>(config.url, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
+  const { data, error } = await admin
+    .from("inventory_items")
+    .select("wine_id, bins!inner(code, restaurant_id)")
+    .eq("restaurant_id", restaurantId)
+    .eq("bins.restaurant_id", restaurantId)
+    .in("wine_id", wineIds)
+    .not("bin_id", "is", null)
+    .is("bins.retired_at", null);
+
+  if (error) {
+    console.error("public bin-code lookup failed");
+    return {};
+  }
+  return buildBinCodesByWine((data ?? []) as unknown as PublicBinCodeRow[]);
 }
 
 export const revalidate = 3600; // ISR: revalidate every hour
@@ -95,7 +127,7 @@ export default async function PublicWineListPage({
   const { data: list, error } = await supabase
     .from("wine_lists")
     .select(
-      "name, template, restaurant_id, restaurants(name, eightysix_strategy, logo_url), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
+      "name, template, restaurant_id, show_bin_codes, restaurants(name, eightysix_strategy, logo_url), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines(id, name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
     )
     .eq("slug", slug)
     .eq("is_published", true)
@@ -121,6 +153,7 @@ export default async function PublicWineListPage({
     blurb: string | null;
     hidden: boolean;
     wines: {
+      id: string;
       name: string;
       producer: string;
       vintage: number | null;
@@ -151,6 +184,12 @@ export default async function PublicWineListPage({
     visibleSections as unknown as WineListSectionEmbed<PublicWineItem>[],
     { eightysixStrategy },
   );
+  const wineIds = visibleSections.flatMap((section) =>
+    section.wine_list_items.flatMap((item) => item.wines?.id ?? []),
+  );
+  const binCodesByWine = list.show_bin_codes
+    ? await fetchPublicBinCodes(list.restaurant_id, wineIds)
+    : {};
 
   return (
     <main className="mx-auto min-h-screen max-w-[720px] bg-surface px-lg py-3xl print:min-h-0 print:max-w-none print:bg-white print:px-0 print:py-0">
@@ -210,6 +249,7 @@ export default async function PublicWineListPage({
             {section.items.map((item) => {
                 const wine = item.wines;
                 const is86d = item.is_marked_eightysixed;
+                const binCodes = binCodesByWine[wine.id] ?? [];
                 return (
                   <div
                     key={item.id}
@@ -240,6 +280,11 @@ export default async function PublicWineListPage({
                             is86d && "line-through",
                           )}>
                             {wine.vintage}
+                          </span>
+                        )}
+                        {binCodes.length > 0 && (
+                          <span className="ml-xs font-mono text-[11px] text-ink-subtle print:text-black">
+                            {binCodes.length === 1 ? "Bin" : "Bins"} {binCodes.join(", ")}
                           </span>
                         )}
                       </div>

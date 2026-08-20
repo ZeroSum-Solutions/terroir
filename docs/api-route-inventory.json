@@ -2,9 +2,53 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 66,
-  "discoveredOperationCount": 78,
+  "routeFileCount": 69,
+  "discoveredOperationCount": 82,
   "discoveredOperations": [
+    {
+      "operationId": "api:GET:/api/bins",
+      "method": "GET",
+      "path": "/api/bins",
+      "source": {
+        "file": "src/app/api/bins/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/bins",
+      "method": "POST",
+      "path": "/api/bins",
+      "source": {
+        "file": "src/app/api/bins/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/bins/{param}",
+      "method": "PATCH",
+      "path": "/api/bins/[id]",
+      "source": {
+        "file": "src/app/api/bins/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/bins/suggest",
+      "method": "GET",
+      "path": "/api/bins/suggest",
+      "source": {
+        "file": "src/app/api/bins/suggest/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
     {
       "operationId": "api:POST:/api/cellar",
       "method": "POST",

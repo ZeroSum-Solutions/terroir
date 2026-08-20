@@ -41,6 +41,19 @@ export type CellarWineRow = {
   // From inventory_items (aggregate)
   sealed_count: number;
   bin_location: string | null;
+  bin_placements: Array<{
+    binId: string;
+    code: string;
+    zone: string | null;
+    quantity: number;
+  }>;
+  unplaced_count: number;
+  suggested_bin: {
+    binId: string;
+    code: string;
+    zone: string | null;
+    reason: "same_lineage" | "same_colour_zone";
+  } | null;
   // BND-063/064 — cellar section from inventory_items.section
   section: string | null;
 

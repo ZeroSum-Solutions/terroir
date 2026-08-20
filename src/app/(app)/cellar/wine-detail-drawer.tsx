@@ -502,9 +502,22 @@ export function WineDetailDrawer({
                     ` · pour size ${(row.glass_pour_ml / ML_PER_OZ).toFixed(1)} oz`}
                 </p>
               )}
-              {row.bin_location && (
+              {row.bin_placements.map((placement) => (
+                <p
+                  key={placement.binId}
+                  className="mt-2xs text-center font-mono text-[12px] text-ink-subtle"
+                >
+                  Bin {placement.zone ? `${placement.zone} › ` : ""}
+                  {placement.code} · {placement.quantity}
+                </p>
+              ))}
+              {row.unplaced_count > 0 && (
                 <p className="mt-2xs text-center font-mono text-[12px] text-ink-subtle">
-                  Bin {row.bin_location}
+                  Unplaced {row.unplaced_count}
+                  {row.suggested_bin && (
+                    <> · Suggested {row.suggested_bin.zone ? `${row.suggested_bin.zone} › ` : ""}
+                      {row.suggested_bin.code}</>
+                  )}
                 </p>
               )}
             </section>

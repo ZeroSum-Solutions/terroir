@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { DollarSign, LogOut, Settings, Users } from "lucide-react";
+import { Archive, DollarSign, LogOut, Settings, Users } from "lucide-react";
 
 export function SettingsDropdown() {
   const [open, setOpen] = useState(false);
@@ -80,6 +80,17 @@ export function SettingsDropdown() {
             </Link>
             <Link
               ref={(el) => { itemsRef.current[1] = el; }}
+              href="/bins"
+              onClick={close}
+              role="menuitem"
+              tabIndex={-1}
+              className="flex items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-surface-muted"
+            >
+              <Archive className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
+              Bins
+            </Link>
+            <Link
+              ref={(el) => { itemsRef.current[2] = el; }}
               href="/team"
               onClick={close}
               role="menuitem"
@@ -92,7 +103,7 @@ export function SettingsDropdown() {
             <div className="mx-md my-xs border-t border-border" role="separator" />
             <form action="/auth/signout" method="post">
               <button
-                ref={(el) => { itemsRef.current[2] = el; }}
+                ref={(el) => { itemsRef.current[3] = el; }}
                 type="submit"
                 role="menuitem"
                 tabIndex={-1}
