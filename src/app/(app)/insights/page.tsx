@@ -12,6 +12,7 @@ import { BriefingAlertCard } from "./briefing-alert-card";
 import { EnrichCellarButton } from "./enrich-cellar-button";
 import { RefreshRetailButton } from "./refresh-retail-button";
 import { PricingReviewCard } from "./pricing-review-card";
+import { ReconcileQueueMetric } from "./reconcile-queue-metric";
 import { SnoozedAlertsCard, type SnoozedRow } from "./snoozed-alerts-card";
 import PourAnalyticsSection from "./pour-analytics-section";
 import DateRangeSelector from "./date-range-selector";
@@ -462,6 +463,7 @@ export default async function DashboardPage({
             {restaurantName}
           </p>
         </header>
+        <ReconcileQueueMetric />
         <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-border-strong bg-surface-muted px-lg py-3xl text-center">
           <BarChart3
             className="mb-md h-10 w-10 text-ink-subtle"
@@ -527,6 +529,7 @@ export default async function DashboardPage({
       </header>
 
       <TodayStrip exceptions={todayExceptions} />
+      <ReconcileQueueMetric />
 
       <YieldReportSection groups={yieldGroups} />
       <CellarHealthPanel summary={cellarHealthSummary} canRecompute={canEnrich} />

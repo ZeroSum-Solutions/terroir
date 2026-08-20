@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 67,
+    "extensionDiscoveredCount": 70,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -514,6 +514,24 @@
       "operationId": "api:POST:/api/reconcile",
       "classification": "exact",
       "concreteRequirementId": "TER-CF-193",
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:GET:/api/reconcile-queue",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/reconcile-queue/accept",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/reconcile-queue/undo",
+      "classification": "extension",
+      "concreteRequirementId": null,
       "semanticAliasContext": []
     },
     {

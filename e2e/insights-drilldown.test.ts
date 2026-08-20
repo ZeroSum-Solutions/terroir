@@ -107,12 +107,19 @@ test.describe("@opp-3 insights drill-down", () => {
         const anchor = element.matches("a[href]")
           ? element
           : element.querySelector("a[href]");
-        return anchor?.getAttribute("href") ?? "";
+        return {
+          metric: element.getAttribute("data-metric"),
+          href: anchor?.getAttribute("href") ?? "",
+        };
       }),
     );
     expect(linkState.length).toBeGreaterThan(0);
     expect(
-      linkState.every((href) => /^\/cellar(?:\?|$)/.test(href)),
+      linkState.every(({ metric, href }) =>
+        metric === "reconcile-queue-count"
+          ? href === "/reconcile-queue"
+          : /^\/cellar(?:\?|$)/.test(href),
+      ),
     ).toBeTruthy();
 
     await page.locator('[data-metric="eightysixed-count"] a').click();
