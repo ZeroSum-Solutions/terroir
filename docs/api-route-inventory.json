@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 75,
-  "discoveredOperationCount": 88,
+  "routeFileCount": 77,
+  "discoveredOperationCount": 90,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/bins",
@@ -281,6 +281,17 @@
       }
     },
     {
+      "operationId": "api:GET:/api/member-analytics",
+      "method": "GET",
+      "path": "/api/member-analytics",
+      "source": {
+        "file": "src/app/api/member-analytics/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
       "operationId": "api:POST:/api/open-bottles",
       "method": "POST",
       "path": "/api/open-bottles",
@@ -517,6 +528,17 @@
       "path": "/api/scans/[id]/re-extract",
       "source": {
         "file": "src/app/api/scans/[id]/re-extract/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/stock-adjustments",
+      "method": "POST",
+      "path": "/api/stock-adjustments",
+      "source": {
+        "file": "src/app/api/stock-adjustments/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null

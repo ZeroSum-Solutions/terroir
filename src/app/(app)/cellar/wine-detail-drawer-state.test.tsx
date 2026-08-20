@@ -150,6 +150,7 @@ function row(overrides: Partial<CellarWineRow>): CellarWineRow {
     opened_by: null,
     theoretical_remaining_ml: 515,
     closeout_reason_codes: [],
+    stock_adjustment_reason_codes: [],
     drink_window_start: null,
     drink_window_end: null,
     peak_year: null,

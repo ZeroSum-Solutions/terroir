@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 71,
+    "extensionDiscoveredCount": 73,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -475,6 +475,12 @@
       "semanticAliasContext": []
     },
     {
+      "operationId": "api:GET:/api/member-analytics",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
       "operationId": "api:POST:/api/open-bottles",
       "classification": "extension",
       "concreteRequirementId": null,
@@ -614,6 +620,12 @@
     },
     {
       "operationId": "api:POST:/api/scans/{param}/re-extract",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/stock-adjustments",
       "classification": "extension",
       "concreteRequirementId": null,
       "semanticAliasContext": []
