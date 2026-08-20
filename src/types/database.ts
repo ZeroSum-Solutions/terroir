@@ -777,6 +777,7 @@ export type Database = {
           created_at: string
           id: string
           new_state: Json
+          ordinal: number
           prior_state: Json
           restaurant_id: string
           subject_id: string
@@ -788,6 +789,7 @@ export type Database = {
           created_at?: string
           id?: string
           new_state: Json
+          ordinal?: number
           prior_state: Json
           restaurant_id: string
           subject_id: string
@@ -799,6 +801,7 @@ export type Database = {
           created_at?: string
           id?: string
           new_state?: Json
+          ordinal?: number
           prior_state?: Json
           restaurant_id?: string
           subject_id?: string
@@ -1279,6 +1282,35 @@ export type Database = {
         Returns: undefined
       }
       cleanup_scan_idempotency: { Args: never; Returns: undefined }
+      close_open_bottle: {
+        Args: {
+          p_actual_remaining_ml: number
+          p_reason_code_id?: string
+          p_wine_id: string
+          p_written_off_ml?: number
+        }
+        Returns: {
+          actual_remaining_ml: number
+          closed_at: string
+          closed_by: string | null
+          id: string
+          open_bottle_id: string | null
+          opened_at: string | null
+          preservation_method: string
+          reason_code_id: string | null
+          restaurant_id: string
+          theoretical_remaining_ml: number
+          variance_ml: number | null
+          wine_id: string
+          written_off_ml: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "bottle_closeouts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       dismiss_pricing_alert: {
         Args: { p_days?: number; p_wine_id: string }
         Returns: string
