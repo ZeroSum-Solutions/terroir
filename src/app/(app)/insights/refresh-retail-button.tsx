@@ -104,7 +104,7 @@ export function RefreshRetailButton() {
         onClick={onClick}
         disabled={busy}
         className={cn(
-          "inline-flex h-[40px] items-center gap-xs rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-bg-secondary disabled:opacity-60",
+          "inline-flex h-[40px] items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60",
           busy && "cursor-wait",
         )}
       >
@@ -117,21 +117,21 @@ export function RefreshRetailButton() {
       </button>
 
       {progress && (
-        <p className="text-[12px] text-ink-muted">
+        <p className="text-[12px] text-grey">
           {progress.refreshed} wine{progress.refreshed === 1 ? "" : "s"} refreshed
           {progress.skipped > 0 && (
             <>
               {" "}
               ·{" "}
-              <span className="font-mono">{progress.skipped}</span> unavailable
-              <span className="ml-xs text-ink-subtle">(no LWIN match or out of API quota)</span>
+              <span className="tabular">{progress.skipped}</span> unavailable
+              <span className="ml-xs text-grey">(no LWIN match or out of API quota)</span>
             </>
           )}
         </p>
       )}
 
       {errorMsg && (
-        <p role="alert" className="text-[12px] text-error">
+        <p role="alert" className="text-[12px] text-primary">
           {errorMsg}
         </p>
       )}

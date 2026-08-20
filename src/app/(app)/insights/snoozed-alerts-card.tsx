@@ -2,8 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ChevronDown, RotateCcw, Clock, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { metricHref } from "./metric-href";
 
 /**
  * BND-040 follow-up — SnoozedAlertsCard
@@ -101,7 +103,7 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
   }
 
   return (
-    <article className="rounded-md border border-border bg-white p-md md:p-lg">
+    <article className="rounded-card border border-hairline bg-white p-md md:p-lg">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -109,17 +111,17 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
         className="flex w-full items-center justify-between text-left"
       >
         <div>
-          <h3 className="font-serif text-[16px] text-ink">
+          <h3 className="font-serif text-[18px] text-ink">
             Snoozed alerts
           </h3>
-          <p className="mt-2xs text-[12px] text-ink-muted">
+          <p className="mt-2xs text-[12px] text-grey">
             {entries.length} active snooze{entries.length === 1 ? "" : "s"}.
             Tap to view + unsnooze early.
           </p>
         </div>
         <ChevronDown
           className={cn(
-            "h-4 w-4 text-ink-muted transition-transform",
+            "h-4 w-4 text-grey transition-transform",
             open && "rotate-180",
           )}
           strokeWidth={2}
@@ -128,7 +130,7 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
       </button>
 
       {open && (
-        <ul className="mt-md flex flex-col divide-y divide-border">
+        <ul className="mt-md flex flex-col divide-y divide-hairline">
           {entries.map((e) => {
             const key = `${e.wineId}:${e.kind}`;
             const isBusy = busy[key] ?? false;
@@ -136,18 +138,22 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
             return (
               <li
                 key={key}
+                data-metric={`snoozed-${e.kind}-${e.wineId}`}
                 className="flex items-center justify-between gap-md py-sm"
               >
                 <div className="min-w-0 flex-1">
-                  <span className="font-serif text-[14px] text-ink">
+                  <Link
+                    href={metricHref("wine", e.wineId)}
+                    className="font-serif text-[17px] font-medium text-ink transition-colors hover:text-primary"
+                  >
                     {e.producer}, {e.name}
-                  </span>
+                  </Link>
                   {e.vintage && (
-                    <span className="ml-xs font-mono text-[11px] text-ink-tertiary">
+                    <span className="ml-xs text-[11px] font-light text-grey">
                       {e.vintage}
                     </span>
                   )}
-                  <div className="mt-2xs flex items-center gap-xs text-[11px] text-ink-muted">
+                  <div className="mt-2xs flex items-center gap-xs text-[11px] text-grey">
                     {e.kind === "drink-window" ? (
                       <>
                         <Clock
@@ -167,15 +173,15 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
                         <span>Pricing review</span>
                       </>
                     )}
-                    <span className="text-ink-subtle">·</span>
-                    <span className="font-mono">until {expires}</span>
+                    <span className="text-grey">·</span>
+                    <span className="tabular">until {expires}</span>
                   </div>
                 </div>
                 <button
                   type="button"
                   disabled={isBusy}
                   onClick={() => onUnsnooze(e.wineId, e.kind)}
-                  className="inline-flex h-[30px] items-center gap-2xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-bg-secondary disabled:opacity-60"
+                  className="inline-flex h-[30px] items-center gap-2xs rounded-pill border border-ink/25 bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
                 >
                   <RotateCcw
                     className="h-3 w-3"
@@ -191,7 +197,7 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
       )}
 
       {errorMsg && (
-        <p role="alert" className="mt-sm text-[12px] text-error">
+        <p role="alert" className="mt-sm text-[12px] text-primary">
           {errorMsg}
         </p>
       )}

@@ -15,8 +15,8 @@ export default function ScansLoading() {
 
       {/* Desktop skeleton */}
       <div className="hidden md:block">
-        <div className="overflow-hidden rounded-md border border-border">
-          <div className="bg-surface-muted px-md py-sm">
+        <div className="overflow-hidden rounded-card border border-hairline">
+          <div className="bg-bridge-surface px-md py-sm">
             <div className="flex gap-lg">
               <Skeleton className="h-3 w-12" />
               <Skeleton className="h-3 w-20" />
@@ -31,7 +31,7 @@ export default function ScansLoading() {
               <div
                 key={i}
                 className={`flex gap-lg px-md py-sm ${
-                  i > 0 ? "border-t border-border" : ""
+                  i > 0 ? "border-t border-hairline" : ""
                 }`}
               >
                 <Skeleton className="h-4 w-20" />
@@ -52,9 +52,9 @@ export default function ScansLoading() {
           return (
             <div
               key={i}
-              className="flex items-center gap-md rounded-md border border-border bg-white p-md"
+              className="flex items-center gap-md rounded-lg border border-hairline bg-white p-md"
             >
-              <Skeleton className="h-11 w-11 shrink-0 rounded-sm" />
+              <Skeleton className="h-11 w-11 shrink-0 rounded-pill" />
               <div className="min-w-0 flex-1">
                 <Skeleton className="h-4 w-36" />
                 <Skeleton className="mt-2 h-3 w-24" />

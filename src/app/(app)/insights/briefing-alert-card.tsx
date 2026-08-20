@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { DrinkWindowTimeline } from "@/components/drink-window-timeline";
 import { getYearsUntilWindowClose } from "@/lib/drink-window/status";
 import type { DrinkWindowAlertRow } from "@/lib/drink-window/alerts";
+import { metricHref } from "./metric-href";
 
 /**
  * BND-039 — BriefingAlertCard
@@ -77,47 +78,48 @@ export function BriefingAlertCard({
 
   return (
     <article
+      data-metric={`drink-window-${alert.wine_id}`}
       className={cn(
-        "rounded-md border border-border bg-white p-md md:p-lg",
-        "border-l-[3px] border-l-warning",
+        "rounded-card border border-hairline bg-white p-md md:p-lg",
+        "border-l-[3px] border-l-primary",
       )}
     >
       <div className="flex flex-col gap-md md:flex-row md:items-start md:gap-lg">
         <div className="min-w-0 flex-1">
           <h3 className="font-serif text-[18px] text-ink md:text-[20px]">
             Hey {firstName} — {alert.bottle_count} bottle{alert.bottle_count === 1 ? "" : "s"} of{" "}
-            <em className="font-semibold italic">
+            <em className="font-medium italic">
               {alert.producer}, {alert.name}
               {alert.vintage ? ` ${alert.vintage}` : ""}
             </em>{" "}
             {alert.bottle_count === 1 ? "is" : "are"} entering {alert.bottle_count === 1 ? "its" : "their"} final drinking window.
           </h3>
-          <div className="mt-xs flex flex-wrap items-center gap-sm text-[12px] text-ink-muted">
+          <div className="mt-xs flex flex-wrap items-center gap-sm text-[12px] text-grey">
             <span className="inline-flex items-center gap-2xs">
               <Clock className="h-3 w-3" strokeWidth={2} aria-hidden />
-              <span className="font-mono">~{yearsLabel}</span> remaining of optimal
+              <span className="tabular">~{yearsLabel}</span> remaining of optimal
             </span>
             {alert.rating != null && alert.rating_source && (
               <span>
-                · last reviewed <span className="font-mono">{alert.rating} pts</span>
+                · last reviewed <span className="tabular">{alert.rating} pts</span>
               </span>
             )}
             {alert.bin_location && (
               <span>
-                · bin <span className="font-mono">{alert.bin_location}</span>
+                · bin <span className="inline-flex rounded-pill bg-beige px-xs py-[1px] text-[11px] text-ink-soft">{alert.bin_location}</span>
               </span>
             )}
           </div>
           {alert.review_excerpt && (
-            <p className="mt-sm font-serif text-[14px] italic text-ink leading-snug">
+            <p className="mt-sm font-serif text-[17px] italic text-ink leading-snug">
               &ldquo;{alert.review_excerpt}&rdquo;
             </p>
           )}
 
           <div className="mt-md flex flex-wrap items-center gap-xs">
             <Link
-              href={`/cellar?wine=${alert.wine_id}`}
-              className="inline-flex h-[38px] items-center gap-xs rounded-sm bg-accent px-md text-[13px] font-medium text-white hover:bg-accent-hover"
+              href={metricHref("wine", alert.wine_id)}
+              className="inline-flex h-[38px] items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
             >
               View {alert.bottle_count} bottle{alert.bottle_count === 1 ? "" : "s"}
               <ChevronRight className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -126,7 +128,7 @@ export function BriefingAlertCard({
               type="button"
               disabled
               title="Menu pairing flow ships in v1.5"
-              className="h-[38px] rounded-sm border border-border bg-bg-tertiary px-md text-[13px] font-medium text-ink-subtle"
+              className="h-[38px] rounded-pill border border-ink/25 bg-bridge-surface px-md text-[13px] font-medium text-grey"
             >
               Add to menu
             </button>
@@ -135,7 +137,7 @@ export function BriefingAlertCard({
               disabled={busy}
               onClick={onSnooze}
               className={cn(
-                "inline-flex h-[38px] items-center gap-xs rounded-sm px-md text-[13px] font-medium text-ink-muted hover:bg-bg-secondary disabled:opacity-60",
+                "inline-flex h-[38px] items-center gap-xs rounded-pill px-md text-[13px] font-medium text-grey hover:bg-bridge-surface disabled:opacity-60",
               )}
             >
               <X className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -144,7 +146,7 @@ export function BriefingAlertCard({
           </div>
 
           {errorMsg && (
-            <p role="alert" className="mt-sm text-[12px] text-error">
+            <p role="alert" className="mt-sm text-[12px] text-primary">
               {errorMsg}
             </p>
           )}
@@ -157,7 +159,7 @@ export function BriefingAlertCard({
             end={alert.drink_window_end}
             size="full"
           />
-          <p className="mt-xs text-[11px] italic text-ink-subtle">
+          <p className="mt-xs text-[11px] italic text-grey">
             Source: {formatRatingSourceLabel(alert.rating_source)}
             {alert.rating_source === "claude_inference" && " (estimated)"}
           </p>

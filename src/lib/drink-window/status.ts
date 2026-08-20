@@ -18,7 +18,7 @@
 
 export type DrinkStatus = "hold" | "optimal" | "drink_now" | "past_peak" | "unknown";
 
-const DRINK_NOW_THRESHOLD_YEARS = 2;
+export const DRINK_NOW_THRESHOLD_YEARS = 2;
 const ALERT_TRIGGER_YEARS = 1;
 
 /**

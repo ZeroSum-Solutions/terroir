@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { DollarSign, LogOut, Settings, Users } from "lucide-react";
+import { Archive, ClipboardCheck, DollarSign, LogOut, Settings, Users } from "lucide-react";
 
 export function SettingsDropdown() {
   const [open, setOpen] = useState(false);
@@ -59,13 +59,13 @@ export function SettingsDropdown() {
         aria-label="Settings"
         aria-expanded={open}
         aria-haspopup="true"
-        className="flex h-10 w-10 items-center justify-center rounded-sm text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink md:h-auto md:w-auto md:border md:border-border-strong md:bg-white md:px-md md:py-sm"
+        className="flex h-10 w-10 items-center justify-center rounded-pill text-grey transition-colors hover:bg-bridge-surface hover:text-ink md:h-auto md:w-auto md:border md:border-beige-deep md:bg-white md:px-md md:py-sm"
       >
         <Settings className="h-5 w-5 md:h-4 md:w-4" strokeWidth={1.75} aria-hidden="true" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-xs w-[180px] rounded-md border border-border bg-surface shadow-lg" role="menu">
+        <div className="absolute right-0 top-full z-30 mt-xs w-[180px] rounded-card border border-hairline bg-canvas" role="menu">
           <div className="flex flex-col py-xs">
             <Link
               ref={(el) => { itemsRef.current[0] = el; }}
@@ -80,6 +80,28 @@ export function SettingsDropdown() {
             </Link>
             <Link
               ref={(el) => { itemsRef.current[1] = el; }}
+              href="/bins"
+              onClick={close}
+              role="menuitem"
+              tabIndex={-1}
+              className="flex items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-surface-muted"
+            >
+              <Archive className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
+              Bins
+            </Link>
+            <Link
+              ref={(el) => { itemsRef.current[2] = el; }}
+              href="/reconcile-queue"
+              onClick={close}
+              role="menuitem"
+              tabIndex={-1}
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-surface-muted"
+            >
+              <ClipboardCheck className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
+              Reconcile
+            </Link>
+            <Link
+              ref={(el) => { itemsRef.current[3] = el; }}
               href="/team"
               onClick={close}
               role="menuitem"
@@ -92,7 +114,7 @@ export function SettingsDropdown() {
             <div className="mx-md my-xs border-t border-border" role="separator" />
             <form action="/auth/signout" method="post">
               <button
-                ref={(el) => { itemsRef.current[2] = el; }}
+                ref={(el) => { itemsRef.current[4] = el; }}
                 type="submit"
                 role="menuitem"
                 tabIndex={-1}

@@ -26,4 +26,13 @@ describe("resolveCellarNavigationIntent", () => {
     expect(resolveCellarNavigationIntent(null, "wine-1", wineIds).selectedWineId).toBe("wine-1");
     expect(resolveCellarNavigationIntent(null, "missing-wine", wineIds).selectedWineId).toBeNull();
   });
+
+  it("EV-4.3: keeps wine deep links persistent instead of consuming them", () => {
+    expect(resolveCellarNavigationIntent(null, "wine-1", wineIds)).toEqual({
+      filter: null,
+      selectedWineId: "wine-1",
+      shouldFocusSearch: false,
+      shouldConsumeParams: false,
+    });
+  });
 });

@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
+import { findDuplicateSuspects } from "@/lib/lineage/rollups";
 import { CellarShell } from "./cellar-shell";
+import { buildCellarBinData } from "./bin-data";
 import type { CellarWineRow } from "./types";
+import { theoreticalRemaining } from "@/lib/partial-bottles/math";
+import { isCellarHealthSegment } from "@/lib/cellar-health/classify";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +39,7 @@ type GridData = Record<string, BinData>;
  *   • `inventory_items`    → bin location + sealed counts + section (aggregate)
  *   • `list_open_bottle_items` RPC → per-wine pour/open-bottle data
  *   • `cellar_config`      → optional grid layout + sections for the Grid toggle
+ *   • `cellar_health`      → current per-wine health segment
  *   • `restaurants`        → auto-86 settings + eightysix_strategy (owner-only Settings modal)
  *
  * Joined client-side into a single CellarWineRow[]. Wines without a
@@ -47,24 +52,50 @@ export default async function CellarPage() {
 
   const [
     { data: wineRows },
-    { data: inventoryRows },
+    { data: inventoryRows, error: inventoryError },
+    { data: binRows, error: binError },
     { data: openBottleRows },
+    { data: directOpenBottleRows, error: directOpenError },
+    { data: reasonCodeRows, error: reasonCodeError },
+    { data: healthRows, error: healthError },
     { data: configRow },
     { data: restaurantRow },
   ] = await Promise.all([
     supabase
       .from("wines")
       .select(
-        "id, name, producer, vintage, varietal, region, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, serving_temp_min, serving_temp_max, serving_temp_label, decant_minutes, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until, tasting_notes, hero_image_url, manual_overrides, colour",
+        "id, name, producer, vintage, varietal, region, country, lineage_id, size_ml, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, serving_temp_min, serving_temp_max, serving_temp_label, decant_minutes, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until, tasting_notes, hero_image_url, manual_overrides, colour",
       )
       .eq("restaurant_id", restaurantId)
       .order("name", { ascending: true }),
     supabase
       .from("inventory_items")
-      .select("wine_id, bin_location, quantity, unit_cost, added_at, section")
+      .select("wine_id, bin_id, bin_location, quantity, unit_cost, added_at, section")
       .eq("restaurant_id", restaurantId)
       .order("added_at", { ascending: false }),
+    supabase
+      .from("bins")
+      .select("id, code, zone, capacity, retired_at")
+      .eq("restaurant_id", restaurantId)
+      .order("priority", { ascending: false })
+      .order("sort_order", { ascending: true })
+      .order("code", { ascending: true }),
     supabase.rpc("list_open_bottle_items", { p_restaurant_id: restaurantId }),
+    supabase
+      .from("open_bottles")
+      .select("id, wine_id, remaining_ml, opened_at, opened_by, preservation_method")
+      .eq("restaurant_id", restaurantId)
+      .is("closed_at", null),
+    supabase
+      .from("reason_codes")
+      .select("id, label, category")
+      .eq("restaurant_id", restaurantId)
+      .eq("active", true)
+      .order("label", { ascending: true }),
+    supabase
+      .from("cellar_health")
+      .select("wine_id, segment")
+      .eq("restaurant_id", restaurantId),
     supabase
       .from("cellar_config")
       .select("*")
@@ -79,6 +110,25 @@ export default async function CellarPage() {
       .eq("id", restaurantId)
       .single(),
   ]);
+
+  if (inventoryError || binError || directOpenError || reasonCodeError || healthError) {
+    throw inventoryError ?? binError ?? directOpenError ?? reasonCodeError ?? healthError;
+  }
+
+  const activeBottleIds = (directOpenBottleRows ?? []).map((bottle) => bottle.id);
+  const earliestOpen = (directOpenBottleRows ?? [])
+    .map((bottle) => bottle.opened_at)
+    .sort()[0];
+  const { data: pourEventRows, error: pourEventError } = activeBottleIds.length
+    ? await supabase
+        .from("pour_events")
+        .select("open_bottle_id, ml_delta, kind, occurred_at")
+        .eq("restaurant_id", restaurantId)
+        .in("open_bottle_id", activeBottleIds)
+        .gte("occurred_at", earliestOpen)
+        .in("kind", ["pour", "spill"])
+    : { data: [], error: null };
+  if (pourEventError) throw pourEventError;
 
   // BND-040 — pull current bottle/glass prices from wine_list_items so
   // the drawer Pricing section can show actual pricing alongside retail
@@ -169,12 +219,81 @@ export default async function CellarPage() {
     openByWine.set(ob.wine_id, ob);
   }
 
+  const directOpenByWine = new Map(
+    (directOpenBottleRows ?? []).map((bottle) => [bottle.wine_id, bottle]),
+  );
+  const directOpenById = new Map(
+    (directOpenBottleRows ?? []).map((bottle) => [bottle.id, bottle]),
+  );
+  const drainingPoursByBottle = new Map<string, number[]>();
+  for (const event of pourEventRows ?? []) {
+    if (!event.open_bottle_id) continue;
+    const bottle = directOpenById.get(event.open_bottle_id);
+    if (!bottle || event.occurred_at < bottle.opened_at) continue;
+    const pours = drainingPoursByBottle.get(event.open_bottle_id) ?? [];
+    drainingPoursByBottle.set(event.open_bottle_id, [...pours, event.ml_delta]);
+  }
+  const healthByWine = new Map(
+    (healthRows ?? []).flatMap((row) =>
+      isCellarHealthSegment(row.segment) ? [[row.wine_id, row.segment] as const] : [],
+    ),
+  );
+
+  // OPP-1 (wave 0) — duplicate suspects: same lineage + vintage + format
+  // pairs are merge candidates (EV-1.2). Computed here so the list can chip
+  // them and the drawer can offer the merge.
+  const suspectIdsByWine = new Map<string, string[]>();
+  for (const suspect of findDuplicateSuspects(
+    (wineRows ?? []).map((w) => ({
+      id: w.id,
+      lineageId: w.lineage_id,
+      producer: w.producer,
+      name: w.name,
+      vintage: w.vintage,
+      sizeMl: w.size_ml,
+      quantity: 0,
+      value: 0,
+      unitCost: null,
+    })),
+  )) {
+    for (const id of suspect.wineIds) {
+      suspectIdsByWine.set(
+        id,
+        suspect.wineIds.filter((other) => other !== id),
+      );
+    }
+  }
+
+  const binDataByWine = buildCellarBinData({
+    wines: (wineRows ?? []).map((wine) => ({
+      id: wine.id,
+      lineageId: wine.lineage_id,
+      name: wine.name,
+      producer: wine.producer,
+      colour: wine.colour,
+    })),
+    bins: (binRows ?? []).map((bin) => ({
+      id: bin.id,
+      code: bin.code,
+      zone: bin.zone,
+      capacity: bin.capacity,
+      retiredAt: bin.retired_at,
+    })),
+    inventoryRows: (inventoryRows ?? []).map((item) => ({
+      wineId: item.wine_id,
+      binId: item.bin_id,
+      quantity: item.quantity ?? 0,
+    })),
+  });
+
   // Build the unified row list. The wines table is canonical — every
   // wine in the cellar shows up, with optional stock data layered on.
   const rows: CellarWineRow[] = (wineRows ?? []).map((w) => {
     const inv =
       inventoryByWine.get(w.id) ?? { sealed: 0, bin: null, section: null, latestCost: null };
+    const binData = binDataByWine[w.id];
     const ob = openByWine.get(w.id);
+    const directOpen = directOpenByWine.get(w.id);
     const price = priceByWine.get(w.id);
     return {
       wine_id: w.id,
@@ -183,19 +302,49 @@ export default async function CellarPage() {
       vintage: w.vintage,
       varietal: w.varietal,
       region: w.region,
+      country: w.country,
+      lineage_id: w.lineage_id,
+      wine_size_ml: w.size_ml,
+      duplicate_wine_ids: suspectIdsByWine.get(w.id) ?? [],
       is_eightysixed: w.is_eightysixed ?? false,
       eightysixed_at: w.eightysixed_at,
       tasting_notes: w.tasting_notes ?? null,
       hero_image_url: w.hero_image_url ?? null,
+      healthSegment: healthByWine.get(w.id) ?? null,
       sealed_count: inv.sealed,
       bin_location: inv.bin,
+      bin_placements: binData?.placements ?? [],
+      unplaced_count: binData?.unplacedCount ?? 0,
+      suggested_bin: binData?.suggestedBin ?? null,
       section: inv.section,
       wine_list_item_id: ob?.wine_list_item_id ?? null,
       glass_pour_ml: ob?.glass_pour_ml ?? price?.pourMl ?? null,
       pour_size_mode: ob?.pour_size_mode ?? null,
       size_ml: ob?.size_ml ?? null,
-      open_remaining_ml: ob?.open_remaining_ml ?? null,
-      opened_at: ob?.opened_at ?? null,
+      open_remaining_ml:
+        directOpen?.remaining_ml ?? ob?.open_remaining_ml ?? null,
+      opened_at: directOpen?.opened_at ?? ob?.opened_at ?? null,
+      open_bottle_id: directOpen?.id ?? null,
+      preservation_method: (directOpen?.preservation_method ?? "none") as CellarWineRow["preservation_method"],
+      opened_by: directOpen?.opened_by ?? null,
+      theoretical_remaining_ml: directOpen
+        ? theoreticalRemaining(
+            w.size_ml,
+            drainingPoursByBottle.get(directOpen.id) ?? [],
+          )
+        : null,
+      closeout_reason_codes: (reasonCodeRows ?? [])
+        .filter((reason) => ["spoilage", "adjustment"].includes(reason.category))
+        .map((reason) => ({
+          id: reason.id,
+          label: reason.label,
+          category: reason.category,
+        })),
+      stock_adjustment_reason_codes: (reasonCodeRows ?? []).map((reason) => ({
+        id: reason.id,
+        label: reason.label,
+        category: reason.category,
+      })),
       // BND-039 — drink window metadata (nullable)
       drink_window_start: w.drink_window_start,
       drink_window_end: w.drink_window_end,

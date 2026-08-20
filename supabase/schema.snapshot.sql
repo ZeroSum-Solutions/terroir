@@ -3830,3 +3830,1279 @@ comment on column public.background_jobs.status is
 
 comment on column public.background_jobs.job_type is
   'invoice_ocr, wine_enrichment, or wine_list_pdf.';
+
+-- === 0053_reason_codes.sql ===
+-- 0053_reason_codes.sql
+-- F-1 (top-10 wave 0, docs/evals/top10-evals.yaml EV-F1.1): structured reason
+-- codes for comps, spills, spoilage, and manual adjustments. Pre-seeded per
+-- restaurant so downstream accountability analytics (OPP-7) and spoilage
+-- write-offs (OPP-10) never start from an empty table — the Bevrly lesson
+-- (audit doc 17 §1.13: zero codes configured at a live customer, so nothing
+-- downstream could ever carry a structured cause).
+
+create table public.reason_codes (
+  id             uuid        primary key default gen_random_uuid(),
+  restaurant_id  uuid        not null references public.restaurants(id) on delete cascade,
+  code           text        not null,
+  label          text        not null,
+  category       text        not null check (
+    category in ('comp', 'spill', 'training', 'spoilage', 'adjustment', 'other')
+  ),
+  active         boolean     not null default true,
+  created_at     timestamptz not null default now()
+);
+
+create unique index reason_codes_restaurant_code_idx
+  on public.reason_codes (restaurant_id, code);
+
+create index reason_codes_restaurant_id_idx
+  on public.reason_codes (restaurant_id);
+
+alter table public.reason_codes enable row level security;
+
+create policy "members can read reason_codes"
+  on public.reason_codes for select
+  using (public.is_member(restaurant_id));
+
+create policy "managers can insert reason_codes"
+  on public.reason_codes for insert
+  with check (public.is_member_with_role(restaurant_id, 'manager'));
+
+create policy "managers can update reason_codes"
+  on public.reason_codes for update
+  using      (public.is_member_with_role(restaurant_id, 'manager'))
+  with check (public.is_member_with_role(restaurant_id, 'manager'));
+
+-- No delete policy: codes are deactivated (active = false), never deleted,
+-- so historical events always keep their referent.
+
+create or replace function public.seed_reason_codes(p_restaurant_id uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  insert into public.reason_codes (restaurant_id, code, label, category)
+  values
+    (p_restaurant_id, 'comp_guest',    'Comped — guest recovery',      'comp'),
+    (p_restaurant_id, 'comp_industry', 'Comped — industry / VIP',      'comp'),
+    (p_restaurant_id, 'spill',         'Spilled / broken',             'spill'),
+    (p_restaurant_id, 'training',      'Staff training / tasting',     'training'),
+    (p_restaurant_id, 'spoilage',      'Corked / oxidised / spoiled',  'spoilage'),
+    (p_restaurant_id, 'count_adjust',  'Count correction',             'adjustment'),
+    (p_restaurant_id, 'other',         'Other',                        'other')
+  on conflict (restaurant_id, code) do nothing;
+$$;
+
+-- Signup trigger now also seeds reason codes. Body otherwise identical to
+-- 0001_auth_boundary.sql's definition.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  new_restaurant_id uuid;
+  restaurant_name   text;
+begin
+  restaurant_name := coalesce(
+    nullif(trim(new.raw_user_meta_data ->> 'restaurant_name'), ''),
+    'My Restaurant'
+  );
+
+  insert into public.restaurants (name)
+  values (restaurant_name)
+  returning id into new_restaurant_id;
+
+  insert into public.memberships (user_id, restaurant_id, role)
+  values (new.id, new_restaurant_id, 'owner');
+
+  perform public.seed_reason_codes(new_restaurant_id);
+
+  return new;
+end;
+$$;
+
+-- Backfill: seed reason codes for existing restaurants
+select public.seed_reason_codes(r.id) from public.restaurants r;
+
+-- === 0054_wine_lineages.sql ===
+-- 0054_wine_lineages.sql
+-- F-2 + OPP-1 (top-10 wave 0, docs/evals/top10-evals.yaml EV-F2.1, EV-1.1–1.4):
+-- vintage as first-class identity. A lineage is one producer-cuvée; vintages
+-- are distinct child wines carrying their own cost basis. Identity comes from
+-- LWIN7 (wines.lwin_id prefix — lwin_catalog is wine-level, no vintage) with a
+-- normalised producer+name fallback; wines whose name-group matches more than
+-- one LWIN identity stay unlinked (ambiguous) for review.
+--
+-- Derivation is a BEFORE trigger so every creation path — cellar add, scan
+-- commit, create-from-lwin — gets a lineage with no app-side coordination.
+-- Cross-vintage merging is rejected here in merge_wines, not just hidden in
+-- the UI: for wine, vintage is identity, not duplication.
+
+create table public.wine_lineages (
+  id             uuid        primary key default gen_random_uuid(),
+  restaurant_id  uuid        not null references public.restaurants(id) on delete cascade,
+  lwin7          text        check (lwin7 ~ '^[0-9]{7}$'),
+  producer_norm  text        not null,
+  cuvee_norm     text        not null,
+  created_at     timestamptz not null default now()
+);
+
+create unique index wine_lineages_lwin7_idx
+  on public.wine_lineages (restaurant_id, lwin7)
+  where lwin7 is not null;
+
+create unique index wine_lineages_name_idx
+  on public.wine_lineages (restaurant_id, producer_norm, cuvee_norm)
+  where lwin7 is null;
+
+create index wine_lineages_norms_idx
+  on public.wine_lineages (restaurant_id, producer_norm, cuvee_norm);
+
+alter table public.wine_lineages enable row level security;
+
+create policy "members can read wine_lineages"
+  on public.wine_lineages for select
+  using (public.is_member(restaurant_id));
+
+-- No client write policies: lineages are created/assigned only by the
+-- security-definer derivation trigger below.
+
+alter table public.wines
+  add column lineage_id uuid references public.wine_lineages(id) on delete set null;
+
+create index wines_lineage_id_idx on public.wines (lineage_id);
+
+create or replace function public.derive_wine_lineage()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_lwin7         text;
+  v_producer_norm text;
+  v_cuvee_norm    text;
+  v_lineage_id    uuid;
+  v_match_count   int;
+begin
+  v_producer_norm := lower(btrim(new.producer));
+  v_cuvee_norm    := lower(btrim(new.name));
+  v_lwin7 := case
+    when new.lwin_id is not null and new.lwin_id ~ '^[0-9]{7}'
+      then substr(new.lwin_id, 1, 7)
+    else null
+  end;
+
+  if v_lwin7 is not null then
+    -- LWIN identity wins.
+    insert into public.wine_lineages (restaurant_id, lwin7, producer_norm, cuvee_norm)
+    values (new.restaurant_id, v_lwin7, v_producer_norm, v_cuvee_norm)
+    on conflict (restaurant_id, lwin7) where lwin7 is not null do nothing
+    returning id into v_lineage_id;
+    if v_lineage_id is null then
+      select id into v_lineage_id
+        from public.wine_lineages
+       where restaurant_id = new.restaurant_id and lwin7 = v_lwin7;
+    end if;
+  else
+    -- Name fallback: adopt the LWIN lineage with these norms iff exactly one.
+    select count(*), min(id::text)::uuid
+      into v_match_count, v_lineage_id
+      from public.wine_lineages
+     where restaurant_id = new.restaurant_id
+       and lwin7 is not null
+       and producer_norm = v_producer_norm
+       and cuvee_norm = v_cuvee_norm;
+
+    if v_match_count > 1 then
+      -- Ambiguous identity: leave unlinked for review (EV-F2.1).
+      v_lineage_id := null;
+    elsif v_match_count = 0 then
+      insert into public.wine_lineages (restaurant_id, producer_norm, cuvee_norm)
+      values (new.restaurant_id, v_producer_norm, v_cuvee_norm)
+      on conflict (restaurant_id, producer_norm, cuvee_norm) where lwin7 is null do nothing
+      returning id into v_lineage_id;
+      if v_lineage_id is null then
+        select id into v_lineage_id
+          from public.wine_lineages
+         where restaurant_id = new.restaurant_id
+           and lwin7 is null
+           and producer_norm = v_producer_norm
+           and cuvee_norm = v_cuvee_norm;
+      end if;
+    end if;
+  end if;
+
+  new.lineage_id := v_lineage_id;
+  return new;
+end;
+$$;
+
+create trigger wines_derive_lineage
+  before insert or update of lwin_id, producer, name
+  on public.wines
+  for each row execute function public.derive_wine_lineage();
+
+-------------------------------------------------------------------------------
+-- Backfill existing wines. Pass A: LWIN-identified wines. Pass B: name-keyed
+-- wines, adopting a unique LWIN lineage where one exists, staying null where
+-- the name-group is ambiguous (matches 2+ LWIN identities).
+-- Updates below only touch lineage_id, so the derivation trigger (scoped to
+-- lwin_id/producer/name) does not fire.
+-------------------------------------------------------------------------------
+
+insert into public.wine_lineages (restaurant_id, lwin7, producer_norm, cuvee_norm)
+select distinct on (w.restaurant_id, substr(w.lwin_id, 1, 7))
+       w.restaurant_id,
+       substr(w.lwin_id, 1, 7),
+       lower(btrim(w.producer)),
+       lower(btrim(w.name))
+  from public.wines w
+ where w.lwin_id ~ '^[0-9]{7}'
+ order by w.restaurant_id, substr(w.lwin_id, 1, 7), w.created_at
+on conflict (restaurant_id, lwin7) where lwin7 is not null do nothing;
+
+update public.wines w
+   set lineage_id = l.id
+  from public.wine_lineages l
+ where w.lwin_id ~ '^[0-9]{7}'
+   and l.restaurant_id = w.restaurant_id
+   and l.lwin7 = substr(w.lwin_id, 1, 7);
+
+update public.wines w
+   set lineage_id = m.lineage_id
+  from (
+        select l.restaurant_id, l.producer_norm, l.cuvee_norm,
+               min(l.id::text)::uuid as lineage_id
+          from public.wine_lineages l
+         where l.lwin7 is not null
+         group by 1, 2, 3
+        having count(*) = 1
+       ) m
+ where w.lineage_id is null
+   and (w.lwin_id is null or w.lwin_id !~ '^[0-9]{7}')
+   and w.restaurant_id = m.restaurant_id
+   and lower(btrim(w.producer)) = m.producer_norm
+   and lower(btrim(w.name)) = m.cuvee_norm;
+
+insert into public.wine_lineages (restaurant_id, producer_norm, cuvee_norm)
+select distinct w.restaurant_id, lower(btrim(w.producer)), lower(btrim(w.name))
+  from public.wines w
+ where w.lineage_id is null
+   and (w.lwin_id is null or w.lwin_id !~ '^[0-9]{7}')
+   and not exists (
+         select 1
+           from public.wine_lineages l
+          where l.restaurant_id = w.restaurant_id
+            and l.lwin7 is not null
+            and l.producer_norm = lower(btrim(w.producer))
+            and l.cuvee_norm = lower(btrim(w.name))
+       )
+on conflict (restaurant_id, producer_norm, cuvee_norm) where lwin7 is null do nothing;
+
+update public.wines w
+   set lineage_id = l.id
+  from public.wine_lineages l
+ where w.lineage_id is null
+   and (w.lwin_id is null or w.lwin_id !~ '^[0-9]{7}')
+   and l.restaurant_id = w.restaurant_id
+   and l.lwin7 is null
+   and l.producer_norm = lower(btrim(w.producer))
+   and l.cuvee_norm = lower(btrim(w.name));
+
+-------------------------------------------------------------------------------
+-- merge_wines — the only sanctioned duplicate-collapse path (EV-1.2, EV-1.3).
+-- Role-checked security-definer RPC, same pattern as record_pour /
+-- reconcile_open_bottles_batch. Guards are enforced HERE: same lineage, same
+-- vintage, same format. Repoints every wines referrer, then deletes source.
+-------------------------------------------------------------------------------
+
+create or replace function public.merge_wines(
+  p_source_wine_id uuid,
+  p_target_wine_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_source            public.wines%rowtype;
+  v_target            public.wines%rowtype;
+  v_restaurant_id     uuid;
+  v_moved_inventory   int;
+  v_moved_pours       int;
+  v_moved_bottles     int;
+  v_moved_list_items  int;
+  v_moved_avail       int;
+begin
+  if p_source_wine_id = p_target_wine_id then
+    raise exception 'identical_merge: source and target are the same wine';
+  end if;
+
+  -- Deterministic lock order to avoid deadlocks between concurrent merges.
+  perform 1 from public.wines
+    where id in (p_source_wine_id, p_target_wine_id)
+    order by id
+    for update;
+
+  select * into v_source from public.wines where id = p_source_wine_id;
+  select * into v_target from public.wines where id = p_target_wine_id;
+
+  if v_source.id is null or v_target.id is null
+     or v_source.restaurant_id <> v_target.restaurant_id then
+    raise exception 'wine_not_found: both wines must exist in the same restaurant';
+  end if;
+
+  v_restaurant_id := v_source.restaurant_id;
+  if not public.is_member_with_role(v_restaurant_id, 'manager') then
+    raise exception 'forbidden: manager role required to merge wines';
+  end if;
+
+  if v_source.lineage_id is null or v_target.lineage_id is null
+     or v_source.lineage_id <> v_target.lineage_id then
+    raise exception 'lineage_mismatch_merge: wines are not the same producer-cuvée — merging is only for true duplicates';
+  end if;
+
+  if coalesce(v_source.vintage, 0) <> coalesce(v_target.vintage, 0) then
+    raise exception 'cross_vintage_merge: % and % are distinct vintages — they are already linked as vintage siblings, not duplicates',
+      coalesce(v_source.vintage::text, 'NV'), coalesce(v_target.vintage::text, 'NV');
+  end if;
+
+  if v_source.size_ml <> v_target.size_ml then
+    raise exception 'format_mismatch_merge: % ml and % ml are distinct formats',
+      v_source.size_ml, v_target.size_ml;
+  end if;
+
+  -- Repoint every referrer; history rows keep their own timestamps, actors,
+  -- and costs — the audit trail survives the merge (EV-1.2).
+  update public.inventory_items set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_inventory = row_count;
+
+  update public.pour_events set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_pours = row_count;
+
+  update public.open_bottles set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_bottles = row_count;
+
+  update public.wine_list_items set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_list_items = row_count;
+
+  update public.availability_events set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_avail = row_count;
+
+  delete from public.wines where id = p_source_wine_id;
+
+  return jsonb_build_object(
+    'target_id',                p_target_wine_id,
+    'moved_inventory_items',    v_moved_inventory,
+    'moved_pour_events',        v_moved_pours,
+    'moved_open_bottles',       v_moved_bottles,
+    'moved_wine_list_items',    v_moved_list_items,
+    'moved_availability_events', v_moved_avail
+  );
+end;
+$$;
+
+-- === 0055_lineage_verify_fixes.sql ===
+-- 0055_lineage_verify_fixes.sql
+-- Wave-0 adversarial-review fixes (Grok 4.6 verify pass, findings V1/V2/V6 —
+-- see Terroir Planning/evidence/model-audits/wave0-verify-grok.json):
+--
+--  V1 (high)  derive_wine_lineage forked vintage siblings when a wine on a
+--             name-keyed lineage later gained an lwin_id: the LWIN branch
+--             always created a NEW lineage and moved only that wine. Fix:
+--             upgrade a matching name-keyed lineage in place (set lwin7) so
+--             every sibling keeps the same lineage_id.
+--  V2 (med)   merge_wines could leave the target listed twice in one wine
+--             list section (no uniqueness on (section_id, wine_id)). Fix:
+--             drop source list rows whose section already lists the target,
+--             then repoint the rest; report the dedupe count.
+--  V6 (low)   seed_reason_codes was executable by any authenticated session
+--             against any restaurant id (security definer, no authz). Fix:
+--             revoke direct execute; the signup trigger and migrations run
+--             as owner and are unaffected.
+
+-- V6 — seed_reason_codes is infrastructure, not an API.
+revoke execute on function public.seed_reason_codes(uuid)
+  from public, anon, authenticated;
+
+-- V1 — replace the derivation trigger function.
+create or replace function public.derive_wine_lineage()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_lwin7         text;
+  v_producer_norm text;
+  v_cuvee_norm    text;
+  v_lineage_id    uuid;
+  v_match_count   int;
+begin
+  v_producer_norm := lower(btrim(new.producer));
+  v_cuvee_norm    := lower(btrim(new.name));
+  v_lwin7 := case
+    when new.lwin_id is not null and new.lwin_id ~ '^[0-9]{7}'
+      then substr(new.lwin_id, 1, 7)
+    else null
+  end;
+
+  if v_lwin7 is not null then
+    -- LWIN identity wins. Adoption order:
+    --   1. an existing LWIN lineage for this code;
+    --   2. upgrade a matching name-keyed lineage in place (sets lwin7), so
+    --      vintage siblings that predate LWIN enrichment keep their lineage;
+    --   3. create a fresh LWIN lineage.
+    select id into v_lineage_id
+      from public.wine_lineages
+     where restaurant_id = new.restaurant_id and lwin7 = v_lwin7;
+
+    if v_lineage_id is null then
+      begin
+        update public.wine_lineages
+           set lwin7 = v_lwin7
+         where restaurant_id = new.restaurant_id
+           and lwin7 is null
+           and producer_norm = v_producer_norm
+           and cuvee_norm = v_cuvee_norm
+        returning id into v_lineage_id;
+      exception when unique_violation then
+        -- Concurrent transaction created this LWIN lineage; adopt it below.
+        v_lineage_id := null;
+      end;
+    end if;
+
+    if v_lineage_id is null then
+      insert into public.wine_lineages (restaurant_id, lwin7, producer_norm, cuvee_norm)
+      values (new.restaurant_id, v_lwin7, v_producer_norm, v_cuvee_norm)
+      on conflict (restaurant_id, lwin7) where lwin7 is not null do nothing
+      returning id into v_lineage_id;
+      if v_lineage_id is null then
+        select id into v_lineage_id
+          from public.wine_lineages
+         where restaurant_id = new.restaurant_id and lwin7 = v_lwin7;
+      end if;
+    end if;
+  else
+    -- Name fallback: adopt the LWIN lineage with these norms iff exactly one.
+    select count(*), min(id::text)::uuid
+      into v_match_count, v_lineage_id
+      from public.wine_lineages
+     where restaurant_id = new.restaurant_id
+       and lwin7 is not null
+       and producer_norm = v_producer_norm
+       and cuvee_norm = v_cuvee_norm;
+
+    if v_match_count > 1 then
+      v_lineage_id := null;
+    elsif v_match_count = 0 then
+      select id into v_lineage_id
+        from public.wine_lineages
+       where restaurant_id = new.restaurant_id
+         and lwin7 is null
+         and producer_norm = v_producer_norm
+         and cuvee_norm = v_cuvee_norm;
+      if v_lineage_id is null then
+        insert into public.wine_lineages (restaurant_id, producer_norm, cuvee_norm)
+        values (new.restaurant_id, v_producer_norm, v_cuvee_norm)
+        on conflict (restaurant_id, producer_norm, cuvee_norm) where lwin7 is null do nothing
+        returning id into v_lineage_id;
+        if v_lineage_id is null then
+          select id into v_lineage_id
+            from public.wine_lineages
+           where restaurant_id = new.restaurant_id
+             and lwin7 is null
+             and producer_norm = v_producer_norm
+             and cuvee_norm = v_cuvee_norm;
+        end if;
+      end if;
+    end if;
+  end if;
+
+  new.lineage_id := v_lineage_id;
+  return new;
+end;
+$$;
+
+-- V2 — replace merge_wines with section-level list dedupe.
+create or replace function public.merge_wines(
+  p_source_wine_id uuid,
+  p_target_wine_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_source            public.wines%rowtype;
+  v_target            public.wines%rowtype;
+  v_restaurant_id     uuid;
+  v_moved_inventory   int;
+  v_moved_pours       int;
+  v_moved_bottles     int;
+  v_moved_list_items  int;
+  v_deduped_list_items int;
+  v_moved_avail       int;
+begin
+  if p_source_wine_id = p_target_wine_id then
+    raise exception 'identical_merge: source and target are the same wine';
+  end if;
+
+  perform 1 from public.wines
+    where id in (p_source_wine_id, p_target_wine_id)
+    order by id
+    for update;
+
+  select * into v_source from public.wines where id = p_source_wine_id;
+  select * into v_target from public.wines where id = p_target_wine_id;
+
+  if v_source.id is null or v_target.id is null
+     or v_source.restaurant_id <> v_target.restaurant_id then
+    raise exception 'wine_not_found: both wines must exist in the same restaurant';
+  end if;
+
+  v_restaurant_id := v_source.restaurant_id;
+  if not public.is_member_with_role(v_restaurant_id, 'manager') then
+    raise exception 'forbidden: manager role required to merge wines';
+  end if;
+
+  if v_source.lineage_id is null or v_target.lineage_id is null
+     or v_source.lineage_id <> v_target.lineage_id then
+    raise exception 'lineage_mismatch_merge: wines are not the same producer-cuvée — merging is only for true duplicates';
+  end if;
+
+  if coalesce(v_source.vintage, 0) <> coalesce(v_target.vintage, 0) then
+    raise exception 'cross_vintage_merge: % and % are distinct vintages — they are already linked as vintage siblings, not duplicates',
+      coalesce(v_source.vintage::text, 'NV'), coalesce(v_target.vintage::text, 'NV');
+  end if;
+
+  if v_source.size_ml <> v_target.size_ml then
+    raise exception 'format_mismatch_merge: % ml and % ml are distinct formats',
+      v_source.size_ml, v_target.size_ml;
+  end if;
+
+  update public.inventory_items set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_inventory = row_count;
+
+  update public.pour_events set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_pours = row_count;
+
+  update public.open_bottles set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_bottles = row_count;
+
+  -- A section listing BOTH wines would show the target twice after a blind
+  -- repoint (no uniqueness on (section_id, wine_id)). Drop the source's row
+  -- wherever the target is already listed, then repoint the rest.
+  delete from public.wine_list_items s
+   where s.wine_id = p_source_wine_id
+     and exists (
+           select 1 from public.wine_list_items t
+            where t.section_id = s.section_id
+              and t.wine_id = p_target_wine_id
+         );
+  get diagnostics v_deduped_list_items = row_count;
+
+  update public.wine_list_items set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_list_items = row_count;
+
+  update public.availability_events set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_avail = row_count;
+
+  delete from public.wines where id = p_source_wine_id;
+
+  return jsonb_build_object(
+    'target_id',                 p_target_wine_id,
+    'moved_inventory_items',     v_moved_inventory,
+    'moved_pour_events',         v_moved_pours,
+    'moved_open_bottles',        v_moved_bottles,
+    'moved_wine_list_items',     v_moved_list_items,
+    'deduped_wine_list_items',   v_deduped_list_items,
+    'moved_availability_events', v_moved_avail
+  );
+end;
+$$;
+
+-- === 0056_lineage_hardening.sql ===
+-- 0056_lineage_hardening.sql
+-- Second verify round (GPT-5.6-sol high — wave0-verify-sol.json), fixes:
+--
+--  S3 (high) wines.lineage_id was directly writable by tenants without
+--            re-derivation (the trigger only watched lwin_id/producer/name),
+--            letting a manager hand-link two unrelated wines and pass
+--            merge_wines' lineage guard. Fix: the trigger now also fires on
+--            UPDATE OF lineage_id and recomputes — a client-supplied value
+--            is always overwritten by derivation, so lineage_id is
+--            effectively derivation-owned. (A future manual link/unlink
+--            feature must ship as its own security-definer RPC.)
+--  S1        Cross-path derivation race (concurrent first inserts of the
+--            same identity, one with LWIN, one without) could create both a
+--            name-keyed and an LWIN lineage. Fix: per-identity advisory
+--            transaction lock serializes derivation.
+--  S4        Renaming a wine never refreshed its LWIN lineage's stored
+--            norms, silently breaking future name-fallback adoption. Fix:
+--            refresh norms on LWIN lineages when the current spelling
+--            differs (name-keyed lineages keep theirs — the norm IS their
+--            identity).
+--
+-- Deliberately NOT addressed here (documented limitations):
+--  S2  A later second LWIN identity with identical norms does not revisit
+--      earlier no-LWIN adoptions; ambiguity review is OPP-5's queue.
+--  S5  wine_list_items still has no (section_id, wine_id) uniqueness; the
+--      merge dedupe closes the common case but a concurrent insert can
+--      still double-list. Whether that uniqueness is a product invariant
+--      is an OPP-8 decision.
+
+create or replace function public.derive_wine_lineage()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_lwin7         text;
+  v_producer_norm text;
+  v_cuvee_norm    text;
+  v_lineage_id    uuid;
+  v_match_count   int;
+begin
+  v_producer_norm := lower(btrim(new.producer));
+  v_cuvee_norm    := lower(btrim(new.name));
+  v_lwin7 := case
+    when new.lwin_id is not null and new.lwin_id ~ '^[0-9]{7}'
+      then substr(new.lwin_id, 1, 7)
+    else null
+  end;
+
+  -- S1: serialize derivation per (restaurant, identity) so the LWIN and
+  -- name-fallback paths cannot race each other into two lineages.
+  perform pg_advisory_xact_lock(
+    hashtextextended(new.restaurant_id::text || '|' || v_producer_norm || '|' || v_cuvee_norm, 42)
+  );
+
+  if v_lwin7 is not null then
+    select id into v_lineage_id
+      from public.wine_lineages
+     where restaurant_id = new.restaurant_id and lwin7 = v_lwin7;
+
+    if v_lineage_id is not null then
+      -- S4: keep LWIN lineage norms current with the latest spelling so
+      -- name-fallback adoption keeps working after corrections.
+      update public.wine_lineages
+         set producer_norm = v_producer_norm,
+             cuvee_norm    = v_cuvee_norm
+       where id = v_lineage_id
+         and (producer_norm <> v_producer_norm or cuvee_norm <> v_cuvee_norm);
+    end if;
+
+    if v_lineage_id is null then
+      begin
+        -- upgrade a matching name-keyed lineage in place (sets lwin7)
+        update public.wine_lineages
+           set lwin7 = v_lwin7
+         where restaurant_id = new.restaurant_id
+           and lwin7 is null
+           and producer_norm = v_producer_norm
+           and cuvee_norm = v_cuvee_norm
+        returning id into v_lineage_id;
+      exception when unique_violation then
+        v_lineage_id := null;
+      end;
+    end if;
+
+    if v_lineage_id is null then
+      insert into public.wine_lineages (restaurant_id, lwin7, producer_norm, cuvee_norm)
+      values (new.restaurant_id, v_lwin7, v_producer_norm, v_cuvee_norm)
+      on conflict (restaurant_id, lwin7) where lwin7 is not null do nothing
+      returning id into v_lineage_id;
+      if v_lineage_id is null then
+        select id into v_lineage_id
+          from public.wine_lineages
+         where restaurant_id = new.restaurant_id and lwin7 = v_lwin7;
+      end if;
+    end if;
+  else
+    select count(*), min(id::text)::uuid
+      into v_match_count, v_lineage_id
+      from public.wine_lineages
+     where restaurant_id = new.restaurant_id
+       and lwin7 is not null
+       and producer_norm = v_producer_norm
+       and cuvee_norm = v_cuvee_norm;
+
+    if v_match_count > 1 then
+      v_lineage_id := null;
+    elsif v_match_count = 0 then
+      select id into v_lineage_id
+        from public.wine_lineages
+       where restaurant_id = new.restaurant_id
+         and lwin7 is null
+         and producer_norm = v_producer_norm
+         and cuvee_norm = v_cuvee_norm;
+      if v_lineage_id is null then
+        insert into public.wine_lineages (restaurant_id, producer_norm, cuvee_norm)
+        values (new.restaurant_id, v_producer_norm, v_cuvee_norm)
+        on conflict (restaurant_id, producer_norm, cuvee_norm) where lwin7 is null do nothing
+        returning id into v_lineage_id;
+        if v_lineage_id is null then
+          select id into v_lineage_id
+            from public.wine_lineages
+           where restaurant_id = new.restaurant_id
+             and lwin7 is null
+             and producer_norm = v_producer_norm
+             and cuvee_norm = v_cuvee_norm;
+        end if;
+      end if;
+    end if;
+  end if;
+
+  new.lineage_id := v_lineage_id;
+  return new;
+end;
+$$;
+
+-- S3: lineage_id joins the watched column list — direct writes re-derive.
+drop trigger if exists wines_derive_lineage on public.wines;
+create trigger wines_derive_lineage
+  before insert or update of lwin_id, producer, name, lineage_id
+  on public.wines
+  for each row execute function public.derive_wine_lineage();
+
+-- === 0057_bins.sql ===
+-- 0057_bins.sql
+-- OPP-6 (top-10 wave 1, docs/evals/top10-evals.yaml EV-6.x): bin-first
+-- location model. Bins are first-class rows — code, zone, capacity,
+-- priority — replacing the free-text inventory_items.bin_location as the
+-- physical key (the text column stays during migration; new writes go to
+-- bin_id). "Unplaced" is a queue state, never a pseudo-bin (EV-6.4).
+-- The Bevrly contrast: their /locations screen renders empty while ten
+-- locations are in use, and pseudo-locations mix with physical ones
+-- (audit doc 17 §1.14, §1.3).
+
+create table public.bins (
+  id             uuid        primary key default gen_random_uuid(),
+  restaurant_id  uuid        not null references public.restaurants(id) on delete cascade,
+  code           text        not null,
+  zone           text,
+  capacity       int         check (capacity > 0),
+  priority       int         not null default 0,
+  sort_order     int         not null default 0,
+  retired_at     timestamptz,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+-- One code namespace per restaurant, case-insensitive ("r4-s3" is "R4-S3").
+create unique index bins_restaurant_code_idx
+  on public.bins (restaurant_id, lower(code));
+
+create index bins_restaurant_id_idx on public.bins (restaurant_id);
+
+create trigger bins_set_updated_at
+  before update on public.bins
+  for each row execute function public.set_updated_at();
+
+alter table public.bins enable row level security;
+
+create policy "members can read bins"
+  on public.bins for select
+  using (public.is_member(restaurant_id));
+
+create policy "managers can insert bins"
+  on public.bins for insert
+  with check (public.is_member_with_role(restaurant_id, 'manager'));
+
+create policy "managers can update bins"
+  on public.bins for update
+  using      (public.is_member_with_role(restaurant_id, 'manager'))
+  with check (public.is_member_with_role(restaurant_id, 'manager'));
+
+-- No delete policy: bins are retired (retired_at), never deleted, so stock
+-- history keeps its referent.
+
+alter table public.inventory_items
+  add column bin_id uuid references public.bins(id) on delete set null;
+
+create index inventory_items_bin_id_idx on public.inventory_items (bin_id);
+
+-- EV-6.5 surface: bin codes may flow onto the public list, per list.
+alter table public.wine_lists
+  add column show_bin_codes boolean not null default false;
+
+-- Backfill: promote every distinct legacy free-text bin_location to a real
+-- bin and point the stock at it.
+insert into public.bins (restaurant_id, code)
+select distinct i.restaurant_id, upper(btrim(i.bin_location))
+  from public.inventory_items i
+ where i.bin_location is not null
+   and btrim(i.bin_location) <> ''
+on conflict do nothing;
+
+update public.inventory_items i
+   set bin_id = b.id
+  from public.bins b
+ where i.bin_location is not null
+   and btrim(i.bin_location) <> ''
+   and b.restaurant_id = i.restaurant_id
+   and lower(b.code) = lower(btrim(i.bin_location));
+
+-- === 0058_cellar_health.sql ===
+-- 0058_cellar_health.sql
+-- OPP-2 (top-10 wave 2, docs/evals/top10-evals.yaml EV-2.x): wine-aware
+-- cellar health. Replaces the single "sleepy inventory" bucket (the Bevrly
+-- failure: 96% of cellar value flagged, doc 17 §1.2) with a partition —
+-- every stocked wine lands in exactly one of window_risk | hold |
+-- dead_stock | cash_trap | healthy, each row carrying the human-readable
+-- reason for the rule that fired (EV-2.1, EV-2.3). Segments are written by
+-- the nightly cellar_health background job; thresholds are owner-tunable
+-- on cellar_config so a rerun reclassifies (EV-2.4).
+
+-- 1. Thresholds ----------------------------------------------------------
+alter table public.cellar_config
+  add column health_dead_stock_days        integer not null default 120
+    check (health_dead_stock_days > 0),
+  add column health_cash_trap_floor        numeric not null default 500
+    check (health_cash_trap_floor >= 0),
+  add column health_appreciation_threshold numeric not null default 0.08
+    check (health_appreciation_threshold >= 0);
+
+-- 2. Segment storage -----------------------------------------------------
+create table public.cellar_health (
+  id             uuid        primary key default gen_random_uuid(),
+  restaurant_id  uuid        not null references public.restaurants(id) on delete cascade,
+  wine_id        uuid        not null references public.wines(id) on delete cascade,
+  segment        text        not null check (
+    segment in ('window_risk', 'hold', 'dead_stock', 'cash_trap', 'healthy')
+  ),
+  reason         text        not null,
+  computed_at    timestamptz not null default now(),
+  unique (restaurant_id, wine_id)
+);
+
+create index cellar_health_restaurant_segment_idx
+  on public.cellar_health (restaurant_id, segment);
+
+alter table public.cellar_health enable row level security;
+
+create policy "members can read cellar_health"
+  on public.cellar_health for select
+  using (public.is_member(restaurant_id));
+
+-- Segments are job-computed state: only the service role writes them.
+revoke insert, update, delete on public.cellar_health from authenticated, anon;
+
+-- 3. Nightly job type ----------------------------------------------------
+alter table public.background_jobs
+  drop constraint background_jobs_job_type_check;
+alter table public.background_jobs
+  add constraint background_jobs_job_type_check check (
+    job_type in ('invoice_ocr', 'wine_enrichment', 'wine_list_pdf', 'cellar_health')
+  );
+
+-- === 0059_reconcile_queue.sql ===
+-- 0059_reconcile_queue.sql
+-- OPP-5 (top-10 wave 2, docs/evals/top10-evals.yaml EV-5.x): wine-aware
+-- reconciliation queue substrate. The queue rows themselves are DERIVED
+-- (unplaced stock, unmatched scan lines, duplicate suspects, ambiguous
+-- lineages) — what the schema owns is the accept/undo ledger: bulk-accept
+-- groups actions into a batch, every action snapshots the full prior and
+-- new state of its subject row, and undo restores prior_state byte-equal
+-- within the undo window (EV-5.4). Ranked by capital at risk, not recency
+-- (EV-5.2) — that is query-side.
+
+create table public.reconcile_batches (
+  id             uuid        primary key default gen_random_uuid(),
+  restaurant_id  uuid        not null references public.restaurants(id) on delete cascade,
+  created_by     uuid        references auth.users(id) on delete set null,
+  action_count   integer     not null default 0 check (action_count >= 0),
+  created_at     timestamptz not null default now(),
+  undone_at      timestamptz,
+  undone_by      uuid        references auth.users(id) on delete set null
+);
+
+create index reconcile_batches_restaurant_idx
+  on public.reconcile_batches (restaurant_id, created_at desc);
+
+create table public.reconcile_actions (
+  id             uuid        primary key default gen_random_uuid(),
+  batch_id       uuid        not null references public.reconcile_batches(id) on delete cascade,
+  restaurant_id  uuid        not null references public.restaurants(id) on delete cascade,
+  action_type    text        not null check (
+    action_type in ('place_bin', 'match_scan', 'link_lineage', 'dismiss')
+  ),
+  subject_table  text        not null,
+  subject_id     uuid        not null,
+  prior_state    jsonb       not null,
+  new_state      jsonb       not null,
+  created_at     timestamptz not null default now()
+);
+
+create index reconcile_actions_batch_idx
+  on public.reconcile_actions (batch_id);
+create index reconcile_actions_restaurant_idx
+  on public.reconcile_actions (restaurant_id, created_at desc);
+
+alter table public.reconcile_batches enable row level security;
+alter table public.reconcile_actions enable row level security;
+
+create policy "members can read reconcile_batches"
+  on public.reconcile_batches for select
+  using (public.is_member(restaurant_id));
+
+create policy "members can read reconcile_actions"
+  on public.reconcile_actions for select
+  using (public.is_member(restaurant_id));
+
+create policy "managers can insert reconcile_batches"
+  on public.reconcile_batches for insert
+  with check (public.is_member_with_role(restaurant_id, 'manager'));
+
+create policy "managers can update reconcile_batches"
+  on public.reconcile_batches for update
+  using      (public.is_member_with_role(restaurant_id, 'manager'))
+  with check (public.is_member_with_role(restaurant_id, 'manager'));
+
+create policy "managers can insert reconcile_actions"
+  on public.reconcile_actions for insert
+  with check (public.is_member_with_role(restaurant_id, 'manager'));
+
+-- Actions are immutable once written (the audit trail undo relies on);
+-- batches close via undone_at, never by rewriting actions.
+revoke update, delete on public.reconcile_actions from authenticated;
+revoke delete on public.reconcile_batches from authenticated;
+
+-- === 0060_partial_bottles.sql ===
+-- 0060_partial_bottles.sql
+-- OPP-10 (top-10 wave 2, docs/evals/top10-evals.yaml EV-10.x): partial-
+-- bottle lifecycle close-out. open_bottles + pour_events already exist —
+-- this adds the preservation method on the open bottle (EV-10.1) and the
+-- close-out record: theoretical remaining (size − Σ pours) vs the actual
+-- remaining the closer observed, variance persisted per bottle (EV-10.2),
+-- grouped by preservation method for the yield report (EV-10.3). A
+-- spoilage write-off REQUIRES a reason code — enforced here, not just in
+-- the API (F-1, the Bevrly zero-reason-codes lesson).
+
+alter table public.open_bottles
+  add column preservation_method text not null default 'none' check (
+    preservation_method in ('coravin', 'argon', 'vacuum', 'none')
+  );
+
+create table public.bottle_closeouts (
+  id                        uuid        primary key default gen_random_uuid(),
+  restaurant_id             uuid        not null references public.restaurants(id) on delete cascade,
+  wine_id                   uuid        not null references public.wines(id) on delete cascade,
+  open_bottle_id            uuid        references public.open_bottles(id) on delete set null,
+  preservation_method       text        not null check (
+    preservation_method in ('coravin', 'argon', 'vacuum', 'none')
+  ),
+  opened_at                 timestamptz,
+  closed_by                 uuid        references auth.users(id) on delete set null,
+  closed_at                 timestamptz not null default now(),
+  -- theoretical may go negative when pours were over-recorded; that IS the
+  -- variance signal, so it is not clamped.
+  theoretical_remaining_ml  integer     not null,
+  actual_remaining_ml       integer     not null check (actual_remaining_ml >= 0),
+  variance_ml               integer     generated always as
+    (actual_remaining_ml - theoretical_remaining_ml) stored,
+  written_off_ml            integer     not null default 0 check (written_off_ml >= 0),
+  reason_code_id            uuid        references public.reason_codes(id) on delete restrict,
+  constraint bottle_closeouts_writeoff_requires_reason check (
+    written_off_ml = 0 or reason_code_id is not null
+  )
+);
+
+create index bottle_closeouts_restaurant_idx
+  on public.bottle_closeouts (restaurant_id, closed_at desc);
+create index bottle_closeouts_wine_idx
+  on public.bottle_closeouts (wine_id, closed_at desc);
+
+alter table public.bottle_closeouts enable row level security;
+
+create policy "members can read bottle_closeouts"
+  on public.bottle_closeouts for select
+  using (public.is_member(restaurant_id));
+
+create policy "members can insert bottle_closeouts"
+  on public.bottle_closeouts for insert
+  with check (public.is_member(restaurant_id));
+
+-- Close-outs are immutable records: no update/delete for authenticated.
+revoke update, delete on public.bottle_closeouts from authenticated;
+
+-- === 0061_close_open_bottle.sql ===
+-- 0061_close_open_bottle.sql
+-- OPP-10 verify finding V1: closing a bottle was two separate writes
+-- (bottle_closeouts insert, then the finish_bottle pour event) with a
+-- best-effort delete as rollback — a partial failure could record a
+-- close-out while the bottle stayed open. This RPC makes the close-out
+-- one transaction: validate, insert the closeout, and emit the
+-- finish_bottle event (the pour_events trigger drains and removes the
+-- open_bottles row in the same transaction).
+
+create or replace function public.close_open_bottle(
+  p_wine_id                  uuid,
+  p_actual_remaining_ml      int,
+  p_written_off_ml           int default 0,
+  p_reason_code_id           uuid default null
+) returns public.bottle_closeouts
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_restaurant_id uuid;
+  v_bottle        public.open_bottles%rowtype;
+  v_size_ml       int;
+  v_theoretical   int;
+  v_closeout      public.bottle_closeouts%rowtype;
+begin
+  -- Same authority pattern as record_pour: the wine names the tenant,
+  -- membership is then verified against it.
+  select restaurant_id, size_ml into v_restaurant_id, v_size_ml
+    from public.wines where id = p_wine_id;
+  if v_restaurant_id is null then
+    raise exception 'wine_not_found';
+  end if;
+  if not public.is_member_with_role(v_restaurant_id, 'staff') then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  select * into v_bottle
+    from public.open_bottles
+   where wine_id = p_wine_id and restaurant_id = v_restaurant_id
+     and closed_at is null
+   for update;
+  if not found then
+    raise exception 'open_bottle_not_found';
+  end if;
+
+  if v_size_ml is null then
+    raise exception 'wine_size_unknown';
+  end if;
+
+  if p_actual_remaining_ml < 0 or p_actual_remaining_ml > v_size_ml then
+    raise exception 'invalid_actual_remaining';
+  end if;
+  -- You can only write off liquid that is physically in the bottle.
+  if p_written_off_ml < 0 or p_written_off_ml > p_actual_remaining_ml then
+    raise exception 'invalid_writeoff_amount';
+  end if;
+  if p_written_off_ml > 0 then
+    if p_reason_code_id is null then
+      raise exception 'writeoff_reason_required';
+    end if;
+    perform 1 from public.reason_codes rc
+      where rc.id = p_reason_code_id
+        and rc.restaurant_id = v_restaurant_id
+        and rc.active
+        and rc.category in ('spoilage', 'adjustment');
+    if not found then
+      raise exception 'invalid_reason_code';
+    end if;
+  end if;
+
+  v_theoretical := v_bottle.remaining_ml;
+
+  insert into public.bottle_closeouts (
+    restaurant_id, wine_id, open_bottle_id, preservation_method,
+    opened_at, closed_by, theoretical_remaining_ml, actual_remaining_ml,
+    written_off_ml, reason_code_id
+  ) values (
+    v_restaurant_id, p_wine_id, v_bottle.id, v_bottle.preservation_method,
+    v_bottle.opened_at, auth.uid(), v_theoretical, p_actual_remaining_ml,
+    p_written_off_ml, p_reason_code_id
+  ) returning * into v_closeout;
+
+  -- Finish event: the pour_events trigger drains remaining_ml to zero and
+  -- deletes the open_bottles row inside this same transaction.
+  insert into public.pour_events (
+    wine_id, restaurant_id, open_bottle_id, ml_delta, kind, actor_user_id, note
+  ) values (
+    p_wine_id, v_restaurant_id, v_bottle.id, v_bottle.remaining_ml, 'finish_bottle',
+    auth.uid(), 'Bottle close-out'
+  );
+
+  return v_closeout;
+end;
+$$;
+
+revoke execute on function public.close_open_bottle(uuid, int, int, uuid) from public, anon;
+grant execute on function public.close_open_bottle(uuid, int, int, uuid) to authenticated;
+
+-- === 0062_reconcile_ordinal.sql ===
+-- 0062_reconcile_ordinal.sql
+-- OPP-5 verify finding V6: undo must restore actions in exact reverse
+-- application order, and created_at is not a total order (equal
+-- timestamps permit arbitrary sequencing). Each action now records its
+-- 0-based position within its batch; undo orders by ordinal desc.
+
+alter table public.reconcile_actions
+  add column ordinal integer not null default 0 check (ordinal >= 0);
+
+create unique index reconcile_actions_batch_ordinal_idx
+  on public.reconcile_actions (batch_id, ordinal);
+
+-- === 0063_stock_adjustments.sql ===
+-- 0063_stock_adjustments.sql
+-- OPP-7 (top-10 wave 3, docs/evals/top10-evals.yaml EV-7.x): comp and
+-- adjustment events, member-attributed. The Bevrly contrast: comps exist
+-- only as a value-tracker movement class with zero reason codes configured
+-- (doc 17 §1.9, §1.13). Every event requires a reason code (F-1) and the
+-- acting member is the AUTHENTICATED user — enforced by the insert policy,
+-- not just the API — so client-supplied member ids can never be persisted
+-- (EV-7.1, EV-7.2).
+
+create table public.stock_adjustments (
+  id              uuid        primary key default gen_random_uuid(),
+  restaurant_id   uuid        not null references public.restaurants(id) on delete cascade,
+  wine_id         uuid        not null references public.wines(id) on delete cascade,
+  kind            text        not null check (kind in ('comp', 'adjustment')),
+  bottles         integer     not null default 0,
+  ml              integer     not null default 0,
+  constraint stock_adjustments_nonzero check (bottles <> 0 or ml <> 0),
+  reason_code_id  uuid        not null references public.reason_codes(id) on delete restrict,
+  acting_user_id  uuid        not null references auth.users(id),
+  note            text,
+  created_at      timestamptz not null default now()
+);
+
+create index stock_adjustments_restaurant_idx
+  on public.stock_adjustments (restaurant_id, created_at desc);
+create index stock_adjustments_member_idx
+  on public.stock_adjustments (restaurant_id, acting_user_id, created_at desc);
+
+alter table public.stock_adjustments enable row level security;
+
+create policy "members can read stock_adjustments"
+  on public.stock_adjustments for select
+  using (public.is_member(restaurant_id));
+
+-- acting_user_id must be the session user: the database, not the API,
+-- guarantees events cannot be attributed to someone else.
+create policy "members insert own stock_adjustments"
+  on public.stock_adjustments for insert
+  with check (
+    public.is_member(restaurant_id)
+    and acting_user_id = auth.uid()
+  );
+
+-- Events are immutable.
+revoke update, delete on public.stock_adjustments from authenticated;
+
+-- === 0064_brand_kits.sql ===
+-- 0064_brand_kits.sql
+-- OPP-8 (top-10 wave 3, docs/evals/top10-evals.yaml EV-8.x): brand kit +
+-- stored list themes. The Bevrly contrast: logo upload plus six raw colour
+-- inputs, no palette extraction, no template, no AI (doc 17 §1.11).
+-- brand_kits holds the extracted palette; the applied theme lives on the
+-- wine list so /list/[slug] and /api/pdf render from ONE source (8-FR4).
+-- Theme JSON is validated (zod + WCAG AA contrast) server-side before save
+-- (8-FR5) — the schema stores, the API guards.
+
+create table public.brand_kits (
+  id             uuid        primary key default gen_random_uuid(),
+  restaurant_id  uuid        not null references public.restaurants(id) on delete cascade,
+  logo_url       text,
+  palette        jsonb       not null default '{}'::jsonb,
+  proposals      jsonb,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  unique (restaurant_id)
+);
+
+create trigger brand_kits_set_updated_at
+  before update on public.brand_kits
+  for each row execute function public.set_updated_at();
+
+alter table public.brand_kits enable row level security;
+
+create policy "members can read brand_kits"
+  on public.brand_kits for select
+  using (public.is_member(restaurant_id));
+
+create policy "managers can insert brand_kits"
+  on public.brand_kits for insert
+  with check (public.is_member_with_role(restaurant_id, 'manager'));
+
+create policy "managers can update brand_kits"
+  on public.brand_kits for update
+  using      (public.is_member_with_role(restaurant_id, 'manager'))
+  with check (public.is_member_with_role(restaurant_id, 'manager'));
+
+alter table public.wine_lists
+  add column theme jsonb;
+
+-- === 0065_pricing_recommendations.sql ===
+-- 0065_pricing_recommendations.sql
+-- OPP-9 (top-10 wave 3, docs/evals/top10-evals.yaml EV-9.x): materialized
+-- pricing recommendations. The Bevrly contrast: -15% on allocated Burgundy
+-- from velocity alone, 18s page load (doc 17 §1.10). Recommendations are
+-- job-computed (same service-role pattern as cellar_health) so the view
+-- reads a table, not an 18-second pipeline (EV-9.4). Every row carries
+-- class + rationale + evidence (EV-9.1); the Meursault rule (EV-9.2) is
+-- recommender logic, pinned by eval fixture.
+
+create table public.pricing_recommendations (
+  id             uuid        primary key default gen_random_uuid(),
+  restaurant_id  uuid        not null references public.restaurants(id) on delete cascade,
+  wine_id        uuid        not null references public.wines(id) on delete cascade,
+  class          text        not null check (
+    class in ('discount_to_move', 'raise_appreciating', 'feature_btg', 'hold')
+  ),
+  rationale      text        not null,
+  evidence       jsonb       not null default '{}'::jsonb,
+  timing         text,
+  computed_at    timestamptz not null default now(),
+  unique (restaurant_id, wine_id)
+);
+
+create index pricing_recommendations_restaurant_class_idx
+  on public.pricing_recommendations (restaurant_id, class);
+
+alter table public.pricing_recommendations enable row level security;
+
+create policy "members can read pricing_recommendations"
+  on public.pricing_recommendations for select
+  using (public.is_member(restaurant_id));
+
+-- Job-computed state: only the service role writes.
+revoke insert, update, delete on public.pricing_recommendations from authenticated, anon;
+
+-- The recompute job type joins the background job vocabulary.
+alter table public.background_jobs
+  drop constraint background_jobs_job_type_check;
+alter table public.background_jobs
+  add constraint background_jobs_job_type_check check (
+    job_type in ('invoice_ocr', 'wine_enrichment', 'wine_list_pdf', 'cellar_health', 'pricing_recommendations')
+  );
+
+-- === 0066_invoice_scans_update_policy.sql ===
+-- 0066_invoice_scans_update_policy.sql
+--
+-- invoice_scans shipped with SELECT + INSERT policies only, so every
+-- user-client UPDATE (scan review edits, OPP-5 reconcile match_scan)
+-- silently matched zero rows under RLS. The reconcile ledger reads that
+-- zero-row result as a compare-and-swap conflict and returns 409
+-- "Subject changed during reconciliation." — caught by the @opp-5 E2E.
+--
+-- Mirror the wines/inventory_items member-update pattern.
+
+create policy "members can update their scans"
+  on public.invoice_scans for update to authenticated
+  using (public.is_member(restaurant_id))
+  with check (public.is_member(restaurant_id));

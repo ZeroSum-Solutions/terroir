@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type NextRequest } from "next/server";
 
 const mockRequireMembership = vi.fn();
+const mockCreateClient = vi.fn();
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: (...args: unknown[]) => mockCreateClient(...args),
+}));
 const mockRevalidatePath = vi.fn();
 vi.mock("@/lib/api/auth", () => ({
   requireMembership: (...args: unknown[]) => mockRequireMembership(...args),
@@ -117,12 +121,15 @@ function makeSupabase(options: {
         },
         update: (payload: Record<string, unknown>) => {
           track(table, "update", [payload]);
-          return {
-            eq: async (...args: unknown[]) => {
+          const chain = {
+            eq: (...args: unknown[]) => {
               track(table, "eq", args);
-              return { error: options.decrementError ?? null };
+              return chain;
             },
+            then: (resolve: (value: unknown) => void) =>
+              resolve({ error: options.decrementError ?? null }),
           };
+          return chain;
         },
       };
     }
@@ -146,17 +153,17 @@ function makeSupabase(options: {
         },
         update: (payload: Record<string, unknown>) => {
           track(table, "update", [payload]);
-          return {
+          const chain = {
             eq: (...args: unknown[]) => {
               track(table, "eq", args);
-              return {
-                select: (...selectArgs: unknown[]) => {
-                  track(table, "select", selectArgs);
-                  return { single: async () => replacement };
-                },
-              };
+              return chain;
+            },
+            select: (...selectArgs: unknown[]) => {
+              track(table, "select", selectArgs);
+              return { single: async () => replacement };
             },
           };
+          return chain;
         },
       };
     }
@@ -174,13 +181,14 @@ function allow(supabase: ReturnType<typeof makeSupabase>) {
     user: { id: "user-a" },
     role: "staff",
   });
+  mockCreateClient.mockReturnValue(supabase);
 }
 
-function request(): NextRequest {
+function request(body: Record<string, unknown> = { wine_id: WINE_ID }): NextRequest {
   return new Request("http://localhost/api/open-bottles", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ wine_id: WINE_ID }),
+    body: JSON.stringify(body),
   }) as unknown as NextRequest;
 }
 
@@ -197,7 +205,30 @@ async function expectGeneric500(response: Response) {
 }
 
 describe("POST /api/open-bottles", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-role-secret");
+  });
+
+  it("EV-10.1: persists preservation method and opened_by when manually opening", async () => {
+    const supabase = makeSupabase({});
+    allow(supabase);
+
+    const response = await POST(
+      request({ wine_id: WINE_ID, preservation_method: "coravin" }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(supabase.calls).toContainEqual({
+      table: "open_bottles",
+      method: "update",
+      args: [expect.objectContaining({
+        preservation_method: "coravin",
+        opened_by: "user-a",
+      })],
+    });
+  });
 
   it("keeps missing wine distinct from a provider failure", async () => {
     const supabase = makeSupabase({

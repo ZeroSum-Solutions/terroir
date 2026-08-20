@@ -1,0 +1,165 @@
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { metricHref, type MetricKey } from "./metric-href";
+
+export type OwnerMetrics = {
+  inventoryValue: number;
+  totalBottles: number;
+  eightysixedCount: number;
+  drinkNowCount: number;
+};
+
+export type TodayException = {
+  wineId: string;
+  kind: "drink-window" | "past-window" | "pricing";
+  title: string;
+  detail: string;
+};
+
+export function selectTodayExceptions(
+  candidates: TodayException[],
+): TodayException[] {
+  const selected: TodayException[] = [];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate.wineId)) continue;
+    selected.push(candidate);
+    seen.add(candidate.wineId);
+    if (selected.length === 3) break;
+  }
+  return selected;
+}
+
+export function TodayStrip({ exceptions }: { exceptions: TodayException[] }) {
+  if (exceptions.length === 0) return null;
+
+  return (
+    <section className="mb-lg md:mb-xl" aria-labelledby="today-heading">
+      <div className="mb-sm flex items-baseline justify-between gap-sm">
+        <h2
+          id="today-heading"
+          className="text-caption font-medium uppercase text-grey"
+        >
+          Today
+        </h2>
+        <span className="text-[12px] text-grey">Most actionable</span>
+      </div>
+      <ul className="grid gap-sm md:grid-cols-3">
+        {exceptions.map((exception) => (
+          <li
+            key={`${exception.kind}:${exception.wineId}`}
+            data-metric={`today-${exception.kind}-${exception.wineId}`}
+          >
+            <Link
+              href={metricHref("wine", exception.wineId)}
+              className="group flex h-full items-start justify-between gap-md rounded-lg border border-hairline bg-bridge-surface p-md transition-colors hover:bg-beige"
+            >
+              <span className="min-w-0">
+                <span
+                  className={cn(
+                    "inline-block rounded-pill px-xs py-[2px] text-[10.5px] font-medium uppercase tracking-wide",
+                    exceptionBadgeClass(exception.kind),
+                  )}
+                >
+                  {exceptionLabel(exception.kind)}
+                </span>
+                <span className="mt-xs block truncate text-[14px] font-medium text-ink">
+                  {exception.title}
+                </span>
+                <span className="mt-2xs block text-[12px] text-grey">
+                  {exception.detail}
+                </span>
+              </span>
+              <ArrowUpRight
+                className="mt-0.5 h-4 w-4 shrink-0 text-grey transition-colors group-hover:text-primary"
+                strokeWidth={1.75}
+                aria-hidden
+              />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+export function OwnerMetricGrid({ metrics }: { metrics: OwnerMetrics }) {
+  const items: Array<{
+    key: Exclude<MetricKey, "varietal" | "wine">;
+    label: string;
+    value: string;
+  }> = [
+    {
+      key: "inventory-value",
+      label: "Inventory value",
+      value: formatMoney(metrics.inventoryValue),
+    },
+    {
+      key: "bottles-in",
+      label: "Bottles in",
+      value: metrics.totalBottles.toLocaleString("en-US"),
+    },
+    {
+      key: "eightysixed-count",
+      label: "86'd",
+      value: metrics.eightysixedCount.toLocaleString("en-US"),
+    },
+    {
+      key: "drink-now-count",
+      label: "Drink now",
+      value: metrics.drinkNowCount.toLocaleString("en-US"),
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-sm md:gap-md">
+      {items.map((item) => (
+        <div key={item.key} data-metric={item.key}>
+          <Link
+            href={metricHref(item.key)}
+            className="group block rounded-lg border border-hairline bg-white p-sm transition-colors hover:bg-bridge-surface"
+          >
+            <span className="flex items-center gap-xs text-caption font-medium uppercase text-grey">
+              {item.label}
+              <ArrowUpRight
+                className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                strokeWidth={2}
+                aria-hidden
+              />
+            </span>
+            <span className="mt-xs block font-serif text-[30px] font-normal leading-none text-ink">
+              {item.value}
+            </span>
+          </Link>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function exceptionLabel(kind: TodayException["kind"]): string {
+  switch (kind) {
+    case "drink-window":
+      return "Window closing";
+    case "past-window":
+      return "Past window";
+    case "pricing":
+      return "Pricing review";
+  }
+}
+
+function exceptionBadgeClass(kind: TodayException["kind"]): string {
+  switch (kind) {
+    case "drink-window":
+      return "bg-powder-wash text-powder-ink";
+    case "past-window":
+      return "bg-blush-wash text-primary";
+    case "pricing":
+      return "bg-amber-wash text-amber";
+  }
+}
+
+function formatMoney(value: number): string {
+  return "$" + value.toLocaleString("en-US", { maximumFractionDigits: 0 });
+}

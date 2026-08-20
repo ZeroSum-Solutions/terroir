@@ -9,7 +9,7 @@ export default function ListsLoading() {
       </header>
       <div className="grid gap-md md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
         {Array.from({ length: 6 }, (_, i) => (
-          <div key={i} className="rounded-md border border-border bg-surface p-md">
+          <div key={i} className="rounded-card border border-hairline bg-canvas p-md">
             <div className="flex items-start justify-between gap-sm">
               <Skeleton className="h-[18px] w-40" />
               <Skeleton className="h-[20px] w-16 rounded-full" />
@@ -22,9 +22,9 @@ export default function ListsLoading() {
               <Skeleton className="h-[12px] w-16" />
               <Skeleton className="h-[12px] w-28" />
             </div>
-            <div className="mt-sm flex items-center gap-xs border-t border-border pt-sm">
-              <Skeleton className="h-[28px] w-[72px] rounded-sm" />
-              <Skeleton className="h-[28px] w-[28px] rounded-sm" />
+            <div className="mt-sm flex items-center gap-xs border-t border-hairline pt-sm">
+              <Skeleton className="h-[28px] w-[72px] rounded-pill" />
+              <Skeleton className="h-[28px] w-[28px] rounded-pill" />
             </div>
           </div>
         ))}

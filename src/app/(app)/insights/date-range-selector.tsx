@@ -56,9 +56,9 @@ export default function DateRangeSelector() {
   );
 
   return (
-    <div className="flex flex-wrap items-center gap-sm">
+    <div className="flex flex-wrap items-center gap-xs">
       <div
-        className="flex rounded-sm border border-border overflow-hidden"
+        className="flex items-center gap-2xs"
         role="radiogroup"
         aria-label="Date range"
       >
@@ -80,10 +80,10 @@ export default function DateRangeSelector() {
                 }
               }}
               className={
-                "px-sm py-2xs text-[12px] font-medium transition-colors " +
+                "rounded-pill border px-sm py-2xs text-[12px] font-medium transition-colors " +
                 (isActive
-                  ? "bg-accent text-white"
-                  : "text-ink-muted hover:bg-surface-muted")
+                  ? "border-ink bg-ink text-beige"
+                  : "border-ink/25 text-ink hover:bg-bridge-surface")
               }
             >
               {opt.label}
@@ -94,7 +94,7 @@ export default function DateRangeSelector() {
 
       {showCustom && (
         <div className="flex items-center gap-xs">
-          <Calendar className="h-4 w-4 shrink-0 text-ink-subtle" strokeWidth={1.5} />
+          <Calendar className="h-4 w-4 shrink-0 text-grey" strokeWidth={1.5} />
           <label className="sr-only" htmlFor="dr-from">
             From
           </label>
@@ -104,9 +104,9 @@ export default function DateRangeSelector() {
             value={draftFrom}
             onChange={function (e) { setDraftFrom(e.target.value); }}
             max={draftTo || todayStr()}
-            className="h-[28px] w-[130px] rounded-sm border border-border bg-white px-xs text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent-soft"
+            className="h-[28px] w-[130px] rounded-pill border border-ink/25 bg-white px-sm text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent-soft"
           />
-          <span className="text-[12px] text-ink-muted">&ndash;</span>
+          <span className="text-[12px] text-grey">&ndash;</span>
           <label className="sr-only" htmlFor="dr-to">
             To
           </label>
@@ -117,12 +117,12 @@ export default function DateRangeSelector() {
             onChange={function (e) { setDraftTo(e.target.value); }}
             min={draftFrom || ""}
             max={todayStr()}
-            className="h-[28px] w-[130px] rounded-sm border border-border bg-white px-xs text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent-soft"
+            className="h-[28px] w-[130px] rounded-pill border border-ink/25 bg-white px-sm text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent-soft"
           />
           <button
             onClick={function () { applyRange("custom", draftFrom, draftTo); }}
             disabled={!draftFrom || !draftTo}
-            className="h-[28px] rounded-sm bg-accent px-sm text-[12px] font-medium text-white hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+            className="h-[28px] rounded-pill bg-primary px-sm text-[12px] font-medium text-white hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
           >
             Apply
           </button>

@@ -224,8 +224,8 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div ref={trapRef} className="flex max-h-[85vh] w-full flex-col rounded-t-lg border border-border bg-surface shadow-lg md:max-w-[480px] md:rounded-md">
-        <div className="border-b border-border px-lg py-md">
+      <div ref={trapRef} className="flex max-h-[85vh] w-full flex-col rounded-t-[20px] border border-hairline bg-canvas md:max-w-[480px] md:rounded-card">
+        <div className="border-b border-hairline px-lg py-md">
           <h2 id="add-wine-title" className="font-serif text-[20px] text-ink">
             Add wine to {activeSectionName}
           </h2>
@@ -236,13 +236,13 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
 
         {!selected ? (
           <>
-            <div className="flex gap-xs border-b border-border px-lg">
+            <div className="flex gap-xs border-b border-hairline px-lg">
               <button
                 type="button"
                 onClick={() => { setSearchMode("inventory"); setQuery(""); setCatalogError(null); }}
                 className={`px-sm py-xs text-[13px] font-medium border-b-2 transition-colors ${
                   searchMode === "inventory"
-                    ? "border-accent text-accent"
+                    ? "border-primary text-primary"
                     : "border-transparent text-ink-muted hover:text-ink"
                 }`}
               >
@@ -253,14 +253,14 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                 onClick={() => { setSearchMode("catalog"); setQuery(""); setCatalogError(null); }}
                 className={`px-sm py-xs text-[13px] font-medium border-b-2 transition-colors ${
                   searchMode === "catalog"
-                    ? "border-accent text-accent"
+                    ? "border-primary text-primary"
                     : "border-transparent text-ink-muted hover:text-ink"
                 }`}
               >
                 LWIN catalog
               </button>
             </div>
-            <div className="border-b border-border px-lg py-sm">
+            <div className="border-b border-hairline px-lg py-sm">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-sm top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" strokeWidth={2} aria-hidden="true" />
                 <input
@@ -273,15 +273,15 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                   }}
                   placeholder="Search by producer or wine name…"
                   aria-label="Search wines"
-                  className="h-[38px] w-full rounded-sm border border-border bg-white pl-xl pr-sm text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                  className="h-[38px] w-full rounded-pill border border-hairline bg-white pl-xl pr-sm text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
                 />
               </div>
             </div>
             {searchMode === "catalog" && catalogError && (
-              <div className="border-b border-border px-lg py-sm">
+              <div className="border-b border-hairline px-lg py-sm">
                 <p
                   role="alert"
-                  className="rounded-sm border border-danger/30 bg-danger-soft px-sm py-xs text-[12px] text-danger"
+                  className="rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[12px] text-primary"
                 >
                   {catalogError}
                 </p>
@@ -303,10 +303,10 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                       key={wine.id}
                       type="button"
                       onClick={() => setSelected(wine)}
-                      className="flex w-full items-center gap-md border-b border-border/50 px-lg py-sm text-left transition-colors hover:bg-surface-muted"
+                      className="flex w-full items-center gap-md border-b border-hairline/50 px-lg py-sm text-left transition-colors hover:bg-bridge-surface"
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="font-serif text-[14px] text-ink">
+                        <div className="font-serif text-[17px] text-ink">
                           {wine.producer}, {wine.name}
                         </div>
                         <div className="mt-2xs flex items-center gap-xs text-[12px] text-ink-muted">
@@ -337,10 +337,10 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     key={wine.lwin_id}
                     type="button"
                     onClick={() => handleSelectCatalog(wine)}
-                    className="flex w-full items-center gap-md border-b border-border/50 px-lg py-sm text-left transition-colors hover:bg-surface-muted"
+                    className="flex w-full items-center gap-md border-b border-hairline/50 px-lg py-sm text-left transition-colors hover:bg-bridge-surface"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="font-serif text-[14px] text-ink">
+                      <div className="font-serif text-[17px] text-ink">
                         {wine.display_name}
                       </div>
                       <div className="mt-2xs flex items-center gap-xs text-[12px] text-ink-muted">
@@ -367,8 +367,8 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
           </>
         ) : (
           <div className="px-lg py-md overflow-y-auto">
-            <div className="rounded-sm border border-border bg-surface-muted px-md py-sm">
-              <div className="font-serif text-[14px] font-medium text-ink">
+            <div className="rounded-md border border-hairline bg-bridge-surface px-md py-sm">
+              <div className="font-serif text-[17px] font-medium text-ink">
                 {selected.producer}, {selected.name}
               </div>
               <div className="mt-2xs text-[12px] text-ink-muted">
@@ -381,7 +381,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                 active section is pre-checked, user can select additional sections. */}
             {sections.length > 1 && (
               <div className="mt-md">
-                <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+                <div className="text-caption font-medium uppercase text-grey">
                   Add to {selectedCount > 1 ? `${selectedCount} sections` : "section"}
                 </div>
                 <div className="mt-sm flex flex-col gap-2xs">
@@ -390,13 +390,13 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     return (
                       <label
                         key={s.id}
-                        className="flex cursor-pointer items-center gap-sm rounded-sm px-sm py-xs transition-colors hover:bg-surface-muted"
+                        className="flex cursor-pointer items-center gap-sm rounded-pill px-sm py-xs transition-colors hover:bg-bridge-surface"
                       >
                         <span
                           className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-xs border-2 transition-colors ${
                             checked
-                              ? "border-accent bg-accent"
-                              : "border-border bg-white"
+                              ? "border-primary bg-primary"
+                              : "border-hairline bg-white"
                           }`}
                         >
                           {checked && (
@@ -431,17 +431,17 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
             )}
             {!suggesting && suggestion && suggestion.hasRetailData && (
               <div
-                className="mt-md rounded-sm bg-bg-secondary p-sm"
-                style={{ borderLeft: "2px solid var(--color-accent)" }}
+                className="mt-md rounded-md bg-bridge-surface p-sm"
+                style={{ borderLeft: "2px solid var(--color-primary)" }}
               >
                 <div className="flex items-baseline justify-between">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                  <div className="text-caption font-medium uppercase text-grey">
                     Suggested prices
                   </div>
                   <button
                     type="button"
                     onClick={applySuggestion}
-                    className="inline-flex items-center gap-2xs text-[11px] font-medium text-accent hover:underline"
+                    className="inline-flex items-center gap-2xs text-[11px] font-medium text-primary hover:underline"
                   >
                     <Sparkles className="h-3 w-3" strokeWidth={2} aria-hidden />
                     Use these
@@ -477,20 +477,20 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
               </div>
             )}
             {!suggesting && suggestion && !suggestion.hasRetailData && (
-              <div className="mt-md rounded-sm bg-bg-secondary p-sm text-[11px] italic text-ink-muted">
+              <div className="mt-md rounded-md bg-bridge-surface p-sm text-[11px] italic text-ink-muted">
                 Pricing data unavailable for this wine. Refresh retail data from
                 Insights to enable suggestions.
               </div>
             )}
             {suggestError && (
-              <p role="alert" className="mt-sm text-[11px] text-error">
+              <p role="alert" className="mt-sm text-[11px] text-primary">
                 {suggestError}
               </p>
             )}
 
             <div className="mt-md grid grid-cols-2 gap-md">
               <div>
-                <label htmlFor="add-wine-glass-price" className="mb-xs block text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+                <label htmlFor="add-wine-glass-price" className="mb-xs block text-caption font-medium uppercase text-grey">
                   Glass price
                 </label>
                 <div className="relative">
@@ -504,12 +504,12 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     value={glassPrice}
                     onChange={(e) => setGlassPrice(e.target.value)}
                     placeholder="—"
-                    className="h-[38px] w-full rounded-sm border border-border bg-white pl-md pr-sm text-right font-mono text-[14px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
+                    className="h-[38px] w-full rounded-pill border border-hairline bg-white pl-md pr-sm text-right font-mono text-[14px] text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-accent-soft"
                   />
                 </div>
               </div>
               <div>
-                <label htmlFor="add-wine-bottle-price" className="mb-xs block text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+                <label htmlFor="add-wine-bottle-price" className="mb-xs block text-caption font-medium uppercase text-grey">
                   Bottle price
                 </label>
                 <div className="relative">
@@ -523,7 +523,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     value={bottlePrice}
                     onChange={(e) => setBottlePrice(e.target.value)}
                     placeholder="—"
-                    className="h-[38px] w-full rounded-sm border border-border bg-white pl-md pr-sm text-right font-mono text-[14px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
+                    className="h-[38px] w-full rounded-pill border border-hairline bg-white pl-md pr-sm text-right font-mono text-[14px] text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-accent-soft"
                   />
                 </div>
               </div>
@@ -531,13 +531,13 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
           </div>
         )}
 
-        <div className="border-t border-border px-lg py-md">
+        <div className="border-t border-hairline px-lg py-md">
           <div className="flex justify-end gap-sm">
             {selected && (
               <button
                 type="button"
                 onClick={clearSelection}
-                className="h-[38px] rounded-sm border border-border-strong px-md text-[14px] font-medium text-ink hover:bg-surface-muted"
+                className="h-[38px] rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
               >
                 Back
               </button>
@@ -545,7 +545,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
             <button
               type="button"
               onClick={onClose}
-              className="h-[38px] rounded-sm border border-border-strong px-md text-[14px] font-medium text-ink hover:bg-surface-muted"
+              className="h-[38px] rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
             >
               Cancel
             </button>
@@ -554,7 +554,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                 type="button"
                 onClick={handleAdd}
                 disabled={adding || selectedSectionIds.size === 0}
-                className="h-[38px] rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+                className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
               >
                 {adding ? "Adding..." : `Add to ${selectedCount > 1 ? `${selectedCount} sections` : "list"}`}
               </button>

@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Wine, TrendingUp, DollarSign } from "lucide-react";
+import { metricHref } from "./metric-href";
 
 type PourVolumeItem = {
   section: string;
@@ -26,7 +28,7 @@ type TopRevenueItem = {
   pour_count: number;
 };
 
-type PourData = {
+export type PourData = {
   range: string;
   topN: number;
   totalPours: number;
@@ -47,9 +49,9 @@ function formatMoney(n: number): string {
 function PourBar({ oz, maxOz }: { oz: number; maxOz: number }) {
   const pct = maxOz > 0 ? (oz / maxOz) * 100 : 0;
   return (
-    <div className="h-2.5 flex-1 overflow-hidden rounded-pill bg-surface-sunken">
+    <div className="h-2.5 flex-1 overflow-hidden rounded-pill bg-beige">
       <div
-        className="h-full rounded-pill bg-accent transition-all duration-300"
+        className="h-full rounded-pill bg-primary transition-all duration-300"
         style={{ width: `${Math.max(pct, 1)}%` }}
       />
     </div>
@@ -125,13 +127,13 @@ export default function PourAnalyticsSection() {
 
   if (loading) {
     return (
-      <section className="rounded-md border border-border bg-surface p-lg">
+      <section className="rounded-card border border-hairline bg-white p-lg">
         <div className="mb-md flex items-center justify-between">
-          <h2 className="text-[15px] font-semibold text-ink">Pour analytics</h2>
+          <h2 className="text-[15px] font-medium text-ink">Pour analytics</h2>
         </div>
         <div className="grid gap-md md:grid-cols-2">
-          <div className="h-[200px] animate-pulse rounded-md bg-surface-muted" />
-          <div className="h-[200px] animate-pulse rounded-md bg-surface-muted" />
+          <div className="h-[200px] animate-pulse rounded-lg bg-bridge-surface" />
+          <div className="h-[200px] animate-pulse rounded-lg bg-bridge-surface" />
         </div>
       </section>
     );
@@ -139,15 +141,19 @@ export default function PourAnalyticsSection() {
 
   if (error || !data) {
     return (
-      <section className="rounded-md border border-border bg-surface p-lg">
-        <h2 className="text-[15px] font-semibold text-ink">Pour analytics</h2>
-        <p className="mt-sm text-[13px] text-ink-muted">
+      <section className="rounded-card border border-hairline bg-white p-lg">
+        <h2 className="text-[15px] font-medium text-ink">Pour analytics</h2>
+        <p className="mt-sm text-[13px] text-grey">
           {error ?? "No data available yet. Start pouring to see analytics."}
         </p>
       </section>
     );
   }
 
+  return <PourAnalyticsContent data={data} />;
+}
+
+export function PourAnalyticsContent({ data }: { data: PourData }) {
   const maxSectionOz = Math.max(
     ...data.pourVolumeBySection.map(function (s) { return s.oz; }),
     1,
@@ -165,18 +171,18 @@ export default function PourAnalyticsSection() {
 
   return (
     <section
-      className="rounded-md border border-border bg-surface p-lg"
+      className="rounded-card border border-hairline bg-white p-lg"
       aria-labelledby="pour-analytics-heading"
     >
       <div className="mb-md flex flex-wrap items-center justify-between gap-sm">
         <div className="flex items-center gap-sm">
           <h2
             id="pour-analytics-heading"
-            className="text-[15px] font-semibold text-ink"
+            className="text-[15px] font-medium text-ink"
           >
             Pour analytics
           </h2>
-          <span className="font-mono text-[12px] text-ink-subtle">
+          <span className="tabular text-[12px] text-grey">
             {data.totalPours} pour{data.totalPours === 1 ? "" : "s"}
           </span>
         </div>
@@ -185,28 +191,28 @@ export default function PourAnalyticsSection() {
       {!hasData ? (
         <div className="flex flex-col items-center justify-center py-3xl text-center">
           <Wine
-            className="mb-md h-10 w-10 text-ink-subtle"
+            className="mb-md h-10 w-10 text-grey"
             strokeWidth={1.5}
           />
           <p className="text-[15px] font-medium text-ink">
             No pour data for this range
           </p>
-          <p className="mt-xs text-[13px] text-ink-muted">
+          <p className="mt-xs text-[13px] text-grey">
             Start pouring wines to see analytics here.
           </p>
         </div>
       ) : (
         <div className="grid gap-md md:grid-cols-2">
           {/* Pour volume by section chart */}
-          <div className="rounded-md border border-dashed border-border p-md">
+          <div className="rounded-lg border border-hairline bg-bridge-surface p-md">
             <div className="mb-sm flex items-center gap-xs">
-              <TrendingUp className="h-4 w-4 text-ink-subtle" strokeWidth={1.5} />
-              <h3 className="text-[13px] font-semibold text-ink">
+              <TrendingUp className="h-4 w-4 text-grey" strokeWidth={1.5} />
+              <h3 className="text-[13px] font-medium text-ink">
                 Volume by section
               </h3>
             </div>
             {data.pourVolumeBySection.length === 0 ? (
-              <p className="text-[13px] text-ink-muted">
+              <p className="text-[13px] text-grey">
                 No sections with pour data
               </p>
             ) : (
@@ -229,33 +235,38 @@ export default function PourAnalyticsSection() {
           </div>
 
           {/* Top wines by pour count */}
-          <div className="rounded-md border border-dashed border-border p-md">
+          <div className="rounded-lg border border-hairline bg-bridge-surface p-md">
             <div className="mb-sm flex items-center gap-xs">
-              <Wine className="h-4 w-4 text-ink-subtle" strokeWidth={1.5} />
-              <h3 className="text-[13px] font-semibold text-ink">
+              <Wine className="h-4 w-4 text-grey" strokeWidth={1.5} />
+              <h3 className="text-[13px] font-medium text-ink">
                 Most poured
               </h3>
             </div>
             {data.topWinesByPours.length === 0 ? (
-              <p className="text-[13px] text-ink-muted">No pour data</p>
+              <p className="text-[13px] text-grey">No pour data</p>
             ) : (
               <div className="flex flex-col gap-xs">
                 {data.topWinesByPours.map(function (w, i) {
                   return (
-                    <div key={w.wine_id} className="flex items-center gap-sm">
-                      <span className="w-[18px] shrink-0 text-right font-mono text-[11px] text-ink-subtle">
-                        {i + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13px] font-medium text-ink">
-                          {w.producer} {w.name}
-                          {w.vintage ? " " + String(w.vintage) : ""}
+                    <div key={w.wine_id} data-metric={`ranked-pours-${w.wine_id}`}>
+                      <Link
+                        href={metricHref("wine", w.wine_id)}
+                        className="flex items-center gap-sm rounded-sm p-xs transition-colors hover:bg-white"
+                      >
+                        <span className="w-[18px] shrink-0 text-right tabular text-[11px] text-grey">
+                          {i + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[13px] font-medium text-ink">
+                            {w.producer} {w.name}
+                            {w.vintage ? " " + String(w.vintage) : ""}
+                          </div>
                         </div>
-                      </div>
-                      <PourBar oz={w.pour_count} maxOz={maxPourCount} />
-                      <span className="w-[32px] shrink-0 text-right font-mono text-[12px] text-ink-muted">
-                        {w.pour_count}
-                      </span>
+                        <PourBar oz={w.pour_count} maxOz={maxPourCount} />
+                        <span className="w-[32px] shrink-0 text-right tabular text-[12px] text-grey">
+                          {w.pour_count}
+                        </span>
+                      </Link>
                     </div>
                   );
                 })}
@@ -264,15 +275,15 @@ export default function PourAnalyticsSection() {
           </div>
 
           {/* Top wines by revenue — full width on desktop */}
-          <div className="rounded-md border border-dashed border-border p-md md:col-span-2">
+          <div className="rounded-lg border border-hairline bg-bridge-surface p-md md:col-span-2">
             <div className="mb-sm flex items-center gap-xs">
-              <DollarSign className="h-4 w-4 text-ink-subtle" strokeWidth={1.5} />
-              <h3 className="text-[13px] font-semibold text-ink">
+              <DollarSign className="h-4 w-4 text-grey" strokeWidth={1.5} />
+              <h3 className="text-[13px] font-medium text-ink">
                 Revenue leaders
               </h3>
             </div>
             {data.topWinesByRevenue.length === 0 ? (
-              <p className="text-[13px] text-ink-muted">
+              <p className="text-[13px] text-grey">
                 No wines with pricing data poured in this range
               </p>
             ) : (
@@ -281,24 +292,29 @@ export default function PourAnalyticsSection() {
                   return (
                     <div
                       key={w.wine_id}
-                      className="flex items-center gap-sm rounded-sm p-xs hover:bg-surface-muted/50"
+                      data-metric={`ranked-revenue-${w.wine_id}`}
                     >
-                      <span className="w-[18px] shrink-0 text-right font-mono text-[11px] text-ink-subtle">
-                        {i + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13px] font-medium text-ink">
-                          {w.producer} {w.name}
-                          {w.vintage ? " " + String(w.vintage) : ""}
+                      <Link
+                        href={metricHref("wine", w.wine_id)}
+                        className="flex items-center gap-sm rounded-sm p-xs transition-colors hover:bg-white"
+                      >
+                        <span className="w-[18px] shrink-0 text-right tabular text-[11px] text-grey">
+                          {i + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[13px] font-medium text-ink">
+                            {w.producer} {w.name}
+                            {w.vintage ? " " + String(w.vintage) : ""}
+                          </div>
+                          <div className="mt-2xs text-[12px] text-grey">
+                            {w.pour_count} pour{w.pour_count === 1 ? "" : "s"}
+                          </div>
                         </div>
-                        <div className="mt-2xs text-[12px] text-ink-muted">
-                          {w.pour_count} pour{w.pour_count === 1 ? "" : "s"}
-                        </div>
-                      </div>
-                      <PourBar oz={w.revenue} maxOz={maxRevenue} />
-                      <span className="w-[48px] shrink-0 text-right font-mono text-[13px] font-medium text-ink">
-                        {formatMoney(w.revenue)}
-                      </span>
+                        <PourBar oz={w.revenue} maxOz={maxRevenue} />
+                        <span className="w-[48px] shrink-0 text-right tabular text-[13px] font-medium text-ink">
+                          {formatMoney(w.revenue)}
+                        </span>
+                      </Link>
                     </div>
                   );
                 })}

@@ -19,6 +19,14 @@ import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
 import { useToast } from "@/lib/toast";
 import {
+  applyFacets,
+  facetCounts,
+  groupRows,
+  type CellarFacetGroup,
+  type CellarFacets,
+  type CellarGroupBy,
+} from "@/lib/cellar-facets";
+import {
   formatStatusLabel,
   getDrinkWindowStatus,
   getMarkerPosition,
@@ -27,6 +35,10 @@ import {
   isHolding,
 } from "@/lib/drink-window/status";
 import type { CellarWineRow } from "./types";
+import {
+  CellarFacetBar,
+  type CellarFacetPatch,
+} from "./cellar-facet-bar";
 
 /**
  * CellarList — the unified wine list inside Cellar's single-screen
@@ -66,6 +78,10 @@ export function CellarList({
   lowStockThreshold,
   onSelectWine,
   onResetFilters,
+  facets,
+  groupBy,
+  onFacetsChange,
+  onGroupByChange,
   sections,
 }: {
   rows: CellarWineRow[];
@@ -74,6 +90,10 @@ export function CellarList({
   lowStockThreshold?: number;
   onSelectWine: (row: CellarWineRow) => void;
   onResetFilters: () => void;
+  facets: CellarFacets;
+  groupBy: CellarGroupBy | null;
+  onFacetsChange: (patch: CellarFacetPatch) => void;
+  onGroupByChange: (groupBy: CellarGroupBy | null) => void;
   // BND-063/064 — cellar sections for grouping, DnD, and bulk assign
   sections?: CellarSection[];
 }) {
@@ -91,7 +111,7 @@ export function CellarList({
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
 
-  const filtered = useMemo(() => {
+  const filteredWithoutFacets = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
       switch (filter) {
@@ -131,6 +151,19 @@ export function CellarList({
       );
     });
   }, [rows, query, filter]);
+
+  const filtered = useMemo(
+    () => applyFacets(filteredWithoutFacets, facets),
+    [filteredWithoutFacets, facets],
+  );
+  const counts = useMemo(
+    () => facetCounts(filteredWithoutFacets, facets),
+    [filteredWithoutFacets, facets],
+  );
+  const taxonomyGroups = useMemo(
+    () => (groupBy ? groupRows(filtered, groupBy) : []),
+    [filtered, groupBy],
+  );
 
   // BND-063: group filtered wines by section. "Uncategorized" for wines
   // without a section. If no sections are configured, all wines go into
@@ -255,14 +288,14 @@ export function CellarList({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-md border border-border bg-white px-md py-2xl text-center">
-        <p className="font-serif text-[16px] text-ink">No wines in your cellar yet.</p>
-        <p className="mt-xs text-[13px] text-ink-muted">
+      <div className="rounded-card border border-hairline bg-white px-md py-2xl text-center">
+        <p className="font-serif text-[17px] font-medium text-ink">No wines in your cellar yet.</p>
+        <p className="mt-xs text-[13px] text-grey">
           Scan an invoice to start building your cellar.
         </p>
         <Link
           href="/scan"
-          className="mt-md inline-flex h-[40px] items-center justify-center rounded-sm bg-accent px-md text-[13px] font-medium text-white hover:bg-accent-hover"
+          className="mt-md inline-flex h-[40px] items-center justify-center rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
         >
           Scan an invoice →
         </Link>
@@ -284,29 +317,45 @@ export function CellarList({
       message = "No wines match the current filter.";
     }
     return (
-      <div className="rounded-md border border-border bg-white px-md py-lg text-center">
-        <p className="text-[13px] text-ink-muted">{message}</p>
-        <button
-          type="button"
-          onClick={onResetFilters}
-          className="mt-sm inline-flex h-[32px] items-center rounded-sm border border-border-strong bg-white px-md text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent-soft"
-        >
-          Clear filter & search
-        </button>
-      </div>
+      <>
+        <CellarFacetBar
+          facets={facets}
+          counts={counts}
+          groupBy={groupBy}
+          onFacetsChange={onFacetsChange}
+          onGroupByChange={onGroupByChange}
+        />
+        <div className="rounded-card border border-hairline bg-white px-md py-lg text-center">
+          <p className="text-[13px] text-grey">{message}</p>
+          <button
+            type="button"
+            onClick={onResetFilters}
+            className="mt-sm inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-md text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-primary/25"
+          >
+            Clear filters & search
+          </button>
+        </div>
+      </>
     );
   }
 
   return (
     <div>
+      <CellarFacetBar
+        facets={facets}
+        counts={counts}
+        groupBy={groupBy}
+        onFacetsChange={onFacetsChange}
+        onGroupByChange={onGroupByChange}
+      />
       {/* BND-064: Selection mode toolbar */}
-      {sections && sections.length > 0 && (
+      {sections && sections.length > 0 && !groupBy && (
         <div className="mb-sm flex items-center gap-xs">
           {!selectMode ? (
             <button
               type="button"
               onClick={() => setSelectMode(true)}
-              className="inline-flex h-[32px] items-center gap-xs rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted transition-colors"
+              className="inline-flex h-[32px] items-center gap-xs rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface transition-colors"
             >
               <CheckSquare className="h-4 w-4" strokeWidth={2} aria-hidden />
               Select wines
@@ -316,7 +365,7 @@ export function CellarList({
               <button
                 type="button"
                 onClick={selectAll}
-                className="inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted"
+                className="inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface"
               >
                 Select all ({filtered.length})
               </button>
@@ -324,7 +373,7 @@ export function CellarList({
                 <button
                   type="button"
                   onClick={deselectAll}
-                  className="inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted"
+                  className="inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
                 >
                   Clear
                 </button>
@@ -334,20 +383,20 @@ export function CellarList({
                   <button
                     type="button"
                     onClick={() => setAssignTarget(assignTarget ? null : "__open__")}
-                    className="inline-flex h-[32px] items-center gap-xs rounded-sm bg-accent px-sm text-[12px] font-medium text-white hover:bg-accent-hover"
+                    className="inline-flex h-[32px] items-center gap-xs rounded-pill bg-primary px-sm text-[12px] font-medium text-white hover:bg-primary-hover"
                   >
                     <Layers className="h-4 w-4" strokeWidth={2} aria-hidden />
                     Assign {selectedIds.size} to section
                     <ChevronDown className="h-3 w-3" strokeWidth={2} aria-hidden />
                   </button>
                   {assignTarget === "__open__" && (
-                    <div className="absolute top-full left-0 mt-1 z-20 w-56 rounded-sm border border-border bg-white shadow-lg py-xs">
+                    <div className="absolute top-full left-0 mt-1 z-20 w-56 rounded-lg border border-hairline bg-white py-xs">
                       {sections.map((s) => (
                         <button
                           key={s.id}
                           type="button"
                           onClick={() => setAssignTarget(s.name)}
-                          className="block w-full px-sm py-xs text-left text-[13px] text-ink hover:bg-surface-muted"
+                          className="block w-full px-sm py-xs text-left text-[13px] text-ink hover:bg-bridge-surface"
                         >
                           {s.name}
                         </button>
@@ -358,14 +407,14 @@ export function CellarList({
               )}
               {assignTarget && assignTarget !== "__open__" && (
                 <div className="flex items-center gap-xs">
-                  <span className="text-[12px] text-ink-muted">
+                  <span className="text-[12px] text-grey">
                     Assign to <strong>{assignTarget}</strong>?
                   </span>
                   <button
                     type="button"
                     onClick={doBulkAssign}
                     disabled={busy}
-                    className="inline-flex h-[32px] items-center rounded-sm bg-accent px-sm text-[12px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+                    className="inline-flex h-[32px] items-center rounded-pill bg-primary px-sm text-[12px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
                   >
                     {busy ? "..." : "Confirm"}
                   </button>
@@ -373,7 +422,7 @@ export function CellarList({
                     type="button"
                     onClick={() => setAssignTarget(null)}
                     disabled={busy}
-                    className="inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted disabled:opacity-60"
+                    className="inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface disabled:opacity-60"
                   >
                     <X className="h-3 w-3" strokeWidth={2} aria-hidden />
                   </button>
@@ -382,7 +431,7 @@ export function CellarList({
               <button
                 type="button"
                 onClick={() => { setSelectMode(false); setSelectedIds(new Set()); setAssignTarget(null); }}
-                className="ml-auto inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted"
+                className="ml-auto inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
               >
                 Done
               </button>
@@ -392,7 +441,18 @@ export function CellarList({
       )}
 
       {/* Wine list with optional DnD section grouping */}
-      {sections && sections.length > 0 ? (
+      {groupBy ? (
+        <div className="flex flex-col gap-md">
+          {taxonomyGroups.map((group) => (
+            <TaxonomyGroup
+              key={group.key}
+              group={group}
+              lowStockThreshold={lowStockThreshold}
+              onSelectWine={onSelectWine}
+            />
+          ))}
+        </div>
+      ) : sections && sections.length > 0 ? (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <div className="flex flex-col gap-md">
             {sectionGroups.map((group) => (
@@ -411,18 +471,192 @@ export function CellarList({
           </div>
         </DndContext>
       ) : (
-        <ul className="flex flex-col divide-y divide-border rounded-md border border-border bg-white">
-          {filtered.map((row) => (
+        <div className="flex flex-col divide-y divide-hairline rounded-card border border-hairline bg-white">
+          <LineageBlockList
+            wines={filtered}
+            renderRow={(row) => (
+              <CellarRow
+                row={row}
+                lowStockThreshold={lowStockThreshold}
+                onSelect={() => onSelectWine(row)}
+              />
+            )}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TaxonomyGroup({
+  group,
+  lowStockThreshold,
+  onSelectWine,
+}: {
+  group: CellarFacetGroup<CellarWineRow>;
+  lowStockThreshold?: number;
+  onSelectWine: (row: CellarWineRow) => void;
+}) {
+  return (
+    <section
+      data-cellar-taxonomy-group
+      data-group-value={group.key}
+      className="overflow-hidden rounded-card border border-hairline bg-white"
+    >
+      <header className="flex items-center justify-between gap-md border-b border-beige-deep bg-beige px-md py-sm">
+        <h2 className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-soft">
+          {group.label}
+        </h2>
+        <span
+          data-group-rollup
+          className="tabular shrink-0 text-[11px] text-ink-soft"
+        >
+          {group.wineCount} wine{group.wineCount === 1 ? "" : "s"} · {group.totalBottles}{" "}
+          bottle{group.totalBottles === 1 ? "" : "s"}
+        </span>
+      </header>
+      <div className="divide-y divide-hairline">
+        <LineageBlockList
+          wines={group.wines}
+          renderRow={(row) => (
             <CellarRow
-              key={row.wine_id}
               row={row}
               lowStockThreshold={lowStockThreshold}
               onSelect={() => onSelectWine(row)}
             />
-          ))}
-        </ul>
+          )}
+        />
+      </div>
+    </section>
+  );
+}
+
+/**
+ * OPP-1 (wave 0, EV-1.1) — lineage grouping. Wines sharing a lineage
+ * (one producer-cuvée) render as a single expandable block: a header row
+ * with the rollup (vintage span, total bottles) above per-vintage child
+ * rows. Wines whose lineage has a single member — or none — render as
+ * plain rows in their original position, so cellars without vintage
+ * siblings look exactly as before.
+ */
+type LineageBlock =
+  | { kind: "single"; row: CellarWineRow }
+  | {
+      kind: "lineage";
+      lineageId: string;
+      producer: string;
+      name: string;
+      totalBottles: number;
+      span: [number, number] | null;
+      rows: CellarWineRow[];
+    };
+
+function buildLineageBlocks(wines: CellarWineRow[]): LineageBlock[] {
+  const counts = new Map<string, number>();
+  for (const w of wines) {
+    if (w.lineage_id) counts.set(w.lineage_id, (counts.get(w.lineage_id) ?? 0) + 1);
+  }
+  const emitted = new Set<string>();
+  const blocks: LineageBlock[] = [];
+  for (const w of wines) {
+    const lid = w.lineage_id;
+    if (!lid || (counts.get(lid) ?? 0) < 2) {
+      blocks.push({ kind: "single", row: w });
+      continue;
+    }
+    if (emitted.has(lid)) continue;
+    emitted.add(lid);
+    const members = wines
+      .filter((x) => x.lineage_id === lid)
+      .sort((a, b) => (b.vintage ?? -1) - (a.vintage ?? -1));
+    const vints = members
+      .map((m) => m.vintage)
+      .filter((v): v is number => v != null);
+    blocks.push({
+      kind: "lineage",
+      lineageId: lid,
+      producer: members[0].producer,
+      name: members[0].name,
+      totalBottles: members.reduce((acc, m) => acc + m.sealed_count, 0),
+      span: vints.length ? [Math.min(...vints), Math.max(...vints)] : null,
+      rows: members,
+    });
+  }
+  return blocks;
+}
+
+function LineageBlockList({
+  wines,
+  renderRow,
+}: {
+  wines: CellarWineRow[];
+  renderRow: (row: CellarWineRow) => React.ReactNode;
+}) {
+  const blocks = useMemo(() => buildLineageBlocks(wines), [wines]);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const toggle = useCallback((lineageId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(lineageId)) next.delete(lineageId);
+      else next.add(lineageId);
+      return next;
+    });
+  }, []);
+
+  return (
+    <>
+      {blocks.map((block) =>
+        block.kind === "single" ? (
+          <div key={block.row.wine_id}>{renderRow(block.row)}</div>
+        ) : (
+          <div key={`lineage-${block.lineageId}`} data-lineage-id={block.lineageId}>
+            <button
+              type="button"
+              data-lineage-header
+              onClick={() => toggle(block.lineageId)}
+              aria-expanded={!collapsed.has(block.lineageId)}
+              className="flex w-full items-center gap-sm px-md py-sm text-left bg-beige hover:bg-beige-deep/60 transition-colors"
+            >
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 shrink-0 text-grey transition-transform",
+                  collapsed.has(block.lineageId) && "-rotate-90",
+                )}
+                strokeWidth={2}
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-soft">
+                  {block.producer}
+                </span>
+                <span className="block truncate font-serif text-[17px] font-medium text-ink">
+                  {block.name}
+                </span>
+              </span>
+              <span
+                data-lineage-rollup
+                className="tabular inline-flex shrink-0 items-center rounded-pill bg-white/70 px-sm py-2xs text-[11px] font-medium text-ink-soft"
+              >
+                {block.rows.length} wines
+                {block.span ? ` · ${block.span[0]}–${block.span[1]}` : ""}
+                {` · ${block.totalBottles} btls`}
+              </span>
+            </button>
+            {!collapsed.has(block.lineageId) && (
+              <div
+                data-lineage-children
+                className="ml-md border-l-2 border-beige-deep divide-y divide-hairline"
+              >
+                {block.rows.map((row) => (
+                  <div key={row.wine_id}>{renderRow(row)}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        ),
       )}
-    </div>
+    </>
   );
 }
 
@@ -452,35 +686,39 @@ function SectionGroup({
   const dropId = `section-${sectionKey}`;
 
   return (
-    <div className="rounded-md border border-border bg-white overflow-hidden">
+    <div className="rounded-card border border-hairline bg-white overflow-hidden">
       {/* Section header — acts as drop target */}
       <div
         id={dropId}
-        className="flex items-center gap-sm px-md py-sm bg-surface-muted border-b border-border"
+        className="flex items-center gap-sm px-md py-sm bg-beige border-b border-beige-deep"
       >
-        <h3 className="text-[13px] font-semibold text-ink">{sectionName}</h3>
-        <span className="inline-flex items-center rounded-full bg-accent-soft px-sm py-2xs text-[11px] font-medium text-accent">
+        <h3 className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-soft">
+          {sectionName}
+        </h3>
+        <span className="tabular inline-flex items-center rounded-pill bg-white/70 px-sm py-2xs text-[11px] font-medium text-ink-soft">
           {wines.length}
         </span>
       </div>
 
       {/* Wine rows in this section */}
       {wines.length > 0 ? (
-        <div className="divide-y divide-border">
-          {wines.map((row) => (
-            <DraggableWineRow
-              key={row.wine_id}
-              row={row}
-              lowStockThreshold={lowStockThreshold}
-              onSelect={() => onSelectWine(row)}
-              selectMode={selectMode}
-              selected={selectedIds.has(row.wine_id)}
-              onToggleSelect={() => onToggleSelect(row.wine_id)}
-            />
-          ))}
+        <div className="divide-y divide-hairline">
+          <LineageBlockList
+            wines={wines}
+            renderRow={(row) => (
+              <DraggableWineRow
+                row={row}
+                lowStockThreshold={lowStockThreshold}
+                onSelect={() => onSelectWine(row)}
+                selectMode={selectMode}
+                selected={selectedIds.has(row.wine_id)}
+                onToggleSelect={() => onToggleSelect(row.wine_id)}
+              />
+            )}
+          />
         </div>
       ) : (
-        <div className="px-md py-lg text-center text-[13px] text-ink-muted">
+        <div className="px-md py-lg text-center text-[13px] text-grey">
           No wines in this section.
         </div>
       )}
@@ -521,7 +759,7 @@ function DraggableWineRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={cn(isDragging && "bg-surface-muted shadow-md rounded-sm")}
+      className={cn(isDragging && "bg-bridge-surface rounded-lg")}
     >
       <CellarRow
         row={row}
@@ -575,9 +813,9 @@ function CellarRow({
   const isLowStock = lowStockThreshold != null && row.sealed_count > 0 && row.sealed_count < lowStockThreshold && !row.is_eightysixed;
   const isPeakWindow = row.peak_year != null && row.peak_year === new Date().getFullYear() && !row.is_eightysixed;
 
-  let chip: { label: string; tone: "neutral" | "ok" | "warn" | "danger" | "muted" };
+  let chip: { label: string; tone: "neutral" | "ok" | "risk" | "muted" };
   if (row.is_eightysixed) {
-    chip = { label: "86'd", tone: "danger" };
+    chip = { label: "86'd", tone: "risk" };
   } else if (row.open_remaining_ml !== null && row.open_remaining_ml > 0) {
     chip = {
       label: `Open · ${ozLeft} oz`,
@@ -599,11 +837,11 @@ function CellarRow({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onToggleSelect?.(); }}
-          className="flex h-[44px] w-[44px] shrink-0 items-center justify-center text-ink-subtle hover:text-accent"
+          className="flex h-[44px] w-[44px] shrink-0 items-center justify-center text-grey hover:text-primary"
           aria-label={selected ? "Deselect" : "Select"}
         >
           {selected ? (
-            <CheckSquare className="h-5 w-5 text-accent" strokeWidth={2} aria-hidden />
+            <CheckSquare className="h-5 w-5 text-primary" strokeWidth={2} aria-hidden />
           ) : (
             <Square className="h-5 w-5" strokeWidth={2} aria-hidden />
           )}
@@ -617,7 +855,7 @@ function CellarRow({
           {...dragHandle.attributes}
           {...dragHandle.listeners}
           aria-label="Drag to reorder"
-          className="flex h-[44px] w-[36px] shrink-0 items-center justify-center cursor-grab active:cursor-grabbing text-ink-subtle hover:text-ink-muted touch:min-h-[44px] touch:min-w-[44px]"
+          className="flex h-[44px] w-[36px] shrink-0 items-center justify-center cursor-grab active:cursor-grabbing text-grey hover:text-ink-soft touch:min-h-[44px] touch:min-w-[44px]"
         >
           <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
         </button>
@@ -626,29 +864,31 @@ function CellarRow({
       <button
         type="button"
         onClick={selectMode ? undefined : onSelect}
-        className="flex-1 min-w-0 px-md py-md text-left transition-colors hover:bg-surface-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-inset rounded-sm"
+        className="flex-1 min-w-0 px-md py-md text-left transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-inset rounded-md"
       >
         <div className="flex items-start justify-between gap-md">
           <div className="min-w-0 flex-1">
             {/* Producer · Vintage · Region */}
-            <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-subtle">
-              <span className="text-ink-muted">{row.producer}</span>
-              {row.vintage && <span className="ml-xs font-mono">{row.vintage}</span>}
+            <div className="text-caption font-medium uppercase text-grey">
+              <span>{row.producer}</span>
+              {row.vintage && <span className="tabular ml-xs">{row.vintage}</span>}
               {row.region && <span className="ml-xs">· {row.region}</span>}
             </div>
             {/* Wine name */}
-            <div className="mt-2xs font-serif text-[16px] text-ink">{row.name}</div>
+            <div className="mt-2xs font-serif text-[17px] font-medium text-ink">{row.name}</div>
             {/* Stock + drink-window + bin row */}
-            <div className="mt-xs flex flex-wrap items-center gap-sm text-[12px] text-ink-muted">
+            <div className="mt-xs flex flex-wrap items-center gap-sm text-[12px] font-light text-grey">
               <Chip tone={chip.tone}>{chip.label}</Chip>
-              {isLowStock && (
-                <span className="inline-flex items-center rounded-full bg-warning-soft px-sm py-2xs text-[11px] font-medium text-warning">Low Stock</span>
-              )}
-              {isPeakWindow && (
-                <span className="inline-flex items-center rounded-full bg-accent-soft px-sm py-2xs text-[11px] font-medium text-accent">Peak Window</span>
+              {isLowStock && <Chip tone="risk">Low stock</Chip>}
+              {isPeakWindow && <Chip tone="ok">Peak window</Chip>}
+              {/* OPP-1 (EV-1.2) — same lineage + vintage + format twin detected */}
+              {row.duplicate_wine_ids.length > 0 && (
+                <span data-duplicate-suspect>
+                  <Chip tone="warn">Possible duplicate</Chip>
+                </span>
               )}
               {glassesLeft !== null && glassesLeft > 0 && !row.is_eightysixed && (
-                <span className="text-ink-muted">
+                <span className="tabular text-grey">
                   ~{glassesLeft} glass{glassesLeft === 1 ? "" : "es"} left
                 </span>
               )}
@@ -659,7 +899,7 @@ function CellarRow({
                 />
               )}
               {row.bin_location && (
-                <span className="inline-flex items-center gap-2xs font-mono text-ink-subtle">
+                <span className="tabular inline-flex items-center gap-2xs rounded-pill bg-beige px-sm py-[2px] text-[11px] text-ink-soft">
                   <MapPin className="h-3 w-3" strokeWidth={2} aria-hidden />
                   {row.bin_location}
                 </span>
@@ -669,7 +909,7 @@ function CellarRow({
           {!selectMode && (
             <span
               aria-hidden
-              className="mt-2xs flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-ink-subtle"
+              className="mt-2xs flex h-8 w-8 shrink-0 items-center justify-center rounded-pill text-grey"
             >
               <MoreVertical className="h-4 w-4" strokeWidth={2} />
             </span>
@@ -693,9 +933,9 @@ function DrinkWindowIndicator({
   const markerPct = getMarkerPosition(start, end);
   const label = formatStatusLabel(status, yearsLeft);
 
-  const tone: "warn" | "muted" | "ok" =
+  const tone: "info" | "muted" | "ok" =
     status === "drink_now" || status === "past_peak"
-      ? "warn"
+      ? "info"
       : status === "hold"
         ? "muted"
         : status === "optimal"
@@ -717,7 +957,7 @@ function DrinkWindowIndicator({
           style={{
             top: "-2px",
             left: `${markerPct}%`,
-            background: "var(--color-accent)",
+            background: "var(--color-primary)",
           }}
         />
       </span>
@@ -726,22 +966,28 @@ function DrinkWindowIndicator({
   );
 }
 
+/**
+ * Ledger Panel badge — DESIGN.md mapping: sage = healthy/in-window/ok,
+ * powder = informational (window closing/drink now), blush+primary = risk,
+ * amber = other warnings, neutral = routine stock count (no status signal).
+ */
 function Chip({
   tone,
   children,
 }: {
-  tone: "neutral" | "ok" | "warn" | "danger" | "muted";
+  tone: "neutral" | "ok" | "info" | "risk" | "warn" | "muted";
   children: React.ReactNode;
 }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-sm py-2xs text-[11px] font-medium",
-        tone === "ok" && "bg-success-soft text-success",
-        tone === "warn" && "bg-warning-soft text-warning",
-        tone === "danger" && "bg-warning-soft text-warning",
-        tone === "neutral" && "bg-accent-soft text-accent",
-        tone === "muted" && "bg-surface-muted text-ink-subtle",
+        "inline-flex items-center rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide",
+        tone === "ok" && "bg-sage-wash text-sage-ink",
+        tone === "info" && "bg-powder-wash text-powder-ink",
+        tone === "risk" && "bg-blush-wash text-primary",
+        tone === "warn" && "bg-amber-wash text-amber",
+        tone === "neutral" && "bg-beige text-ink-soft",
+        tone === "muted" && "bg-bridge-surface text-grey",
       )}
     >
       {children}

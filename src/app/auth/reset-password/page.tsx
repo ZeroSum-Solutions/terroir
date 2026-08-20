@@ -56,26 +56,23 @@ export default async function ResetPasswordPage({
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-lg">
-      <div className="w-full max-w-[420px]">
+    <main className="flex min-h-screen items-center justify-center bg-canvas px-lg py-xl">
+      <div className="w-full max-w-[420px] rounded-card border border-hairline bg-canvas p-xl">
         <div className="mb-xl text-center">
-          <div
-            className="mb-sm font-serif text-[22px] tracking-tight text-accent"
-            style={{ fontWeight: 500 }}
-          >
-            Terroir
+          <div className="mb-sm font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink">
+            TERR<span className="text-primary">OIR</span>
           </div>
-          <h1 className="font-serif text-[28px] leading-tight text-ink">
-            Set new password
+          <h1 className="font-serif text-heading-sm leading-tight text-ink">
+            Set new <em className="text-primary font-normal italic">password</em>
           </h1>
-          <p className="mt-xs text-[14px] text-ink-muted">
+          <p className="mt-xs text-[14px] font-light text-grey">
             Choose a password for <span className="font-medium">{data.user.email}</span>
           </p>
         </div>
 
         <form action={setNewPassword} className="flex flex-col gap-md">
           <label htmlFor="new-password" className="flex flex-col gap-xs">
-            <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+            <span className="text-caption font-medium uppercase text-grey">
               New password
             </span>
             <input
@@ -87,11 +84,11 @@ export default async function ResetPasswordPage({
               minLength={6}
               aria-describedby={error ? "reset-password-error" : undefined}
               placeholder="At least 6 characters"
-              className="h-[38px] rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+              className="h-[42px] rounded-pill border border-hairline bg-white px-md text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
             />
           </label>
           <label htmlFor="confirm-password" className="flex flex-col gap-xs">
-            <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+            <span className="text-caption font-medium uppercase text-grey">
               Confirm password
             </span>
             <input
@@ -103,11 +100,11 @@ export default async function ResetPasswordPage({
               minLength={6}
               aria-describedby={error ? "reset-password-error" : undefined}
               placeholder="Same password again"
-              className="h-[38px] rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+              className="h-[42px] rounded-pill border border-hairline bg-white px-md text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
             />
           </label>
           {error && (
-            <div id="reset-password-error" role="alert" className="text-[13px] text-danger">{error}</div>
+            <div id="reset-password-error" role="alert" className="text-[13px] text-primary">{error}</div>
           )}
 <SetPasswordSubmit />
         </form>

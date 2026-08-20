@@ -79,7 +79,7 @@ export default async function WineListPrintPage({
       </header>
 
       {sections.length === 0 && (
-        <p className="font-serif text-[16px] italic text-ink-muted">
+        <p className="font-sans text-[14px] italic text-ink-muted">
           No wines to print.
         </p>
       )}
@@ -99,7 +99,7 @@ export default async function WineListPrintPage({
                 >
                   <div className="flex items-baseline justify-between gap-md">
                     <div className="min-w-0">
-                      <span className="font-serif text-[15px] text-ink print:text-[13px]">
+                      <span className="font-serif text-[17px] font-medium text-ink print:text-[14px]">
                         {wine.producer} {wine.name}
                       </span>
                       {wine.vintage && (
@@ -124,7 +124,7 @@ export default async function WineListPrintPage({
                     </p>
                   )}
                   {item.blurb && (
-                    <p className="mt-2xs font-serif text-[12px] italic text-ink-muted print:text-[10px]">
+                    <p className="mt-2xs font-sans text-[12px] italic text-ink-muted print:text-[10px]">
                       {item.blurb}
                     </p>
                   )}

@@ -90,19 +90,20 @@ export default async function LoginPage({
   const isForgotPassword = forgot === "1";
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-lg">
-      <div className="w-full max-w-[420px]">
+    <main className="dawn-gradient flex min-h-screen items-center justify-center px-lg py-xl">
+      <div className="w-full max-w-[420px] rounded-card border border-hairline bg-canvas p-xl">
         <div className="mb-xl text-center">
-          <div
-            className="mb-sm font-serif text-[22px] tracking-tight text-accent"
-            style={{ fontWeight: 500 }}
-          >
-            Terroir
+          <div className="mb-sm font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink">
+            TERR<span className="text-primary">OIR</span>
           </div>
-          <h1 className="font-serif text-[28px] leading-tight text-ink">
-            {isForgotPassword ? "Reset your password" : "Sign in"}
+          <h1 className="font-serif text-heading-sm leading-tight text-ink">
+            {isForgotPassword ? (
+              <>Reset your <em className="text-primary font-normal italic">password</em></>
+            ) : (
+              <>Sign <em className="text-primary font-normal italic">in</em></>
+            )}
           </h1>
-          <p className="mt-xs text-[14px] text-ink-muted">
+          <p className="mt-xs text-[14px] font-light text-grey">
             {isForgotPassword
               ? "We&rsquo;ll email you a reset link."
               : "We&rsquo;ll email you a magic link."}
@@ -113,7 +114,7 @@ export default async function LoginPage({
           <div
             role="status"
             aria-live="polite"
-            className="rounded-md border border-success/30 bg-success-soft p-lg text-[14px] text-success"
+            className="rounded-md border border-sage-ink/30 bg-sage-wash p-lg text-[14px] text-sage-ink"
           >
             Password updated. Sign in with a magic link or your new password.
           </div>
@@ -121,7 +122,7 @@ export default async function LoginPage({
           <div
             role="status"
             aria-live="polite"
-            className="rounded-md border border-success/30 bg-success-soft p-lg text-[14px] text-success"
+            className="rounded-md border border-sage-ink/30 bg-sage-wash p-lg text-[14px] text-sage-ink"
           >
             Check <span className="font-medium">{sent}</span> for a sign-in link.
             You can close this tab.
@@ -130,7 +131,7 @@ export default async function LoginPage({
           <div
             role="status"
             aria-live="polite"
-            className="rounded-md border border-success/30 bg-success-soft p-lg text-[14px] text-success"
+            className="rounded-md border border-sage-ink/30 bg-sage-wash p-lg text-[14px] text-sage-ink"
           >
             If that email is registered, we&rsquo;ve sent a password reset link.
             Check your inbox.
@@ -138,7 +139,7 @@ export default async function LoginPage({
         ) : isForgotPassword ? (
           <form action={sendPasswordReset} className="flex flex-col gap-md">
             <label htmlFor="reset-email" className="flex flex-col gap-xs">
-              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+              <span className="text-caption font-medium uppercase text-grey">
                 Work email
               </span>
               <input
@@ -149,16 +150,16 @@ export default async function LoginPage({
                 required
                 aria-describedby={error ? "reset-error" : undefined}
                 placeholder="you@restaurant.com…"
-                className="h-[38px] rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+                className="h-[42px] rounded-pill border border-hairline bg-white px-md text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
               />
             </label>
             {error && (
-              <div id="reset-error" role="alert" className="text-[13px] text-danger">{error}</div>
+              <div id="reset-error" role="alert" className="text-[13px] text-primary">{error}</div>
             )}
             <ResetPasswordSubmit />
             <a
               href="/login"
-              className="text-center text-[13px] text-ink-muted hover:text-ink"
+              className="text-center text-[13px] text-grey hover:text-ink"
             >
               Back to sign in
             </a>
@@ -167,7 +168,7 @@ export default async function LoginPage({
           <form action={sendMagicLink} className="flex flex-col gap-md">
             <input type="hidden" name="next" value={next ?? "/"} />
             <label htmlFor="login-email" className="flex flex-col gap-xs">
-              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+              <span className="text-caption font-medium uppercase text-grey">
                 Work email
               </span>
               <input
@@ -178,16 +179,16 @@ export default async function LoginPage({
                 required
                 aria-describedby={error ? "login-error" : undefined}
                 placeholder="you@restaurant.com…"
-                className="h-[38px] rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+                className="h-[42px] rounded-pill border border-hairline bg-white px-md text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
               />
             </label>
             {error && (
-              <div id="login-error" role="alert" className="text-[13px] text-danger">{error}</div>
+              <div id="login-error" role="alert" className="text-[13px] text-primary">{error}</div>
             )}
             <MagicLinkSubmit />
             <a
               href="/login?forgot=1"
-              className="text-center text-[13px] text-ink-muted hover:text-ink"
+              className="text-center text-[13px] text-grey hover:text-ink"
             >
               Forgot password?
             </a>
@@ -195,17 +196,17 @@ export default async function LoginPage({
         )}
 
         {devBypassEmail && !sent && reset !== "1" && reset_done !== "1" && (
-          <div className="mt-lg border-t border-dashed border-border pt-lg">
-            <p className="mb-sm text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+          <div className="mt-lg border-t border-hairline pt-lg">
+            <p className="mb-sm text-caption font-medium uppercase text-grey">
               Dev only
             </p>
             <a
               href="/api/dev-login"
-              className="flex h-[38px] items-center justify-center rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted"
+              className="flex h-[42px] items-center justify-center rounded-pill border border-beige-deep bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface"
             >
               Sign in as {devBypassEmail}
             </a>
-            <p className="mt-xs text-[11px] text-ink-subtle">
+            <p className="mt-xs text-[11px] text-grey">
               Skips email. Disabled in production (no DEV_BYPASS_EMAIL set).
             </p>
           </div>

@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 60,
+    "extensionDiscoveredCount": 76,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -307,9 +307,51 @@
   ],
   "discoveredClassifications": [
     {
+      "operationId": "api:GET:/api/bins",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/bins",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:PATCH:/api/bins/{param}",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:GET:/api/bins/suggest",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/brand-kit",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/brand-kit/propose",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
       "operationId": "api:POST:/api/cellar",
       "classification": "exact",
       "concreteRequirementId": "TER-CF-182",
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/cellar-health/recompute",
+      "classification": "extension",
+      "concreteRequirementId": null,
       "semanticAliasContext": []
     },
     {
@@ -445,6 +487,12 @@
       "semanticAliasContext": []
     },
     {
+      "operationId": "api:GET:/api/member-analytics",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
       "operationId": "api:POST:/api/open-bottles",
       "classification": "extension",
       "concreteRequirementId": null,
@@ -452,6 +500,12 @@
     },
     {
       "operationId": "api:POST:/api/open-bottles/{param}/close",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/open-bottles/close",
       "classification": "extension",
       "concreteRequirementId": null,
       "semanticAliasContext": []
@@ -475,9 +529,33 @@
       "semanticAliasContext": []
     },
     {
+      "operationId": "api:POST:/api/pricing-recommendations/recompute",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
       "operationId": "api:POST:/api/reconcile",
       "classification": "exact",
       "concreteRequirementId": "TER-CF-193",
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:GET:/api/reconcile-queue",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/reconcile-queue/accept",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/reconcile-queue/undo",
+      "classification": "extension",
+      "concreteRequirementId": null,
       "semanticAliasContext": []
     },
     {
@@ -554,6 +632,12 @@
     },
     {
       "operationId": "api:POST:/api/scans/{param}/re-extract",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/stock-adjustments",
       "classification": "extension",
       "concreteRequirementId": null,
       "semanticAliasContext": []
@@ -715,6 +799,12 @@
       "semanticAliasContext": []
     },
     {
+      "operationId": "api:POST:/api/wine-lists/{param}/theme",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
       "operationId": "api:PATCH:/api/wines/{param}",
       "classification": "extension",
       "concreteRequirementId": null,
@@ -806,6 +896,12 @@
     },
     {
       "operationId": "api:GET:/api/wines/lwin-search",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/wines/merge",
       "classification": "extension",
       "concreteRequirementId": null,
       "semanticAliasContext": []

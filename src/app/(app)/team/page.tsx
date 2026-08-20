@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
+import { MemberAnalyticsSection } from "./member-analytics-section";
 import { TeamActions } from "./team-actions";
 
 export const metadata: Metadata = { title: "Team" };
 
 export default async function TeamPage() {
   const auth = (await getAuthContext())!; // AppLayout redirects when null
-  const { supabase, restaurantId, restaurantName } = auth;
+  const { supabase, restaurantId, restaurantName, userRole } = auth;
+  // EV-7.4: member-level analytics are manager/owner-only. The roster stays
+  // staff-visible (pre-existing behavior); the API route also 403s staff.
+  const canViewAnalytics = userRole === "owner" || userRole === "manager";
 
   const [{ data: members }, { data: invitations }] = await Promise.all([
     supabase
@@ -34,8 +38,8 @@ export default async function TeamPage() {
   return (
     <section>
       <header className="mb-lg md:mb-xl">
-        <h1 className="font-serif text-[28px] text-ink">Team</h1>
-        <p className="mt-xs text-[15px] text-ink-muted">{restaurantName}</p>
+        <h1 className="font-serif text-heading-sm text-ink">Team</h1>
+        <p className="mt-xs text-[15px] text-grey">{restaurantName}</p>
       </header>
 
       <TeamActions
@@ -49,6 +53,7 @@ export default async function TeamPage() {
         currentUserId={auth.user.id}
         restaurantName={restaurantName}
       />
+      {canViewAnalytics && <MemberAnalyticsSection />}
     </section>
   );
 }

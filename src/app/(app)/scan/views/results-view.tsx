@@ -46,7 +46,7 @@ function SummaryRow({ items, bottles, total, lowCount }: SummaryRowProps) {
       value: (
         <>
           {lowCount}
-          <span className="ml-xs text-[12px] font-normal text-ink-muted">fields</span>
+          <span className="ml-xs text-[12px] font-normal text-grey">fields</span>
         </>
       ),
       tone: lowCount > 0 ? "warning" : "success",
@@ -57,16 +57,16 @@ function SummaryRow({ items, bottles, total, lowCount }: SummaryRowProps) {
       {stats.map((s) => (
         <div
           key={s.label}
-          className="rounded-md border border-border bg-white p-md"
+          className="rounded-lg border border-hairline bg-white p-md"
         >
-          <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+          <div className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
             {s.label}
           </div>
           <div
             className={cn(
               "mt-xs text-[20px] font-medium",
-              s.tone === "warning" && "text-warning",
-              s.tone === "success" && "text-success",
+              s.tone === "warning" && "text-primary",
+              s.tone === "success" && "text-sage-ink",
               !s.tone && "text-ink",
             )}
           >
@@ -138,20 +138,20 @@ export function ResultsView({
           <button
             type="button"
             onClick={() => setRawTextOpen(!rawTextOpen)}
-            className="flex w-full items-center justify-between rounded-md border border-border bg-white p-md text-[13px] font-medium text-ink focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2"
+            className="flex w-full items-center justify-between rounded-lg border border-hairline bg-white p-md text-[13px] font-medium text-ink focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
           >
             <span className="flex items-center gap-sm">
-              <FileText className="h-4 w-4 text-ink-subtle" strokeWidth={1.75} />
+              <FileText className="h-4 w-4 text-grey" strokeWidth={1.75} />
               Raw invoice text
             </span>
             <ChevronDown
-              className={cn("h-4 w-4 text-ink-subtle transition-transform", rawTextOpen && "rotate-180")}
+              className={cn("h-4 w-4 text-grey transition-transform", rawTextOpen && "rotate-180")}
               strokeWidth={2}
             />
           </button>
           {rawTextOpen && (
-            <div className="mt-xs rounded-md border border-border bg-surface-muted p-md">
-              <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-ink-muted">
+            <div className="mt-xs rounded-lg border border-hairline bg-bridge-surface p-md">
+              <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-grey">
                 {rawText}
               </pre>
             </div>
@@ -165,12 +165,12 @@ export function ResultsView({
           <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
             Invoice scan results
           </h1>
-          <p className="mt-xs text-[14px] text-ink-muted md:text-[15px]">
-            Review, correct, and export. Yellow fields need a second look.
+          <p className="mt-xs text-[14px] text-grey md:text-[15px]">
+            Review, correct, and export. Flagged fields need a second look.
           </p>
         </div>
         <div className="flex items-center gap-sm self-start md:self-auto">
-          <div className="flex items-center gap-xs rounded-pill bg-success-soft px-sm py-xs text-[12px] font-medium text-success">
+          <div className="flex items-center gap-xs rounded-pill bg-sage-wash px-sm py-xs text-[11px] font-medium uppercase tracking-wide text-sage-ink">
             <Sparkles className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
             <span>Parsed accuracy</span>
             <span className="tabular">{accuracy}%</span>
@@ -182,7 +182,7 @@ export function ResultsView({
                 onScanAnother();
               }
             }}
-            className="flex h-8 items-center gap-xs rounded-sm border border-border-strong px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted hover:text-danger focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2"
+            className="flex h-8 items-center gap-xs rounded-pill border border-ink/25 px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface hover:text-primary focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
           >
             <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
             Clear
@@ -190,11 +190,11 @@ export function ResultsView({
         </div>
       </header>
 
-      <div className="mb-lg rounded-md border border-border bg-white p-md">
+      <div className="mb-lg rounded-card border border-hairline bg-white p-md">
         <div className="flex flex-col gap-sm">
           <div>
-            <label className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">Supplier</label>
-            <div className="mt-xs relative flex w-full items-center rounded-sm border border-border bg-white px-sm py-xs transition-colors focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)]">
+            <label className="text-caption font-medium uppercase tracking-[0.18em] text-grey">Supplier</label>
+            <div className="mt-xs relative flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--color-blush-wash)]">
               <input
                 value={source.distributor}
                 onChange={(e) => onUpdateSource("distributor", e.target.value)}
@@ -205,8 +205,8 @@ export function ResultsView({
           </div>
           <div className="flex items-center gap-sm">
             <div className="flex-1">
-              <label className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">Invoice #</label>
-              <div className="mt-xs relative flex w-full items-center rounded-sm border border-border bg-white px-sm py-xs transition-colors focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)]">
+              <label className="text-caption font-medium uppercase tracking-[0.18em] text-grey">Invoice #</label>
+              <div className="mt-xs relative flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--color-blush-wash)]">
                 <input
                   value={source.invoiceNo}
                   onChange={(e) => onUpdateSource("invoiceNo", e.target.value)}
@@ -216,8 +216,8 @@ export function ResultsView({
               </div>
             </div>
             <div className="flex-1">
-              <label className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">Delivery date</label>
-              <div className="mt-xs relative flex w-full items-center rounded-sm border border-border bg-white px-sm py-xs transition-colors focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)]">
+              <label className="text-caption font-medium uppercase tracking-[0.18em] text-grey">Delivery date</label>
+              <div className="mt-xs relative flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--color-blush-wash)]">
                 <input
                   type="date"
                   value={source.invoiceDate}
@@ -230,7 +230,7 @@ export function ResultsView({
           </div>
         </div>
         <div className="mt-sm flex justify-between items-center">
-          <span className="rounded-sm bg-surface-muted px-sm py-xs text-[11px] uppercase tracking-[0.06em] text-ink-subtle">
+          <span className="rounded-pill bg-bridge-surface px-sm py-xs text-[11px] uppercase tracking-[0.1em] text-grey">
             {items.length} items
           </span>
         </div>
@@ -244,10 +244,10 @@ export function ResultsView({
       />
 
       {/* Desktop table (md+) */}
-      <div className="mt-lg hidden overflow-hidden rounded-md border border-border md:block">
+      <div className="mt-lg hidden overflow-hidden rounded-card border border-hairline md:block">
         <table className="w-full border-collapse text-[14px]">
           <thead>
-            <tr className="bg-surface-muted">
+            <tr className="bg-bridge-surface">
               <Th className="w-[32%]">Wine</Th>
               <Th className="w-[14%]">Varietal</Th>
               <Th className="w-[9%]">Vintage</Th>
@@ -261,7 +261,7 @@ export function ResultsView({
             {items.map((it) => (
               <tr
                 key={it.id}
-                className="border-t border-border align-middle hover:bg-[#FBFAF6]"
+                className="border-t border-hairline align-middle hover:bg-bridge-surface"
               >
                 <td className="p-sm">
                   <TextInput
@@ -269,7 +269,7 @@ export function ResultsView({
                     low={isLow(it, "name")}
                     edited={isEdited(it, "name")}
                     onCommit={(v) => onUpdate(it.id, "name", v)}
-                    className="font-medium"
+                    className="font-serif text-[17px] font-medium"
                     label="Wine name"
                   />
                   <div className="mt-2xs">
@@ -278,7 +278,7 @@ export function ResultsView({
                       low={isLow(it, "producer")}
                       edited={isEdited(it, "producer")}
                       onCommit={(v) => onUpdate(it.id, "producer", v)}
-                      className="text-[12px] text-ink-muted"
+                      className="text-[12px] text-grey"
                       label="Producer"
                     />
                   </div>
@@ -330,7 +330,7 @@ export function ResultsView({
                     type="button"
                     aria-label={`Remove ${it.name}`}
                     onClick={() => onRemove(it.id)}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-sm text-ink-subtle hover:bg-surface-muted hover:text-danger"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface hover:text-primary"
                   >
                     <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                   </button>
@@ -357,19 +357,19 @@ export function ResultsView({
 
       {/* Action bar */}
       <div
-        className="sticky bottom-[64px] z-10 mt-md flex flex-col gap-sm rounded-md border border-border bg-white p-md shadow-sm md:static md:bottom-auto md:mt-lg md:flex-row md:items-center md:justify-between md:shadow-none"
+        className="sticky bottom-[64px] z-10 mt-md flex flex-col gap-sm rounded-card border border-hairline bg-white p-md md:static md:bottom-auto md:mt-lg md:flex-row md:items-center md:justify-between"
         style={{ marginBottom: "calc(env(safe-area-inset-bottom) + 8px)" }}
       >
-        <div className="text-[13px] text-ink-muted md:text-[14px]">
+        <div className="text-[13px] text-grey md:text-[14px]">
           <span className="font-medium text-ink">{items.length} wines</span>
-          <span className="mx-xs text-ink-subtle">·</span>
+          <span className="mx-xs text-grey">·</span>
           <span>{Object.keys(edits).length} corrections</span>
         </div>
         <div className="grid grid-cols-2 gap-sm md:flex md:gap-md">
           <button
             type="button"
             onClick={onScanAnother}
-            className="flex h-11 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px] md:px-md"
+            className="flex h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:h-[38px] md:px-md"
           >
             <ScanLine className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
             <span className="hidden sm:inline">Scan another</span>
@@ -379,7 +379,7 @@ export function ResultsView({
             <button
               type="button"
               onClick={onExportCsv}
-              className="flex h-11 flex-1 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px] md:flex-none md:px-md"
+              className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:h-[38px] md:flex-none md:px-md"
               title="Export as CSV"
             >
               <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -388,7 +388,7 @@ export function ResultsView({
             <button
               type="button"
               onClick={onExportAccuracy}
-              className="flex h-11 flex-1 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px] md:flex-none md:px-md"
+              className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:h-[38px] md:flex-none md:px-md"
               title="Export accuracy JSON (source + items + per-field edits)"
             >
               <FileJson className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -399,7 +399,7 @@ export function ResultsView({
             type="button"
             onClick={onSaveToInventory}
             disabled={isSaving}
-            className="col-span-2 flex h-11 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 disabled:opacity-60 md:h-[38px] md:px-md"
+            className="col-span-2 flex h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 disabled:opacity-60 md:h-[38px] md:px-md"
           >
             {isSaving ? (
               <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" />
@@ -415,15 +415,15 @@ export function ResultsView({
       {/* Desktop: raw text sidebar */}
       {rawText && (
         <aside className="hidden shrink-0 md:block md:w-[320px]">
-          <div className="sticky top-[72px] rounded-md border border-border bg-white">
-            <div className="flex items-center gap-sm border-b border-border p-md">
-              <FileText className="h-4 w-4 text-ink-subtle" strokeWidth={1.75} />
+          <div className="sticky top-[72px] rounded-card border border-hairline bg-white">
+            <div className="flex items-center gap-sm border-b border-hairline p-md">
+              <FileText className="h-4 w-4 text-grey" strokeWidth={1.75} />
               <span className="text-[13px] font-medium text-ink">
                 Raw invoice text
               </span>
             </div>
             <div className="p-md">
-              <pre className="max-h-[calc(100vh-200px)] overflow-auto whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-ink-muted">
+              <pre className="max-h-[calc(100vh-200px)] overflow-auto whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-grey">
                 {rawText}
               </pre>
             </div>

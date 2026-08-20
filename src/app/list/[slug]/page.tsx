@@ -10,6 +10,11 @@ import {
   requireSupabasePublicConfig,
 } from "@/lib/supabase/config";
 import { cn } from "@/lib/utils";
+import { parseRenderableTheme, themeCssVariables } from "@/lib/branding/theme";
+import {
+  buildBinCodesByWine,
+  type PublicBinCodeRow,
+} from "./public-bin-codes";
 
 /** Anon client for public pages — respects RLS, no auth session needed. */
 function createAnonClient() {
@@ -23,6 +28,34 @@ function createAnonClient() {
     config.url,
     config.publishableKey,
   );
+}
+
+async function fetchPublicBinCodes(restaurantId: string, wineIds: string[]) {
+  const config = getSupabasePublicConfig();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (wineIds.length === 0) return {};
+  if (!config || !serviceRoleKey) {
+    console.error("public bin-code lookup is not configured");
+    return {};
+  }
+
+  const admin = createSupabaseClient<Database>(config.url, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
+  const { data, error } = await admin
+    .from("inventory_items")
+    .select("wine_id, bins!inner(code, restaurant_id)")
+    .eq("restaurant_id", restaurantId)
+    .eq("bins.restaurant_id", restaurantId)
+    .in("wine_id", wineIds)
+    .not("bin_id", "is", null)
+    .is("bins.retired_at", null);
+
+  if (error) {
+    console.error("public bin-code lookup failed");
+    return {};
+  }
+  return buildBinCodesByWine((data ?? []) as unknown as PublicBinCodeRow[]);
 }
 
 export const revalidate = 3600; // ISR: revalidate every hour
@@ -95,7 +128,7 @@ export default async function PublicWineListPage({
   const { data: list, error } = await supabase
     .from("wine_lists")
     .select(
-      "name, template, restaurant_id, restaurants(name, eightysix_strategy, logo_url), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
+      "name, template, theme, restaurant_id, show_bin_codes, restaurants(name, eightysix_strategy, logo_url), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines(id, name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
     )
     .eq("slug", slug)
     .eq("is_published", true)
@@ -121,6 +154,7 @@ export default async function PublicWineListPage({
     blurb: string | null;
     hidden: boolean;
     wines: {
+      id: string;
       name: string;
       producer: string;
       vintage: number | null;
@@ -151,9 +185,25 @@ export default async function PublicWineListPage({
     visibleSections as unknown as WineListSectionEmbed<PublicWineItem>[],
     { eightysixStrategy },
   );
+  const wineIds = visibleSections.flatMap((section) =>
+    section.wine_list_items.flatMap((item) => item.wines?.id ?? []),
+  );
+  // NOTE: this page is ISR (revalidate above) — when a settings UI for
+  // show_bin_codes ships, its mutation must revalidatePath(`/list/${slug}`)
+  // so toggling the flag off revokes cached bin codes immediately.
+  const binCodesByWine = list.show_bin_codes
+    ? await fetchPublicBinCodes(list.restaurant_id, wineIds)
+    : {};
+  const theme = parseRenderableTheme(list.theme);
 
   return (
-    <main className="mx-auto min-h-screen max-w-[720px] bg-surface px-lg py-3xl print:min-h-0 print:max-w-none print:bg-white print:px-0 print:py-0">
+    <main
+      className={cn(
+        "mx-auto min-h-screen max-w-[720px] bg-surface px-lg py-3xl print:min-h-0 print:max-w-none print:bg-white print:px-0 print:py-0",
+        theme && "font-sans text-ink",
+      )}
+      style={themeCssVariables(theme)}
+    >
       {/* Header */}
       <header className="mb-2xl border-b border-border pb-xl print:mb-lg print:border-black/30 print:pb-md">
         {logoUrl && (
@@ -166,10 +216,10 @@ export default async function PublicWineListPage({
             />
           </div>
         )}
-        <p className="text-[11px] uppercase tracking-[0.08em] text-ink-subtle print:text-black">
+        <p className="text-caption uppercase text-grey print:text-black">
           {restaurantName}
         </p>
-        <h1 className="mt-sm font-serif text-[28px] text-ink print:text-[24px] print:text-black">
+        <h1 className="mt-sm font-serif text-heading-sm text-ink print:text-[24px] print:text-black">
           {list.name}
         </h1>
       </header>
@@ -180,7 +230,7 @@ export default async function PublicWineListPage({
           reads as broken to a guest. Hidden in print so a paper copy doesn't
           carry a stray "Nothing to pour" line. */}
       {sections.length === 0 && (
-        <div className="my-3xl rounded-md border border-dashed border-border-strong bg-surface-muted px-lg py-2xl text-center print:hidden">
+        <div className="my-3xl rounded-card border border-dashed border-beige-deep bg-bridge-surface px-lg py-2xl text-center print:hidden">
           <p className="font-serif text-[18px] text-ink">
             Nothing to pour right now.
           </p>
@@ -210,6 +260,7 @@ export default async function PublicWineListPage({
             {section.items.map((item) => {
                 const wine = item.wines;
                 const is86d = item.is_marked_eightysixed;
+                const binCodes = binCodesByWine[wine.id] ?? [];
                 return (
                   <div
                     key={item.id}
@@ -223,7 +274,7 @@ export default async function PublicWineListPage({
                       <div className="min-w-0">
                         <span
                           className={cn(
-                            "font-serif text-[15px] text-ink print:text-black",
+                            "font-serif text-[17px] font-medium text-ink print:text-black",
                             is86d && "line-through",
                           )}
                         >
@@ -240,6 +291,11 @@ export default async function PublicWineListPage({
                             is86d && "line-through",
                           )}>
                             {wine.vintage}
+                          </span>
+                        )}
+                        {binCodes.length > 0 && (
+                          <span className="ml-xs font-mono text-[11px] text-ink-subtle print:text-black">
+                            {binCodes.length === 1 ? "Bin" : "Bins"} {binCodes.join(", ")}
                           </span>
                         )}
                       </div>
@@ -278,7 +334,7 @@ export default async function PublicWineListPage({
                     )}
                     {item.tasting_note && (
                       <p className={cn(
-                        "mt-xs font-serif text-[13px] italic text-ink-muted print:text-black",
+                        "mt-xs font-sans text-[13px] italic text-ink-muted print:text-black",
                         is86d && "line-through",
                       )}>
                         {item.tasting_note}
@@ -302,10 +358,10 @@ export default async function PublicWineListPage({
 
       {/* Footer — hidden when printing so the menu doesn't carry a
           "Powered by Terroir" line on a paper copy. */}
-      <footer className="mt-3xl border-t border-border pt-lg text-center print:hidden">
+      <footer className="mt-3xl border-t border-hairline pt-lg text-center print:hidden">
         <p className="text-[12px] text-ink-subtle">
           Powered by{" "}
-          <span className="font-serif font-medium text-accent">Terroir</span>
+          <span className="font-serif font-medium text-primary">Terroir</span>
         </p>
       </footer>
     </main>

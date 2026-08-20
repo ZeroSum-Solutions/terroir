@@ -99,7 +99,7 @@ export function ScanDetailView({
       <header className="mb-lg">
         <Link
           href="/scans"
-          className="mb-md inline-flex items-center gap-xs text-[13px] text-ink-muted hover:text-ink"
+          className="mb-md inline-flex items-center gap-xs text-[13px] text-grey hover:text-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
           Back to scan history
@@ -112,7 +112,7 @@ export function ScanDetailView({
             <button
               type="button"
               onClick={handleExportCsv}
-              className="flex h-10 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px]"
+              className="flex h-10 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:h-[38px]"
               title="Download line items as CSV"
             >
               <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -125,16 +125,16 @@ export function ScanDetailView({
 
       <div className="grid gap-md md:grid-cols-2">
         {/* Metadata card */}
-        <div className="rounded-md border border-border bg-surface p-md md:col-span-2">
+        <div className="rounded-card border border-hairline bg-white p-md md:col-span-2">
           <div className="grid grid-cols-2 gap-sm md:grid-cols-4 md:gap-md">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              <div className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
                 Distributor
               </div>
               <div className="mt-xs text-[14px] font-medium text-ink">{distributor}</div>
             </div>
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              <div className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
                 Invoice #
               </div>
               <div className="mt-xs font-mono text-[14px] text-ink">
@@ -142,7 +142,7 @@ export function ScanDetailView({
               </div>
             </div>
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              <div className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
                 Date
               </div>
               <div className="mt-xs font-mono text-[14px] text-ink">
@@ -150,7 +150,7 @@ export function ScanDetailView({
               </div>
             </div>
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              <div className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
                 Accuracy
               </div>
               <div
@@ -162,14 +162,14 @@ export function ScanDetailView({
               </div>
             </div>
           </div>
-          <div className="mt-md flex flex-wrap items-center gap-md border-t border-dashed border-border pt-md text-[13px] text-ink-muted">
+          <div className="mt-md flex flex-wrap items-center gap-md border-t border-dashed border-hairline pt-md text-[13px] text-grey">
             <span>{itemCount} wines</span>
-            <span aria-hidden className="text-ink-subtle">·</span>
+            <span aria-hidden className="text-grey">·</span>
             <span className="font-mono">${formatMoney(total)}</span>
             {flaggedCount > 0 && (
               <>
-                <span aria-hidden className="text-ink-subtle">·</span>
-                <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-xs text-[11px] font-semibold text-warning">
+                <span aria-hidden className="text-grey">·</span>
+                <span className="inline-flex items-center gap-xs rounded-pill bg-blush-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-primary">
                   <AlertTriangle
                     className="h-3 w-3"
                     strokeWidth={2.5}
@@ -184,27 +184,27 @@ export function ScanDetailView({
 
         {/* OCR Text (if available) */}
         {hasOcr && (
-          <div className="rounded-md border border-border bg-white md:col-span-2">
+          <div className="rounded-card border border-hairline bg-white md:col-span-2">
             <button
               type="button"
               onClick={() => setOcrOpen(!ocrOpen)}
-              className="flex w-full items-center justify-between p-md text-left focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-inset"
+              className="flex w-full items-center justify-between p-md text-left focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-inset"
             >
               <span className="flex items-center gap-sm text-[13px] font-medium text-ink">
-                <FileText className="h-4 w-4 text-ink-subtle" strokeWidth={1.75} />
+                <FileText className="h-4 w-4 text-grey" strokeWidth={1.75} />
                 OCR text
               </span>
               <ChevronDown
                 className={cn(
-                  "h-4 w-4 text-ink-subtle transition-transform",
+                  "h-4 w-4 text-grey transition-transform",
                   ocrOpen && "rotate-180",
                 )}
                 strokeWidth={2}
               />
             </button>
             {ocrOpen && (
-              <div className="border-t border-border px-md pb-md pt-sm">
-                <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-ink-muted">
+              <div className="border-t border-hairline px-md pb-md pt-sm">
+                <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-grey">
                   {JSON.stringify(ocrText, null, 2)}
                 </pre>
               </div>
@@ -214,13 +214,13 @@ export function ScanDetailView({
 
         {/* Invoice image */}
         {hasImage && (
-          <div className="rounded-md border border-border bg-surface p-md md:sticky md:top-[72px] md:self-start">
-            <div className="mb-sm text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+          <div className="rounded-card border border-hairline bg-white p-md md:sticky md:top-[72px] md:self-start">
+            <div className="mb-sm text-caption font-medium uppercase tracking-[0.18em] text-grey">
               Original invoice
             </div>
             {imageLoading ? (
-              <div className="flex h-[200px] items-center justify-center rounded bg-surface-muted">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+              <div className="flex h-[200px] items-center justify-center rounded-lg bg-bridge-surface">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
               </div>
             ) : imageUrl ? (
               <>
@@ -229,7 +229,7 @@ export function ScanDetailView({
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Open full-resolution invoice from ${distributor} in a new tab`}
-                  className="block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                  className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash"
                 >
                   <Image
                     src={imageUrl}
@@ -237,7 +237,7 @@ export function ScanDetailView({
                     width={0}
                     height={0}
                     unoptimized
-                    className="max-h-[60vh] w-full cursor-zoom-in rounded object-contain md:max-h-[70vh]"
+                    className="max-h-[60vh] w-full cursor-zoom-in rounded-lg object-contain md:max-h-[70vh]"
                     style={{ width: "100%", height: "auto", touchAction: "pinch-zoom" }}
                   />
                 </a>
@@ -245,14 +245,14 @@ export function ScanDetailView({
                   href={imageUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-sm inline-flex items-center gap-xs text-[12px] text-ink-muted hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                  className="mt-sm inline-flex items-center gap-xs text-[12px] text-grey hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash"
                 >
                   <ExternalLink className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                   Open full size
                 </a>
               </>
             ) : (
-              <div className="flex h-[200px] items-center justify-center rounded bg-surface-muted text-[13px] text-ink-muted">
+              <div className="flex h-[200px] items-center justify-center rounded-lg bg-bridge-surface text-[13px] text-grey">
                 Image unavailable
               </div>
             )}
@@ -261,7 +261,7 @@ export function ScanDetailView({
 
         {/* Line items */}
         <div className={hasImage ? "" : "md:col-span-2"}>
-          <div className="mb-md text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+          <div className="mb-md text-caption font-medium uppercase tracking-[0.18em] text-grey">
             Line items
           </div>
 
@@ -269,15 +269,15 @@ export function ScanDetailView({
           <div className="hidden md:block">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-                  <th scope="col" className="pb-sm text-left font-semibold">Wine</th>
-                  <th scope="col" className="pb-sm text-left font-semibold">Producer</th>
-                  <th scope="col" className="pb-sm text-right font-semibold">Vintage</th>
-                  <th scope="col" className="pb-sm text-left font-semibold">Varietal</th>
-                  <th scope="col" className="pb-sm text-right font-semibold">Qty</th>
-                  <th scope="col" className="pb-sm text-right font-semibold">Unit cost</th>
-                  <th scope="col" className="pb-sm text-right font-semibold">Conf.</th>
-                  <th scope="col" className="pb-sm text-right font-semibold">Subtotal</th>
+                <tr className="bg-bridge-surface text-caption font-medium uppercase tracking-[0.18em] text-grey">
+                  <th scope="col" className="px-sm py-sm text-left font-medium">Wine</th>
+                  <th scope="col" className="px-sm py-sm text-left font-medium">Producer</th>
+                  <th scope="col" className="px-sm py-sm text-right font-medium">Vintage</th>
+                  <th scope="col" className="px-sm py-sm text-left font-medium">Varietal</th>
+                  <th scope="col" className="px-sm py-sm text-right font-medium">Qty</th>
+                  <th scope="col" className="px-sm py-sm text-right font-medium">Unit cost</th>
+                  <th scope="col" className="px-sm py-sm text-right font-medium">Conf.</th>
+                  <th scope="col" className="px-sm py-sm text-right font-medium">Subtotal</th>
                 </tr>
               </thead>
               <tbody>
@@ -286,15 +286,15 @@ export function ScanDetailView({
                   return (
                   <tr
                     key={it.id}
-                    className={`${i > 0 ? "border-t border-dashed border-border" : ""} ${
-                      lowConf ? "bg-warning-soft/40" : ""
+                    className={`${i > 0 ? "border-t border-hairline" : ""} ${
+                      lowConf ? "bg-blush-wash/40" : ""
                     }`}
                   >
-                    <td className="py-sm font-medium text-ink">
+                    <td className="px-sm py-sm font-serif text-[17px] font-medium text-ink">
                       <span className="inline-flex items-center gap-xs">
                         {lowConf && (
                           <AlertTriangle
-                            className="h-3.5 w-3.5 shrink-0 text-warning"
+                            className="h-3.5 w-3.5 shrink-0 text-primary"
                             strokeWidth={2.5}
                             aria-label={`Low confidence (${Math.round(it.confidence * 100)}%) — review`}
                           />
@@ -302,19 +302,19 @@ export function ScanDetailView({
                         {it.name}
                       </span>
                     </td>
-                    <td className="py-sm text-ink">{it.producer}</td>
-                    <td className="py-sm text-right font-mono text-ink">
+                    <td className="px-sm py-sm text-ink">{it.producer}</td>
+                    <td className="px-sm py-sm text-right font-mono text-ink">
                       {it.vintage ?? "NV"}
                     </td>
-                    <td className="py-sm text-ink">{it.varietal}</td>
-                    <td className="py-sm text-right font-mono text-ink">{it.qty}</td>
-                    <td className="py-sm text-right font-mono text-ink">
+                    <td className="px-sm py-sm text-ink">{it.varietal}</td>
+                    <td className="px-sm py-sm text-right font-mono text-ink">{it.qty}</td>
+                    <td className="px-sm py-sm text-right font-mono text-ink">
                       ${formatMoney(it.unitCost)}
                     </td>
-                    <td className={`py-sm text-right font-mono ${accuracyColor(it.confidence * 100)}`}>
+                    <td className={`px-sm py-sm text-right font-mono ${accuracyColor(it.confidence * 100)}`}>
                       {Math.round(it.confidence * 100)}%
                     </td>
-                    <td className="py-sm text-right font-mono font-medium text-ink">
+                    <td className="px-sm py-sm text-right font-mono font-medium text-ink">
                       ${formatMoney(it.qty * it.unitCost)}
                     </td>
                   </tr>
@@ -323,14 +323,14 @@ export function ScanDetailView({
               </tbody>
               {items.length > 0 && (
                 <tfoot>
-                  <tr className="border-t border-border">
+                  <tr className="border-t border-hairline">
                     <td
                       colSpan={7}
-                      className="py-sm pr-sm text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle"
+                      className="px-sm py-sm text-right text-caption font-medium uppercase tracking-[0.18em] text-grey"
                     >
                       Total
                     </td>
-                    <td className="py-sm text-right font-mono font-semibold text-ink">
+                    <td className="px-sm py-sm text-right font-mono font-semibold text-ink">
                       ${formatMoney(total)}
                     </td>
                   </tr>
@@ -346,31 +346,31 @@ export function ScanDetailView({
               return (
               <div
                 key={it.id}
-                className={`rounded-md border p-md ${
+                className={`rounded-lg border p-md ${
                   lowConf
-                    ? "border-warning/40 bg-warning-soft/40"
-                    : "border-border bg-white"
+                    ? "border-primary/30 bg-blush-wash/40"
+                    : "border-hairline bg-white"
                 }`}
               >
                 <div className="flex items-start gap-xs">
                   {lowConf && (
                     <AlertTriangle
-                      className="mt-2xs h-4 w-4 shrink-0 text-warning"
+                      className="mt-2xs h-4 w-4 shrink-0 text-primary"
                       strokeWidth={2.5}
                       aria-label={`Low confidence (${Math.round(it.confidence * 100)}%) — review`}
                     />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="text-[14px] font-medium text-ink">{it.name}</div>
-                    <div className="mt-2xs text-[13px] text-ink-muted">{it.producer}</div>
+                    <div className="font-serif text-[17px] font-medium text-ink">{it.name}</div>
+                    <div className="mt-2xs text-[13px] text-grey">{it.producer}</div>
                   </div>
                 </div>
-                <div className="mt-sm flex flex-wrap items-center gap-x-md gap-y-xs text-[12px] text-ink-muted">
+                <div className="mt-sm flex flex-wrap items-center gap-x-md gap-y-xs text-[12px] text-grey">
                   <span className="font-mono">{it.vintage ?? "NV"}</span>
                   <span>{it.varietal}</span>
                   <span>{it.region}</span>
                 </div>
-                <div className="mt-sm flex items-center justify-between border-t border-dashed border-border pt-sm">
+                <div className="mt-sm flex items-center justify-between border-t border-dashed border-hairline pt-sm">
                   <span className="font-mono text-[13px] text-ink">
                     {it.qty} × ${formatMoney(it.unitCost)}
                   </span>
@@ -385,8 +385,8 @@ export function ScanDetailView({
               );
             })}
             {items.length > 0 && (
-              <div className="mt-xs flex items-center justify-between border-t border-border px-md pt-md">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              <div className="mt-xs flex items-center justify-between border-t border-hairline px-md pt-md">
+                <span className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
                   Total
                 </span>
                 <span className="font-mono text-[14px] font-semibold text-ink">
@@ -400,7 +400,7 @@ export function ScanDetailView({
         {/* Resulting inventory items */}
         {inventoryItems.length > 0 && (
           <div className={hasImage ? "" : "md:col-span-2"}>
-            <div className="mb-md text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <div className="mb-md text-caption font-medium uppercase tracking-[0.18em] text-grey">
               Inventory created
             </div>
 
@@ -408,40 +408,40 @@ export function ScanDetailView({
             <div className="hidden md:block">
               <table className="w-full text-[13px]">
                 <thead>
-                  <tr className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-                    <th scope="col" className="pb-sm text-left font-semibold">Wine</th>
-                    <th scope="col" className="pb-sm text-left font-semibold">Producer</th>
-                    <th scope="col" className="pb-sm text-right font-semibold">Vintage</th>
-                    <th scope="col" className="pb-sm text-right font-semibold">Qty</th>
-                    <th scope="col" className="pb-sm text-right font-semibold">Unit cost</th>
-                    <th scope="col" className="pb-sm text-right font-semibold">Total</th>
+                  <tr className="bg-bridge-surface text-caption font-medium uppercase tracking-[0.18em] text-grey">
+                    <th scope="col" className="px-sm py-sm text-left font-medium">Wine</th>
+                    <th scope="col" className="px-sm py-sm text-left font-medium">Producer</th>
+                    <th scope="col" className="px-sm py-sm text-right font-medium">Vintage</th>
+                    <th scope="col" className="px-sm py-sm text-right font-medium">Qty</th>
+                    <th scope="col" className="px-sm py-sm text-right font-medium">Unit cost</th>
+                    <th scope="col" className="px-sm py-sm text-right font-medium">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {inventoryItems.map((ii, i) => (
                     <tr
                       key={ii.id}
-                      className={i > 0 ? "border-t border-dashed border-border" : ""}
+                      className={i > 0 ? "border-t border-hairline" : ""}
                     >
-                      <td className="py-sm font-medium text-ink">
+                      <td className="px-sm py-sm font-serif text-[17px] font-medium text-ink">
                         <Link
                           href={`/cellar?wine=${ii.wine_id}`}
-                          className="text-ink hover:text-accent"
+                          className="text-ink hover:text-primary"
                         >
                           {ii.wine_name}
                         </Link>
                       </td>
-                      <td className="py-sm text-ink">{ii.wine_producer}</td>
-                      <td className="py-sm text-right font-mono text-ink">
+                      <td className="px-sm py-sm text-ink">{ii.wine_producer}</td>
+                      <td className="px-sm py-sm text-right font-mono text-ink">
                         {ii.wine_vintage ?? "NV"}
                       </td>
-                      <td className="py-sm text-right font-mono tabular text-ink">
+                      <td className="px-sm py-sm text-right font-mono tabular text-ink">
                         {ii.quantity}
                       </td>
-                      <td className="py-sm text-right font-mono text-ink">
+                      <td className="px-sm py-sm text-right font-mono text-ink">
                         {ii.unit_cost != null ? `$${formatMoney(ii.unit_cost)}` : "—"}
                       </td>
-                      <td className="py-sm text-right font-mono font-medium text-ink">
+                      <td className="px-sm py-sm text-right font-mono font-medium text-ink">
                         {ii.unit_cost != null
                           ? `$${formatMoney(ii.quantity * ii.unit_cost)}`
                           : "—"}
@@ -458,15 +458,15 @@ export function ScanDetailView({
                 <Link
                   key={ii.id}
                   href={`/cellar?wine=${ii.wine_id}`}
-                  className="rounded-md border border-border bg-white p-md hover:bg-[#FBFAF6]"
+                  className="rounded-lg border border-hairline bg-white p-md hover:bg-bridge-surface"
                 >
                   <div className="flex items-start gap-md">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-surface-muted">
-                      <Package className="h-5 w-5 text-ink-subtle" strokeWidth={1.5} />
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill bg-bridge-surface">
+                      <Package className="h-5 w-5 text-grey" strokeWidth={1.5} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-[14px] font-medium text-ink">{ii.wine_name}</div>
-                      <div className="mt-2xs text-[13px] text-ink-muted">{ii.wine_producer}</div>
+                      <div className="font-serif text-[17px] font-medium text-ink">{ii.wine_name}</div>
+                      <div className="mt-2xs text-[13px] text-grey">{ii.wine_producer}</div>
                     </div>
                     <div className="shrink-0 text-right">
                       <div className="font-mono text-[14px] tabular text-ink">
@@ -474,7 +474,7 @@ export function ScanDetailView({
                       </div>
                     </div>
                   </div>
-                  <div className="mt-sm flex items-center justify-between border-t border-dashed border-border pt-sm">
+                  <div className="mt-sm flex items-center justify-between border-t border-dashed border-hairline pt-sm">
                     <span className="font-mono text-[13px] tabular text-ink">
                       {ii.quantity} ×{" "}
                       {ii.unit_cost != null ? `$${formatMoney(ii.unit_cost)}` : "—"}

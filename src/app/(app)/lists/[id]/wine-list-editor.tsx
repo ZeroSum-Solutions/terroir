@@ -42,6 +42,10 @@ import { SortableWineRow } from "./components/wine-row";
 import { AddWineModal } from "./components/add-wine-modal";
 import { PublishModal } from "./components/publish-modal";
 import { TemplatePicker } from "./components/template-picker";
+import {
+  BrandKitPanel,
+  type BrandKitView,
+} from "./components/brand-kit-panel";
 
 export type WineListEditorWine = {
   id: string;
@@ -130,10 +134,10 @@ function SortableSectionButton({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group flex items-center rounded-sm transition-colors",
+        "group flex items-center rounded-pill transition-colors",
         isActive && !isDragging
-          ? "bg-surface-muted shadow-sm"
-          : "hover:bg-surface-muted",
+          ? "bg-bridge-surface"
+          : "hover:bg-bridge-surface",
       )}
     >
       {/* Drag handle */}
@@ -160,7 +164,7 @@ function SortableSectionButton({
               if (e.key === "Escape") onEditCancel();
             }}
             onBlur={onEditCommit}
-            className="flex-1 min-w-0 rounded-sm border border-accent bg-white px-xs py-0.5 text-[13px] font-medium text-ink outline-none focus:ring-2 focus:ring-accent-soft"
+            className="flex-1 min-w-0 rounded-pill border border-primary bg-white px-sm py-0.5 text-[13px] font-medium text-ink outline-none focus:ring-2 focus:ring-accent-soft"
             autoFocus
           />
         </div>
@@ -194,7 +198,7 @@ function SortableSectionButton({
               e.stopPropagation();
               onEditStart(section.id, section.name);
             }}
-            className="p-1 rounded-sm text-ink-subtle hover:text-ink hover:bg-surface-sunken"
+            className="p-1 rounded-pill text-ink-subtle hover:text-ink hover:bg-beige"
             aria-label={`Rename ${section.name}`}
           >
             <Pencil className="h-3 w-3" strokeWidth={2} />
@@ -205,7 +209,7 @@ function SortableSectionButton({
               e.stopPropagation();
               onDelete(section);
             }}
-            className="p-1 rounded-sm text-ink-subtle hover:text-danger hover:bg-danger-soft"
+            className="p-1 rounded-pill text-ink-subtle hover:text-primary hover:bg-blush-wash"
             aria-label={`Delete ${section.name}`}
           >
             <Trash2 className="h-3 w-3" strokeWidth={2} />
@@ -219,9 +223,13 @@ function SortableSectionButton({
 export function WineListEditor({
   list,
   sections: initialSections,
+  brandKit,
+  canManageBranding,
 }: {
   list: Omit<WineList, "wine_list_sections">;
   sections: WineListEditorSection[];
+  brandKit: BrandKitView | null;
+  canManageBranding: boolean;
 }) {
   const router = useRouter();
   const [sections, setSections] = useState(initialSections);
@@ -693,15 +701,15 @@ export function WineListEditor({
         </Link>
         <div className="flex flex-col gap-sm md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="font-serif text-[28px] text-ink">{list.name}</h1>
+            <h1 className="font-serif text-heading-sm text-ink">{list.name}</h1>
             <p className="mt-xs text-[13px] text-ink-muted">
               {list.is_published ? (
-                <span className="mr-sm inline-flex items-center gap-xs rounded-pill bg-success-soft px-sm py-xs text-[11px] font-medium text-success">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
+                <span className="mr-sm inline-flex items-center gap-xs rounded-pill bg-sage-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-sage-ink">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sage-ink" />
                   Published
                 </span>
               ) : (
-                <span className="mr-sm inline-flex items-center gap-xs rounded-pill bg-surface-sunken px-sm py-xs text-[11px] font-medium text-ink-muted">
+                <span className="mr-sm inline-flex items-center gap-xs rounded-pill bg-beige px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-ink-soft">
                   Draft
                 </span>
               )}
@@ -713,7 +721,7 @@ export function WineListEditor({
               type="button"
               onClick={downloadPdf}
               disabled={generatingPdf}
-              className="flex h-[34px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[13px] font-medium text-ink hover:bg-surface-muted disabled:opacity-60 md:px-md"
+              className="flex h-[34px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60 md:px-md"
             >
               {generatingPdf ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
@@ -725,7 +733,7 @@ export function WineListEditor({
             <a
               href="/api/export/toast-csv"
               download="toast-import.csv"
-              className="flex h-[34px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[13px] font-medium text-ink hover:bg-surface-muted md:px-md"
+              className="flex h-[34px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface md:px-md"
             >
               <FileSpreadsheet className="h-3.5 w-3.5" strokeWidth={2} />
               <span className="hidden md:inline">Toast Export</span>
@@ -733,7 +741,7 @@ export function WineListEditor({
             <a
               href={`/api/wine-lists/${list.id}/csv`}
               download
-              className="flex h-[34px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[13px] font-medium text-ink hover:bg-surface-muted md:px-md"
+              className="flex h-[34px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface md:px-md"
             >
               <FileText className="h-3.5 w-3.5" strokeWidth={2} />
               <span className="hidden md:inline">CSV</span>
@@ -743,7 +751,7 @@ export function WineListEditor({
               href={`/lists/${list.id}/preview`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex h-[34px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[13px] font-medium text-ink hover:bg-surface-muted md:px-md"
+              className="flex h-[34px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface md:px-md"
             >
               <Eye className="h-3.5 w-3.5" strokeWidth={2} />
               <span className="hidden md:inline">Preview</span>
@@ -752,7 +760,7 @@ export function WineListEditor({
               href={`/lists/${list.id}/print`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex h-[34px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[13px] font-medium text-ink hover:bg-surface-muted md:px-md"
+              className="flex h-[34px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface md:px-md"
             >
               <Printer className="h-3.5 w-3.5" strokeWidth={2} />
               <span className="hidden md:inline">Print</span>
@@ -761,7 +769,7 @@ export function WineListEditor({
               <button
                 type="button"
                 onClick={copyUrl}
-                className="flex h-[34px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[13px] font-medium text-ink hover:bg-surface-muted md:px-md"
+                className="flex h-[34px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface md:px-md"
               >
                 <Copy className="h-3.5 w-3.5" strokeWidth={2} />
                 <span className="hidden md:inline">Copy URL</span>
@@ -770,7 +778,7 @@ export function WineListEditor({
                         <button
               type="button"
               onClick={() => setShowPublish(true)}
-              className="flex h-[34px] items-center gap-xs rounded-sm bg-accent px-sm text-[13px] font-medium text-white hover:bg-accent-hover md:px-md"
+              className="flex h-[34px] items-center gap-xs rounded-pill bg-primary px-sm text-[13px] font-medium text-white hover:bg-primary-hover md:px-md"
             >
               <Share2 className="h-3.5 w-3.5" strokeWidth={2} />
               <span className="hidden md:inline">Publish</span>
@@ -784,7 +792,7 @@ export function WineListEditor({
         <select
           value={activeSection}
           onChange={(e) => setActiveSection(e.target.value)}
-          className="h-11 w-full appearance-none rounded-sm border border-border bg-white px-sm pr-xl text-[14px] font-medium text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
+          className="h-11 w-full appearance-none rounded-pill border border-hairline bg-canvas px-sm pr-xl text-[14px] font-medium text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-accent-soft"
         >
           {sections.map((s) => (
             <option key={s.id} value={s.id}>
@@ -799,7 +807,7 @@ export function WineListEditor({
       <div className="md:grid md:grid-cols-[220px_1fr] md:gap-lg">
         {/* Desktop sidebar */}
         <aside className="hidden md:block">
-          <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+          <div className="text-caption font-medium uppercase text-grey">
             Sections
           </div>
           <div className="mt-sm flex flex-col gap-2xs">
@@ -844,7 +852,7 @@ export function WineListEditor({
             </button>
           </div>
 
-          <div className="mt-lg text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+          <div className="mt-lg text-caption font-medium uppercase text-grey">
             Template
           </div>
           <div className="mt-sm">
@@ -858,9 +866,9 @@ export function WineListEditor({
 
         {/* Main content — active section */}
         {currentSection && (
-          <div className="rounded-md border border-border bg-surface">
+          <div className="rounded-card border border-hairline bg-canvas">
             {/* Section header */}
-            <div className="flex items-center justify-between border-b border-border px-md py-md md:px-lg">
+            <div className="flex items-center justify-between border-b border-hairline px-md py-md md:px-lg">
               <div>
                 <h2 className="font-serif text-[22px] font-medium text-ink md:text-[26px]">
                   {currentSection.name}
@@ -873,7 +881,7 @@ export function WineListEditor({
                 <button
                   type="button"
                   onClick={() => setShowAddWine(true)}
-                  className="flex h-[30px] items-center gap-xs rounded-sm bg-accent px-sm text-[13px] font-medium text-white hover:bg-accent-hover"
+                  className="flex h-[30px] items-center gap-xs rounded-pill bg-primary px-sm text-[13px] font-medium text-white hover:bg-primary-hover"
                 >
                   <Plus className="h-3.5 w-3.5" strokeWidth={2} />
                   <span className="hidden sm:inline">Add wine</span>
@@ -903,15 +911,15 @@ export function WineListEditor({
                 >
                   <div>
                     {/* Desktop table header */}
-                    <div className="hidden border-b border-border bg-surface-muted px-lg py-xs md:grid md:grid-cols-[28px_1fr_80px_80px_36px]">
+                    <div className="hidden border-b border-hairline bg-bridge-surface px-lg py-xs md:grid md:grid-cols-[28px_1fr_80px_80px_36px]">
                       <div />
-                      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+                      <div className="text-caption font-medium uppercase text-grey">
                         Wine
                       </div>
-                      <div className="text-right text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+                      <div className="text-right text-caption font-medium uppercase text-grey">
                         Glass
                       </div>
-                      <div className="text-right text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+                      <div className="text-right text-caption font-medium uppercase text-grey">
                         Bottle
                       </div>
                       <div />
@@ -935,7 +943,7 @@ export function WineListEditor({
             )}
 
             {/* Add another wine footer */}
-            <div className="border-t border-dashed border-border px-lg py-md text-center">
+            <div className="border-t border-dashed border-hairline px-lg py-md text-center">
               <button
                 type="button"
                 onClick={() => setShowAddWine(true)}
@@ -952,10 +960,18 @@ export function WineListEditor({
         )}
       </div>
 
+      {canManageBranding && (
+        <BrandKitPanel
+          listId={list.id}
+          initialBrandKit={brandKit}
+          initialTheme={list.theme}
+        />
+      )}
+
             {/* Delete wine confirmation dialog (BND-194) */}
       {wineToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-md">
-          <div className="w-full max-w-sm rounded-lg border border-border bg-white shadow-xl">
+          <div className="w-full max-w-sm rounded-card border border-hairline bg-white">
             <div className="px-lg py-lg">
               <div className="flex items-start justify-between">
                 <h3 className="font-serif text-[18px] font-medium text-ink">
@@ -964,7 +980,7 @@ export function WineListEditor({
                 <button
                   type="button"
                   onClick={function() { setWineToDelete(null); }}
-                  className="rounded-sm p-1 text-ink-subtle hover:text-ink"
+                  className="rounded-pill p-1 text-ink-subtle hover:text-ink"
                   aria-label="Close"
                 >
                   <X className="h-4 w-4" strokeWidth={2} />
@@ -983,7 +999,7 @@ export function WineListEditor({
                 <button
                   type="button"
                   onClick={function() { setWineToDelete(null); }}
-                  className="rounded-sm border border-border px-md py-1.5 text-[13px] font-medium text-ink-muted hover:bg-surface-muted"
+                  className="rounded-pill border border-hairline px-md py-1.5 text-[13px] font-medium text-ink-muted hover:bg-bridge-surface"
                 >
                   Cancel
                 </button>
@@ -991,7 +1007,7 @@ export function WineListEditor({
                   type="button"
                   onClick={confirmDeleteItem}
                   disabled={deletingItem}
-                  className="rounded-sm bg-danger px-md py-1.5 text-[13px] font-medium text-white hover:bg-danger-hover disabled:opacity-60"
+                  className="rounded-pill bg-primary px-md py-1.5 text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
                 >
                   Remove wine
                 </button>
@@ -1004,7 +1020,7 @@ export function WineListEditor({
       {/* Delete confirmation dialog (BND-163) */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-md">
-          <div className="w-full max-w-sm rounded-lg border border-border bg-white shadow-xl">
+          <div className="w-full max-w-sm rounded-card border border-hairline bg-white">
             <div className="px-lg py-lg">
               <div className="flex items-start justify-between">
                 <h3 className="font-serif text-[18px] font-medium text-ink">
@@ -1013,7 +1029,7 @@ export function WineListEditor({
                 <button
                   type="button"
                   onClick={() => setDeleteTarget(null)}
-                  className="rounded-sm p-1 text-ink-subtle hover:text-ink"
+                  className="rounded-pill p-1 text-ink-subtle hover:text-ink"
                   aria-label="Close"
                 >
                   <X className="h-4 w-4" strokeWidth={2} />
@@ -1024,7 +1040,7 @@ export function WineListEditor({
                 <strong className="text-ink">{deleteTarget.name}</strong>?
               </p>
               {deleteTarget.wine_list_items.length > 0 && (
-                <p className="mt-sm rounded-sm bg-danger-soft px-sm py-sm text-[13px] text-danger font-medium">
+                <p className="mt-sm rounded-md bg-blush-wash px-sm py-sm text-[13px] text-primary font-medium">
                   This will permanently remove{" "}
                   {deleteTarget.wine_list_items.length} wine
                   {deleteTarget.wine_list_items.length !== 1 ? "s" : ""} from
@@ -1035,7 +1051,7 @@ export function WineListEditor({
                 <button
                   type="button"
                   onClick={() => setDeleteTarget(null)}
-                  className="rounded-sm border border-border px-md py-1.5 text-[13px] font-medium text-ink-muted hover:bg-surface-muted"
+                  className="rounded-pill border border-hairline px-md py-1.5 text-[13px] font-medium text-ink-muted hover:bg-bridge-surface"
                 >
                   Cancel
                 </button>
@@ -1043,7 +1059,7 @@ export function WineListEditor({
                   type="button"
                   onClick={confirmDelete}
                   disabled={deletingSection}
-                  className="rounded-sm bg-danger px-md py-1.5 text-[13px] font-medium text-white hover:bg-danger-hover disabled:opacity-60"
+                  className="rounded-pill bg-primary px-md py-1.5 text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
                 >
                   Delete section
                 </button>
@@ -1076,14 +1092,14 @@ export function WineListEditor({
 
       {/* Error toast for failed drag-and-drop reorders */}
       {errorToast && (
-        <div className="fixed bottom-lg left-1/2 z-50 -translate-x-1/2 rounded-md bg-danger px-lg py-sm text-[13px] font-medium text-white shadow-lg animate-in fade-in slide-in-from-bottom-2">
+        <div className="fixed bottom-lg left-1/2 z-50 -translate-x-1/2 rounded-pill bg-primary px-lg py-sm text-[13px] font-medium text-white animate-in fade-in slide-in-from-bottom-2">
           {errorToast}
         </div>
       )}
 
       {/* Copy URL toast */}
       {copyFeedback && (
-        <div className="fixed bottom-lg left-1/2 z-50 -translate-x-1/2 rounded-md bg-ink px-lg py-sm text-[13px] font-medium text-white shadow-lg animate-in fade-in slide-in-from-bottom-2">
+        <div className="fixed bottom-lg left-1/2 z-50 -translate-x-1/2 rounded-pill bg-ink px-lg py-sm text-[13px] font-medium text-white animate-in fade-in slide-in-from-bottom-2">
           URL copied to clipboard.
         </div>
       )}

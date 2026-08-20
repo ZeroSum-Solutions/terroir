@@ -44,35 +44,35 @@ export default function AcceptInvitePage() {
   }, [params.token, router]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-surface px-md">
-      <div className="w-full max-w-sm rounded-md border border-border bg-surface p-lg text-center">
+    <main className="flex min-h-screen items-center justify-center bg-canvas px-md">
+      <div className="w-full max-w-sm rounded-card border border-hairline bg-canvas p-lg text-center">
         {status === "loading" && (
           <>
-            <Loader2 className="mx-auto h-8 w-8 animate-spin text-accent" aria-hidden="true" />
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" aria-hidden="true" />
             <p className="mt-md text-[15px] text-ink">Joining restaurant...</p>
           </>
         )}
         {status === "success" && (
           <>
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success-soft">
-              <Check className="h-6 w-6 text-success" strokeWidth={2.5} aria-hidden="true" />
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-sage-wash">
+              <Check className="h-6 w-6 text-sage-ink" strokeWidth={2.5} aria-hidden="true" />
             </div>
             <p className="mt-md text-[15px] font-medium text-ink">{message}</p>
-            <p className="mt-xs text-[13px] text-ink-muted">
+            <p className="mt-xs text-[13px] text-grey">
               Redirecting to Terroir...
             </p>
           </>
         )}
         {status === "error" && (
           <>
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-error/10">
-              <X className="h-6 w-6 text-error" strokeWidth={2.5} aria-hidden="true" />
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blush-wash">
+              <X className="h-6 w-6 text-primary" strokeWidth={2.5} aria-hidden="true" />
             </div>
             <p className="mt-md text-[15px] font-medium text-ink">{message}</p>
             <button
               type="button"
               onClick={() => router.push("/login")}
-              className="mt-lg flex mx-auto h-[38px] items-center rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
+              className="mt-lg flex mx-auto h-[42px] items-center rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
             >
               Go to login
             </button>

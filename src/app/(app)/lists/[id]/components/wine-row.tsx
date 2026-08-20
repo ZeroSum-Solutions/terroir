@@ -99,7 +99,7 @@ export function PriceInput({ value, onChange, muted }: PriceInputProps) {
           setEditing(true);
         }}
         className={cn(
-          "w-full rounded-sm border border-transparent px-xs py-2xs text-right font-mono text-[14px] transition-colors hover:border-border hover:bg-white",
+          "w-full rounded-md border border-transparent px-xs py-2xs text-right font-mono text-[14px] transition-colors hover:border-hairline hover:bg-white",
           muted ? "text-ink-muted" : "text-ink",
         )}
       >
@@ -124,7 +124,7 @@ export function PriceInput({ value, onChange, muted }: PriceInputProps) {
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setEditing(false);
         }}
-        className="w-full rounded-sm border border-accent bg-white py-2xs pl-md pr-xs text-right font-mono text-[14px] text-ink outline-none ring-2 ring-accent-soft"
+        className="w-full rounded-md border border-primary bg-white py-2xs pl-md pr-xs text-right font-mono text-[14px] text-ink outline-none ring-2 ring-accent-soft"
       />
     </div>
   );
@@ -167,9 +167,9 @@ function NameEdit({
           setEditing(true);
         }}
         className={cn(
-          "rounded-sm border border-transparent px-xs py-2xs text-left transition-colors hover:border-border hover:bg-white",
-          "font-serif text-[14px] font-medium",
-          isOverridden ? "text-accent italic" : "text-ink",
+          "rounded-md border border-transparent px-xs py-2xs text-left transition-colors hover:border-hairline hover:bg-white",
+          "font-serif text-[17px] font-medium",
+          isOverridden ? "text-primary italic" : "text-ink",
         )}
         title={isOverridden ? "Custom display name (click to edit)" : "Click to set a custom display name"}
       >
@@ -197,7 +197,7 @@ function NameEdit({
         if (e.key === "Escape") setEditing(false);
       }}
       placeholder={item.wines.name}
-      className="w-full rounded-sm border border-accent bg-white px-xs py-2xs font-serif text-[14px] font-medium text-ink outline-none ring-2 ring-accent-soft"
+      className="w-full rounded-md border border-primary bg-white px-xs py-2xs font-serif text-[17px] font-medium text-ink outline-none ring-2 ring-accent-soft"
     />
   );
 }
@@ -245,7 +245,7 @@ function PourConfigRow({
           }}
           placeholder="148"
           aria-label={`Pour size in ml for ${item.wines.name}`}
-          className="h-[28px] w-[64px] rounded-sm border border-border bg-white px-xs text-right font-mono text-[12px] text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
+          className="h-[28px] w-[64px] rounded-md border border-hairline bg-white px-xs text-right font-mono text-[12px] text-ink outline-none focus:border-primary focus:ring-2 focus:ring-accent-soft"
         />
         <span className="shrink-0 text-[11px] text-ink-subtle">ml</span>
         {ozHint && (
@@ -299,7 +299,7 @@ export function WineRow({
   return (
     <>
       {/* Desktop row — grid + compact pour-config sub-row stacked below. */}
-      <div className="group hidden border-b border-border transition-colors last:border-b-0 hover:bg-[#FBFAF6] md:block">
+      <div className="group hidden border-b border-hairline transition-colors last:border-b-0 hover:bg-bridge-surface md:block">
       <div className="grid grid-cols-[28px_1fr_80px_80px_36px] items-center px-lg py-sm">
         <div
           aria-label="Drag to reorder"
@@ -347,13 +347,13 @@ export function WineRow({
           type="button"
           aria-label={`Remove ${item.wines.name}`}
           onClick={() => onDelete(item.id)}
-          className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-subtle opacity-0 transition-opacity hover:bg-surface-muted hover:text-danger group-hover:opacity-100"
+          className="flex h-8 w-8 items-center justify-center rounded-pill text-ink-subtle opacity-0 transition-opacity hover:bg-blush-wash hover:text-primary group-hover:opacity-100"
         >
           <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
       {/* Desktop pour-config sub-row (offset to match the wine-name column). */}
-      <div className="hidden border-t border-border/40 bg-surface-muted/30 px-lg pb-sm pt-xs md:grid md:grid-cols-[28px_1fr]">
+      <div className="hidden border-t border-hairline/40 bg-bridge-surface/30 px-lg pb-sm pt-xs md:grid md:grid-cols-[28px_1fr]">
         <div />
         <PourConfigRow item={item} onPourChange={onPourChange} />
           {/* BND-170: blurb input */}
@@ -364,15 +364,15 @@ export function WineRow({
               onBlur={(e) => { if (!e.target.value.trim()) onBlurbChange(item.id, null); }}
               placeholder="Add a note for guests (e.g., sommelier pick, pairing suggestion)"
               rows={2}
-              className="flex-1 rounded-sm border border-border bg-white px-xs py-1 text-[12px] text-ink resize-none outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft placeholder:text-ink-muted/50"
+              className="flex-1 rounded-md border border-hairline bg-white px-xs py-1 text-[12px] text-ink resize-none outline-none focus:border-primary focus:ring-2 focus:ring-accent-soft placeholder:text-ink-muted/50"
             />
             {/* BND-171: hide toggle */}
             <button
               type="button"
               onClick={() => onHiddenChange(item.id, !item.hidden)}
               className={cn(
-                "shrink-0 rounded-sm px-sm py-1 text-[11px] font-medium transition-colors",
-                item.hidden ? "bg-warning-soft text-warning" : "bg-surface-sunken text-ink-subtle hover:text-ink"
+                "shrink-0 rounded-pill px-sm py-1 text-[10.5px] font-medium uppercase tracking-wide transition-colors",
+                item.hidden ? "bg-amber-wash text-amber" : "bg-beige text-ink-soft hover:text-ink"
               )}
               title={item.hidden ? "Hidden from public list" : "Visible on public list"}
             >
@@ -383,12 +383,12 @@ export function WineRow({
       </div>
 
       {/* Mobile card */}
-      <div className="border-b border-border px-md py-md last:border-b-0 md:hidden">
+      <div className="border-b border-hairline px-md py-md last:border-b-0 md:hidden">
         <div className="flex items-start justify-between">
           <div className="min-w-0 flex-1">
             <NameEdit item={item} onNameChange={onNameChange} />
             <div className="mt-2xs flex flex-wrap items-center gap-xs text-[12px] text-ink-muted">
-              <span className="rounded-sm bg-surface-muted px-xs py-2xs font-mono text-[11px] text-ink-subtle">
+              <span className="rounded-pill bg-beige px-sm py-2xs font-mono text-[11px] text-ink-soft">
                 {wine.vintage ?? "NV"}
               </span>
               {wine.region && <span>{wine.region}</span>}
@@ -408,14 +408,14 @@ export function WineRow({
             type="button"
             aria-label={`Options for ${item.wines.name}`}
             onClick={() => onDelete(item.id)}
-            className="ml-sm flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-ink-subtle hover:text-danger"
+            className="ml-sm flex h-8 w-8 shrink-0 items-center justify-center rounded-pill text-ink-subtle hover:text-primary"
           >
             <MoreHorizontal className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           </button>
         </div>
         <div className="mt-sm flex gap-lg">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.06em] text-ink-subtle">
+            <div className="text-caption uppercase text-grey">
               Glass
             </div>
             <div className="font-mono text-[14px] text-ink-muted">
@@ -423,7 +423,7 @@ export function WineRow({
             </div>
           </div>
           <div>
-            <div className="text-[11px] uppercase tracking-[0.06em] text-ink-subtle">
+            <div className="text-caption uppercase text-grey">
               Bottle
             </div>
             <div className="font-mono text-[14px] text-ink">
@@ -432,8 +432,8 @@ export function WineRow({
           </div>
         </div>
         {/* BND-038: mobile pour-config block. */}
-        <div className="mt-sm border-t border-border/50 pt-sm">
-          <div className="text-[11px] uppercase tracking-[0.06em] text-ink-subtle">
+        <div className="mt-sm border-t border-hairline/50 pt-sm">
+          <div className="text-caption uppercase text-grey">
             Pour
           </div>
           <div className="mt-xs">
@@ -441,8 +441,8 @@ export function WineRow({
           </div>
         </div>
         {/* BND-170/171: blurb + hide toggle (mobile) */}
-        <div className="mt-sm border-t border-border/50 pt-sm">
-          <div className="text-[11px] uppercase tracking-[0.06em] text-ink-subtle">
+        <div className="mt-sm border-t border-hairline/50 pt-sm">
+          <div className="text-caption uppercase text-grey">
             Note
           </div>
           <textarea
@@ -451,14 +451,14 @@ export function WineRow({
             onBlur={(e) => { if (!e.target.value.trim()) onBlurbChange(item.id, null); }}
             placeholder="Sommelier pick, pairing suggestion..."
             rows={2}
-            className="mt-xs w-full rounded-sm border border-border bg-white px-xs py-1 text-[12px] text-ink resize-none outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft placeholder:text-ink-muted/50"
+            className="mt-xs w-full rounded-md border border-hairline bg-white px-xs py-1 text-[12px] text-ink resize-none outline-none focus:border-primary focus:ring-2 focus:ring-accent-soft placeholder:text-ink-muted/50"
           />
           <button
             type="button"
             onClick={() => onHiddenChange(item.id, !item.hidden)}
             className={cn(
-              "mt-xs rounded-sm px-sm py-xs text-[11px] font-medium transition-colors",
-              item.hidden ? "bg-warning-soft text-warning" : "bg-surface-sunken text-ink-subtle hover:text-ink"
+              "mt-xs rounded-pill px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide transition-colors",
+              item.hidden ? "bg-amber-wash text-amber" : "bg-beige text-ink-soft hover:text-ink"
             )}
             title={item.hidden ? "Hidden from public list" : "Visible on public list"}
           >

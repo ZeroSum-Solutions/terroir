@@ -63,11 +63,11 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
       ref={dialogRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-lg"
     >
-      <div className="w-full max-w-[420px] rounded-md border border-border bg-white p-lg shadow-lg">
-        <h2 id={headingId} className="font-serif text-[18px] text-ink">
+      <div className="w-full max-w-[420px] rounded-card border border-hairline bg-white p-lg">
+        <h2 id={headingId} className="font-serif text-[18px] font-medium text-ink">
           {item.producer} {item.name}
         </h2>
-        <p className="mt-xs text-[12px] text-ink-muted">Pick a pour size</p>
+        <p className="mt-xs text-[12px] text-grey">Pick a pour size</p>
 
         <div className="mt-md grid grid-cols-2 gap-xs">
           {PRESETS_OZ.map((oz) => {
@@ -79,8 +79,8 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
                 type="button"
                 onClick={() => handleConfirm(ml)}
                 className={isDefault
-                  ? "h-[48px] rounded-sm border-2 border-accent bg-accent-soft text-[14px] font-semibold text-accent hover:bg-accent-soft/70"
-                  : "h-[48px] rounded-sm border border-border bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
+                  ? "h-[48px] rounded-pill border-2 border-primary bg-blush-wash text-[14px] font-semibold text-primary hover:bg-blush-wash/70"
+                  : "h-[48px] rounded-pill border border-hairline bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
                 }
               >
                 {oz} oz
@@ -92,7 +92,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
         <div className="mt-md flex flex-wrap items-center gap-sm">
           <label
             htmlFor="pour-picker-custom"
-            className="text-[12px] text-ink-muted"
+            className="text-[12px] text-grey"
           >
             Custom (oz)
           </label>
@@ -113,13 +113,13 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
               }
             }}
             placeholder="5.0"
-            className="h-[38px] w-[80px] rounded-sm border border-border bg-white px-sm text-[14px] outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
+            className="h-[38px] w-[80px] rounded-pill border border-hairline bg-white px-sm text-[14px] outline-none focus:border-primary focus:ring-2 focus:ring-blush-wash"
           />
           <button
             type="button"
             disabled={!customValue || Number(customValue) <= 0}
             onClick={submitCustom}
-            className="h-[38px] rounded-sm bg-accent px-md text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+            className="h-[38px] rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-40"
           >
             Pour
           </button>
@@ -129,7 +129,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
         <div className="mt-md">
           <label
             htmlFor="pour-picker-note"
-            className="text-[12px] text-ink-muted"
+            className="text-[12px] text-grey"
           >
             Note (optional)
           </label>
@@ -140,7 +140,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
             maxLength={500}
             rows={2}
             placeholder="e.g., comp for VIP"
-            className="mt-xs w-full rounded-sm border border-border bg-surface px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+            className="mt-xs w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </div>
 
@@ -148,7 +148,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
           <button
             type="button"
             onClick={handleCancel}
-            className="h-[38px] rounded-sm border border-border bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted"
+            className="h-[38px] rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface"
           >
             Cancel
           </button>

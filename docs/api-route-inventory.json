@@ -2,15 +2,92 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 65,
-  "discoveredOperationCount": 77,
+  "routeFileCount": 80,
+  "discoveredOperationCount": 93,
   "discoveredOperations": [
+    {
+      "operationId": "api:GET:/api/bins",
+      "method": "GET",
+      "path": "/api/bins",
+      "source": {
+        "file": "src/app/api/bins/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/bins",
+      "method": "POST",
+      "path": "/api/bins",
+      "source": {
+        "file": "src/app/api/bins/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/bins/{param}",
+      "method": "PATCH",
+      "path": "/api/bins/[id]",
+      "source": {
+        "file": "src/app/api/bins/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/bins/suggest",
+      "method": "GET",
+      "path": "/api/bins/suggest",
+      "source": {
+        "file": "src/app/api/bins/suggest/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/brand-kit",
+      "method": "POST",
+      "path": "/api/brand-kit",
+      "source": {
+        "file": "src/app/api/brand-kit/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/brand-kit/propose",
+      "method": "POST",
+      "path": "/api/brand-kit/propose",
+      "source": {
+        "file": "src/app/api/brand-kit/propose/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
     {
       "operationId": "api:POST:/api/cellar",
       "method": "POST",
       "path": "/api/cellar",
       "source": {
         "file": "src/app/api/cellar/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/cellar-health/recompute",
+      "method": "POST",
+      "path": "/api/cellar-health/recompute",
+      "source": {
+        "file": "src/app/api/cellar-health/recompute/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null
@@ -226,6 +303,17 @@
       }
     },
     {
+      "operationId": "api:GET:/api/member-analytics",
+      "method": "GET",
+      "path": "/api/member-analytics",
+      "source": {
+        "file": "src/app/api/member-analytics/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
       "operationId": "api:POST:/api/open-bottles",
       "method": "POST",
       "path": "/api/open-bottles",
@@ -242,6 +330,17 @@
       "path": "/api/open-bottles/[id]/close",
       "source": {
         "file": "src/app/api/open-bottles/[id]/close/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/open-bottles/close",
+      "method": "POST",
+      "path": "/api/open-bottles/close",
+      "source": {
+        "file": "src/app/api/open-bottles/close/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null
@@ -281,11 +380,55 @@
       }
     },
     {
+      "operationId": "api:POST:/api/pricing-recommendations/recompute",
+      "method": "POST",
+      "path": "/api/pricing-recommendations/recompute",
+      "source": {
+        "file": "src/app/api/pricing-recommendations/recompute/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
       "operationId": "api:POST:/api/reconcile",
       "method": "POST",
       "path": "/api/reconcile",
       "source": {
         "file": "src/app/api/reconcile/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/reconcile-queue",
+      "method": "GET",
+      "path": "/api/reconcile-queue",
+      "source": {
+        "file": "src/app/api/reconcile-queue/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/reconcile-queue/accept",
+      "method": "POST",
+      "path": "/api/reconcile-queue/accept",
+      "source": {
+        "file": "src/app/api/reconcile-queue/accept/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/reconcile-queue/undo",
+      "method": "POST",
+      "path": "/api/reconcile-queue/undo",
+      "source": {
+        "file": "src/app/api/reconcile-queue/undo/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null
@@ -407,6 +550,17 @@
       "path": "/api/scans/[id]/re-extract",
       "source": {
         "file": "src/app/api/scans/[id]/re-extract/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/stock-adjustments",
+      "method": "POST",
+      "path": "/api/stock-adjustments",
+      "source": {
+        "file": "src/app/api/stock-adjustments/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null
@@ -655,6 +809,17 @@
       }
     },
     {
+      "operationId": "api:POST:/api/wine-lists/{param}/theme",
+      "method": "POST",
+      "path": "/api/wine-lists/[id]/theme",
+      "source": {
+        "file": "src/app/api/wine-lists/[id]/theme/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
       "operationId": "api:PATCH:/api/wines/{param}",
       "method": "PATCH",
       "path": "/api/wines/[id]",
@@ -816,6 +981,17 @@
         "file": "src/app/api/wines/lwin-search/route.ts",
         "exportKind": "function-declaration",
         "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wines/merge",
+      "method": "POST",
+      "path": "/api/wines/merge",
+      "source": {
+        "file": "src/app/api/wines/merge/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
         "moduleSpecifier": null
       }
     },
