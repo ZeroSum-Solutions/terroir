@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 72,
+    "extensionDiscoveredCount": 73,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -512,6 +512,12 @@
     },
     {
       "operationId": "api:POST:/api/pour/undo",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/pricing-recommendations/recompute",
       "classification": "extension",
       "concreteRequirementId": null,
       "semanticAliasContext": []
