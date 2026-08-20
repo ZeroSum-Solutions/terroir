@@ -79,12 +79,33 @@ function renderItem(item: ItemData, template: "classic" | "modern" | "minimal"):
     </div>`;
 }
 
+function renderThemeCss(theme: MenuTheme | null | undefined): string {
+  if (!theme) return "";
+  const spacing = {
+    compact: { page: 32, section: 22, item: 8 },
+    comfortable: { page: 40, section: 32, item: 12 },
+    spacious: { page: 52, section: 42, item: 16 },
+  }[theme.spacing.scale];
+  return `
+  body { font-family: ${fontStack(theme.typography.body)}; color: ${theme.palette.text}; background: ${theme.palette.background}; padding: ${spacing.page}px; }
+  h1, .section-title, .wine-name, .wine-note { font-family: ${fontStack(theme.typography.heading)}; }
+  .restaurant, .wine-region, .wine-note, .wine-meta { color: ${theme.palette.mutedText}; }
+  .section-title { color: ${theme.palette.text}; border-color: ${theme.palette.border}; margin-top: ${spacing.section}px; }
+  .wine-item { margin-bottom: ${spacing.item}px; }
+  .dots { border-color: ${theme.palette.border}; }
+  .footer { color: ${theme.palette.accent}; }`;
+}
+
+function themeAttribute(theme: MenuTheme | null | undefined): string {
+  return theme ? ` data-menu-theme="${escapeHtml(theme.name)}"` : "";
+}
+
 // Font policy (BND-004): PDF templates MUST NOT reach out to any remote
 // font CDN. An external font fetch inside puppeteer's networkidle0 wait
 // could wedge a worker indefinitely. We use system font stacks so
 // rendering is deterministic and offline.
 
-export function renderClassic(data: ListData): string {
+export function renderClassic(data: ListData, theme?: MenuTheme | null): string {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -103,9 +124,10 @@ export function renderClassic(data: ListData): string {
   .wine-region { font-size: 9pt; color: #6B6B6B; margin-top: 2px; }
   .wine-note { font-size: 10pt; font-style: italic; color: #6B6B6B; margin-top: 2px; }
   .footer { margin-top: 48px; text-align: center; font-size: 9pt; color: #9A958C; }
+${renderThemeCss(theme)}
 </style>
 </head>
-<body>
+<body${themeAttribute(theme)}>
   <h1>${escapeHtml(data.name)}</h1>
   <div class="restaurant">${escapeHtml(data.restaurantName)}</div>
   ${data.sections.map((s) => `
@@ -117,7 +139,7 @@ export function renderClassic(data: ListData): string {
 </html>`;
 }
 
-export function renderModern(data: ListData): string {
+export function renderModern(data: ListData, theme?: MenuTheme | null): string {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -134,9 +156,10 @@ export function renderModern(data: ListData): string {
   .wine-price { font-size: 10pt; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .wine-meta { font-size: 8.5pt; color: #6B6B6B; margin-top: 1px; }
   .footer { margin-top: 40px; text-align: center; font-size: 8pt; color: #9A958C; text-transform: uppercase; letter-spacing: 0.06em; }
+${renderThemeCss(theme)}
 </style>
 </head>
-<body>
+<body${themeAttribute(theme)}>
   <h1>${escapeHtml(data.name)}</h1>
   <div class="restaurant">${escapeHtml(data.restaurantName)}</div>
   ${data.sections.map((s) => `
@@ -148,7 +171,7 @@ export function renderModern(data: ListData): string {
 </html>`;
 }
 
-export function renderMinimal(data: ListData): string {
+export function renderMinimal(data: ListData, theme?: MenuTheme | null): string {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -162,9 +185,10 @@ export function renderMinimal(data: ListData): string {
   .wine-name { font-weight: 400; }
   .wine-price { font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .footer { margin-top: 64px; text-align: center; font-size: 9pt; color: #9A958C; }
+${renderThemeCss(theme)}
 </style>
 </head>
-<body>
+<body${themeAttribute(theme)}>
   <h1>${escapeHtml(data.name)}</h1>
   ${data.sections.map((s, i) => `
     ${i > 0 ? '<div class="section-spacer"></div>' : ""}
@@ -175,13 +199,18 @@ export function renderMinimal(data: ListData): string {
 </html>`;
 }
 
-export function renderTemplate(template: string, data: ListData): string {
+export function renderTemplate(
+  template: string,
+  data: ListData,
+  theme?: MenuTheme | null,
+): string {
   switch (template) {
     case "modern":
-      return renderModern(data);
+      return renderModern(data, theme);
     case "minimal":
-      return renderMinimal(data);
+      return renderMinimal(data, theme);
     default:
-      return renderClassic(data);
+      return renderClassic(data, theme);
   }
 }
+import { fontStack, type MenuTheme } from "@/lib/branding/theme";

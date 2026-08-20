@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 73,
+    "extensionDiscoveredCount": 76,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -326,6 +326,18 @@
     },
     {
       "operationId": "api:GET:/api/bins/suggest",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/brand-kit",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/brand-kit/propose",
       "classification": "extension",
       "concreteRequirementId": null,
       "semanticAliasContext": []
@@ -782,6 +794,12 @@
     },
     {
       "operationId": "api:DELETE:/api/wine-lists/{param}/publish",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/wine-lists/{param}/theme",
       "classification": "extension",
       "concreteRequirementId": null,
       "semanticAliasContext": []

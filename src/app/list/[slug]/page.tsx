@@ -10,6 +10,7 @@ import {
   requireSupabasePublicConfig,
 } from "@/lib/supabase/config";
 import { cn } from "@/lib/utils";
+import { parseRenderableTheme, themeCssVariables } from "@/lib/branding/theme";
 import {
   buildBinCodesByWine,
   type PublicBinCodeRow,
@@ -127,7 +128,7 @@ export default async function PublicWineListPage({
   const { data: list, error } = await supabase
     .from("wine_lists")
     .select(
-      "name, template, restaurant_id, show_bin_codes, restaurants(name, eightysix_strategy, logo_url), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines(id, name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
+      "name, template, theme, restaurant_id, show_bin_codes, restaurants(name, eightysix_strategy, logo_url), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines(id, name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
     )
     .eq("slug", slug)
     .eq("is_published", true)
@@ -193,9 +194,16 @@ export default async function PublicWineListPage({
   const binCodesByWine = list.show_bin_codes
     ? await fetchPublicBinCodes(list.restaurant_id, wineIds)
     : {};
+  const theme = parseRenderableTheme(list.theme);
 
   return (
-    <main className="mx-auto min-h-screen max-w-[720px] bg-surface px-lg py-3xl print:min-h-0 print:max-w-none print:bg-white print:px-0 print:py-0">
+    <main
+      className={cn(
+        "mx-auto min-h-screen max-w-[720px] bg-surface px-lg py-3xl print:min-h-0 print:max-w-none print:bg-white print:px-0 print:py-0",
+        theme && "font-sans text-ink",
+      )}
+      style={themeCssVariables(theme)}
+    >
       {/* Header */}
       <header className="mb-2xl border-b border-border pb-xl print:mb-lg print:border-black/30 print:pb-md">
         {logoUrl && (

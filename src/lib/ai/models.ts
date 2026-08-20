@@ -86,6 +86,13 @@ export const BOTTLE_SCAN: ModelProfile = {
   maxTokens: 4000,
 };
 
+/** Structured, WCAG-aware brand theme proposals for public wine lists. */
+export const MENU_DESIGN: ModelProfile = {
+  model: "claude-sonnet-5",
+  effort: "medium",
+  maxTokens: 12000,
+};
+
 /**
  * Sommelier enrichment — drink window, peak year, tasting note, decant time.
  *
