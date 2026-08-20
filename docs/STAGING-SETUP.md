@@ -77,32 +77,45 @@ does.
    railway.app`. Add to `.council/progress.md` + this README so cold-
    start developers know where to smoke-test.
 
-## Option B — Cheaper half-step (CI step landed; dashboard toggle pending)
+## Option B — Cheaper half-step (enforced CI gate)
 
 **What it gets us:** per-PR preview deploys with a health check.
 Doesn't replace prod staging, but catches Chromium / runtime shifts
 before merge.
 
 **Status:** The CI workflow is **already in place** as
-`.github/workflows/preview-health.yml`. It polls the GitHub
-Deployments API for a Railway-originated preview deployment on each
-PR, waits up to 5 minutes for it to reach `success`, then curls its
-`/api/health` and fails the gate on non-200.
+`.github/workflows/preview-health.yml`. It accepts preview metadata only
+from the authenticated `railway-app[bot]` comment on the current PR,
+binds that comment's environment ID to a Railway-bot deployment for the
+PR HEAD SHA, waits up to 5 minutes for it to reach `success`, then curls
+the comment's Railway-provided service domain at `/api/health`.
 
-**Graceful degradation:** when no Railway deployment is found within
-the timeout (i.e., the Railway dashboard toggle below is NOT flipped),
-the step succeeds with a skip message. Safe to land PRs today; the
-gate activates automatically the moment the toggle flips.
+**Fail-closed behavior:** the check fails when GitHub does not provide
+complete PR metadata, Railway reports deployment `failure` or `error`,
+or polling exhausts without a valid preview. A Railway deployment that
+reaches `success` passes only when its preview `/api/health` returns
+HTTP 200. User-authored comments, unrelated deployments, and
+`railway.com` dashboard/log URLs cannot satisfy the gate. If the
+Railway project setup below is incomplete, PRs fail this check rather
+than report a false-green result.
 
-**Remaining steps to activate:**
+**External setup required for passing PRs:**
 
-1. **Enable Railway PR previews** (Railway dashboard → Service →
-   Settings → PR Environments → toggle on). Each PR then gets a
-   temporary service at a generated URL, reported to GitHub via the
-   Deployments API. **No code change required** — the existing
-   workflow will start exercising preview URLs immediately.
+1. **Enable Railway PR Environments** in Railway **Project Settings →
+   Environments → Enable PR Environments**. This is the current path
+   in Railway's [PR Environments guide](https://docs.railway.com/guides/preview-deployments-with-pr-environments).
 
-2. **Gate merge** on the `Preview health / Railway preview /api/health`
+2. **Keep one public Terroir web service on a Railway-provided domain.**
+   Railway provisions PR domains only when the corresponding base
+   service already uses a Railway-provided domain. The gate requires
+   exactly one `https://*.up.railway.app` service URL in Railway's PR
+   comment; zero or multiple public service URLs fail closed.
+
+3. **For bot-authored PRs, enable Bot PR Environments** under **Project
+   Settings → Environments → PR Environments**. Railway does not
+   create environments for bot PRs by default.
+
+4. **Gate merge** on the `Preview health / Railway preview /api/health`
    check via a branch-protection rule on `main` (Settings →
    Branches → main → Require status checks to pass).
 
@@ -117,29 +130,34 @@ After flipping the Railway toggle + adding the branch-protection
 rule, verify both are wired correctly by opening a throwaway PR and
 watching for:
 
-1. **Railway posts a deployment.** Within ~30-90 s of the PR
-   opening, the PR timeline shows a `Deployment` event from Railway
-   with environment label `pr-N`. If it doesn't appear, the
-   dashboard toggle isn't on.
+1. **The Railway GitHub bot comments on the PR.** The comment author is
+   `railway-app` / `railway-app[bot]`, the body lists the PR environment,
+   and its Terroir row contains a `Web` link on `*.up.railway.app`.
+   User-authored lookalike comments are ignored.
 
 2. **The `Preview health` workflow runs.** Check the Actions tab on
    the PR — `Preview health / Railway preview /api/health` should
    start polling. Logs show `Polling for Railway preview on
    <repo> @ <sha> ...` for up to 5 min.
 
-3. **`/api/health` is curled on the preview URL.** Log shows
-   `Preview ready — curling <url>/api/health`. A 200 reply logs
-   `✅ Preview /api/health returned 200` and the check passes.
+3. **`/api/health` is curled on the service URL from the trusted bot
+   comment.** Log shows `Preview ready — curling
+   https://<service>.up.railway.app/api/health`. Railway dashboard and
+   deployment-log URLs are metadata only and are never health targets.
+   A 200 reply logs `✅ Preview /api/health returned 200` and the check
+   passes.
 
 4. **The status check is required in the PR UI.** The "Merge pull
    request" button is disabled until the check reports success, and
    the check appears in the required-checks list at the bottom of
    the PR.
 
-If step 1 passes but step 2 doesn't, check the workflow file is
-present on the PR's base branch (`main`). If steps 1-3 pass but
-step 4 doesn't, the branch-protection rule didn't take — the check
-name to require is exactly `Preview health / Railway preview /api/health`
+If step 1 passes but step 2 doesn't, check the workflow file is present
+on the PR's base branch (`main`). If the bot comment has zero or
+multiple `*.up.railway.app` links, correct the Railway service/domain
+setup; the gate intentionally will not guess. If steps 1-3 pass but
+step 4 doesn't, the branch-protection rule didn't take — the check name
+to require is exactly `Preview health / Railway preview /api/health`
 (job name inside `preview-health.yml`, not the workflow name).
 
 ## Tracking
@@ -154,11 +172,13 @@ Once either path is chosen and executed, update:
 
 ## Why this is still open as a finding
 
-This doc scopes the work. Option B's **CI side is landed** — the
-preview-health workflow is in place and will start gating merges as
-soon as the Railway dashboard PR-Environments toggle is flipped.
-Option A still requires dashboard-level access + a call on Supabase
-branch vs. separate project.
+This doc scopes the work. Option B's **CI side is landed and fails
+closed** — the preview-health workflow will not pass without a valid
+Railway preview and a 200 response from its `/api/health`. The Railway
+Project Settings PR-Environments configuration and a single
+Railway-provided public service domain are therefore required before
+PRs can satisfy the gate. Option A still requires dashboard-level
+access + a call on Supabase branch vs. separate project.
 
 INT-018 moves from "open" to "half-scoped" once the workflow lands,
 and closes fully when either path is activated on the Railway side.
