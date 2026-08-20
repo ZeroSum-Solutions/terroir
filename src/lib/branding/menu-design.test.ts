@@ -18,6 +18,19 @@ function themes() {
   }));
 }
 
+function lowContrastTheme(name: string) {
+  return {
+    ...VALID_THEME,
+    name,
+    palette: {
+      ...VALID_THEME.palette,
+      text: "#777777",
+      mutedText: "#AAAAAA",
+      accent: "#BBBBBB",
+    },
+  };
+}
+
 describe("generateMenuThemes", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -52,6 +65,69 @@ describe("generateMenuThemes", () => {
         listSummary: "Whites",
       }),
     ).resolves.toHaveLength(3);
+    expect(mocks.parse).toHaveBeenCalledTimes(2);
+  });
+
+  it("filters low-contrast proposals and retries once when fewer than three comply", async () => {
+    mocks.parse
+      .mockResolvedValueOnce({
+        parsed_output: {
+          themes: [
+            ...themes().slice(0, 2),
+            lowContrastTheme("Faded Reserve"),
+            lowContrastTheme("Pale Cellar"),
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        parsed_output: {
+          themes: [...themes(), lowContrastTheme("Still Faded")],
+        },
+      });
+
+    const result = await generateMenuThemes({
+      palette: { colors: ["#721D35"] },
+      listSummary: "Reds",
+    });
+
+    expect(mocks.parse).toHaveBeenCalledTimes(2);
+    expect(result).toEqual(themes());
+  });
+
+  it("fails closed when two lane responses each contain fewer than three compliant themes", async () => {
+    mocks.parse.mockResolvedValue({
+      parsed_output: {
+        themes: [
+          ...themes().slice(0, 2),
+          lowContrastTheme("Faded Reserve"),
+        ],
+      },
+    });
+
+    await expect(
+      generateMenuThemes({
+        palette: { colors: ["#721D35"] },
+        listSummary: "Reds",
+      }),
+    ).rejects.toThrow("fewer than 3 accessible, uniquely named menu themes");
+    expect(mocks.parse).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects duplicate proposal names and retries the lane", async () => {
+    mocks.parse
+      .mockResolvedValueOnce({
+        parsed_output: {
+          themes: [VALID_THEME, VALID_THEME, { ...VALID_THEME, name: "Night Service" }],
+        },
+      })
+      .mockResolvedValueOnce({ parsed_output: { themes: themes() } });
+
+    await expect(
+      generateMenuThemes({
+        palette: { colors: ["#721D35"] },
+        listSummary: "Reds",
+      }),
+    ).resolves.toEqual(themes());
     expect(mocks.parse).toHaveBeenCalledTimes(2);
   });
 

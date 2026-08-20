@@ -51,8 +51,30 @@ describe("POST /api/brand-kit", () => {
       request(new File(["gif"], "logo.gif", { type: "image/gif" })),
     );
 
-    expect(response.status).toBe(415);
+    expect(response.status).toBe(422);
     expect(mockExtractPalette).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: "unsupported_logo_format",
+        message: expect.stringContaining("non-interlaced 8-bit RGB or RGBA PNG"),
+      },
+    });
+  });
+
+  it.each([
+    ["image/jpeg", "logo.jpg"],
+    ["image/webp", "logo.webp"],
+  ])("rejects advertised-but-undecodable %s uploads with the exact PNG contract", async (type, name) => {
+    const { supabase } = makeSupabase();
+    mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
+
+    const response = await POST(request(new File(["bytes"], name, { type })));
+
+    expect(response.status).toBe(422);
+    expect(mockExtractPalette).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({
+      error: { message: expect.stringContaining("non-interlaced 8-bit RGB or RGBA PNG") },
+    });
   });
 
   it("creates or updates the brand kit with the extracted palette", async () => {
@@ -73,11 +95,15 @@ describe("POST /api/brand-kit", () => {
         restaurant_id: "r-1",
         logo_url: expect.stringMatching(/^data:image\/png;base64,/),
         palette: { colors: ["#CC2233", "#2244CC"] },
+        proposals: null,
       }),
       { onConflict: "restaurant_id" },
     );
     await expect(response.json()).resolves.toMatchObject({
-      brandKit: { palette: { colors: ["#CC2233", "#2244CC"] } },
+      brandKit: {
+        palette: { colors: ["#CC2233", "#2244CC"] },
+        proposals: null,
+      },
     });
   });
 
@@ -93,7 +119,10 @@ describe("POST /api/brand-kit", () => {
     expect(response.status).toBe(422);
     expect(upsert).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: "invalid_logo" },
+      error: {
+        code: "invalid_logo",
+        message: expect.stringContaining("non-interlaced 8-bit RGB or RGBA PNG"),
+      },
     });
   });
 });

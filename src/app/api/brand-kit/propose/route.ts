@@ -87,7 +87,7 @@ async function postProposals(request: NextRequest) {
   } catch (error) {
     if (error instanceof MenuDesignError) {
       return Errors.badGateway(
-        "Theme generation returned invalid designs. Try again.",
+        "Theme generation returned fewer than 3 accessible, uniquely named designs after retrying. Try again.",
       );
     }
     throw error;

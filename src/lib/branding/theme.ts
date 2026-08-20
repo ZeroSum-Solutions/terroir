@@ -42,7 +42,24 @@ export const MenuThemeSchema = z.strictObject({
   }),
 });
 
-export const MenuThemeProposalsSchema = z.array(MenuThemeSchema).min(3).max(4);
+export const MenuThemeProposalsSchema = z
+  .array(MenuThemeSchema)
+  .min(3)
+  .max(4)
+  .superRefine((themes, context) => {
+    const names = new Set<string>();
+    themes.forEach((theme, index) => {
+      const name = theme.name.toLocaleLowerCase();
+      if (names.has(name)) {
+        context.addIssue({
+          code: "custom",
+          message: "Theme names must be unique.",
+          path: [index, "name"],
+        });
+      }
+      names.add(name);
+    });
+  });
 
 export const MenuThemeCollectionSchema = z.strictObject({
   themes: MenuThemeProposalsSchema,
@@ -78,6 +95,11 @@ type ThemeCssProperties = CSSProperties & Record<`--${string}`, string>;
 export function parseStoredTheme(value: unknown): MenuTheme | null {
   const parsed = MenuThemeSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
+}
+
+export function parseRenderableTheme(value: unknown): MenuTheme | null {
+  const theme = parseStoredTheme(value);
+  return theme && validateThemeContrast(theme).length === 0 ? theme : null;
 }
 
 export function parseStoredProposals(value: unknown): MenuTheme[] {

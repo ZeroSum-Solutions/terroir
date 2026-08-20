@@ -9,7 +9,11 @@ vi.mock("@/lib/api/auth", () => ({
 }));
 vi.mock("@/lib/branding/menu-design", () => ({
   generateMenuThemes: (...args: unknown[]) => mockGenerateMenuThemes(...args),
-  MenuDesignError: class MenuDesignError extends Error {},
+  MenuDesignError: class MenuDesignError extends Error {
+    constructor() {
+      super("The model returned fewer than 3 accessible, uniquely named menu themes.");
+    }
+  },
 }));
 
 const { POST } = await import("./route");
@@ -127,5 +131,23 @@ describe("POST /api/brand-kit/propose", () => {
     const noList = makeSupabase({ list: false });
     mockRequireRole.mockResolvedValue({ supabase: noList.supabase, restaurantId: "r-1" });
     expect((await POST(request({ listId: LIST_ID }))).status).toBe(404);
+  });
+
+  it("returns a clear 502 and stores nothing when the lane stays non-compliant", async () => {
+    const { supabase, updates } = makeSupabase();
+    mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    const { MenuDesignError } = await import("@/lib/branding/menu-design");
+    mockGenerateMenuThemes.mockRejectedValue(new MenuDesignError());
+
+    const response = await POST(request({ listId: LIST_ID }));
+
+    expect(response.status).toBe(502);
+    expect(updates).toEqual([]);
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: "bad_gateway",
+        message: expect.stringContaining("fewer than 3 accessible, uniquely named designs"),
+      },
+    });
   });
 });

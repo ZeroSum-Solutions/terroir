@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  MenuThemeProposalsSchema,
   MenuThemeSchema,
   contrastRatio,
+  parseRenderableTheme,
   parseStoredTheme,
   themeCssVariables,
   validateThemeContrast,
@@ -38,6 +40,18 @@ describe("MenuThemeSchema", () => {
   });
 });
 
+describe("MenuThemeProposalsSchema", () => {
+  it("requires proposal names to be unique across the collection", () => {
+    expect(
+      MenuThemeProposalsSchema.safeParse([
+        VALID_THEME,
+        { ...VALID_THEME },
+        { ...VALID_THEME, name: "Night Service" },
+      ]).success,
+    ).toBe(false);
+  });
+});
+
 describe("WCAG contrast", () => {
   it("matches known contrast pairs", () => {
     expect(contrastRatio("#000000", "#FFFFFF")).toBeCloseTo(21, 4);
@@ -69,6 +83,22 @@ describe("theme rendering tokens", () => {
     expect(parseStoredTheme(null)).toBeNull();
     expect(parseStoredTheme({ rawCss: "body{}" })).toBeNull();
     expect(themeCssVariables(null)).toBeUndefined();
+  });
+
+  it("rejects a structurally valid low-contrast theme at the render boundary", () => {
+    const lowContrastTheme = {
+      ...VALID_THEME,
+      palette: {
+        ...VALID_THEME.palette,
+        text: "#777777",
+        mutedText: "#AAAAAA",
+        accent: "#BBBBBB",
+      },
+    };
+
+    expect(MenuThemeSchema.safeParse(lowContrastTheme).success).toBe(true);
+    expect(parseStoredTheme(lowContrastTheme)).not.toBeNull();
+    expect(parseRenderableTheme(lowContrastTheme)).toBeNull();
   });
 
   it("maps a valid stored theme to scoped web tokens", () => {

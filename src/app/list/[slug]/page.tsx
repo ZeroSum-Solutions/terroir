@@ -10,7 +10,7 @@ import {
   requireSupabasePublicConfig,
 } from "@/lib/supabase/config";
 import { cn } from "@/lib/utils";
-import { themeCssVariables } from "@/lib/branding/theme";
+import { parseRenderableTheme, themeCssVariables } from "@/lib/branding/theme";
 import {
   buildBinCodesByWine,
   type PublicBinCodeRow,
@@ -194,11 +194,15 @@ export default async function PublicWineListPage({
   const binCodesByWine = list.show_bin_codes
     ? await fetchPublicBinCodes(list.restaurant_id, wineIds)
     : {};
+  const theme = parseRenderableTheme(list.theme);
 
   return (
     <main
-      className="mx-auto min-h-screen max-w-[720px] bg-surface px-lg py-3xl font-sans text-ink print:min-h-0 print:max-w-none print:bg-white print:px-0 print:py-0"
-      style={themeCssVariables(list.theme)}
+      className={cn(
+        "mx-auto min-h-screen max-w-[720px] bg-surface px-lg py-3xl print:min-h-0 print:max-w-none print:bg-white print:px-0 print:py-0",
+        theme && "font-sans text-ink",
+      )}
+      style={themeCssVariables(theme)}
     >
       {/* Header */}
       <header className="mb-2xl border-b border-border pb-xl print:mb-lg print:border-black/30 print:pb-md">

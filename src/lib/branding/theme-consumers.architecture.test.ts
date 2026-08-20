@@ -12,7 +12,7 @@ describe("wine_lists.theme consumers", () => {
     expect(publicPage).toContain("theme");
     expect(publicPage).toContain("themeCssVariables");
     expect(pdfService).toContain("theme");
-    expect(pdfService).toContain("parseStoredTheme");
+    expect(pdfService).toContain("parseRenderableTheme");
     expect(pdfService).toMatch(/renderTemplate\([\s\S]*theme/);
   });
 });

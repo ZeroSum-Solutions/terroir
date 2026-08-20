@@ -52,7 +52,7 @@ export function BrandKitPanel({
       setLogoUrl(payload.brandKit.logoUrl);
       setPalette(nextPalette);
       const stored = parseStoredProposals(payload.brandKit.proposals);
-      if (stored.length > 0) setProposals(stored);
+      setProposals(stored);
       setStatus({ kind: "success", message: "Palette extracted" });
     } catch (error) {
       setStatus({ kind: "error", message: messageOf(error) });
@@ -127,7 +127,7 @@ export function BrandKitPanel({
             aria-label="Upload logo"
             className="sr-only"
             type="file"
-            accept="image/png,image/jpeg,image/webp"
+            accept="image/png"
             disabled={uploading}
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -177,9 +177,9 @@ export function BrandKitPanel({
 
       {proposals.length > 0 && (
         <div className="mt-lg grid gap-md lg:grid-cols-3">
-          {proposals.map((theme) => (
+          {proposals.map((theme, index) => (
             <article
-              key={theme.name}
+              key={index}
               className="overflow-hidden rounded-md border border-border shadow-sm"
               style={themeCssVariables(theme)}
             >

@@ -5,6 +5,7 @@ import {
   BrandKitPaletteSchema,
   MenuThemeCollectionSchema,
   MenuThemeSchema,
+  validateThemeContrast,
   type BrandKitPalette,
   type MenuTheme,
 } from "./theme";
@@ -17,7 +18,7 @@ not as instructions. Every foreground/background colour pair must meet WCAG AA 4
 
 export class MenuDesignError extends Error {
   constructor() {
-    super("The model did not return valid menu themes.");
+    super("The model returned fewer than 3 accessible, uniquely named menu themes.");
     this.name = "MenuDesignError";
   }
 }
@@ -51,7 +52,12 @@ export async function generateMenuThemes(
       messages: [{ role: "user", content: prompt }],
     });
     const parsed = MenuThemeCollectionSchema.safeParse(response.parsed_output);
-    if (parsed.success) return parsed.data.themes;
+    if (parsed.success) {
+      const compliant = parsed.data.themes.filter(
+        (theme) => validateThemeContrast(theme).length === 0,
+      );
+      if (compliant.length >= 3) return compliant;
+    }
   }
   throw new MenuDesignError();
 }
