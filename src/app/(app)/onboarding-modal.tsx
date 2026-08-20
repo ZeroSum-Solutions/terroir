@@ -40,11 +40,11 @@ export function OnboardingModal({
       aria-modal="true"
       aria-labelledby="onboarding-title"
     >
-      <div ref={trapRef} className="w-full max-w-[400px] rounded-md border border-border bg-surface p-lg shadow-lg">
-        <h2 id="onboarding-title" className="font-serif text-[22px] text-ink">
+      <div ref={trapRef} className="w-full max-w-[400px] rounded-card border border-hairline bg-canvas p-lg">
+        <h2 id="onboarding-title" className="font-serif text-[22px] font-normal text-ink">
           Name your restaurant
         </h2>
-        <p className="mt-xs text-[13px] text-ink-muted">
+        <p className="mt-xs text-[13px] font-light text-grey">
           You can change this later in settings.
         </p>
         <input
@@ -56,14 +56,14 @@ export function OnboardingModal({
             if (e.key === "Enter") submit();
           }}
           placeholder="Tartine Cellar…"
-          className="mt-lg h-[38px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+          className="mt-lg h-[38px] w-full rounded-pill border border-hairline bg-canvas px-md text-[14px] text-ink placeholder:text-grey focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash"
         />
         <div className="mt-lg flex justify-end">
           <button
             type="button"
             onClick={submit}
             disabled={saving || !name.trim()}
-            className="h-[38px] rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+            className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
           >
             {saving ? "Saving..." : "Continue"}
           </button>

@@ -43,7 +43,7 @@ export function ReExtractButton({ scanId }: ReExtractButtonProps) {
         type="button"
         onClick={handleClick}
         disabled={reExtracting}
-        className="flex h-10 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink disabled:opacity-50 hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px]"
+        className="flex h-10 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink disabled:opacity-50 hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:h-[38px]"
         title="Re-run Claude extraction on the stored OCR text"
       >
         <RefreshCw
@@ -54,7 +54,7 @@ export function ReExtractButton({ scanId }: ReExtractButtonProps) {
         {reExtracting ? "Re-extracting…\n" : <span className="hidden sm:inline">Re-run extraction</span>}
       </button>
       {error && (
-        <p className="text-[12px] text-danger">{error}</p>
+        <p className="text-[12px] text-primary">{error}</p>
       )}
     </div>
   );

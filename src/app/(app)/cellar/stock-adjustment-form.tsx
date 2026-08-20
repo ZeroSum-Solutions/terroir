@@ -15,8 +15,8 @@ export function StockAdjustmentForm({
 }) {
   const form = useStockAdjustment(wineId, onComplete);
   return (
-    <section aria-label="Stock adjustment" className="rounded-sm border border-border bg-white p-sm">
-      <h3 className="text-[13px] font-semibold text-ink">Record comp or adjustment</h3>
+    <section aria-label="Stock adjustment" className="rounded-lg border border-hairline bg-white p-sm">
+      <h3 className="text-caption font-medium uppercase text-grey">Record comp or adjustment</h3>
       <StockAdjustmentFields reasons={reasons} form={form} />
     </section>
   );
@@ -80,38 +80,38 @@ function StockAdjustmentFields({
   return (
     <>
       <div className="mt-sm grid grid-cols-2 gap-xs">
-        <label className="text-[12px] text-ink-muted">
+        <label className="text-[12px] text-grey">
           Kind
-          <select name="kind" value={form.kind} onChange={(event) => form.setKind(event.target.value as typeof form.kind)} className="mt-xs h-10 w-full rounded-sm border border-border bg-white px-sm text-[13px] text-ink">
+          <select name="kind" value={form.kind} onChange={(event) => form.setKind(event.target.value as typeof form.kind)} className="mt-xs h-10 w-full rounded-pill border border-hairline bg-white px-sm text-[13px] text-ink">
             <option value="comp">Comp</option>
             <option value="adjustment">Adjustment</option>
           </select>
         </label>
-        <label className="text-[12px] text-ink-muted">
+        <label className="text-[12px] text-grey">
           Unit
-          <select name="unit" value={form.unit} onChange={(event) => form.setUnit(event.target.value as typeof form.unit)} className="mt-xs h-10 w-full rounded-sm border border-border bg-white px-sm text-[13px] text-ink">
+          <select name="unit" value={form.unit} onChange={(event) => form.setUnit(event.target.value as typeof form.unit)} className="mt-xs h-10 w-full rounded-pill border border-hairline bg-white px-sm text-[13px] text-ink">
             <option value="bottles">Bottles</option>
             <option value="ml">ml</option>
           </select>
         </label>
       </div>
-      <label className="mt-sm block text-[12px] text-ink-muted">
+      <label className="mt-sm block text-[12px] text-grey">
         Quantity
-        <input name="quantity" type="number" step="1" value={form.quantity} onChange={(event) => form.setQuantity(event.target.value)} className="mt-xs h-10 w-full rounded-sm border border-border bg-white px-sm font-mono text-[13px] text-ink" />
+        <input name="quantity" type="number" step="1" value={form.quantity} onChange={(event) => form.setQuantity(event.target.value)} className="mt-xs h-10 w-full rounded-pill border border-hairline bg-white px-sm font-mono text-[13px] text-ink" />
       </label>
-      <label className="mt-sm block text-[12px] text-ink-muted">
+      <label className="mt-sm block text-[12px] text-grey">
         Reason
-        <select name="reason_code_id" value={form.reasonId} onChange={(event) => form.setReasonId(event.target.value)} className="mt-xs h-10 w-full rounded-sm border border-border bg-white px-sm text-[13px] text-ink">
+        <select name="reason_code_id" value={form.reasonId} onChange={(event) => form.setReasonId(event.target.value)} className="mt-xs h-10 w-full rounded-pill border border-hairline bg-white px-sm text-[13px] text-ink">
           <option value="">Select a reason</option>
           {reasons.filter((reason) => (form.kind === "comp" ? reason.category === "comp" : reason.category !== "comp")).map((reason) => <option key={reason.id} value={reason.id}>{reason.label}</option>)}
         </select>
       </label>
-      <label className="mt-sm block text-[12px] text-ink-muted">
+      <label className="mt-sm block text-[12px] text-grey">
         Note
-        <input name="note" maxLength={500} value={form.note} onChange={(event) => form.setNote(event.target.value)} className="mt-xs h-10 w-full rounded-sm border border-border bg-white px-sm text-[13px] text-ink" />
+        <input name="note" maxLength={500} value={form.note} onChange={(event) => form.setNote(event.target.value)} className="mt-xs h-10 w-full rounded-pill border border-hairline bg-white px-sm text-[13px] text-ink" />
       </label>
-      {form.message && <p role="status" className="mt-sm text-[12px] text-ink-muted">{form.message}</p>}
-      <button type="button" disabled={form.busy || form.invalid} onClick={form.submit} className="mt-sm h-10 w-full rounded-sm border border-border-strong bg-white text-[13px] font-medium text-ink hover:bg-surface-muted disabled:opacity-50">
+      {form.message && <p role="status" className="mt-sm text-[12px] text-grey">{form.message}</p>}
+      <button type="button" disabled={form.busy || form.invalid} onClick={form.submit} className="mt-sm h-10 w-full rounded-pill border border-ink/25 bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50">
         {form.busy ? "Recording…" : "Record event"}
       </button>
     </>

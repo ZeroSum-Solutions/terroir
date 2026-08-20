@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { metricHref, type MetricKey } from "./metric-href";
 
 export type OwnerMetrics = {
@@ -38,11 +39,11 @@ export function TodayStrip({ exceptions }: { exceptions: TodayException[] }) {
       <div className="mb-sm flex items-baseline justify-between gap-sm">
         <h2
           id="today-heading"
-          className="text-[10px] font-semibold uppercase tracking-[0.08em] text-accent"
+          className="text-caption font-medium uppercase text-grey"
         >
           Today
         </h2>
-        <span className="text-[12px] text-ink-muted">Most actionable</span>
+        <span className="text-[12px] text-grey">Most actionable</span>
       </div>
       <ul className="grid gap-sm md:grid-cols-3">
         {exceptions.map((exception) => (
@@ -52,21 +53,26 @@ export function TodayStrip({ exceptions }: { exceptions: TodayException[] }) {
           >
             <Link
               href={metricHref("wine", exception.wineId)}
-              className="group flex h-full items-start justify-between gap-md rounded-md border border-border bg-surface p-md transition-colors hover:border-border-strong hover:bg-surface-muted"
+              className="group flex h-full items-start justify-between gap-md rounded-lg border border-hairline bg-bridge-surface p-md transition-colors hover:bg-beige"
             >
               <span className="min-w-0">
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.08em] text-warning">
+                <span
+                  className={cn(
+                    "inline-block rounded-pill px-xs py-[2px] text-[10.5px] font-medium uppercase tracking-wide",
+                    exceptionBadgeClass(exception.kind),
+                  )}
+                >
                   {exceptionLabel(exception.kind)}
                 </span>
                 <span className="mt-xs block truncate text-[14px] font-medium text-ink">
                   {exception.title}
                 </span>
-                <span className="mt-2xs block text-[12px] text-ink-muted">
+                <span className="mt-2xs block text-[12px] text-grey">
                   {exception.detail}
                 </span>
               </span>
               <ArrowUpRight
-                className="mt-0.5 h-4 w-4 shrink-0 text-ink-subtle transition-colors group-hover:text-accent"
+                className="mt-0.5 h-4 w-4 shrink-0 text-grey transition-colors group-hover:text-primary"
                 strokeWidth={1.75}
                 aria-hidden
               />
@@ -112,9 +118,9 @@ export function OwnerMetricGrid({ metrics }: { metrics: OwnerMetrics }) {
         <div key={item.key} data-metric={item.key}>
           <Link
             href={metricHref(item.key)}
-            className="group block rounded-md border border-transparent p-sm transition-colors hover:border-border hover:bg-surface-muted"
+            className="group block rounded-lg border border-hairline bg-white p-sm transition-colors hover:bg-bridge-surface"
           >
-            <span className="flex items-center gap-xs text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <span className="flex items-center gap-xs text-caption font-medium uppercase text-grey">
               {item.label}
               <ArrowUpRight
                 className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
@@ -122,7 +128,7 @@ export function OwnerMetricGrid({ metrics }: { metrics: OwnerMetrics }) {
                 aria-hidden
               />
             </span>
-            <span className="mt-xs block font-mono text-[26px] font-medium leading-none tracking-[-0.03em] text-ink md:text-[34px]">
+            <span className="mt-xs block font-serif text-[30px] font-normal leading-none text-ink">
               {item.value}
             </span>
           </Link>
@@ -140,6 +146,17 @@ function exceptionLabel(kind: TodayException["kind"]): string {
       return "Past window";
     case "pricing":
       return "Pricing review";
+  }
+}
+
+function exceptionBadgeClass(kind: TodayException["kind"]): string {
+  switch (kind) {
+    case "drink-window":
+      return "bg-powder-wash text-powder-ink";
+    case "past-window":
+      return "bg-blush-wash text-primary";
+    case "pricing":
+      return "bg-amber-wash text-amber";
   }
 }
 

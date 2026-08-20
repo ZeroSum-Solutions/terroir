@@ -47,11 +47,11 @@ export function RecomputePricingRecommendationsButton() {
         type="button"
         onClick={recompute}
         disabled={busy}
-        className="inline-flex h-11 items-center rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted disabled:cursor-wait disabled:opacity-60"
+        className="inline-flex h-11 items-center rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:cursor-wait disabled:opacity-60"
       >
         {busy ? "Recomputing…" : "Recompute"}
       </button>
-      {error && <p role="alert" className="text-[12px] text-error">{error}</p>}
+      {error && <p role="alert" className="text-[12px] text-primary">{error}</p>}
     </div>
   );
 }

@@ -63,21 +63,21 @@ export function ReconcileModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby={headingId}
-      className="fixed inset-0 z-50 flex flex-col bg-surface md:items-center md:justify-center md:bg-ink/40 md:p-lg"
+      className="fixed inset-0 z-50 flex flex-col bg-canvas md:items-center md:justify-center md:bg-ink/40 md:p-lg"
     >
-      <div className="flex h-full w-full flex-col overflow-hidden bg-surface md:h-[min(720px,90vh)] md:max-w-[640px] md:rounded-md md:border md:border-border md:shadow-lg">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-canvas md:h-[min(720px,90vh)] md:max-w-[640px] md:rounded-card md:border md:border-hairline">
         <header
-          className="flex items-center justify-between border-b border-border px-md py-md md:px-lg"
+          className="flex items-center justify-between border-b border-hairline px-md py-md md:px-lg"
           style={{ paddingTop: "calc(env(safe-area-inset-top) + 1rem)" }}
         >
           <div>
             <h2
               id={headingId}
-              className="font-serif text-[20px] text-ink md:text-[22px]"
+              className="font-serif text-[20px] font-medium text-ink md:text-[22px]"
             >
               Reconcile open bottles
             </h2>
-            <p className="mt-2xs text-[13px] text-ink-muted">
+            <p className="mt-2xs text-[13px] text-grey">
               End-of-shift correction. Set each open bottle to its actual
               remaining level.
             </p>
@@ -86,7 +86,7 @@ export function ReconcileModal({
             type="button"
             onClick={onClose}
             aria-label="Close reconcile mode"
-            className="ml-md flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted"
+            className="ml-md flex h-10 w-10 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>

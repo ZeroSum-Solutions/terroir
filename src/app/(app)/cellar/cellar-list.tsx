@@ -288,14 +288,14 @@ export function CellarList({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-md border border-border bg-white px-md py-2xl text-center">
-        <p className="font-serif text-[16px] text-ink">No wines in your cellar yet.</p>
-        <p className="mt-xs text-[13px] text-ink-muted">
+      <div className="rounded-card border border-hairline bg-white px-md py-2xl text-center">
+        <p className="font-serif text-[17px] font-medium text-ink">No wines in your cellar yet.</p>
+        <p className="mt-xs text-[13px] text-grey">
           Scan an invoice to start building your cellar.
         </p>
         <Link
           href="/scan"
-          className="mt-md inline-flex h-[40px] items-center justify-center rounded-sm bg-accent px-md text-[13px] font-medium text-white hover:bg-accent-hover"
+          className="mt-md inline-flex h-[40px] items-center justify-center rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
         >
           Scan an invoice →
         </Link>
@@ -325,12 +325,12 @@ export function CellarList({
           onFacetsChange={onFacetsChange}
           onGroupByChange={onGroupByChange}
         />
-        <div className="rounded-md border border-border bg-white px-md py-lg text-center">
-          <p className="text-[13px] text-ink-muted">{message}</p>
+        <div className="rounded-card border border-hairline bg-white px-md py-lg text-center">
+          <p className="text-[13px] text-grey">{message}</p>
           <button
             type="button"
             onClick={onResetFilters}
-            className="mt-sm inline-flex h-[32px] items-center rounded-sm border border-border-strong bg-white px-md text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent-soft"
+            className="mt-sm inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-md text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-primary/25"
           >
             Clear filters & search
           </button>
@@ -355,7 +355,7 @@ export function CellarList({
             <button
               type="button"
               onClick={() => setSelectMode(true)}
-              className="inline-flex h-[32px] items-center gap-xs rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted transition-colors"
+              className="inline-flex h-[32px] items-center gap-xs rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface transition-colors"
             >
               <CheckSquare className="h-4 w-4" strokeWidth={2} aria-hidden />
               Select wines
@@ -365,7 +365,7 @@ export function CellarList({
               <button
                 type="button"
                 onClick={selectAll}
-                className="inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted"
+                className="inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface"
               >
                 Select all ({filtered.length})
               </button>
@@ -373,7 +373,7 @@ export function CellarList({
                 <button
                   type="button"
                   onClick={deselectAll}
-                  className="inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted"
+                  className="inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
                 >
                   Clear
                 </button>
@@ -383,20 +383,20 @@ export function CellarList({
                   <button
                     type="button"
                     onClick={() => setAssignTarget(assignTarget ? null : "__open__")}
-                    className="inline-flex h-[32px] items-center gap-xs rounded-sm bg-accent px-sm text-[12px] font-medium text-white hover:bg-accent-hover"
+                    className="inline-flex h-[32px] items-center gap-xs rounded-pill bg-primary px-sm text-[12px] font-medium text-white hover:bg-primary-hover"
                   >
                     <Layers className="h-4 w-4" strokeWidth={2} aria-hidden />
                     Assign {selectedIds.size} to section
                     <ChevronDown className="h-3 w-3" strokeWidth={2} aria-hidden />
                   </button>
                   {assignTarget === "__open__" && (
-                    <div className="absolute top-full left-0 mt-1 z-20 w-56 rounded-sm border border-border bg-white shadow-lg py-xs">
+                    <div className="absolute top-full left-0 mt-1 z-20 w-56 rounded-lg border border-hairline bg-white py-xs">
                       {sections.map((s) => (
                         <button
                           key={s.id}
                           type="button"
                           onClick={() => setAssignTarget(s.name)}
-                          className="block w-full px-sm py-xs text-left text-[13px] text-ink hover:bg-surface-muted"
+                          className="block w-full px-sm py-xs text-left text-[13px] text-ink hover:bg-bridge-surface"
                         >
                           {s.name}
                         </button>
@@ -407,14 +407,14 @@ export function CellarList({
               )}
               {assignTarget && assignTarget !== "__open__" && (
                 <div className="flex items-center gap-xs">
-                  <span className="text-[12px] text-ink-muted">
+                  <span className="text-[12px] text-grey">
                     Assign to <strong>{assignTarget}</strong>?
                   </span>
                   <button
                     type="button"
                     onClick={doBulkAssign}
                     disabled={busy}
-                    className="inline-flex h-[32px] items-center rounded-sm bg-accent px-sm text-[12px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+                    className="inline-flex h-[32px] items-center rounded-pill bg-primary px-sm text-[12px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
                   >
                     {busy ? "..." : "Confirm"}
                   </button>
@@ -422,7 +422,7 @@ export function CellarList({
                     type="button"
                     onClick={() => setAssignTarget(null)}
                     disabled={busy}
-                    className="inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted disabled:opacity-60"
+                    className="inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface disabled:opacity-60"
                   >
                     <X className="h-3 w-3" strokeWidth={2} aria-hidden />
                   </button>
@@ -431,7 +431,7 @@ export function CellarList({
               <button
                 type="button"
                 onClick={() => { setSelectMode(false); setSelectedIds(new Set()); setAssignTarget(null); }}
-                className="ml-auto inline-flex h-[32px] items-center rounded-sm border border-border bg-white px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted"
+                className="ml-auto inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
               >
                 Done
               </button>
@@ -471,7 +471,7 @@ export function CellarList({
           </div>
         </DndContext>
       ) : (
-        <div className="flex flex-col divide-y divide-border rounded-md border border-border bg-white">
+        <div className="flex flex-col divide-y divide-hairline rounded-card border border-hairline bg-white">
           <LineageBlockList
             wines={filtered}
             renderRow={(row) => (
@@ -501,19 +501,21 @@ function TaxonomyGroup({
     <section
       data-cellar-taxonomy-group
       data-group-value={group.key}
-      className="overflow-hidden rounded-md border border-border bg-white"
+      className="overflow-hidden rounded-card border border-hairline bg-white"
     >
-      <header className="flex items-center justify-between gap-md border-b border-border bg-surface-muted px-md py-sm">
-        <h2 className="text-[13px] font-semibold text-ink">{group.label}</h2>
+      <header className="flex items-center justify-between gap-md border-b border-beige-deep bg-beige px-md py-sm">
+        <h2 className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-soft">
+          {group.label}
+        </h2>
         <span
           data-group-rollup
-          className="shrink-0 font-mono text-[11px] text-ink-muted"
+          className="tabular shrink-0 text-[11px] text-ink-soft"
         >
           {group.wineCount} wine{group.wineCount === 1 ? "" : "s"} · {group.totalBottles}{" "}
           bottle{group.totalBottles === 1 ? "" : "s"}
         </span>
       </header>
-      <div className="divide-y divide-border">
+      <div className="divide-y divide-hairline">
         <LineageBlockList
           wines={group.wines}
           renderRow={(row) => (
@@ -614,27 +616,27 @@ function LineageBlockList({
               data-lineage-header
               onClick={() => toggle(block.lineageId)}
               aria-expanded={!collapsed.has(block.lineageId)}
-              className="flex w-full items-center gap-sm px-md py-sm text-left bg-surface-muted/60 hover:bg-surface-muted transition-colors"
+              className="flex w-full items-center gap-sm px-md py-sm text-left bg-beige hover:bg-beige-deep/60 transition-colors"
             >
               <ChevronDown
                 className={cn(
-                  "h-4 w-4 shrink-0 text-ink-subtle transition-transform",
+                  "h-4 w-4 shrink-0 text-grey transition-transform",
                   collapsed.has(block.lineageId) && "-rotate-90",
                 )}
                 strokeWidth={2}
                 aria-hidden
               />
               <span className="min-w-0 flex-1">
-                <span className="block text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+                <span className="block text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-soft">
                   {block.producer}
                 </span>
-                <span className="block truncate font-serif text-[15px] text-ink">
+                <span className="block truncate font-serif text-[17px] font-medium text-ink">
                   {block.name}
                 </span>
               </span>
               <span
                 data-lineage-rollup
-                className="inline-flex shrink-0 items-center rounded-full bg-accent-soft px-sm py-2xs text-[11px] font-medium text-accent"
+                className="tabular inline-flex shrink-0 items-center rounded-pill bg-white/70 px-sm py-2xs text-[11px] font-medium text-ink-soft"
               >
                 {block.rows.length} wines
                 {block.span ? ` · ${block.span[0]}–${block.span[1]}` : ""}
@@ -644,7 +646,7 @@ function LineageBlockList({
             {!collapsed.has(block.lineageId) && (
               <div
                 data-lineage-children
-                className="ml-md border-l-2 border-accent-soft divide-y divide-border"
+                className="ml-md border-l-2 border-beige-deep divide-y divide-hairline"
               >
                 {block.rows.map((row) => (
                   <div key={row.wine_id}>{renderRow(row)}</div>
@@ -684,21 +686,23 @@ function SectionGroup({
   const dropId = `section-${sectionKey}`;
 
   return (
-    <div className="rounded-md border border-border bg-white overflow-hidden">
+    <div className="rounded-card border border-hairline bg-white overflow-hidden">
       {/* Section header — acts as drop target */}
       <div
         id={dropId}
-        className="flex items-center gap-sm px-md py-sm bg-surface-muted border-b border-border"
+        className="flex items-center gap-sm px-md py-sm bg-beige border-b border-beige-deep"
       >
-        <h3 className="text-[13px] font-semibold text-ink">{sectionName}</h3>
-        <span className="inline-flex items-center rounded-full bg-accent-soft px-sm py-2xs text-[11px] font-medium text-accent">
+        <h3 className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-soft">
+          {sectionName}
+        </h3>
+        <span className="tabular inline-flex items-center rounded-pill bg-white/70 px-sm py-2xs text-[11px] font-medium text-ink-soft">
           {wines.length}
         </span>
       </div>
 
       {/* Wine rows in this section */}
       {wines.length > 0 ? (
-        <div className="divide-y divide-border">
+        <div className="divide-y divide-hairline">
           <LineageBlockList
             wines={wines}
             renderRow={(row) => (
@@ -714,7 +718,7 @@ function SectionGroup({
           />
         </div>
       ) : (
-        <div className="px-md py-lg text-center text-[13px] text-ink-muted">
+        <div className="px-md py-lg text-center text-[13px] text-grey">
           No wines in this section.
         </div>
       )}
@@ -755,7 +759,7 @@ function DraggableWineRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={cn(isDragging && "bg-surface-muted shadow-md rounded-sm")}
+      className={cn(isDragging && "bg-bridge-surface rounded-lg")}
     >
       <CellarRow
         row={row}
@@ -809,9 +813,9 @@ function CellarRow({
   const isLowStock = lowStockThreshold != null && row.sealed_count > 0 && row.sealed_count < lowStockThreshold && !row.is_eightysixed;
   const isPeakWindow = row.peak_year != null && row.peak_year === new Date().getFullYear() && !row.is_eightysixed;
 
-  let chip: { label: string; tone: "neutral" | "ok" | "warn" | "danger" | "muted" };
+  let chip: { label: string; tone: "neutral" | "ok" | "risk" | "muted" };
   if (row.is_eightysixed) {
-    chip = { label: "86'd", tone: "danger" };
+    chip = { label: "86'd", tone: "risk" };
   } else if (row.open_remaining_ml !== null && row.open_remaining_ml > 0) {
     chip = {
       label: `Open · ${ozLeft} oz`,
@@ -833,11 +837,11 @@ function CellarRow({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onToggleSelect?.(); }}
-          className="flex h-[44px] w-[44px] shrink-0 items-center justify-center text-ink-subtle hover:text-accent"
+          className="flex h-[44px] w-[44px] shrink-0 items-center justify-center text-grey hover:text-primary"
           aria-label={selected ? "Deselect" : "Select"}
         >
           {selected ? (
-            <CheckSquare className="h-5 w-5 text-accent" strokeWidth={2} aria-hidden />
+            <CheckSquare className="h-5 w-5 text-primary" strokeWidth={2} aria-hidden />
           ) : (
             <Square className="h-5 w-5" strokeWidth={2} aria-hidden />
           )}
@@ -851,7 +855,7 @@ function CellarRow({
           {...dragHandle.attributes}
           {...dragHandle.listeners}
           aria-label="Drag to reorder"
-          className="flex h-[44px] w-[36px] shrink-0 items-center justify-center cursor-grab active:cursor-grabbing text-ink-subtle hover:text-ink-muted touch:min-h-[44px] touch:min-w-[44px]"
+          className="flex h-[44px] w-[36px] shrink-0 items-center justify-center cursor-grab active:cursor-grabbing text-grey hover:text-ink-soft touch:min-h-[44px] touch:min-w-[44px]"
         >
           <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
         </button>
@@ -860,38 +864,31 @@ function CellarRow({
       <button
         type="button"
         onClick={selectMode ? undefined : onSelect}
-        className="flex-1 min-w-0 px-md py-md text-left transition-colors hover:bg-surface-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-inset rounded-sm"
+        className="flex-1 min-w-0 px-md py-md text-left transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-inset rounded-md"
       >
         <div className="flex items-start justify-between gap-md">
           <div className="min-w-0 flex-1">
             {/* Producer · Vintage · Region */}
-            <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-subtle">
-              <span className="text-ink-muted">{row.producer}</span>
-              {row.vintage && <span className="ml-xs font-mono">{row.vintage}</span>}
+            <div className="text-caption font-medium uppercase text-grey">
+              {row.producer}
+              {row.vintage && <span className="tabular ml-xs">{row.vintage}</span>}
               {row.region && <span className="ml-xs">· {row.region}</span>}
             </div>
             {/* Wine name */}
-            <div className="mt-2xs font-serif text-[16px] text-ink">{row.name}</div>
+            <div className="mt-2xs font-serif text-[17px] font-medium text-ink">{row.name}</div>
             {/* Stock + drink-window + bin row */}
-            <div className="mt-xs flex flex-wrap items-center gap-sm text-[12px] text-ink-muted">
+            <div className="mt-xs flex flex-wrap items-center gap-sm text-[12px] font-light text-grey">
               <Chip tone={chip.tone}>{chip.label}</Chip>
-              {isLowStock && (
-                <span className="inline-flex items-center rounded-full bg-warning-soft px-sm py-2xs text-[11px] font-medium text-warning">Low Stock</span>
-              )}
-              {isPeakWindow && (
-                <span className="inline-flex items-center rounded-full bg-accent-soft px-sm py-2xs text-[11px] font-medium text-accent">Peak Window</span>
-              )}
+              {isLowStock && <Chip tone="risk">Low stock</Chip>}
+              {isPeakWindow && <Chip tone="ok">Peak window</Chip>}
               {/* OPP-1 (EV-1.2) — same lineage + vintage + format twin detected */}
               {row.duplicate_wine_ids.length > 0 && (
-                <span
-                  data-duplicate-suspect
-                  className="inline-flex items-center rounded-full bg-warning-soft px-sm py-2xs text-[11px] font-medium text-warning"
-                >
-                  Possible duplicate
+                <span data-duplicate-suspect>
+                  <Chip tone="warn">Possible duplicate</Chip>
                 </span>
               )}
               {glassesLeft !== null && glassesLeft > 0 && !row.is_eightysixed && (
-                <span className="text-ink-muted">
+                <span className="tabular text-grey">
                   ~{glassesLeft} glass{glassesLeft === 1 ? "" : "es"} left
                 </span>
               )}
@@ -902,7 +899,7 @@ function CellarRow({
                 />
               )}
               {row.bin_location && (
-                <span className="inline-flex items-center gap-2xs font-mono text-ink-subtle">
+                <span className="tabular inline-flex items-center gap-2xs rounded-pill bg-beige px-sm py-[2px] text-[11px] text-ink-soft">
                   <MapPin className="h-3 w-3" strokeWidth={2} aria-hidden />
                   {row.bin_location}
                 </span>
@@ -912,7 +909,7 @@ function CellarRow({
           {!selectMode && (
             <span
               aria-hidden
-              className="mt-2xs flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-ink-subtle"
+              className="mt-2xs flex h-8 w-8 shrink-0 items-center justify-center rounded-pill text-grey"
             >
               <MoreVertical className="h-4 w-4" strokeWidth={2} />
             </span>
@@ -936,9 +933,9 @@ function DrinkWindowIndicator({
   const markerPct = getMarkerPosition(start, end);
   const label = formatStatusLabel(status, yearsLeft);
 
-  const tone: "warn" | "muted" | "ok" =
+  const tone: "info" | "muted" | "ok" =
     status === "drink_now" || status === "past_peak"
-      ? "warn"
+      ? "info"
       : status === "hold"
         ? "muted"
         : status === "optimal"
@@ -960,7 +957,7 @@ function DrinkWindowIndicator({
           style={{
             top: "-2px",
             left: `${markerPct}%`,
-            background: "var(--color-accent)",
+            background: "var(--color-primary)",
           }}
         />
       </span>
@@ -969,22 +966,28 @@ function DrinkWindowIndicator({
   );
 }
 
+/**
+ * Ledger Panel badge — DESIGN.md mapping: sage = healthy/in-window/ok,
+ * powder = informational (window closing/drink now), blush+primary = risk,
+ * amber = other warnings, neutral = routine stock count (no status signal).
+ */
 function Chip({
   tone,
   children,
 }: {
-  tone: "neutral" | "ok" | "warn" | "danger" | "muted";
+  tone: "neutral" | "ok" | "info" | "risk" | "warn" | "muted";
   children: React.ReactNode;
 }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-sm py-2xs text-[11px] font-medium",
-        tone === "ok" && "bg-success-soft text-success",
-        tone === "warn" && "bg-warning-soft text-warning",
-        tone === "danger" && "bg-warning-soft text-warning",
-        tone === "neutral" && "bg-accent-soft text-accent",
-        tone === "muted" && "bg-surface-muted text-ink-subtle",
+        "inline-flex items-center rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide",
+        tone === "ok" && "bg-sage-wash text-sage-ink",
+        tone === "info" && "bg-powder-wash text-powder-ink",
+        tone === "risk" && "bg-blush-wash text-primary",
+        tone === "warn" && "bg-amber-wash text-amber",
+        tone === "neutral" && "bg-beige text-ink-soft",
+        tone === "muted" && "bg-bridge-surface text-grey",
       )}
     >
       {children}

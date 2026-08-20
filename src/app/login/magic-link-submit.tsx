@@ -13,7 +13,7 @@ export function MagicLinkSubmit() {
       type="submit"
       disabled={pending}
       aria-disabled={pending}
-      className="flex h-[38px] items-center justify-center gap-xs rounded-sm bg-accent px-md text-[14px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-accent"
+      className="flex h-[42px] items-center justify-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
     >
       {pending ? (
         <>
@@ -37,7 +37,7 @@ export function ResetPasswordSubmit() {
       type="submit"
       disabled={pending}
       aria-disabled={pending}
-      className="flex h-[38px] items-center justify-center rounded-sm bg-accent px-md text-[14px] font-medium text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-accent"
+      className="flex h-[42px] items-center justify-center rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
     >
       {pending ? (
         <>
@@ -61,12 +61,12 @@ export function SetPasswordSubmit() {
       type="submit"
       disabled={pending}
       aria-disabled={pending}
-      className="flex h-[38px] items-center justify-center rounded-sm bg-accent px-md text-[14px] font-medium text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-accent"
+      className="flex h-[42px] items-center justify-center rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
     >
       {pending ? (
         <>
           <Loader2 className="mr-xs h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
-          Saving…        
+          Saving…
         </>
       ) : (
         "Save password"

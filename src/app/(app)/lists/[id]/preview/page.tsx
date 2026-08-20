@@ -84,8 +84,8 @@ export default async function WineListPreviewPage({
       </Link>
 
       {/* Preview badge */}
-      <div className="mb-lg rounded-sm border border-warning-soft bg-warning-soft/30 px-md py-sm print:hidden">
-        <p className="text-[13px] font-medium text-warning">
+      <div className="mb-lg rounded-md border border-amber-wash bg-amber-wash/30 px-md py-sm print:hidden">
+        <p className="text-[13px] font-medium text-amber">
           Preview mode
           {!list.is_published && " — this list is not yet published"}
         </p>
@@ -93,7 +93,7 @@ export default async function WineListPreviewPage({
           This is how guests will see the list.
           {" "}
           {list.is_published && (
-            <a href={`/list/${list.slug}`} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+            <a href={`/list/${list.slug}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
               Open live version
             </a>
           )}
@@ -101,18 +101,18 @@ export default async function WineListPreviewPage({
       </div>
 
       {/* Header */}
-      <header className="mb-2xl border-b border-border pb-xl">
-        <p className="text-[11px] uppercase tracking-[0.08em] text-ink-subtle">
+      <header className="mb-2xl border-b border-hairline pb-xl">
+        <p className="text-caption uppercase text-grey">
           {restaurantName}
         </p>
-        <h1 className="mt-sm font-serif text-[28px] text-ink">
+        <h1 className="mt-sm font-serif text-heading-sm text-ink">
           {list.name}
         </h1>
       </header>
 
       {/* Empty state */}
       {sections.length === 0 && (
-        <div className="my-3xl rounded-md border border-dashed border-border-strong bg-surface-muted px-lg py-2xl text-center">
+        <div className="my-3xl rounded-card border border-dashed border-beige-deep bg-bridge-surface px-lg py-2xl text-center">
           <p className="font-serif text-[18px] text-ink">
             Nothing to pour right now.
           </p>
@@ -141,18 +141,18 @@ export default async function WineListPreviewPage({
               return (
                 <div
                   key={item.id}
-                  className={`border-b border-border/50 py-sm last:border-b-0${isHidden ? " bg-warning-soft/10" : ""}`}
+                  className={`border-b border-hairline/50 py-sm last:border-b-0${isHidden ? " bg-amber-wash/10" : ""}`}
                 >
                   {/* BND-171: hidden item warning for editor */}
                   {isHidden && (
-                    <div className="mb-sm flex items-center gap-xs rounded-sm bg-warning-soft px-sm py-xs text-[11px] font-medium text-warning print:hidden">
+                    <div className="mb-sm flex items-center gap-xs rounded-pill bg-amber-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-amber print:hidden">
                       <EyeOff className="h-3 w-3" strokeWidth={2} />
                       Hidden from guests
                     </div>
                   )}
                   <div className="flex items-baseline justify-between gap-md">
                     <div className="min-w-0">
-                      <span className={`font-serif text-[15px]${isHidden ? " text-ink-muted line-through" : " text-ink"}`}>
+                      <span className={`font-serif text-[17px] font-medium${isHidden ? " text-ink-muted line-through" : " text-ink"}`}>
                         {wine.producer} {wine.name}
                       </span>
                       {wine.vintage && (
@@ -186,7 +186,7 @@ export default async function WineListPreviewPage({
                     </p>
                   )}
                   {item.tasting_note && (
-                    <p className="mt-xs font-serif text-[13px] italic text-ink-muted">
+                    <p className="mt-xs font-sans text-[13px] italic text-ink-muted">
                       {item.tasting_note}
                     </p>
                   )}
@@ -204,9 +204,9 @@ export default async function WineListPreviewPage({
       ))}
 
       {/* Footer */}
-      <footer className="mt-3xl border-t border-border pt-lg text-center print:hidden">
+      <footer className="mt-3xl border-t border-hairline pt-lg text-center print:hidden">
         <p className="text-[12px] text-ink-subtle">
-          Powered by <span className="font-serif font-medium text-accent">Terroir</span>
+          Powered by <span className="font-serif font-medium text-primary">Terroir</span>
         </p>
       </footer>
     </main>

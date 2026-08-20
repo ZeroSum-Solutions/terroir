@@ -9,22 +9,22 @@ export default function InsightsLoading() {
       </div>
       <div className="grid gap-md sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, i) => (
-          <div key={i} className="rounded-md border border-border bg-surface p-md">
+          <div key={i} className="rounded-lg border border-hairline bg-bridge-surface p-md">
             <Skeleton className="h-[12px] w-20 mb-sm" />
             <Skeleton className="h-[24px] w-16 mb-xs" />
             <Skeleton className="h-[12px] w-28" />
           </div>
         ))}
       </div>
-      <div className="rounded-md border border-border bg-surface p-lg">
+      <div className="rounded-card border border-hairline bg-white p-lg">
         <Skeleton className="h-[16px] w-36 mb-md" />
         <Skeleton className="h-[120px] w-full" />
       </div>
       {Array.from({ length: 2 }, (_, i) => (
-        <div key={i} className="rounded-md border border-border bg-surface p-lg">
+        <div key={i} className="rounded-card border border-hairline bg-white p-lg">
           <Skeleton className="h-[16px] w-40 mb-md" />
           {Array.from({ length: 5 }, (_, j) => (
-            <div key={j} className="flex justify-between py-sm border-b border-border/50">
+            <div key={j} className="flex justify-between py-sm border-b border-hairline/50">
               <Skeleton className="h-[13px] w-32" />
               <Skeleton className="h-[13px] w-16" />
             </div>

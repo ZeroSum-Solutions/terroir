@@ -159,13 +159,13 @@ export function EditMetadataModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="edit-metadata-heading"
-      className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[85dvh] flex-col rounded-t-lg bg-surface shadow-xl md:inset-0 md:m-auto md:h-fit md:max-h-[90dvh] md:w-[480px] md:rounded-lg"
+      className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[85dvh] flex-col rounded-t-lg bg-canvas md:inset-0 md:m-auto md:h-fit md:max-h-[90dvh] md:w-[480px] md:rounded-card md:border md:border-hairline"
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-md py-sm shrink-0">
+      <div className="flex items-center justify-between border-b border-hairline px-md py-sm shrink-0">
         <h2
           id="edit-metadata-heading"
-          className="text-[15px] font-semibold text-ink"
+          className="font-serif text-[17px] font-medium text-ink"
         >
           Edit wine
         </h2>
@@ -174,7 +174,7 @@ export function EditMetadataModal({
           onClick={onClose}
           aria-label="Close"
           disabled={busy}
-          className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted"
+          className="flex h-8 w-8 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
         >
           <X className="h-4 w-4" strokeWidth={2} aria-hidden />
         </button>
@@ -189,7 +189,7 @@ export function EditMetadataModal({
             type="text"
             value={producer}
             onChange={(e) => setProducer(e.target.value)}
-            className="h-[40px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+            className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -200,7 +200,7 @@ export function EditMetadataModal({
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-[40px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+            className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -214,7 +214,7 @@ export function EditMetadataModal({
             value={vintage}
             onChange={(e) => setVintage(e.target.value)}
             placeholder="e.g. 2020"
-            className="h-[40px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+            className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -226,7 +226,7 @@ export function EditMetadataModal({
             value={varietal}
             onChange={(e) => setVarietal(e.target.value)}
             placeholder="e.g. Cabernet Sauvignon"
-            className="h-[40px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+            className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -238,7 +238,7 @@ export function EditMetadataModal({
             value={region}
             onChange={(e) => setRegion(e.target.value)}
             placeholder="e.g. Napa Valley"
-            className="h-[40px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+            className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -250,16 +250,16 @@ export function EditMetadataModal({
             onChange={(e) => setTastingNotes(e.target.value)}
             placeholder="Enter free-form tasting notes..."
             rows={4}
-            className="w-full rounded-sm border border-border bg-white px-sm py-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft resize-y"
+            className="w-full rounded-md border border-hairline bg-white px-sm py-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash resize-y"
           />
         </Field>
 
         {/* BND-277 — drink-window override (#72) */}
-        <fieldset className="rounded-sm border border-border p-sm">
-          <legend className="text-[12px] font-medium text-ink-muted px-xs">
+        <fieldset className="rounded-lg border border-hairline p-sm">
+          <legend className="text-[12px] font-medium text-grey px-xs">
             Drink window (manual override)
           </legend>
-          <p className="text-[11px] text-ink-subtle mb-sm px-xs">
+          <p className="text-[11px] text-grey mb-sm px-xs">
             Setting any of these locks the drink window, preventing future
             enrichment from changing it.
           </p>
@@ -273,7 +273,7 @@ export function EditMetadataModal({
                 value={dwStart}
                 onChange={(e) => setDwStart(e.target.value)}
                 placeholder="e.g. 2025"
-                className="h-[40px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+                className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
               />
             </Field>
             <Field label="Peak year" htmlFor="edit-dw-peak">
@@ -285,7 +285,7 @@ export function EditMetadataModal({
                 value={dwPeak}
                 onChange={(e) => setDwPeak(e.target.value)}
                 placeholder="e.g. 2030"
-                className="h-[40px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+                className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
               />
             </Field>
             <Field label="End year" htmlFor="edit-dw-end">
@@ -297,7 +297,7 @@ export function EditMetadataModal({
                 value={dwEnd}
                 onChange={(e) => setDwEnd(e.target.value)}
                 placeholder="e.g. 2035"
-                className="h-[40px] w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+                className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
               />
             </Field>
           </div>
@@ -306,7 +306,7 @@ export function EditMetadataModal({
         {errorMsg && (
           <div
             role="alert"
-            className="rounded-sm border border-danger/30 bg-danger-soft px-md py-sm text-[13px] text-danger"
+            className="rounded-md border border-primary/30 bg-blush-wash px-md py-sm text-[13px] text-primary"
           >
             {errorMsg}
           </div>
@@ -314,12 +314,12 @@ export function EditMetadataModal({
       </div>
 
       {/* Footer */}
-      <div className="flex justify-end gap-sm border-t border-border px-md py-sm shrink-0">
+      <div className="flex justify-end gap-sm border-t border-hairline px-md py-sm shrink-0">
         <button
           type="button"
           onClick={onClose}
           disabled={busy}
-          className="flex h-[40px] items-center rounded-sm border border-border bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted disabled:opacity-60"
+          className="flex h-[40px] items-center rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
         >
           Cancel
         </button>
@@ -328,10 +328,10 @@ export function EditMetadataModal({
           onClick={handleSave}
           disabled={busy || !producer.trim() || !name.trim()}
           className={cn(
-            "flex h-[40px] items-center gap-sm rounded-sm px-md text-[13px] font-medium text-white transition-colors",
+            "flex h-[40px] items-center gap-sm rounded-pill px-md text-[13px] font-medium text-white transition-colors",
             dirty
-              ? "bg-accent hover:bg-accent-hover"
-              : "bg-accent/50",
+              ? "bg-primary hover:bg-primary-hover"
+              : "bg-primary/50",
             "disabled:opacity-40",
           )}
         >
@@ -356,7 +356,7 @@ function Field({
     <div className="flex flex-col gap-2xs">
       <label
         htmlFor={htmlFor}
-        className="text-[12px] font-medium text-ink-muted"
+        className="text-[12px] font-medium text-grey"
       >
         {label}
       </label>

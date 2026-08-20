@@ -20,7 +20,7 @@ interface MobileFieldProps {
 function MobileField({ label, span, children }: MobileFieldProps) {
   return (
     <div className={cn("flex flex-col gap-xs", span && "col-span-2")}>
-      <dt className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+      <dt className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
         {label}
       </dt>
       <dd>{children}</dd>
@@ -44,7 +44,7 @@ export function LineItemCard({
   onRemove,
 }: LineItemCardProps) {
   return (
-    <article className="rounded-md border border-border bg-white p-md">
+    <article className="rounded-lg border border-hairline bg-white p-md">
       <header className="mb-md flex items-start justify-between gap-sm">
         <div className="min-w-0 flex-1">
           <TextInput
@@ -52,7 +52,7 @@ export function LineItemCard({
             low={isLow(item, "name")}
             edited={isEdited(item, "name")}
             onCommit={(v) => onUpdate(item.id, "name", v)}
-            className="font-serif text-[18px] font-medium"
+            className="font-serif text-[17px] font-medium"
           />
           <div className="mt-2xs">
             <TextInput
@@ -69,7 +69,7 @@ export function LineItemCard({
           type="button"
           aria-label={`Remove ${item.name}`}
           onClick={() => onRemove(item.id)}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-ink-subtle hover:bg-surface-muted hover:text-danger"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface hover:text-primary"
         >
           <Trash2 className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
         </button>
@@ -118,8 +118,8 @@ export function LineItemCard({
         </MobileField>
       </dl>
 
-      <footer className="mt-md flex items-center justify-between border-t border-border pt-sm">
-        <span className="text-[12px] text-ink-muted">Line total</span>
+      <footer className="mt-md flex items-center justify-between border-t border-hairline pt-sm">
+        <span className="text-[12px] text-grey">Line total</span>
         <span className="font-mono text-[14px] font-medium text-ink tabular">
           ${formatMoney(item.qty * item.unitCost)}
         </span>

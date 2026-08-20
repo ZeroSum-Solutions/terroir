@@ -162,6 +162,7 @@ export function CellarShell({
   }, []);
 
   const alerts = useMemo(() => {
+    const totalBottles = rows.reduce((acc, r) => acc + r.sealed_count, 0);
     const openCount = rows.filter(
       (r) => r.open_remaining_ml !== null && r.open_remaining_ml > 0,
     ).length;
@@ -180,7 +181,7 @@ export function CellarShell({
       (r) => !r.is_eightysixed && isHolding(r.drink_window_start),
     ).length;
 
-    return { openCount, outCount, lowCount, drinkNowCount, holdCount };
+    return { totalBottles, openCount, outCount, lowCount, drinkNowCount, holdCount };
   }, [rows]);
 
   const FILTER_CHIPS: Array<{ id: CellarUrlFilter; label: string; count?: number }> = [
@@ -198,41 +199,97 @@ export function CellarShell({
 
   return (
     <section>
-      {/* Header */}
-      <header className="mb-md flex items-center gap-sm md:mb-lg">
-        <div className="min-w-0 flex-1">
-          <h1 className="font-serif text-[24px] text-ink md:text-[28px]">Cellar</h1>
-          <p className="mt-2xs text-[12px] text-ink-muted md:text-[13px]">
-            {restaurantName}
-            {cellarConfig && (
-              <>
-                {" "}
-                · {cellarConfig.rows} × {cellarConfig.columns} grid
-              </>
-            )}
+      {/* Dawn Hero */}
+      <div className="-mx-md -mt-lg dawn-gradient px-md pb-lg pt-lg md:-mx-lg md:-mt-xl md:px-lg md:pb-xl md:pt-xl">
+        <p className="text-caption font-medium uppercase text-grey">
+          {restaurantName} · Cellar
+        </p>
+        <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink md:text-heading">
+          A cellar beyond the <em className="italic font-normal text-primary">ordinary</em>
+        </h1>
+        {cellarConfig && (
+          <p className="mt-sm max-w-[480px] text-body-light font-light text-ink-soft">
+            {cellarConfig.rows} × {cellarConfig.columns} grid
           </p>
-        </div>
+        )}
 
-        <div className="hidden md:block">
-          <SearchInput
-            value={qDraft}
-            onChange={setQDraft}
-            inputRef={searchInputRef}
+        {/* Glass stat tiles — derived from data already on the page */}
+        <div className="mt-lg grid grid-cols-2 gap-xs md:grid-cols-4 md:gap-sm">
+          <StatTile label="Bottles on hand" value={alerts.totalBottles.toLocaleString()} />
+          <StatTile
+            label="Drink now"
+            value={alerts.drinkNowCount}
+            tone={alerts.drinkNowCount > 0 ? "warn" : undefined}
           />
+          <StatTile
+            label="Low stock"
+            value={alerts.lowCount}
+            tone={alerts.lowCount > 0 ? "warn" : undefined}
+          />
+          <StatTile label="86'd" value={alerts.outCount} />
         </div>
+      </div>
 
-        <div className="flex items-center gap-2xs">
+      {/* Bridge Band */}
+      <div className="-mx-md mb-md flex flex-wrap items-center gap-sm bg-beige px-md py-sm md:-mx-lg md:px-lg">
+        {view === "list" && (
+          <div
+            className="flex min-w-0 flex-1 gap-2xs overflow-x-auto pb-2xs md:flex-wrap md:pb-0"
+            role="tablist"
+            aria-label="Filter wines"
+          >
+            {FILTER_CHIPS.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                role="tab"
+                aria-selected={urlState.filter === c.id}
+                onClick={() => replaceUrlState({ filter: c.id })}
+                className={cn(
+                  "inline-flex h-[32px] shrink-0 items-center gap-xs rounded-pill border px-md text-[12.5px] font-medium transition-colors",
+                  urlState.filter === c.id
+                    ? "border-ink bg-ink text-beige"
+                    : "border-ink/25 bg-transparent text-ink hover:bg-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
+                )}
+              >
+                {c.label}
+                {c.count !== undefined && (
+                  <span
+                    className={cn(
+                      "tabular inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-pill px-xs text-[10px]",
+                      urlState.filter === c.id
+                        ? "bg-white/25 text-beige"
+                        : "bg-white/70 text-ink-soft",
+                    )}
+                  >
+                    {c.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="ml-auto flex shrink-0 items-center gap-xs">
+          <div className="hidden md:block">
+            <SearchInput
+              value={qDraft}
+              onChange={setQDraft}
+              inputRef={searchInputRef}
+            />
+          </div>
+
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
             aria-label="Search wines"
-            className="flex h-9 w-9 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft md:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-pill text-ink-soft hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 md:hidden"
           >
             <Search className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
 
           {cellarConfig && (
-            <div className="hidden items-center rounded-sm border border-border md:inline-flex">
+            <div className="hidden items-center overflow-hidden rounded-pill border border-ink/25 md:inline-flex">
               <ViewToggleButton
                 active={view === "list"}
                 onClick={() => setView("list")}
@@ -253,19 +310,30 @@ export function CellarShell({
               type="button"
               onClick={() => setSettingsOpen(true)}
               aria-label="Cellar settings"
-              className="flex h-9 w-9 items-center justify-center rounded-sm text-ink-muted hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+              className="flex h-9 w-9 items-center justify-center rounded-pill text-ink-soft hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
             >
               <Settings className="h-5 w-5" strokeWidth={2} aria-hidden />
             </button>
           )}
+
+          {view === "list" && canManage && reconcileItems.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setReconcileOpen(true)}
+              className="inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-pill bg-primary px-md text-[12.5px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+            >
+              Reconcile {reconcileItems.length} open bottle
+              {reconcileItems.length === 1 ? "" : "s"} →
+            </button>
+          )}
         </div>
-      </header>
+      </div>
 
       {/* Alerts banner */}
       {alerts.lowCount > 0 && view === "list" && (
         <div
           role="status"
-          className="mb-md flex items-center justify-between gap-md rounded-sm border border-warning/30 bg-warning-soft px-md py-sm text-[13px] text-warning"
+          className="mb-md flex items-center justify-between gap-md rounded-md border border-hairline bg-amber-wash px-md py-sm text-body-sm text-amber"
         >
           <span>
             {alerts.lowCount} wine{alerts.lowCount === 1 ? "" : "s"} low on stock
@@ -273,62 +341,11 @@ export function CellarShell({
           <button
             type="button"
             onClick={() => replaceUrlState({ filter: "low" })}
-            className="font-medium underline-offset-2 hover:underline"
+            className="inline-flex h-[26px] items-center rounded-pill border border-amber/30 px-sm text-[11.5px] font-medium text-amber hover:bg-white/50"
           >
             Show
           </button>
         </div>
-      )}
-
-      {/* Filter chips */}
-      {view === "list" && (
-        <div
-          className="mb-md flex gap-2xs overflow-x-auto pb-2xs md:flex-wrap"
-          role="tablist"
-          aria-label="Filter wines"
-        >
-          {FILTER_CHIPS.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              role="tab"
-              aria-selected={urlState.filter === c.id}
-              onClick={() => replaceUrlState({ filter: c.id })}
-              className={cn(
-                "inline-flex h-[32px] shrink-0 items-center gap-xs rounded-full border px-md text-[12px] font-medium transition-colors",
-                urlState.filter === c.id
-                  ? "border-accent bg-accent text-white"
-                  : "border-border bg-white text-ink-muted hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft",
-              )}
-            >
-              {c.label}
-              {c.count !== undefined && (
-                <span
-                  className={cn(
-                    "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-xs font-mono text-[10px]",
-                    urlState.filter === c.id
-                      ? "bg-white/25 text-white"
-                      : "bg-bg-tertiary text-ink-muted",
-                  )}
-                >
-                  {c.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Reconcile entry */}
-      {view === "list" && canManage && reconcileItems.length > 0 && (
-        <button
-          type="button"
-          onClick={() => setReconcileOpen(true)}
-          className="mb-md flex h-[40px] w-full items-center justify-center rounded-sm border border-border-strong bg-white text-[13px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft md:w-auto md:px-md"
-        >
-          Reconcile {reconcileItems.length} open bottle
-          {reconcileItems.length === 1 ? "" : "s"} →
-        </button>
       )}
 
       {/* Main view */}
@@ -374,9 +391,9 @@ export function CellarShell({
         <CellarSetup restaurantName={restaurantName} />
       )}
 
-      {/* Mobile search overlay */}
+      {/* Mobile search overlay — floating chrome, carries the glass recipe */}
       {searchOpen && (
-        <div className="fixed inset-x-0 top-14 z-30 border-b border-border bg-surface px-md py-sm shadow-md md:hidden">
+        <div className="glass fixed inset-x-0 top-14 z-30 px-md py-sm md:hidden">
           <div className="flex items-center gap-sm">
             <SearchInput
               value={qDraft}
@@ -388,7 +405,7 @@ export function CellarShell({
             <button
               type="button"
               onClick={() => setSearchOpen(false)}
-              className="h-[38px] rounded-sm px-sm text-[13px] font-medium text-ink-muted hover:bg-surface-muted"
+              className="h-[38px] rounded-pill px-sm text-[13px] font-medium text-ink-soft hover:bg-white/50"
             >
               Done
             </button>
@@ -433,6 +450,30 @@ export function CellarShell({
   );
 }
 
+function StatTile({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  tone?: "warn";
+}) {
+  return (
+    <div className="glass rounded-lg px-md py-sm">
+      <div className="text-caption font-medium uppercase text-grey">{label}</div>
+      <div
+        className={cn(
+          "mt-2xs font-serif text-[28px] font-normal leading-none md:text-[30px]",
+          tone === "warn" ? "text-primary" : "text-ink",
+        )}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
 function SearchInput({
   value,
   onChange,
@@ -449,9 +490,9 @@ function SearchInput({
   const [focused, setFocused] = useState(false);
   const showHint = !value && !focused;
   return (
-    <div className="relative w-full md:w-[320px]">
+    <div className="relative w-full md:w-[280px]">
       <Search
-        className="pointer-events-none absolute left-sm top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle"
+        className="pointer-events-none absolute left-sm top-1/2 h-4 w-4 -translate-y-1/2 text-grey"
         strokeWidth={2}
         aria-hidden
       />
@@ -475,7 +516,7 @@ function SearchInput({
         }}
         placeholder="Search name, producer, region…"
         autoFocus={autoFocus}
-        className="h-[38px] w-full rounded-sm border border-border bg-white pl-[32px] pr-[36px] text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+        className="h-[38px] w-full rounded-pill border border-ink/20 bg-white/70 pl-[32px] pr-[36px] text-[13px] text-ink outline-none placeholder:text-grey focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15"
       />
       {value ? (
         <button
@@ -485,7 +526,7 @@ function SearchInput({
             onChange("");
             inputRef.current?.focus();
           }}
-          className="absolute right-2xs top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-ink-subtle hover:bg-surface-muted hover:text-ink-muted focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent-soft"
+          className="absolute right-2xs top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-pill text-grey hover:bg-white/60 hover:text-ink-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-primary/20"
         >
           <X className="h-4 w-4" strokeWidth={2} aria-hidden />
         </button>
@@ -493,7 +534,7 @@ function SearchInput({
         showHint && (
           <kbd
             aria-hidden
-            className="pointer-events-none absolute right-sm top-1/2 hidden h-[20px] -translate-y-1/2 items-center rounded-sm border border-border bg-surface-muted px-2xs font-mono text-[11px] text-ink-subtle md:inline-flex"
+            className="pointer-events-none absolute right-sm top-1/2 hidden h-[20px] -translate-y-1/2 items-center rounded-md border border-hairline bg-white/60 px-2xs font-sans text-[11px] text-grey md:inline-flex"
           >
             /
           </kbd>
@@ -521,9 +562,9 @@ function ViewToggleButton({
       aria-pressed={active}
       aria-label={`${label} view`}
       className={cn(
-        "flex h-9 w-9 items-center justify-center text-ink-muted transition-colors",
-        active && "bg-accent-soft text-accent",
-        !active && "hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft",
+        "flex h-9 w-9 items-center justify-center text-ink-soft transition-colors",
+        active && "bg-ink text-beige",
+        !active && "hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
       )}
     >
       <Icon className="h-4 w-4" strokeWidth={2} aria-hidden />

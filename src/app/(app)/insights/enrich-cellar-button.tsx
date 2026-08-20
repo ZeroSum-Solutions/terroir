@@ -96,7 +96,7 @@ export function EnrichCellarButton() {
         onClick={onClick}
         disabled={busy}
         className={cn(
-          "inline-flex h-[40px] items-center gap-xs rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-bg-secondary disabled:opacity-60",
+          "inline-flex h-[40px] items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60",
           busy && "cursor-wait",
         )}
       >
@@ -109,13 +109,13 @@ export function EnrichCellarButton() {
       </button>
 
       {progress && (
-        <p className="text-[12px] text-ink-muted">
+        <p className="text-[12px] text-grey">
           {progress.enriched} wine{progress.enriched === 1 ? "" : "s"} enriched
           {progress.claudeEnriched > 0 && (
             <>
               {" "}
               ·{" "}
-              <span className="font-mono">{progress.claudeEnriched}</span> via
+              <span className="tabular">{progress.claudeEnriched}</span> via
               Claude AI
             </>
           )}
@@ -123,7 +123,7 @@ export function EnrichCellarButton() {
             <>
               {" "}
               ·{" "}
-              <span className="font-mono">{progress.lwinMatched}</span> LWIN
+              <span className="tabular">{progress.lwinMatched}</span> LWIN
               matched
             </>
           )}
@@ -131,7 +131,7 @@ export function EnrichCellarButton() {
       )}
 
       {errorMsg && (
-        <p role="alert" className="text-[12px] text-error">
+        <p role="alert" className="text-[12px] text-primary">
           {errorMsg}
         </p>
       )}

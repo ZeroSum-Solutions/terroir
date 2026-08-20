@@ -59,14 +59,14 @@ export function BinForm({
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="h-11 rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted disabled:opacity-50"
+          className="h-11 rounded-pill border border-beige-deep bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={busy}
-          className="flex h-11 items-center gap-xs rounded-sm bg-accent px-md text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+          className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-50"
         >
           {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
           {submitLabel}
@@ -78,7 +78,7 @@ export function BinForm({
 
 function BinFields({ draft, onChange }: { draft: BinDraft; onChange: (draft: BinDraft) => void }) {
   const set = (field: keyof BinDraft, value: string) => onChange({ ...draft, [field]: value });
-  const common = "h-11 w-full rounded-sm border border-border bg-white px-sm text-[14px] text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/15";
+  const common = "h-11 w-full rounded-pill border border-hairline bg-white px-md text-[14px] text-ink outline-none focus:border-primary focus:ring-2 focus:ring-blush-wash";
   return <>
     <Field label="Code"><input required maxLength={50} value={draft.code} onChange={(event) => set("code", event.target.value)} className={`${common} font-mono`} /></Field>
     <Field label="Zone"><input maxLength={100} value={draft.zone} onChange={(event) => set("zone", event.target.value)} className={common} /></Field>
@@ -89,7 +89,7 @@ function BinFields({ draft, onChange }: { draft: BinDraft; onChange: (draft: Bin
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="grid gap-xs text-[12px] font-semibold text-ink-muted">
+    <label className="grid gap-xs text-caption font-medium uppercase text-grey">
       {label}
       {children}
     </label>

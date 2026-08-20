@@ -51,21 +51,21 @@ export default function AuthCompletePage() {
   }, [router]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-lg">
+    <main className="flex min-h-screen items-center justify-center bg-canvas px-lg">
       <div className="text-center">
         {error ? (
           <>
-            <h1 className="font-serif text-[22px] text-ink">Sign-in failed</h1>
-            <p className="mt-sm text-[14px] text-danger">{error}</p>
+            <h1 className="font-serif text-heading-sm text-ink">Sign-in failed</h1>
+            <p className="mt-sm text-[14px] text-primary">{error}</p>
             <a
               href="/login"
-              className="mt-md inline-block rounded-sm bg-accent px-md py-sm text-[14px] font-medium text-white hover:bg-accent-hover"
+              className="mt-md inline-block rounded-pill bg-primary px-md py-sm text-[14px] font-medium text-white hover:bg-primary-hover"
             >
               Back to sign in
             </a>
           </>
         ) : (
-          <p className="text-[14px] text-ink-muted">Signing you in…</p>
+          <p className="text-[14px] font-light text-grey">Signing you in…</p>
         )}
       </div>
     </main>

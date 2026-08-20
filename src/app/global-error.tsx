@@ -32,8 +32,8 @@ export default function GlobalError({
         style={{
           margin: 0,
           minHeight: "100vh",
-          background: "#FAFAF8",
-          color: "#1A1A1A",
+          background: "#faf7f2",
+          color: "#191919",
           fontFamily:
             'Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
           display: "flex",
@@ -59,7 +59,7 @@ export default function GlobalError({
             style={{
               fontSize: "15px",
               lineHeight: 1.5,
-              color: "#6B6B6B",
+              color: "#707070",
               margin: "0 0 24px",
             }}
           >
@@ -70,9 +70,9 @@ export default function GlobalError({
             <p
               style={{
                 fontSize: "11px",
-                letterSpacing: "0.06em",
+                letterSpacing: "0.18em",
                 textTransform: "uppercase",
-                color: "#9A958C",
+                color: "#707070",
                 fontFamily:
                   '"JetBrains Mono", ui-monospace, SFMono-Regular, monospace',
                 margin: "0 0 24px",
@@ -91,10 +91,10 @@ export default function GlobalError({
             href="/"
             style={{
               display: "inline-block",
-              background: "#722F37",
+              background: "#722f37",
               color: "white",
-              padding: "10px 18px",
-              borderRadius: "4px",
+              padding: "12px 24px",
+              borderRadius: "999px",
               fontSize: "14px",
               fontWeight: 500,
               textDecoration: "none",

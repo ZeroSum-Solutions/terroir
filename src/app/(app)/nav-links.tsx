@@ -51,10 +51,10 @@ export function DesktopNavLinks({ role }: { role: Role }) {
             href={href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "rounded-sm px-md py-sm text-[14px] font-medium transition-colors",
+              "py-sm text-[13px] font-normal underline-offset-4 transition-colors",
               active
-                ? "bg-surface-muted text-ink"
-                : "text-ink-muted hover:bg-surface-muted hover:text-ink",
+                ? "text-primary underline decoration-1"
+                : "text-ink-soft no-underline hover:text-primary",
             )}
           >
             {label}
@@ -86,12 +86,12 @@ export function MobileNavLinks({ role }: { role: Role }) {
             className={cn(
               "flex min-h-[64px] flex-1 flex-col items-center justify-center gap-xs px-2xs py-sm text-[11px] font-medium transition-colors",
               active
-                ? "border-t-2 border-accent bg-surface-muted text-accent"
-                : "border-t-2 border-transparent text-ink-muted active:bg-surface-muted",
+                ? "border-t-2 border-primary text-primary"
+                : "border-t-2 border-transparent text-grey active:bg-bridge-surface",
             )}
           >
             <Icon
-              className={cn("h-5 w-5", active && "text-accent")}
+              className={cn("h-5 w-5", active && "text-primary")}
               strokeWidth={active ? 2 : 1.75}
               aria-hidden
             />

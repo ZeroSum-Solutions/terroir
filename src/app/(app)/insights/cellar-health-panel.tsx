@@ -24,37 +24,37 @@ export function CellarHealthPanel({
         <div>
           <h2
             id="cellar-health-heading"
-            className="text-[10px] font-semibold uppercase tracking-[0.08em] text-accent"
+            className="text-caption font-medium uppercase text-grey"
           >
             Cellar health
           </h2>
-          <p className="mt-2xs text-[12px] text-ink-muted">
+          <p className="mt-2xs text-[12px] text-grey">
             Stock value and wine count by segment
           </p>
         </div>
         {canRecompute && <RecomputeCellarHealthButton />}
       </div>
-      <div className="grid gap-xs rounded-md border border-border bg-surface p-md md:grid-cols-5">
+      <div className="grid gap-xs rounded-card border border-hairline bg-white p-md md:grid-cols-5">
         {summary.map((item) => {
           const href = `/cellar?health=${item.segment}`;
           return (
-            <div key={item.segment} className="rounded-sm bg-white p-sm">
+            <div key={item.segment} className="rounded-lg border border-hairline bg-bridge-surface p-sm">
               <h3 className="text-[12px] font-medium text-ink">{LABELS[item.segment]}</h3>
               <div className="mt-xs grid grid-cols-2 gap-xs">
                 <div data-metric={`cellar-health-${item.segment}-value`}>
-                  <Link href={href} className="block rounded-sm hover:bg-surface-muted">
-                    <span className="block font-mono text-[18px] text-ink">
+                  <Link href={href} className="block rounded-sm hover:bg-beige">
+                    <span className="block font-serif text-[18px] font-normal text-ink">
                       {formatMoney(item.value)}
                     </span>
-                    <span className="text-[10px] uppercase tracking-[0.06em] text-ink-subtle">
+                    <span className="text-[10px] uppercase tracking-[0.06em] text-grey">
                       value
                     </span>
                   </Link>
                 </div>
                 <div data-metric={`cellar-health-${item.segment}-count`}>
-                  <Link href={href} className="block rounded-sm hover:bg-surface-muted">
-                    <span className="block font-mono text-[18px] text-ink">{item.count}</span>
-                    <span className="text-[10px] uppercase tracking-[0.06em] text-ink-subtle">
+                  <Link href={href} className="block rounded-sm hover:bg-beige">
+                    <span className="block font-serif text-[18px] font-normal text-ink">{item.count}</span>
+                    <span className="text-[10px] uppercase tracking-[0.06em] text-grey">
                       wines
                     </span>
                   </Link>

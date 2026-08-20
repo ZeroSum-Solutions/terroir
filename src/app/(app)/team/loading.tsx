@@ -7,9 +7,9 @@ export default function TeamLoading() {
         <Skeleton className="h-[28px] w-24 mb-xs" />
         <Skeleton className="h-[15px] w-40" />
       </header>
-      <div className="rounded-md border border-border bg-white">
+      <div className="rounded-card border border-hairline bg-white">
         {Array.from({ length: 3 }, (_, i) => (
-          <div key={i} className="flex items-center justify-between border-b border-border px-md py-md last:border-b-0">
+          <div key={i} className="flex items-center justify-between border-b border-hairline px-md py-md last:border-b-0">
             <div className="flex items-center gap-md">
               <Skeleton className="h-10 w-10 rounded-full" />
               <div className="space-y-xs">

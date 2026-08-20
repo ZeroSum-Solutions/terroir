@@ -71,17 +71,15 @@ function ToastContainer({ items }: { items: ToastItem[] }) {
               key={t.id}
               role="alert"
               className={cn(
-                "flex items-center gap-sm rounded-md px-md py-sm text-[14px] shadow-lg",
+                "glass flex items-center gap-sm rounded-lg px-md py-sm text-[14px] text-ink",
                 "animate-[toast-in_0.2s ease-out]",
-                t.tone === "success" && "bg-surface-inverse text-white",
-                t.tone === "error" && "bg-danger text-white",
               )}
             >
               {t.tone === "success" && (
-                <Check className="h-4 w-4 text-success shrink-0" strokeWidth={2.25} />
+                <Check className="h-4 w-4 text-sage-ink shrink-0" strokeWidth={2.25} />
               )}
               {t.tone === "error" && (
-                <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+                <AlertTriangle className="h-4 w-4 text-primary shrink-0" strokeWidth={2.25} />
               )}
               <span className="flex-1">{t.text}</span>
             </div>

@@ -304,20 +304,20 @@ export default function ScanBottlePage() {
             <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
               Scan Bottle
             </h1>
-            <p className="mt-xs text-[14px] text-ink-muted md:text-[15px]">
+            <p className="mt-xs text-[14px] text-grey md:text-[15px]">
               Scan a bottle&rsquo;s QR code to look up its wine.
             </p>
           </div>
           {showSessionBadge && phase !== "summary" && (
             <div className="flex items-center gap-sm">
-              <span className="inline-flex items-center gap-xs rounded-pill bg-accent px-sm py-xs text-[13px] font-semibold text-white">
+              <span className="inline-flex items-center gap-xs rounded-pill bg-beige px-sm py-xs text-[13px] font-medium text-ink-soft">
                 <List className="h-3.5 w-3.5" strokeWidth={2.5} />
                 {session.length} scanned
               </span>
               <button
                 type="button"
                 onClick={handleEndSession}
-                className="flex h-[36px] items-center gap-xs rounded-sm border border-border-strong bg-white px-sm text-[12px] font-medium text-ink hover:bg-surface-muted transition-colors"
+                className="flex h-[36px] items-center gap-xs rounded-pill border border-ink/25 bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface transition-colors"
               >
                 End session
               </button>
@@ -329,33 +329,33 @@ export default function ScanBottlePage() {
       {/* BND-112: Summary view showing all scanned bottles */}
       {phase === "summary" && (
         <div className="space-y-md">
-          <div className="rounded-md border border-border bg-white p-md md:p-lg">
+          <div className="rounded-card border border-hairline bg-white p-md md:p-lg">
             <h2 className="font-serif text-[18px] text-ink">Session summary</h2>
-            <p className="mt-xs text-[13px] text-ink-muted">
+            <p className="mt-xs text-[13px] text-grey">
               {session.length} bottle{session.length !== 1 ? "s" : ""} scanned
               in this session.
             </p>
           </div>
 
           {session.length > 0 ? (
-            <ul className="divide-y divide-border rounded-md border border-border bg-white">
+            <ul className="divide-y divide-hairline rounded-card border border-hairline bg-white">
               {session.map((scan, i) => (
                 <li key={i} className="px-md py-md">
                   <div className="flex items-start justify-between gap-sm">
                     <div className="min-w-0">
-                      <p className="font-serif text-[15px] font-medium text-ink truncate">
+                      <p className="font-serif text-[17px] font-medium text-ink truncate">
                         {scan.wine.producer}
                       </p>
-                      <p className="text-[14px] text-ink-muted truncate">
+                      <p className="text-[14px] text-grey truncate">
                         {scan.wine.name}
                         {scan.wine.vintage ? " (" + scan.wine.vintage + ")" : ""}
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-pill bg-surface-muted px-sm py-2xs text-[11px] font-medium text-ink-subtle tabular">
+                    <span className="shrink-0 rounded-pill bg-bridge-surface px-sm py-2xs text-[11px] font-medium text-grey tabular">
                       #{i + 1}
                     </span>
                   </div>
-                  <p className="mt-xs inline-flex items-center gap-xs text-[12px] text-ink-subtle">
+                  <p className="mt-xs inline-flex items-center gap-xs text-[12px] text-grey">
                     <MapPin className="h-3 w-3" strokeWidth={2} />
                     {scan.section}{" "}
                     <span aria-hidden>&middot;</span>{" "}
@@ -365,8 +365,8 @@ export default function ScanBottlePage() {
               ))}
             </ul>
           ) : (
-            <div className="flex flex-col items-center gap-md rounded-md border border-border bg-white px-lg py-2xl text-center">
-              <p className="text-[14px] text-ink-muted">
+            <div className="flex flex-col items-center gap-md rounded-card border border-hairline bg-white px-lg py-2xl text-center">
+              <p className="text-[14px] text-grey">
                 No bottles were scanned in this session.
               </p>
             </div>
@@ -375,7 +375,7 @@ export default function ScanBottlePage() {
           <button
             type="button"
             onClick={handleNewSession}
-            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover"
+            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover"
           >
             <Camera className="h-4 w-4" strokeWidth={2} />
             Start new session
@@ -385,7 +385,7 @@ export default function ScanBottlePage() {
 
       {phase === "scanning" && (
         <div className="space-y-md">
-          <div className="relative overflow-hidden rounded-md border-2 border-border bg-surface-inverse">
+          <div className="relative overflow-hidden rounded-card border-2 border-hairline bg-ink">
             <div className="relative pb-[75%]">
               <video
                 ref={videoRef}
@@ -395,11 +395,11 @@ export default function ScanBottlePage() {
                 className="absolute inset-0 h-full w-full object-cover"
               />
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="h-48 w-48 rounded-md border-2 border-accent/60 md:h-56 md:w-56" />
+                <div className="h-48 w-48 rounded-lg border-2 border-primary/60 md:h-56 md:w-56" />
               </div>
             </div>
             <div className="absolute bottom-md left-1/2 -translate-x-1/2">
-              <span className="inline-flex items-center gap-sm rounded-sm bg-surface-inverse/80 px-md py-sm text-[13px] font-medium text-white backdrop-blur-sm">
+              <span className="inline-flex items-center gap-sm rounded-pill bg-ink/80 px-md py-sm text-[13px] font-medium text-white backdrop-blur-sm">
                 <ScanLine className="h-4 w-4 animate-pulse" strokeWidth={2} />
                 Point camera at QR code
               </span>
@@ -411,7 +411,7 @@ export default function ScanBottlePage() {
               setPhase("manual");
               setError(null);
             }}
-            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
+            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
           >
             <Keyboard className="h-4 w-4" strokeWidth={2} />
             Enter code manually
@@ -421,22 +421,22 @@ export default function ScanBottlePage() {
 
       {phase === "no-camera" && (
         <div className="space-y-md">
-          <div className="flex flex-col items-center gap-md rounded-md border border-border bg-white px-lg py-2xl text-center">
-            <div className="rounded-full bg-surface-muted p-lg">
-              <Camera className="h-8 w-8 text-ink-subtle" strokeWidth={1.5} />
+          <div className="flex flex-col items-center gap-md rounded-card border border-hairline bg-white px-lg py-2xl text-center">
+            <div className="rounded-full bg-bridge-surface p-lg">
+              <Camera className="h-8 w-8 text-grey" strokeWidth={1.5} />
             </div>
             <div>
               <p className="text-[15px] font-medium text-ink">
                 Camera not available
               </p>
-              <p className="mt-xs text-[13px] text-ink-muted">
+              <p className="mt-xs text-[13px] text-grey">
                 Enter the bottle&rsquo;s wine code manually.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setPhase("manual")}
-              className="flex h-[44px] items-center justify-center gap-sm rounded-sm bg-accent px-lg text-[14px] font-medium text-white hover:bg-accent-hover"
+              className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary px-lg text-[14px] font-medium text-white hover:bg-primary-hover"
             >
               <Keyboard className="h-4 w-4" strokeWidth={2} />
               Enter code
@@ -448,10 +448,10 @@ export default function ScanBottlePage() {
       {phase === "manual" && (
         <div className="space-y-md">
           <form onSubmit={handleManualSubmit} className="space-y-md">
-            <div className="rounded-md border border-border bg-white p-md md:p-lg">
+            <div className="rounded-card border border-hairline bg-white p-md md:p-lg">
               <label
                 htmlFor="manual-code"
-                className="mb-xs block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle"
+                className="mb-xs block text-caption font-medium uppercase tracking-[0.18em] text-grey"
               >
                 Wine ID or QR code
               </label>
@@ -464,16 +464,16 @@ export default function ScanBottlePage() {
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
                 placeholder="Enter the code from the bottle label"
-                className="w-full rounded-sm border border-border bg-white px-md py-sm font-mono text-[14px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
+                className="w-full rounded-pill border border-hairline bg-white px-md py-sm font-mono text-[14px] text-ink placeholder:text-grey focus:border-primary focus:outline-none focus:ring-2 focus:ring-blush-wash"
               />
-              <p className="mt-xs text-[12px] text-ink-subtle">
+              <p className="mt-xs text-[12px] text-grey">
                 The code is printed below the QR code on the bottle label.
               </p>
             </div>
             <button
               type="submit"
               disabled={!manualCode.trim()}
-              className="flex h-[44px] w-full items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+              className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-50"
             >
               <Search className="h-4 w-4" strokeWidth={2} />
               Look up wine
@@ -485,7 +485,7 @@ export default function ScanBottlePage() {
               setPhase("scanning");
               setError(null);
             }}
-            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
+            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
           >
             <Camera className="h-4 w-4" strokeWidth={2} />
             Use camera instead
@@ -495,12 +495,12 @@ export default function ScanBottlePage() {
 
       {phase === "matched" && wine && (
         <div className="space-y-md">
-          <div className="rounded-md border border-border bg-white p-md md:p-lg">
+          <div className="rounded-card border border-hairline bg-white p-md md:p-lg">
             <div className="mb-md flex items-start justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              <span className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
                 Matched wine
               </span>
-              <span className="rounded-pill bg-success-soft px-sm py-2xs text-[12px] font-medium text-success">
+              <span className="rounded-pill bg-sage-wash px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide text-sage-ink">
                 Match found
               </span>
             </div>
@@ -513,25 +513,25 @@ export default function ScanBottlePage() {
             <dl className="mt-md grid grid-cols-2 gap-x-md gap-y-sm text-[13px]">
               {wine.vintage && (
                 <>
-                  <dt className="text-ink-subtle">Vintage</dt>
+                  <dt className="text-grey">Vintage</dt>
                   <dd className="tabular text-ink">{wine.vintage}</dd>
                 </>
               )}
               {wine.varietal && (
                 <>
-                  <dt className="text-ink-subtle">Varietal</dt>
+                  <dt className="text-grey">Varietal</dt>
                   <dd className="text-ink">{wine.varietal}</dd>
                 </>
               )}
               {wine.region && (
                 <>
-                  <dt className="text-ink-subtle">Region</dt>
+                  <dt className="text-grey">Region</dt>
                   <dd className="text-ink">{wine.region}</dd>
                 </>
               )}
               {wine.country && (
                 <>
-                  <dt className="text-ink-subtle">Country</dt>
+                  <dt className="text-grey">Country</dt>
                   <dd className="text-ink">{wine.country}</dd>
                 </>
               )}
@@ -545,7 +545,7 @@ export default function ScanBottlePage() {
                 setSearchQuery("");
                 setSearchResults([]);
               }}
-              className="flex h-[44px] items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
+              className="flex h-[44px] items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
             >
               <X className="h-4 w-4" strokeWidth={2} />
               Correct
@@ -557,7 +557,7 @@ export default function ScanBottlePage() {
                 setSection("");
                 setBinLocation("");
               }}
-              className="flex h-[44px] items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover"
+              className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover"
             >
               <Check className="h-4 w-4" strokeWidth={2} />
               Confirm
@@ -568,10 +568,10 @@ export default function ScanBottlePage() {
 
       {phase === "correcting" && (
         <div className="space-y-md">
-          <div className="rounded-md border border-border bg-white p-md md:p-lg">
+          <div className="rounded-card border border-hairline bg-white p-md md:p-lg">
             <label
               htmlFor="correct-search"
-              className="mb-xs block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle"
+              className="mb-xs block text-caption font-medium uppercase tracking-[0.18em] text-grey"
             >
               Search for the correct wine
             </label>
@@ -584,33 +584,33 @@ export default function ScanBottlePage() {
               value={searchQuery}
               onChange={(e) => handleCorrectSearch(e.target.value)}
               placeholder="Search by producer, name, or vintage..."
-              className="w-full rounded-sm border border-border bg-white px-md py-sm text-[14px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
+              className="w-full rounded-pill border border-hairline bg-white px-md py-sm text-[14px] text-ink placeholder:text-grey focus:border-primary focus:outline-none focus:ring-2 focus:ring-blush-wash"
             />
           </div>
 
           {searching && (
-            <p className="px-md text-[13px] text-ink-muted">Searching...</p>
+            <p className="px-md text-[13px] text-grey">Searching...</p>
           )}
 
           {!searching && searchResults.length > 0 && (
-            <ul className="divide-y divide-border rounded-md border border-border bg-white">
+            <ul className="divide-y divide-hairline rounded-card border border-hairline bg-white">
               {searchResults.map((w) => (
                 <li key={w.id}>
                   <button
                     type="button"
                     onClick={() => handleCorrectSelect(w)}
-                    className="flex w-full items-start gap-md px-md py-md text-left hover:bg-surface-muted"
+                    className="flex w-full items-start gap-md px-md py-md text-left hover:bg-bridge-surface"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-serif text-[15px] font-medium text-ink">
+                      <p className="truncate font-serif text-[17px] font-medium text-ink">
                         {w.producer}
                       </p>
-                      <p className="truncate text-[14px] text-ink-muted">
+                      <p className="truncate text-[14px] text-grey">
                         {w.name}
                         {w.vintage ? ", " + w.vintage : ""}
                       </p>
                     </div>
-                    <span className="mt-0.5 shrink-0 text-[11px] text-ink-subtle">
+                    <span className="mt-0.5 shrink-0 text-[11px] text-grey">
                       {w.varietal}
                       {w.varietal && w.region ? " . " : ""}
                       {w.region}
@@ -624,7 +624,7 @@ export default function ScanBottlePage() {
           {!searching &&
             searchQuery.length >= 2 &&
             searchResults.length === 0 && (
-              <p className="px-md text-[13px] text-ink-muted">
+              <p className="px-md text-[13px] text-grey">
                 No wines found for &ldquo;
                 {searchQuery}
                 &rdquo;.
@@ -634,7 +634,7 @@ export default function ScanBottlePage() {
           <button
             type="button"
             onClick={() => setPhase("matched")}
-            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
+            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
           >
             <X className="h-4 w-4" strokeWidth={2} />
             Cancel
@@ -644,12 +644,12 @@ export default function ScanBottlePage() {
 
       {phase === "location" && wine && (
         <div className="space-y-md">
-          <div className="rounded-md border border-border bg-white p-md md:p-lg">
+          <div className="rounded-card border border-hairline bg-white p-md md:p-lg">
             <div className="mb-md flex items-start justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              <span className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
                 Bottle location
               </span>
-              <span className="rounded-pill bg-accent-soft px-sm py-2xs text-[12px] font-medium text-accent">
+              <span className="rounded-pill bg-beige px-sm py-2xs text-[12px] font-medium text-ink-soft">
                 {wine.producer} {wine.name}
                 {wine.vintage ? " " + wine.vintage : ""}
               </span>
@@ -670,7 +670,7 @@ export default function ScanBottlePage() {
                   value={section}
                   onChange={(e) => setSection(e.target.value)}
                   placeholder='e.g. "Red Room", "Main Cellar"'
-                  className="w-full rounded-sm border border-border bg-white px-md py-sm text-[14px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
+                  className="w-full rounded-pill border border-hairline bg-white px-md py-sm text-[14px] text-ink placeholder:text-grey focus:border-primary focus:outline-none focus:ring-2 focus:ring-blush-wash"
                 />
               </div>
               <div>
@@ -687,14 +687,14 @@ export default function ScanBottlePage() {
                   value={binLocation}
                   onChange={(e) => setBinLocation(e.target.value)}
                   placeholder='e.g. "A-12", "Shelf 3, Row 5"'
-                  className="w-full rounded-sm border border-border bg-white px-md py-sm text-[14px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
+                  className="w-full rounded-pill border border-hairline bg-white px-md py-sm text-[14px] text-ink placeholder:text-grey focus:border-primary focus:outline-none focus:ring-2 focus:ring-blush-wash"
                 />
               </div>
               <div className="grid grid-cols-2 gap-sm">
                 <button
                   type="button"
                   onClick={() => setPhase("matched")}
-                  className="flex h-[44px] items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
+                  className="flex h-[44px] items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
                 >
                   <X className="h-4 w-4" strokeWidth={2} />
                   Back
@@ -702,7 +702,7 @@ export default function ScanBottlePage() {
                 <button
                   type="submit"
                   disabled={!section.trim() || !binLocation.trim() || confirming}
-                  className="flex h-[44px] items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                  className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-50"
                 >
                   <Check className="h-4 w-4" strokeWidth={2} />
                   {confirming ? "Saving..." : "Save location"}
@@ -715,21 +715,20 @@ export default function ScanBottlePage() {
 
       {phase === "confirmed" && wine && (
         <div className="space-y-md">
-          <div className="flex flex-col items-center gap-lg rounded-md border border-success/30 bg-success-soft/40 px-lg py-2xl text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-success">
+          <div className="flex flex-col items-center gap-lg rounded-card border border-hairline bg-sage-wash/40 px-lg py-2xl text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-sage-ink">
               <Check className="h-7 w-7 text-white" strokeWidth={2.5} />
             </div>
             <div>
               <p className="text-[17px] font-medium text-ink">
                 Bottle confirmed
               </p>
-              <p className="mt-xs text-[14px] text-ink-muted">
-                <span className="font-serif">{wine.producer}</span>{" "}
-                {wine.name}
+              <p className="mt-xs font-serif text-[17px] font-medium text-ink">
+                {wine.producer} {wine.name}
                 {wine.vintage ? " (" + wine.vintage + ")" : ""}
               </p>
               {(section || binLocation) && (
-                <p className="mt-sm inline-flex items-center gap-xs text-[12px] text-ink-subtle">
+                <p className="mt-sm inline-flex items-center gap-xs text-[12px] text-grey">
                   <MapPin className="h-3 w-3" strokeWidth={2} />
                   {section && <span>{section}</span>}
                   {section && binLocation && <span>&middot;</span>}
@@ -741,7 +740,7 @@ export default function ScanBottlePage() {
               <button
                 type="button"
                 onClick={handleScanAgain}
-                className="flex h-[44px] items-center justify-center gap-sm rounded-sm bg-accent px-xl text-[14px] font-medium text-white hover:bg-accent-hover"
+                className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary px-xl text-[14px] font-medium text-white hover:bg-primary-hover"
               >
                 <Camera className="h-4 w-4" strokeWidth={2} />
                 Scan another bottle
@@ -750,7 +749,7 @@ export default function ScanBottlePage() {
                 <button
                   type="button"
                   onClick={handleEndSession}
-                  className="flex h-[44px] items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
+                  className="flex h-[44px] items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
                 >
                   <List className="h-4 w-4" strokeWidth={2} />
                   End session ({session.length} scanned)
@@ -763,10 +762,10 @@ export default function ScanBottlePage() {
 
       {phase === "error" && (
         <div className="space-y-md">
-          <div className="flex flex-col items-center gap-md rounded-md border border-danger/20 bg-white px-lg py-2xl text-center">
-            <div className="rounded-full bg-surface-muted p-lg">
+          <div className="flex flex-col items-center gap-md rounded-card border border-hairline bg-white px-lg py-2xl text-center">
+            <div className="rounded-full bg-primary p-lg">
               <AlertTriangle
-                className="h-8 w-8 text-danger"
+                className="h-8 w-8 text-white"
                 strokeWidth={1.5}
               />
             </div>
@@ -774,9 +773,9 @@ export default function ScanBottlePage() {
               <p className="text-[15px] font-medium text-ink">
                 Lookup failed
               </p>
-              <p className="mt-xs text-[13px] text-ink-muted">{error}</p>
+              <p className="mt-xs text-[13px] text-grey">{error}</p>
               {payload && (
-                <p className="mt-sm font-mono text-[12px] text-ink-subtle">
+                <p className="mt-sm font-mono text-[12px] text-grey">
                   Code: {payload}
                 </p>
               )}
@@ -785,7 +784,7 @@ export default function ScanBottlePage() {
               <button
                 type="button"
                 onClick={handleScanAgain}
-                className="flex h-[44px] w-full items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover"
+                className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover"
               >
                 <Camera className="h-4 w-4" strokeWidth={2} />
                 Try again
@@ -797,7 +796,7 @@ export default function ScanBottlePage() {
                     setPhase("manual");
                     setError(null);
                   }}
-                  className="flex h-[44px] w-full items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted"
+                  className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
                 >
                   <Keyboard className="h-4 w-4" strokeWidth={2} />
                   Enter code manually

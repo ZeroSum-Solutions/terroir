@@ -12,7 +12,7 @@ export function formatMoney(n: number) {
 }
 
 const FIELD_WRAP =
-  "relative flex w-full items-center rounded-sm border border-transparent bg-transparent px-sm py-xs transition-colors focus-within:border-accent focus-within:bg-white focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)] hover:border-border hover:bg-white";
+  "relative flex w-full items-center rounded-sm border border-transparent bg-transparent px-sm py-xs transition-colors focus-within:border-primary focus-within:bg-white focus-within:shadow-[0_0_0_3px_var(--color-blush-wash)] hover:border-hairline hover:bg-white";
 
 interface FieldWrapProps {
   low?: boolean;
@@ -25,14 +25,14 @@ export function FieldWrap({ low, edited, children }: FieldWrapProps) {
     <div
       className={cn(
         FIELD_WRAP,
-        low && "border-l-[3px] border-l-warning bg-warning-soft/60",
-        edited && !low && "bg-success-soft/40",
+        low && "border-l-[3px] border-l-primary bg-blush-wash/60",
+        edited && !low && "bg-sage-wash/40",
       )}
     >
       {children}
       {low && (
         <AlertTriangle
-          className="ml-xs h-4 w-4 shrink-0 text-warning"
+          className="ml-xs h-4 w-4 shrink-0 text-primary"
           strokeWidth={2}
           aria-label="Needs review"
         />
@@ -165,7 +165,7 @@ interface QtyStepperProps {
 
 export function QtyStepper({ value, onChange }: QtyStepperProps) {
   return (
-    <div className="inline-flex items-center rounded-sm border border-border bg-white">
+    <div className="inline-flex items-center overflow-hidden rounded-pill border border-hairline bg-white">
       <button
         type="button"
         aria-label="Decrease quantity"
@@ -199,7 +199,7 @@ export function Th({ children, className }: ThProps) {
     <th
       scope="col"
       className={cn(
-        "px-sm py-sm text-left text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle",
+        "px-sm py-sm text-left text-caption font-medium uppercase tracking-[0.18em] text-grey",
         className,
       )}
     >

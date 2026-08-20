@@ -139,8 +139,8 @@ function FabInner() {
         aria-label={open ? "Close actions" : "Open actions"}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "pointer-events-auto absolute bottom-0 right-md grid h-14 w-14 place-items-center rounded-full bg-accent text-white shadow-md transition-transform duration-200",
-          "hover:bg-accent-hover active:scale-95",
+          "pointer-events-auto absolute bottom-0 right-md grid h-14 w-14 place-items-center rounded-pill bg-primary text-white transition-transform duration-200",
+          "hover:bg-primary-hover active:scale-95",
           open && "rotate-45",
         )}
       >
@@ -169,7 +169,7 @@ function ActionPill({
   const inner = (
     <span
       className={cn(
-        "flex items-center gap-sm rounded-full bg-surface px-md py-sm text-[13px] font-medium shadow-md ring-1 ring-border-strong transition-all duration-200",
+        "glass flex items-center gap-sm rounded-pill px-md py-sm text-[13px] font-medium transition-all duration-200",
         visible
           ? "translate-y-0 opacity-100"
           : "pointer-events-none translate-y-2 opacity-0",
@@ -177,13 +177,13 @@ function ActionPill({
       )}
       style={{ transitionDelay }}
     >
-      <span className="text-[12px] uppercase tracking-[0.06em] text-ink-muted">
+      <span className="text-[12px] uppercase tracking-[0.06em] text-grey">
         {label}
       </span>
       <span
         className={cn(
-          "grid h-9 w-9 place-items-center rounded-full",
-          disabled ? "bg-surface-sunken text-ink-subtle" : "bg-accent-soft text-accent",
+          "grid h-9 w-9 place-items-center rounded-pill",
+          disabled ? "bg-beige text-grey" : "bg-blush-wash text-primary",
         )}
       >
         <Icon className="h-4 w-4" strokeWidth={2} />

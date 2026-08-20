@@ -15,10 +15,10 @@
 export default function PublicWineListNotFound() {
   return (
     <main className="mx-auto flex min-h-screen max-w-[480px] flex-col items-center justify-center bg-surface px-lg py-3xl text-center">
-      <p className="text-[11px] uppercase tracking-[0.08em] text-ink-subtle">
+      <p className="text-caption uppercase text-grey">
         Wine list
       </p>
-      <h1 className="mt-sm font-serif text-[28px] text-ink">
+      <h1 className="mt-sm font-serif text-heading-sm text-ink">
         This list isn&rsquo;t available
       </h1>
       <p className="mt-md text-[15px] leading-relaxed text-ink-muted">
@@ -27,7 +27,7 @@ export default function PublicWineListNotFound() {
       </p>
       <p className="mt-2xl text-[12px] text-ink-subtle">
         Powered by{" "}
-        <span className="font-serif font-medium text-accent">Terroir</span>
+        <span className="font-serif font-medium text-primary">Terroir</span>
       </p>
     </main>
   );

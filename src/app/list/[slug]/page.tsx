@@ -216,10 +216,10 @@ export default async function PublicWineListPage({
             />
           </div>
         )}
-        <p className="text-[11px] uppercase tracking-[0.08em] text-ink-subtle print:text-black">
+        <p className="text-caption uppercase text-grey print:text-black">
           {restaurantName}
         </p>
-        <h1 className="mt-sm font-serif text-[28px] text-ink print:text-[24px] print:text-black">
+        <h1 className="mt-sm font-serif text-heading-sm text-ink print:text-[24px] print:text-black">
           {list.name}
         </h1>
       </header>
@@ -230,7 +230,7 @@ export default async function PublicWineListPage({
           reads as broken to a guest. Hidden in print so a paper copy doesn't
           carry a stray "Nothing to pour" line. */}
       {sections.length === 0 && (
-        <div className="my-3xl rounded-md border border-dashed border-border-strong bg-surface-muted px-lg py-2xl text-center print:hidden">
+        <div className="my-3xl rounded-card border border-dashed border-beige-deep bg-bridge-surface px-lg py-2xl text-center print:hidden">
           <p className="font-serif text-[18px] text-ink">
             Nothing to pour right now.
           </p>
@@ -274,7 +274,7 @@ export default async function PublicWineListPage({
                       <div className="min-w-0">
                         <span
                           className={cn(
-                            "font-serif text-[15px] text-ink print:text-black",
+                            "font-serif text-[17px] font-medium text-ink print:text-black",
                             is86d && "line-through",
                           )}
                         >
@@ -334,7 +334,7 @@ export default async function PublicWineListPage({
                     )}
                     {item.tasting_note && (
                       <p className={cn(
-                        "mt-xs font-serif text-[13px] italic text-ink-muted print:text-black",
+                        "mt-xs font-sans text-[13px] italic text-ink-muted print:text-black",
                         is86d && "line-through",
                       )}>
                         {item.tasting_note}
@@ -358,10 +358,10 @@ export default async function PublicWineListPage({
 
       {/* Footer — hidden when printing so the menu doesn't carry a
           "Powered by Terroir" line on a paper copy. */}
-      <footer className="mt-3xl border-t border-border pt-lg text-center print:hidden">
+      <footer className="mt-3xl border-t border-hairline pt-lg text-center print:hidden">
         <p className="text-[12px] text-ink-subtle">
           Powered by{" "}
-          <span className="font-serif font-medium text-accent">Terroir</span>
+          <span className="font-serif font-medium text-primary">Terroir</span>
         </p>
       </footer>
     </main>

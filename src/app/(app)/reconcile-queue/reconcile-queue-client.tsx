@@ -73,7 +73,7 @@ function QueueView(props: QueueViewProps) {
       <QueueHeader summary={data.summary} latestBatch={data.latest_batch} busy={busy} undo={props.undo} />
       {(props.message || props.mutationError) && <StatusBanner message={props.message} error={props.mutationError} />}
       {rows.length === 0 ? <QueueEmpty /> : (
-        <div className="overflow-hidden rounded-md border border-border bg-surface">
+        <div className="overflow-hidden rounded-card border border-hairline bg-canvas">
           {rows.map((row) => (
           <QueueIssueRow
             key={row.id}
@@ -136,12 +136,12 @@ function QueueHeader({ summary, latestBatch, busy, undo }: { summary: QueueRespo
   return (
     <header className="mb-lg flex flex-wrap items-end justify-between gap-md md:mb-xl">
       <div>
-        <p className="mb-xs text-[10px] font-semibold uppercase tracking-[0.08em] text-accent">Inventory control</p>
-        <h1 className="font-serif text-[28px] text-ink">Reconciliation queue</h1>
-        <p className="mt-xs text-[14px] tabular-nums text-ink-muted">{summary.itemCount} items · {summary.unitCount} units · ${formatRisk(summary.atRisk)} at risk</p>
+        <p className="mb-xs text-caption font-medium uppercase text-primary">Inventory control</p>
+        <h1 className="font-serif text-heading-sm text-ink">Reconciliation queue</h1>
+        <p className="mt-xs text-[14px] tabular-nums text-grey">{summary.itemCount} items · {summary.unitCount} units · ${formatRisk(summary.atRisk)} at risk</p>
       </div>
       {latestBatch && (
-        <button type="button" onClick={undo} disabled={busy} className="flex h-11 items-center gap-xs rounded-sm border border-border-strong bg-white px-md text-[13px] font-medium text-ink hover:bg-surface-muted disabled:opacity-50">
+        <button type="button" onClick={undo} disabled={busy} className="flex h-11 items-center gap-xs rounded-pill border border-beige-deep bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50">
           <Undo2 className="h-4 w-4" aria-hidden />Undo latest batch
         </button>
       )}
@@ -151,12 +151,12 @@ function QueueHeader({ summary, latestBatch, busy, undo }: { summary: QueueRespo
 
 function BulkRail({ busy, selectedCount, readyCount, allReadySelected, accept, toggleAll }: { busy: boolean; selectedCount: number; readyCount: number; allReadySelected: boolean; accept: () => void; toggleAll: () => void }) {
   return (
-    <div className="sticky bottom-[72px] z-10 mt-md flex flex-wrap items-center justify-between gap-sm rounded-md border border-border-strong bg-surface/95 px-sm py-sm shadow-lg backdrop-blur-sm md:bottom-md md:px-md">
-      <button type="button" onClick={toggleAll} disabled={busy || readyCount === 0} className="h-11 rounded-sm px-sm text-[13px] font-medium text-ink-muted hover:bg-surface-muted disabled:opacity-40">
+    <div className="glass sticky bottom-[72px] z-10 mt-md flex flex-wrap items-center justify-between gap-sm rounded-lg px-sm py-sm md:bottom-md md:px-md">
+      <button type="button" onClick={toggleAll} disabled={busy || readyCount === 0} className="h-11 rounded-pill px-sm text-[13px] font-medium text-grey hover:bg-bridge-surface disabled:opacity-40">
         {allReadySelected ? "Clear actionable" : `Select actionable (${readyCount})`}
       </button>
-      <span className="text-[12px] tabular-nums text-ink-muted">{selectedCount} selected</span>
-      <button type="button" onClick={accept} disabled={busy || selectedCount === 0} className="flex h-11 items-center gap-xs rounded-sm bg-accent px-md text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-45">
+      <span className="text-[12px] tabular-nums text-grey">{selectedCount} selected</span>
+      <button type="button" onClick={accept} disabled={busy || selectedCount === 0} className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-45">
         {busy ? <RefreshCw className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}
         Accept {selectedCount} item{selectedCount === 1 ? "" : "s"}
       </button>
@@ -165,19 +165,19 @@ function BulkRail({ busy, selectedCount, readyCount, allReadySelected, accept, t
 }
 
 function QueueLoading() {
-  return <div aria-label="Loading reconciliation queue" className="space-y-sm"><div className="h-20 animate-pulse rounded-md bg-surface-muted" />{[1, 2, 3].map((item) => <div key={item} className="h-24 animate-pulse border-t border-border bg-surface-muted/60" />)}</div>;
+  return <div aria-label="Loading reconciliation queue" className="space-y-sm"><div className="h-20 animate-pulse rounded-card bg-bridge-surface" />{[1, 2, 3].map((item) => <div key={item} className="h-24 animate-pulse border-t border-hairline bg-bridge-surface/60" />)}</div>;
 }
 
 function QueueError({ message, retry }: { message: string; retry: () => void }) {
-  return <div role="alert" className="rounded-md border border-danger/30 bg-danger-soft p-md text-[13px] text-danger"><p>{message}</p><button type="button" onClick={retry} className="mt-sm h-11 rounded-sm border border-danger/30 bg-white px-md font-medium">Try again</button></div>;
+  return <div role="alert" className="rounded-md border border-primary/30 bg-blush-wash p-md text-[13px] text-primary"><p>{message}</p><button type="button" onClick={retry} className="mt-sm h-11 rounded-pill border border-primary/30 bg-white px-md font-medium">Try again</button></div>;
 }
 
 function QueueEmpty() {
-  return <div className="rounded-md border border-dashed border-border-strong bg-surface-muted px-lg py-3xl text-center"><Check className="mx-auto mb-sm h-8 w-8 text-success" aria-hidden /><p className="font-serif text-[18px] text-ink">Queue is clear</p><p className="mt-xs text-[13px] text-ink-muted">No inventory records need reconciliation.</p></div>;
+  return <div className="rounded-card border border-hairline bg-bridge-surface px-lg py-3xl text-center"><Check className="mx-auto mb-sm h-8 w-8 text-sage-ink" aria-hidden /><p className="font-serif text-[18px] text-ink">Queue is clear</p><p className="mt-xs text-[13px] text-grey">No inventory records need reconciliation.</p></div>;
 }
 
 function StatusBanner({ message, error }: { message: string | null; error: string | null }) {
-  return <div role={error ? "alert" : "status"} className={`mb-md rounded-sm border px-md py-sm text-[13px] ${error ? "border-danger/30 bg-danger-soft text-danger" : "border-success/30 bg-success-soft text-success"}`}>{error ?? message}</div>;
+  return <div role={error ? "alert" : "status"} className={`mb-md rounded-md border px-md py-sm text-[13px] ${error ? "border-primary/30 bg-blush-wash text-primary" : "border-sage-ink/30 bg-sage-wash text-sage-ink"}`}>{error ?? message}</div>;
 }
 
 function toggleId(current: Set<string>, id: string) {

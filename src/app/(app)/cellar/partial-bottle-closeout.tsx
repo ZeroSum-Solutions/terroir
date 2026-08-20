@@ -32,7 +32,7 @@ export function PartialBottleCloseout({
   const form = useCloseout(bottle, onComplete);
 
   return (
-    <section aria-label="Partial bottle close-out" className="mt-md rounded-md border border-border bg-white p-md">
+    <section aria-label="Partial bottle close-out" className="mt-md rounded-lg border border-hairline bg-white p-md">
       <BottleSummary bottle={bottle} />
       <CloseoutFields reasons={reasons} form={form} />
     </section>
@@ -110,10 +110,10 @@ function BottleSummary({ bottle }: { bottle: Bottle }) {
   return (
     <>
       <div className="flex items-baseline justify-between gap-sm">
-        <h3 className="text-[13px] font-semibold text-ink">Open bottle</h3>
-        <span className="text-[12px] text-ink-muted">{LABELS[bottle.preservationMethod]}</span>
+        <h3 className="text-caption font-medium uppercase text-grey">Open bottle</h3>
+        <span className="text-[12px] text-grey">{LABELS[bottle.preservationMethod]}</span>
       </div>
-      <p className="mt-xs text-[12px] text-ink-muted">
+      <p className="mt-xs text-[12px] text-grey">
         {bottle.theoreticalRemainingMl} ml theoretical remaining
         {bottle.openedBy ? ` · opened by ${bottle.openedBy}` : ""}
       </p>
@@ -128,15 +128,15 @@ function CloseoutFields({ reasons, form }: { reasons: Reason[]; form: CloseoutFo
         <Field name="actual_remaining_ml" label="Actual remaining (ml)" value={form.actual} onChange={form.setActual} />
         <Field name="written_off_ml" label="Write-off (ml)" value={form.writeoff} onChange={form.setWriteoff} />
       </div>
-      <label className="mt-sm block text-[12px] text-ink-muted">
+      <label className="mt-sm block text-[12px] text-grey">
         Reason
-        <select value={form.reason} onChange={(event) => form.setReason(event.target.value)} className="mt-xs h-10 w-full rounded-sm border border-border bg-white px-sm text-[13px] text-ink">
+        <select value={form.reason} onChange={(event) => form.setReason(event.target.value)} className="mt-xs h-10 w-full rounded-pill border border-hairline bg-white px-sm text-[13px] text-ink">
           <option value="">{form.writtenOffMl > 0 ? "Select a reason" : "No reason"}</option>
           {reasons.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
         </select>
       </label>
-      {form.error && <p role="alert" className="mt-sm text-[12px] text-danger">{form.error}</p>}
-      <button type="button" disabled={form.busy || form.invalid} onClick={form.closeBottle} className="mt-sm h-10 w-full rounded-sm border border-border-strong bg-white text-[13px] font-medium text-ink hover:bg-surface-muted disabled:opacity-50">
+      {form.error && <p role="alert" className="mt-sm text-[12px] text-primary">{form.error}</p>}
+      <button type="button" disabled={form.busy || form.invalid} onClick={form.closeBottle} className="mt-sm h-10 w-full rounded-pill border border-ink/25 bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50">
         {form.busy ? "Closing…" : "Close bottle"}
       </button>
     </>
@@ -145,9 +145,9 @@ function CloseoutFields({ reasons, form }: { reasons: Reason[]; form: CloseoutFo
 
 function Field({ name, label, value, onChange }: { name: string; label: string; value: string; onChange: (value: string) => void }) {
   return (
-    <label className="text-[12px] text-ink-muted">
+    <label className="text-[12px] text-grey">
       {label}
-      <input name={name} type="number" min="0" step="1" value={value} onChange={(event) => onChange(event.target.value)} className="mt-xs h-10 w-full rounded-sm border border-border bg-white px-sm font-mono text-[13px] text-ink" />
+      <input name={name} type="number" min="0" step="1" value={value} onChange={(event) => onChange(event.target.value)} className="mt-xs h-10 w-full rounded-pill border border-hairline bg-white px-sm font-mono text-[13px] text-ink" />
     </label>
   );
 }

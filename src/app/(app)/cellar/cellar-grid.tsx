@@ -48,16 +48,16 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
   };
 
   return (
-    <div className="mx-auto w-full max-w-[420px] rounded-md border border-border bg-surface p-lg">
+    <div className="mx-auto w-full max-w-[420px] rounded-card border border-hairline bg-white p-lg">
       <div className="mb-lg text-center">
         <Grid2x2
-          className="mx-auto mb-md h-10 w-10 text-ink-subtle"
+          className="mx-auto mb-md h-10 w-10 text-grey"
           strokeWidth={1.5}
         />
         <h2 className="text-[18px] font-serif font-medium text-ink">
           Set up your cellar grid
         </h2>
-        <p className="mt-xs text-[13px] text-ink-muted">
+        <p className="mt-xs text-[13px] text-grey">
           Choose a grid size that matches your storage layout. You can change
           this later.
         </p>
@@ -65,7 +65,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
 
       <div className="mb-lg grid grid-cols-2 gap-md">
         <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+          <label className="text-caption block font-medium uppercase text-grey">
             Rows
           </label>
           <input
@@ -76,11 +76,11 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
             onChange={(e) =>
               setSetupRows(Math.max(1, Math.min(26, +e.target.value)))
             }
-            className="mt-xs w-full rounded-sm border border-border bg-white px-md py-sm text-center font-mono text-[16px] text-ink"
+            className="tabular mt-xs w-full rounded-pill border border-ink/20 bg-white px-md py-sm text-center text-[16px] text-ink"
           />
         </div>
         <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+          <label className="text-caption block font-medium uppercase text-grey">
             Columns
           </label>
           <input
@@ -91,7 +91,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
             onChange={(e) =>
               setSetupCols(Math.max(1, Math.min(30, +e.target.value)))
             }
-            className="mt-xs w-full rounded-sm border border-border bg-white px-md py-sm text-center font-mono text-[16px] text-ink"
+            className="tabular mt-xs w-full rounded-pill border border-ink/20 bg-white px-md py-sm text-center text-[16px] text-ink"
           />
         </div>
       </div>
@@ -110,10 +110,10 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
               setSetupRows(preset.r);
               setSetupCols(preset.c);
             }}
-            className={`flex-1 rounded-sm border px-sm py-xs text-[13px] font-medium transition-colors ${
+            className={`flex-1 rounded-pill border px-sm py-xs text-[13px] font-medium transition-colors ${
               setupRows === preset.r && setupCols === preset.c
-                ? "border-accent bg-accent-soft text-accent"
-                : "border-border bg-white text-ink-muted hover:border-border-strong"
+                ? "border-primary bg-blush-wash text-primary"
+                : "border-ink/20 bg-white text-grey hover:border-beige-deep"
             }`}
           >
             {preset.label}
@@ -125,7 +125,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
         type="button"
         onClick={createCellar}
         disabled={creating}
-        className="flex h-[38px] w-full items-center justify-center gap-xs rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+        className="flex h-[38px] w-full items-center justify-center gap-xs rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
       >
         {creating && (
           <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
@@ -153,7 +153,7 @@ export function CellarGridView({
     <>
       <div className="flex flex-col gap-lg md:flex-row">
         {/* SVG Grid */}
-        <div className="flex-1 overflow-x-auto rounded-md border border-border bg-surface p-md">
+        <div className="flex-1 overflow-x-auto rounded-card border border-hairline bg-white p-md">
           <svg
             width={svgWidth}
             height={svgHeight}
@@ -167,8 +167,8 @@ export function CellarGridView({
                 x={LABEL_OFFSET + c * (CELL_SIZE + GAP) + CELL_SIZE / 2}
                 y={LABEL_OFFSET - 8}
                 textAnchor="middle"
-                className="fill-ink-subtle"
-                style={{ fontSize: 11, fontFamily: "var(--font-mono)" }}
+                className="fill-grey"
+                style={{ fontSize: 11, fontFamily: "var(--font-sans)" }}
               >
                 {c + 1}
               </text>
@@ -181,8 +181,8 @@ export function CellarGridView({
                   x={LABEL_OFFSET - 8}
                   y={LABEL_OFFSET + r * (CELL_SIZE + GAP) + CELL_SIZE / 2 + 4}
                   textAnchor="end"
-                  className="fill-ink-subtle"
-                  style={{ fontSize: 11, fontFamily: "var(--font-mono)" }}
+                  className="fill-grey"
+                  style={{ fontSize: 11, fontFamily: "var(--font-sans)" }}
                 >
                   {String.fromCharCode(65 + r)}
                 </text>
@@ -191,9 +191,15 @@ export function CellarGridView({
                   const data = gridData[binId];
                   const total = data?.totalBottles ?? 0;
 
-                  let fill = "#EFEBE3"; // empty — bg-tertiary
-                  if (total > 0 && total <= 2) fill = "#D4A843"; // low — warning
-                  else if (total > 2) fill = "#2D6A4F"; // in stock — success
+                  // Contract tokens only: beige-deep (empty), amber (low), sage (in stock).
+                  let fill = "#E3D9CB"; // empty — beige-deep
+                  let textFill = "white";
+                  if (total > 0 && total <= 2) {
+                    fill = "#8B6914"; // low — amber
+                  } else if (total > 2) {
+                    fill = "#ADAA8A"; // in stock — sage
+                    textFill = "#191919"; // ink, for contrast against sage
+                  }
 
                   const isSelected = selectedBin === binId;
 
@@ -236,10 +242,10 @@ export function CellarGridView({
                             4
                           }
                           textAnchor="middle"
-                          fill="white"
+                          fill={textFill}
                           style={{
                             fontSize: 12,
-                            fontFamily: "var(--font-mono)",
+                            fontFamily: "var(--font-sans)",
                             fontWeight: 500,
                           }}
                         >
@@ -256,16 +262,16 @@ export function CellarGridView({
 
         {/* Bin detail drawer */}
         {selectedBin && (
-          <div className="w-full shrink-0 rounded-md border border-border bg-surface p-lg md:w-[280px]">
+          <div className="w-full shrink-0 rounded-card border border-hairline bg-white p-lg md:w-[280px]">
             <div className="mb-md flex items-center justify-between">
-              <h3 className="font-mono text-[18px] font-medium text-ink">
+              <h3 className="tabular text-[18px] font-medium text-ink">
                 Bin {selectedBin}
               </h3>
               <button
                 type="button"
                 onClick={() => setSelectedBin(null)}
                 aria-label="Close bin detail"
-                className="flex h-8 w-8 items-center justify-center rounded-sm text-ink-subtle hover:bg-surface-muted"
+                className="flex h-8 w-8 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
               >
                 <X className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
               </button>
@@ -273,7 +279,7 @@ export function CellarGridView({
 
             {selectedData ? (
               <>
-                <div className="mb-md text-[12px] text-ink-muted">
+                <div className="mb-md text-[12px] text-grey">
                   {selectedData.totalBottles} bottle
                   {selectedData.totalBottles !== 1 ? "s" : ""}
                 </div>
@@ -281,17 +287,17 @@ export function CellarGridView({
                   {selectedData.wines.map((w, i) => (
                     <div
                       key={`${w.wineId}-${i}`}
-                      className="rounded-sm border border-border/50 px-sm py-sm"
+                      className="rounded-lg border border-hairline px-sm py-sm"
                     >
-                      <div className="font-serif text-[14px] text-ink">
+                      <div className="font-serif text-[17px] font-medium leading-snug text-ink">
                         {w.producer}, {w.name}
                       </div>
-                      <div className="mt-2xs flex items-center gap-sm text-[12px] text-ink-muted">
-                        <span className="font-mono text-ink-subtle">
+                      <div className="mt-2xs flex items-center gap-sm text-[12px] font-light text-grey">
+                        <span className="tabular">
                           {w.vintage ?? "NV"}
                         </span>
                         <span>&middot;</span>
-                        <span className="font-mono">Qty {w.quantity}</span>
+                        <span className="tabular">Qty {w.quantity}</span>
                       </div>
                     </div>
                   ))}
@@ -300,10 +306,10 @@ export function CellarGridView({
             ) : (
               <div className="flex flex-col items-center py-lg text-center">
                 <Wine
-                  className="mb-sm h-8 w-8 text-ink-subtle"
+                  className="mb-sm h-8 w-8 text-grey"
                   strokeWidth={1.5}
                 />
-                <p className="text-[13px] text-ink-muted">
+                <p className="text-[13px] text-grey">
                   This bin is empty
                 </p>
               </div>
@@ -313,17 +319,17 @@ export function CellarGridView({
       </div>
 
       {/* Legend */}
-      <div className="mt-lg flex items-center gap-lg text-[12px] text-ink-muted">
+      <div className="mt-lg flex items-center gap-lg text-[12px] text-grey">
         <div className="flex items-center gap-xs">
-          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#2D6A4F" }} />
+          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#ADAA8A" }} />
           In stock (3+)
         </div>
         <div className="flex items-center gap-xs">
-          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#D4A843" }} />
+          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#8B6914" }} />
           Low (1-2)
         </div>
         <div className="flex items-center gap-xs">
-          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#EFEBE3" }} />
+          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#E3D9CB" }} />
           Empty
         </div>
       </div>

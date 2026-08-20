@@ -27,14 +27,14 @@ export function ProcessingView({ progress, stepIndex, mode = "invoice" }: Proces
   const steps = isBottle ? BOTTLE_STEPS : INVOICE_STEPS;
   return (
     <section className="flex min-h-[60vh] items-center justify-center">
-      <div className="w-full max-w-[420px] rounded-md border border-border bg-white p-xl text-center">
-        <div className="mx-auto mb-md flex h-16 w-16 items-center justify-center rounded-full bg-accent-soft text-accent">
+      <div className="w-full max-w-[420px] rounded-card border border-hairline bg-white p-xl text-center">
+        <div className="mx-auto mb-md flex h-16 w-16 items-center justify-center rounded-full bg-blush-wash text-primary">
           <Sparkles className="h-7 w-7" strokeWidth={1.5} />
         </div>
         <h2 className="font-serif text-[22px] text-ink">
           {isBottle ? "Reading the label" : "Reading your invoice"}
         </h2>
-        <p className="mt-xs text-[14px] text-ink-muted">
+        <p className="mt-xs text-[14px] text-grey">
           {capped
             ? isBottle
               ? "Still working — this should finish shortly."
@@ -44,13 +44,13 @@ export function ProcessingView({ progress, stepIndex, mode = "invoice" }: Proces
               : "Usually 20-30 seconds."}
         </p>
 
-        <div className="relative mt-md h-1.5 overflow-hidden rounded-pill bg-surface-sunken">
+        <div className="relative mt-md h-1.5 overflow-hidden rounded-pill bg-beige">
           <div
-            className="absolute inset-y-0 left-0 bg-accent transition-[width] duration-100 ease-out"
+            className="absolute inset-y-0 left-0 bg-primary transition-[width] duration-100 ease-out"
             style={{ width: `${progress}%` }}
           />
         </div>
-        <div className="mt-xs flex items-center justify-between text-[11px] tabular text-ink-subtle">
+        <div className="mt-xs flex items-center justify-between text-[11px] tabular text-grey">
           <span>{progress}%</span>
           <span>Claude Sonnet 4.6</span>
         </div>
@@ -65,8 +65,8 @@ export function ProcessingView({ progress, stepIndex, mode = "invoice" }: Proces
                 className={cn(
                   "flex items-center gap-sm text-[14px]",
                   done && "text-ink",
-                  active && "text-accent",
-                  !done && !active && "text-ink-subtle",
+                  active && "text-primary",
+                  !done && !active && "text-grey",
                 )}
               >
                 {done ? (

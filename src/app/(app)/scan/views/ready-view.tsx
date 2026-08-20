@@ -18,13 +18,13 @@ function RecentScansList({ scans }: RecentScansListProps) {
   if (scans.length === 0) return null;
   return (
     <section className="mt-2xl">
-      <div className="mb-md flex items-center justify-between"><h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">Recent scans</h3><Link href="/scans" className="inline-flex items-center gap-xs text-[11px] font-medium text-ink-muted hover:text-accent">View all<ArrowRight className="h-3 w-3" strokeWidth={2} /></Link></div>
+      <div className="mb-md flex items-center justify-between"><h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">Recent scans</h3><Link href="/scans" className="inline-flex items-center gap-xs text-[11px] font-medium text-grey hover:text-primary">View all<ArrowRight className="h-3 w-3" strokeWidth={2} /></Link></div>
       <div className="grid grid-cols-1 gap-sm md:grid-cols-3 md:gap-md">
         {scans.map((s) => (
           <Link
             key={s.id}
             href={`/scan/${s.id}`}
-            className="block rounded-md border border-border bg-white p-md transition-all hover:border-accent/40 hover:shadow-sm"
+            className="block rounded-lg border border-hairline bg-white p-md transition-colors hover:border-primary/40"
           >
             <div className="mb-sm flex items-center justify-between">
               <TimeAgo iso={s.parsedAt} className="tabular text-[12px] text-ink-muted" />
@@ -81,15 +81,15 @@ export function ReadyView({
     <section>
       {/* Mode toggle */}
       <div className="mb-lg flex items-center justify-center">
-        <div className="inline-flex rounded-sm border border-border bg-surface-muted p-0.5">
+        <div className="inline-flex rounded-pill border border-hairline bg-bridge-surface p-0.5">
           <button
             type="button"
             onClick={() => onModeChange("invoice")}
             className={cn(
-              "flex items-center gap-xs rounded-sm px-md py-sm text-[13px] font-medium transition-colors",
+              "flex items-center gap-xs rounded-pill px-md py-sm text-[13px] font-medium transition-colors",
               !isBottle
-                ? "bg-white text-ink shadow-sm"
-                : "text-ink-muted hover:text-ink",
+                ? "bg-ink text-beige"
+                : "text-grey hover:text-ink",
             )}
           >
             <ScanLine className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
@@ -99,10 +99,10 @@ export function ReadyView({
             type="button"
             onClick={() => onModeChange("bottle")}
             className={cn(
-              "flex items-center gap-xs rounded-sm px-md py-sm text-[13px] font-medium transition-colors",
+              "flex items-center gap-xs rounded-pill px-md py-sm text-[13px] font-medium transition-colors",
               isBottle
-                ? "bg-white text-ink shadow-sm"
-                : "text-ink-muted hover:text-ink",
+                ? "bg-ink text-beige"
+                : "text-grey hover:text-ink",
             )}
           >
             <Wine className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
@@ -115,7 +115,7 @@ export function ReadyView({
         <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
           {isBottle ? "Scan a bottle label" : "Scan an invoice"}
         </h1>
-        <p className="mt-xs text-[14px] text-ink-muted md:text-[15px]">
+        <p className="mt-xs text-[14px] text-grey md:text-[15px]">
           {isBottle
             ? "Photograph a wine label. We'll identify the wine in a few seconds."
             : "Photograph a wine invoice with your phone. Parsed in about 20 seconds."}
@@ -123,9 +123,9 @@ export function ReadyView({
       </header>
 
       {savedResult && (
-        <div className="mb-lg flex items-center justify-between rounded-md border border-success/30 bg-success-soft px-md py-sm">
+        <div className="mb-lg flex items-center justify-between rounded-card border border-hairline bg-sage-wash px-md py-sm">
           <div className="flex items-center gap-sm">
-            <Check className="h-4 w-4 text-success" strokeWidth={2.5} aria-hidden="true" />
+            <Check className="h-4 w-4 text-sage-ink" strokeWidth={2.5} aria-hidden="true" />
             <span className="text-[14px] text-ink">
               Saved {savedResult.itemCount} {savedResult.itemCount === 1 ? "item" : "items"} to inventory ({savedResult.wineCount} distinct {savedResult.wineCount === 1 ? "wine" : "wines"})
             </span>
@@ -134,7 +134,7 @@ export function ReadyView({
             <Link
               href="/lists"
               onClick={onDismissSaved}
-              className="flex items-center gap-xs rounded-sm px-sm py-xs text-[13px] font-medium text-accent hover:bg-accent-soft"
+              className="flex items-center gap-xs rounded-pill px-sm py-xs text-[13px] font-medium text-primary hover:bg-blush-wash"
             >
               <ListOrdered className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
               Add to wine list
@@ -142,7 +142,7 @@ export function ReadyView({
             <button
               type="button"
               onClick={onDismissSaved}
-              className="text-[13px] text-ink-muted hover:text-ink"
+              className="text-[13px] text-grey hover:text-ink"
             >
               Dismiss
             </button>
@@ -153,15 +153,15 @@ export function ReadyView({
       <button
         type="button"
         onClick={() => cameraRef.current?.click()}
-        className="flex w-full flex-col items-center justify-center rounded-md border-2 border-dashed border-border-strong bg-surface-muted px-lg py-2xl text-center transition-colors hover:border-accent hover:bg-accent-soft/40 focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:py-3xl"
+        className="flex w-full flex-col items-center justify-center rounded-card border-2 border-dashed border-beige-deep bg-bridge-surface px-lg py-2xl text-center transition-colors hover:border-primary hover:bg-blush-wash/40 focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:py-3xl"
       >
-        <span className="mb-md flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white md:h-16 md:w-16">
+        <span className="mb-md flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white md:h-16 md:w-16">
           <Camera className="h-6 w-6 md:h-7 md:w-7" strokeWidth={1.75} aria-hidden="true" />
         </span>
         <h2 className="font-serif text-[20px] text-ink md:text-[22px]">
           {isBottle ? "Tap to photograph label" : "Tap to photograph"}
         </h2>
-        <p className="mt-xs text-[13px] text-ink-muted">
+        <p className="mt-xs text-[13px] text-grey">
           {isBottle ? "JPG or PNG · up to 20MB" : "JPG, PNG, or PDF · up to 20MB"}
         </p>
       </button>
@@ -170,7 +170,7 @@ export function ReadyView({
         <button
           type="button"
           onClick={() => cameraRef.current?.click()}
-          className="flex h-12 items-center justify-center gap-sm rounded-sm bg-accent text-[14px] font-medium text-white hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px]"
+          className="flex h-12 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:h-[38px]"
         >
           <Camera className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           Take photo
@@ -178,7 +178,7 @@ export function ReadyView({
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
-          className="flex h-12 items-center justify-center gap-sm rounded-sm border border-border-strong bg-white text-[14px] font-medium text-ink hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 md:h-[38px]"
+          className="flex h-12 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:h-[38px]"
         >
           <FileUp className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           Upload file
