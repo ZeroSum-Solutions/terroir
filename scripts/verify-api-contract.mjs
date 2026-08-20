@@ -315,6 +315,6 @@ if (main) {
     [...result.errors].sort().forEach((error) => console.error(`- ${error}`));
     process.exitCode = 1;
   } else {
-    console.log(`API contract verified: ${result.summary.discoveredOperationCount} discovered operations, ${result.summary.plannedOperationCount} planned promises, ${result.summary.classificationCount} classifications.`);
+    console.log(`API inventory parity verified: ${result.summary.discoveredOperationCount} discovered operations, ${result.summary.plannedOperationCount} planned promises, ${result.summary.classificationCount} classifications.`);
   }
 }

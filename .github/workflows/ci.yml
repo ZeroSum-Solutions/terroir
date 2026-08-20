@@ -73,6 +73,9 @@ jobs:
       - name: API contract verification
         run: pnpm run verify:api-contract
 
+      - name: Product contract conformance
+        run: pnpm run verify:product-conformance
+
       - name: Typecheck
         run: pnpm exec tsc --noEmit
 

@@ -16,6 +16,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "verify:api-contract": "node scripts/verify-api-contract.mjs",
+    "generate:product-conformance": "node scripts/generate-product-contract-conformance.mjs --write",
+    "verify:product-conformance": "node scripts/generate-product-contract-conformance.mjs --check",
     "verify:feature-ledger": "node scripts/verify-feature-ledger.mjs",
     "snapshot": "node scripts/build-schema-snapshot.mjs",
     "snapshot:check": "node scripts/build-schema-snapshot.mjs && git diff --exit-code supabase/schema.snapshot.sql",
