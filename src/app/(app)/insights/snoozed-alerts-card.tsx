@@ -2,8 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ChevronDown, RotateCcw, Clock, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { metricHref } from "./metric-href";
 
 /**
  * BND-040 follow-up — SnoozedAlertsCard
@@ -136,12 +138,16 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
             return (
               <li
                 key={key}
+                data-metric={`snoozed-${e.kind}-${e.wineId}`}
                 className="flex items-center justify-between gap-md py-sm"
               >
                 <div className="min-w-0 flex-1">
-                  <span className="font-serif text-[14px] text-ink">
+                  <Link
+                    href={metricHref("wine", e.wineId)}
+                    className="font-serif text-[14px] text-ink transition-colors hover:text-accent"
+                  >
                     {e.producer}, {e.name}
-                  </span>
+                  </Link>
                   {e.vintage && (
                     <span className="ml-xs font-mono text-[11px] text-ink-tertiary">
                       {e.vintage}

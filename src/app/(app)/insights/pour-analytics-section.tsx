@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Wine, TrendingUp, DollarSign } from "lucide-react";
+import { metricHref } from "./metric-href";
 
 type PourVolumeItem = {
   section: string;
@@ -26,7 +28,7 @@ type TopRevenueItem = {
   pour_count: number;
 };
 
-type PourData = {
+export type PourData = {
   range: string;
   topN: number;
   totalPours: number;
@@ -148,6 +150,10 @@ export default function PourAnalyticsSection() {
     );
   }
 
+  return <PourAnalyticsContent data={data} />;
+}
+
+export function PourAnalyticsContent({ data }: { data: PourData }) {
   const maxSectionOz = Math.max(
     ...data.pourVolumeBySection.map(function (s) { return s.oz; }),
     1,
@@ -242,20 +248,25 @@ export default function PourAnalyticsSection() {
               <div className="flex flex-col gap-xs">
                 {data.topWinesByPours.map(function (w, i) {
                   return (
-                    <div key={w.wine_id} className="flex items-center gap-sm">
-                      <span className="w-[18px] shrink-0 text-right font-mono text-[11px] text-ink-subtle">
-                        {i + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13px] font-medium text-ink">
-                          {w.producer} {w.name}
-                          {w.vintage ? " " + String(w.vintage) : ""}
+                    <div key={w.wine_id} data-metric={`ranked-pours-${w.wine_id}`}>
+                      <Link
+                        href={metricHref("wine", w.wine_id)}
+                        className="flex items-center gap-sm rounded-sm p-xs transition-colors hover:bg-surface-muted/50"
+                      >
+                        <span className="w-[18px] shrink-0 text-right font-mono text-[11px] text-ink-subtle">
+                          {i + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[13px] font-medium text-ink">
+                            {w.producer} {w.name}
+                            {w.vintage ? " " + String(w.vintage) : ""}
+                          </div>
                         </div>
-                      </div>
-                      <PourBar oz={w.pour_count} maxOz={maxPourCount} />
-                      <span className="w-[32px] shrink-0 text-right font-mono text-[12px] text-ink-muted">
-                        {w.pour_count}
-                      </span>
+                        <PourBar oz={w.pour_count} maxOz={maxPourCount} />
+                        <span className="w-[32px] shrink-0 text-right font-mono text-[12px] text-ink-muted">
+                          {w.pour_count}
+                        </span>
+                      </Link>
                     </div>
                   );
                 })}
@@ -281,24 +292,29 @@ export default function PourAnalyticsSection() {
                   return (
                     <div
                       key={w.wine_id}
-                      className="flex items-center gap-sm rounded-sm p-xs hover:bg-surface-muted/50"
+                      data-metric={`ranked-revenue-${w.wine_id}`}
                     >
-                      <span className="w-[18px] shrink-0 text-right font-mono text-[11px] text-ink-subtle">
-                        {i + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13px] font-medium text-ink">
-                          {w.producer} {w.name}
-                          {w.vintage ? " " + String(w.vintage) : ""}
+                      <Link
+                        href={metricHref("wine", w.wine_id)}
+                        className="flex items-center gap-sm rounded-sm p-xs transition-colors hover:bg-surface-muted/50"
+                      >
+                        <span className="w-[18px] shrink-0 text-right font-mono text-[11px] text-ink-subtle">
+                          {i + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[13px] font-medium text-ink">
+                            {w.producer} {w.name}
+                            {w.vintage ? " " + String(w.vintage) : ""}
+                          </div>
+                          <div className="mt-2xs text-[12px] text-ink-muted">
+                            {w.pour_count} pour{w.pour_count === 1 ? "" : "s"}
+                          </div>
                         </div>
-                        <div className="mt-2xs text-[12px] text-ink-muted">
-                          {w.pour_count} pour{w.pour_count === 1 ? "" : "s"}
-                        </div>
-                      </div>
-                      <PourBar oz={w.revenue} maxOz={maxRevenue} />
-                      <span className="w-[48px] shrink-0 text-right font-mono text-[13px] font-medium text-ink">
-                        {formatMoney(w.revenue)}
-                      </span>
+                        <PourBar oz={w.revenue} maxOz={maxRevenue} />
+                        <span className="w-[48px] shrink-0 text-right font-mono text-[13px] font-medium text-ink">
+                          {formatMoney(w.revenue)}
+                        </span>
+                      </Link>
                     </div>
                   );
                 })}

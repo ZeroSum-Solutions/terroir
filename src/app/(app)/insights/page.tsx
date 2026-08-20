@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { BarChart3, ScanLine, History, Activity, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { fetchDrinkWindowAlerts } from "@/lib/drink-window/alerts";
+import { DRINK_NOW_THRESHOLD_YEARS } from "@/lib/drink-window/status";
 import { fetchPricingAlerts } from "@/lib/pricing/alerts";
 import { accuracyColor } from "@/lib/scanner/accuracy-color";
 import { timeAgo } from "@/lib/time";
@@ -14,7 +15,14 @@ import { PricingReviewCard } from "./pricing-review-card";
 import { SnoozedAlertsCard, type SnoozedRow } from "./snoozed-alerts-card";
 import PourAnalyticsSection from "./pour-analytics-section";
 import DateRangeSelector from "./date-range-selector";
-import { dateRangeSince, dateRangeUntil, dateRangeLabel } from "./date-range";
+import { dateRangeSince, dateRangeUntil } from "./date-range";
+import {
+  OwnerMetricGrid,
+  TodayStrip,
+  selectTodayExceptions,
+  type TodayException,
+} from "./insights-drilldown";
+import { metricHref } from "./metric-href";
 
 type NullableDateRange = { range?: string; from?: string; to?: string };
 type SearchParams = Promise<NullableDateRange>;
@@ -285,7 +293,6 @@ export default async function DashboardPage({
   const range = sp.range ?? "all";
   const rangeSince = dateRangeSince(range, sp.from);
   const rangeUntil = dateRangeUntil(range, sp.to);
-  const activeRangeLabel = dateRangeLabel(range, sp.from, sp.to);
 
   const [drinkWindowAlerts, pricingAlerts, snoozedRows] = await Promise.all([
     fetchDrinkWindowAlerts(supabase, rid),
@@ -315,6 +322,8 @@ export default async function DashboardPage({
     { data: scans },
     { data: inventoryItems },
     { data: scanItems },
+    { count: rawEightysixedCount },
+    { count: rawDrinkNowCount },
     initPastDrinkWindow,
   ] =
     await Promise.all([
@@ -327,6 +336,23 @@ export default async function DashboardPage({
         .from("inventory_items")
         .select("quantity, unit_cost, invoice_scan_id, invoice_scans!inner(distributor_name)")
         .eq("restaurant_id", rid),
+      // Server-side counts: a .select() read is capped at the PostgREST row
+      // limit, which silently truncates on large cellars.
+      supabase
+        .from("wines")
+        .select("id", { count: "exact", head: true })
+        .eq("restaurant_id", rid)
+        .eq("is_eightysixed", true),
+      // Mirrors isClosingWindow(end): end != null && end <= year + threshold.
+      supabase
+        .from("wines")
+        .select("id", { count: "exact", head: true })
+        .eq("restaurant_id", rid)
+        .eq("is_eightysixed", false)
+        .lte(
+          "drink_window_end",
+          new Date().getFullYear() + DRINK_NOW_THRESHOLD_YEARS,
+        ),
       fetchPastDrinkWindow(supabase, rid).catch(function () { return [] as PastDrinkWindowRow[]; }),
     ]);
 
@@ -334,9 +360,15 @@ export default async function DashboardPage({
   const items = inventoryItems ?? [];
   const pastDrinkWindowWines: PastDrinkWindowRow[] = initPastDrinkWindow;
 
-  const scanCount = allScans.length;
   const inventoryValue = items.reduce(function (s, i) { return s + i.quantity * i.unit_cost; }, 0);
   const totalBottles = items.reduce(function (s, i) { return s + i.quantity; }, 0);
+  const eightysixedCount = rawEightysixedCount ?? 0;
+  const drinkNowCount = rawDrinkNowCount ?? 0;
+  const todayExceptions = buildTodayExceptions(
+    drinkWindowAlerts,
+    pastDrinkWindowWines,
+    pricingAlerts,
+  );
 
   // Varietal breakdown (current inventory — not time-filtered)
   const varietalMap = new Map<string, number>();
@@ -483,6 +515,8 @@ export default async function DashboardPage({
         </div>
       </header>
 
+      <TodayStrip exceptions={todayExceptions} />
+
       {/* Drink-window watch */}
       {(drinkWindowAlerts.length > 0 || canEnrich) && (
         <section className="mb-lg md:mb-xl" aria-labelledby="dw-watch-heading">
@@ -551,11 +585,12 @@ export default async function DashboardPage({
                     return (
                       <tr
                         key={w.wine_id}
+                        data-metric={`past-drink-window-${w.wine_id}`}
                         className={`${i > 0 ? "border-t border-dashed border-border" : ""}`}
                       >
                         <td className="py-sm">
                           <Link
-                            href={`/cellar?wine=${w.wine_id}`}
+                            href={metricHref("wine", w.wine_id)}
                             className="font-medium text-ink hover:text-accent transition-colors"
                           >
                             {w.producer} {w.name}
@@ -621,65 +656,14 @@ export default async function DashboardPage({
       <div className="grid gap-md md:grid-cols-2">
         {/* Hero metric */}
         <div className="rounded-md border border-border bg-surface p-lg md:col-span-2 md:grid md:grid-cols-2 md:gap-lg md:p-xl">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-              Inventory value
-            </div>
-            <div className="mt-sm font-mono text-[48px] font-medium leading-none tracking-[-0.04em] text-ink md:text-[72px]">
-              {formatMoney(inventoryValue)}
-            </div>
-            <div className="mt-sm text-[13px] text-ink-muted">
-              at current cost · {scanCount} scan{scanCount === 1 ? "" : "s"}{" "}
-              · {activeRangeLabel}
-            </div>
-
-            <div className="mt-lg grid grid-cols-3 gap-sm md:gap-md">
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-                  Bottles in
-                </div>
-                <div className="mt-xs font-mono text-[20px] font-medium text-ink">
-                  {totalBottles}
-                </div>
-              </div>
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-                  Scans
-                </div>
-                <div className="mt-xs font-mono text-[20px] font-medium text-ink">
-                  {scanCount}
-                </div>
-              </div>
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-                  Avg accuracy
-                </div>
-                {allScans.length === 0
-                  ? (
-                    <div className="mt-xs font-mono text-[20px] font-medium text-ink">
-                      —
-                    </div>
-                  )
-                  : (function () {
-                      const avgPct = Math.round(
-                        (allScans.reduce(
-                          function (s, sc) { return s + (sc.accuracy_score ?? 0); },
-                          0,
-                        ) /
-                          allScans.length) *
-                          100,
-                      );
-                      return (
-                        <div
-                          className={`mt-xs font-mono text-[20px] font-medium ${accuracyColor(avgPct)}`}
-                        >
-                          {avgPct}%
-                        </div>
-                      );
-                    })()}
-              </div>
-            </div>
-          </div>
+          <OwnerMetricGrid
+            metrics={{
+              inventoryValue,
+              totalBottles,
+              eightysixedCount,
+              drinkNowCount,
+            }}
+          />
 
           {/* Sparkline — items per scan */}
           <div className="mt-lg md:mt-0">
@@ -796,22 +780,27 @@ export default async function DashboardPage({
                   const spend = _a[1];
                   const pct = spend / varietalTotalAll;
                   return (
-                    <div key={label} className="flex items-center gap-sm">
-                      <span className="w-[100px] shrink-0 truncate text-[13px] text-ink">
-                        {label}
-                      </span>
-                      <div className="h-2.5 flex-1 overflow-hidden rounded-pill bg-surface-sunken">
-                        <div
-                          className="h-full rounded-pill bg-accent"
-                          style={{
-                            width: `${pct * 100}%`,
-                            opacity: 1 - i * 0.07,
-                          }}
-                        />
-                      </div>
-                      <span className="w-[36px] shrink-0 text-right font-mono text-[12px] text-ink-muted">
-                        {Math.round(pct * 100)}%
-                      </span>
+                    <div key={label} data-metric={`varietal-${label}`}>
+                      <Link
+                        href={metricHref("varietal", label)}
+                        className="flex items-center gap-sm rounded-sm transition-colors hover:bg-surface-muted/50"
+                      >
+                        <span className="w-[100px] shrink-0 truncate text-[13px] text-ink">
+                          {label}
+                        </span>
+                        <div className="h-2.5 flex-1 overflow-hidden rounded-pill bg-surface-sunken">
+                          <div
+                            className="h-full rounded-pill bg-accent"
+                            style={{
+                              width: `${pct * 100}%`,
+                              opacity: 1 - i * 0.07,
+                            }}
+                          />
+                        </div>
+                        <span className="w-[36px] shrink-0 text-right font-mono text-[12px] text-ink-muted">
+                          {Math.round(pct * 100)}%
+                        </span>
+                      </Link>
                     </div>
                   );
                 })}
@@ -972,6 +961,37 @@ export default async function DashboardPage({
       </div>
     </section>
   );
+}
+
+function buildTodayExceptions(
+  drinkWindowAlerts: Awaited<ReturnType<typeof fetchDrinkWindowAlerts>>,
+  pastDrinkWindowWines: PastDrinkWindowRow[],
+  pricingAlerts: Awaited<ReturnType<typeof fetchPricingAlerts>>,
+): TodayException[] {
+  // Priority is intentional: stock at the end of its window, then stock
+  // already past its window, then pricing outliers. All three feeds were
+  // already loaded by Insights; duplicate wines are removed before the cap.
+  const candidates: TodayException[] = [
+    ...drinkWindowAlerts.map((alert) => ({
+      wineId: alert.wine_id,
+      kind: "drink-window" as const,
+      title: `${alert.producer} ${alert.name}${alert.vintage ? ` ${alert.vintage}` : ""}`,
+      detail: `${alert.bottle_count} bottle${alert.bottle_count === 1 ? "" : "s"} · window ends ${alert.drink_window_end ?? "soon"}`,
+    })),
+    ...pastDrinkWindowWines.map((wine) => ({
+      wineId: wine.wine_id,
+      kind: "past-window" as const,
+      title: `${wine.producer} ${wine.name}${wine.vintage ? ` ${wine.vintage}` : ""}`,
+      detail: `${wine.bottle_count} bottle${wine.bottle_count === 1 ? "" : "s"} · ended ${wine.drink_window_end ?? "earlier"}`,
+    })),
+    ...pricingAlerts.map((alert) => ({
+      wineId: alert.wine_id,
+      kind: "pricing" as const,
+      title: `${alert.producer} ${alert.name}${alert.vintage ? ` ${alert.vintage}` : ""}`,
+      detail: "Bottle or glass pricing is outside its target",
+    })),
+  ];
+  return selectTodayExceptions(candidates);
 }
 
 async function fetchSnoozedAlerts(
