@@ -22,7 +22,7 @@ function request(body: unknown) {
 
 function makeSupabase(options: {
   wine?: { id: string } | null;
-  reason?: { id: string } | null;
+  reason?: { id: string; category?: string } | null;
   insertError?: { message: string } | null;
 } = {}) {
   const inserted: unknown[] = [];
@@ -43,7 +43,7 @@ function makeSupabase(options: {
       maybeSingle: async () => ({
         data: table === "wines"
           ? (options.wine === undefined ? { id: WINE_ID } : options.wine)
-          : (options.reason === undefined ? { id: REASON_ID } : options.reason),
+          : (options.reason === undefined ? { id: REASON_ID, category: "comp" } : options.reason),
         error: null,
       }),
       single: async () => ({
@@ -134,7 +134,9 @@ describe("POST /api/stock-adjustments", () => {
   });
 
   it("EV-7.2: links a valid reason on the inserted event", async () => {
-    const supabase = makeSupabase();
+    const supabase = makeSupabase({
+      reason: { id: REASON_ID, category: "adjustment" },
+    });
     allow(supabase.client);
 
     const response = await POST(request({

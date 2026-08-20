@@ -178,7 +178,7 @@ test.describe("@opp-7 staff, comp, and anomaly analytics", () => {
     await expect(row.locator("[data-metric]")).toHaveCount(4);
   });
 
-  test("EV-7.4: staff receives 403 from both analytics API and page", async ({ page }) => {
+  test("EV-7.4: staff gets 403 from the analytics API; roster stays visible without analytics", async ({ page }) => {
     const admin = adminClient();
     await admin.from("memberships").update({ role: "staff" }).eq("id", membershipId);
     await login(page);
@@ -186,7 +186,11 @@ test.describe("@opp-7 staff, comp, and anomaly analytics", () => {
       const api = await page.request.get("/api/member-analytics");
       expect(api.status()).toBe(403);
       const team = await page.goto("/team");
-      expect(team?.status()).toBe(403);
+      expect(team?.status()).toBe(200);
+      await expect(page.getByRole("heading", { name: "Team" })).toBeVisible();
+      await expect(
+        page.getByRole("region", { name: "Member analytics" }),
+      ).toHaveCount(0);
     } finally {
       await admin.from("memberships").update({ role: originalRole }).eq("id", membershipId);
     }

@@ -14,8 +14,8 @@ export type MemberAnalytics = {
   pourCount: number;
   pourMl: number;
   compCount: number;
-  compRate: number;
-  compRateZScore: number;
+  compRate: number | null;
+  compRateZScore: number | null;
   closeoutCount: number;
   closeoutVarianceMl: number;
   requiresVarianceInvestigation: boolean;
@@ -56,9 +56,12 @@ export function buildMemberAnalytics(
   const members = [...byUser.values()];
   for (const member of members) {
     const serviceEvents = member.pourCount + member.compCount;
-    member.compRate = serviceEvents === 0 ? 0 : member.compCount / serviceEvents;
+    // No observations means no rate — a zero here would drag the house
+    // median down and make active members look anomalous.
+    member.compRate = serviceEvents === 0 ? null : member.compCount / serviceEvents;
   }
-  const rates = members.map((member) => member.compRate);
+  const active = members.filter((member) => member.compRate !== null);
+  const rates = active.map((member) => member.compRate as number);
   const houseMedianCompRate = median(rates);
   const mean = rates.length === 0
     ? 0
@@ -68,15 +71,31 @@ export function buildMemberAnalytics(
     : rates.reduce((sum, rate) => sum + (rate - mean) ** 2, 0) / rates.length;
   const deviation = Math.sqrt(variance);
 
+  // A z-score flag needs enough signal to mean anything: at least
+  // MIN_COHORT active members, and the member's own event count at least
+  // MIN_MEMBER_EVENTS. Below that the state is insufficient-data, not
+  // suspicion.
+  const cohortSufficient = active.length >= MIN_COHORT;
   for (const member of members) {
-    member.compRateZScore = deviation === 0 ? 0 : (member.compRate - mean) / deviation;
+    const serviceEvents = member.pourCount + member.compCount;
+    member.compRateZScore =
+      member.compRate === null || deviation === 0
+        ? member.compRate === null ? null : 0
+        : (member.compRate - mean) / deviation;
+    const zFlag =
+      cohortSufficient &&
+      serviceEvents >= MIN_MEMBER_EVENTS &&
+      member.compRateZScore !== null &&
+      Math.abs(member.compRateZScore) >= 2;
     member.requiresVarianceInvestigation =
-      Math.abs(member.compRateZScore) >= 2 ||
-      Math.abs(member.closeoutVarianceMl) >= 30;
+      zFlag || Math.abs(member.closeoutVarianceMl) >= 30;
   }
 
   return { houseMedianCompRate, members };
 }
+
+export const MIN_COHORT = 4;
+export const MIN_MEMBER_EVENTS = 10;
 
 function emptyAnalytics(
   member: MemberAnalyticsInput["members"][number],
@@ -86,8 +105,8 @@ function emptyAnalytics(
     pourCount: 0,
     pourMl: 0,
     compCount: 0,
-    compRate: 0,
-    compRateZScore: 0,
+    compRate: null,
+    compRateZScore: null,
     closeoutCount: 0,
     closeoutVarianceMl: 0,
     requiresVarianceInvestigation: false,

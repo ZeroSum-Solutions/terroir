@@ -48,7 +48,7 @@ export function MemberAnalyticsTable({ data }: { data: MemberAnalyticsResult }) 
                   <td className="py-sm pr-md"><span className="font-mono text-ink">{shortId(member.userId)}</span><span className="ml-xs text-ink-muted">{member.role}</span>{member.requiresVarianceInvestigation && <span className="mt-xs block w-fit rounded-full bg-warning-soft px-xs py-2xs text-[11px] text-warning-text">Variance investigation</span>}</td>
                   <Metric href={anchor} name={`member-${member.userId}-pours`}>{member.pourCount} · {member.pourMl.toLocaleString()} ml</Metric>
                   <Metric href={anchor} name={`member-${member.userId}-comps`}>{member.compCount}</Metric>
-                  <Metric href={anchor} name={`member-${member.userId}-comp-rate`}>{formatRate(member.compRate)} · {signed(member.compRate - data.houseMedianCompRate)}</Metric>
+                  <Metric href={anchor} name={`member-${member.userId}-comp-rate`}>{member.compRate === null ? "no activity" : `${formatRate(member.compRate)} · ${signed(member.compRate - data.houseMedianCompRate)}`}</Metric>
                   <Metric href={anchor} name={`member-${member.userId}-variance`}>{signedMl(member.closeoutVarianceMl)} · {member.closeoutCount} close-outs</Metric>
                 </tr>
               );

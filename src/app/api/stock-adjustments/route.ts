@@ -46,7 +46,7 @@ async function postStockAdjustment(request: NextRequest) {
         .maybeSingle(),
       auth.supabase
         .from("reason_codes")
-        .select("id")
+        .select("id, category")
         .eq("id", body.reason_code_id)
         .eq("restaurant_id", auth.restaurantId)
         .eq("active", true)
@@ -59,6 +59,16 @@ async function postStockAdjustment(request: NextRequest) {
     return Errors.unprocessable(
       "invalid_reason_code",
       "Reason code must be active for this restaurant.",
+    );
+  }
+  // A comp must carry a comp reason; an adjustment anything but one. The
+  // audit trail is only as good as the kind/category pairing.
+  const categoryMatchesKind =
+    body.kind === "comp" ? reason.category === "comp" : reason.category !== "comp";
+  if (!categoryMatchesKind) {
+    return Errors.unprocessable(
+      "invalid_reason_code",
+      `Reason category '${reason.category}' does not apply to a ${body.kind}.`,
     );
   }
 

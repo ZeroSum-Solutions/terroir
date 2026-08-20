@@ -103,7 +103,7 @@ function StockAdjustmentFields({
         Reason
         <select name="reason_code_id" value={form.reasonId} onChange={(event) => form.setReasonId(event.target.value)} className="mt-xs h-10 w-full rounded-sm border border-border bg-white px-sm text-[13px] text-ink">
           <option value="">Select a reason</option>
-          {reasons.map((reason) => <option key={reason.id} value={reason.id}>{reason.label}</option>)}
+          {reasons.filter((reason) => (form.kind === "comp" ? reason.category === "comp" : reason.category !== "comp")).map((reason) => <option key={reason.id} value={reason.id}>{reason.label}</option>)}
         </select>
       </label>
       <label className="mt-sm block text-[12px] text-ink-muted">

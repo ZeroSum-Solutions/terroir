@@ -28,7 +28,10 @@ describe("buildMemberAnalytics", () => {
       ],
     });
 
-    expect(result.houseMedianCompRate).toBe(0);
+    // House median covers ACTIVE members only (a: 1/3, b: 0 → 1/6);
+    // c has no events, so their rate is null and excluded.
+    expect(result.houseMedianCompRate).toBeCloseTo(1 / 6, 10);
+    expect(result.members.find((m) => m.userId === "c")?.compRate).toBeNull();
     expect(result.members).toEqual([
       expect.objectContaining({
         userId: "a",
@@ -46,9 +49,9 @@ describe("buildMemberAnalytics", () => {
         compCount: 0,
         compRate: 0,
       }),
-      expect.objectContaining({ userId: "c", compRate: 0 }),
+      expect.objectContaining({ userId: "c", compRate: null }),
     ]);
-    expect(result.members[0].compRateZScore).toBeGreaterThan(1);
+    expect(result.members[0].compRateZScore).toBeCloseTo(1, 10);
   });
 
   it("gives every member a zero z-score when comp rates are uniform", () => {
@@ -77,7 +80,7 @@ describe("buildMemberAnalytics", () => {
         closeouts: [],
       });
 
-      expect(result.members.every((member) => Math.abs(member.compRateZScore) < 1e-12)).toBe(true);
+      expect(result.members.every((member) => Math.abs(member.compRateZScore ?? 0) < 1e-12)).toBe(true);
     }
   });
 
