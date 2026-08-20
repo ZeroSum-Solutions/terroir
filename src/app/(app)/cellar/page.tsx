@@ -5,6 +5,7 @@ import { findDuplicateSuspects } from "@/lib/lineage/rollups";
 import { CellarShell } from "./cellar-shell";
 import { buildCellarBinData } from "./bin-data";
 import type { CellarWineRow } from "./types";
+import { isCellarHealthSegment } from "@/lib/cellar-health/classify";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +38,7 @@ type GridData = Record<string, BinData>;
  *   • `inventory_items`    → bin location + sealed counts + section (aggregate)
  *   • `list_open_bottle_items` RPC → per-wine pour/open-bottle data
  *   • `cellar_config`      → optional grid layout + sections for the Grid toggle
+ *   • `cellar_health`      → current per-wine health segment
  *   • `restaurants`        → auto-86 settings + eightysix_strategy (owner-only Settings modal)
  *
  * Joined client-side into a single CellarWineRow[]. Wines without a
@@ -52,6 +54,7 @@ export default async function CellarPage() {
     { data: inventoryRows, error: inventoryError },
     { data: binRows, error: binError },
     { data: openBottleRows },
+    { data: healthRows, error: healthError },
     { data: configRow },
     { data: restaurantRow },
   ] = await Promise.all([
@@ -76,6 +79,10 @@ export default async function CellarPage() {
       .order("code", { ascending: true }),
     supabase.rpc("list_open_bottle_items", { p_restaurant_id: restaurantId }),
     supabase
+      .from("cellar_health")
+      .select("wine_id, segment")
+      .eq("restaurant_id", restaurantId),
+    supabase
       .from("cellar_config")
       .select("*")
       .eq("restaurant_id", restaurantId)
@@ -90,8 +97,8 @@ export default async function CellarPage() {
       .single(),
   ]);
 
-  if (inventoryError || binError) {
-    throw inventoryError ?? binError;
+  if (inventoryError || binError || healthError) {
+    throw inventoryError ?? binError ?? healthError;
   }
 
   // BND-040 — pull current bottle/glass prices from wine_list_items so
@@ -183,6 +190,12 @@ export default async function CellarPage() {
     openByWine.set(ob.wine_id, ob);
   }
 
+  const healthByWine = new Map(
+    (healthRows ?? []).flatMap((row) =>
+      isCellarHealthSegment(row.segment) ? [[row.wine_id, row.segment] as const] : [],
+    ),
+  );
+
   // OPP-1 (wave 0) — duplicate suspects: same lineage + vintage + format
   // pairs are merge candidates (EV-1.2). Computed here so the list can chip
   // them and the drawer can offer the merge.
@@ -253,6 +266,7 @@ export default async function CellarPage() {
       eightysixed_at: w.eightysixed_at,
       tasting_notes: w.tasting_notes ?? null,
       hero_image_url: w.hero_image_url ?? null,
+      healthSegment: healthByWine.get(w.id) ?? null,
       sealed_count: inv.sealed,
       bin_location: inv.bin,
       bin_placements: binData?.placements ?? [],

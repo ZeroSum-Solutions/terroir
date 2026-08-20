@@ -15,6 +15,7 @@ export type CellarFacetPatch = Partial<
     | "vintageMin"
     | "vintageMax"
     | "format"
+    | "health"
   >
 >;
 
@@ -110,6 +111,7 @@ export function CellarFacetBar({
               vintageMin: null,
               vintageMax: null,
               format: null,
+              health: null,
             })
           }
           className="h-11 shrink-0 rounded-sm px-sm text-[12px] font-medium text-ink-muted hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft md:h-9"
