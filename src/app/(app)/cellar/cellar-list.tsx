@@ -870,7 +870,7 @@ function CellarRow({
           <div className="min-w-0 flex-1">
             {/* Producer · Vintage · Region */}
             <div className="text-caption font-medium uppercase text-grey">
-              {row.producer}
+              <span>{row.producer}</span>
               {row.vintage && <span className="tabular ml-xs">{row.vintage}</span>}
               {row.region && <span className="ml-xs">· {row.region}</span>}
             </div>

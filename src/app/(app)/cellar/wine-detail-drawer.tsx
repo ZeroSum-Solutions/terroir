@@ -425,7 +425,7 @@ export function WineDetailDrawer({
           {/* Header */}
           <div className="flex items-center justify-between border-b border-hairline px-md py-sm">
             <h2 id={headingId} className="font-serif text-[17px] font-medium text-ink leading-snug">
-              {row.producer} {row.name}
+              <span>{row.producer}</span> <span>{row.name}</span>
               {row.vintage != null && (
                 <span className="ml-1 font-sans text-[13px] font-light text-grey"> {row.vintage}</span>
               )}
