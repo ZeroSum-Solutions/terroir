@@ -120,6 +120,7 @@ function row(overrides: Partial<CellarWineRow>): CellarWineRow {
   return {
     wine_id: "wine-1",
     name: "Test Wine",
+    healthSegment: null,
     producer: "Producer",
     vintage: 2024,
     varietal: "Pinot Noir",

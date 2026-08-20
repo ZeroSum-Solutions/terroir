@@ -6,6 +6,7 @@ import { CellarShell } from "./cellar-shell";
 import { buildCellarBinData } from "./bin-data";
 import type { CellarWineRow } from "./types";
 import { theoreticalRemaining } from "@/lib/partial-bottles/math";
+import { isCellarHealthSegment } from "@/lib/cellar-health/classify";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +39,7 @@ type GridData = Record<string, BinData>;
  *   • `inventory_items`    → bin location + sealed counts + section (aggregate)
  *   • `list_open_bottle_items` RPC → per-wine pour/open-bottle data
  *   • `cellar_config`      → optional grid layout + sections for the Grid toggle
+ *   • `cellar_health`      → current per-wine health segment
  *   • `restaurants`        → auto-86 settings + eightysix_strategy (owner-only Settings modal)
  *
  * Joined client-side into a single CellarWineRow[]. Wines without a
@@ -55,6 +57,7 @@ export default async function CellarPage() {
     { data: openBottleRows },
     { data: directOpenBottleRows, error: directOpenError },
     { data: reasonCodeRows, error: reasonCodeError },
+    { data: healthRows, error: healthError },
     { data: configRow },
     { data: restaurantRow },
   ] = await Promise.all([
@@ -91,6 +94,10 @@ export default async function CellarPage() {
       .in("category", ["spoilage", "adjustment"])
       .order("label", { ascending: true }),
     supabase
+      .from("cellar_health")
+      .select("wine_id, segment")
+      .eq("restaurant_id", restaurantId),
+    supabase
       .from("cellar_config")
       .select("*")
       .eq("restaurant_id", restaurantId)
@@ -105,8 +112,8 @@ export default async function CellarPage() {
       .single(),
   ]);
 
-  if (inventoryError || binError || directOpenError || reasonCodeError) {
-    throw inventoryError ?? binError ?? directOpenError ?? reasonCodeError;
+  if (inventoryError || binError || directOpenError || reasonCodeError || healthError) {
+    throw inventoryError ?? binError ?? directOpenError ?? reasonCodeError ?? healthError;
   }
 
   const activeBottleIds = (directOpenBottleRows ?? []).map((bottle) => bottle.id);
@@ -227,6 +234,11 @@ export default async function CellarPage() {
     const pours = drainingPoursByBottle.get(event.open_bottle_id) ?? [];
     drainingPoursByBottle.set(event.open_bottle_id, [...pours, event.ml_delta]);
   }
+  const healthByWine = new Map(
+    (healthRows ?? []).flatMap((row) =>
+      isCellarHealthSegment(row.segment) ? [[row.wine_id, row.segment] as const] : [],
+    ),
+  );
 
   // OPP-1 (wave 0) — duplicate suspects: same lineage + vintage + format
   // pairs are merge candidates (EV-1.2). Computed here so the list can chip
@@ -299,6 +311,7 @@ export default async function CellarPage() {
       eightysixed_at: w.eightysixed_at,
       tasting_notes: w.tasting_notes ?? null,
       hero_image_url: w.hero_image_url ?? null,
+      healthSegment: healthByWine.get(w.id) ?? null,
       sealed_count: inv.sealed,
       bin_location: inv.bin,
       bin_placements: binData?.placements ?? [],

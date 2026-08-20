@@ -38,6 +38,7 @@ begin
   select * into v_bottle
     from public.open_bottles
    where wine_id = p_wine_id and restaurant_id = v_restaurant_id
+     and closed_at is null
    for update;
   if not found then
     raise exception 'open_bottle_not_found';
@@ -83,9 +84,9 @@ begin
   -- Finish event: the pour_events trigger drains remaining_ml to zero and
   -- deletes the open_bottles row inside this same transaction.
   insert into public.pour_events (
-    wine_id, restaurant_id, ml_delta, kind, actor_user_id, note
+    wine_id, restaurant_id, open_bottle_id, ml_delta, kind, actor_user_id, note
   ) values (
-    p_wine_id, v_restaurant_id, v_bottle.remaining_ml, 'finish_bottle',
+    p_wine_id, v_restaurant_id, v_bottle.id, v_bottle.remaining_ml, 'finish_bottle',
     auth.uid(), 'Bottle close-out'
   );
 
