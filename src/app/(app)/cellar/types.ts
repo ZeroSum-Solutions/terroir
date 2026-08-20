@@ -77,6 +77,11 @@ export type CellarWineRow = {
     label: string;
     category: string;
   }>;
+  stock_adjustment_reason_codes: Array<{
+    id: string;
+    label: string;
+    category: string;
+  }>;
 
   // BND-039 — drink-window enrichment metadata. All nullable so a wine
   // without enrichment data renders with no timeline / no panel; the
