@@ -5,6 +5,7 @@ import { findDuplicateSuspects } from "@/lib/lineage/rollups";
 import { CellarShell } from "./cellar-shell";
 import { buildCellarBinData } from "./bin-data";
 import type { CellarWineRow } from "./types";
+import { theoreticalRemaining } from "@/lib/partial-bottles/math";
 import { isCellarHealthSegment } from "@/lib/cellar-health/classify";
 
 export const runtime = "nodejs";
@@ -54,6 +55,8 @@ export default async function CellarPage() {
     { data: inventoryRows, error: inventoryError },
     { data: binRows, error: binError },
     { data: openBottleRows },
+    { data: directOpenBottleRows, error: directOpenError },
+    { data: reasonCodeRows, error: reasonCodeError },
     { data: healthRows, error: healthError },
     { data: configRow },
     { data: restaurantRow },
@@ -79,6 +82,18 @@ export default async function CellarPage() {
       .order("code", { ascending: true }),
     supabase.rpc("list_open_bottle_items", { p_restaurant_id: restaurantId }),
     supabase
+      .from("open_bottles")
+      .select("id, wine_id, remaining_ml, opened_at, opened_by, preservation_method")
+      .eq("restaurant_id", restaurantId)
+      .is("closed_at", null),
+    supabase
+      .from("reason_codes")
+      .select("id, label, category")
+      .eq("restaurant_id", restaurantId)
+      .eq("active", true)
+      .in("category", ["spoilage", "adjustment"])
+      .order("label", { ascending: true }),
+    supabase
       .from("cellar_health")
       .select("wine_id, segment")
       .eq("restaurant_id", restaurantId),
@@ -97,9 +112,24 @@ export default async function CellarPage() {
       .single(),
   ]);
 
-  if (inventoryError || binError || healthError) {
-    throw inventoryError ?? binError ?? healthError;
+  if (inventoryError || binError || directOpenError || reasonCodeError || healthError) {
+    throw inventoryError ?? binError ?? directOpenError ?? reasonCodeError ?? healthError;
   }
+
+  const activeBottleIds = (directOpenBottleRows ?? []).map((bottle) => bottle.id);
+  const earliestOpen = (directOpenBottleRows ?? [])
+    .map((bottle) => bottle.opened_at)
+    .sort()[0];
+  const { data: pourEventRows, error: pourEventError } = activeBottleIds.length
+    ? await supabase
+        .from("pour_events")
+        .select("open_bottle_id, ml_delta, kind, occurred_at")
+        .eq("restaurant_id", restaurantId)
+        .in("open_bottle_id", activeBottleIds)
+        .gte("occurred_at", earliestOpen)
+        .in("kind", ["pour", "spill"])
+    : { data: [], error: null };
+  if (pourEventError) throw pourEventError;
 
   // BND-040 — pull current bottle/glass prices from wine_list_items so
   // the drawer Pricing section can show actual pricing alongside retail
@@ -190,6 +220,20 @@ export default async function CellarPage() {
     openByWine.set(ob.wine_id, ob);
   }
 
+  const directOpenByWine = new Map(
+    (directOpenBottleRows ?? []).map((bottle) => [bottle.wine_id, bottle]),
+  );
+  const directOpenById = new Map(
+    (directOpenBottleRows ?? []).map((bottle) => [bottle.id, bottle]),
+  );
+  const drainingPoursByBottle = new Map<string, number[]>();
+  for (const event of pourEventRows ?? []) {
+    if (!event.open_bottle_id) continue;
+    const bottle = directOpenById.get(event.open_bottle_id);
+    if (!bottle || event.occurred_at < bottle.opened_at) continue;
+    const pours = drainingPoursByBottle.get(event.open_bottle_id) ?? [];
+    drainingPoursByBottle.set(event.open_bottle_id, [...pours, event.ml_delta]);
+  }
   const healthByWine = new Map(
     (healthRows ?? []).flatMap((row) =>
       isCellarHealthSegment(row.segment) ? [[row.wine_id, row.segment] as const] : [],
@@ -250,6 +294,7 @@ export default async function CellarPage() {
       inventoryByWine.get(w.id) ?? { sealed: 0, bin: null, section: null, latestCost: null };
     const binData = binDataByWine[w.id];
     const ob = openByWine.get(w.id);
+    const directOpen = directOpenByWine.get(w.id);
     const price = priceByWine.get(w.id);
     return {
       wine_id: w.id,
@@ -277,8 +322,23 @@ export default async function CellarPage() {
       glass_pour_ml: ob?.glass_pour_ml ?? price?.pourMl ?? null,
       pour_size_mode: ob?.pour_size_mode ?? null,
       size_ml: ob?.size_ml ?? null,
-      open_remaining_ml: ob?.open_remaining_ml ?? null,
-      opened_at: ob?.opened_at ?? null,
+      open_remaining_ml:
+        directOpen?.remaining_ml ?? ob?.open_remaining_ml ?? null,
+      opened_at: directOpen?.opened_at ?? ob?.opened_at ?? null,
+      open_bottle_id: directOpen?.id ?? null,
+      preservation_method: (directOpen?.preservation_method ?? "none") as CellarWineRow["preservation_method"],
+      opened_by: directOpen?.opened_by ?? null,
+      theoretical_remaining_ml: directOpen
+        ? theoreticalRemaining(
+            w.size_ml,
+            drainingPoursByBottle.get(directOpen.id) ?? [],
+          )
+        : null,
+      closeout_reason_codes: (reasonCodeRows ?? []).map((reason) => ({
+        id: reason.id,
+        label: reason.label,
+        category: reason.category,
+      })),
       // BND-039 — drink window metadata (nullable)
       drink_window_start: w.drink_window_start,
       drink_window_end: w.drink_window_end,

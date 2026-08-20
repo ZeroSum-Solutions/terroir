@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 70,
-  "discoveredOperationCount": 83,
+  "routeFileCount": 71,
+  "discoveredOperationCount": 84,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/bins",
@@ -297,6 +297,17 @@
       "path": "/api/open-bottles/[id]/close",
       "source": {
         "file": "src/app/api/open-bottles/[id]/close/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/open-bottles/close",
+      "method": "POST",
+      "path": "/api/open-bottles/close",
+      "source": {
+        "file": "src/app/api/open-bottles/close/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null
