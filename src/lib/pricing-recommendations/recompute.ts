@@ -34,10 +34,15 @@ export async function runPricingRecommendationsRecompute(
   try {
     const inputs = await loadInputs(admin, restaurantId, now);
     const rows = buildRows(inputs, restaurantId, now);
-    if (rows.length > 0) {
+    // Upsert, stale cleanup, and job finish are separate commits (no RPC).
+    // Accepted limitation, same as cellar_health: this is advisory state and
+    // an idempotent rerun self-heals a partially-visible generation.
+    for (let start = 0; start < rows.length; start += WRITE_BATCH_SIZE) {
       const { error } = await admin
         .from("pricing_recommendations")
-        .upsert(rows, { onConflict: "restaurant_id,wine_id" });
+        .upsert(rows.slice(start, start + WRITE_BATCH_SIZE), {
+          onConflict: "restaurant_id,wine_id",
+        });
       if (error) throw error;
     }
     await removeStaleRows(admin, restaurantId, inputs.existingWineIds, rows);
@@ -76,6 +81,7 @@ async function startJob(
 
 const FETCH_PAGE_SIZE = 1_000;
 const PROFILE_DAYS = 90;
+const WRITE_BATCH_SIZE = 500;
 const VELOCITY_DAYS = 30;
 
 async function fetchAll<T>(
@@ -101,7 +107,7 @@ async function loadInputs(admin: Client, restaurantId: string, now: Date) {
       fetchAll((from, to) => admin.from("wines").select("id, retail_median, size_ml").eq("restaurant_id", restaurantId).order("id").range(from, to)),
       fetchAll((from, to) => admin.from("inventory_items").select("id, wine_id, quantity, unit_cost").eq("restaurant_id", restaurantId).order("id").range(from, to)),
       fetchAll((from, to) => admin.from("cellar_health").select("wine_id, segment").eq("restaurant_id", restaurantId).order("wine_id").range(from, to)),
-      fetchAll((from, to) => admin.from("pour_events").select("id, wine_id, kind, ml_delta, occurred_at").eq("restaurant_id", restaurantId).gte("occurred_at", profileSince.toISOString()).order("id").range(from, to)),
+      fetchAll((from, to) => admin.from("pour_events").select("id, wine_id, kind, ml_delta, occurred_at").eq("restaurant_id", restaurantId).gte("occurred_at", profileSince.toISOString()).lte("occurred_at", now.toISOString()).order("id").range(from, to)),
       fetchAll((from, to) => admin.from("wine_list_items").select("id, wine_id, bottle_price, glass_price, glass_pour_ml, wine_list_sections!inner(wine_lists!inner(restaurant_id))").eq("wine_list_sections.wine_lists.restaurant_id", restaurantId).order("id").range(from, to)),
       admin.from("cellar_config").select("health_appreciation_threshold").eq("restaurant_id", restaurantId).limit(1).maybeSingle(),
       fetchAll((from, to) => admin.from("pricing_recommendations").select("wine_id").eq("restaurant_id", restaurantId).order("wine_id").range(from, to)),
@@ -199,6 +205,7 @@ function aggregateActivity(rows: LoadedInputs["pours"], now: Date) {
   for (const row of rows) {
     if (row.kind !== "pour" || row.ml_delta <= 0) continue;
     const timestamp = new Date(row.occurred_at);
+    if (timestamp.getTime() > now.getTime()) continue; // future-dated rows never count
     if (Number.isNaN(timestamp.getTime())) continue;
     const current = result.get(row.wine_id) ?? { velocity: 0, profile: {} };
     if (timestamp.getTime() >= velocitySince) current.velocity += 1;
@@ -283,13 +290,14 @@ async function removeStaleRows(
 ) {
   const current = new Set(currentRows.map((row) => row.wine_id));
   const stale = existingWineIds.filter((wineId) => !current.has(wineId));
-  if (stale.length === 0) return;
-  const { error } = await admin
-    .from("pricing_recommendations")
-    .delete()
-    .eq("restaurant_id", restaurantId)
-    .in("wine_id", stale);
-  if (error) throw error;
+  for (let start = 0; start < stale.length; start += WRITE_BATCH_SIZE) {
+    const { error } = await admin
+      .from("pricing_recommendations")
+      .delete()
+      .eq("restaurant_id", restaurantId)
+      .in("wine_id", stale.slice(start, start + WRITE_BATCH_SIZE));
+    if (error) throw error;
+  }
 }
 
 async function finishJob(

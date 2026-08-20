@@ -40,6 +40,10 @@ describe("fetchPricingRecommendations", () => {
         calls.push(["order", args]);
         return chain;
       },
+      range: (...args: unknown[]) => {
+        calls.push(["range", args]);
+        return chain;
+      },
       then: (
         resolve: (value: typeof result) => unknown,
         reject?: (reason: unknown) => unknown,
@@ -80,6 +84,7 @@ describe("fetchPricingRecommendations", () => {
       select: () => chain,
       eq: () => chain,
       order: () => chain,
+      range: () => chain,
       then: (
         resolve: (value: typeof result) => unknown,
         reject?: (reason: unknown) => unknown,

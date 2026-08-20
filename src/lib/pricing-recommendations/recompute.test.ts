@@ -184,6 +184,7 @@ function makeClient(
       select: () => chain,
       eq: () => chain,
       gte: () => chain,
+      lte: () => chain,
       order: () => chain,
       range: (from: number, to: number) => {
         fixture.ranges.push([from, to]);

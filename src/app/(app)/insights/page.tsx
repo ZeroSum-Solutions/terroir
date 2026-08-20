@@ -311,7 +311,11 @@ export default async function DashboardPage({
     fetchPricingAlerts(supabase, rid).catch(function () { return []; }),
     fetchSnoozedAlerts(supabase, rid).catch(function () { return [] as SnoozedRow[]; }),
     fetchYieldGroups(supabase, rid, rangeSince, rangeUntil),
-    fetchPricingRecommendations(supabase, rid),
+    // Fail soft: a pricing read/shape error must not take down Insights.
+    fetchPricingRecommendations(supabase, rid).catch(function (error) {
+      console.error("pricing recommendations unavailable:", error);
+      return null;
+    }),
   ]);
   const firstName = parseFirstName(user.email ?? "") || "there";
   const canEnrich = userRole === "owner" || userRole === "manager";
@@ -542,10 +546,12 @@ export default async function DashboardPage({
 
       <YieldReportSection groups={yieldGroups} />
       <CellarHealthPanel summary={cellarHealthSummary} canRecompute={canEnrich} />
-      <PricingPlaysSection
-        recommendations={pricingRecommendations}
-        canRecompute={canEnrich}
-      />
+      {pricingRecommendations !== null && (
+        <PricingPlaysSection
+          recommendations={pricingRecommendations}
+          canRecompute={canEnrich}
+        />
+      )}
 
       {/* Drink-window watch */}
       {(drinkWindowAlerts.length > 0 || canEnrich) && (

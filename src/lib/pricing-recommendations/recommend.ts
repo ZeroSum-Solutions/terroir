@@ -175,7 +175,9 @@ function selectSlowestObservedDay(profile: DayOfWeekProfile): DayOfWeek | null {
   let minimum = Number.POSITIVE_INFINITY;
   for (const day of DAYS_OF_WEEK) {
     const count = profile[day];
-    if (count === undefined || count <= 0 || count >= minimum) continue;
+    // Presence means observed: an explicit zero-demand day is a valid
+    // (in fact ideal) slowest day; only absent days are unknown.
+    if (count === undefined || count < 0 || count >= minimum) continue;
     selected = day;
     minimum = count;
   }

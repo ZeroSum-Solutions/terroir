@@ -51,17 +51,26 @@ export async function fetchPricingRecommendations(
   supabase: SupabaseClient<Database>,
   restaurantId: string,
 ): Promise<PricingPlay[]> {
-  const { data, error } = await supabase
-    .from("pricing_recommendations")
-    .select(
-      "wine_id, class, rationale, evidence, timing, computed_at, wines!inner(name, producer, vintage)",
-    )
-    .eq("restaurant_id", restaurantId)
-    .order("class")
-    .order("computed_at", { ascending: false });
-  if (error) throw error;
+  const pageSize = 1000;
+  const all: unknown[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("pricing_recommendations")
+      .select(
+        "wine_id, class, rationale, evidence, timing, computed_at, wines!inner(name, producer, vintage)",
+      )
+      .eq("restaurant_id", restaurantId)
+      .order("class")
+      .order("computed_at", { ascending: false })
+      .order("wine_id")
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = data ?? [];
+    all.push(...page);
+    if (page.length < pageSize) break;
+  }
 
-  return StoredRowSchema.array().parse(data ?? []).map((row) => ({
+  return StoredRowSchema.array().parse(all).map((row) => ({
     wineId: row.wine_id,
     class: row.class,
     rationale: row.rationale,
