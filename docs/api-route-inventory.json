@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 69,
-  "discoveredOperationCount": 82,
+  "routeFileCount": 72,
+  "discoveredOperationCount": 85,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/bins",
@@ -330,6 +330,39 @@
       "path": "/api/reconcile",
       "source": {
         "file": "src/app/api/reconcile/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/reconcile-queue",
+      "method": "GET",
+      "path": "/api/reconcile-queue",
+      "source": {
+        "file": "src/app/api/reconcile-queue/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/reconcile-queue/accept",
+      "method": "POST",
+      "path": "/api/reconcile-queue/accept",
+      "source": {
+        "file": "src/app/api/reconcile-queue/accept/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/reconcile-queue/undo",
+      "method": "POST",
+      "path": "/api/reconcile-queue/undo",
+      "source": {
+        "file": "src/app/api/reconcile-queue/undo/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null

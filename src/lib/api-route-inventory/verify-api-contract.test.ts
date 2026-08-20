@@ -310,9 +310,9 @@ describe("checked-in API contract gate", () => {
 
     expect(result.errors).toEqual([]);
     expect(result.summary).toEqual({
-      discoveredOperationCount: 82,
+      discoveredOperationCount: 85,
       plannedOperationCount: 15,
-      classificationCount: 82,
+      classificationCount: 85,
     });
     expect(paths.map((file) => readFileSync(resolve(file), "utf8"))).toEqual(
       before,
