@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import { findDuplicateSuspects } from "@/lib/lineage/rollups";
 import { CellarShell } from "./cellar-shell";
+import { buildCellarBinData } from "./bin-data";
 import type { CellarWineRow } from "./types";
 
 export const runtime = "nodejs";
@@ -48,7 +49,8 @@ export default async function CellarPage() {
 
   const [
     { data: wineRows },
-    { data: inventoryRows },
+    { data: inventoryRows, error: inventoryError },
+    { data: binRows, error: binError },
     { data: openBottleRows },
     { data: configRow },
     { data: restaurantRow },
@@ -62,9 +64,16 @@ export default async function CellarPage() {
       .order("name", { ascending: true }),
     supabase
       .from("inventory_items")
-      .select("wine_id, bin_location, quantity, unit_cost, added_at, section")
+      .select("wine_id, bin_id, bin_location, quantity, unit_cost, added_at, section")
       .eq("restaurant_id", restaurantId)
       .order("added_at", { ascending: false }),
+    supabase
+      .from("bins")
+      .select("id, code, zone, capacity, retired_at")
+      .eq("restaurant_id", restaurantId)
+      .order("priority", { ascending: false })
+      .order("sort_order", { ascending: true })
+      .order("code", { ascending: true }),
     supabase.rpc("list_open_bottle_items", { p_restaurant_id: restaurantId }),
     supabase
       .from("cellar_config")
@@ -80,6 +89,10 @@ export default async function CellarPage() {
       .eq("id", restaurantId)
       .single(),
   ]);
+
+  if (inventoryError || binError) {
+    throw inventoryError ?? binError;
+  }
 
   // BND-040 — pull current bottle/glass prices from wine_list_items so
   // the drawer Pricing section can show actual pricing alongside retail
@@ -195,11 +208,34 @@ export default async function CellarPage() {
     }
   }
 
+  const binDataByWine = buildCellarBinData({
+    wines: (wineRows ?? []).map((wine) => ({
+      id: wine.id,
+      lineageId: wine.lineage_id,
+      name: wine.name,
+      producer: wine.producer,
+      colour: wine.colour,
+    })),
+    bins: (binRows ?? []).map((bin) => ({
+      id: bin.id,
+      code: bin.code,
+      zone: bin.zone,
+      capacity: bin.capacity,
+      retiredAt: bin.retired_at,
+    })),
+    inventoryRows: (inventoryRows ?? []).map((item) => ({
+      wineId: item.wine_id,
+      binId: item.bin_id,
+      quantity: item.quantity ?? 0,
+    })),
+  });
+
   // Build the unified row list. The wines table is canonical — every
   // wine in the cellar shows up, with optional stock data layered on.
   const rows: CellarWineRow[] = (wineRows ?? []).map((w) => {
     const inv =
       inventoryByWine.get(w.id) ?? { sealed: 0, bin: null, section: null, latestCost: null };
+    const binData = binDataByWine[w.id];
     const ob = openByWine.get(w.id);
     const price = priceByWine.get(w.id);
     return {
@@ -219,6 +255,9 @@ export default async function CellarPage() {
       hero_image_url: w.hero_image_url ?? null,
       sealed_count: inv.sealed,
       bin_location: inv.bin,
+      bin_placements: binData?.placements ?? [],
+      unplaced_count: binData?.unplacedCount ?? 0,
+      suggested_bin: binData?.suggestedBin ?? null,
       section: inv.section,
       wine_list_item_id: ob?.wine_list_item_id ?? null,
       glass_pour_ml: ob?.glass_pour_ml ?? price?.pourMl ?? null,

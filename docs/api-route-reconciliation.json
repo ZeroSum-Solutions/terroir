@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 61,
+    "extensionDiscoveredCount": 65,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -306,6 +306,30 @@
     }
   ],
   "discoveredClassifications": [
+    {
+      "operationId": "api:GET:/api/bins",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/bins",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:PATCH:/api/bins/{param}",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:GET:/api/bins/suggest",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
     {
       "operationId": "api:POST:/api/cellar",
       "classification": "exact",
