@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Search, Settings, LayoutGrid, List as ListIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDrinkWindowStatus, isHolding } from "@/lib/drink-window/status";
@@ -13,12 +13,8 @@ import { ReconcileModal } from "./reconcile-modal";
 import { AutoEightysixModal } from "./auto-eightysix-modal";
 import { CellarGridView, CellarSetup } from "./cellar-grid";
 import { resolveCellarNavigationIntent } from "./cellar-navigation";
-import {
-  parseCellarUrlState,
-  serializeCellarUrlState,
-  type CellarUrlFilter,
-  type CellarUrlState,
-} from "@/lib/cellar-facets/url-state";
+import { type CellarUrlFilter } from "@/lib/cellar-facets/url-state";
+import { useCellarUrlState } from "./use-cellar-url-state";
 
 type CellarSection = { id: string; name: string };
 
@@ -68,34 +64,12 @@ export function CellarShell({
   // BND-063/064 — cellar sections for grouping and DnD
   cellarSections?: CellarSection[];
 }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const mode = searchParams.get("mode");
-  const urlState = useMemo(
-    () => parseCellarUrlState(searchParams),
-    [searchParams],
-  );
-  const urlStateRef = useRef(urlState);
-  useEffect(() => {
-    urlStateRef.current = urlState;
-  }, [urlState]);
-  const applyUrlState = useCallback(
-    (patch: Partial<CellarUrlState>, mode: "replace" | "push") => {
-      const next = { ...urlStateRef.current, ...patch };
-      urlStateRef.current = next;
-      const params = serializeCellarUrlState(next);
-      const href = `/cellar?${params.toString()}`;
-      if (mode === "push") router.push(href, { scroll: false });
-      else router.replace(href, { scroll: false });
-    },
-    [router],
-  );
-  const replaceUrlState = useCallback(
-    (patch: Partial<CellarUrlState>) => applyUrlState(patch, "replace"),
-    [applyUrlState],
-  );
+  const { urlState, urlStateRef, applyUrlState, replaceUrlState } =
+    useCellarUrlState();
   // Opening the drawer pushes a history entry so Back closes it.
   const openWine = useCallback(
     (wineId: string) => applyUrlState({ wine: wineId }, "push"),
@@ -127,7 +101,7 @@ export function CellarShell({
       replaceUrlState({ q: qDraft });
     }, 250);
     return () => clearTimeout(id);
-  }, [qDraft, replaceUrlState]);
+  }, [qDraft, replaceUrlState, urlStateRef]);
 
   const [initialMode] = useState(() => mode ?? "");
   const [view, setView] = useState<"list" | "grid">("list");

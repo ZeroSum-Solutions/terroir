@@ -123,10 +123,9 @@ test.describe("@opp-4 navigable wine taxonomy", () => {
     await expect(page.getByLabel("Region")).toHaveValue(regionA);
     await expect(page.getByText(names[2], { exact: true })).toHaveCount(0);
 
+    // Back-to-back changes with no wait between them: useCellarUrlState
+    // must not let a stale router snapshot resurrect the cleared region.
     await page.getByLabel("Region").selectOption("");
-    // Wait for the region clear to commit to the URL before the next
-    // filter interaction; back-to-back changes race the RSC navigation.
-    await expect(page).not.toHaveURL(/region=/);
     await page.getByLabel("Group by").selectOption("producer");
     await expect(page).toHaveURL(/group_by=producer/);
     await expect(page).not.toHaveURL(/region=/);
