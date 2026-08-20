@@ -142,3 +142,46 @@ describe("wave-0 lineage and reason-code contracts", () => {
     expect(schema).toContain("pg_advisory_xact_lock");
   });
 });
+
+describe("wave-2 health, reconcile, and close-out contracts", () => {
+
+  it("EV-2.1/2.4: cellar_health partitions segments; thresholds live on cellar_config", () => {
+    expect(schema).toContain(
+      "segment in ('window_risk', 'hold', 'dead_stock', 'cash_trap', 'healthy')",
+    );
+    expect(schema).toContain("unique (restaurant_id, wine_id)");
+    expect(schema).toContain("health_dead_stock_days");
+    expect(schema).toContain("health_cash_trap_floor");
+    expect(schema).toContain("health_appreciation_threshold");
+    expect(schema).toContain(
+      "job_type in ('invoice_ocr', 'wine_enrichment', 'wine_list_pdf', 'cellar_health')",
+    );
+    expect(schema).toContain(
+      "revoke insert, update, delete on public.cellar_health from authenticated, anon;",
+    );
+  });
+
+  it("EV-5.4: reconcile actions snapshot prior/new state and are immutable", () => {
+    expect(schema).toContain("create table public.reconcile_batches");
+    expect(schema).toContain("prior_state    jsonb       not null");
+    expect(schema).toContain("new_state      jsonb       not null");
+    expect(schema).toContain(
+      "revoke update, delete on public.reconcile_actions from authenticated;",
+    );
+  });
+
+  it("EV-10.1/10.2: preservation method on open_bottles; write-off requires a reason code", () => {
+    expect(schema).toContain(
+      "preservation_method in ('coravin', 'argon', 'vacuum', 'none')",
+    );
+    expect(schema).toContain(
+      "written_off_ml = 0 or reason_code_id is not null",
+    );
+    expect(schema).toContain(
+      "(actual_remaining_ml - theoretical_remaining_ml) stored",
+    );
+    expect(schema).toContain(
+      "revoke update, delete on public.bottle_closeouts from authenticated;",
+    );
+  });
+});

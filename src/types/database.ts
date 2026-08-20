@@ -187,10 +187,90 @@ export type Database = {
           },
         ]
       }
+      bottle_closeouts: {
+        Row: {
+          actual_remaining_ml: number
+          closed_at: string
+          closed_by: string | null
+          id: string
+          open_bottle_id: string | null
+          opened_at: string | null
+          preservation_method: string
+          reason_code_id: string | null
+          restaurant_id: string
+          theoretical_remaining_ml: number
+          variance_ml: number | null
+          wine_id: string
+          written_off_ml: number
+        }
+        Insert: {
+          actual_remaining_ml: number
+          closed_at?: string
+          closed_by?: string | null
+          id?: string
+          open_bottle_id?: string | null
+          opened_at?: string | null
+          preservation_method: string
+          reason_code_id?: string | null
+          restaurant_id: string
+          theoretical_remaining_ml: number
+          variance_ml?: number | null
+          wine_id: string
+          written_off_ml?: number
+        }
+        Update: {
+          actual_remaining_ml?: number
+          closed_at?: string
+          closed_by?: string | null
+          id?: string
+          open_bottle_id?: string | null
+          opened_at?: string | null
+          preservation_method?: string
+          reason_code_id?: string | null
+          restaurant_id?: string
+          theoretical_remaining_ml?: number
+          variance_ml?: number | null
+          wine_id?: string
+          written_off_ml?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bottle_closeouts_open_bottle_id_fkey"
+            columns: ["open_bottle_id"]
+            isOneToOne: false
+            referencedRelation: "open_bottles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bottle_closeouts_reason_code_id_fkey"
+            columns: ["reason_code_id"]
+            isOneToOne: false
+            referencedRelation: "reason_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bottle_closeouts_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bottle_closeouts_wine_id_fkey"
+            columns: ["wine_id"]
+            isOneToOne: false
+            referencedRelation: "wines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cellar_config: {
         Row: {
           columns: number
           created_at: string
+          health_appreciation_threshold: number
+          health_cash_trap_floor: number
+          health_dead_stock_days: number
           id: string
           labels: Json
           low_stock_threshold: number
@@ -203,6 +283,9 @@ export type Database = {
         Insert: {
           columns?: number
           created_at?: string
+          health_appreciation_threshold?: number
+          health_cash_trap_floor?: number
+          health_dead_stock_days?: number
           id?: string
           labels?: Json
           low_stock_threshold?: number
@@ -215,6 +298,9 @@ export type Database = {
         Update: {
           columns?: number
           created_at?: string
+          health_appreciation_threshold?: number
+          health_cash_trap_floor?: number
+          health_dead_stock_days?: number
           id?: string
           labels?: Json
           low_stock_threshold?: number
@@ -230,6 +316,48 @@ export type Database = {
             columns: ["restaurant_id"]
             isOneToOne: false
             referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cellar_health: {
+        Row: {
+          computed_at: string
+          id: string
+          reason: string
+          restaurant_id: string
+          segment: string
+          wine_id: string
+        }
+        Insert: {
+          computed_at?: string
+          id?: string
+          reason: string
+          restaurant_id: string
+          segment: string
+          wine_id: string
+        }
+        Update: {
+          computed_at?: string
+          id?: string
+          reason?: string
+          restaurant_id?: string
+          segment?: string
+          wine_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cellar_health_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cellar_health_wine_id_fkey"
+            columns: ["wine_id"]
+            isOneToOne: false
+            referencedRelation: "wines"
             referencedColumns: ["id"]
           },
         ]
@@ -494,6 +622,7 @@ export type Database = {
           id: string
           opened_at: string
           opened_by: string | null
+          preservation_method: string
           remaining_ml: number
           restaurant_id: string
           source_inventory_item_id: string | null
@@ -504,6 +633,7 @@ export type Database = {
           id?: string
           opened_at?: string
           opened_by?: string | null
+          preservation_method?: string
           remaining_ml: number
           restaurant_id: string
           source_inventory_item_id?: string | null
@@ -514,6 +644,7 @@ export type Database = {
           id?: string
           opened_at?: string
           opened_by?: string | null
+          preservation_method?: string
           remaining_ml?: number
           restaurant_id?: string
           source_inventory_item_id?: string | null
@@ -632,6 +763,95 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "reason_codes_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reconcile_actions: {
+        Row: {
+          action_type: string
+          batch_id: string
+          created_at: string
+          id: string
+          new_state: Json
+          prior_state: Json
+          restaurant_id: string
+          subject_id: string
+          subject_table: string
+        }
+        Insert: {
+          action_type: string
+          batch_id: string
+          created_at?: string
+          id?: string
+          new_state: Json
+          prior_state: Json
+          restaurant_id: string
+          subject_id: string
+          subject_table: string
+        }
+        Update: {
+          action_type?: string
+          batch_id?: string
+          created_at?: string
+          id?: string
+          new_state?: Json
+          prior_state?: Json
+          restaurant_id?: string
+          subject_id?: string
+          subject_table?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reconcile_actions_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "reconcile_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reconcile_actions_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reconcile_batches: {
+        Row: {
+          action_count: number
+          created_at: string
+          created_by: string | null
+          id: string
+          restaurant_id: string
+          undone_at: string | null
+          undone_by: string | null
+        }
+        Insert: {
+          action_count?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          restaurant_id: string
+          undone_at?: string | null
+          undone_by?: string | null
+        }
+        Update: {
+          action_count?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          restaurant_id?: string
+          undone_at?: string | null
+          undone_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reconcile_batches_restaurant_id_fkey"
             columns: ["restaurant_id"]
             isOneToOne: false
             referencedRelation: "restaurants"
@@ -1160,6 +1380,7 @@ export type Database = {
           id: string
           opened_at: string
           opened_by: string | null
+          preservation_method: string
           remaining_ml: number
           restaurant_id: string
           source_inventory_item_id: string | null
@@ -1188,6 +1409,7 @@ export type Database = {
           id: string
           opened_at: string
           opened_by: string | null
+          preservation_method: string
           remaining_ml: number
           restaurant_id: string
           source_inventory_item_id: string | null
@@ -1240,6 +1462,7 @@ export type Database = {
           id: string
           opened_at: string
           opened_by: string | null
+          preservation_method: string
           remaining_ml: number
           restaurant_id: string
           source_inventory_item_id: string | null
