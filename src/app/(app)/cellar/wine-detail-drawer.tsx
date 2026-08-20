@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition, useCallback } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { X, Wine, PackageOpen, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, Undo2, Upload, Trash2 } from "lucide-react";
+import { X, PackageOpen, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, Undo2, Upload, Trash2 } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { useToast } from "@/lib/toast";
 import { ML_PER_OZ } from "@/lib/units";
@@ -33,6 +33,7 @@ import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
 import type { PreservationMethod } from "@/lib/partial-bottles/math";
 import { PartialBottleCloseout } from "./partial-bottle-closeout";
+import { StockAdjustmentForm } from "./stock-adjustment-form";
 
 export function WineDetailDrawer({
   row,
@@ -593,6 +594,11 @@ export function WineDetailDrawer({
 
             {/* Quick actions */}
             <section aria-label="Actions" className="mt-md flex flex-col gap-sm">
+              <StockAdjustmentForm
+                wineId={row.wine_id}
+                reasons={row.stock_adjustment_reason_codes}
+                onComplete={() => startTransition(() => router.refresh())}
+              />
               {(row.sealed_count > 0 || canPour) && (
                 <label className="text-[12px] text-ink-muted">
                   Preservation method
@@ -815,12 +821,6 @@ export function WineDetailDrawer({
                 </>
               )}
 
-              {!canPour && !canManage && (
-                <div className="rounded-sm border border-border bg-surface-muted px-md py-sm text-center text-[12px] text-ink-muted">
-                  <Wine className="mx-auto mb-2xs h-4 w-4" strokeWidth={1.5} aria-hidden />
-                  No actions available for your role.
-                </div>
-              )}
             </section>
           </div>
         </div>

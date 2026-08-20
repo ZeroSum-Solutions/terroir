@@ -91,7 +91,6 @@ export default async function CellarPage() {
       .select("id, label, category")
       .eq("restaurant_id", restaurantId)
       .eq("active", true)
-      .in("category", ["spoilage", "adjustment"])
       .order("label", { ascending: true }),
     supabase
       .from("cellar_health")
@@ -334,7 +333,14 @@ export default async function CellarPage() {
             drainingPoursByBottle.get(directOpen.id) ?? [],
           )
         : null,
-      closeout_reason_codes: (reasonCodeRows ?? []).map((reason) => ({
+      closeout_reason_codes: (reasonCodeRows ?? [])
+        .filter((reason) => ["spoilage", "adjustment"].includes(reason.category))
+        .map((reason) => ({
+          id: reason.id,
+          label: reason.label,
+          category: reason.category,
+        })),
+      stock_adjustment_reason_codes: (reasonCodeRows ?? []).map((reason) => ({
         id: reason.id,
         label: reason.label,
         category: reason.category,
