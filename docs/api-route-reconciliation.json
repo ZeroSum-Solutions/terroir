@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 65,
+    "extensionDiscoveredCount": 66,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -334,6 +334,12 @@
       "operationId": "api:POST:/api/cellar",
       "classification": "exact",
       "concreteRequirementId": "TER-CF-182",
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/cellar-health/recompute",
+      "classification": "extension",
+      "concreteRequirementId": null,
       "semanticAliasContext": []
     },
     {

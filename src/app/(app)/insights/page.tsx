@@ -23,6 +23,8 @@ import {
   type TodayException,
 } from "./insights-drilldown";
 import { metricHref } from "./metric-href";
+import { summarizeCellarHealth } from "@/lib/cellar-health/summary";
+import { CellarHealthPanel } from "./cellar-health-panel";
 
 type NullableDateRange = { range?: string; from?: string; to?: string };
 type SearchParams = Promise<NullableDateRange>;
@@ -321,6 +323,7 @@ export default async function DashboardPage({
   const [
     { data: scans },
     { data: inventoryItems },
+    { data: cellarHealthRows, error: cellarHealthError },
     { data: scanItems },
     { count: rawEightysixedCount },
     { count: rawDrinkNowCount },
@@ -331,6 +334,10 @@ export default async function DashboardPage({
       supabase
         .from("inventory_items")
         .select("quantity, unit_cost, wine_id, wines(varietal)")
+        .eq("restaurant_id", rid),
+      supabase
+        .from("cellar_health")
+        .select("wine_id, segment")
         .eq("restaurant_id", rid),
       supabase
         .from("inventory_items")
@@ -358,6 +365,8 @@ export default async function DashboardPage({
 
   const allScans = scans ?? [];
   const items = inventoryItems ?? [];
+  if (cellarHealthError) throw cellarHealthError;
+  const cellarHealthSummary = summarizeCellarHealth(cellarHealthRows ?? [], items);
   const pastDrinkWindowWines: PastDrinkWindowRow[] = initPastDrinkWindow;
 
   const inventoryValue = items.reduce(function (s, i) { return s + i.quantity * i.unit_cost; }, 0);
@@ -516,6 +525,8 @@ export default async function DashboardPage({
       </header>
 
       <TodayStrip exceptions={todayExceptions} />
+
+      <CellarHealthPanel summary={cellarHealthSummary} canRecompute={canEnrich} />
 
       {/* Drink-window watch */}
       {(drinkWindowAlerts.length > 0 || canEnrich) && (

@@ -11,7 +11,8 @@ describe("cellar URL state codec", () => {
       new URLSearchParams(
         "q=cote&filter=low&producer=Jamet&region=Rhone&country=France&" +
           "varietal=Syrah&vintage_min=2016&vintage_max=2020&format=750&" +
-          "group_by=producer&wine=123e4567-e89b-42d3-a456-426614174000&ignored=yes",
+          "group_by=producer&health=hold&" +
+          "wine=123e4567-e89b-42d3-a456-426614174000&ignored=yes",
       ),
     );
 
@@ -26,6 +27,7 @@ describe("cellar URL state codec", () => {
       vintageMax: 2020,
       format: 750,
       groupBy: "producer",
+      health: "hold",
       wine: "123e4567-e89b-42d3-a456-426614174000",
     });
   });
@@ -34,7 +36,7 @@ describe("cellar URL state codec", () => {
     expect(
       parseCellarUrlState(
         new URLSearchParams(
-          "filter=broken&vintage_min=nope&format=-1&group_by=country&wine=not-a-uuid",
+          "filter=broken&vintage_min=nope&format=-1&group_by=country&health=sleepy&wine=not-a-uuid",
         ),
       ),
     ).toEqual({
@@ -48,6 +50,7 @@ describe("cellar URL state codec", () => {
       vintageMax: null,
       format: null,
       groupBy: null,
+      health: null,
       wine: null,
     });
   });
@@ -57,6 +60,7 @@ describe("cellar URL state codec", () => {
     const values = [null, "Jamet", "Côte & Fils", "Müller"] as const;
     const filters = ["all", "open", "out", "low", "drink-now", "hold"] as const;
     const groups = [null, "producer", "region", "varietal", "vintage"] as const;
+    const health = [null, "window_risk", "hold", "dead_stock", "cash_trap", "healthy"] as const;
     for (let run = 0; run < 100; run++) {
       const state: CellarUrlState = {
         q: values[Math.floor(rand() * values.length)] ?? "",
@@ -69,6 +73,7 @@ describe("cellar URL state codec", () => {
         vintageMax: rand() < 0.5 ? null : 2010 + Math.floor(rand() * 17),
         format: rand() < 0.5 ? null : rand() < 0.5 ? 750 : 1_500,
         groupBy: groups[Math.floor(rand() * groups.length)],
+        health: health[Math.floor(rand() * health.length)],
         wine:
           rand() < 0.5
             ? null

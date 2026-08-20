@@ -18,6 +18,7 @@ function wine(overrides: Partial<CellarFacetRow> = {}): CellarFacetRow {
     vintage: 2018,
     wine_size_ml: 750,
     sealed_count: 3,
+    healthSegment: "healthy",
     ...overrides,
   };
 }
@@ -50,6 +51,18 @@ const rows = [
 ];
 
 describe("applyFacets", () => {
+  it("EV-2.4: filters rows by their exact cellar-health segment", () => {
+    const healthRows = [
+      wine({ wine_id: "healthy", healthSegment: "healthy" }),
+      wine({ wine_id: "dead", healthSegment: "dead_stock" }),
+      wine({ wine_id: "unknown", healthSegment: null }),
+    ];
+
+    expect(
+      applyFacets(healthRows, { health: "dead_stock" }).map((row) => row.wine_id),
+    ).toEqual(["dead"]);
+  });
+
   it("EV-4.1: combines every taxonomy facet with case-insensitive exact matching", () => {
     expect(
       applyFacets(rows, {

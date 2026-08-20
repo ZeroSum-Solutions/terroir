@@ -18,6 +18,7 @@ export type CellarFacets = {
   vintageMin?: number | null;
   vintageMax?: number | null;
   format?: number | null;
+  health?: CellarHealthSegment | null;
 };
 
 export type CellarFacetRow = {
@@ -29,6 +30,7 @@ export type CellarFacetRow = {
   vintage: number | null;
   wine_size_ml: number;
   sealed_count: number;
+  healthSegment: CellarHealthSegment | null;
 };
 
 export type FacetCount = { value: string; label: string; count: number; isUnknown: boolean };
@@ -49,6 +51,7 @@ export function applyFacets<T extends CellarFacetRow>(
   facets: CellarFacets,
 ): T[] {
   return rows.filter((row) => {
+    if (facets.health && row.healthSegment !== facets.health) return false;
     for (const dimension of TEXT_DIMENSIONS) {
       if (!matchesText(row[dimension], facets[dimension])) return false;
     }
@@ -173,3 +176,4 @@ function compareGroups(
 function normalize(value: string) {
   return value.trim().toLocaleLowerCase();
 }
+import type { CellarHealthSegment } from "@/lib/cellar-health/classify";

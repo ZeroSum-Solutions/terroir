@@ -376,6 +376,7 @@ export function CellarShell({
               vintageMin: null,
               vintageMax: null,
               format: null,
+              health: null,
             });
           }}
           facets={{
@@ -386,6 +387,7 @@ export function CellarShell({
             vintageMin: urlState.vintageMin,
             vintageMax: urlState.vintageMax,
             format: urlState.format,
+            health: urlState.health,
           }}
           groupBy={urlState.groupBy}
           onFacetsChange={replaceUrlState}
