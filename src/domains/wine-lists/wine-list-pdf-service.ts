@@ -4,6 +4,7 @@ import { renderHtmlToPdf } from "@/adapters/pdf";
 import { renderWineListSections } from "@/lib/wine-list/render";
 import type { WineListSectionEmbed } from "@/lib/wine-list/shapes";
 import { renderTemplate } from "@/lib/wine-list/templates";
+import { parseStoredTheme } from "@/lib/branding/theme";
 import type { Database } from "@/types/database";
 
 export class WineListPdfNotFoundError extends Error {
@@ -57,7 +58,7 @@ export async function generateWineListPdf(
   const { data: list, error: fetchError } = await supabase
     .from("wine_lists")
     .select(
-      "name, template, restaurant_id, restaurants(name), wine_list_sections(name, position, wine_list_items(position, glass_price, bottle_price, tasting_note, name_override, wines(name, producer, vintage, varietal, region, is_eightysixed)))",
+      "name, template, theme, restaurant_id, restaurants(name), wine_list_sections(name, position, wine_list_items(position, glass_price, bottle_price, tasting_note, name_override, wines(name, producer, vintage, varietal, region, is_eightysixed)))",
     )
     .eq("id", listId)
     .eq("restaurant_id", restaurantId)
@@ -81,11 +82,12 @@ export async function generateWineListPdf(
   );
 
   const template = input.template ?? list.template ?? "classic";
+  const theme = parseStoredTheme(list.theme);
   const html = renderTemplate(template, {
     name: list.name,
     restaurantName,
     sections,
-  });
+  }, theme);
 
   try {
     const pdf = await renderHtmlToPdf(html);

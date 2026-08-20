@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BOTTLE_SCAN,
   INVOICE_EXTRACTION,
+  MENU_DESIGN,
   WINE_ENRICHMENT,
   WINE_ENRICHMENT_TOKENS_PER_WINE,
 } from "./models";
@@ -29,6 +30,14 @@ describe("Claude model profile contract", () => {
     });
   });
 
+  it("pins the structured menu-design profile", () => {
+    expect(MENU_DESIGN).toEqual({
+      model: "claude-sonnet-5",
+      effort: "medium",
+      maxTokens: 12000,
+    });
+  });
+
   it("pins the wine enrichment profile", () => {
     // Held at the incumbent on purpose: every newer candidate lost a blind
     // quality eval. See the rationale block in models.ts before changing this.
@@ -48,7 +57,7 @@ describe("Claude model profile contract", () => {
   it("leaves thinking headroom under every output cap", () => {
     // Sonnet 5 has adaptive thinking on by default and thinking counts
     // against max_tokens, so a cap sized only for the response truncates.
-    for (const profile of [INVOICE_EXTRACTION, BOTTLE_SCAN]) {
+    for (const profile of [INVOICE_EXTRACTION, BOTTLE_SCAN, MENU_DESIGN]) {
       expect(profile.maxTokens).toBeGreaterThanOrEqual(4000);
     }
   });

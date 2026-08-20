@@ -42,6 +42,10 @@ import { SortableWineRow } from "./components/wine-row";
 import { AddWineModal } from "./components/add-wine-modal";
 import { PublishModal } from "./components/publish-modal";
 import { TemplatePicker } from "./components/template-picker";
+import {
+  BrandKitPanel,
+  type BrandKitView,
+} from "./components/brand-kit-panel";
 
 export type WineListEditorWine = {
   id: string;
@@ -219,9 +223,13 @@ function SortableSectionButton({
 export function WineListEditor({
   list,
   sections: initialSections,
+  brandKit,
+  canManageBranding,
 }: {
   list: Omit<WineList, "wine_list_sections">;
   sections: WineListEditorSection[];
+  brandKit: BrandKitView | null;
+  canManageBranding: boolean;
 }) {
   const router = useRouter();
   const [sections, setSections] = useState(initialSections);
@@ -951,6 +959,14 @@ export function WineListEditor({
           </div>
         )}
       </div>
+
+      {canManageBranding && (
+        <BrandKitPanel
+          listId={list.id}
+          initialBrandKit={brandKit}
+          initialTheme={list.theme}
+        />
+      )}
 
             {/* Delete wine confirmation dialog (BND-194) */}
       {wineToDelete && (

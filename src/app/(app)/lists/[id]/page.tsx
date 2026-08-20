@@ -7,6 +7,11 @@ import {
   type WineListEditorSection,
 } from "./wine-list-editor";
 import type { WineList } from "@/lib/wine-list/types";
+import {
+  BrandKitPaletteSchema,
+  parseStoredProposals,
+} from "@/lib/branding/theme";
+import type { BrandKitView } from "./components/brand-kit-panel";
 
 export const metadata: Metadata = { title: "Edit list" };
 
@@ -30,7 +35,7 @@ export default async function WineListEditorPage({
     // requireMembership returned a NextResponse (401/403). Send to login.
     redirect(`/login?next=/wine-list/${id}`);
   }
-  const { supabase, restaurantId } = auth;
+  const { supabase, restaurantId, role } = auth;
 
   const { data: list, error } = await supabase
     .from("wine_lists")
@@ -42,6 +47,20 @@ export default async function WineListEditorPage({
     .single();
 
   if (error || !list) notFound();
+
+  const { data: brandKit } = await supabase
+    .from("brand_kits")
+    .select("logo_url, palette, proposals")
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+  const parsedPalette = BrandKitPaletteSchema.safeParse(brandKit?.palette);
+  const brandKitView: BrandKitView | null = brandKit
+    ? {
+        logoUrl: brandKit.logo_url,
+        palette: parsedPalette.success ? parsedPalette.data : null,
+        proposals: parseStoredProposals(brandKit.proposals),
+      }
+    : null;
 
   // Sort sections by position, items by position within each section
   const sections: WineListEditorSection[] = ((list.wine_list_sections ?? []) as Array<{
@@ -109,6 +128,8 @@ export default async function WineListEditorPage({
     <WineListEditor
       list={listMeta as Omit<WineList, "wine_list_sections">}
       sections={sections}
+      brandKit={brandKitView}
+      canManageBranding={role === "owner" || role === "manager"}
     />
   );
 }
