@@ -54,10 +54,13 @@ const AcceptSchema = z.array(z.discriminatedUnion("action_type", [
 
 function failure(error: LedgerFailure) {
   if (error.kind === "not_found") return Errors.notFound("Reconcile subject");
+  if (error.kind === "identity_mismatch") {
+    return apiError(422, "identity_mismatch", error.message, error.details);
+  }
   if (error.kind === "conflict") {
     return apiError(409, "reconcile_conflict", error.message, error.details);
   }
-  return Errors.internal("Reconciliation failed.");
+  return apiError(500, "internal_error", "Reconciliation failed.", error.details);
 }
 
 export async function POST(request: NextRequest) {

@@ -15,7 +15,7 @@ function failure(error: LedgerFailure) {
   if (error.kind === "conflict") {
     return apiError(409, "reconcile_conflict", error.message, error.details);
   }
-  return Errors.internal("Reconcile undo failed.");
+  return apiError(500, "internal_error", "Reconcile undo failed.", error.details);
 }
 
 export async function POST(request: NextRequest) {

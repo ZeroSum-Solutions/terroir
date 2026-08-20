@@ -1,6 +1,6 @@
 export { buildDuplicateSources } from "./duplicates";
 export { parseBottleFormat } from "./format";
-export { suggestWineMatch } from "./matches";
+export { suggestWineMatch, wineMatchIdentityFromLine } from "./matches";
 export { buildReconcileQueue, rankQueueRows } from "./queue";
 export type {
   BottleFormatInput,

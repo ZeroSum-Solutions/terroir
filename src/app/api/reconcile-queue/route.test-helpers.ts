@@ -1,9 +1,28 @@
 import type { NextRequest } from "next/server";
+import { isDeepStrictEqual } from "node:util";
 import { vi } from "vitest";
 
 type Row = Record<string, unknown>;
 type Tables = Record<string, Row[]>;
 type Filter = (row: Row) => boolean;
+type Operation = "select" | "insert" | "update";
+
+type Interceptor = {
+  table: string;
+  operation: Operation;
+  after: boolean;
+  error: boolean;
+  run?: (tables: Tables) => void;
+};
+
+type QueryControl = {
+  interceptors: Interceptor[];
+};
+
+type QueryResult = {
+  data: Row[];
+  error: { code: string } | null;
+};
 
 function project(row: Row, fields: string) {
   if (fields === "*") return structuredClone(row);
@@ -22,6 +41,7 @@ class Query {
     private readonly table: string,
     private readonly tables: Tables,
     private readonly operations: Record<string, unknown[][]>,
+    private readonly control: QueryControl,
   ) {}
 
   select(fields = "*") {
@@ -44,13 +64,23 @@ class Query {
 
   eq(column: string, value: unknown) {
     this.operations[this.table].push(["eq", column, value]);
-    this.filters.push((row) => row[column] === value);
+    this.filters.push((row) => isDeepStrictEqual(row[column], value));
     return this;
   }
 
   is(column: string, value: unknown) {
     this.operations[this.table].push(["is", column, value]);
     this.filters.push((row) => row[column] === value);
+    return this;
+  }
+
+  filter(column: string, operator: string, value: unknown) {
+    this.operations[this.table].push(["filter", column, operator, value]);
+    const expected = operator === "eq" && typeof value === "string"
+      && (value.startsWith("[") || value.startsWith("{"))
+      ? JSON.parse(value)
+      : value;
+    this.filters.push((row) => isDeepStrictEqual(row[column], expected));
     return this;
   }
 
@@ -87,7 +117,7 @@ class Query {
   }
 
   then<TResult1 = { data: Row[]; error: null }>(
-    resolve?: ((value: { data: Row[]; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
+    resolve?: ((value: QueryResult) => TResult1 | PromiseLike<TResult1>) | null,
   ) {
     return this.execute().then(resolve);
   }
@@ -107,6 +137,17 @@ class Query {
   }
 
   private async execute() {
+    const operation = this.mutation?.kind ?? "select";
+    const interceptorIndex = this.control.interceptors.findIndex((item) =>
+      item.table === this.table && item.operation === operation,
+    );
+    const interceptor = interceptorIndex === -1
+      ? null
+      : this.control.interceptors.splice(interceptorIndex, 1)[0];
+    interceptor?.run?.(this.tables);
+    if (interceptor?.error && !interceptor.after) {
+      return { data: [], error: { code: "TEST_FAILURE" } };
+    }
     if (this.mutation?.kind === "insert") {
       const values = Array.isArray(this.mutation.value)
         ? this.mutation.value
@@ -122,13 +163,19 @@ class Query {
         ...structuredClone(value),
       }));
       this.tables[this.table].push(...created);
-      return { data: created.map((row) => project(row, this.fields)), error: null };
+      return {
+        data: created.map((row) => project(row, this.fields)),
+        error: interceptor?.error ? { code: "TEST_FAILURE" } : null,
+      };
     }
     const rows = this.matchingRows();
     if (this.mutation?.kind === "update") {
       for (const row of rows) Object.assign(row, structuredClone(this.mutation.value));
     }
-    return { data: rows.map((row) => project(row, this.fields)), error: null };
+    return {
+      data: rows.map((row) => project(row, this.fields)),
+      error: interceptor?.error ? { code: "TEST_FAILURE" } : null,
+    };
   }
 }
 
@@ -146,11 +193,27 @@ export function makeSupabase(seed: Tables) {
     "reconcile_actions",
   ]) tables[table] ??= [];
   const operations: Record<string, unknown[][]> = {};
+  const control: QueryControl = { interceptors: [] };
   const from = vi.fn((table: string) => {
     operations[table] ??= [];
-    return new Query(table, tables, operations);
+    return new Query(table, tables, operations, control);
   });
-  return { from, tables, operations };
+  return {
+    from,
+    tables,
+    operations,
+    failNext(table: string, operation: Operation, options: { after?: boolean } = {}) {
+      control.interceptors.push({
+        table,
+        operation,
+        after: options.after ?? false,
+        error: true,
+      });
+    },
+    beforeNext(table: string, operation: Operation, run: (value: Tables) => void) {
+      control.interceptors.push({ table, operation, after: false, error: false, run });
+    },
+  };
 }
 
 export function postRequest(path: string, body: unknown): NextRequest {
@@ -195,7 +258,7 @@ export function subjectSeed() {
     invoice_scans: [{
       id: SCAN_ID,
       restaurant_id: RESTAURANT_ID,
-      final_line_items: [{ id: "line-1", name: "Before" }],
+      final_line_items: [{ id: "line-1", name: "Before", lwin: "1000001" }],
       status: "complete",
     }],
     wines: [{
@@ -205,6 +268,7 @@ export function subjectSeed() {
       producer: "Maker",
       vintage: 2020,
       size_ml: 750,
+      lwin_id: "1000001",
       lineage_id: null,
     }],
     wine_lineages: [{

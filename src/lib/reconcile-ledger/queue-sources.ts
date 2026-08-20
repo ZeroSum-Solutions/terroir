@@ -3,6 +3,7 @@ import {
   buildReconcileQueue,
   parseBottleFormat,
   suggestWineMatch,
+  wineMatchIdentityFromLine,
   type QueueSourceInput,
   type WineMatchCandidate,
 } from "@/lib/reconcile-queue";
@@ -147,21 +148,14 @@ function exactInventoryMatch(line: Line, item: Inventory, wine: Wine) {
 
 function unmatchedSource(scan: Scan, line: Line, index: number, wineCandidates: WineMatchCandidate[]) {
   const suffix = text(line.id) ?? String(index);
-  const name = text(line.name ?? line.cuvee) ?? "Unknown wine";
-  const producer = text(line.producer) ?? "Unknown producer";
+  const identity = wineMatchIdentityFromLine(line);
+  const name = identity.cuvee ?? "Unknown wine";
+  const producer = identity.producer ?? "Unknown producer";
   const units = number(line.qty ?? line.quantity);
-  const suggestion = suggestWineMatch({
-    lwin: text(line.lwin ?? line.lwin_id),
-    producer,
-    cuvee: name,
-    vintage: typeof line.vintage === "number" ? line.vintage : null,
-    format: typeof line.format === "string" || typeof line.format === "number"
-      ? line.format
-      : undefined,
-  }, wineCandidates) ?? undefined;
+  const suggestion = suggestWineMatch(identity, wineCandidates) ?? undefined;
   return {
     subjectTable: "invoice_scans",
-    subjectId: `${scan.id}:${suffix}`,
+    subjectId: `${scan.id}:${index}:${suffix}`,
     title: `${producer} ${name}`,
     detail: `Unmatched line from ${scan.distributor_name}`,
     units,

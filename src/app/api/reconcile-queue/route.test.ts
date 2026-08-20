@@ -25,6 +25,9 @@ const { GET } = await import("./route");
 const { POST } = await import("./accept/route");
 const { POST: UNDO } = await import("./undo/route");
 
+const OTHER_RESTAURANT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const OTHER_WINE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
 function allow(supabase: ReturnType<typeof makeSupabase>) {
   const auth = {
     supabase,
@@ -50,7 +53,7 @@ const actions = [
     patch: {
       line_index: 0,
       wine_id: WINE_ID,
-      expected_line: { id: "line-1", name: "Before" },
+      expected_line: { id: "line-1", name: "Before", lwin: "1000001" },
     },
   },
 ] as const;
@@ -145,7 +148,7 @@ describe("reconcile queue routes", () => {
       issue.kind === "ambiguous_lineage").action).toBeUndefined();
     const unmatched = body.issues.find((issue: { kind: string }) => issue.kind === "unmatched_scan");
     expect(unmatched).toMatchObject({
-      subjectId: `${SCAN_ID}:line-2`,
+      subjectId: `${SCAN_ID}:1:line-2`,
       units: 2,
       atRisk: 30,
       suggestion: {
@@ -169,6 +172,34 @@ describe("reconcile queue routes", () => {
       .map((issue: { subjectId: string }) => issue.subjectId)).toEqual(["plain-i"]);
     expect(body.bins.map((bin: { code: string }) => bin.code)).toEqual(["A-01"]);
     expect(body.latest_batch.id).toBe("99999999-9999-4999-8999-999999999999");
+  });
+
+  it("gives duplicate scan line ids collision-proof subject ids while retaining display metadata", async () => {
+    const seed = subjectSeed();
+    const duplicateLines = [
+      { id: "duplicate", lwin: "1000001", qty: 1 },
+      { id: "duplicate", lwin: "1000001", qty: 1 },
+    ];
+    seed.inventory_items = [];
+    const supabase = makeSupabase({
+      ...seed,
+      invoice_scans: [{
+        ...seed.invoice_scans[0],
+        distributor_name: "Supplier",
+        final_line_items: duplicateLines,
+      }],
+    });
+    allow(supabase);
+
+    const response = await GET(getRequest());
+    const body = await response.json();
+
+    expect(body.issues.map((issue: { subjectId: string }) => issue.subjectId)).toEqual([
+      `${SCAN_ID}:0:duplicate`,
+      `${SCAN_ID}:1:duplicate`,
+    ]);
+    expect(body.issues.map((issue: { action: { payload: { expected_line: unknown } } }) =>
+      issue.action.payload.expected_line)).toEqual(duplicateLines);
   });
 
   it("POST rejects mismatched action/table/patch shapes before database access", async () => {
@@ -225,7 +256,57 @@ describe("reconcile queue routes", () => {
     expect(supabase.tables.reconcile_batches).toHaveLength(0);
   });
 
-  it("bulk accept records full snapshots and undo restores every subject byte-for-byte", async () => {
+  it("rejects a cross-restaurant wine uuid before applying a scan match", async () => {
+    const seed = subjectSeed();
+    seed.wines.push({
+      ...seed.wines[0],
+      id: OTHER_WINE_ID,
+      restaurant_id: OTHER_RESTAURANT_ID,
+    });
+    const supabase = makeSupabase(seed);
+    allow(supabase);
+
+    const response = await POST(postRequest("/api/reconcile-queue/accept", [{
+      ...actions[1],
+      patch: { ...actions[1].patch, wine_id: OTHER_WINE_ID },
+    }]));
+
+    expect(response.status).toBe(404);
+    expect(supabase.tables.invoice_scans[0].final_line_items).toEqual(
+      seed.invoice_scans[0].final_line_items,
+    );
+    expect(supabase.tables.reconcile_batches).toHaveLength(0);
+  });
+
+  it("rejects a wine that is not the current scan line's exact identity match", async () => {
+    const seed = subjectSeed();
+    seed.wines[0].lwin_id = "different-lwin";
+    const supabase = makeSupabase(seed);
+    allow(supabase);
+
+    const response = await POST(postRequest("/api/reconcile-queue/accept", [actions[1]]));
+
+    expect(response.status).toBe(422);
+    expect((await response.json()).error.code).toBe("identity_mismatch");
+    expect(supabase.tables.invoice_scans[0].final_line_items).toEqual(
+      seed.invoice_scans[0].final_line_items,
+    );
+    expect(supabase.tables.reconcile_batches).toHaveLength(0);
+  });
+
+  it("accepts a restaurant-scoped wine that exactly matches the current scan identity", async () => {
+    const supabase = makeSupabase(subjectSeed());
+    allow(supabase);
+
+    const response = await POST(postRequest("/api/reconcile-queue/accept", [actions[1]]));
+
+    expect(response.status).toBe(201);
+    expect(supabase.tables.invoice_scans[0].final_line_items).toEqual([
+      { id: "line-1", name: "Before", lwin: "1000001", wine_id: WINE_ID },
+    ]);
+  });
+
+  it("EV-5.4: records projected snapshots and restores only the patched fields", async () => {
     const supabase = makeSupabase(subjectSeed());
     allow(supabase);
     const before = {
@@ -242,21 +323,40 @@ describe("reconcile queue routes", () => {
       bin_location: "A-01",
     });
     expect(supabase.tables.invoice_scans[0].final_line_items).toEqual([
-      { id: "line-1", name: "Before", wine_id: WINE_ID },
+      { id: "line-1", name: "Before", lwin: "1000001", wine_id: WINE_ID },
     ]);
     expect(supabase.tables.reconcile_actions).toHaveLength(2);
-    expect(supabase.tables.reconcile_actions[0].prior_state).toEqual(before.inventory);
-    expect(supabase.tables.reconcile_actions[0].new_state).toEqual(
-      supabase.tables.inventory_items[0],
-    );
+    expect(supabase.tables.reconcile_actions[0]).toMatchObject({
+      ordinal: 0,
+      prior_state: { bin_id: null, bin_location: null },
+      new_state: { bin_id: BIN_ID, bin_location: "A-01" },
+    });
+    expect(supabase.tables.reconcile_actions[1]).toMatchObject({
+      ordinal: 1,
+      prior_state: { final_line_items: before.scan.final_line_items },
+      new_state: {
+        final_line_items: [
+          { id: "line-1", name: "Before", lwin: "1000001", wine_id: WINE_ID },
+        ],
+      },
+    });
+    supabase.tables.inventory_items[0].updated_at = "trigger-noise";
+    supabase.tables.invoice_scans[0].status = "concurrent-unpatched-noise";
 
     const undone = await UNDO(postRequest("/api/reconcile-queue/undo", {
       batch_id: batch.id,
     }));
 
     expect(undone.status).toBe(200);
-    expect(supabase.tables.inventory_items[0]).toEqual(before.inventory);
-    expect(supabase.tables.invoice_scans[0]).toEqual(before.scan);
+    expect({
+      bin_id: supabase.tables.inventory_items[0].bin_id,
+      bin_location: supabase.tables.inventory_items[0].bin_location,
+    }).toEqual({ bin_id: before.inventory.bin_id, bin_location: before.inventory.bin_location });
+    expect({
+      final_line_items: supabase.tables.invoice_scans[0].final_line_items,
+    }).toEqual({ final_line_items: before.scan.final_line_items });
+    expect(supabase.tables.inventory_items[0].updated_at).toBe("trigger-noise");
+    expect(supabase.tables.invoice_scans[0].status).toBe("concurrent-unpatched-noise");
     expect(supabase.tables.wines[0]).toEqual(before.wine);
     expect(supabase.tables.reconcile_batches[0]).toMatchObject({
       undone_by: USER_ID,
@@ -269,8 +369,8 @@ describe("reconcile queue routes", () => {
   it("bulk accept applies multiple unmatched lines from one scan and undo reverses them", async () => {
     const seed = subjectSeed();
     seed.invoice_scans[0].final_line_items = [
-      { id: "line-1", name: "First" },
-      { id: "line-2", name: "Second" },
+      { id: "line-1", name: "First", lwin: "1000001" },
+      { id: "line-2", name: "Second", lwin: "1000001" },
     ];
     const supabase = makeSupabase(seed);
     allow(supabase);
@@ -291,10 +391,12 @@ describe("reconcile queue routes", () => {
     expect(response.status).toBe(201);
     const { batch } = await response.json();
     expect(supabase.tables.invoice_scans[0].final_line_items).toEqual([
-      { id: "line-1", name: "First", wine_id: WINE_ID },
-      { id: "line-2", name: "Second", wine_id: WINE_ID },
+      { id: "line-1", name: "First", lwin: "1000001", wine_id: WINE_ID },
+      { id: "line-2", name: "Second", lwin: "1000001", wine_id: WINE_ID },
     ]);
     expect(supabase.tables.reconcile_actions).toHaveLength(2);
+    supabase.tables.reconcile_actions[0].created_at = "2026-08-19T13:00:00.000Z";
+    supabase.tables.reconcile_actions[1].created_at = "2026-08-19T11:00:00.000Z";
 
     const undone = await UNDO(postRequest("/api/reconcile-queue/undo", {
       batch_id: batch.id,
@@ -315,9 +417,128 @@ describe("reconcile queue routes", () => {
 
     expect(response.status).toBe(409);
     expect(supabase.tables.invoice_scans[0].final_line_items).toEqual([
-      { id: "line-1", name: "Before" },
+      { id: "line-1", name: "Before", lwin: "1000001" },
     ]);
     expect(supabase.tables.reconcile_batches).toHaveLength(0);
+  });
+
+  it("creates no ledger or subject mutation when batch creation fails", async () => {
+    const supabase = makeSupabase(subjectSeed());
+    allow(supabase);
+    const before = structuredClone(supabase.tables.inventory_items[0]);
+    supabase.failNext("reconcile_batches", "insert");
+
+    const response = await POST(postRequest("/api/reconcile-queue/accept", [actions[0]]));
+
+    expect(response.status).toBe(500);
+    expect(supabase.tables.inventory_items[0]).toEqual(before);
+    expect(supabase.tables.reconcile_batches).toHaveLength(0);
+    expect(supabase.tables.reconcile_actions).toHaveLength(0);
+  });
+
+  it("does not mutate a subject when the action insert fails", async () => {
+    const supabase = makeSupabase(subjectSeed());
+    allow(supabase);
+    const before = structuredClone(supabase.tables.inventory_items[0]);
+    supabase.failNext("reconcile_actions", "insert");
+
+    const response = await POST(postRequest("/api/reconcile-queue/accept", [actions[0]]));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.error.details).toMatchObject({ applied: [] });
+    expect(supabase.tables.inventory_items[0]).toEqual(before);
+    expect(supabase.tables.reconcile_batches[0].action_count).toBe(0);
+    expect(supabase.tables.reconcile_actions).toHaveLength(0);
+  });
+
+  it("restores the subject when its update mutates and then reports an error", async () => {
+    const supabase = makeSupabase(subjectSeed());
+    allow(supabase);
+    const before = structuredClone(supabase.tables.inventory_items[0]);
+    supabase.failNext("inventory_items", "update", { after: true });
+
+    const response = await POST(postRequest("/api/reconcile-queue/accept", [actions[0]]));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.error.details).toMatchObject({ applied: [] });
+    expect(supabase.tables.inventory_items[0]).toEqual(before);
+    expect(supabase.tables.reconcile_batches[0].action_count).toBe(0);
+    expect(supabase.tables.reconcile_actions).toHaveLength(1);
+  });
+
+  it("stops a failed batch at the applied prefix and leaves every mutation ledgered", async () => {
+    const supabase = makeSupabase(subjectSeed());
+    allow(supabase);
+    const beforeScan = structuredClone(supabase.tables.invoice_scans[0]);
+    supabase.failNext("invoice_scans", "update", { after: true });
+
+    const response = await POST(postRequest("/api/reconcile-queue/accept", actions));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.error.details).toMatchObject({
+      applied: [{ ordinal: 0, subject_id: INVENTORY_ID }],
+      failed: { ordinal: 1, subject_id: SCAN_ID },
+    });
+    expect(supabase.tables.inventory_items[0]).toMatchObject({
+      bin_id: BIN_ID,
+      bin_location: "A-01",
+    });
+    expect(supabase.tables.invoice_scans[0]).toEqual(beforeScan);
+    expect(supabase.tables.reconcile_batches[0].action_count).toBe(1);
+    expect(supabase.tables.reconcile_actions).toHaveLength(2);
+
+    const undone = await UNDO(postRequest("/api/reconcile-queue/undo", {
+      batch_id: supabase.tables.reconcile_batches[0].id,
+    }));
+    expect(undone.status).toBe(200);
+    expect(supabase.tables.inventory_items[0]).toMatchObject({
+      bin_id: null,
+      bin_location: null,
+    });
+    expect(supabase.tables.invoice_scans[0]).toEqual(beforeScan);
+  });
+
+  it("reports final batch-count failure without leaving an unledgered mutation", async () => {
+    const supabase = makeSupabase(subjectSeed());
+    allow(supabase);
+    supabase.failNext("reconcile_batches", "update");
+
+    const response = await POST(postRequest("/api/reconcile-queue/accept", [actions[0]]));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.error.details).toMatchObject({
+      applied: [{ ordinal: 0, subject_id: INVENTORY_ID }],
+    });
+    expect(supabase.tables.inventory_items[0].bin_id).toBe(BIN_ID);
+    expect(supabase.tables.reconcile_actions).toHaveLength(1);
+    expect(supabase.tables.reconcile_batches[0].action_count).toBe(0);
+  });
+
+  it("surfaces concurrent bin placement as a conflict without overwriting it", async () => {
+    const supabase = makeSupabase(subjectSeed());
+    allow(supabase);
+    supabase.beforeNext("inventory_items", "update", (tables) => {
+      Object.assign(tables.inventory_items[0], {
+        bin_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        bin_location: "Z-99",
+      });
+    });
+
+    const response = await POST(postRequest("/api/reconcile-queue/accept", [actions[0]]));
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.error.details).toMatchObject({ applied: [] });
+    expect(supabase.tables.inventory_items[0]).toMatchObject({
+      bin_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      bin_location: "Z-99",
+    });
+    expect(supabase.tables.reconcile_batches[0].action_count).toBe(0);
+    expect(supabase.tables.reconcile_actions).toHaveLength(1);
   });
 
   it("undo preflights all subjects and reports conflicts without partial restoration", async () => {
@@ -326,7 +547,7 @@ describe("reconcile queue routes", () => {
     const accepted = await POST(postRequest("/api/reconcile-queue/accept", actions));
     const { batch } = await accepted.json();
     const acceptedInventory = structuredClone(supabase.tables.inventory_items[0]);
-    supabase.tables.invoice_scans[0].status = "concurrent-edit";
+    supabase.tables.invoice_scans[0].final_line_items = [{ id: "concurrent" }];
 
     const response = await UNDO(postRequest("/api/reconcile-queue/undo", {
       batch_id: batch.id,
@@ -337,6 +558,93 @@ describe("reconcile queue routes", () => {
       conflicts: [{ subject_table: "invoice_scans", subject_id: SCAN_ID }],
     });
     expect(supabase.tables.inventory_items[0]).toEqual(acceptedInventory);
+    expect(supabase.tables.reconcile_batches[0].undone_at).toBeNull();
+  });
+
+  it("compensates an uncertain first restoration failure back to the accepted state", async () => {
+    const supabase = makeSupabase(subjectSeed());
+    allow(supabase);
+    const accepted = await POST(postRequest("/api/reconcile-queue/accept", actions));
+    const { batch } = await accepted.json();
+    const acceptedInventory = structuredClone(supabase.tables.inventory_items[0]);
+    const acceptedScan = structuredClone(supabase.tables.invoice_scans[0]);
+    supabase.failNext("invoice_scans", "update", { after: true });
+
+    const response = await UNDO(postRequest("/api/reconcile-queue/undo", {
+      batch_id: batch.id,
+    }));
+
+    expect(response.status).toBe(500);
+    expect(supabase.tables.inventory_items[0]).toEqual(acceptedInventory);
+    expect(supabase.tables.invoice_scans[0]).toEqual(acceptedScan);
+    expect(supabase.tables.reconcile_batches[0].undone_at).toBeNull();
+  });
+
+  it("compensates earlier restorations when a later restoration fails", async () => {
+    const supabase = makeSupabase(subjectSeed());
+    allow(supabase);
+    const accepted = await POST(postRequest("/api/reconcile-queue/accept", actions));
+    const { batch } = await accepted.json();
+    const acceptedInventory = structuredClone(supabase.tables.inventory_items[0]);
+    const acceptedScan = structuredClone(supabase.tables.invoice_scans[0]);
+    supabase.failNext("inventory_items", "update", { after: true });
+
+    const response = await UNDO(postRequest("/api/reconcile-queue/undo", {
+      batch_id: batch.id,
+    }));
+
+    expect(response.status).toBe(500);
+    expect(supabase.tables.inventory_items[0]).toEqual(acceptedInventory);
+    expect(supabase.tables.invoice_scans[0]).toEqual(acceptedScan);
+    expect(supabase.tables.reconcile_batches[0].undone_at).toBeNull();
+  });
+
+  it("rolls every restored subject forward when the batch-close write fails", async () => {
+    const supabase = makeSupabase(subjectSeed());
+    allow(supabase);
+    const accepted = await POST(postRequest("/api/reconcile-queue/accept", actions));
+    const { batch } = await accepted.json();
+    const acceptedInventory = structuredClone(supabase.tables.inventory_items[0]);
+    const acceptedScan = structuredClone(supabase.tables.invoice_scans[0]);
+    supabase.failNext("reconcile_batches", "update", { after: true });
+
+    const response = await UNDO(postRequest("/api/reconcile-queue/undo", {
+      batch_id: batch.id,
+    }));
+
+    expect(response.status).toBe(500);
+    expect(supabase.tables.inventory_items[0]).toEqual(acceptedInventory);
+    expect(supabase.tables.invoice_scans[0]).toEqual(acceptedScan);
+    expect(supabase.tables.reconcile_batches[0].undone_at).toBeNull();
+  });
+
+  it("detects a restore TOCTOU conflict and compensates prior restorations", async () => {
+    const supabase = makeSupabase(subjectSeed());
+    allow(supabase);
+    const accepted = await POST(postRequest("/api/reconcile-queue/accept", actions));
+    const { batch } = await accepted.json();
+    const acceptedScan = structuredClone(supabase.tables.invoice_scans[0]);
+    supabase.beforeNext("inventory_items", "update", (tables) => {
+      Object.assign(tables.inventory_items[0], {
+        bin_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        bin_location: "Z-99",
+      });
+    });
+
+    const response = await UNDO(postRequest("/api/reconcile-queue/undo", {
+      batch_id: batch.id,
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.error.details).toMatchObject({
+      conflicts: [{ subject_table: "inventory_items", subject_id: INVENTORY_ID }],
+    });
+    expect(supabase.tables.inventory_items[0]).toMatchObject({
+      bin_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      bin_location: "Z-99",
+    });
+    expect(supabase.tables.invoice_scans[0]).toEqual(acceptedScan);
     expect(supabase.tables.reconcile_batches[0].undone_at).toBeNull();
   });
 

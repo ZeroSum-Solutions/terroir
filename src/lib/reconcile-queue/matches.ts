@@ -16,6 +16,25 @@ function normalizedText(value: string | null | undefined): string | null {
   return normalized ? normalized : null;
 }
 
+function lineText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export function wineMatchIdentityFromLine(
+  line: Readonly<Record<string, unknown>>,
+): WineMatchIdentity {
+  const format = line.format;
+  return {
+    lwin: lineText(line.lwin ?? line.lwin_id),
+    producer: lineText(line.producer),
+    cuvee: lineText(line.name ?? line.cuvee),
+    vintage: typeof line.vintage === "number" ? line.vintage : null,
+    format: typeof format === "string" || typeof format === "number"
+      ? format
+      : null,
+  };
+}
+
 function exactFieldMatch(scan: WineMatchIdentity, candidate: WineMatchCandidate): boolean {
   const scanProducer = normalizedText(scan.producer);
   const scanCuvee = normalizedText(scan.cuvee);
