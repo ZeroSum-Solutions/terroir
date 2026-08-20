@@ -56,7 +56,7 @@ function useCloseout(bottle: Bottle, onComplete?: () => void) {
     setBusy(true);
     setError(null);
     try {
-      await postCloseout(bottle.id, actualMl, writtenOffMl, reason);
+      await postCloseout(bottle.wineId, actualMl, writtenOffMl, reason);
       onComplete?.();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Close-out failed.");
@@ -81,7 +81,7 @@ function useCloseout(bottle: Bottle, onComplete?: () => void) {
 }
 
 async function postCloseout(
-  bottleId: string,
+  wineId: string,
   actualRemainingMl: number,
   writtenOffMl: number,
   reasonCodeId: string,
@@ -90,7 +90,7 @@ async function postCloseout(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      open_bottle_id: bottleId,
+      wine_id: wineId,
       actual_remaining_ml: actualRemainingMl,
       written_off_ml: writtenOffMl,
       reason_code_id: reasonCodeId || undefined,

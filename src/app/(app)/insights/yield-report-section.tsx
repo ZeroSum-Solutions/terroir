@@ -71,16 +71,30 @@ function formatMl(value: number) {
 export async function fetchYieldGroups(
   supabase: SupabaseClient<Database>,
   restaurantId: string,
+  rangeSince: Date | null,
+  rangeUntil: Date | null,
 ) {
-  const { data, error } = await supabase
-    .from("bottle_closeouts")
-    .select("id, open_bottle_id, wine_id, preservation_method, theoretical_remaining_ml, actual_remaining_ml, written_off_ml, wines!inner(size_ml)")
-    .eq("restaurant_id", restaurantId)
-    .order("closed_at", { ascending: false })
-    .limit(100);
-  if (error) throw error;
+  const pageSize = 1_000;
+  const rows = [];
+  for (let from = 0; ; from += pageSize) {
+    let query = supabase
+      .from("bottle_closeouts")
+      .select("id, open_bottle_id, wine_id, preservation_method, theoretical_remaining_ml, actual_remaining_ml, written_off_ml, wines!inner(size_ml)")
+      .eq("restaurant_id", restaurantId)
+      .order("closed_at", { ascending: false });
+    if (rangeSince) {
+      query = query.gte("closed_at", rangeSince.toISOString());
+    }
+    if (rangeUntil) {
+      query = query.lte("closed_at", rangeUntil.toISOString());
+    }
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data ?? []));
+    if ((data?.length ?? 0) < pageSize) break;
+  }
 
-  return aggregateYieldByPreservation((data ?? []).map((row) => ({
+  return aggregateYieldByPreservation(rows.map((row) => ({
     bottleId: row.open_bottle_id ?? row.id,
     wineId: row.wine_id,
     preservationMethod: row.preservation_method as PreservationMethod,

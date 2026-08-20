@@ -309,12 +309,8 @@ export default async function CellarPage() {
       glass_pour_ml: ob?.glass_pour_ml ?? price?.pourMl ?? null,
       pour_size_mode: ob?.pour_size_mode ?? null,
       size_ml: ob?.size_ml ?? null,
-      open_remaining_ml: directOpen
-        ? theoreticalRemaining(
-            w.size_ml,
-            drainingPoursByBottle.get(directOpen.id) ?? [],
-          )
-        : null,
+      open_remaining_ml:
+        directOpen?.remaining_ml ?? ob?.open_remaining_ml ?? null,
       opened_at: directOpen?.opened_at ?? ob?.opened_at ?? null,
       open_bottle_id: directOpen?.id ?? null,
       preservation_method: (directOpen?.preservation_method ?? "none") as CellarWineRow["preservation_method"],

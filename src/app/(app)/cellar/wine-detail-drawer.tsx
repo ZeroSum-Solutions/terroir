@@ -871,6 +871,10 @@ export function WineDetailDrawer({
   );
 }
 
+export function drawerStateKey(row: CellarWineRow | null) {
+  return row ? `${row.wine_id}:${row.opened_at ?? "sealed"}` : "none";
+}
+
 /** Tiny stat chip used inside the drawer stock grid. */
 function Stat({
   label,

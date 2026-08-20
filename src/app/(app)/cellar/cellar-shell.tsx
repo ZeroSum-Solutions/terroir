@@ -8,7 +8,7 @@ import { getDrinkWindowStatus, isHolding } from "@/lib/drink-window/status";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
 import { CellarList } from "./cellar-list";
-import { WineDetailDrawer } from "./wine-detail-drawer";
+import { drawerStateKey, WineDetailDrawer } from "./wine-detail-drawer";
 import { ReconcileModal } from "./reconcile-modal";
 import { AutoEightysixModal } from "./auto-eightysix-modal";
 import { CellarGridView, CellarSetup } from "./cellar-grid";
@@ -422,7 +422,7 @@ export function CellarShell({
 
       {/* Drawer + modals */}
       <WineDetailDrawer
-        key={urlState.wine ?? "none"}
+        key={drawerStateKey(selected)}
         row={selected}
         canManage={canManage}
         isOwner={isOwner}

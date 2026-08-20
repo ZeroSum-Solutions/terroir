@@ -299,7 +299,7 @@ export default async function DashboardPage({
     fetchDrinkWindowAlerts(supabase, rid),
     fetchPricingAlerts(supabase, rid).catch(function () { return []; }),
     fetchSnoozedAlerts(supabase, rid).catch(function () { return [] as SnoozedRow[]; }),
-    fetchYieldGroups(supabase, rid),
+    fetchYieldGroups(supabase, rid, rangeSince, rangeUntil),
   ]);
   const firstName = parseFirstName(user.email ?? "") || "there";
   const canEnrich = userRole === "owner" || userRole === "manager";
