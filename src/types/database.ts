@@ -140,6 +140,53 @@ export type Database = {
           },
         ]
       }
+      bins: {
+        Row: {
+          capacity: number | null
+          code: string
+          created_at: string
+          id: string
+          priority: number
+          restaurant_id: string
+          retired_at: string | null
+          sort_order: number
+          updated_at: string
+          zone: string | null
+        }
+        Insert: {
+          capacity?: number | null
+          code: string
+          created_at?: string
+          id?: string
+          priority?: number
+          restaurant_id: string
+          retired_at?: string | null
+          sort_order?: number
+          updated_at?: string
+          zone?: string | null
+        }
+        Update: {
+          capacity?: number | null
+          code?: string
+          created_at?: string
+          id?: string
+          priority?: number
+          restaurant_id?: string
+          retired_at?: string | null
+          sort_order?: number
+          updated_at?: string
+          zone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bins_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cellar_config: {
         Row: {
           columns: number
@@ -191,6 +238,7 @@ export type Database = {
         Row: {
           added_at: string
           added_via: Database["public"]["Enums"]["added_via"]
+          bin_id: string | null
           bin_location: string | null
           currency: string | null
           format: string | null
@@ -206,6 +254,7 @@ export type Database = {
         Insert: {
           added_at?: string
           added_via?: Database["public"]["Enums"]["added_via"]
+          bin_id?: string | null
           bin_location?: string | null
           currency?: string | null
           format?: string | null
@@ -221,6 +270,7 @@ export type Database = {
         Update: {
           added_at?: string
           added_via?: Database["public"]["Enums"]["added_via"]
+          bin_id?: string | null
           bin_location?: string | null
           currency?: string | null
           format?: string | null
@@ -234,6 +284,13 @@ export type Database = {
           wine_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "inventory_items_bin_id_fkey"
+            columns: ["bin_id"]
+            isOneToOne: false
+            referencedRelation: "bins"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "inventory_items_invoice_scan_id_fkey"
             columns: ["invoice_scan_id"]
@@ -799,6 +856,7 @@ export type Database = {
           last_published_at: string | null
           name: string
           restaurant_id: string
+          show_bin_codes: boolean
           slug: string | null
           template: string
           updated_at: string
@@ -812,6 +870,7 @@ export type Database = {
           last_published_at?: string | null
           name: string
           restaurant_id: string
+          show_bin_codes?: boolean
           slug?: string | null
           template?: string
           updated_at?: string
@@ -825,6 +884,7 @@ export type Database = {
           last_published_at?: string | null
           name?: string
           restaurant_id?: string
+          show_bin_codes?: boolean
           slug?: string | null
           template?: string
           updated_at?: string

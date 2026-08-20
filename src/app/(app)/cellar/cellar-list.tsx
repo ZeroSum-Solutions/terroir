@@ -19,6 +19,14 @@ import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
 import { useToast } from "@/lib/toast";
 import {
+  applyFacets,
+  facetCounts,
+  groupRows,
+  type CellarFacetGroup,
+  type CellarFacets,
+  type CellarGroupBy,
+} from "@/lib/cellar-facets";
+import {
   formatStatusLabel,
   getDrinkWindowStatus,
   getMarkerPosition,
@@ -27,6 +35,10 @@ import {
   isHolding,
 } from "@/lib/drink-window/status";
 import type { CellarWineRow } from "./types";
+import {
+  CellarFacetBar,
+  type CellarFacetPatch,
+} from "./cellar-facet-bar";
 
 /**
  * CellarList — the unified wine list inside Cellar's single-screen
@@ -66,6 +78,10 @@ export function CellarList({
   lowStockThreshold,
   onSelectWine,
   onResetFilters,
+  facets,
+  groupBy,
+  onFacetsChange,
+  onGroupByChange,
   sections,
 }: {
   rows: CellarWineRow[];
@@ -74,6 +90,10 @@ export function CellarList({
   lowStockThreshold?: number;
   onSelectWine: (row: CellarWineRow) => void;
   onResetFilters: () => void;
+  facets: CellarFacets;
+  groupBy: CellarGroupBy | null;
+  onFacetsChange: (patch: CellarFacetPatch) => void;
+  onGroupByChange: (groupBy: CellarGroupBy | null) => void;
   // BND-063/064 — cellar sections for grouping, DnD, and bulk assign
   sections?: CellarSection[];
 }) {
@@ -91,7 +111,7 @@ export function CellarList({
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
 
-  const filtered = useMemo(() => {
+  const filteredWithoutFacets = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
       switch (filter) {
@@ -131,6 +151,19 @@ export function CellarList({
       );
     });
   }, [rows, query, filter]);
+
+  const filtered = useMemo(
+    () => applyFacets(filteredWithoutFacets, facets),
+    [filteredWithoutFacets, facets],
+  );
+  const counts = useMemo(
+    () => facetCounts(filteredWithoutFacets, facets),
+    [filteredWithoutFacets, facets],
+  );
+  const taxonomyGroups = useMemo(
+    () => (groupBy ? groupRows(filtered, groupBy) : []),
+    [filtered, groupBy],
+  );
 
   // BND-063: group filtered wines by section. "Uncategorized" for wines
   // without a section. If no sections are configured, all wines go into
@@ -284,23 +317,39 @@ export function CellarList({
       message = "No wines match the current filter.";
     }
     return (
-      <div className="rounded-md border border-border bg-white px-md py-lg text-center">
-        <p className="text-[13px] text-ink-muted">{message}</p>
-        <button
-          type="button"
-          onClick={onResetFilters}
-          className="mt-sm inline-flex h-[32px] items-center rounded-sm border border-border-strong bg-white px-md text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent-soft"
-        >
-          Clear filter & search
-        </button>
-      </div>
+      <>
+        <CellarFacetBar
+          facets={facets}
+          counts={counts}
+          groupBy={groupBy}
+          onFacetsChange={onFacetsChange}
+          onGroupByChange={onGroupByChange}
+        />
+        <div className="rounded-md border border-border bg-white px-md py-lg text-center">
+          <p className="text-[13px] text-ink-muted">{message}</p>
+          <button
+            type="button"
+            onClick={onResetFilters}
+            className="mt-sm inline-flex h-[32px] items-center rounded-sm border border-border-strong bg-white px-md text-[12px] font-medium text-ink hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent-soft"
+          >
+            Clear filters & search
+          </button>
+        </div>
+      </>
     );
   }
 
   return (
     <div>
+      <CellarFacetBar
+        facets={facets}
+        counts={counts}
+        groupBy={groupBy}
+        onFacetsChange={onFacetsChange}
+        onGroupByChange={onGroupByChange}
+      />
       {/* BND-064: Selection mode toolbar */}
-      {sections && sections.length > 0 && (
+      {sections && sections.length > 0 && !groupBy && (
         <div className="mb-sm flex items-center gap-xs">
           {!selectMode ? (
             <button
@@ -392,7 +441,18 @@ export function CellarList({
       )}
 
       {/* Wine list with optional DnD section grouping */}
-      {sections && sections.length > 0 ? (
+      {groupBy ? (
+        <div className="flex flex-col gap-md">
+          {taxonomyGroups.map((group) => (
+            <TaxonomyGroup
+              key={group.key}
+              group={group}
+              lowStockThreshold={lowStockThreshold}
+              onSelectWine={onSelectWine}
+            />
+          ))}
+        </div>
+      ) : sections && sections.length > 0 ? (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <div className="flex flex-col gap-md">
             {sectionGroups.map((group) => (
@@ -425,6 +485,47 @@ export function CellarList({
         </div>
       )}
     </div>
+  );
+}
+
+function TaxonomyGroup({
+  group,
+  lowStockThreshold,
+  onSelectWine,
+}: {
+  group: CellarFacetGroup<CellarWineRow>;
+  lowStockThreshold?: number;
+  onSelectWine: (row: CellarWineRow) => void;
+}) {
+  return (
+    <section
+      data-cellar-taxonomy-group
+      data-group-value={group.key}
+      className="overflow-hidden rounded-md border border-border bg-white"
+    >
+      <header className="flex items-center justify-between gap-md border-b border-border bg-surface-muted px-md py-sm">
+        <h2 className="text-[13px] font-semibold text-ink">{group.label}</h2>
+        <span
+          data-group-rollup
+          className="shrink-0 font-mono text-[11px] text-ink-muted"
+        >
+          {group.wineCount} wine{group.wineCount === 1 ? "" : "s"} · {group.totalBottles}{" "}
+          bottle{group.totalBottles === 1 ? "" : "s"}
+        </span>
+      </header>
+      <div className="divide-y divide-border">
+        <LineageBlockList
+          wines={group.wines}
+          renderRow={(row) => (
+            <CellarRow
+              row={row}
+              lowStockThreshold={lowStockThreshold}
+              onSelect={() => onSelectWine(row)}
+            />
+          )}
+        />
+      </div>
+    </section>
   );
 }
 

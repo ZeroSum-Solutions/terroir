@@ -6,9 +6,8 @@ export type CellarNavigationIntent = {
 };
 
 /**
- * Translate the short-lived Cellar URL parameters used by the mobile FAB
- * into the UI state they request. Keeping this pure makes same-path query
- * navigations testable without coupling the behavior to Next's router.
+ * Translate the short-lived `mode` parameter used by the mobile FAB while
+ * treating `wine` as persistent, shareable Cellar state.
  */
 export function resolveCellarNavigationIntent(
   mode: string | null,
@@ -21,6 +20,6 @@ export function resolveCellarNavigationIntent(
     filter: mode === "pour" ? "open" : null,
     selectedWineId: wineId && wineIds.has(wineId) ? wineId : null,
     shouldFocusSearch,
-    shouldConsumeParams: Boolean(mode || wineId),
+    shouldConsumeParams: Boolean(mode),
   };
 }

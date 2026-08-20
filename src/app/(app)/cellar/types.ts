@@ -23,6 +23,7 @@ export type CellarWineRow = {
   vintage: number | null;
   varietal: string | null;
   region: string | null;
+  country: string | null;
   is_eightysixed: boolean;
   eightysixed_at: string | null;
   tasting_notes: string | null;
