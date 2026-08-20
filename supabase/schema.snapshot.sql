@@ -4956,3 +4956,137 @@ alter table public.reconcile_actions
 
 create unique index reconcile_actions_batch_ordinal_idx
   on public.reconcile_actions (batch_id, ordinal);
+
+-- === 0063_stock_adjustments.sql ===
+-- 0063_stock_adjustments.sql
+-- OPP-7 (top-10 wave 3, docs/evals/top10-evals.yaml EV-7.x): comp and
+-- adjustment events, member-attributed. The Bevrly contrast: comps exist
+-- only as a value-tracker movement class with zero reason codes configured
+-- (doc 17 §1.9, §1.13). Every event requires a reason code (F-1) and the
+-- acting member is the AUTHENTICATED user — enforced by the insert policy,
+-- not just the API — so client-supplied member ids can never be persisted
+-- (EV-7.1, EV-7.2).
+
+create table public.stock_adjustments (
+  id              uuid        primary key default gen_random_uuid(),
+  restaurant_id   uuid        not null references public.restaurants(id) on delete cascade,
+  wine_id         uuid        not null references public.wines(id) on delete cascade,
+  kind            text        not null check (kind in ('comp', 'adjustment')),
+  bottles         integer     not null default 0,
+  ml              integer     not null default 0,
+  constraint stock_adjustments_nonzero check (bottles <> 0 or ml <> 0),
+  reason_code_id  uuid        not null references public.reason_codes(id) on delete restrict,
+  acting_user_id  uuid        not null references auth.users(id),
+  note            text,
+  created_at      timestamptz not null default now()
+);
+
+create index stock_adjustments_restaurant_idx
+  on public.stock_adjustments (restaurant_id, created_at desc);
+create index stock_adjustments_member_idx
+  on public.stock_adjustments (restaurant_id, acting_user_id, created_at desc);
+
+alter table public.stock_adjustments enable row level security;
+
+create policy "members can read stock_adjustments"
+  on public.stock_adjustments for select
+  using (public.is_member(restaurant_id));
+
+-- acting_user_id must be the session user: the database, not the API,
+-- guarantees events cannot be attributed to someone else.
+create policy "members insert own stock_adjustments"
+  on public.stock_adjustments for insert
+  with check (
+    public.is_member(restaurant_id)
+    and acting_user_id = auth.uid()
+  );
+
+-- Events are immutable.
+revoke update, delete on public.stock_adjustments from authenticated;
+
+-- === 0064_brand_kits.sql ===
+-- 0064_brand_kits.sql
+-- OPP-8 (top-10 wave 3, docs/evals/top10-evals.yaml EV-8.x): brand kit +
+-- stored list themes. The Bevrly contrast: logo upload plus six raw colour
+-- inputs, no palette extraction, no template, no AI (doc 17 §1.11).
+-- brand_kits holds the extracted palette; the applied theme lives on the
+-- wine list so /list/[slug] and /api/pdf render from ONE source (8-FR4).
+-- Theme JSON is validated (zod + WCAG AA contrast) server-side before save
+-- (8-FR5) — the schema stores, the API guards.
+
+create table public.brand_kits (
+  id             uuid        primary key default gen_random_uuid(),
+  restaurant_id  uuid        not null references public.restaurants(id) on delete cascade,
+  logo_url       text,
+  palette        jsonb       not null default '{}'::jsonb,
+  proposals      jsonb,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  unique (restaurant_id)
+);
+
+create trigger brand_kits_set_updated_at
+  before update on public.brand_kits
+  for each row execute function public.set_updated_at();
+
+alter table public.brand_kits enable row level security;
+
+create policy "members can read brand_kits"
+  on public.brand_kits for select
+  using (public.is_member(restaurant_id));
+
+create policy "managers can insert brand_kits"
+  on public.brand_kits for insert
+  with check (public.is_member_with_role(restaurant_id, 'manager'));
+
+create policy "managers can update brand_kits"
+  on public.brand_kits for update
+  using      (public.is_member_with_role(restaurant_id, 'manager'))
+  with check (public.is_member_with_role(restaurant_id, 'manager'));
+
+alter table public.wine_lists
+  add column theme jsonb;
+
+-- === 0065_pricing_recommendations.sql ===
+-- 0065_pricing_recommendations.sql
+-- OPP-9 (top-10 wave 3, docs/evals/top10-evals.yaml EV-9.x): materialized
+-- pricing recommendations. The Bevrly contrast: -15% on allocated Burgundy
+-- from velocity alone, 18s page load (doc 17 §1.10). Recommendations are
+-- job-computed (same service-role pattern as cellar_health) so the view
+-- reads a table, not an 18-second pipeline (EV-9.4). Every row carries
+-- class + rationale + evidence (EV-9.1); the Meursault rule (EV-9.2) is
+-- recommender logic, pinned by eval fixture.
+
+create table public.pricing_recommendations (
+  id             uuid        primary key default gen_random_uuid(),
+  restaurant_id  uuid        not null references public.restaurants(id) on delete cascade,
+  wine_id        uuid        not null references public.wines(id) on delete cascade,
+  class          text        not null check (
+    class in ('discount_to_move', 'raise_appreciating', 'feature_btg', 'hold')
+  ),
+  rationale      text        not null,
+  evidence       jsonb       not null default '{}'::jsonb,
+  timing         text,
+  computed_at    timestamptz not null default now(),
+  unique (restaurant_id, wine_id)
+);
+
+create index pricing_recommendations_restaurant_class_idx
+  on public.pricing_recommendations (restaurant_id, class);
+
+alter table public.pricing_recommendations enable row level security;
+
+create policy "members can read pricing_recommendations"
+  on public.pricing_recommendations for select
+  using (public.is_member(restaurant_id));
+
+-- Job-computed state: only the service role writes.
+revoke insert, update, delete on public.pricing_recommendations from authenticated, anon;
+
+-- The recompute job type joins the background job vocabulary.
+alter table public.background_jobs
+  drop constraint background_jobs_job_type_check;
+alter table public.background_jobs
+  add constraint background_jobs_job_type_check check (
+    job_type in ('invoice_ocr', 'wine_enrichment', 'wine_list_pdf', 'cellar_health', 'pricing_recommendations')
+  );
