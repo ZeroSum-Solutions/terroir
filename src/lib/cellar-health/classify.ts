@@ -23,6 +23,8 @@ export const DEFAULT_HEALTH_THRESHOLDS: CellarHealthThresholds = {
 export type CellarHealthInput = {
   drinkWindowStart: number | null;
   drinkWindowEnd: number | null;
+  /** Bottles on hand — window_risk keys off stock, not monetary value. */
+  stockQuantity: number;
   stockValue: number;
   lastMovementAt: string | null;
   appreciation: number | null;
@@ -47,7 +49,7 @@ export function classifyCellarHealth(
     input.appreciation >= thresholds.appreciationThreshold;
   const stale = isStale(input.lastMovementAt, thresholds.deadStockDays, today);
 
-  if (window && inFinalThird && input.stockValue > 0) {
+  if (window && inFinalThird && input.stockQuantity > 0) {
     return result("window_risk", `entered the final third of ${window.start}–${window.end}`);
   }
   if (window && insideWindow && appreciating) {

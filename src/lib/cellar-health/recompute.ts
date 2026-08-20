@@ -39,10 +39,10 @@ export async function runCellarHealthRecompute(
       rows,
     );
     const segments = countSegments(rows);
-    await finishJob(admin, jobId, now, rows.length, segments);
+    await finishJob(admin, jobId, new Date(), rows.length, segments);
     return { classified: rows.length, segments };
   } catch (error) {
-    await failJob(admin, jobId, now, error);
+    await failJob(admin, jobId, new Date(), error);
     throw error;
   }
 }
@@ -71,20 +71,52 @@ async function startJob(
   return data.id;
 }
 
+const FETCH_PAGE_SIZE = 1000;
+
+// PostgREST caps a single response; unpaginated reads silently truncate on
+// large cellars (the OPP-3 lesson). Every list read pages to exhaustion.
+async function fetchAll<T>(
+  makeQuery: (from: number, to: number) => PromiseLike<{
+    data: T[] | null;
+    error: { message: string } | null;
+  }>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += FETCH_PAGE_SIZE) {
+    const { data, error } = await makeQuery(from, from + FETCH_PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < FETCH_PAGE_SIZE) return rows;
+  }
+}
+
 async function loadInputs(admin: Client, restaurantId: string) {
   const [wines, inventory, pours, config, existingHealth] = await Promise.all([
-    admin
-      .from("wines")
-      .select("id, drink_window_start, drink_window_end, retail_median")
-      .eq("restaurant_id", restaurantId),
-    admin
-      .from("inventory_items")
-      .select("wine_id, quantity, unit_cost, added_at")
-      .eq("restaurant_id", restaurantId),
-    admin
-      .from("pour_events")
-      .select("wine_id, occurred_at")
-      .eq("restaurant_id", restaurantId),
+    fetchAll((from, to) =>
+      admin
+        .from("wines")
+        .select("id, drink_window_start, drink_window_end, retail_median")
+        .eq("restaurant_id", restaurantId)
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAll((from, to) =>
+      admin
+        .from("inventory_items")
+        .select("wine_id, quantity, unit_cost, added_at")
+        .eq("restaurant_id", restaurantId)
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAll((from, to) =>
+      admin
+        .from("pour_events")
+        .select("wine_id, occurred_at")
+        .eq("restaurant_id", restaurantId)
+        .order("id")
+        .range(from, to),
+    ),
     admin
       .from("cellar_config")
       .select(
@@ -93,20 +125,22 @@ async function loadInputs(admin: Client, restaurantId: string) {
       .eq("restaurant_id", restaurantId)
       .limit(1)
       .maybeSingle(),
-    admin
-      .from("cellar_health")
-      .select("wine_id")
-      .eq("restaurant_id", restaurantId),
+    fetchAll((from, to) =>
+      admin
+        .from("cellar_health")
+        .select("wine_id")
+        .eq("restaurant_id", restaurantId)
+        .order("wine_id")
+        .range(from, to),
+    ),
   ]);
-  for (const result of [wines, inventory, pours, config, existingHealth]) {
-    if (result.error) throw result.error;
-  }
+  if (config.error) throw config.error;
   return {
-    wines: wines.data ?? [],
-    inventory: inventory.data ?? [],
-    pours: pours.data ?? [],
+    wines,
+    inventory,
+    pours,
     thresholds: thresholdsFromConfig(config.data),
-    existingHealthWineIds: (existingHealth.data ?? []).map((row) => row.wine_id),
+    existingHealthWineIds: existingHealth.map((row) => row.wine_id),
   };
 }
 
@@ -128,8 +162,9 @@ function buildHealthRows(
       {
         drinkWindowStart: wine.drink_window_start,
         drinkWindowEnd: wine.drink_window_end,
+        stockQuantity: stock.quantity,
         stockValue: stock.value,
-        lastMovementAt: lastPourByWine.get(wine.id) ?? stock.latestAddedAt,
+        lastMovementAt: laterOf(lastPourByWine.get(wine.id) ?? null, stock.latestAddedAt),
         appreciation: deriveAppreciation(
           wine.retail_median,
           stock.value / stock.quantity,
@@ -167,6 +202,13 @@ function aggregateStock(inputs: LoadedInputs["inventory"]) {
     stock.set(item.wine_id, current);
   }
   return stock;
+}
+
+// ISO-8601 strings compare chronologically as strings.
+function laterOf(a: string | null, b: string | null): string | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return a > b ? a : b;
 }
 
 function latestPourDates(inputs: LoadedInputs["pours"]) {

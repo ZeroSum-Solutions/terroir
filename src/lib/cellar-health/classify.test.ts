@@ -12,6 +12,7 @@ function wine(overrides: Partial<CellarHealthInput> = {}): CellarHealthInput {
   return {
     drinkWindowStart: null,
     drinkWindowEnd: null,
+    stockQuantity: 4,
     stockValue: 100,
     lastMovementAt: "2026-08-01T00:00:00.000Z",
     appreciation: null,

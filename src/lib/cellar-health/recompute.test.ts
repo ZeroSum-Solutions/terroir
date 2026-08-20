@@ -140,6 +140,8 @@ function makeClient(
       const selectChain = {
         select: () => selectChain,
         eq: () => selectChain,
+        order: () => selectChain,
+        range: () => selectChain,
         then: (
           resolve: (value: typeof selected) => unknown,
           reject?: (reason: unknown) => unknown,
@@ -174,6 +176,8 @@ function makeClient(
     const chain = {
       select: () => chain,
       eq: () => chain,
+      order: () => chain,
+      range: () => chain,
       then: (
         resolve: (value: { data: unknown; error: unknown }) => unknown,
         reject?: (reason: unknown) => unknown,
