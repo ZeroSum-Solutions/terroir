@@ -303,6 +303,17 @@
       }
     },
     {
+      "operationId": "api:GET:/api/member-analytics",
+      "method": "GET",
+      "path": "/api/member-analytics",
+      "source": {
+        "file": "src/app/api/member-analytics/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
       "operationId": "api:POST:/api/open-bottles",
       "method": "POST",
       "path": "/api/open-bottles",
@@ -363,6 +374,17 @@
       "path": "/api/pour/undo",
       "source": {
         "file": "src/app/api/pour/undo/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/pricing-recommendations/recompute",
+      "method": "POST",
+      "path": "/api/pricing-recommendations/recompute",
+      "source": {
+        "file": "src/app/api/pricing-recommendations/recompute/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null
@@ -528,6 +550,17 @@
       "path": "/api/scans/[id]/re-extract",
       "source": {
         "file": "src/app/api/scans/[id]/re-extract/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/stock-adjustments",
+      "method": "POST",
+      "path": "/api/stock-adjustments",
+      "source": {
+        "file": "src/app/api/stock-adjustments/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null
