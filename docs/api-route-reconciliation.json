@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 65,
+    "extensionDiscoveredCount": 66,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -476,6 +476,12 @@
     },
     {
       "operationId": "api:POST:/api/open-bottles/{param}/close",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/open-bottles/close",
       "classification": "extension",
       "concreteRequirementId": null,
       "semanticAliasContext": []

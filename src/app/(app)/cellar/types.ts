@@ -65,6 +65,15 @@ export type CellarWineRow = {
   size_ml: number | null;
   open_remaining_ml: number | null;
   opened_at: string | null;
+  open_bottle_id: string | null;
+  preservation_method: "coravin" | "argon" | "vacuum" | "none";
+  opened_by: string | null;
+  theoretical_remaining_ml: number | null;
+  closeout_reason_codes: Array<{
+    id: string;
+    label: string;
+    category: string;
+  }>;
 
   // BND-039 — drink-window enrichment metadata. All nullable so a wine
   // without enrichment data renders with no timeline / no panel; the

@@ -31,6 +31,8 @@ import {
 } from "@/lib/pricing/status";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
+import type { PreservationMethod } from "@/lib/partial-bottles/math";
+import { PartialBottleCloseout } from "./partial-bottle-closeout";
 
 export function WineDetailDrawer({
   row,
@@ -114,6 +116,8 @@ export function WineDetailDrawer({
 
   // BND-121: manually open a bottle without recording a pour
   const [openBottleBusy, setOpenBottleBusy] = useState(false);
+  const [preservationMethod, setPreservationMethod] =
+    useState<PreservationMethod>(row?.preservation_method ?? "none");
 
   const doOpenBottle = useCallback(
     async () => {
@@ -124,7 +128,10 @@ export function WineDetailDrawer({
         const res = await fetch("/api/open-bottles", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wine_id: row.wine_id }),
+          body: JSON.stringify({
+            wine_id: row.wine_id,
+            preservation_method: preservationMethod,
+          }),
         });
         if (!res.ok) {
           const payload = (await res.json().catch(() => null)) as
@@ -143,7 +150,7 @@ export function WineDetailDrawer({
         setOpenBottleBusy(false);
       }
     },
-    [row, router, toast],
+    [row, router, toast, preservationMethod],
   );
 
   const doPour = useCallback(
@@ -157,15 +164,26 @@ export function WineDetailDrawer({
         const res = await fetch("/api/pour", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wine_id: row.wine_id, ml, kind: "pour" }),
+          body: JSON.stringify({
+            wine_id: row.wine_id,
+            ml,
+            kind: "pour",
+            preservation_method: preservationMethod,
+          }),
         });
+        const payload = (await res.json().catch(() => null)) as
+          | { error?: string | { message?: string }; warning?: { message?: string } }
+          | null;
         if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          throw new Error(payload?.error ?? `Request failed (${res.status}).`);
+          const message = typeof payload?.error === "string"
+            ? payload.error
+            : payload?.error?.message;
+          throw new Error(message ?? `Request failed (${res.status}).`);
         }
         toast.success("Glass poured");
+        if (payload?.warning?.message) {
+          setErrorMsg(payload.warning.message);
+        }
         setLastPour({ ml });
         startTransition(() => router.refresh());
       } catch (err) {
@@ -175,7 +193,7 @@ export function WineDetailDrawer({
         setBusy(false);
       }
     },
-    [row, router, toast],
+    [row, router, toast, preservationMethod],
   );
 
   // BND-119: undo the most recent pour.
@@ -559,8 +577,38 @@ export function WineDetailDrawer({
               </div>
             )}
 
+            {row.open_bottle_id && row.theoretical_remaining_ml !== null && (
+              <PartialBottleCloseout
+                bottle={{
+                  id: row.open_bottle_id,
+                  wineId: row.wine_id,
+                  theoreticalRemainingMl: row.theoretical_remaining_ml,
+                  preservationMethod: row.preservation_method,
+                  openedBy: row.opened_by,
+                }}
+                reasons={row.closeout_reason_codes}
+                onComplete={() => startTransition(() => router.refresh())}
+              />
+            )}
+
             {/* Quick actions */}
             <section aria-label="Actions" className="mt-md flex flex-col gap-sm">
+              {(row.sealed_count > 0 || canPour) && (
+                <label className="text-[12px] text-ink-muted">
+                  Preservation method
+                  <select
+                    aria-label="Preservation method"
+                    value={preservationMethod}
+                    onChange={(event) => setPreservationMethod(event.target.value as PreservationMethod)}
+                    className="mt-xs h-10 w-full rounded-sm border border-border bg-white px-sm text-[13px] text-ink"
+                  >
+                    <option value="none">None</option>
+                    <option value="coravin">Coravin</option>
+                    <option value="argon">Argon</option>
+                    <option value="vacuum">Vacuum</option>
+                  </select>
+                </label>
+              )}
               {/* BND-121: Manually open a bottle without recording a pour */}
               {row.sealed_count > 0 && (
                 <button

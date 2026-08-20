@@ -10,6 +10,8 @@ import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { parseJson } from "@/lib/api/validation";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { PRESERVATION_METHODS } from "@/lib/partial-bottles/math";
 
 export const runtime = "nodejs";
 
@@ -18,6 +20,7 @@ const BodySchema = z.object({
   ml: z.number().int().positive().max(2000),
   kind: z.enum(["pour", "spill"]).default("pour"),
   note: z.string().trim().max(500).optional(),
+  preservation_method: z.enum(PRESERVATION_METHODS).optional(),
 });
 
 /**
@@ -48,7 +51,16 @@ async function postPour(request: NextRequest) {
     message: "Invalid body.",
   });
   if (!parsed.ok) return parsed.response;
-  const { wine_id, ml, kind, note } = parsed.data;
+  const { wine_id, ml, kind, note, preservation_method } = parsed.data;
+
+  const { data: wine, error: wineError } = await supabase
+    .from("wines")
+    .select("id")
+    .eq("id", wine_id)
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+  if (wineError) throw wineError;
+  if (!wine) return Errors.notFound("Wine");
 
   try {
     const openBottle = await recordPour({
@@ -59,6 +71,22 @@ async function postPour(request: NextRequest) {
       kind,
       note,
     });
+    if (preservation_method) {
+      const service = createServiceRoleClient();
+      if (!service) {
+        return preservationWarning(openBottle);
+      }
+      const { error } = await service
+        .from("open_bottles")
+        .update({ preservation_method })
+        .eq("restaurant_id", restaurantId)
+        .eq("wine_id", wine_id)
+        .is("closed_at", null);
+      if (error) {
+        console.error("Failed to update open-bottle preservation method.");
+        return preservationWarning(openBottle);
+      }
+    }
     return NextResponse.json({ open_bottle: openBottle });
   } catch (error) {
     if (error instanceof PourNoInventoryError) {
@@ -72,4 +100,14 @@ async function postPour(request: NextRequest) {
     }
     throw error;
   }
+}
+
+function preservationWarning(openBottle: unknown) {
+  return NextResponse.json({
+    open_bottle: openBottle,
+    warning: {
+      code: "preservation_update_failed",
+      message: "Pour recorded, but preservation method was not updated.",
+    },
+  });
 }

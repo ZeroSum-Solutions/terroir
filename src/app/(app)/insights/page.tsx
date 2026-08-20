@@ -23,6 +23,7 @@ import {
   type TodayException,
 } from "./insights-drilldown";
 import { metricHref } from "./metric-href";
+import { fetchYieldGroups, YieldReportSection } from "./yield-report-section";
 
 type NullableDateRange = { range?: string; from?: string; to?: string };
 type SearchParams = Promise<NullableDateRange>;
@@ -294,10 +295,11 @@ export default async function DashboardPage({
   const rangeSince = dateRangeSince(range, sp.from);
   const rangeUntil = dateRangeUntil(range, sp.to);
 
-  const [drinkWindowAlerts, pricingAlerts, snoozedRows] = await Promise.all([
+  const [drinkWindowAlerts, pricingAlerts, snoozedRows, yieldGroups] = await Promise.all([
     fetchDrinkWindowAlerts(supabase, rid),
     fetchPricingAlerts(supabase, rid).catch(function () { return []; }),
     fetchSnoozedAlerts(supabase, rid).catch(function () { return [] as SnoozedRow[]; }),
+    fetchYieldGroups(supabase, rid),
   ]);
   const firstName = parseFirstName(user.email ?? "") || "there";
   const canEnrich = userRole === "owner" || userRole === "manager";
@@ -442,7 +444,7 @@ export default async function DashboardPage({
       : null;
 
   // Empty state
-  if (allScans.length === 0 && items.length === 0) {
+  if (allScans.length === 0 && items.length === 0 && yieldGroups.length === 0) {
     return (
       <section>
         <header className="mb-xl">
@@ -516,6 +518,8 @@ export default async function DashboardPage({
       </header>
 
       <TodayStrip exceptions={todayExceptions} />
+
+      <YieldReportSection groups={yieldGroups} />
 
       {/* Drink-window watch */}
       {(drinkWindowAlerts.length > 0 || canEnrich) && (
