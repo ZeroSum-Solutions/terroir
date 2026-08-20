@@ -2,85 +2,166 @@
 
 /*
  * Terroir Design System — token layer
- * Source: DESIGN.md (do not edit here without updating DESIGN.md first)
+ * Source: DESIGN.md ("Terroir — Beyond Ordinary", 2026-08-19).
+ * Do not edit values here without updating DESIGN.md first.
+ *
+ * Two tiers:
+ *  1. Contract tokens — names straight from DESIGN.md frontmatter.
+ *  2. Legacy aliases — the pre-redesign semantic names (surface/accent/border…)
+ *     still used across components, remapped onto contract values so the whole
+ *     app retints. New/touched code should use contract tokens; aliases shrink
+ *     as surfaces are migrated.
  */
 @theme {
-  /* Surfaces */
-  --color-surface: #fafaf8;
-  --color-surface-muted: #f5f3ef;
-  --color-surface-sunken: #efebe3;
-  --color-surface-inverse: #1a1a1a;
+  /* ── Contract tokens ─────────────────────────────────────── */
+  --color-primary: #722f37;
+  --color-primary-hover: #5a252c;
+  --color-canvas: #ffffff;
+  --color-beige: #ece4da;
+  --color-beige-deep: #e3d9cb;
+  --color-bridge-surface: #faf7f2;
+  --color-powder: #c7d7e9;
+  --color-powder-wash: #e2eaf3;
+  --color-powder-ink: #41586e;
+  --color-sage: #adaa8a;
+  --color-sage-wash: #e6e4d4;
+  --color-sage-ink: #5f5c40;
+  --color-ink: #191919;
+  --color-ink-soft: #212121;
+  --color-grey: #707070;
+  --color-hairline: #e4ded4;
+  --color-blush-wash: #f2e6e2;
+  --color-amber: #8b6914;
+  --color-amber-wash: #fbf3dc;
+  --color-glass-white: rgba(255, 255, 255, 0.55);
+  --color-glass-edge: rgba(255, 255, 255, 0.7);
+  --color-glass-shadow: rgba(25, 25, 25, 0.07);
 
-  /* Ink */
-  --color-ink: #1a1a1a;
-  --color-ink-muted: #6b6b6b;
-  --color-ink-subtle: #726d66;
-
-  /* Accent — burgundy */
-  --color-accent: #722f37;
-  --color-accent-hover: #5a252c;
-  --color-accent-soft: #f4e8ea;
-
-  /* Semantic */
-  --color-success: #2d6a4f;
-  --color-success-soft: #e3efe8;
-  --color-warning: #8b6914;
-  --color-warning-soft: #fbf3dc;
-  --color-danger: #c1292e;
-
-  /* Lines */
-  --color-border: #e5e2db;
-  --color-border-strong: #d4cfc3;
+  /* ── Legacy aliases (remapped) ───────────────────────────── */
+  --color-surface: #ffffff; /* → canvas */
+  --color-surface-muted: #faf7f2; /* → bridge-surface */
+  --color-surface-sunken: #ece4da; /* → beige */
+  --color-surface-inverse: #191919; /* → ink */
+  --color-ink-muted: #707070; /* → grey */
+  --color-ink-subtle: #707070; /* → grey */
+  --color-accent: #722f37; /* → primary */
+  --color-accent-hover: #5a252c; /* → primary-hover */
+  --color-accent-soft: #f2e6e2; /* → blush-wash */
+  --color-success: #5f5c40; /* → sage-ink */
+  --color-success-soft: #e6e4d4; /* → sage-wash */
+  --color-warning: #8b6914; /* → amber */
+  --color-warning-soft: #fbf3dc; /* → amber-wash */
+  --color-danger: #722f37; /* burgundy is the only alarm chromatic */
+  --color-border: #e4ded4; /* → hairline */
+  --color-border-strong: #e3d9cb; /* → beige-deep */
 
   /* Typography — fonts injected via next/font in layout.tsx */
   --font-serif: var(--font-cormorant), "Cormorant Garamond", Georgia, serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
 
+  /* Type scale (contract) */
+  --text-caption: 11px;
+  --text-caption--line-height: 1.5;
+  --text-caption--letter-spacing: 0.18em;
+  --text-body-sm: 13px;
+  --text-body-sm--line-height: 1.55;
+  --text-body: 15px;
+  --text-body--line-height: 1.6;
+  --text-body-light: 16px;
+  --text-body-light--line-height: 1.6;
+  --text-subheading: 19px;
+  --text-subheading--line-height: 1.45;
+  --text-heading-sm: 28px;
+  --text-heading-sm--line-height: 1.25;
+  --text-heading: 44px;
+  --text-heading--line-height: 1.1;
+  --text-heading--letter-spacing: -0.01em;
+  --text-display: 84px;
+  --text-display--line-height: 1;
+  --text-display--letter-spacing: -0.01em;
+
   /* Spacing scale (named tokens alongside default numeric scale) */
   --spacing-2xs: 2px;
-  --spacing-xs: 4px;
-  --spacing-sm: 8px;
-  --spacing-md: 16px;
+  --spacing-xs: 8px;
+  --spacing-sm: 14px;
+  --spacing-md: 18px;
   --spacing-lg: 24px;
-  --spacing-xl: 32px;
+  --spacing-xl: 36px;
   --spacing-2xl: 48px;
-  --spacing-3xl: 64px;
+  --spacing-3xl: 72px;
 
-  /* Radii */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-pill: 100px;
+  /* Radii — control 10 / tile 18 / card 20 / pill. Nothing between 10 and 18. */
+  --radius-sm: 8px;
+  --radius-md: 10px; /* control */
+  --radius-lg: 18px; /* tile */
+  --radius-card: 20px;
+  --radius-pill: 999px;
 
-  /* Shadows — warm black, not pure black */
-  --shadow-sm: 0 1px 2px rgba(26, 26, 26, 0.04), 0 1px 1px rgba(26, 26, 26, 0.02);
-  --shadow-md: 0 4px 12px rgba(26, 26, 26, 0.06), 0 2px 4px rgba(26, 26, 26, 0.03);
-  --shadow-lg: 0 12px 32px rgba(26, 26, 26, 0.08), 0 4px 10px rgba(26, 26, 26, 0.04);
+  /* Shadows — floating glass is the ONLY shadowed element in the system.
+     Legacy sm/md/lg kept as near-invisible whispers until usages migrate. */
+  --shadow-glass: 0 8px 32px rgba(25, 25, 25, 0.07);
+  --shadow-sm: 0 1px 2px rgba(25, 25, 25, 0.03);
+  --shadow-md: 0 2px 8px rgba(25, 25, 25, 0.04);
+  --shadow-lg: 0 8px 32px rgba(25, 25, 25, 0.07);
 
   /* Layout */
   --container-prose: 720px;
-  --container-page: 1440px;
+  --container-page: 1200px;
 }
 
 html,
 body {
-  background: var(--color-surface);
+  background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 body {
-  font-size: 16px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 /* Tabular numerals for prices, quantities, timestamps */
 .tabular,
 [data-tabular] {
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Glass recipe (DESIGN.md — Elevation & Depth).
+ * Only for elements that float above other content: sticky nav, stat tiles
+ * on the gradient hero, drawers, modals, command palette, toasts.
+ * Never glass-on-glass; glass stays white.
+ */
+.glass {
+  background: rgba(255, 255, 255, 0.92); /* fallback when backdrop-filter unsupported */
+  border: 1px solid var(--color-glass-edge);
+  box-shadow: var(--shadow-glass);
+}
+@supports (backdrop-filter: blur(18px)) or (-webkit-backdrop-filter: blur(18px)) {
+  .glass {
+    background: var(--color-glass-white);
+    -webkit-backdrop-filter: blur(18px) saturate(1.3);
+    backdrop-filter: blur(18px) saturate(1.3);
+  }
+}
+
+/*
+ * Dawn gradient (level-0 surface) — hero atmosphere only, once per page,
+ * always resolving into the white workspace via the beige bridge band.
+ */
+.dawn-gradient {
+  background: linear-gradient(
+    172deg,
+    #c7d7e9 0%,
+    #dfe6ea 22%,
+    #f4efe7 55%,
+    #ece4da 100%
+  );
 }
 
 @media (prefers-reduced-motion: reduce) {
