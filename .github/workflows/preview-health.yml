@@ -1,24 +1,22 @@
 # INT-018 — Railway PR preview health gate (staging Option B from
 # docs/STAGING-SETUP.md).
 #
-# Triggers on PR. Polls the GitHub Deployments API for a Railway-
-# originated preview deployment, waits up to 5 minutes for it to
-# reach 'success', then curls its `/api/health` and fails the gate
-# on non-200.
+# Triggers on PR. Binds Railway's authenticated PR comment to its
+# deployment using the PR-specific environment ID and HEAD SHA, waits
+# up to 5 minutes for success, then curls the comment's Railway-provided
+# service domain at `/api/health` and fails the gate on non-200.
 #
-# Graceful degradation: when no Railway deployment is found within
-# the timeout (i.e., PR previews are NOT enabled in Railway → Service
-# → Settings → PR Environments), the step succeeds with a skip
-# message. Safe to land now; "just works" once the dashboard toggle
-# is flipped.
+# The gate fails closed: missing PR metadata, a failed/error deployment,
+# or exhaustion without a valid Railway preview all fail the job. A
+# successful deployment passes only when its `/api/health` returns 200.
 #
 # SECURITY: this workflow intentionally avoids interpolating any
 # untrusted PR-author-controlled strings (titles, bodies, branch
-# names) in run: blocks. The two values it does surface via env —
-# the PR number (set by GitHub, always an integer) and the PR HEAD
-# SHA (always a git hash) — are both structured, GitHub-authored
-# fields that aren't writable by the PR author. Everything else
-# goes through the `gh` CLI + GitHub API.
+# names) in run: blocks. PR number and HEAD SHA are structured,
+# GitHub-authored fields. Comment data is accepted only from the
+# unique `railway-app[bot]` actor with type `Bot`, parsed as data, and
+# constrained to a single `*.up.railway.app` HTTPS origin. User-authored
+# comments and deployment status dashboard/log URLs are never curled.
 
 name: Preview health
 
@@ -55,8 +53,8 @@ jobs:
           SLEEP_S=15
 
           if [ -z "$PR_NUMBER" ] || [ -z "$HEAD_SHA" ]; then
-            echo "⚠️  Missing PR_NUMBER / HEAD_SHA — exiting 0 (skip)."
-            exit 0
+            echo "❌ Missing PR_NUMBER / HEAD_SHA — cannot validate the PR preview."
+            exit 1
           fi
           # GITHUB_REPOSITORY is auto-provided by GitHub Actions.
           # Used instead of `gh repo view` so this job doesn't need
@@ -66,20 +64,47 @@ jobs:
           echo "Polling for Railway preview on $REPO @ $HEAD_SHA ..."
 
           for i in $(seq 1 $MAX_ATTEMPTS); do
-            # Find non-production deployments matching HEAD (Railway creates
-            # its PR previews with environment labels like 'pr-123').
-            deployment_id=$(gh api "repos/$REPO/deployments?sha=$HEAD_SHA" \
-              --jq 'map(select(.environment != "production")) | .[0].id' 2>/dev/null || echo "")
+            comments_json=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" \
+              2>/dev/null || echo '[]')
+            railway_comment=$(printf '%s' "$comments_json" | jq -r '
+              [.[] | select(
+                .user.login == "railway-app[bot]" and
+                .user.type == "Bot" and
+                (.body | startswith("<!-- railway-bot-comment-version="))
+              )] | last | .body // empty
+            ')
+            environment_id=$(printf '%s' "$railway_comment" | jq -Rrs '
+              try capture("environmentId=(?<id>[0-9a-fA-F-]{36})").id catch ""
+            ')
+            preview_url=$(printf '%s' "$railway_comment" | jq -Rrs '
+              [scan("https://[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.up\\.railway\\.app")]
+              | unique
+              | if length == 1 then .[0] else empty end
+            ')
 
-            if [ -n "$deployment_id" ] && [ "$deployment_id" != "null" ]; then
-              status_json=$(gh api "repos/$REPO/deployments/$deployment_id/statuses" \
-                --jq '.[0] | {state: .state, target: .target_url, env: .environment_url}' 2>/dev/null || echo '')
+            deployments_json=$(gh api "repos/$REPO/deployments?sha=$HEAD_SHA&per_page=100" \
+              2>/dev/null || echo '[]')
+            deployment_id=$(printf '%s' "$deployments_json" | jq -r \
+              --arg environment_id "$environment_id" \
+              --arg head_sha "$HEAD_SHA" '
+                [.[] | select(
+                  .creator.login == "railway-app[bot]" and
+                  .creator.type == "Bot" and
+                  .sha == $head_sha and
+                  .payload.environmentId == $environment_id
+                )]
+                | sort_by(.created_at)
+                | last
+                | .id // empty
+              ')
 
-              state=$(echo "$status_json" | jq -r '.state // empty')
-              url=$(echo "$status_json" | jq -r '.env // .target // empty')
+            if [ -n "$deployment_id" ]; then
+              statuses_json=$(gh api "repos/$REPO/deployments/$deployment_id/statuses" \
+                2>/dev/null || echo '[]')
+              state=$(printf '%s' "$statuses_json" | jq -r '.[0].state // empty')
 
-              if [ "$state" = "success" ] && [ -n "$url" ] && [ "$url" != "null" ]; then
-                health_url="${url%/}/api/health"
+              if [ "$state" = "success" ] && [ -n "$preview_url" ]; then
+                health_url="${preview_url%/}/api/health"
                 echo "Preview ready — curling $health_url"
                 http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$health_url" || echo "000")
                 if [ "$http_code" = "200" ]; then
@@ -100,7 +125,7 @@ jobs:
             sleep $SLEEP_S
           done
 
-          echo "⚠️  No Railway preview detected within $((MAX_ATTEMPTS * SLEEP_S))s."
-          echo "    Expected when Railway PR Previews are NOT enabled."
-          echo "    See docs/STAGING-SETUP.md → Option B. Exiting 0 (graceful skip)."
-          exit 0
+          echo "❌ No valid Railway preview detected within $((MAX_ATTEMPTS * SLEEP_S))s."
+          echo "    Confirm Railway PR Previews are enabled."
+          echo "    See docs/STAGING-SETUP.md → Option B."
+          exit 1

@@ -1,0 +1,575 @@
+{
+  "schemaVersion": 1,
+  "generatorVersion": 2,
+  "scope": {
+    "firstRequirementId": "TER-CF-180",
+    "lastRequirementId": "TER-CF-217",
+    "requirementCount": 38,
+    "activeFeatureLedgerCount": 269
+  },
+  "inputs": {
+    "featureLedger": "docs/feature-ledger.json",
+    "routeSourceRoot": "src/app/api"
+  },
+  "summary": {
+    "proved": 0,
+    "weak": 23,
+    "unimplemented": 15
+  },
+  "requirements": [
+    {
+      "requirementId": "TER-CF-180",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:GET:/api/health",
+      "evidence": {
+        "ledgerClaim": "GET /api/health returns 200 with a JSON liveness payload",
+        "implementation": {
+          "method": "GET",
+          "path": "/api/health",
+          "sourceFile": "src/app/api/health/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-181",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:GET:/api/cellar",
+      "evidence": {
+        "ledgerClaim": "GET /api/cellar returns the authenticated user's cellar",
+        "expectedRoute": {
+          "method": "GET",
+          "path": "/api/cellar"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-182",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:POST:/api/cellar",
+      "evidence": {
+        "ledgerClaim": "POST /api/cellar adds a wine to the cellar",
+        "implementation": {
+          "method": "POST",
+          "path": "/api/cellar",
+          "sourceFile": "src/app/api/cellar/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-183",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:PATCH:/api/cellar/{param}",
+      "evidence": {
+        "ledgerClaim": "PATCH /api/cellar/[id] updates a wine",
+        "implementation": {
+          "method": "PATCH",
+          "path": "/api/cellar/[id]",
+          "sourceFile": "src/app/api/cellar/[id]/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-184",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:DELETE:/api/cellar/{param}",
+      "evidence": {
+        "ledgerClaim": "DELETE /api/cellar/[id] removes a wine (rejects when references exist)",
+        "implementation": {
+          "method": "DELETE",
+          "path": "/api/cellar/[id]",
+          "sourceFile": "src/app/api/cellar/[id]/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-185",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:GET:/api/wines",
+      "evidence": {
+        "ledgerClaim": "GET /api/wines returns wines with pagination and filtering",
+        "expectedRoute": {
+          "method": "GET",
+          "path": "/api/wines"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-186",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:GET:/api/wines/{param}",
+      "evidence": {
+        "ledgerClaim": "GET /api/wines/[id] returns a single wine with enrichment data",
+        "expectedRoute": {
+          "method": "GET",
+          "path": "/api/wines/[id]"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-187",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:POST:/api/scan",
+      "evidence": {
+        "ledgerClaim": "POST /api/scan submits a stored image for OCR + extraction",
+        "implementation": {
+          "method": "POST",
+          "path": "/api/scan",
+          "sourceFile": "src/app/api/scan/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-188",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:GET:/api/scans",
+      "evidence": {
+        "ledgerClaim": "GET /api/scans lists past scans for the current restaurant",
+        "expectedRoute": {
+          "method": "GET",
+          "path": "/api/scans"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-189",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:GET:/api/scans/{param}",
+      "evidence": {
+        "ledgerClaim": "GET /api/scans/[id] returns a single scan with line items",
+        "expectedRoute": {
+          "method": "GET",
+          "path": "/api/scans/[id]"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-190",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:POST:/api/scan-bottle",
+      "evidence": {
+        "ledgerClaim": "POST /api/scan-bottle decodes a QR code and resolves the wine",
+        "implementation": {
+          "method": "POST",
+          "path": "/api/scan-bottle",
+          "sourceFile": "src/app/api/scan-bottle/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-191",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:GET:/api/inventory",
+      "evidence": {
+        "ledgerClaim": "GET /api/inventory returns aggregate inventory data",
+        "expectedRoute": {
+          "method": "GET",
+          "path": "/api/inventory"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-192",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:POST:/api/pour",
+      "evidence": {
+        "ledgerClaim": "POST /api/pour records a pour event",
+        "implementation": {
+          "method": "POST",
+          "path": "/api/pour",
+          "sourceFile": "src/app/api/pour/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-193",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:POST:/api/reconcile",
+      "evidence": {
+        "ledgerClaim": "POST /api/reconcile reconciles one or more open bottles",
+        "implementation": {
+          "method": "POST",
+          "path": "/api/reconcile",
+          "sourceFile": "src/app/api/reconcile/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-194",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:GET:/api/wine-lists",
+      "evidence": {
+        "ledgerClaim": "GET /api/wine-lists returns lists for the restaurant",
+        "expectedRoute": {
+          "method": "GET",
+          "path": "/api/wine-lists"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-195",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:POST:/api/wine-lists",
+      "evidence": {
+        "ledgerClaim": "POST /api/wine-lists creates a new list",
+        "implementation": {
+          "method": "POST",
+          "path": "/api/wine-lists",
+          "sourceFile": "src/app/api/wine-lists/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-196",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:PATCH:/api/wine-lists/{param}",
+      "evidence": {
+        "ledgerClaim": "PATCH /api/wine-lists/[id] updates a list",
+        "implementation": {
+          "method": "PATCH",
+          "path": "/api/wine-lists/[id]",
+          "sourceFile": "src/app/api/wine-lists/[id]/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-197",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:DELETE:/api/wine-lists/{param}",
+      "evidence": {
+        "ledgerClaim": "DELETE /api/wine-lists/[id] archives a list",
+        "implementation": {
+          "method": "DELETE",
+          "path": "/api/wine-lists/[id]",
+          "sourceFile": "src/app/api/wine-lists/[id]/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-198",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:GET:/api/wine-list-sections",
+      "evidence": {
+        "ledgerClaim": "GET /api/wine-list-sections returns sections for a list",
+        "expectedRoute": {
+          "method": "GET",
+          "path": "/api/wine-list-sections"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-199",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:POST:/api/wine-list-sections",
+      "evidence": {
+        "ledgerClaim": "POST /api/wine-list-sections creates a section",
+        "implementation": {
+          "method": "POST",
+          "path": "/api/wine-list-sections",
+          "sourceFile": "src/app/api/wine-list-sections/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-200",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:PATCH:/api/wine-list-sections/{param}",
+      "evidence": {
+        "ledgerClaim": "PATCH /api/wine-list-sections/[id] reorders or renames a section",
+        "implementation": {
+          "method": "PATCH",
+          "path": "/api/wine-list-sections/[id]",
+          "sourceFile": "src/app/api/wine-list-sections/[id]/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-201",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:GET:/api/wine-list-items",
+      "evidence": {
+        "ledgerClaim": "GET /api/wine-list-items returns items for a section",
+        "expectedRoute": {
+          "method": "GET",
+          "path": "/api/wine-list-items"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-202",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:POST:/api/wine-list-items",
+      "evidence": {
+        "ledgerClaim": "POST /api/wine-list-items adds a wine to a section",
+        "implementation": {
+          "method": "POST",
+          "path": "/api/wine-list-items",
+          "sourceFile": "src/app/api/wine-list-items/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-203",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:PATCH:/api/wine-list-items/{param}",
+      "evidence": {
+        "ledgerClaim": "PATCH /api/wine-list-items/[id] updates an item override",
+        "implementation": {
+          "method": "PATCH",
+          "path": "/api/wine-list-items/[id]",
+          "sourceFile": "src/app/api/wine-list-items/[id]/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-204",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:GET:/api/insights",
+      "evidence": {
+        "ledgerClaim": "GET /api/insights returns aggregate metrics for the restaurant",
+        "implementation": {
+          "method": "GET",
+          "path": "/api/insights",
+          "sourceFile": "src/app/api/insights/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-205",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:GET:/api/restaurant",
+      "evidence": {
+        "ledgerClaim": "GET /api/restaurant returns restaurant metadata",
+        "expectedRoute": {
+          "method": "GET",
+          "path": "/api/restaurant"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-206",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:PATCH:/api/restaurant",
+      "evidence": {
+        "ledgerClaim": "PATCH /api/restaurant updates restaurant metadata",
+        "expectedRoute": {
+          "method": "PATCH",
+          "path": "/api/restaurant"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-207",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:GET:/api/team",
+      "evidence": {
+        "ledgerClaim": "GET /api/team returns memberships and pending invitations",
+        "expectedRoute": {
+          "method": "GET",
+          "path": "/api/team"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-208",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:POST:/api/team",
+      "evidence": {
+        "ledgerClaim": "POST /api/team invites a new member",
+        "expectedRoute": {
+          "method": "POST",
+          "path": "/api/team"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-209",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:DELETE:/api/team/{param}",
+      "evidence": {
+        "ledgerClaim": "DELETE /api/team/[membership_id] revokes membership",
+        "expectedRoute": {
+          "method": "DELETE",
+          "path": "/api/team/[membership_id]"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-210",
+      "status": "weak",
+      "reason": "route_present_executable_proof_not_trusted",
+      "operationId": "api:POST:/api/pdf",
+      "evidence": {
+        "ledgerClaim": "POST /api/pdf generates a print-ready PDF for a wine list",
+        "implementation": {
+          "method": "POST",
+          "path": "/api/pdf",
+          "sourceFile": "src/app/api/pdf/route.ts",
+          "exportKind": "function-declaration"
+        },
+        "proofAssessment": "Executable behavioral proof is not yet trusted."
+      }
+    },
+    {
+      "requirementId": "TER-CF-211",
+      "status": "unimplemented",
+      "reason": "current_route_not_discovered",
+      "operationId": "api:GET:/api/export",
+      "evidence": {
+        "ledgerClaim": "GET /api/export streams a CSV export",
+        "expectedRoute": {
+          "method": "GET",
+          "path": "/api/export"
+        },
+        "implementation": null
+      }
+    },
+    {
+      "requirementId": "TER-CF-212",
+      "status": "weak",
+      "reason": "cross_cutting_executable_proof_not_trusted",
+      "operationId": null,
+      "evidence": {
+        "ledgerClaim": "All write endpoints validate input with Zod and return 400 on invalid bodies",
+        "scope": "All write endpoints",
+        "implementation": null,
+        "proofAssessment": "No trusted executable proof covers this quantified scope."
+      }
+    },
+    {
+      "requirementId": "TER-CF-213",
+      "status": "weak",
+      "reason": "cross_cutting_executable_proof_not_trusted",
+      "operationId": null,
+      "evidence": {
+        "ledgerClaim": "All endpoints return a consistent error envelope shape",
+        "scope": "All endpoints",
+        "implementation": null,
+        "proofAssessment": "No trusted executable proof covers this quantified scope."
+      }
+    },
+    {
+      "requirementId": "TER-CF-214",
+      "status": "weak",
+      "reason": "cross_cutting_executable_proof_not_trusted",
+      "operationId": null,
+      "evidence": {
+        "ledgerClaim": "All endpoints return 401 for unauthenticated requests",
+        "scope": "All endpoints",
+        "implementation": null,
+        "proofAssessment": "No trusted executable proof covers this quantified scope."
+      }
+    },
+    {
+      "requirementId": "TER-CF-215",
+      "status": "weak",
+      "reason": "cross_cutting_executable_proof_not_trusted",
+      "operationId": null,
+      "evidence": {
+        "ledgerClaim": "All endpoints return 403 for cross-restaurant access attempts",
+        "scope": "All endpoints",
+        "implementation": null,
+        "proofAssessment": "No trusted executable proof covers this quantified scope."
+      }
+    },
+    {
+      "requirementId": "TER-CF-216",
+      "status": "weak",
+      "reason": "cross_cutting_executable_proof_not_trusted",
+      "operationId": null,
+      "evidence": {
+        "ledgerClaim": "All endpoints return 404 for missing resources rather than leaking existence",
+        "scope": "All endpoints",
+        "implementation": null,
+        "proofAssessment": "No trusted executable proof covers this quantified scope."
+      }
+    },
+    {
+      "requirementId": "TER-CF-217",
+      "status": "weak",
+      "reason": "cross_cutting_executable_proof_not_trusted",
+      "operationId": null,
+      "evidence": {
+        "ledgerClaim": "All endpoints return 429 when per-user rate limits are exceeded",
+        "scope": "All endpoints",
+        "implementation": null,
+        "proofAssessment": "No trusted executable proof covers this quantified scope."
+      }
+    }
+  ]
+}
