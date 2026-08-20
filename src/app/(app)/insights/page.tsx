@@ -27,6 +27,8 @@ import { metricHref } from "./metric-href";
 import { fetchYieldGroups, YieldReportSection } from "./yield-report-section";
 import { summarizeCellarHealth } from "@/lib/cellar-health/summary";
 import { CellarHealthPanel } from "./cellar-health-panel";
+import { fetchPricingRecommendations } from "@/lib/pricing-recommendations/fetch";
+import { PricingPlaysSection } from "./pricing-plays-section";
 
 type NullableDateRange = { range?: string; from?: string; to?: string };
 type SearchParams = Promise<NullableDateRange>;
@@ -298,11 +300,18 @@ export default async function DashboardPage({
   const rangeSince = dateRangeSince(range, sp.from);
   const rangeUntil = dateRangeUntil(range, sp.to);
 
-  const [drinkWindowAlerts, pricingAlerts, snoozedRows, yieldGroups] = await Promise.all([
+  const [
+    drinkWindowAlerts,
+    pricingAlerts,
+    snoozedRows,
+    yieldGroups,
+    pricingRecommendations,
+  ] = await Promise.all([
     fetchDrinkWindowAlerts(supabase, rid),
     fetchPricingAlerts(supabase, rid).catch(function () { return []; }),
     fetchSnoozedAlerts(supabase, rid).catch(function () { return [] as SnoozedRow[]; }),
     fetchYieldGroups(supabase, rid, rangeSince, rangeUntil),
+    fetchPricingRecommendations(supabase, rid),
   ]);
   const firstName = parseFirstName(user.email ?? "") || "there";
   const canEnrich = userRole === "owner" || userRole === "manager";
@@ -533,6 +542,10 @@ export default async function DashboardPage({
 
       <YieldReportSection groups={yieldGroups} />
       <CellarHealthPanel summary={cellarHealthSummary} canRecompute={canEnrich} />
+      <PricingPlaysSection
+        recommendations={pricingRecommendations}
+        canRecompute={canEnrich}
+      />
 
       {/* Drink-window watch */}
       {(drinkWindowAlerts.length > 0 || canEnrich) && (

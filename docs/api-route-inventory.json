@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 74,
-  "discoveredOperationCount": 87,
+  "routeFileCount": 75,
+  "discoveredOperationCount": 88,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/bins",
@@ -341,6 +341,17 @@
       "path": "/api/pour/undo",
       "source": {
         "file": "src/app/api/pour/undo/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/pricing-recommendations/recompute",
+      "method": "POST",
+      "path": "/api/pricing-recommendations/recompute",
+      "source": {
+        "file": "src/app/api/pricing-recommendations/recompute/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null
