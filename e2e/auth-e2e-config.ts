@@ -1,3 +1,5 @@
+import { createHash, randomBytes } from "node:crypto";
+
 type Environment = Record<string, string | undefined>;
 
 export type RealAuthE2eConfig = {
@@ -107,7 +109,27 @@ export function isolatedAuthE2eEmail(
   if (!/^[a-z0-9-]+$/i.test(purpose)) {
     throw new Error("Auth E2E purposes must be simple opaque labels.");
   }
-  return `terroir-${purpose}-${config.runId}@${config.emailDomain}`.toLowerCase();
+  const rawLocalPart = `terroir-${purpose}-${config.runId}`.toLowerCase();
+  if (rawLocalPart.length <= 64) {
+    return `${rawLocalPart}@${config.emailDomain}`;
+  }
+
+  const digest = createHash("sha256")
+    .update(`${purpose}:${config.runId}`)
+    .digest("hex")
+    .slice(0, 16);
+  const prefix = `terroir-${purpose}`.toLowerCase().slice(0, 47).replace(/-+$/, "");
+  return `${prefix}-${digest}@${config.emailDomain}`;
+}
+
+export function isolatedAuthE2ePassword(
+  purpose: string,
+): string {
+  if (!/^[a-z0-9-]+$/i.test(purpose)) {
+    throw new Error("Auth E2E password purposes must be simple opaque labels.");
+  }
+  const random = randomBytes(24).toString("base64url");
+  return `Terroir1-${purpose.slice(0, 20)}-${random}!`;
 }
 
 export async function waitForMailpitEmail(

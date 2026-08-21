@@ -4,6 +4,7 @@ import {
   extractAuthEmailLink,
   getRealAuthE2eConfig,
   isolatedAuthE2eEmail,
+  isolatedAuthE2ePassword,
   waitForMailpitEmail,
   type RealAuthE2eConfig,
 } from "./auth-e2e-config";
@@ -24,8 +25,8 @@ test.describe("real Supabase email authentication", () => {
     if (!config) throw new Error("Missing real auth E2E configuration.");
 
     const email = isolatedAuthE2eEmail(config, `auth-${Date.now()}`);
-    const initialPassword = `Terroir-${config.runId}-first!`;
-    const replacementPassword = `Terroir-${config.runId}-second!`;
+    const initialPassword = isolatedAuthE2ePassword("first");
+    const replacementPassword = isolatedAuthE2ePassword("second");
     const browserErrors: string[] = [];
     page.on("console", (message) => {
       if (message.type() === "error") browserErrors.push(message.text());

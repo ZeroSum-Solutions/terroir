@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getRealAuthE2eConfig,
   isolatedAuthE2eEmail,
+  isolatedAuthE2ePassword,
 } from "../../../e2e/auth-e2e-config";
 
 const valid = {
@@ -29,6 +30,31 @@ describe("real auth E2E configuration", () => {
     expect(isolatedAuthE2eEmail(config!, "auth")).toBe(
       "terroir-auth-github-run-12345678@auth-e2e.example.test",
     );
+  });
+
+  it("keeps maximum-length run identifiers within the email local-part limit", () => {
+    const config = getRealAuthE2eConfig({
+      ...valid,
+      AUTH_E2E_RUN_ID: "a".repeat(80),
+    })!;
+    const email = isolatedAuthE2eEmail(config, `auth-${Date.now()}`);
+    const [localPart] = email.split("@");
+
+    expect(localPart.length).toBeLessThanOrEqual(64);
+    expect(isolatedAuthE2eEmail(config, "auth-fixed")).toBe(
+      isolatedAuthE2eEmail(config, "auth-fixed"),
+    );
+    const firstPassword = isolatedAuthE2ePassword("first");
+    const secondPassword = isolatedAuthE2ePassword("second");
+    const repeatedPurposePassword = isolatedAuthE2ePassword("first");
+    expect(firstPassword.length).toBeLessThanOrEqual(72);
+    expect(secondPassword.length).toBeLessThanOrEqual(72);
+    expect(firstPassword).not.toBe(secondPassword);
+    expect(firstPassword).not.toBe(repeatedPurposePassword);
+    expect(firstPassword).toMatch(/[A-Z]/);
+    expect(firstPassword).toMatch(/[a-z]/);
+    expect(firstPassword).toMatch(/[0-9]/);
+    expect(firstPassword).toMatch(/[^A-Za-z0-9]/);
   });
 
   it.each([

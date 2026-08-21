@@ -234,13 +234,15 @@ export default async function PriceComparisonPage({
   );
   const visibleComparisonCount =
     visibleComparable.length + visibleSingleSource.length;
-  const hasMoreComparisons = visibleComparisonCount < comparisons.length;
+  const maximumVisibleComparisonCount = Math.min(comparisons.length, 500);
+  const hasMoreComparisons =
+    visibleComparisonCount < maximumVisibleComparisonCount;
   const showMoreParams = new URLSearchParams();
   if (sf) showMoreParams.set("sort", sf);
   if (so) showMoreParams.set("ord", so);
   showMoreParams.set(
     "limit",
-    String(Math.min(comparisons.length, visibleComparisonCount + 25)),
+    String(Math.min(maximumVisibleComparisonCount, visibleComparisonCount + 25)),
   );
 
   // Total savings opportunity

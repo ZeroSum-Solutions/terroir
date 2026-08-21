@@ -10,6 +10,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
+import { readFile } from "node:fs/promises";
 
 config({ path: ".env.local" });
 
@@ -108,6 +109,16 @@ const sections = [
   "Reds - Old World",
   "Reds - New World",
   "Dessert & Fortified",
+];
+
+const invoiceImageFixtures = [
+  "OIP-2427424005.jpg",
+  "OIP-3239974709.jpg",
+  "OIP-863239403.jpg",
+  "OIP-1231690657.jpg",
+  "OIP-2622458412.jpg",
+  "OIP-1998228646.jpg",
+  "OIP-1658565059.jpg",
 ];
 
 function uuid(prefix, index) {
@@ -248,10 +259,12 @@ function buildRows(userIds = DRY_USER_IDS) {
       const wine = wines[(idx * 4 + j) % wines.length];
       return {
         producer: wine.producer,
-        wine: wine.name,
+        name: wine.name,
         vintage: wine.vintage,
-        quantity: 1 + ((i + j) % 6),
-        unit_cost: cents(20 + ((i + j) % 50) * 3.1),
+        varietal: wine.varietal,
+        region: wine.region,
+        qty: 1 + ((i + j) % 6),
+        unitCost: cents(20 + ((i + j) % 50) * 3.1),
         currency: "USD",
         format: wine.size_ml === 1500 ? "magnum" : wine.size_ml === 375 ? "half" : "750ml",
         confidence: 0.82 + ((i + j) % 15) / 100,
@@ -644,6 +657,34 @@ async function upsertRows(supabase, table, rows, options = {}) {
   }
 }
 
+function seedImagePaths(scans) {
+  return scans.flatMap((scan) => [
+    scan.raw_image_path,
+    ...(scan.extra_image_paths ?? []),
+  ]);
+}
+
+async function seedInvoiceImages(supabase, scans) {
+  const fixtures = await Promise.all(
+    invoiceImageFixtures.map((name) =>
+      readFile(new URL(`../test-invoices/${name}`, import.meta.url)),
+    ),
+  );
+  const bucket = supabase.storage.from("invoice-images");
+  const paths = seedImagePaths(scans);
+
+  for (let index = 0; index < paths.length; index += 1) {
+    const { error } = await bucket.upload(
+      paths[index],
+      fixtures[index % fixtures.length],
+      { contentType: "image/jpeg", upsert: true },
+    );
+    if (error) {
+      throw new Error(`invoice image upload failed: ${error.message}`);
+    }
+  }
+}
+
 async function seed() {
   assertWriteAllowed();
   const dryRows = buildRows();
@@ -671,6 +712,7 @@ async function seed() {
   await upsertRows(supabase, "cellar_config", rows.cellarConfig);
   await upsertRows(supabase, "wines", rows.wines);
   await upsertRows(supabase, "invoice_scans", rows.scans);
+  await seedInvoiceImages(supabase, rows.scans);
   await upsertRows(supabase, "inventory_items", rows.inventoryItems);
   await upsertRows(supabase, "wine_lists", rows.lists);
   await upsertRows(supabase, "wine_list_sections", rows.wineListSections);
@@ -695,6 +737,11 @@ async function teardown() {
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
   });
+
+  const { error: storageError } = await supabase.storage
+    .from("invoice-images")
+    .remove(seedImagePaths(rows.scans));
+  if (storageError) throw storageError;
 
   const { error } = await supabase
     .from("restaurants")

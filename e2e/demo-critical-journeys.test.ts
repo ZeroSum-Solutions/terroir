@@ -45,6 +45,16 @@ test.describe("mobile demo critical journeys", () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await loginWithLocalFixture(page);
+    const seededImage = await page.request.get(
+      "/api/scans/de100004-0000-4000-8000-000000000001/image",
+    );
+    expect(seededImage.status(), await seededImage.text()).toBe(200);
+    await page.goto("/scan/de100004-0000-4000-8000-000000000001");
+    await expect(page.getByRole("heading", { name: "Review scan" })).toBeVisible();
+    await expect(page.getByLabel("Wine name").first()).toHaveValue(
+      "Burgundy Pinot Noir Lot 001",
+    );
+    await expect(page.getByText("14 bottles", { exact: true })).toBeVisible();
     await page.goto("/scan");
     await page.evaluate(() => localStorage.removeItem("terroir:current-scan"));
     await page.reload();
