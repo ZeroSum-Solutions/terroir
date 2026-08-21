@@ -86,6 +86,105 @@ export type WineListEditorSection = {
   wine_list_items: WineListEditorItem[];
 };
 
+function ListActions({
+  listId,
+  isPublished,
+  slug,
+  generatingPdf,
+  touchSized = false,
+  onDownloadPdf,
+  onCopyUrl,
+  onPublish,
+  className,
+}: {
+  listId: string;
+  isPublished: boolean;
+  slug: string | null;
+  generatingPdf: boolean;
+  touchSized?: boolean;
+  onDownloadPdf: () => void;
+  onCopyUrl: () => void;
+  onPublish: () => void;
+  className?: string;
+}) {
+  const secondaryClassName = cn(
+    "items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface",
+    touchSized ? "inline-flex min-h-11" : "flex h-[34px] md:px-md",
+  );
+  const publishClassName = cn(
+    "items-center gap-xs rounded-pill bg-primary px-sm text-[13px] font-medium text-white hover:bg-primary-hover",
+    touchSized ? "inline-flex min-h-11" : "flex h-[34px] md:px-md",
+  );
+
+  return (
+    <div aria-label="List actions" className={className}>
+      <button
+        type="button"
+        onClick={onDownloadPdf}
+        disabled={generatingPdf}
+        className={cn(secondaryClassName, "disabled:opacity-60")}
+      >
+        {generatingPdf ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+        ) : (
+          <Download className="h-3.5 w-3.5" strokeWidth={2} />
+        )}
+        <span>
+          {generatingPdf
+            ? touchSized
+              ? "Generating PDF"
+              : "Generating..."
+            : "Download PDF"}
+        </span>
+      </button>
+      <a
+        href="/api/export/toast-csv"
+        download="toast-import.csv"
+        className={secondaryClassName}
+      >
+        <FileSpreadsheet className="h-3.5 w-3.5" strokeWidth={2} />
+        <span>Toast Export</span>
+      </a>
+      <a
+        href={`/api/wine-lists/${listId}/csv`}
+        download
+        className={secondaryClassName}
+      >
+        <FileText className="h-3.5 w-3.5" strokeWidth={2} />
+        <span>CSV</span>
+      </a>
+      <a
+        href={`/lists/${listId}/preview`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={secondaryClassName}
+      >
+        <Eye className="h-3.5 w-3.5" strokeWidth={2} />
+        <span>Preview</span>
+      </a>
+      <a
+        href={`/lists/${listId}/print`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={secondaryClassName}
+      >
+        <Printer className="h-3.5 w-3.5" strokeWidth={2} />
+        <span>Print</span>
+      </a>
+      {isPublished && slug && (
+        <button type="button" onClick={onCopyUrl} className={secondaryClassName}>
+          <Copy className="h-3.5 w-3.5" strokeWidth={2} />
+          <span>Copy URL</span>
+        </button>
+      )}
+      <button type="button" onClick={onPublish} className={publishClassName}>
+        <Share2 className="h-3.5 w-3.5" strokeWidth={2} />
+        <span>Publish</span>
+      </button>
+    </div>
+  );
+}
+
 // BND-161: inline-rename input overlay.
 // BND-162: sortable section sidebar button.
 function SortableSectionButton({
@@ -166,7 +265,6 @@ function SortableSectionButton({
             }}
             onBlur={onEditCommit}
             className="flex-1 min-w-0 rounded-pill border border-primary bg-white px-sm py-0.5 text-[13px] font-medium text-ink outline-none focus:ring-2 focus:ring-accent-soft"
-            autoFocus
           />
         </div>
       ) : (
@@ -243,12 +341,18 @@ export function WineListEditor({
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [editSectionName, setEditSectionName] = useState("");
   const editInputRef = useRef<HTMLInputElement | null>(null);
+  const mobileEditInputRef = useRef<HTMLInputElement | null>(null);
+  const settledRenameRef = useRef<string | null>(null);
 
   // Focus the input when entering edit mode
   useEffect(() => {
-    if (editingSectionId && editInputRef.current) {
-      editInputRef.current.focus();
-      editInputRef.current.select();
+    if (editingSectionId) {
+      const input =
+        window.innerWidth < 768
+          ? mobileEditInputRef.current
+          : editInputRef.current;
+      input?.focus();
+      input?.select();
     }
   }, [editingSectionId]);
 
@@ -287,6 +391,8 @@ export function WineListEditor({
       setEditingSectionId(null);
       return;
     }
+    if (settledRenameRef.current === id) return;
+    settledRenameRef.current = id;
 
     // Optimistic update
     setSections((prev) =>
@@ -306,7 +412,14 @@ export function WineListEditor({
   }, [editingSectionId, editSectionName, router]);
 
   const cancelRename = useCallback(() => {
+    if (editingSectionId) settledRenameRef.current = editingSectionId;
     setEditingSectionId(null);
+  }, [editingSectionId]);
+
+  const startRename = useCallback((id: string, name: string) => {
+    settledRenameRef.current = null;
+    setEditingSectionId(id);
+    setEditSectionName(name);
   }, []);
 
   // BND-163: delete section
@@ -393,7 +506,14 @@ export function WineListEditor({
         return;
       }
 
-      const created = (await res.json()) as { id: string };
+      const created = (await res.json()) as Pick<
+        WineListEditorSection,
+        "id" | "wine_list_id" | "name" | "position"
+      >;
+      setSections((previous) => [
+        ...previous,
+        { ...created, wine_list_items: [] },
+      ]);
       setActiveSection(created.id);
       startTransition(() => router.refresh());
     } finally {
@@ -721,91 +841,135 @@ export function WineListEditor({
               {totalWines} wines
             </p>
           </div>
-          <div className="flex gap-sm self-start md:self-auto">
-            <button
-              type="button"
-              onClick={downloadPdf}
-              disabled={generatingPdf}
-              className="flex h-[34px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60 md:px-md"
-            >
-              {generatingPdf ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
-              ) : (
-                <Download className="h-3.5 w-3.5" strokeWidth={2} />
-              )}
-              <span className="hidden md:inline">{generatingPdf ? "Generating..." : "Download PDF"}</span>
-            </button>
-            <a
-              href="/api/export/toast-csv"
-              download="toast-import.csv"
-              className="flex h-[34px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface md:px-md"
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5" strokeWidth={2} />
-              <span className="hidden md:inline">Toast Export</span>
-            </a>
-            <a
-              href={`/api/wine-lists/${list.id}/csv`}
-              download
-              className="flex h-[34px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface md:px-md"
-            >
-              <FileText className="h-3.5 w-3.5" strokeWidth={2} />
-              <span className="hidden md:inline">CSV</span>
-            </a>
-            {/* BND-172: Preview button */}
-            <a
-              href={`/lists/${list.id}/preview`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-[34px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface md:px-md"
-            >
-              <Eye className="h-3.5 w-3.5" strokeWidth={2} />
-              <span className="hidden md:inline">Preview</span>
-            </a>
-            <a
-              href={`/lists/${list.id}/print`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-[34px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface md:px-md"
-            >
-              <Printer className="h-3.5 w-3.5" strokeWidth={2} />
-              <span className="hidden md:inline">Print</span>
-            </a>
-            {list.is_published && list.slug && (
-              <button
-                type="button"
-                onClick={copyUrl}
-                className="flex h-[34px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface md:px-md"
-              >
-                <Copy className="h-3.5 w-3.5" strokeWidth={2} />
-                <span className="hidden md:inline">Copy URL</span>
-              </button>
-            )}
-                        <button
-              type="button"
-              onClick={() => setShowPublish(true)}
-              className="flex h-[34px] items-center gap-xs rounded-pill bg-primary px-sm text-[13px] font-medium text-white hover:bg-primary-hover md:px-md"
-            >
-              <Share2 className="h-3.5 w-3.5" strokeWidth={2} />
-              <span className="hidden md:inline">Publish</span>
-            </button>
-          </div>
+          <ListActions
+            listId={list.id}
+            isPublished={list.is_published}
+            slug={list.slug}
+            generatingPdf={generatingPdf}
+            onDownloadPdf={downloadPdf}
+            onCopyUrl={copyUrl}
+            onPublish={() => setShowPublish(true)}
+            className="hidden gap-sm self-start md:flex md:self-auto"
+          />
         </div>
       </header>
 
-      {/* Mobile section dropdown */}
-      <div className="relative mb-md md:hidden">
-        <select
-          value={activeSection}
-          onChange={(e) => setActiveSection(e.target.value)}
-          className="h-11 w-full appearance-none rounded-pill border border-hairline bg-canvas px-sm pr-xl text-[14px] font-medium text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-accent-soft"
-        >
-          {sections.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name} ({s.wine_list_items.length})
-            </option>
-          ))}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-sm top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
+      <div
+        data-testid="mobile-list-controls"
+        className="mb-md space-y-md md:hidden"
+      >
+        <ListActions
+          listId={list.id}
+          isPublished={list.is_published}
+          slug={list.slug}
+          generatingPdf={generatingPdf}
+          touchSized
+          onDownloadPdf={downloadPdf}
+          onCopyUrl={copyUrl}
+          onPublish={() => setShowPublish(true)}
+          className="flex max-w-full flex-wrap gap-xs"
+        />
+
+        {sections.length === 0 ? (
+          <section className="rounded-card border border-dashed border-hairline p-lg text-center">
+            <h2 className="font-serif text-[22px] text-ink">Start your list</h2>
+            <p className="mt-xs text-[14px] text-ink-muted">
+              Add a section before adding wines.
+            </p>
+            <button
+              type="button"
+              onClick={addSection}
+              disabled={addingSection}
+              className="mt-md min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+            >
+              Add first section
+            </button>
+          </section>
+        ) : (
+          <div>
+            <label
+              htmlFor="mobile-section"
+              className="text-caption font-medium uppercase text-grey"
+            >
+              Section
+            </label>
+            <div className="relative mt-xs">
+              <select
+                id="mobile-section"
+                value={activeSection}
+                onChange={(e) => setActiveSection(e.target.value)}
+                className="h-11 w-full appearance-none rounded-pill border border-hairline bg-canvas px-sm pr-xl text-[14px] font-medium text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-accent-soft"
+              >
+                {sections.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.wine_list_items.length})
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-sm top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
+            </div>
+
+            {currentSection && editingSectionId === currentSection.id ? (
+              <input
+                ref={mobileEditInputRef}
+                type="text"
+                aria-label="Section name"
+                value={editSectionName}
+                onChange={(event) => setEditSectionName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") commitRename();
+                  if (event.key === "Escape") cancelRename();
+                }}
+                onBlur={commitRename}
+                className="mt-xs min-h-11 w-full rounded-pill border border-primary bg-white px-sm text-[14px] font-medium text-ink outline-none focus:ring-2 focus:ring-accent-soft"
+              />
+            ) : currentSection ? (
+              <div className="mt-sm grid grid-cols-3 gap-xs">
+                <button
+                  type="button"
+                  aria-label={`Rename ${currentSection.name}`}
+                  onClick={() => startRename(currentSection.id, currentSection.name)}
+                  className="min-h-11 rounded-pill border border-hairline px-xs text-[13px] font-medium text-ink hover:bg-bridge-surface"
+                >
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Delete ${currentSection.name}`}
+                  onClick={() => setDeleteTarget(currentSection)}
+                  className="min-h-11 rounded-pill border border-primary/30 px-xs text-[13px] font-medium text-primary hover:bg-blush-wash"
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={addSection}
+                  disabled={addingSection}
+                  className="min-h-11 rounded-pill border border-hairline px-xs text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50"
+                >
+                  Add section
+                </button>
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        <div>
+          <h2
+            id="mobile-template-heading"
+            className="text-caption font-medium uppercase text-grey"
+          >
+            Template
+          </h2>
+          <div className="mt-sm">
+            <TemplatePicker
+              current={list.template}
+              onChange={updateTemplate}
+              disabled={isPending}
+              ariaLabelledby="mobile-template-heading"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Desktop: sidebar + content */}
@@ -834,10 +998,7 @@ export function WineListEditor({
                     onDelete={setDeleteTarget}
                     editingId={editingSectionId}
                     editName={editSectionName}
-                    onEditStart={(id, name) => {
-                      setEditingSectionId(id);
-                      setEditSectionName(name);
-                    }}
+                    onEditStart={startRename}
                     onEditChange={setEditSectionName}
                     onEditCommit={commitRename}
                     onEditCancel={cancelRename}
