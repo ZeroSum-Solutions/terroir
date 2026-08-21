@@ -1,6 +1,6 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { AlertTriangle, Check } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { readApiError } from "@/lib/api/client-error";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
@@ -19,13 +19,14 @@ import type {
   ScanMode,
 } from "@/lib/scanner/types";
 import { ReadyView } from "./views/ready-view";
-import { ProcessingView } from "./views/processing-view";
+import { ProcessingView, stageForProgress } from "./views/processing-view";
 import { ErrorView } from "./views/error-view";
 import { ConfidenceGateView } from "./views/confidence-gate";
 import { ResultsView } from "./views/results-view";
 import { BottleResultsView } from "./views/bottle-results-view";
 
 type Status = "ready" | "processing" | "review" | "results" | "bottle-results" | "error";
+type Feedback = { kind: "success" | "error"; message: string };
 const STORAGE_KEY = "terroir:current-scan";
 
 export { formatMoney } from "./components/field-inputs";
@@ -98,7 +99,6 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const { restaurantId: _restaurantId } = useRestaurant();
   const [status, setStatus] = useState<Status>("ready");
   const [progress, setProgress] = useState(0);
-  const [stepIndex, setStepIndex] = useState(0);
   const [scan, setScan] = useState<Scan | null>(null);
   const [originalItems, setOriginalItems] = useState<LineItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -124,7 +124,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     () => true,
     () => false,
   );
-  const [toast, setToast] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rawText, setRawText] = useState<string | null>(null);
   const [lastFile, setLastFile] = useState<File | null>(null);
@@ -142,11 +142,13 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     });
   }, []);
 
+  useEffect(() => () => abortRef.current?.abort(), []);
+
   useEffect(() => {
-    if (!toast) return;
-    const id = window.setTimeout(() => setToast(null), 2600);
+    if (!feedback) return;
+    const id = window.setTimeout(() => setFeedback(null), 2600);
     return () => window.clearTimeout(id);
-  }, [toast]);
+  }, [feedback]);
 
   /* Progress animation — advances independent of fetch, clamps at 90% until
      the response arrives, then jumps to 100%. Reset to 0 happens in startScan
@@ -163,7 +165,6 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
           ? Math.min(90, Math.round((elapsed / SOFT_DURATION) * 90))
           : Math.min(95, 90 + Math.round(((elapsed - SOFT_DURATION) / 60000) * 5));
       setProgress(pct);
-      setStepIndex(pct < 30 ? 0 : pct < 60 ? 1 : 2);
     }, 250);
     return () => window.clearInterval(id);
   }, [status]);
@@ -175,9 +176,9 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
 
     setLastFile(files[0]);
     setProgress(0);
-    setStepIndex(0);
     setStatus("processing");
     setError(null);
+    setRawText(null);
 
     // BND-089: mint scanIdempotency key on first attempt, reuse on retry.
     if (!scanKeyRef.current) {
@@ -201,6 +202,8 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       setError(message);
       setRawText(err instanceof ScanError ? err.rawText ?? null : null);
       setStatus("error");
+    } finally {
+      if (abortRef.current === ac) abortRef.current = null;
     }
   }, []);
 
@@ -261,10 +264,30 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     setStatus("ready");
   }, []);
 
+  const cancelScan = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    scanKeyRef.current = null;
+    setProgress(0);
+    setError(null);
+    setRawText(null);
+    setStatus("ready");
+  }, []);
+
   const exportCsv = useCallback(() => {
     if (!scan) return;
-    downloadCsv(csvFilename(scan.source), toCsv(scan.items));
-    setToast(`Exported ${scan.items.length} wines to CSV`);
+    try {
+      downloadCsv(csvFilename(scan.source), toCsv(scan.items));
+      setFeedback({
+        kind: "success",
+        message: `Exported ${scan.items.length} wines to CSV`,
+      });
+    } catch (err) {
+      setFeedback({
+        kind: "error",
+        message: err instanceof Error ? err.message : "CSV export failed.",
+      });
+    }
   }, [scan]);
 
   const exportAccuracyJson = useCallback(() => {
@@ -286,23 +309,44 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         totalFields,
       },
     };
-    const json = JSON.stringify(report, null, 2);
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const date = scan.source.parsedAt.slice(0, 10);
-    const slug = scan.source.distributor
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "");
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `terroir-accuracy-${date}-${slug}.json`;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setToast("Exported accuracy report");
+    let url: string | null = null;
+    let link: HTMLAnchorElement | null = null;
+    try {
+      const json = JSON.stringify(report, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      url = URL.createObjectURL(blob);
+      const date = scan.source.parsedAt.slice(0, 10);
+      const slug = scan.source.distributor
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+      link = document.createElement("a");
+      link.href = url;
+      link.download = `terroir-accuracy-${date}-${slug}.json`;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      if (link.isConnected) link.remove();
+      link = null;
+      URL.revokeObjectURL(url);
+      url = null;
+      setFeedback({ kind: "success", message: "Exported accuracy report" });
+    } catch (err) {
+      try {
+        if (link?.isConnected) link.remove();
+      } catch {
+        // Preserve the original export or cleanup failure below.
+      }
+      try {
+        if (url) URL.revokeObjectURL(url);
+      } catch {
+        // Preserve the original export or cleanup failure below.
+      }
+      setFeedback({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Accuracy export failed.",
+      });
+    }
   }, [scan]);
 
   const saveToInventory = useCallback(async () => {
@@ -351,15 +395,11 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       setStatus("ready");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Save failed.";
-      setToast(message);
+      setFeedback({ kind: "error", message });
     } finally {
       setIsSaving(false);
     }
   }, [scan, originalItems, isSaving, lastFile]);
-
-  const retryScan = useCallback(() => {
-    if (lastFile) startScan([lastFile]);
-  }, [lastFile, startScan]);
 
   const enterManualEntry = useCallback(() => {
     const parsedAt = new Date().toISOString();
@@ -400,8 +440,10 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     abortRef.current = ac;
 
     setLastFile(file);
+    setProgress(0);
     setStatus("processing");
     setError(null);
+    setRawText(null);
 
     try {
       const body = new FormData();
@@ -421,6 +463,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         );
       }
       const result = (await res.json()) as BottleScanResult;
+      if (ac.signal.aborted) return;
       setProgress(100);
       setBottleResult(result);
       setStatus("bottle-results");
@@ -429,8 +472,19 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       const message = err instanceof Error ? err.message : "Scan failed.";
       setError(message);
       setStatus("error");
+    } finally {
+      if (abortRef.current === ac) abortRef.current = null;
     }
   }, []);
+
+  const retryScan = useCallback(() => {
+    if (!lastFile) return;
+    if (mode === "bottle") {
+      startBottleScan(lastFile);
+    } else {
+      startScan([lastFile]);
+    }
+  }, [lastFile, mode, startBottleScan, startScan]);
 
   const saveBottleToInventory = useCallback(
     async (wine: {
@@ -477,7 +531,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         setStatus("ready");
       } catch (err) {
         const message = err instanceof Error ? err.message : "Save failed.";
-        setToast(message);
+        setFeedback({ kind: "error", message });
       } finally {
         setIsSaving(false);
       }
@@ -502,10 +556,16 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     <>
       {status === "ready" && <ReadyView onStart={handleStart} mode={mode} onModeChange={setMode} recentScans={recentScans} savedResult={savedResult} onDismissSaved={() => setSavedResult(null)} />}
       {status === "processing" && (
-        <ProcessingView progress={progress} stepIndex={stepIndex} mode={mode} />
+        <ProcessingView
+          progress={progress}
+          stage={stageForProgress(mode, progress)}
+          mode={mode}
+          onCancel={cancelScan}
+        />
       )}
       {status === "error" && (
         <ErrorView
+          mode={mode}
           message={error ?? "Unknown error."}
           onRetry={lastFile ? retryScan : startOver}
           onNewPhoto={startOver}
@@ -541,11 +601,19 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
           isSaving={isSaving}
         />
       )}
-      {toast && (
-        <div role="alert" aria-live="assertive" className="glass fixed inset-x-md bottom-[88px] z-30 mx-auto max-w-[420px] rounded-card px-md py-sm text-[14px] text-ink md:bottom-lg">
+      {feedback && (
+        <div
+          role={feedback.kind === "error" ? "alert" : "status"}
+          aria-live={feedback.kind === "error" ? "assertive" : "polite"}
+          className="glass fixed inset-x-md bottom-[88px] z-30 mx-auto max-w-[420px] rounded-card px-md py-sm text-[14px] text-ink md:bottom-lg"
+        >
           <div className="flex items-center gap-sm">
-            <Check className="h-4 w-4 text-sage-ink" strokeWidth={2.25} aria-hidden="true" />
-            {toast}
+            {feedback.kind === "error" ? (
+              <AlertTriangle className="h-4 w-4 text-primary" strokeWidth={2.25} aria-hidden="true" />
+            ) : (
+              <Check className="h-4 w-4 text-sage-ink" strokeWidth={2.25} aria-hidden="true" />
+            )}
+            {feedback.message}
           </div>
         </div>
       )}
