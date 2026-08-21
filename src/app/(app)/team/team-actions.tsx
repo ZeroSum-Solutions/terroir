@@ -6,19 +6,25 @@ import { useRouter } from "next/navigation";
 import { RouteDataEmpty } from "@/components/route-data-state";
 import { ActionDialog } from "@/components/action-dialog";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
+import {
+  ROLE_DESCRIPTIONS,
+  type MemberRole,
+} from "@/lib/team/member-identities";
 import { TimeAgo } from "@/components/time-ago";
 
 type Member = {
   id: string;
   user_id: string;
-  role: "owner" | "manager" | "staff";
+  name: string;
+  email: string;
+  role: MemberRole;
   created_at: string;
 };
 
 type Invitation = {
   id: string;
-  token: string;
-  role: "owner" | "manager" | "staff";
+  token?: string;
+  role: MemberRole;
   email: string | null;
   expires_at: string;
   created_at: string;
@@ -45,7 +51,7 @@ export function TeamActions({
   const [creating, setCreating] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  // Per-row "copied" indicator for the Pending invitations table —
+  // Per-card "copied" indicator for Pending invitations —
   // tracks the invitation id whose link was most recently copied so we
   // can flash a confirmation on that row only.
   const [copiedInvitationId, setCopiedInvitationId] = useState<string | null>(
@@ -124,6 +130,7 @@ export function TeamActions({
   };
 
   const copyInvitationLink = async (invitation: Invitation) => {
+    if (!invitation.token) return;
     const url = `${window.location.origin}/invite/${invitation.token}`;
     await navigator.clipboard.writeText(url);
     setCopiedInvitationId(invitation.id);
@@ -237,17 +244,21 @@ export function TeamActions({
 
   return (
     <>
-      {/* Members */}
-      <div className="mb-xl">
-        <div className="mb-md flex items-center justify-between">
-          <h2 className="text-[15px] font-semibold text-ink">Members</h2>
+      <section className="mb-xl" aria-labelledby="members-heading">
+        <div
+          data-testid="team-toolbar"
+          className="mb-md flex flex-wrap items-center justify-between gap-sm"
+        >
+          <h2 id="members-heading" className="text-[15px] font-semibold text-ink">
+            Members ({members.length})
+          </h2>
           {canInvite && members.length > 0 && (
             <button
               type="button"
               onClick={openInvite}
-              className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
+              className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
             >
-              <Link2 className="h-3.5 w-3.5" strokeWidth={2} />
+              <Link2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               Create invite link
             </button>
           )}
@@ -282,202 +293,180 @@ export function TeamActions({
                 <button
                   type="button"
                   onClick={openInvite}
-                  className="inline-flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
+                  className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
                 >
-                  <Link2 className="h-3.5 w-3.5" strokeWidth={2} />
+                  <Link2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                   Create invite link
                 </button>
               ) : undefined
             }
           />
         ) : (
-        <div className="overflow-hidden rounded-card border border-hairline bg-canvas">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="bg-bridge-surface text-[11px] font-medium uppercase tracking-[0.18em] text-grey">
-                <th className="px-md py-sm text-left font-medium">User</th>
-                <th className="px-md py-sm text-left font-medium">Role</th>
-                <th className="px-md py-sm text-right font-medium">
-                  Joined
-                </th>
-                {isOwner && (
-                  <th className="w-[48px] px-sm py-sm font-medium" />
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {members.map((member) => (
-                <tr
+          <ul className="grid gap-sm">
+            {members.map((member) => {
+              const isCurrentUser = member.user_id === currentUserId;
+              return (
+                <li
                   key={member.id}
-                  className="border-t border-hairline hover:bg-bridge-surface"
+                  className="grid min-w-0 gap-md rounded-card border border-hairline bg-canvas p-md sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                 >
-                  <td className="px-md py-sm font-medium text-ink">
-                    {member.user_id === currentUserId
-                      ? "You"
-                      : member.user_id.slice(0, 8) + "..."}
-                  </td>
-                  <td className="px-md py-sm">
-                    {isOwner && member.user_id !== currentUserId ? (
+                  <div className="min-w-0">
+                    <p className="break-words font-medium text-ink">
+                      {member.name}{" "}
+                      {isCurrentUser && (
+                        <span className="text-grey">(You)</span>
+                      )}
+                    </p>
+                    <p className="mt-2xs break-all text-[13px] text-grey">
+                      {member.email}
+                    </p>
+                    <p className="mt-xs text-[13px] leading-relaxed text-ink-soft">
+                      {ROLE_DESCRIPTIONS[member.role]}
+                    </p>
+                    <p className="mt-xs font-mono text-[11px] text-grey">
+                      Joined <TimeAgo iso={member.created_at} />
+                    </p>
+                  </div>
+
+                  <div className="flex min-w-0 flex-wrap items-center gap-xs sm:justify-end">
+                    {isOwner && !isCurrentUser ? (
                       <select
+                        aria-label={`Change role for ${member.name}`}
                         value={member.role}
                         onChange={(e) => changeRole(member.id, e.target.value)}
-                        className="rounded-pill border border-hairline bg-white px-sm py-xs text-[13px] text-ink"
+                        className="min-h-11 rounded-pill border border-hairline bg-white px-sm text-[13px] text-ink"
                       >
                         <option value="owner">Owner</option>
                         <option value="manager">Manager</option>
                         <option value="staff">Staff</option>
                       </select>
                     ) : (
-                      <span className="inline-flex items-center rounded-pill bg-beige px-sm py-xs text-[11px] font-medium capitalize text-ink-soft">
+                      <span className="inline-flex min-h-11 items-center rounded-pill bg-beige px-sm text-[11px] font-medium capitalize text-ink-soft">
                         {member.role}
                       </span>
                     )}
-                  </td>
-                  <td className="px-md py-sm text-right font-mono text-[12px] text-grey">
-                    <TimeAgo iso={member.created_at} />
-                  </td>
-                  {isOwner && (
-                    <td className="px-sm py-sm text-right">
-                      {member.user_id !== currentUserId && (
-                        <button
-                          type="button"
-                          aria-label="Remove team member"
-                          onClick={() => {
-                            setMemberActionError(null);
-                            setPendingMemberRemoval(member);
-                          }}
-                          className="flex h-8 w-8 items-center justify-center rounded-md text-grey hover:bg-bridge-surface hover:text-primary"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                        </button>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    {isOwner && !isCurrentUser && (
+                      <button
+                        type="button"
+                        aria-label={`Remove ${member.name}`}
+                        onClick={() => {
+                          setMemberActionError(null);
+                          setPendingMemberRemoval(member);
+                        }}
+                        className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-grey hover:bg-bridge-surface hover:text-primary"
+                      >
+                        <Trash2
+                          className="h-3.5 w-3.5"
+                          strokeWidth={2}
+                          aria-hidden
+                        />
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
-      </div>
+      </section>
 
-      {/* Pending invitations */}
       {invitations.length > 0 && (
-        <div className="mb-xl">
-          <h2 className="mb-md text-[15px] font-semibold text-grey">
-            Pending invitations ({invitations.length})
+        <section className="mb-xl" aria-labelledby="pending-heading">
+          <h2
+            id="pending-heading"
+            className="mb-md text-[15px] font-semibold text-grey"
+          >
+            Pending ({invitations.length})
           </h2>
-          <div className="overflow-hidden rounded-card border border-hairline bg-canvas">
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="bg-bridge-surface text-[11px] font-medium uppercase tracking-[0.18em] text-grey">
-                  <th className="px-md py-sm text-left font-medium">Email</th>
-                  <th className="px-md py-sm text-left font-medium">Role</th>
-                  <th className="px-md py-sm text-left font-medium">
-                    Created
-                  </th>
-                  <th className="px-md py-sm text-right font-medium">
-                    Expires
-                  </th>
-                  {isOwner && (
-                    <th className="w-[200px] px-sm py-sm font-medium" />
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {invitations.map((inv) => {
-                  const justCopied = copiedInvitationId === inv.id;
-                  const expiry = describeExpiry(inv.expires_at);
-                  return (
-                    <tr
-                      key={inv.id}
-                      className={`border-t border-hairline hover:bg-bridge-surface ${expiry.status === "expired" ? "opacity-60" : ""}`}
-                    >
-                      <td className="px-md py-sm text-ink">
-                        {inv.email ?? (
-                          <span className="text-grey italic">
-                            (no email)
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-md py-sm capitalize text-ink">
-                        {inv.role}
-                      </td>
-                      <td className="px-md py-sm font-mono text-[12px] text-grey">
-                        <TimeAgo iso={inv.created_at} />
-                      </td>
-                      <td
-                        className="px-md py-sm text-right text-[12px]"
+          <ul className="grid gap-sm">
+            {invitations.map((inv) => {
+              const justCopied = copiedInvitationId === inv.id;
+              const expiry = describeExpiry(inv.expires_at);
+              const identity = inv.email ?? "Email unavailable";
+              return (
+                <li
+                  key={inv.id}
+                  className={`grid min-w-0 gap-md rounded-card border border-hairline bg-canvas p-md sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${expiry.status === "expired" ? "opacity-60" : ""}`}
+                >
+                  <div className="min-w-0">
+                    <p className="break-all font-medium text-ink">{identity}</p>
+                    <p className="mt-xs text-[13px] capitalize text-ink-soft">
+                      {inv.role}
+                    </p>
+                    <p className="mt-2xs text-[13px] leading-relaxed text-ink-soft">
+                      {ROLE_DESCRIPTIONS[inv.role]}
+                    </p>
+                    <div className="mt-xs flex flex-wrap items-center gap-xs text-[11px] text-grey">
+                      <span className="font-mono">
+                        Created <TimeAgo iso={inv.created_at} />
+                      </span>
+                      <span aria-hidden>·</span>
+                      <span
+                        className={
+                          expiry.status === "expired"
+                            ? "font-medium text-primary"
+                            : expiry.status === "soon"
+                              ? "font-medium text-amber"
+                              : "font-mono"
+                        }
                         title={new Intl.DateTimeFormat(undefined, {
                           dateStyle: "medium",
                           timeStyle: "short",
                         }).format(new Date(inv.expires_at))}
                       >
-                        {expiry.status === "expired" ? (
-                          <span className="inline-flex items-center rounded-pill bg-blush-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-primary">
-                            Expired
-                          </span>
-                        ) : expiry.status === "soon" ? (
-                          <span className="inline-flex items-center gap-xs">
-                            <span className="rounded-pill bg-amber-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-amber">
-                              Expires soon
-                            </span>
-                            <span className="font-mono text-grey">
-                              {expiry.label}
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="font-mono text-grey">
-                            {expiry.label}
-                          </span>
-                        )}
-                      </td>
-                      {isOwner && (
-                        <td className="px-sm py-sm text-right">
-                          <div className="flex items-center justify-end gap-xs">
-                            <button
-                              type="button"
-                              onClick={() => copyInvitationLink(inv)}
-                              aria-label={`Copy invite link for ${inv.email ?? "invitation"}`}
-                              className="inline-flex h-[28px] items-center gap-xs rounded-pill border border-beige-deep bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash"
-                            >
-                              {justCopied ? (
-                                <Check className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                              ) : (
-                                <Copy className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                              )}
-                              {justCopied ? "Copied" : "Copy link"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => resendInvitation(inv.id)}
-                              aria-label={`Resend invitation for ${inv.email ?? "invitation"}`}
-                              className="inline-flex h-[28px] items-center gap-xs rounded-pill border border-beige-deep bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash"
-                            >
-                              <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                              Resend
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMemberActionError(null);
-                                setPendingInvitationRevocation(inv);
-                              }}
-                              aria-label={`Revoke invitation for ${inv.email ?? "invitation"}`}
-                              className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-pill border border-beige-deep bg-white text-grey hover:bg-blush-wash hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                            </button>
-                          </div>
-                        </td>
+                        {expiry.status === "expired"
+                          ? "Expired"
+                          : expiry.status === "soon"
+                            ? `Expires soon ${expiry.label}`
+                            : `Expires ${expiry.label}`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {isOwner && (
+                    <div className="flex min-w-0 flex-wrap items-center gap-xs sm:justify-end">
+                      {inv.token && (
+                        <button
+                          type="button"
+                          onClick={() => copyInvitationLink(inv)}
+                          aria-label={`Copy invite link for ${identity}`}
+                          className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-beige-deep bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash"
+                        >
+                          {justCopied ? (
+                            <Check className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                          )}
+                          {justCopied ? "Copied" : "Copy link"}
+                        </button>
                       )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                      <button
+                        type="button"
+                        onClick={() => resendInvitation(inv.id)}
+                        aria-label={`Resend invitation for ${identity}`}
+                        className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-beige-deep bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                        Resend
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMemberActionError(null);
+                          setPendingInvitationRevocation(inv);
+                        }}
+                        aria-label={`Revoke invitation for ${identity}`}
+                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-beige-deep bg-white text-grey hover:bg-blush-wash hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                      </button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
 
       {/* Invite modal */}
@@ -510,7 +499,7 @@ export function TeamActions({
       <ActionDialog
         open={pendingMemberRemoval !== null}
         title="Remove member"
-        description={`Member ${pendingMemberRemoval?.user_id.slice(0, 8) ?? ""} will lose access to this restaurant.`}
+        description={`${pendingMemberRemoval?.name ?? "This member"} will lose access to this restaurant.`}
         confirmLabel="Remove member"
         busy={memberActionBusy}
         onClose={() => setPendingMemberRemoval(null)}
@@ -631,7 +620,7 @@ function InviteModal({
                     onCreate();
                   }
                 }}
-                className="mt-xs w-full rounded-pill border border-hairline bg-white px-md py-sm text-[14px] text-ink"
+                className="mt-xs min-h-11 w-full rounded-pill border border-hairline bg-white px-md text-[14px] text-ink"
               />
               <p className="mt-xs text-[12px] text-grey">
                 The link will only work for this address.
@@ -651,15 +640,13 @@ function InviteModal({
                 onChange={(e) =>
                   setInviteRole(e.target.value as "manager" | "staff")
                 }
-                className="mt-xs w-full rounded-pill border border-hairline bg-white px-md py-sm text-[14px] text-ink"
+                className="mt-xs min-h-11 w-full rounded-pill border border-hairline bg-white px-md text-[14px] text-ink"
               >
                 <option value="manager">Manager</option>
                 <option value="staff">Staff</option>
               </select>
               <p className="mt-xs text-[12px] text-grey">
-                {inviteRole === "manager"
-                  ? "Can scan, create wine lists, and publish."
-                  : "Can scan invoices only."}
+                {ROLE_DESCRIPTIONS[inviteRole]}
               </p>
             </div>
 
@@ -676,7 +663,7 @@ function InviteModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-[38px] items-center rounded-pill border border-beige-deep bg-white px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
+                className="flex min-h-11 items-center rounded-pill border border-beige-deep bg-white px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
               >
                 Cancel
               </button>
@@ -684,7 +671,7 @@ function InviteModal({
                 type="button"
                 onClick={onCreate}
                 disabled={creating || inviteEmail.trim().length === 0}
-                className="flex h-[38px] items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+                className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
               >
                 {creating && (
                   <Loader2
@@ -707,14 +694,14 @@ function InviteModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-[38px] items-center rounded-pill border border-beige-deep bg-white px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
+                className="flex min-h-11 items-center rounded-pill border border-beige-deep bg-white px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
               >
                 Done
               </button>
               <button
                 type="button"
                 onClick={onCopy}
-                className="flex h-[38px] items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
+                className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
               >
                 {copied ? (
                   <Check className="h-4 w-4" strokeWidth={2} />
@@ -736,7 +723,7 @@ function InviteModal({
  * - expired: expires_at is in the past
  * - soon:    expires within the next 48 hours
  * - ok:      everything else
- * Used to colour-code the Pending invitations table so operators can
+ * Used to label Pending invitation cards so operators can
  * see at a glance which links are still usable.
  */
 function describeExpiry(

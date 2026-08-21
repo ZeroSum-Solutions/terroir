@@ -45,7 +45,7 @@ describe("TeamActions destructive confirmations", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { container } = await mountTeam();
 
-    await click(buttonByLabel(container, "Remove team member"));
+    await click(buttonByLabel(container, "Remove Member Example"));
     expect(fetchMock).not.toHaveBeenCalled();
     let dialog = dialogByTitle(container, "Remove member");
     expect(dialog).toBeDefined();
@@ -53,7 +53,7 @@ describe("TeamActions destructive confirmations", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(dialogByTitle(container, "Remove member")).toBeUndefined();
 
-    await click(buttonByLabel(container, "Remove team member"));
+    await click(buttonByLabel(container, "Remove Member Example"));
     dialog = dialogByTitle(container, "Remove member")!;
     await click(button(dialog, "Remove member"));
     expect(fetchMock).toHaveBeenCalledOnce();
@@ -84,7 +84,7 @@ describe("TeamActions destructive confirmations", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { container } = await mountTeam();
 
-    await click(buttonByLabel(container, "Remove team member"));
+    await click(buttonByLabel(container, "Remove Member Example"));
     await click(button(dialogByTitle(container, "Remove member")!, "Remove member"));
     expect(dialogByTitle(container, "Remove member")).toBeDefined();
     expect(dialogByTitle(container, "Remove member")!.querySelector('[role="alert"]')?.textContent).toContain(
@@ -154,12 +154,16 @@ describe("TeamActions destructive confirmations", () => {
           {
             id: "membership-owner",
             user_id: "owner-user",
+            name: "Owner Example",
+            email: "owner@example.com",
             role: "owner",
             created_at: "2026-08-01T12:00:00.000Z",
           },
           {
             id: "membership-2",
             user_id: "member-user",
+            name: "Member Example",
+            email: "member@example.com",
             role: "staff",
             created_at: "2026-08-02T12:00:00.000Z",
           },
