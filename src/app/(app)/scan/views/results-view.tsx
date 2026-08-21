@@ -12,6 +12,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ActionDialog } from "@/components/action-dialog";
+import { Field } from "@/components/field";
+import { IconButton } from "@/components/icon-button";
 import { SCORED_FIELDS_COUNT } from "@/lib/scanner/scored-fields";
 import { cn } from "@/lib/utils";
 import type { LineItem, LineItemField, Scan } from "@/lib/scanner/types";
@@ -103,6 +106,18 @@ export function ResultsView({
 }: ResultsViewProps) {
   const { items, edits, source, rawText } = scan;
   const [rawTextOpen, setRawTextOpen] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [discardBusy, setDiscardBusy] = useState(false);
+
+  const confirmDiscard = () => {
+    setDiscardBusy(true);
+    try {
+      onScanAnother();
+      setDiscardOpen(false);
+    } finally {
+      setDiscardBusy(false);
+    }
+  };
 
   const { total, bottles, lowCount, accuracy } = useMemo(() => {
     const totalFields = items.length * SCORED_FIELDS_COUNT;
@@ -177,12 +192,8 @@ export function ResultsView({
           </div>
           <button
             type="button"
-            onClick={() => {
-              if (window.confirm("Clear this scan and all edits?")) {
-                onScanAnother();
-              }
-            }}
-            className="flex h-8 items-center gap-xs rounded-pill border border-ink/25 px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface hover:text-primary focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
+            onClick={() => setDiscardOpen(true)}
+            className="flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface hover:text-primary focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
           >
             <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
             Clear
@@ -192,41 +203,44 @@ export function ResultsView({
 
       <div className="mb-lg rounded-card border border-hairline bg-white p-md">
         <div className="flex flex-col gap-sm">
-          <div>
-            <label className="text-caption font-medium uppercase tracking-[0.18em] text-grey">Supplier</label>
-            <div className="mt-xs relative flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--color-blush-wash)]">
-              <input
-                value={source.distributor}
-                onChange={(e) => onUpdateSource("distributor", e.target.value)}
-                aria-label="Supplier name"
-                className="w-full bg-transparent text-[14px] font-medium text-ink outline-none"
-              />
-            </div>
-          </div>
+          <Field id="scan-supplier" label="Supplier">
+            {(a11y) => (
+              <div className="relative mt-xs flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--color-blush-wash)]">
+                <input
+                  {...a11y}
+                  value={source.distributor}
+                  onChange={(e) => onUpdateSource("distributor", e.target.value)}
+                  className="min-h-11 w-full bg-transparent text-[14px] font-medium text-ink outline-none"
+                />
+              </div>
+            )}
+          </Field>
           <div className="flex items-center gap-sm">
-            <div className="flex-1">
-              <label className="text-caption font-medium uppercase tracking-[0.18em] text-grey">Invoice #</label>
-              <div className="mt-xs relative flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--color-blush-wash)]">
-                <input
-                  value={source.invoiceNo}
-                  onChange={(e) => onUpdateSource("invoiceNo", e.target.value)}
-                  aria-label="Invoice number"
-                  className="w-full bg-transparent text-[14px] text-ink outline-none"
-                />
-              </div>
-            </div>
-            <div className="flex-1">
-              <label className="text-caption font-medium uppercase tracking-[0.18em] text-grey">Delivery date</label>
-              <div className="mt-xs relative flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--color-blush-wash)]">
-                <input
-                  type="date"
-                  value={source.invoiceDate}
-                  onChange={(e) => onUpdateSource("invoiceDate", e.target.value)}
-                  aria-label="Delivery date"
-                  className="w-full bg-transparent text-[14px] text-ink outline-none"
-                />
-              </div>
-            </div>
+            <Field id="scan-invoice-number" label="Invoice number" className="flex-1">
+              {(a11y) => (
+                <div className="relative mt-xs flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--color-blush-wash)]">
+                  <input
+                    {...a11y}
+                    value={source.invoiceNo}
+                    onChange={(e) => onUpdateSource("invoiceNo", e.target.value)}
+                    className="min-h-11 w-full bg-transparent text-[14px] text-ink outline-none"
+                  />
+                </div>
+              )}
+            </Field>
+            <Field id="scan-delivery-date" label="Delivery date" className="flex-1">
+              {(a11y) => (
+                <div className="relative mt-xs flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--color-blush-wash)]">
+                  <input
+                    {...a11y}
+                    type="date"
+                    value={source.invoiceDate}
+                    onChange={(e) => onUpdateSource("invoiceDate", e.target.value)}
+                    className="min-h-11 w-full bg-transparent text-[14px] text-ink outline-none"
+                  />
+                </div>
+              )}
+            </Field>
           </div>
         </div>
         <div className="mt-sm flex justify-between items-center">
@@ -265,35 +279,44 @@ export function ResultsView({
               >
                 <td className="p-sm">
                   <TextInput
+                    id={`line-${it.id}-desktop-name`}
+                    label="Wine name"
+                    srOnlyLabel
                     value={it.name}
                     low={isLow(it, "name")}
                     edited={isEdited(it, "name")}
                     onCommit={(v) => onUpdate(it.id, "name", v)}
                     className="font-serif text-[17px] font-medium"
-                    label="Wine name"
                   />
                   <div className="mt-2xs">
                     <TextInput
+                      id={`line-${it.id}-desktop-producer`}
+                      label="Producer"
+                      srOnlyLabel
                       value={it.producer}
                       low={isLow(it, "producer")}
                       edited={isEdited(it, "producer")}
                       onCommit={(v) => onUpdate(it.id, "producer", v)}
                       className="text-[12px] text-grey"
-                      label="Producer"
                     />
                   </div>
                 </td>
                 <td className="p-sm">
                   <TextInput
+                    id={`line-${it.id}-desktop-varietal`}
+                    label="Varietal"
+                    srOnlyLabel
                     value={it.varietal}
                     low={isLow(it, "varietal")}
                     edited={isEdited(it, "varietal")}
                     onCommit={(v) => onUpdate(it.id, "varietal", v)}
-                    label="Varietal"
                   />
                 </td>
                 <td className="p-sm">
                   <VintageInput
+                    id={`line-${it.id}-desktop-vintage`}
+                    label="Vintage"
+                    srOnlyLabel
                     value={it.vintage}
                     low={isLow(it, "vintage")}
                     edited={isEdited(it, "vintage")}
@@ -302,11 +325,13 @@ export function ResultsView({
                 </td>
                 <td className="p-sm">
                   <TextInput
+                    id={`line-${it.id}-desktop-region`}
+                    label="Region"
+                    srOnlyLabel
                     value={it.region}
                     low={isLow(it, "region")}
                     edited={isEdited(it, "region")}
                     onCommit={(v) => onUpdate(it.id, "region", v)}
-                    label="Region"
                   />
                 </td>
                 <td className="p-sm">
@@ -319,6 +344,9 @@ export function ResultsView({
                 </td>
                 <td className="p-sm">
                   <MoneyInput
+                    id={`line-${it.id}-desktop-unit-cost`}
+                    label="Unit cost"
+                    srOnlyLabel
                     value={it.unitCost}
                     low={isLow(it, "unitCost")}
                     edited={isEdited(it, "unitCost")}
@@ -326,14 +354,13 @@ export function ResultsView({
                   />
                 </td>
                 <td className="p-sm text-center">
-                  <button
-                    type="button"
-                    aria-label={`Remove ${it.name}`}
+                  <IconButton
+                    label={`Remove ${it.name}`}
                     onClick={() => onRemove(it.id)}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface hover:text-primary"
+                    className="rounded-pill text-grey hover:bg-bridge-surface hover:text-primary"
                   >
                     <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                  </button>
+                  </IconButton>
                 </td>
               </tr>
             ))}
@@ -368,8 +395,8 @@ export function ResultsView({
         <div className="grid grid-cols-2 gap-sm md:flex md:gap-md">
           <button
             type="button"
-            onClick={onScanAnother}
-            className="flex h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:h-[38px] md:px-md"
+            onClick={() => setDiscardOpen(true)}
+            className="flex min-h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:px-md"
           >
             <ScanLine className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
             <span className="hidden sm:inline">Scan another</span>
@@ -379,7 +406,7 @@ export function ResultsView({
             <button
               type="button"
               onClick={onExportCsv}
-              className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:h-[38px] md:flex-none md:px-md"
+              className="flex min-h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:flex-none md:px-md"
               title="Export as CSV"
             >
               <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -388,7 +415,7 @@ export function ResultsView({
             <button
               type="button"
               onClick={onExportAccuracy}
-              className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:h-[38px] md:flex-none md:px-md"
+              className="flex min-h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:flex-none md:px-md"
               title="Export accuracy JSON (source + items + per-field edits)"
             >
               <FileJson className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -399,7 +426,7 @@ export function ResultsView({
             type="button"
             onClick={onSaveToInventory}
             disabled={isSaving}
-            className="col-span-2 flex h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 disabled:opacity-60 md:h-[38px] md:px-md"
+            className="col-span-2 flex min-h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 disabled:opacity-60 md:px-md"
           >
             {isSaving ? (
               <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" />
@@ -430,6 +457,16 @@ export function ResultsView({
           </div>
         </aside>
       )}
+
+      <ActionDialog
+        open={discardOpen}
+        title="Discard scan"
+        description="The current scan and all edits will be lost."
+        confirmLabel="Discard scan"
+        busy={discardBusy}
+        onClose={() => setDiscardOpen(false)}
+        onConfirm={confirmDiscard}
+      />
     </section>
   );
 }

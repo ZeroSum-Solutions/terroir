@@ -1,0 +1,1872 @@
+{
+  "schema_version": "1.0",
+  "ref": "6b180d6f679c9c2fd08177b6e7294ef84aac566c",
+  "base": {
+    "status": "AVAILABLE",
+    "value": "origin/main",
+    "unavailable_reason": null,
+    "evidence": [
+      {
+        "class": "COMMAND",
+        "citation": "CMD-001 captured the exact origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c path range"
+      }
+    ]
+  },
+  "scope": {
+    "changed_paths": [
+      "docs/evals/ux-high-leverage/ux-01-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-02-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-03-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-04-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-05-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-06-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-07-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-08-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-09-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-10-implementation-audit.md",
+      "docs/plans/2026-08-20-high-leverage-ux-plan-audits.md",
+      "docs/plans/2026-08-20-high-leverage-ux-portfolio-spec.md",
+      "docs/plans/2026-08-20-ux-01-reconciliation-truth.md",
+      "docs/plans/2026-08-20-ux-02-honest-data-states.md",
+      "docs/plans/2026-08-20-ux-03-cancellable-scan-trust.md",
+      "docs/plans/2026-08-20-ux-04-mobile-list-editor-survival.md",
+      "docs/plans/2026-08-20-ux-05-action-safety-dialogs.md",
+      "docs/plans/2026-08-20-ux-06-team-clarity.md",
+      "docs/plans/2026-08-20-ux-07-floor-forms-targets.md",
+      "docs/plans/2026-08-20-ux-08-truthful-insights.md",
+      "docs/plans/2026-08-20-ux-09-guest-menu-clarity.md",
+      "docs/plans/2026-08-20-ux-10-restaurant-role-context.md",
+      "e2e/mobile-list-editor.test.ts",
+      "e2e/team-mobile.test.ts",
+      "src/app/(app)/cellar/cellar-shell-open-bottles.test.tsx",
+      "src/app/(app)/cellar/cellar-shell.tsx",
+      "src/app/(app)/cellar/note-modal.test.tsx",
+      "src/app/(app)/cellar/note-modal.tsx",
+      "src/app/(app)/cellar/open/error.tsx",
+      "src/app/(app)/cellar/open/loading.tsx",
+      "src/app/(app)/cellar/open/page.test.tsx",
+      "src/app/(app)/cellar/open/page.tsx",
+      "src/app/(app)/cellar/pour-picker-modal.test.tsx",
+      "src/app/(app)/cellar/pour-picker-modal.tsx",
+      "src/app/(app)/cellar/reconcile-list.test.tsx",
+      "src/app/(app)/cellar/reconcile-list.tsx",
+      "src/app/(app)/cellar/reconcile/history/error.tsx",
+      "src/app/(app)/cellar/reconcile/history/history-data.test.ts",
+      "src/app/(app)/cellar/reconcile/history/history-data.ts",
+      "src/app/(app)/cellar/reconcile/history/loading.tsx",
+      "src/app/(app)/cellar/reconcile/history/page.test.tsx",
+      "src/app/(app)/cellar/reconcile/history/page.tsx",
+      "src/app/(app)/cellar/wine-detail-drawer-state.test.tsx",
+      "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "src/app/(app)/fab.test.tsx",
+      "src/app/(app)/fab.tsx",
+      "src/app/(app)/insights/briefing-alert-card.test.tsx",
+      "src/app/(app)/insights/briefing-alert-card.tsx",
+      "src/app/(app)/insights/date-range-selector.test.tsx",
+      "src/app/(app)/insights/date-range-selector.tsx",
+      "src/app/(app)/insights/date-range.test.ts",
+      "src/app/(app)/insights/date-range.ts",
+      "src/app/(app)/insights/distributor-metrics.test.ts",
+      "src/app/(app)/insights/distributor-metrics.ts",
+      "src/app/(app)/insights/insight-scope.test.tsx",
+      "src/app/(app)/insights/insight-scope.tsx",
+      "src/app/(app)/insights/page.truthfulness.test.ts",
+      "src/app/(app)/insights/page.tsx",
+      "src/app/(app)/insights/yield-report-section.test.tsx",
+      "src/app/(app)/insights/yield-report-section.tsx",
+      "src/app/(app)/layout.test.tsx",
+      "src/app/(app)/layout.tsx",
+      "src/app/(app)/lists/(index)/error.tsx",
+      "src/app/(app)/lists/(index)/loading.tsx",
+      "src/app/(app)/lists/(index)/page.test.tsx",
+      "src/app/(app)/lists/(index)/page.tsx",
+      "src/app/(app)/lists/[id]/components/publish-modal.test.tsx",
+      "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      "src/app/(app)/lists/[id]/components/template-picker.test.tsx",
+      "src/app/(app)/lists/[id]/components/template-picker.tsx",
+      "src/app/(app)/lists/[id]/page.test.tsx",
+      "src/app/(app)/lists/[id]/page.tsx",
+      "src/app/(app)/lists/[id]/wine-list-editor.action-dialog.test.tsx",
+      "src/app/(app)/lists/[id]/wine-list-editor.mobile.test.tsx",
+      "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "src/app/(app)/lists/loading.tsx",
+      "src/app/(app)/lists/wine-list-landing.action-dialog.test.tsx",
+      "src/app/(app)/lists/wine-list-landing.tsx",
+      "src/app/(app)/nav-links.test.tsx",
+      "src/app/(app)/price-comparison/error.tsx",
+      "src/app/(app)/price-comparison/loading.tsx",
+      "src/app/(app)/price-comparison/page.test.tsx",
+      "src/app/(app)/price-comparison/page.tsx",
+      "src/app/(app)/scan/components/field-inputs.test.tsx",
+      "src/app/(app)/scan/components/field-inputs.tsx",
+      "src/app/(app)/scan/components/line-item-card.test.tsx",
+      "src/app/(app)/scan/components/line-item-card.tsx",
+      "src/app/(app)/scan/scanner.test.tsx",
+      "src/app/(app)/scan/scanner.tsx",
+      "src/app/(app)/scan/views/error-view.test.tsx",
+      "src/app/(app)/scan/views/error-view.tsx",
+      "src/app/(app)/scan/views/processing-view.test.tsx",
+      "src/app/(app)/scan/views/processing-view.tsx",
+      "src/app/(app)/scan/views/ready-view.test.tsx",
+      "src/app/(app)/scan/views/ready-view.tsx",
+      "src/app/(app)/scan/views/results-view.action-dialog.test.tsx",
+      "src/app/(app)/scan/views/results-view.fields.test.tsx",
+      "src/app/(app)/scan/views/results-view.tsx",
+      "src/app/(app)/shell-context.test.tsx",
+      "src/app/(app)/shell-context.tsx",
+      "src/app/(app)/team/(index)/error.tsx",
+      "src/app/(app)/team/(index)/loading.tsx",
+      "src/app/(app)/team/(index)/page.test.tsx",
+      "src/app/(app)/team/(index)/page.tsx",
+      "src/app/(app)/team/loading.tsx",
+      "src/app/(app)/team/member-analytics-section.test.tsx",
+      "src/app/(app)/team/member-analytics-section.tsx",
+      "src/app/(app)/team/page.test.tsx",
+      "src/app/(app)/team/team-actions.action-dialog.test.tsx",
+      "src/app/(app)/team/team-actions.test.tsx",
+      "src/app/(app)/team/team-actions.tsx",
+      "src/app/list/[slug]/menu-freshness.test.ts",
+      "src/app/list/[slug]/menu-freshness.ts",
+      "src/app/list/[slug]/page.clarity.test.tsx",
+      "src/app/list/[slug]/page.tsx",
+      "src/app/list/[slug]/public-menu-share.test.tsx",
+      "src/app/list/[slug]/public-menu-share.tsx",
+      "src/components/action-dialog.test.tsx",
+      "src/components/action-dialog.tsx",
+      "src/components/field.test.tsx",
+      "src/components/field.tsx",
+      "src/components/icon-button.test.tsx",
+      "src/components/icon-button.tsx",
+      "src/components/route-data-state.test.tsx",
+      "src/components/route-data-state.tsx",
+      "src/lib/hooks/use-focus-trap.test.tsx",
+      "src/lib/hooks/use-focus-trap.ts",
+      "src/lib/reconciliation/variance.test.ts",
+      "src/lib/reconciliation/variance.ts",
+      "src/lib/team/member-identities.test.ts",
+      "src/lib/team/member-identities.ts"
+    ],
+    "captured_diff_paths": [
+      "docs/evals/ux-high-leverage/ux-01-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-02-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-03-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-04-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-05-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-06-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-07-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-08-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-09-implementation-audit.md",
+      "docs/evals/ux-high-leverage/ux-10-implementation-audit.md",
+      "docs/plans/2026-08-20-high-leverage-ux-plan-audits.md",
+      "docs/plans/2026-08-20-high-leverage-ux-portfolio-spec.md",
+      "docs/plans/2026-08-20-ux-01-reconciliation-truth.md",
+      "docs/plans/2026-08-20-ux-02-honest-data-states.md",
+      "docs/plans/2026-08-20-ux-03-cancellable-scan-trust.md",
+      "docs/plans/2026-08-20-ux-04-mobile-list-editor-survival.md",
+      "docs/plans/2026-08-20-ux-05-action-safety-dialogs.md",
+      "docs/plans/2026-08-20-ux-06-team-clarity.md",
+      "docs/plans/2026-08-20-ux-07-floor-forms-targets.md",
+      "docs/plans/2026-08-20-ux-08-truthful-insights.md",
+      "docs/plans/2026-08-20-ux-09-guest-menu-clarity.md",
+      "docs/plans/2026-08-20-ux-10-restaurant-role-context.md",
+      "e2e/mobile-list-editor.test.ts",
+      "e2e/team-mobile.test.ts",
+      "src/app/(app)/cellar/cellar-shell-open-bottles.test.tsx",
+      "src/app/(app)/cellar/cellar-shell.tsx",
+      "src/app/(app)/cellar/note-modal.test.tsx",
+      "src/app/(app)/cellar/note-modal.tsx",
+      "src/app/(app)/cellar/open/error.tsx",
+      "src/app/(app)/cellar/open/loading.tsx",
+      "src/app/(app)/cellar/open/page.test.tsx",
+      "src/app/(app)/cellar/open/page.tsx",
+      "src/app/(app)/cellar/pour-picker-modal.test.tsx",
+      "src/app/(app)/cellar/pour-picker-modal.tsx",
+      "src/app/(app)/cellar/reconcile-list.test.tsx",
+      "src/app/(app)/cellar/reconcile-list.tsx",
+      "src/app/(app)/cellar/reconcile/history/error.tsx",
+      "src/app/(app)/cellar/reconcile/history/history-data.test.ts",
+      "src/app/(app)/cellar/reconcile/history/history-data.ts",
+      "src/app/(app)/cellar/reconcile/history/loading.tsx",
+      "src/app/(app)/cellar/reconcile/history/page.test.tsx",
+      "src/app/(app)/cellar/reconcile/history/page.tsx",
+      "src/app/(app)/cellar/wine-detail-drawer-state.test.tsx",
+      "src/app/(app)/cellar/wine-detail-drawer.tsx",
+      "src/app/(app)/fab.test.tsx",
+      "src/app/(app)/fab.tsx",
+      "src/app/(app)/insights/briefing-alert-card.test.tsx",
+      "src/app/(app)/insights/briefing-alert-card.tsx",
+      "src/app/(app)/insights/date-range-selector.test.tsx",
+      "src/app/(app)/insights/date-range-selector.tsx",
+      "src/app/(app)/insights/date-range.test.ts",
+      "src/app/(app)/insights/date-range.ts",
+      "src/app/(app)/insights/distributor-metrics.test.ts",
+      "src/app/(app)/insights/distributor-metrics.ts",
+      "src/app/(app)/insights/insight-scope.test.tsx",
+      "src/app/(app)/insights/insight-scope.tsx",
+      "src/app/(app)/insights/page.truthfulness.test.ts",
+      "src/app/(app)/insights/page.tsx",
+      "src/app/(app)/insights/yield-report-section.test.tsx",
+      "src/app/(app)/insights/yield-report-section.tsx",
+      "src/app/(app)/layout.test.tsx",
+      "src/app/(app)/layout.tsx",
+      "src/app/(app)/lists/(index)/error.tsx",
+      "src/app/(app)/lists/(index)/loading.tsx",
+      "src/app/(app)/lists/(index)/page.test.tsx",
+      "src/app/(app)/lists/(index)/page.tsx",
+      "src/app/(app)/lists/[id]/components/publish-modal.test.tsx",
+      "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+      "src/app/(app)/lists/[id]/components/template-picker.test.tsx",
+      "src/app/(app)/lists/[id]/components/template-picker.tsx",
+      "src/app/(app)/lists/[id]/page.test.tsx",
+      "src/app/(app)/lists/[id]/page.tsx",
+      "src/app/(app)/lists/[id]/wine-list-editor.action-dialog.test.tsx",
+      "src/app/(app)/lists/[id]/wine-list-editor.mobile.test.tsx",
+      "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+      "src/app/(app)/lists/loading.tsx",
+      "src/app/(app)/lists/wine-list-landing.action-dialog.test.tsx",
+      "src/app/(app)/lists/wine-list-landing.tsx",
+      "src/app/(app)/nav-links.test.tsx",
+      "src/app/(app)/price-comparison/error.tsx",
+      "src/app/(app)/price-comparison/loading.tsx",
+      "src/app/(app)/price-comparison/page.test.tsx",
+      "src/app/(app)/price-comparison/page.tsx",
+      "src/app/(app)/scan/components/field-inputs.test.tsx",
+      "src/app/(app)/scan/components/field-inputs.tsx",
+      "src/app/(app)/scan/components/line-item-card.test.tsx",
+      "src/app/(app)/scan/components/line-item-card.tsx",
+      "src/app/(app)/scan/scanner.test.tsx",
+      "src/app/(app)/scan/scanner.tsx",
+      "src/app/(app)/scan/views/error-view.test.tsx",
+      "src/app/(app)/scan/views/error-view.tsx",
+      "src/app/(app)/scan/views/processing-view.test.tsx",
+      "src/app/(app)/scan/views/processing-view.tsx",
+      "src/app/(app)/scan/views/ready-view.test.tsx",
+      "src/app/(app)/scan/views/ready-view.tsx",
+      "src/app/(app)/scan/views/results-view.action-dialog.test.tsx",
+      "src/app/(app)/scan/views/results-view.fields.test.tsx",
+      "src/app/(app)/scan/views/results-view.tsx",
+      "src/app/(app)/shell-context.test.tsx",
+      "src/app/(app)/shell-context.tsx",
+      "src/app/(app)/team/(index)/error.tsx",
+      "src/app/(app)/team/(index)/loading.tsx",
+      "src/app/(app)/team/(index)/page.test.tsx",
+      "src/app/(app)/team/(index)/page.tsx",
+      "src/app/(app)/team/loading.tsx",
+      "src/app/(app)/team/member-analytics-section.test.tsx",
+      "src/app/(app)/team/member-analytics-section.tsx",
+      "src/app/(app)/team/page.test.tsx",
+      "src/app/(app)/team/team-actions.action-dialog.test.tsx",
+      "src/app/(app)/team/team-actions.test.tsx",
+      "src/app/(app)/team/team-actions.tsx",
+      "src/app/list/[slug]/menu-freshness.test.ts",
+      "src/app/list/[slug]/menu-freshness.ts",
+      "src/app/list/[slug]/page.clarity.test.tsx",
+      "src/app/list/[slug]/page.tsx",
+      "src/app/list/[slug]/public-menu-share.test.tsx",
+      "src/app/list/[slug]/public-menu-share.tsx",
+      "src/components/action-dialog.test.tsx",
+      "src/components/action-dialog.tsx",
+      "src/components/field.test.tsx",
+      "src/components/field.tsx",
+      "src/components/icon-button.test.tsx",
+      "src/components/icon-button.tsx",
+      "src/components/route-data-state.test.tsx",
+      "src/components/route-data-state.tsx",
+      "src/lib/hooks/use-focus-trap.test.tsx",
+      "src/lib/hooks/use-focus-trap.ts",
+      "src/lib/reconciliation/variance.test.ts",
+      "src/lib/reconciliation/variance.ts",
+      "src/lib/team/member-identities.test.ts",
+      "src/lib/team/member-identities.ts"
+    ],
+    "path_classification": [
+      {
+        "path": "docs/evals/ux-high-leverage/ux-01-implementation-audit.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/evals/ux-high-leverage/ux-01-implementation-audit.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/evals/ux-high-leverage/ux-02-implementation-audit.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/evals/ux-high-leverage/ux-02-implementation-audit.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/evals/ux-high-leverage/ux-03-implementation-audit.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/evals/ux-high-leverage/ux-03-implementation-audit.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/evals/ux-high-leverage/ux-04-implementation-audit.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/evals/ux-high-leverage/ux-04-implementation-audit.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/evals/ux-high-leverage/ux-05-implementation-audit.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/evals/ux-high-leverage/ux-05-implementation-audit.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/evals/ux-high-leverage/ux-06-implementation-audit.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/evals/ux-high-leverage/ux-06-implementation-audit.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/evals/ux-high-leverage/ux-07-implementation-audit.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/evals/ux-high-leverage/ux-07-implementation-audit.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/evals/ux-high-leverage/ux-08-implementation-audit.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/evals/ux-high-leverage/ux-08-implementation-audit.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/evals/ux-high-leverage/ux-09-implementation-audit.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/evals/ux-high-leverage/ux-09-implementation-audit.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/evals/ux-high-leverage/ux-10-implementation-audit.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/evals/ux-high-leverage/ux-10-implementation-audit.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/plans/2026-08-20-high-leverage-ux-plan-audits.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/plans/2026-08-20-high-leverage-ux-plan-audits.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/plans/2026-08-20-high-leverage-ux-portfolio-spec.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/plans/2026-08-20-high-leverage-ux-portfolio-spec.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/plans/2026-08-20-ux-01-reconciliation-truth.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/plans/2026-08-20-ux-01-reconciliation-truth.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/plans/2026-08-20-ux-02-honest-data-states.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/plans/2026-08-20-ux-02-honest-data-states.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/plans/2026-08-20-ux-03-cancellable-scan-trust.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/plans/2026-08-20-ux-03-cancellable-scan-trust.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/plans/2026-08-20-ux-04-mobile-list-editor-survival.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/plans/2026-08-20-ux-04-mobile-list-editor-survival.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/plans/2026-08-20-ux-05-action-safety-dialogs.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/plans/2026-08-20-ux-05-action-safety-dialogs.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/plans/2026-08-20-ux-06-team-clarity.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/plans/2026-08-20-ux-06-team-clarity.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/plans/2026-08-20-ux-07-floor-forms-targets.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/plans/2026-08-20-ux-07-floor-forms-targets.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/plans/2026-08-20-ux-08-truthful-insights.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/plans/2026-08-20-ux-08-truthful-insights.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/plans/2026-08-20-ux-09-guest-menu-clarity.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/plans/2026-08-20-ux-09-guest-menu-clarity.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "docs/plans/2026-08-20-ux-10-restaurant-role-context.md",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:docs/plans/2026-08-20-ux-10-restaurant-role-context.md reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "e2e/mobile-list-editor.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:e2e/mobile-list-editor.test.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "e2e/team-mobile.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:e2e/team-mobile.test.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/cellar-shell-open-bottles.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/cellar-shell-open-bottles.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/cellar-shell.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/cellar-shell.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/note-modal.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/note-modal.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/note-modal.tsx",
+        "surfaces": [
+          "untrusted-input"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/note-modal.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/open/error.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/open/error.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/open/loading.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/open/loading.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/open/page.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/open/page.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/open/page.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/open/page.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/pour-picker-modal.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/pour-picker-modal.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/pour-picker-modal.tsx",
+        "surfaces": [
+          "untrusted-input"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/pour-picker-modal.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/reconcile-list.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/reconcile-list.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/reconcile-list.tsx",
+        "surfaces": [
+          "untrusted-input"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/reconcile-list.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/reconcile/history/error.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/reconcile/history/error.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/reconcile/history/history-data.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/reconcile/history/history-data.test.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/reconcile/history/history-data.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/reconcile/history/history-data.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/reconcile/history/loading.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/reconcile/history/loading.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/reconcile/history/page.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/reconcile/history/page.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/reconcile/history/page.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/reconcile/history/page.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/wine-detail-drawer-state.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/wine-detail-drawer-state.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/cellar/wine-detail-drawer.tsx",
+        "surfaces": [
+          "untrusted-input"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/cellar/wine-detail-drawer.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/fab.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/fab.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/fab.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/fab.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/insights/briefing-alert-card.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/insights/briefing-alert-card.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/insights/briefing-alert-card.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/insights/briefing-alert-card.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/insights/date-range-selector.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/insights/date-range-selector.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/insights/date-range-selector.tsx",
+        "surfaces": [
+          "untrusted-input"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/insights/date-range-selector.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/insights/date-range.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/insights/date-range.test.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/insights/date-range.ts",
+        "surfaces": [
+          "untrusted-input"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/insights/date-range.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/insights/distributor-metrics.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/insights/distributor-metrics.test.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/insights/distributor-metrics.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/insights/distributor-metrics.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/insights/insight-scope.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/insights/insight-scope.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/insights/insight-scope.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/insights/insight-scope.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/insights/page.truthfulness.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/insights/page.truthfulness.test.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/insights/page.tsx",
+        "surfaces": [
+          "untrusted-input",
+          "authorization"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/insights/page.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/insights/yield-report-section.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/insights/yield-report-section.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/insights/yield-report-section.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/insights/yield-report-section.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/layout.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/layout.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/layout.tsx",
+        "surfaces": [
+          "authentication",
+          "authorization"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/layout.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/(index)/error.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/(index)/error.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/(index)/loading.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/(index)/loading.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/(index)/page.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/(index)/page.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/(index)/page.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/(index)/page.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/[id]/components/publish-modal.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/[id]/components/publish-modal.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/[id]/components/publish-modal.tsx",
+        "surfaces": [
+          "untrusted-input"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/[id]/components/publish-modal.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/[id]/components/template-picker.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/[id]/components/template-picker.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/[id]/components/template-picker.tsx",
+        "surfaces": [
+          "untrusted-input"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/[id]/components/template-picker.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/[id]/page.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/[id]/page.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/[id]/page.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/[id]/page.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/[id]/wine-list-editor.action-dialog.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/[id]/wine-list-editor.action-dialog.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/[id]/wine-list-editor.mobile.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/[id]/wine-list-editor.mobile.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/[id]/wine-list-editor.tsx",
+        "surfaces": [
+          "untrusted-input"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/[id]/wine-list-editor.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/loading.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/loading.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/wine-list-landing.action-dialog.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/wine-list-landing.action-dialog.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/lists/wine-list-landing.tsx",
+        "surfaces": [
+          "untrusted-input"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/lists/wine-list-landing.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/nav-links.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/nav-links.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/price-comparison/error.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/price-comparison/error.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/price-comparison/loading.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/price-comparison/loading.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/price-comparison/page.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/price-comparison/page.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/price-comparison/page.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/price-comparison/page.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/components/field-inputs.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/components/field-inputs.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/components/field-inputs.tsx",
+        "surfaces": [
+          "untrusted-input"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/components/field-inputs.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/components/line-item-card.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/components/line-item-card.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/components/line-item-card.tsx",
+        "surfaces": [
+          "untrusted-input"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/components/line-item-card.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/scanner.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/scanner.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/scanner.tsx",
+        "surfaces": [
+          "untrusted-input",
+          "export"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/scanner.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/views/error-view.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/views/error-view.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/views/error-view.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/views/error-view.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/views/processing-view.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/views/processing-view.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/views/processing-view.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/views/processing-view.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/views/ready-view.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/views/ready-view.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/views/ready-view.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/views/ready-view.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/views/results-view.action-dialog.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/views/results-view.action-dialog.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/views/results-view.fields.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/views/results-view.fields.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/scan/views/results-view.tsx",
+        "surfaces": [
+          "untrusted-input"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/scan/views/results-view.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/shell-context.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/shell-context.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/shell-context.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/shell-context.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/team/(index)/error.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/team/(index)/error.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/team/(index)/loading.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/team/(index)/loading.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/team/(index)/page.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/team/(index)/page.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/team/(index)/page.tsx",
+        "surfaces": [
+          "authentication",
+          "authorization"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/team/(index)/page.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/team/loading.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/team/loading.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/team/member-analytics-section.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/team/member-analytics-section.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/team/member-analytics-section.tsx",
+        "surfaces": [
+          "authentication",
+          "authorization"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/team/member-analytics-section.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/team/page.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/team/page.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/team/team-actions.action-dialog.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/team/team-actions.action-dialog.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/team/team-actions.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/team/team-actions.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/(app)/team/team-actions.tsx",
+        "surfaces": [
+          "authentication",
+          "authorization"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/(app)/team/team-actions.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/list/[slug]/menu-freshness.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/list/[slug]/menu-freshness.test.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/list/[slug]/menu-freshness.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/list/[slug]/menu-freshness.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/list/[slug]/page.clarity.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/list/[slug]/page.clarity.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/list/[slug]/page.tsx",
+        "surfaces": [
+          "untrusted-input",
+          "authorization",
+          "export"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/list/[slug]/page.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/list/[slug]/public-menu-share.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/list/[slug]/public-menu-share.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/app/list/[slug]/public-menu-share.tsx",
+        "surfaces": [
+          "untrusted-input",
+          "export"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/app/list/[slug]/public-menu-share.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/components/action-dialog.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/components/action-dialog.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/components/action-dialog.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/components/action-dialog.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/components/field.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/components/field.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/components/field.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/components/field.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/components/icon-button.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/components/icon-button.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/components/icon-button.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/components/icon-button.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/components/route-data-state.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/components/route-data-state.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/components/route-data-state.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/components/route-data-state.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/lib/hooks/use-focus-trap.test.tsx",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/lib/hooks/use-focus-trap.test.tsx reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/lib/hooks/use-focus-trap.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/lib/hooks/use-focus-trap.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/lib/reconciliation/variance.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/lib/reconciliation/variance.test.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/lib/reconciliation/variance.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/lib/reconciliation/variance.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/lib/team/member-identities.test.ts",
+        "surfaces": [],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/lib/team/member-identities.test.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      },
+      {
+        "path": "src/lib/team/member-identities.ts",
+        "surfaces": [
+          "authentication",
+          "authorization"
+        ],
+        "evidence": [
+          {
+            "class": "STATIC",
+            "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c:src/lib/team/member-identities.ts reviewed against its committed tests and UX audit"
+          }
+        ]
+      }
+    ],
+    "sensitive_surfaces": [
+      "authentication",
+      "authorization",
+      "export",
+      "untrusted-input"
+    ],
+    "diff_command_id": "CMD-001",
+    "evidence": [
+      {
+        "class": "COMMAND",
+        "citation": "git diff --name-only origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c exited 0 and captured 131 paths"
+      }
+    ]
+  },
+  "commands": [
+    {
+      "id": "CMD-001",
+      "purpose": "diff",
+      "command": "git diff --name-only origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "scope": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c",
+      "evidence": [
+        {
+          "class": "COMMAND",
+          "citation": "git diff --name-only origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c exited 0 and captured 131 paths"
+        }
+      ],
+      "unavailable_reason": null
+    },
+    {
+      "id": "CMD-002",
+      "purpose": "secrets-scan",
+      "command": "gitleaks detect --source . --no-banner --redact --log-opts origin/main..6b180d6f679c9c2fd08177b6e7294ef84aac566c",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "scope": "origin/main..6b180d6f679c9c2fd08177b6e7294ef84aac566c",
+      "evidence": [
+        {
+          "class": "COMMAND",
+          "citation": "gitleaks scanned 11 commits and reported no leaks"
+        }
+      ],
+      "unavailable_reason": null
+    }
+  ],
+  "exports": {
+    "state": "LISTED",
+    "items": [
+      {
+        "id": "EXP-001",
+        "destination": "User-selected operating-system Web Share target or browser clipboard",
+        "data_classes": [
+          "public menu URL",
+          "public restaurant name",
+          "public wine-list title"
+        ],
+        "initiating_identity": "Guest who activates Share menu",
+        "authorization_evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/app/list/[slug]/public-menu-share.tsx requires a direct button activation and shares current public URL only"
+          }
+        ],
+        "recipient_scope": "Only the target selected by the guest or the guest device clipboard",
+        "retention_redaction": "The application stores no export copy; recipient or clipboard retention is controlled by the guest device",
+        "failure_behavior": "Abort leaves no status or clipboard write; other native failures fall back to clipboard and failures show recovery text",
+        "policy_basis": {
+          "status": "OWNER-APPROVED",
+          "citation": "The current user request approved UX-09 and its audited native Share implementation plan",
+          "owner": "zero",
+          "reason": null
+        }
+      },
+      {
+        "id": "EXP-002",
+        "destination": "Authenticated operator browser download",
+        "data_classes": [
+          "invoice scan wine fields",
+          "invoice source metadata"
+        ],
+        "initiating_identity": "Authenticated restaurant operator who activates CSV export",
+        "authorization_evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/app/(app)/scan/scanner.tsx renders export controls inside the authenticated app layout"
+          }
+        ],
+        "recipient_scope": "The initiating operator device",
+        "retention_redaction": "Downloaded CSV retention is controlled by the operator; no new server copy is created",
+        "failure_behavior": "Download errors are caught and shown as error feedback",
+        "policy_basis": {
+          "status": "OWNER-APPROVED",
+          "citation": "The current user request approved UX-03 scanner recovery and export-feedback implementation",
+          "owner": "zero",
+          "reason": null
+        }
+      },
+      {
+        "id": "EXP-003",
+        "destination": "Authenticated operator browser download",
+        "data_classes": [
+          "invoice scan source and items",
+          "field edit and accuracy metadata"
+        ],
+        "initiating_identity": "Authenticated restaurant operator who activates accuracy JSON export",
+        "authorization_evidence": [
+          {
+            "class": "STATIC",
+            "citation": "src/app/(app)/scan/scanner.tsx generates the accuracy artifact only from a direct export action"
+          }
+        ],
+        "recipient_scope": "The initiating operator device",
+        "retention_redaction": "Downloaded JSON retention is controlled by the operator; temporary DOM link and object URL are removed",
+        "failure_behavior": "Export and cleanup failures are caught, best-effort cleanup runs, and error feedback is shown",
+        "policy_basis": {
+          "status": "OWNER-APPROVED",
+          "citation": "The current user request approved UX-03 scanner recovery and export-feedback implementation",
+          "owner": "zero",
+          "reason": null
+        }
+      }
+    ],
+    "evidence": [
+      {
+        "class": "STATIC",
+        "citation": "origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c export paths were manually inventoried for Web Share, CSV download, and accuracy JSON download"
+      }
+    ],
+    "unavailable_reason": null
+  },
+  "secrets_scan": {
+    "result": "PASS",
+    "command_id": "CMD-002",
+    "scope": "RANGE",
+    "comparison": "origin/main..6b180d6f679c9c2fd08177b6e7294ef84aac566c",
+    "evidence": [
+      {
+        "class": "COMMAND",
+        "citation": "gitleaks scanned 11 commits and reported no leaks"
+      }
+    ],
+    "unavailable_reason": null
+  },
+  "export_policy": {
+    "result": "PASS",
+    "evidence": [
+      {
+        "class": "STATIC",
+        "citation": "All three changed export flows are direct user actions explicitly approved in the UX portfolio and keep destination control with the initiating user"
+      }
+    ],
+    "unavailable_reason": null
+  },
+  "coverage": [
+    {
+      "surface": "prompt-injection",
+      "state": "NOT-APPLICABLE",
+      "evidence": [
+        {
+          "class": "STATIC",
+          "citation": "No prompt, retrieval, model, tool-routing, or agent-control path changed in origin/main...6b180d6f679c9c2fd08177b6e7294ef84aac566c"
+        }
+      ],
+      "unavailable_reason": null
+    },
+    {
+      "surface": "secrets",
+      "state": "REVIEWED",
+      "evidence": [
+        {
+          "class": "COMMAND",
+          "citation": "CMD-002 scanned the exact origin/main..6b180d6f679c9c2fd08177b6e7294ef84aac566c commit range with redaction enabled"
+        }
+      ],
+      "unavailable_reason": null
+    },
+    {
+      "surface": "authentication",
+      "state": "REVIEWED",
+      "evidence": [
+        {
+          "class": "STATIC",
+          "citation": "Authenticated shell and team identity changes preserve getAuthContext and server-only user lookup boundaries"
+        }
+      ],
+      "unavailable_reason": null
+    },
+    {
+      "surface": "authorization",
+      "state": "REVIEWED",
+      "evidence": [
+        {
+          "class": "STATIC",
+          "citation": "Team client props, tenant-scoped identity resolution, insights queries, and public published-list access were reviewed with their focused tests"
+        }
+      ],
+      "unavailable_reason": null
+    },
+    {
+      "surface": "untrusted-input",
+      "state": "REVIEWED",
+      "evidence": [
+        {
+          "class": "STATIC",
+          "citation": "Scanner drafts, list actions, date parameters, modal inputs, and public route parameters were reviewed with validation and cancellation regressions"
+        }
+      ],
+      "unavailable_reason": null
+    },
+    {
+      "surface": "export",
+      "state": "REVIEWED",
+      "evidence": [
+        {
+          "class": "STATIC",
+          "citation": "EXP-001 through EXP-003 inventory every changed external or local data transfer path"
+        }
+      ],
+      "unavailable_reason": null
+    }
+  ],
+  "findings": [],
+  "verdict": "PASS"
+}

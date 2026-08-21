@@ -33,7 +33,7 @@ export default async function WineListEditorPage({
   const auth = await requireMembership();
   if (auth instanceof NextResponse) {
     // requireMembership returned a NextResponse (401/403). Send to login.
-    redirect(`/login?next=/wine-list/${id}`);
+    redirect(`/login?next=/lists/${id}`);
   }
   const { supabase, restaurantId, role } = auth;
 

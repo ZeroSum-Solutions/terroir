@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Field } from "@/components/field";
 import { ML_PER_OZ } from "@/lib/units";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
@@ -18,12 +19,14 @@ interface Props {
 
 export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props) {
   const [custom, setCustom] = useState<string | null>(null);
+  const [customError, setCustomError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
   const headingId = "pour-picker-heading";
 
   const handleCancel = () => {
     setCustom(null);
+    setCustomError(null);
     setNote("");
     onCancel();
   };
@@ -31,6 +34,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
   const handleConfirm = (ml: number) => {
     const trimmed = note.trim();
     setCustom(null);
+    setCustomError(null);
     setNote("");
     onConfirm(ml, trimmed.length > 0 ? trimmed : undefined);
   };
@@ -48,7 +52,11 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
 
   const submitCustom = () => {
     const oz = Number(customValue);
-    if (!Number.isFinite(oz) || oz <= 0) return;
+    if (!Number.isFinite(oz) || oz <= 0) {
+      setCustomError("Enter a pour greater than 0 oz.");
+      return;
+    }
+    setCustomError(null);
     const ml = Math.max(1, Math.round(oz * ML_PER_OZ));
     handleConfirm(ml);
   };
@@ -79,8 +87,8 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
                 type="button"
                 onClick={() => handleConfirm(ml)}
                 className={isDefault
-                  ? "h-[48px] rounded-pill border-2 border-primary bg-blush-wash text-[14px] font-semibold text-primary hover:bg-blush-wash/70"
-                  : "h-[48px] rounded-pill border border-hairline bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
+                  ? "min-h-11 rounded-pill border-2 border-primary bg-blush-wash text-[14px] font-semibold text-primary hover:bg-blush-wash/70"
+                  : "min-h-11 rounded-pill border border-hairline bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
                 }
               >
                 {oz} oz
@@ -90,65 +98,75 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
         </div>
 
         <div className="mt-md flex flex-wrap items-center gap-sm">
-          <label
-            htmlFor="pour-picker-custom"
-            className="text-[12px] text-grey"
-          >
-            Custom (oz)
-          </label>
-          <input
+          <Field
             id="pour-picker-custom"
-            type="number"
-            step="0.1"
-            min="0.1"
-            max="40"
-            inputMode="decimal"
-            autoFocus
-            value={customValue}
-            onChange={(e) => setCustom(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                submitCustom();
-              }
-            }}
-            placeholder="5.0"
-            className="h-[38px] w-[80px] rounded-pill border border-hairline bg-white px-sm text-[14px] outline-none focus:border-primary focus:ring-2 focus:ring-blush-wash"
-          />
+            label="Custom (oz)"
+            error={customError}
+            className="flex flex-wrap items-center gap-sm"
+            labelClassName="normal-case tracking-normal"
+          >
+            {(a11y) => (
+              <input
+                {...a11y}
+                type="number"
+                step="0.1"
+                min="0.1"
+                max="40"
+                inputMode="decimal"
+                autoFocus
+                value={customValue}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setCustom(next);
+                  const oz = Number(next);
+                  if (Number.isFinite(oz) && oz > 0) setCustomError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    submitCustom();
+                  }
+                }}
+                placeholder="5.0"
+                className="min-h-11 w-[80px] rounded-pill border border-hairline bg-white px-sm text-[14px] outline-none focus:border-primary focus:ring-2 focus:ring-blush-wash"
+              />
+            )}
+          </Field>
           <button
             type="button"
-            disabled={!customValue || Number(customValue) <= 0}
+            disabled={!customValue}
             onClick={submitCustom}
-            className="h-[38px] rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-40"
+            className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-40"
           >
             Pour
           </button>
         </div>
 
         {/* BND-127: Optional note field */}
-        <div className="mt-md">
-          <label
-            htmlFor="pour-picker-note"
-            className="text-[12px] text-grey"
-          >
-            Note (optional)
-          </label>
-          <textarea
-            id="pour-picker-note"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            maxLength={500}
-            rows={2}
-            placeholder="e.g., comp for VIP"
-            className="mt-xs w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
-          />
-        </div>
+        <Field
+          id="pour-picker-note"
+          label="Note (optional)"
+          className="mt-md"
+          labelClassName="normal-case tracking-normal"
+        >
+          {(a11y) => (
+            <textarea
+              {...a11y}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={500}
+              rows={2}
+              placeholder="e.g., comp for VIP"
+              className="mt-xs min-h-11 w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+            />
+          )}
+        </Field>
 
         <div className="mt-md flex justify-end">
           <button
             type="button"
             onClick={handleCancel}
-            className="h-[38px] rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface"
+            className="min-h-11 rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface"
           >
             Cancel
           </button>

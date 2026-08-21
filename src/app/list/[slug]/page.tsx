@@ -15,6 +15,8 @@ import {
   buildBinCodesByWine,
   type PublicBinCodeRow,
 } from "./public-bin-codes";
+import { formatMenuFreshness, newestValidTimestamp } from "./menu-freshness";
+import { PublicMenuShare } from "./public-menu-share";
 
 /** Anon client for public pages — respects RLS, no auth session needed. */
 function createAnonClient() {
@@ -128,7 +130,7 @@ export default async function PublicWineListPage({
   const { data: list, error } = await supabase
     .from("wine_lists")
     .select(
-      "name, template, theme, restaurant_id, show_bin_codes, restaurants(name, eightysix_strategy, logo_url), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines(id, name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
+      "name, template, theme, updated_at, restaurant_id, show_bin_codes, restaurants(name, eightysix_strategy, logo_url), wine_list_sections(id, name, position, wine_list_items(id, position, updated_at, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines(id, name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
     )
     .eq("slug", slug)
     .eq("is_published", true)
@@ -147,6 +149,7 @@ export default async function PublicWineListPage({
   type PublicWineItem = {
     id: string;
     position: number;
+    updated_at: string;
     glass_price: number | null;
     bottle_price: number | null;
     tasting_note: string | null;
@@ -185,6 +188,27 @@ export default async function PublicWineListPage({
     visibleSections as unknown as WineListSectionEmbed<PublicWineItem>[],
     { eightysixStrategy },
   );
+  const renderedItemIds = new Set(
+    sections.flatMap((section) => section.items.map((item) => item.id)),
+  );
+  const renderedItemTimestamps = visibleSections.flatMap((section) =>
+    section.wine_list_items
+      .filter((item) => renderedItemIds.has(item.id))
+      .map((item) => item.updated_at),
+  );
+  const freshestIso = newestValidTimestamp([
+    list.updated_at,
+    ...renderedItemTimestamps,
+  ]);
+  const freshnessLabel = freshestIso
+    ? formatMenuFreshness(freshestIso)
+    : "Updated recently";
+  const shareTitle = restaurantName
+    ? `${list.name} · ${restaurantName}`
+    : list.name;
+  const shareText = restaurantName
+    ? `View the current wine list at ${restaurantName}.`
+    : "View the current wine list.";
   const wineIds = visibleSections.flatMap((section) =>
     section.wine_list_items.flatMap((item) => item.wines?.id ?? []),
   );
@@ -212,16 +236,28 @@ export default async function PublicWineListPage({
             <img
               src={logoUrl}
               alt={restaurantName || "Restaurant logo"}
-              className="h-10 w-auto max-w-[200px] object-contain print:h-8"
+              width={200}
+              height={40}
+              className="h-10 w-[200px] max-w-full object-contain print:h-8"
             />
           </div>
         )}
-        <p className="text-caption uppercase text-grey print:text-black">
-          {restaurantName}
-        </p>
-        <h1 className="mt-sm font-serif text-heading-sm text-ink print:text-[24px] print:text-black">
-          {list.name}
-        </h1>
+        <div className="flex flex-wrap items-start justify-between gap-md">
+          <div className="min-w-0 flex-1">
+            <p className="text-caption uppercase text-grey print:text-black">
+              {restaurantName}
+            </p>
+            <h1 className="mt-sm font-serif text-heading-sm text-ink print:text-[24px] print:text-black">
+              {list.name}
+            </h1>
+            <p className="mt-xs text-[12px] text-ink-muted print:text-black">
+              {freshnessLabel}
+            </p>
+          </div>
+          <div className="shrink-0 print:hidden">
+            <PublicMenuShare title={shareTitle} text={shareText} />
+          </div>
+        </div>
       </header>
 
       {/* Empty state — published list with zero visible items (e.g. every
@@ -235,7 +271,7 @@ export default async function PublicWineListPage({
             Nothing to pour right now.
           </p>
           <p className="mt-xs text-[13px] text-ink-muted">
-            Check back soon — this list is being updated.
+            Availability changes during service; check back soon for the latest list.
           </p>
         </div>
       )}
@@ -282,7 +318,7 @@ export default async function PublicWineListPage({
                         </span>
                         {is86d && (
                           <span className="ml-xs font-mono text-[11px] uppercase text-ink-subtle print:hidden">
-                            86&rsquo;d
+                            Unavailable
                           </span>
                         )}
                         {wine.vintage && (
@@ -305,7 +341,7 @@ export default async function PublicWineListPage({
                             "text-ink-muted print:text-black",
                             is86d && "line-through",
                           )}>
-                            ${item.glass_price}
+                            Glass ${item.glass_price}
                           </span>
                         )}
                         {item.bottle_price != null && (
@@ -313,7 +349,7 @@ export default async function PublicWineListPage({
                             "text-ink print:text-black",
                             is86d && "line-through",
                           )}>
-                            ${item.bottle_price}
+                            Bottle ${item.bottle_price}
                           </span>
                         )}
                       </div>

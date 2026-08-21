@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 // Matches the MDN "tabbable" set well enough for single-panel dialogs.
 // Intentionally does not filter by offsetParent / visibility — callers
@@ -19,6 +19,11 @@ interface UseFocusTrapOptions {
    * unconditionally. Defaults to true.
    */
   enabled?: boolean;
+  /**
+   * Temporarily yield keyboard ownership to a nested trap without restoring
+   * or replacing this trap's original trigger snapshot.
+   */
+  paused?: boolean;
 }
 
 /**
@@ -38,15 +43,29 @@ export function useFocusTrap({
   containerRef,
   onEscape,
   enabled = true,
+  paused = false,
 }: UseFocusTrapOptions): void {
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const onEscapeRef = useRef(onEscape);
+
+  useEffect(() => {
+    onEscapeRef.current = onEscape;
+  }, [onEscape]);
+
   useEffect(() => {
     if (!enabled) return;
 
-    // Snapshot the element that opened the modal so we can return
-    // focus on close. Runs inside the effect so the snapshot happens
-    // after React has moved focus into the dialog if autoFocus fired
-    // synchronously.
-    const previouslyFocused = document.activeElement as HTMLElement | null;
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+
+    return () => {
+      const previouslyFocused = previouslyFocusedRef.current;
+      previouslyFocusedRef.current = null;
+      previouslyFocused?.focus?.();
+    };
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled || paused) return;
 
     // Auto-focus the first focusable in the container. Deferred to
     // the next tick so the children have mounted.
@@ -57,28 +76,32 @@ export function useFocusTrap({
       // Respect explicit autoFocus inside the dialog — only seed
       // focus if nothing in the container already has it.
       if (active instanceof HTMLElement && root.contains(active)) return;
-      const focusables = root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+      const focusables = focusableElements(root);
       focusables[0]?.focus();
     });
 
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
-        onEscape();
+        onEscapeRef.current();
         return;
       }
       if (e.key !== "Tab") return;
 
       const root = containerRef.current;
       if (!root) return;
-      const focusable = Array.from(
-        root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-      );
+      const focusable = focusableElements(root);
       if (focusable.length === 0) return;
 
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       const active = document.activeElement as HTMLElement | null;
+
+      if (!active || !root.contains(active) || !focusable.includes(active)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+        return;
+      }
 
       if (e.shiftKey && active === first) {
         e.preventDefault();
@@ -94,9 +117,12 @@ export function useFocusTrap({
     return () => {
       cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", handleKey);
-      // Restore focus to the element that opened the modal so
-      // keyboard users aren't stranded at the document root.
-      previouslyFocused?.focus?.();
     };
-  }, [containerRef, onEscape, enabled]);
+  }, [containerRef, enabled, paused]);
+}
+
+function focusableElements(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (element) => !element.closest("[inert]"),
+  );
 }

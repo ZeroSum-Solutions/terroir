@@ -8,19 +8,30 @@ interface TemplatePickerProps {
   current: string;
   onChange: (template: Template) => void;
   disabled?: boolean;
+  ariaLabelledby?: string;
 }
 
-export function TemplatePicker({ current, onChange, disabled }: TemplatePickerProps) {
+export function TemplatePicker({
+  current,
+  onChange,
+  disabled,
+  ariaLabelledby,
+}: TemplatePickerProps) {
   return (
-    <div className="flex flex-col gap-2xs">
+    <div
+      role="group"
+      aria-labelledby={ariaLabelledby}
+      className="flex flex-col gap-2xs"
+    >
       {TEMPLATES.map((t) => (
         <button
           key={t}
           type="button"
           onClick={() => onChange(t)}
           disabled={disabled}
+          aria-pressed={current === t}
           className={cn(
-            "flex items-center justify-between rounded-pill px-sm py-xs text-[14px] transition-colors disabled:pointer-events-none",
+            "flex min-h-11 items-center justify-between rounded-pill px-sm py-xs text-[14px] transition-colors disabled:pointer-events-none",
             current === t
               ? "bg-bridge-surface font-medium text-ink"
               : "text-ink-muted hover:bg-bridge-surface hover:text-ink",

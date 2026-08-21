@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
-import { MemberAnalyticsSection } from "./member-analytics-section";
-import { TeamActions } from "./team-actions";
+import { resolveMemberIdentities } from "@/lib/team/member-identities";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { MemberAnalyticsSection } from "../member-analytics-section";
+import { TeamActions } from "../team-actions";
 
 export const metadata: Metadata = { title: "Team" };
 
@@ -12,7 +14,7 @@ export default async function TeamPage() {
   // staff-visible (pre-existing behavior); the API route also 403s staff.
   const canViewAnalytics = userRole === "owner" || userRole === "manager";
 
-  const [{ data: members }, { data: invitations }] = await Promise.all([
+  const [membersResult, invitationsResult] = await Promise.all([
     supabase
       .from("memberships")
       .select("id, user_id, role, created_at")
@@ -26,9 +28,34 @@ export default async function TeamPage() {
       .order("created_at", { ascending: false }),
   ]);
 
+  const { data: members, error: membersError } = membersResult;
+  const { data: invitations, error: invitationsError } = invitationsResult;
+  if (membersError) throw membersError;
+  if (invitationsError) throw invitationsError;
+
+  const roster = members ?? [];
+  const admin = createServiceRoleClient();
+  const identities = admin
+    ? await resolveMemberIdentities(
+        admin,
+        roster.map((member) => member.user_id),
+      )
+    : new Map();
+  const enrichedRoster = roster.map((member) => ({
+    ...member,
+    name: identities.get(member.user_id)?.name ?? "Team member",
+    email: identities.get(member.user_id)?.email ?? "Email unavailable",
+  }));
+  const analyticsIdentities = Object.fromEntries(
+    enrichedRoster.map((member) => [
+      member.user_id,
+      { name: member.name, email: member.email },
+    ]),
+  );
+
   const pendingInvitations = (invitations ?? []).map((inv) => ({
     id: inv.id,
-    token: inv.token,
+    ...(userRole === "owner" ? { token: inv.token } : {}),
     role: inv.role as "owner" | "manager" | "staff",
     email: inv.email,
     expires_at: inv.expires_at,
@@ -43,17 +70,22 @@ export default async function TeamPage() {
       </header>
 
       <TeamActions
-        members={(members ?? []).map((m) => ({
+        members={enrichedRoster.map((m) => ({
           id: m.id,
           user_id: m.user_id,
+          name: m.name,
+          email: m.email,
           role: m.role as "owner" | "manager" | "staff",
           created_at: m.created_at,
         }))}
         invitations={pendingInvitations}
         currentUserId={auth.user.id}
         restaurantName={restaurantName}
+        canInvite={userRole === "owner"}
       />
-      {canViewAnalytics && <MemberAnalyticsSection />}
+      {canViewAnalytics && (
+        <MemberAnalyticsSection identities={analyticsIdentities} />
+      )}
     </section>
   );
 }

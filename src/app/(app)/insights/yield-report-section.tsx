@@ -7,6 +7,7 @@ import {
 } from "@/lib/partial-bottles/math";
 import type { Database } from "@/types/database";
 import { metricHref } from "./metric-href";
+import { InsightScope } from "./insight-scope";
 
 const LABELS: Record<YieldGroup["preservationMethod"], string> = {
   argon: "Argon",
@@ -15,15 +16,24 @@ const LABELS: Record<YieldGroup["preservationMethod"], string> = {
   vacuum: "Vacuum",
 };
 
-export function YieldReportSection({ groups }: { groups: YieldGroup[] }) {
+export function YieldReportSection({
+  groups,
+  rangeLabel,
+}: {
+  groups: YieldGroup[];
+  rangeLabel: string;
+}) {
   if (groups.length === 0) return null;
 
   return (
     <section className="mb-lg md:mb-xl" aria-labelledby="yield-report-heading">
-      <div className="mb-md flex items-baseline justify-between gap-sm">
-        <h2 id="yield-report-heading" className="text-caption font-medium uppercase text-grey">
-          Partial-bottle yield
-        </h2>
+      <div className="mb-md flex flex-wrap items-baseline justify-between gap-sm">
+        <div className="flex flex-wrap items-baseline gap-sm">
+          <h2 id="yield-report-heading" className="text-caption font-medium uppercase text-grey">
+            Partial-bottle yield
+          </h2>
+          <InsightScope metric="yield" kind="range" label={rangeLabel} />
+        </div>
         <span className="text-[12px] text-grey">Actual excludes write-offs</span>
       </div>
       <div className="grid gap-md md:grid-cols-2">

@@ -3,145 +3,75 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, History, TrendingDown, TrendingUp, BarChart3 } from "lucide-react";
 import { getAuthContext } from "@/lib/auth-context";
+import { RouteDataEmpty } from "@/components/route-data-state";
+import {
+  formatSignedVarianceOz,
+  getReconciliationVariance,
+  reconciliationTone,
+} from "@/lib/reconciliation/variance";
+import {
+  buildHistoryFromPersistedEvents,
+  type DayGroup,
+  type ReconEvent,
+} from "./history-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Reconcile History — Terroir" };
 
-type ReconEvent = {
-  id: string;
-  created_at: string;
-  delta: number | null;
-  note: string | null;
-  user_id: string | null;
-  wine_id: string;
-  wines: {
-    producer: string;
-    name: string;
-    vintage: number | null;
-  } | null;
-};
-
-type DailySummary = {
-  date: string;
-  displayDate: string;
-  totalVarianceMl: number;
-  eventCount: number;
-  sessions: ReconSession[];
-};
-
-type ReconSession = {
-  timeLabel: string;
-  events: ReconEvent[];
-  totalVarianceMl: number;
-  bottleCount: number;
-};
-
-function formatDateHeader(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
-function formatOz(ml: number): string {
+function formatAbsoluteOz(ml: number): string {
   const oz = Math.abs(ml) / 29.5735;
   return oz.toFixed(1) + " oz";
 }
 
-/**
- * Group reconciliation events into daily summaries and sessions.
- * Events within 10 minutes of each other are considered the same session.
- */
-function buildHistory(events: ReconEvent[]): DailySummary[] {
-  if (events.length === 0) return [];
+const varianceTextClasses = {
+  positive: "text-sage-ink",
+  negative: "text-primary",
+  neutral: "text-grey",
+} as const;
 
-  const SESSION_GAP_MS = 10 * 60 * 1000; // 10 minutes
+const varianceBadgeClasses = {
+  positive: "bg-sage-wash text-sage-ink",
+  negative: "bg-blush-wash text-primary",
+  neutral: "bg-bridge-surface text-grey",
+} as const;
 
-  // Group by date first
-  const byDate = new Map<string, ReconEvent[]>();
-  for (const e of events) {
-    const dateKey = e.created_at.slice(0, 10); // YYYY-MM-DD
-    const arr = byDate.get(dateKey) || [];
-    arr.push(e);
-    byDate.set(dateKey, arr);
+function VarianceValue({
+  deltaMl,
+  badge = false,
+  className = "",
+}: {
+  deltaMl: number | null;
+  badge?: boolean;
+  className?: string;
+}) {
+  if (deltaMl == null) {
+    return <span className={`${className} text-ink-subtle`}>—</span>;
   }
 
-  const dailySummaries: DailySummary[] = [];
+  const variance = getReconciliationVariance(deltaMl, 0);
+  const tone = reconciliationTone(variance.relation);
+  const toneClasses = badge ? varianceBadgeClasses[tone] : varianceTextClasses[tone];
 
-  for (const [dateKey, dayEvents] of byDate) {
-    // Sort by created_at ascending within the day
-    dayEvents.sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-    );
-
-    // Split into sessions (events within 10 min of each other)
-    const sessions: ReconSession[] = [];
-    let currentSession: ReconEvent[] = [dayEvents[0]];
-
-    for (let i = 1; i < dayEvents.length; i++) {
-      const prev = new Date(dayEvents[i - 1].created_at).getTime();
-      const curr = new Date(dayEvents[i].created_at).getTime();
-      if (curr - prev <= SESSION_GAP_MS) {
-        currentSession.push(dayEvents[i]);
-      } else {
-        sessions.push(buildSession(currentSession));
-        currentSession = [dayEvents[i]];
-      }
-    }
-    sessions.push(buildSession(currentSession));
-
-    const totalVarianceMl = sessions.reduce(
-      (sum, s) => sum + Math.abs(s.totalVarianceMl),
-      0,
-    );
-
-    dailySummaries.push({
-      date: dateKey,
-      displayDate: formatDateHeader(dayEvents[0].created_at),
-      totalVarianceMl,
-      eventCount: dayEvents.length,
-      sessions,
-    });
-  }
-
-  // Sort newest first
-  dailySummaries.sort((a, b) => b.date.localeCompare(a.date));
-
-  return dailySummaries;
-}
-
-function buildSession(events: ReconEvent[]): ReconSession {
-  const totalVarianceMl = events.reduce(
-    (sum, e) => sum + (e.delta ?? 0),
-    0,
+  return (
+    <span className={`${className} ${toneClasses}`}>
+      {badge && variance.relation === "over" && (
+        <TrendingUp className="h-3 w-3" strokeWidth={2.5} />
+      )}
+      {badge && variance.relation === "under" && (
+        <TrendingDown className="h-3 w-3" strokeWidth={2.5} />
+      )}
+      {formatSignedVarianceOz(variance.deltaMl)} · {variance.label}
+    </span>
   );
-  return {
-    timeLabel: formatTime(events[0].created_at),
-    events,
-    totalVarianceMl,
-    bottleCount: events.length,
-  };
 }
 
 /**
  * Simple CSS bar chart for variance trend over time.
  * Each bar represents one day; height is proportional to max variance.
  */
-function VarianceChart({ dailySummaries }: { dailySummaries: DailySummary[] }) {
+function VarianceChart({ dailySummaries }: { dailySummaries: DayGroup[] }) {
   if (dailySummaries.length === 0) return null;
 
   // Chart shows oldest→newest (left→right), so reverse
@@ -167,12 +97,12 @@ function VarianceChart({ dailySummaries }: { dailySummaries: DailySummary[] }) {
               style={{ height: "100%" }}
             >
               <span className="mb-xs font-mono text-[10px] text-ink-subtle tabular-nums">
-                {formatOz(day.totalVarianceMl)}
+                {formatAbsoluteOz(day.totalVarianceMl)}
               </span>
               <div
                 className="w-full max-w-[40px] rounded-t-sm bg-accent/70 transition-colors hover:bg-accent"
                 style={{ height: `${Math.max(pct, 4)}%` }}
-                title={`${day.displayDate}: ${formatOz(day.totalVarianceMl)}`}
+                title={`${day.displayDate}: ${formatAbsoluteOz(day.totalVarianceMl)}`}
               />
               <span className="mt-xs font-mono text-[9px] text-ink-subtle leading-tight text-center">
                 {new Date(day.date + "T12:00:00").toLocaleDateString("en-US", {
@@ -200,7 +130,7 @@ export default async function ReconcileHistoryPage() {
   }
 
   // Fetch reconciliation events with wine details
-  const { data: events } = await supabase
+  const { data: events, error: eventsError } = await supabase
     .from("availability_events")
     .select("id, created_at, delta, note, user_id, wine_id, wines(producer, name, vintage)")
     .eq("restaurant_id", restaurantId)
@@ -208,7 +138,9 @@ export default async function ReconcileHistoryPage() {
     .order("created_at", { ascending: false })
     .limit(500);
 
-  const history = buildHistory((events ?? []) as unknown as ReconEvent[]);
+  if (eventsError) throw eventsError;
+
+  const history = buildHistoryFromPersistedEvents((events ?? []) as ReconEvent[]);
 
   return (
     <section>
@@ -231,22 +163,19 @@ export default async function ReconcileHistoryPage() {
       </header>
 
       {history.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-border-strong bg-surface-muted px-lg py-3xl text-center">
-          <History className="mb-md h-10 w-10 text-ink-subtle" strokeWidth={1.5} />
-          <p className="text-[15px] font-medium text-ink">
-            No reconciliation history yet
-          </p>
-          <p className="mt-xs text-[13px] text-ink-muted">
-            History will appear here after you run your first end-of-shift
-            reconciliation.
-          </p>
-          <Link
-            href="/cellar/reconcile"
-            className="mt-lg flex h-[38px] items-center gap-sm rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
-          >
-            Go to reconcile
-          </Link>
-        </div>
+        <RouteDataEmpty
+          icon={<History className="h-6 w-6" strokeWidth={1.5} />}
+          title="No reconciliation history yet"
+          description="History will appear here after you run your first end-of-shift reconciliation."
+          action={
+            <Link
+              href="/cellar/reconcile"
+              className="inline-flex h-11 items-center gap-sm rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
+            >
+              Go to reconcile
+            </Link>
+          }
+        />
       ) : (
         <>
           {/* Variance chart */}
@@ -275,7 +204,7 @@ export default async function ReconcileHistoryPage() {
                 Total variance
               </div>
               <div className="mt-xs font-mono text-[20px] font-medium text-ink">
-                {formatOz(history.reduce((sum, d) => sum + d.totalVarianceMl, 0))}
+                {formatAbsoluteOz(history.reduce((sum, d) => sum + d.totalVarianceMl, 0))}
               </div>
             </div>
           </div>
@@ -291,15 +220,13 @@ export default async function ReconcileHistoryPage() {
                     · {day.sessions.length} session
                     {day.sessions.length !== 1 ? "s" : ""}
                     {" · "}
-                    {formatOz(day.totalVarianceMl)} variance
+                    {formatAbsoluteOz(day.totalVarianceMl)} variance
                   </span>
                 </h2>
 
                 <div className="flex flex-col gap-md">
                   {day.sessions.map((session, si) => {
                     const wineCount = session.bottleCount;
-                    const isOverpour = session.totalVarianceMl > 0;
-                    const isUnderpour = session.totalVarianceMl < 0;
 
                     return (
                       <div
@@ -315,23 +242,11 @@ export default async function ReconcileHistoryPage() {
                             <span className="text-[12px] text-ink-muted tabular-nums">
                               {wineCount} bottle{wineCount !== 1 ? "s" : ""}
                             </span>
-                            {isOverpour && (
-                              <span className="inline-flex items-center gap-xs rounded-pill bg-warning-soft px-sm py-2xs text-[11px] font-semibold text-warning">
-                                <TrendingUp className="h-3 w-3" strokeWidth={2.5} />
-                                +{formatOz(session.totalVarianceMl)}
-                              </span>
-                            )}
-                            {isUnderpour && (
-                              <span className="inline-flex items-center gap-xs rounded-pill bg-success-soft px-sm py-2xs text-[11px] font-semibold text-success">
-                                <TrendingDown className="h-3 w-3" strokeWidth={2.5} />
-                                −{formatOz(session.totalVarianceMl)}
-                              </span>
-                            )}
-                            {!isOverpour && !isUnderpour && (
-                              <span className="inline-flex items-center gap-xs rounded-pill bg-surface-muted px-sm py-2xs text-[11px] font-semibold text-ink-subtle">
-                                0 oz
-                              </span>
-                            )}
+                            <VarianceValue
+                              deltaMl={session.totalVarianceMl}
+                              badge
+                              className="inline-flex items-center gap-xs rounded-pill px-sm py-2xs text-[11px] font-semibold"
+                            />
                           </div>
                         </div>
 
@@ -379,22 +294,7 @@ export default async function ReconcileHistoryPage() {
                                     )}
                                   </td>
                                   <td className="px-md py-sm text-right font-mono tabular-nums">
-                                    {event.delta != null ? (
-                                      <span
-                                        className={
-                                          event.delta > 0
-                                            ? "text-warning"
-                                            : event.delta < 0
-                                              ? "text-success"
-                                              : "text-ink-subtle"
-                                        }
-                                      >
-                                        {event.delta > 0 ? "+" : ""}
-                                        {formatOz(event.delta)}
-                                      </span>
-                                    ) : (
-                                      <span className="text-ink-subtle">—</span>
-                                    )}
+                                    <VarianceValue deltaMl={event.delta} />
                                   </td>
                                   <td className="px-md py-sm text-ink-muted">
                                     {event.note || "—"}
@@ -438,19 +338,10 @@ export default async function ReconcileHistoryPage() {
                                   </div>
                                 )}
                               </div>
-                              <span
-                                className={`ml-sm shrink-0 font-mono text-[13px] font-medium tabular-nums ${
-                                  (event.delta ?? 0) > 0
-                                    ? "text-warning"
-                                    : (event.delta ?? 0) < 0
-                                      ? "text-success"
-                                      : "text-ink-subtle"
-                                }`}
-                              >
-                                {event.delta != null
-                                  ? `${event.delta > 0 ? "+" : ""}${formatOz(event.delta)}`
-                                  : "—"}
-                              </span>
+                              <VarianceValue
+                                deltaMl={event.delta}
+                                className="ml-sm shrink-0 font-mono text-[13px] font-medium tabular-nums"
+                              />
                             </div>
                           ))}
                         </div>

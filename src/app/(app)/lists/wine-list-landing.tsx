@@ -16,6 +16,8 @@ import {
   X,
 } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
+import { ActionDialog } from "@/components/action-dialog";
+import { RouteDataEmpty } from "@/components/route-data-state";
 import { TimeAgo } from "@/components/time-ago";
 import type { WineListWithCount } from "@/lib/wine-list/types";
 
@@ -43,6 +45,7 @@ export function WineListLanding({
   // Delete button while the request is in flight. Surface API errors in
   // an inline alert above the grid so the user sees what failed.
   const [deletingListId, setDeletingListId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<WineListWithCount | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // Tracks which list is being archived/unarchived
   const [archivingListId, setArchivingListId] = useState<string | null>(null);
@@ -99,18 +102,9 @@ export function WineListLanding({
     [router],
   );
 
-  const deleteList = useCallback(
-    async (list: WineListWithCount) => {
-      // BND-159: only archived lists can be deleted. The API enforces this,
-      // but the UI should never call DELETE on a non-archived list — archive
-      // first.
-      if (!list.archived) return;
-
-      const confirmMessage = list.is_published
-        ? `Permanently delete "${list.name}"? This list is currently published — its public link will stop working immediately. This cannot be undone.`
-        : `Permanently delete "${list.name}"? Its sections and items will be removed. This cannot be undone.`;
-      if (!window.confirm(confirmMessage)) return;
-
+  const deleteList = useCallback(async () => {
+      if (!deleteTarget) return;
+      const list = deleteTarget;
       setDeleteError(null);
       setDeletingListId(list.id);
       try {
@@ -127,6 +121,7 @@ export function WineListLanding({
           }
           throw new Error(serverMessage ?? "Couldn't delete wine list.");
         }
+        setDeleteTarget(null);
         router.refresh();
       } catch (err) {
         setDeleteError(
@@ -137,9 +132,15 @@ export function WineListLanding({
       } finally {
         setDeletingListId(null);
       }
-    },
-    [router],
-  );
+  }, [deleteTarget, router]);
+
+  const requestDeleteList = useCallback((list: WineListWithCount) => {
+    // BND-159: only archived lists can be deleted. The API enforces this,
+    // but the UI should never offer DELETE on a non-archived list.
+    if (!list.archived) return;
+    setDeleteError(null);
+    setDeleteTarget(list);
+  }, []);
 
   const cloneList = useCallback(
     async (list: WineListWithCount) => {
@@ -337,7 +338,7 @@ export function WineListLanding({
             {list.archived && (
               <button
                 type="button"
-                onClick={() => deleteList(list)}
+                onClick={() => requestDeleteList(list)}
                 disabled={isDeleting}
                 aria-label={`Permanently delete ${list.name}`}
                 className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-pill border border-hairline bg-canvas text-ink-subtle hover:bg-blush-wash hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60"
@@ -367,7 +368,7 @@ export function WineListLanding({
           {archivedLists.length > 0 && (
             <a
               href={showArchived ? "/lists" : "/lists?show_archived=1"}
-              className="flex h-[38px] items-center gap-xs rounded-pill border border-ink/25 bg-transparent px-md text-[13px] font-medium text-ink hover:bg-bridge-surface self-start md:self-auto"
+              className="flex h-11 items-center gap-xs rounded-pill border border-ink/25 bg-transparent px-md text-[13px] font-medium text-ink hover:bg-bridge-surface self-start md:self-auto"
             >
               <Archive className="h-4 w-4" strokeWidth={2} />
               {showArchived ? "Hide archived" : `Show archived (${archivedLists.length})`}
@@ -376,7 +377,7 @@ export function WineListLanding({
           <button
             type="button"
             onClick={() => setShowModal(true)}
-            className="flex h-[38px] items-center gap-sm self-start rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover md:self-auto"
+            className="flex h-11 items-center gap-sm self-start rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover md:self-auto"
           >
             <Plus className="h-4 w-4" strokeWidth={2} />
             New wine list
@@ -384,48 +385,44 @@ export function WineListLanding({
         </div>
       </header>
 
-      {noListsAtAll ? (
-        <div className="flex flex-col items-center justify-center rounded-card border border-dashed border-beige-deep bg-bridge-surface px-lg py-3xl text-center">
-          <ListOrdered
-            className="mb-md h-10 w-10 text-ink-subtle"
-            strokeWidth={1.5}
-          />
-          <p className="text-[15px] font-medium text-ink">
-            Create your first wine list
-          </p>
-          <p className="mt-xs text-[13px] text-ink-muted">
-            Your guests will thank you.
-          </p>
+      {deleteError && deleteTarget === null && (
+        <div
+          role="alert"
+          className="mb-md flex items-start justify-between gap-sm rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"
+        >
+          <span>{deleteError}</span>
           <button
             type="button"
-            onClick={() => setShowModal(true)}
-            className="mt-lg flex h-[38px] items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
+            onClick={() => setDeleteError(null)}
+            aria-label="Dismiss error"
+            className="-mr-2xs flex h-6 w-6 shrink-0 items-center justify-center rounded-pill text-primary/70 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
-            <Plus className="h-4 w-4" strokeWidth={2} />
-            New wine list
+            <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
           </button>
         </div>
+      )}
+
+      {noListsAtAll ? (
+        <RouteDataEmpty
+          icon={<ListOrdered className="h-6 w-6" strokeWidth={1.5} />}
+          title="Create your first wine list"
+          description="Your guests will thank you."
+          action={
+            <button
+              type="button"
+              onClick={() => setShowModal(true)}
+              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2} />
+              New wine list
+            </button>
+          }
+        />
       ) : (
         <>
           {/* Active lists */}
           {lists.length > 0 && (
             <div className="grid gap-md md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
-              {deleteError && (
-                <div
-                  role="alert"
-                  className="md:col-span-full flex items-start justify-between gap-sm rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"
-                >
-                  <span>{deleteError}</span>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteError(null)}
-                    aria-label="Dismiss error"
-                    className="-mr-2xs flex h-6 w-6 shrink-0 items-center justify-center rounded-pill text-primary/70 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                  >
-                    <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                  </button>
-                </div>
-              )}
               {lists.map(renderCard)}
               <button
                 type="button"
@@ -466,7 +463,7 @@ export function WineListLanding({
               </p>
               <Link
                 href="/lists?show_archived=1"
-                className="mt-lg inline-flex h-[38px] items-center gap-sm rounded-pill border border-ink/25 bg-transparent px-md text-[13px] font-medium text-ink hover:bg-bridge-surface"
+                className="mt-lg inline-flex h-11 items-center gap-sm rounded-pill border border-ink/25 bg-transparent px-md text-[13px] font-medium text-ink hover:bg-bridge-surface"
               >
                 <Archive className="h-4 w-4" strokeWidth={2} />
                 Show archived lists
@@ -498,6 +495,31 @@ export function WineListLanding({
           onCreate={createList}
         />
       )}
+
+      <ActionDialog
+        open={deleteTarget !== null}
+        title="Permanently delete list"
+        description={
+          deleteTarget?.is_published
+            ? `Permanently delete "${deleteTarget.name}"? This list is currently published — its public link will stop working immediately. This cannot be undone.`
+            : deleteTarget
+              ? `Permanently delete "${deleteTarget.name}"? Its sections and items will be removed. This cannot be undone.`
+              : ""
+        }
+        confirmLabel="Permanently delete list"
+        busy={deletingListId === deleteTarget?.id}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={deleteList}
+      >
+        {deleteError && (
+          <p
+            role="alert"
+            className="rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"
+          >
+            {deleteError}
+          </p>
+        )}
+      </ActionDialog>
     </section>
   );
 }

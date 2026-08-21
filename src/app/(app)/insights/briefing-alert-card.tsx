@@ -23,8 +23,6 @@ import { metricHref } from "./metric-href";
  *
  * Actions:
  *   • View bottles → deep-link to /cellar?wine={id} (Cellar opens drawer)
- *   • Add to menu → disabled stub for v1.5 (the menu-pairing feature)
- *   • Add to staff briefing → disabled stub for v1.5
  *   • Snooze 30 days → POST /api/wines/{id}/snooze-alert + refresh
  */
 
@@ -124,14 +122,6 @@ export function BriefingAlertCard({
               View {alert.bottle_count} bottle{alert.bottle_count === 1 ? "" : "s"}
               <ChevronRight className="h-4 w-4" strokeWidth={2} aria-hidden />
             </Link>
-            <button
-              type="button"
-              disabled
-              title="Menu pairing flow ships in v1.5"
-              className="h-[38px] rounded-pill border border-ink/25 bg-bridge-surface px-md text-[13px] font-medium text-grey"
-            >
-              Add to menu
-            </button>
             <button
               type="button"
               disabled={busy}

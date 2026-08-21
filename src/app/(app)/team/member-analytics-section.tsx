@@ -4,7 +4,15 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { MemberAnalyticsResult } from "@/lib/member-analytics";
 
-export function MemberAnalyticsSection() {
+type MemberIdentityLookup = Readonly<
+  Record<string, { name: string; email: string }>
+>;
+
+export function MemberAnalyticsSection({
+  identities,
+}: {
+  identities: MemberIdentityLookup;
+}) {
   const [data, setData] = useState<MemberAnalyticsResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,10 +33,16 @@ export function MemberAnalyticsSection() {
 
   if (error) return <p role="alert" className="mt-lg text-[13px] text-primary">{error}</p>;
   if (!data) return <div className="mt-lg h-32 animate-pulse rounded-md bg-bridge-surface" />;
-  return <MemberAnalyticsTable data={data} />;
+  return <MemberAnalyticsTable data={data} identities={identities} />;
 }
 
-export function MemberAnalyticsTable({ data }: { data: MemberAnalyticsResult }) {
+export function MemberAnalyticsTable({
+  data,
+  identities,
+}: {
+  data: MemberAnalyticsResult;
+  identities: MemberIdentityLookup;
+}) {
   return (
     <section aria-labelledby="member-analytics-heading" className="mt-xl rounded-card border border-hairline bg-white p-md">
       <div className="mb-md flex flex-wrap items-baseline justify-between gap-xs">
@@ -42,14 +56,24 @@ export function MemberAnalyticsTable({ data }: { data: MemberAnalyticsResult }) 
           </thead>
           <tbody>
             {data.members.map((member) => {
-              const anchor = `/team#member-${encodeURIComponent(member.userId)}`;
+              const memberToken = stableMemberToken(member.memberId);
+              const anchor = `/team#member-${memberToken}`;
+              const identity = identities[member.userId] ?? {
+                name: "Team member",
+                email: "Email unavailable",
+              };
               return (
-                <tr id={`member-${member.userId}`} key={member.memberId} className="border-t border-hairline align-top hover:bg-bridge-surface">
-                  <td className="py-sm pr-md"><span className="font-mono text-ink">{shortId(member.userId)}</span><span className="ml-xs text-grey">{member.role}</span>{member.requiresVarianceInvestigation && <span className="mt-xs block w-fit rounded-pill bg-amber-wash px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide text-amber">Variance investigation</span>}</td>
-                  <Metric href={anchor} name={`member-${member.userId}-pours`}>{member.pourCount} · {member.pourMl.toLocaleString()} ml</Metric>
-                  <Metric href={anchor} name={`member-${member.userId}-comps`}>{member.compCount}</Metric>
-                  <Metric href={anchor} name={`member-${member.userId}-comp-rate`}>{member.compRate === null ? "no activity" : `${formatRate(member.compRate)} · ${signed(member.compRate - data.houseMedianCompRate)}`}</Metric>
-                  <Metric href={anchor} name={`member-${member.userId}-variance`}>{signedMl(member.closeoutVarianceMl)} · {member.closeoutCount} close-outs</Metric>
+                <tr id={`member-${memberToken}`} key={member.memberId} className="border-t border-hairline align-top hover:bg-bridge-surface">
+                  <td className="py-sm pr-md">
+                    <span className="block font-medium text-ink">{identity.name}</span>
+                    <span className="block break-all text-grey">{identity.email}</span>
+                    <span className="mt-2xs block capitalize text-grey">{member.role}</span>
+                    {member.requiresVarianceInvestigation && <span className="mt-xs block w-fit rounded-pill bg-amber-wash px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide text-amber">Variance investigation</span>}
+                  </td>
+                  <Metric href={anchor} name={`member-${memberToken}-pours`}>{member.pourCount} · {member.pourMl.toLocaleString()} ml</Metric>
+                  <Metric href={anchor} name={`member-${memberToken}-comps`}>{member.compCount}</Metric>
+                  <Metric href={anchor} name={`member-${memberToken}-comp-rate`}>{member.compRate === null ? "no activity" : `${formatRate(member.compRate)} · ${signed(member.compRate - data.houseMedianCompRate)}`}</Metric>
+                  <Metric href={anchor} name={`member-${memberToken}-variance`}>{signedMl(member.closeoutVarianceMl)} · {member.closeoutCount} close-outs</Metric>
                 </tr>
               );
             })}
@@ -78,6 +102,11 @@ function signedMl(value: number) {
   return `${value > 0 ? "+" : "−"}${Math.abs(value).toLocaleString()} ml`;
 }
 
-function shortId(userId: string) {
-  return userId.length > 12 ? `${userId.slice(0, 8)}…` : userId;
+function stableMemberToken(memberId: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < memberId.length; index += 1) {
+    hash ^= memberId.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
 }
