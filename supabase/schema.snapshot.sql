@@ -2524,8 +2524,9 @@ $$;
 comment on function public.enrich_wines_batch(uuid, jsonb) is
   'BND-031 BND-039 BND-261: atomic batch enrichment with provenance. Returns rows updated.';
 
--- === 0038.sql ===
+-- === 0038_pour_events_open_bottle_id.sql ===
 -- 0038_pour_events_open_bottle_id.sql -- BND-117, BND-119
+-- The descriptive suffix is required for Supabase to apply this migration.
 -- Adds open_bottle_id to pour_events for direct bottle-to-events linkage.
 -- This enables undo-last-pour by finding the most recent pour_event
 -- for a specific open bottle and reversing it.
@@ -3380,15 +3381,6 @@ $$;
 
 grant execute on function public.reconcile_open_bottle(uuid, int, text) to authenticated;
 
--- === 0046_wines_tasting_notes_hero_image.sql ===
--- 0046_wines_tasting_notes_hero_image.sql
--- BND-055 + BND-056 + BND-057: add tasting_notes and hero_image_url
--- to the wines table.
-
-alter table public.wines
-  add column if not exists tasting_notes text,
-  add column if not exists hero_image_url text;
-
 -- === 0047_wines_decant_minutes.sql ===
 -- 0047_wines_decant_minutes.sql
 -- BND-070: Add decant_minutes column to wines table and update
@@ -3571,14 +3563,6 @@ $func$;
 COMMENT ON FUNCTION public.enrich_wines_batch(uuid, jsonb) IS
   'BND-031/BND-039/BND-070/BND-277/BND-278: atomic batch enrichment with manual-override gating.';
 
--- === 0049_inventory_items_format_currency.sql ===
--- 0049_inventory_items_format_currency.sql
--- Add format and currency columns to inventory_items for invoice scan data fidelity.
-
-alter table public.inventory_items
-  add column if not exists format   text,
-  add column if not exists currency text;
-
 -- === 0049_wines_colour.sql ===
 -- 0049_wines_colour.sql
 -- BND-277: Add colour column to wines and update enrich_wines_batch
@@ -3587,38 +3571,9 @@ alter table public.inventory_items
 -- 1. Add colour column
 ALTER TABLE public.wines ADD COLUMN colour text;
 
--- 2. Add manual_overrides column
-
 COMMENT ON COLUMN public.wines.colour IS 'BND-277 -- wine colour populated via LWIN catalog fallback.';
 
--- 3. Add manual_overrides column
-ALTER TABLE public.wines
-  ADD COLUMN manual_overrides text[] DEFAULT '{}';
-
-COMMENT ON COLUMN public.wines.manual_overrides IS
-  'BND-277/BND-278 -- manually overridden enrichable field categories (e.g., drink_window, region, varietal, country). Enrichment skips these fields.';
-
--- 4. Create add_manual_overrides RPC
-CREATE OR REPLACE FUNCTION public.add_manual_overrides(
-  p_wine_id uuid,
-  p_fields  text[]
-) RETURNS void
-LANGUAGE plpgsql
-SECURITY INVOKER
-AS $func$
-BEGIN
-  UPDATE public.wines
-  SET manual_overrides = array(
-    SELECT DISTINCT unnest(array_cat(manual_overrides, p_fields))
-  )
-  WHERE id = p_wine_id;
-END;
-$func$;
-
-COMMENT ON FUNCTION public.add_manual_overrides(uuid, text[]) IS
-  'BND-277/BND-278: merge field category overrides. Idempotent.';
-
-
+-- 2. Extend the 0048 manual-override-aware enrichment RPC with colour.
 CREATE OR REPLACE FUNCTION public.enrich_wines_batch(
   p_restaurant_id uuid,
   p_enrichments   jsonb
@@ -5106,3 +5061,49 @@ create policy "members can update their scans"
   on public.invoice_scans for update to authenticated
   using (public.is_member(restaurant_id))
   with check (public.is_member(restaurant_id));
+
+-- === 0072_wines_tasting_notes_hero_image.sql ===
+-- 0072_wines_tasting_notes_hero_image.sql
+-- BND-055 + BND-056 + BND-057: add tasting_notes and hero_image_url
+-- to the wines table.
+
+alter table public.wines
+  add column if not exists tasting_notes text,
+  add column if not exists hero_image_url text;
+
+-- === 0073_inventory_items_format_currency.sql ===
+-- 0073_inventory_items_format_currency.sql
+-- Add format and currency columns to inventory_items for invoice scan data fidelity.
+
+alter table public.inventory_items
+  add column if not exists format   text,
+  add column if not exists currency text;
+
+-- === 0074_public_api_grants.sql ===
+-- Restore the table privileges required by Supabase's Data API roles.
+--
+-- The local bootstrap intentionally removes DML from postgres-owned default
+-- privileges. Terroir migrations run as postgres, so RLS policies alone are
+-- insufficient: the API roles also need table privileges before RLS can
+-- evaluate a request.
+
+grant select, insert, update, delete
+  on all tables in schema public
+  to authenticated, service_role;
+
+-- Anonymous clients only need the published-menu read graph. The existing
+-- SELECT policies continue to hide drafts and tenant-private rows.
+grant select
+  on table
+    public.restaurants,
+    public.wine_lists,
+    public.wine_list_sections,
+    public.wine_list_items,
+    public.wines
+  to anon;
+
+-- service_role is the trusted server-side maintenance role. Preserve its DML
+-- access for future postgres-owned public tables without widening defaults for
+-- anon or authenticated.
+alter default privileges for role postgres in schema public
+  grant select, insert, update, delete on tables to service_role;

@@ -1,4 +1,5 @@
 -- 0038_pour_events_open_bottle_id.sql -- BND-117, BND-119
+-- The descriptive suffix is required for Supabase to apply this migration.
 -- Adds open_bottle_id to pour_events for direct bottle-to-events linkage.
 -- This enables undo-last-pour by finding the most recent pour_event
 -- for a specific open bottle and reversing it.
