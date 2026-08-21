@@ -21,7 +21,6 @@ origin and these path prefixes:
 
 ```text
 <origin>/auth/callback**
-<origin>/auth/complete**
 <origin>/auth/confirm**
 ```
 
