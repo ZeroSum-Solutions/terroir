@@ -2,6 +2,11 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import {
+  formatSignedVarianceOz,
+  getReconciliationVariance,
+  reconciliationTone,
+} from "@/lib/reconciliation/variance";
 import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
@@ -15,6 +20,18 @@ const FRACTIONS: Array<{ label: string; value: number }> = [
   { label: "Three Quarter", value: 0.75 },
   { label: "Full", value: 1 },
 ];
+
+const badgeToneClasses = {
+  positive: "bg-sage-wash text-sage-ink",
+  negative: "bg-blush-wash text-primary",
+  neutral: "bg-bridge-surface text-grey",
+} as const;
+
+const flaggedCardClasses = {
+  positive: "border-sage-ink/30 bg-sage-wash",
+  negative: "border-primary/40 bg-blush-wash",
+  neutral: "border-hairline bg-white",
+} as const;
 
 type PendingChange = { newRemainingMl: number; note?: string };
 
@@ -140,16 +157,16 @@ function ReconcileRow({
 
   const expectedMl = item.open_remaining_ml;
   const actualMl = pending?.newRemainingMl ?? expectedMl;
-  const varianceMl = actualMl - expectedMl;
-  const varianceOz = varianceMl / ML_PER_OZ;
-  const hasVariance = pending !== null && pending.newRemainingMl !== item.open_remaining_ml;
-  const isVarianceFlagged = hasVariance && Math.abs(varianceOz) > varianceThresholdOz;
+  const variance = getReconciliationVariance(actualMl, expectedMl);
+  const varianceOz = variance.deltaMl / ML_PER_OZ;
+  const tone = reconciliationTone(variance.relation);
+  const isVarianceFlagged = pending !== null && Math.abs(varianceOz) > varianceThresholdOz;
 
   return (
     <li
       className={`rounded-card border p-md ${
         isVarianceFlagged
-          ? "border-primary/40 bg-blush-wash"
+          ? flaggedCardClasses[tone]
           : "border-hairline bg-white"
       }`}
     >
@@ -226,17 +243,11 @@ function ReconcileRow({
             = {currentOz.toFixed(1)} oz
           </span>
         </div>
-        {hasVariance && (
+        {pending !== null && (
           <div
-            className={`mt-xs inline-flex items-center gap-xs rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide ${
-              Math.abs(varianceOz) > varianceThresholdOz
-                ? "bg-primary text-white"
-                : "bg-bridge-surface text-grey"
-            }`}
+            className={`mt-xs inline-flex items-center gap-xs rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide ${badgeToneClasses[tone]}`}
           >
-            {varianceOz > 0 ? "↑" : varianceOz < 0 ? "↓" : "="}{" "}
-            {Math.abs(varianceOz).toFixed(1)} oz{" "}
-            {varianceOz > 0 ? "less than tracked" : varianceOz < 0 ? "more than tracked" : "no change"}
+            {formatSignedVarianceOz(variance.deltaMl)} · {variance.label}
           </div>
         )}
       </div>
