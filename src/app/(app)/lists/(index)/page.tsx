@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
-import { WineListLanding } from "./wine-list-landing";
+import { WineListLanding } from "../wine-list-landing";
 
 export const metadata: Metadata = { title: "Wine lists" };
 
@@ -15,13 +15,15 @@ export default async function WineListPage({
   const auth = (await getAuthContext())!; // AppLayout redirects when null
   const { supabase, restaurantId } = auth;
 
-  const { data: lists } = await supabase
+  const { data: lists, error: listsError } = await supabase
     .from("wine_lists")
     .select(
       "*, wine_list_sections(wine_list_items(id))",
     )
     .eq("restaurant_id", restaurantId)
     .order("updated_at", { ascending: false });
+
+  if (listsError) throw listsError;
 
   // Compute wine counts from the nested join, split by archived state
   const allLists = (lists ?? []).map((list) => {

@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { ArrowDown, ArrowUp, DollarSign, ScanLine, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { OverpaidFlagButton } from "@/components/overpaid-flag-button";
+import { RouteDataEmpty } from "@/components/route-data-state";
 import { SortControls } from "./sort-controls";
 import {
   ExportCsvButton,
@@ -93,15 +94,17 @@ export default async function PriceComparisonPage({
   const { supabase, restaurantId: rid } = auth;
 
   // Fetch inventory items with wine retail data + invoice scan details
-  const { data: items } = await supabase
+  const { data: items, error: itemsError } = await supabase
     .from("inventory_items")
     .select(
       "unit_cost, quantity, wine_id, wines(id, name, producer, vintage, varietal, retail_median, retail_min, retail_max, enrichment_metadata, overpaid_flag), invoice_scan_id, invoice_scans(distributor_name, invoice_date)",
     )
     .eq("restaurant_id", rid);
 
+  if (itemsError) throw itemsError;
+
   // BND-138: also fetch wines without inventory items that still have retail data
-  const { data: winesWithRetail } = await supabase
+  const { data: winesWithRetail, error: retailError } = await supabase
     .from("wines")
     .select("id, retail_median, retail_min, retail_max, enrichment_metadata")
     .eq("restaurant_id", rid)
@@ -273,26 +276,20 @@ export default async function PriceComparisonPage({
             Compare prices across suppliers
           </p>
         </header>
-        <div className="flex flex-col items-center justify-center rounded-card border border-dashed border-beige-deep bg-bridge-surface px-lg py-3xl text-center">
-          <DollarSign
-            className="mb-md h-10 w-10 text-ink-subtle"
-            strokeWidth={1.5}
-          />
-          <p className="text-[15px] font-medium text-ink">
-            Scan invoices to compare prices
-          </p>
-          <p className="mt-xs text-[13px] text-ink-muted">
-            Once you scan invoices from multiple distributors, price comparisons
-            will appear here.
-          </p>
-          <Link
-            href="/scan"
-            className="mt-lg flex h-[38px] items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
-          >
-            <ScanLine className="h-4 w-4" strokeWidth={2} />
-            Go to scanner
-          </Link>
-        </div>
+        <RouteDataEmpty
+          icon={<DollarSign className="h-6 w-6" strokeWidth={1.5} />}
+          title="Scan invoices to compare prices"
+          description="Once you scan invoices from multiple distributors, price comparisons will appear here."
+          action={
+            <Link
+              href="/scan"
+              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
+            >
+              <ScanLine className="h-4 w-4" strokeWidth={2} />
+              Go to scanner
+            </Link>
+          }
+        />
       </section>
     );
   }
@@ -312,6 +309,17 @@ export default async function PriceComparisonPage({
           <ExportCsvButton rows={csvRows} />
         </div>
       </header>
+
+      {retailError && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-lg rounded-card border border-hairline bg-bridge-surface px-md py-sm text-[13px] text-ink-muted"
+        >
+          Market benchmarks are temporarily unavailable. Distributor pricing
+          remains available.
+        </div>
+      )}
 
       {/* Summary card */}
       {comparable.length > 0 && (

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
-import { MemberAnalyticsSection } from "./member-analytics-section";
-import { TeamActions } from "./team-actions";
+import { MemberAnalyticsSection } from "../member-analytics-section";
+import { TeamActions } from "../team-actions";
 
 export const metadata: Metadata = { title: "Team" };
 
@@ -12,7 +12,7 @@ export default async function TeamPage() {
   // staff-visible (pre-existing behavior); the API route also 403s staff.
   const canViewAnalytics = userRole === "owner" || userRole === "manager";
 
-  const [{ data: members }, { data: invitations }] = await Promise.all([
+  const [membersResult, invitationsResult] = await Promise.all([
     supabase
       .from("memberships")
       .select("id, user_id, role, created_at")
@@ -25,6 +25,11 @@ export default async function TeamPage() {
       .is("accepted_at", null)
       .order("created_at", { ascending: false }),
   ]);
+
+  const { data: members, error: membersError } = membersResult;
+  const { data: invitations, error: invitationsError } = invitationsResult;
+  if (membersError) throw membersError;
+  if (invitationsError) throw invitationsError;
 
   const pendingInvitations = (invitations ?? []).map((inv) => ({
     id: inv.id,
@@ -52,6 +57,7 @@ export default async function TeamPage() {
         invitations={pendingInvitations}
         currentUserId={auth.user.id}
         restaurantName={restaurantName}
+        canInvite={userRole === "owner"}
       />
       {canViewAnalytics && <MemberAnalyticsSection />}
     </section>

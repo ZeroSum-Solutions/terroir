@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, Wine } from "lucide-react";
 import { getAuthContext } from "@/lib/auth-context";
+import { RouteDataEmpty } from "@/components/route-data-state";
 import { ML_PER_OZ } from "@/lib/units";
 import { cn } from "@/lib/utils";
 import { CloseBottleButton } from "./close-button";
@@ -30,7 +31,7 @@ export default async function OpenBottlesPage() {
   const auth = (await getAuthContext())!;
   const { supabase, restaurantId } = auth;
 
-  const { data: bottles, error } = await supabase
+  const { data: bottles, error: bottlesError } = await supabase
     .from("open_bottles")
     .select(
       "id, wine_id, opened_at, opened_by, remaining_ml, size_ml, wines!inner(id, name, producer, vintage)",
@@ -39,9 +40,7 @@ export default async function OpenBottlesPage() {
     .is("closed_at", null)
     .order("opened_at", { ascending: false });
 
-  if (error) {
-    console.error("Failed to load open bottles:", error);
-  }
+  if (bottlesError) throw bottlesError;
 
   const openBottles = (bottles ?? []) as unknown as OBRow[];
   const renderedAtMs = new Date().getTime();
@@ -65,14 +64,19 @@ export default async function OpenBottlesPage() {
       </header>
 
       {openBottles.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-xxl text-center">
-          <Wine className="h-12 w-12 text-grey mb-md" strokeWidth={1.5} />
-          <p className="font-serif text-[18px] font-medium text-ink mb-xs">No open bottles</p>
-          <p className="text-[14px] text-grey max-w-[320px]">
-            Open a bottle from the cellar to start tracking pours. Open bottles
-            will appear here with their remaining volume.
-          </p>
-        </div>
+        <RouteDataEmpty
+          icon={<Wine className="h-6 w-6" strokeWidth={1.5} />}
+          title="No open bottles"
+          description="Open a bottle from the cellar to start tracking pours. Open bottles will appear here with their remaining volume."
+          action={
+            <Link
+              href="/cellar"
+              className="inline-flex h-11 items-center rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
+            >
+              Return to cellar
+            </Link>
+          }
+        />
       )}
 
       {openBottles.length > 0 && (

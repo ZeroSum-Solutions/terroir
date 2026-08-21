@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, Copy, Link2, Loader2, RefreshCw, Trash2, X } from "lucide-react";
+import { Check, Copy, Link2, Loader2, RefreshCw, Trash2, Users, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { RouteDataEmpty } from "@/components/route-data-state";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { TimeAgo } from "@/components/time-ago";
 
@@ -27,11 +28,13 @@ export function TeamActions({
   invitations,
   currentUserId,
   restaurantName: _restaurantName,
+  canInvite,
 }: {
   members: Member[];
   invitations: Invitation[];
   currentUserId: string;
   restaurantName: string;
+  canInvite: boolean;
 }) {
   const router = useRouter();
   const [showInvite, setShowInvite] = useState(false);
@@ -57,6 +60,13 @@ export function TeamActions({
   const isOwner = members.some(
     (m) => m.user_id === currentUserId && m.role === "owner",
   );
+
+  const openInvite = () => {
+    setShowInvite(true);
+    setInviteUrl("");
+    setInviteEmail("");
+    setInviteError(null);
+  };
 
   const createInvite = async () => {
     const email = inviteEmail.trim();
@@ -204,16 +214,11 @@ export function TeamActions({
       <div className="mb-xl">
         <div className="mb-md flex items-center justify-between">
           <h2 className="text-[15px] font-semibold text-ink">Members</h2>
-          {isOwner && (
+          {canInvite && members.length > 0 && (
             <button
               type="button"
-              onClick={() => {
-                setShowInvite(true);
-                setInviteUrl("");
-                setInviteEmail("");
-                setInviteError(null);
-              }}
-              className="flex h-[34px] items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
+              onClick={openInvite}
+              className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
             >
               <Link2 className="h-3.5 w-3.5" strokeWidth={2} />
               Create invite link
@@ -238,6 +243,25 @@ export function TeamActions({
           </div>
         )}
 
+        {members.length === 0 ? (
+          <RouteDataEmpty
+            icon={<Users className="h-6 w-6" strokeWidth={1.5} />}
+            title="No team members yet"
+            description="Invite a teammate to start building your roster."
+            action={
+              canInvite ? (
+                <button
+                  type="button"
+                  onClick={openInvite}
+                  className="inline-flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
+                >
+                  <Link2 className="h-3.5 w-3.5" strokeWidth={2} />
+                  Create invite link
+                </button>
+              ) : undefined
+            }
+          />
+        ) : (
         <div className="overflow-hidden rounded-card border border-hairline bg-canvas">
           <table className="w-full text-[13px]">
             <thead>
@@ -306,6 +330,7 @@ export function TeamActions({
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       {/* Pending invitations */}

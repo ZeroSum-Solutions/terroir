@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Search, Settings, LayoutGrid, List as ListIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -271,6 +272,13 @@ export function CellarShell({
         )}
 
         <div className="ml-auto flex shrink-0 items-center gap-xs">
+          <Link
+            href="/cellar/open"
+            className="inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill border border-ink/25 px-md text-[12.5px] font-medium text-ink hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+          >
+            Open bottles {alerts.openCount}
+          </Link>
+
           <div className="hidden md:block">
             <SearchInput
               value={qDraft}

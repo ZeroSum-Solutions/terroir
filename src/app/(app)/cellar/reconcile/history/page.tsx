@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, History, TrendingDown, TrendingUp, BarChart3 } from "lucide-react";
 import { getAuthContext } from "@/lib/auth-context";
+import { RouteDataEmpty } from "@/components/route-data-state";
 import {
   formatSignedVarianceOz,
   getReconciliationVariance,
@@ -129,13 +130,15 @@ export default async function ReconcileHistoryPage() {
   }
 
   // Fetch reconciliation events with wine details
-  const { data: events } = await supabase
+  const { data: events, error: eventsError } = await supabase
     .from("availability_events")
     .select("id, created_at, delta, note, user_id, wine_id, wines(producer, name, vintage)")
     .eq("restaurant_id", restaurantId)
     .eq("direction", "reconcile")
     .order("created_at", { ascending: false })
     .limit(500);
+
+  if (eventsError) throw eventsError;
 
   const history = buildHistoryFromPersistedEvents((events ?? []) as ReconEvent[]);
 
@@ -160,22 +163,19 @@ export default async function ReconcileHistoryPage() {
       </header>
 
       {history.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-border-strong bg-surface-muted px-lg py-3xl text-center">
-          <History className="mb-md h-10 w-10 text-ink-subtle" strokeWidth={1.5} />
-          <p className="text-[15px] font-medium text-ink">
-            No reconciliation history yet
-          </p>
-          <p className="mt-xs text-[13px] text-ink-muted">
-            History will appear here after you run your first end-of-shift
-            reconciliation.
-          </p>
-          <Link
-            href="/cellar/reconcile"
-            className="mt-lg flex h-[38px] items-center gap-sm rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
-          >
-            Go to reconcile
-          </Link>
-        </div>
+        <RouteDataEmpty
+          icon={<History className="h-6 w-6" strokeWidth={1.5} />}
+          title="No reconciliation history yet"
+          description="History will appear here after you run your first end-of-shift reconciliation."
+          action={
+            <Link
+              href="/cellar/reconcile"
+              className="inline-flex h-11 items-center gap-sm rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
+            >
+              Go to reconcile
+            </Link>
+          }
+        />
       ) : (
         <>
           {/* Variance chart */}

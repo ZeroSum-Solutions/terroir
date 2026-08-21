@@ -3,10 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getAuthContext: vi.fn(),
+  redirect: vi.fn(),
 }));
 
 vi.mock("@/lib/auth-context", () => ({
   getAuthContext: (...args: unknown[]) => mocks.getAuthContext(...args),
+}));
+vi.mock("next/navigation", () => ({
+  redirect: (...args: unknown[]) => mocks.redirect(...args),
 }));
 
 const persistedPositiveEvent = persistedEvent(
@@ -28,26 +32,87 @@ const persistedZeroEvent = persistedEvent(
   "Persisted Zero",
 );
 
+type QueryResult = { data: unknown[] | null; error: unknown };
+
+let queryResult: QueryResult;
+
 const query = {
   select: vi.fn(() => query),
   eq: vi.fn(() => query),
   order: vi.fn(() => query),
-  limit: vi.fn().mockResolvedValue({
-    data: [persistedPositiveEvent, persistedNegativeEvent, persistedZeroEvent],
-    error: null,
-  }),
+  limit: vi.fn(() => query),
+  then: (
+    resolve: (value: QueryResult) => unknown,
+    reject?: (reason: unknown) => unknown,
+  ) => Promise.resolve(queryResult).then(resolve, reject),
 };
 
 const { default: ReconcileHistoryPage } = await import("./page");
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getAuthContext.mockResolvedValue({
+  queryResult = {
+    data: [persistedPositiveEvent, persistedNegativeEvent, persistedZeroEvent],
+    error: null,
+  };
+  mocks.redirect.mockImplementation((path: string) => {
+    throw new Error(`redirect:${path}`);
+  });
+  mocks.getAuthContext.mockResolvedValue(authFor("owner"));
+});
+
+function authFor(userRole: string) {
+  return {
     user: { id: "user-1" },
-    userRole: "owner",
+    userRole,
     restaurantId: "restaurant-1",
     restaurantName: "House",
     supabase: { from: vi.fn(() => query) },
+  };
+}
+
+describe("ReconcileHistoryPage data outcomes", () => {
+  it("throws an availability_events query failure instead of presenting empty history", async () => {
+    const error = new Error("forced query failure");
+    queryResult = { data: null, error };
+
+    await expect(ReconcileHistoryPage()).rejects.toBe(error);
+  });
+
+  it("renders genuine zero-row history with a reachable reconcile action", async () => {
+    queryResult = { data: [], error: null };
+
+    const markup = renderToStaticMarkup(await ReconcileHistoryPage());
+    const container = document.createElement("div");
+    container.innerHTML = markup;
+    const emptyPanel = container.querySelector(
+      '[aria-label="No reconciliation history yet"]',
+    );
+    const reconcileLink = emptyPanel?.querySelector(
+      'a[href="/cellar/reconcile"]',
+    );
+
+    expect(emptyPanel).not.toBeNull();
+    expect(emptyPanel?.textContent).toContain(
+      "History will appear here after you run your first end-of-shift reconciliation.",
+    );
+    expect(reconcileLink?.className).toContain("h-11");
+  });
+
+  it("keeps unauthenticated users on the login redirect path", async () => {
+    mocks.getAuthContext.mockResolvedValue(null);
+
+    await expect(ReconcileHistoryPage()).rejects.toThrow("redirect:/login");
+    expect(mocks.redirect).toHaveBeenCalledWith("/login");
+  });
+
+  it("keeps staff users on the cellar redirect path", async () => {
+    const auth = authFor("staff");
+    mocks.getAuthContext.mockResolvedValue(auth);
+
+    await expect(ReconcileHistoryPage()).rejects.toThrow("redirect:/cellar");
+    expect(mocks.redirect).toHaveBeenCalledWith("/cellar");
+    expect(auth.supabase.from).not.toHaveBeenCalled();
   });
 });
 

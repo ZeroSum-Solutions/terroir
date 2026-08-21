@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
+import { RouteDataEmpty } from "@/components/route-data-state";
 import { TimeAgo } from "@/components/time-ago";
 import type { WineListWithCount } from "@/lib/wine-list/types";
 
@@ -367,7 +368,7 @@ export function WineListLanding({
           {archivedLists.length > 0 && (
             <a
               href={showArchived ? "/lists" : "/lists?show_archived=1"}
-              className="flex h-[38px] items-center gap-xs rounded-pill border border-ink/25 bg-transparent px-md text-[13px] font-medium text-ink hover:bg-bridge-surface self-start md:self-auto"
+              className="flex h-11 items-center gap-xs rounded-pill border border-ink/25 bg-transparent px-md text-[13px] font-medium text-ink hover:bg-bridge-surface self-start md:self-auto"
             >
               <Archive className="h-4 w-4" strokeWidth={2} />
               {showArchived ? "Hide archived" : `Show archived (${archivedLists.length})`}
@@ -376,7 +377,7 @@ export function WineListLanding({
           <button
             type="button"
             onClick={() => setShowModal(true)}
-            className="flex h-[38px] items-center gap-sm self-start rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover md:self-auto"
+            className="flex h-11 items-center gap-sm self-start rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover md:self-auto"
           >
             <Plus className="h-4 w-4" strokeWidth={2} />
             New wine list
@@ -385,26 +386,21 @@ export function WineListLanding({
       </header>
 
       {noListsAtAll ? (
-        <div className="flex flex-col items-center justify-center rounded-card border border-dashed border-beige-deep bg-bridge-surface px-lg py-3xl text-center">
-          <ListOrdered
-            className="mb-md h-10 w-10 text-ink-subtle"
-            strokeWidth={1.5}
-          />
-          <p className="text-[15px] font-medium text-ink">
-            Create your first wine list
-          </p>
-          <p className="mt-xs text-[13px] text-ink-muted">
-            Your guests will thank you.
-          </p>
-          <button
-            type="button"
-            onClick={() => setShowModal(true)}
-            className="mt-lg flex h-[38px] items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
-          >
-            <Plus className="h-4 w-4" strokeWidth={2} />
-            New wine list
-          </button>
-        </div>
+        <RouteDataEmpty
+          icon={<ListOrdered className="h-6 w-6" strokeWidth={1.5} />}
+          title="Create your first wine list"
+          description="Your guests will thank you."
+          action={
+            <button
+              type="button"
+              onClick={() => setShowModal(true)}
+              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2} />
+              New wine list
+            </button>
+          }
+        />
       ) : (
         <>
           {/* Active lists */}
@@ -466,7 +462,7 @@ export function WineListLanding({
               </p>
               <Link
                 href="/lists?show_archived=1"
-                className="mt-lg inline-flex h-[38px] items-center gap-sm rounded-pill border border-ink/25 bg-transparent px-md text-[13px] font-medium text-ink hover:bg-bridge-surface"
+                className="mt-lg inline-flex h-11 items-center gap-sm rounded-pill border border-ink/25 bg-transparent px-md text-[13px] font-medium text-ink hover:bg-bridge-surface"
               >
                 <Archive className="h-4 w-4" strokeWidth={2} />
                 Show archived lists
