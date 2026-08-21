@@ -8,6 +8,7 @@ describe("YieldReportSection", () => {
   it("EV-10.3: links every per-bottle actual and theoretical yield figure to its wine drawer", () => {
     document.body.innerHTML = renderToStaticMarkup(
       <YieldReportSection
+        rangeLabel="Aug 1 – Aug 20"
         groups={[
           {
             preservationMethod: "coravin",
@@ -45,6 +46,32 @@ describe("YieldReportSection", () => {
     expect(document.body.textContent).toContain("Coravin");
     expect(document.body.textContent).toContain("562 ml actual");
     expect(document.body.textContent).toContain("550 ml theoretical");
+    expect(
+      document.querySelector('[data-insight-scope="yield"]')?.textContent,
+    ).toBe("Aug 1 – Aug 20");
+  });
+
+  it("allows both heading rows to wrap at the 390px review width", () => {
+    document.body.innerHTML = renderToStaticMarkup(
+      <YieldReportSection
+        rangeLabel="2026-08-01 – 2026-08-20"
+        groups={[
+          {
+            preservationMethod: "coravin",
+            bottlesClosed: 1,
+            averageVarianceMl: -12,
+            actualPouredMl: 562,
+            theoreticalPouredMl: 550,
+            bottles: [],
+          },
+        ]}
+      />,
+    );
+
+    const headingRow = document.querySelector("#yield-report-heading")!
+      .parentElement!;
+    expect(headingRow.className).toContain("flex-wrap");
+    expect(headingRow.parentElement!.className).toContain("flex-wrap");
   });
 
   it("applies the insights date range to closed_at", async () => {

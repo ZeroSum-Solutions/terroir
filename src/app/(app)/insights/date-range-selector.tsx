@@ -3,6 +3,13 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { Calendar } from "lucide-react";
+import {
+  formatLocalDate,
+  isValidCustomRange,
+  normalizeInsightsRange,
+} from "./date-range";
+
+export { formatLocalDate, isValidCustomRange } from "./date-range";
 
 type RangeOption = "7d" | "30d" | "90d" | "ytd" | "all" | "custom";
 
@@ -12,32 +19,72 @@ const RANGE_OPTIONS: { value: RangeOption; label: string }[] = [
   { value: "90d", label: "90d" },
   { value: "ytd", label: "YTD" },
   { value: "all", label: "All" },
+  { value: "custom", label: "Custom" },
 ];
 
+function isRangeOption(value: string | null): value is RangeOption {
+  return RANGE_OPTIONS.some((option) => option.value === value);
+}
+
 function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return formatLocalDate(new Date());
 }
 
 function ytdStart(): string {
-  const d = new Date();
-  d.setMonth(0, 1);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+  return formatLocalDate(new Date(new Date().getFullYear(), 0, 1));
 }
 
 export default function DateRangeSelector() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const currentRange = (searchParams.get("range") as RangeOption | null) ?? "all";
+  const rangeParam = searchParams.get("range");
   const currentFrom = searchParams.get("from") ?? "";
   const currentTo = searchParams.get("to") ?? "";
+  const localToday = todayStr();
+  const normalizedRange = normalizeInsightsRange(
+    rangeParam ?? undefined,
+    currentFrom || undefined,
+    currentTo || undefined,
+    localToday,
+  );
+  const currentRange = isRangeOption(normalizedRange.range)
+    ? normalizedRange.range
+    : "all";
+  const normalizedFrom = normalizedRange.from ?? "";
+  const normalizedTo = normalizedRange.to ?? "";
 
   const [showCustom, setShowCustom] = useState(currentRange === "custom");
   const [draftFrom, setDraftFrom] = useState(
-    currentFrom || ytdStart(),
+    currentRange === "custom" && normalizedFrom ? normalizedFrom : ytdStart(),
   );
-  const [draftTo, setDraftTo] = useState(currentTo || todayStr());
+  const [draftTo, setDraftTo] = useState(
+    currentRange === "custom" && normalizedTo ? normalizedTo : localToday,
+  );
+  const [previousSearchValues, setPreviousSearchValues] = useState({
+    range: rangeParam,
+    from: currentFrom,
+    to: currentTo,
+  });
+
+  if (
+    previousSearchValues.range !== rangeParam ||
+    previousSearchValues.from !== currentFrom ||
+    previousSearchValues.to !== currentTo
+  ) {
+    setPreviousSearchValues({
+      range: rangeParam,
+      from: currentFrom,
+      to: currentTo,
+    });
+    setShowCustom(currentRange === "custom");
+    setDraftFrom(
+      currentRange === "custom" && normalizedFrom ? normalizedFrom : ytdStart(),
+    );
+    setDraftTo(
+      currentRange === "custom" && normalizedTo ? normalizedTo : todayStr(),
+    );
+  }
 
   const applyRange = useCallback(
     (range: RangeOption, from?: string, to?: string) => {
@@ -54,33 +101,37 @@ export default function DateRangeSelector() {
     },
     [router, searchParams],
   );
+  const canApplyCustom = isValidCustomRange(
+    draftFrom,
+    draftTo,
+    localToday,
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-xs">
       <div
-        className="flex items-center gap-2xs"
+        className="flex flex-wrap items-center gap-2xs"
         role="radiogroup"
         aria-label="Date range"
       >
         {RANGE_OPTIONS.map(function (opt) {
-          const isActive =
-            (currentRange === opt.value && opt.value !== "custom") ||
-            (currentRange === "custom" && opt.value === "custom");
+          const isActive = currentRange === opt.value;
           return (
             <button
               key={opt.value}
+              type="button"
               role="radio"
-              aria-checked={isActive && !showCustom}
+              aria-checked={isActive}
               onClick={function () {
                 if (opt.value === "custom") {
-                  setShowCustom(!showCustom);
+                  setShowCustom(true);
                 } else {
                   setShowCustom(false);
                   applyRange(opt.value);
                 }
               }}
               className={
-                "rounded-pill border px-sm py-2xs text-[12px] font-medium transition-colors " +
+                "min-h-11 rounded-pill border px-sm py-2xs text-[12px] font-medium transition-colors " +
                 (isActive
                   ? "border-ink bg-ink text-beige"
                   : "border-ink/25 text-ink hover:bg-bridge-surface")
@@ -93,7 +144,7 @@ export default function DateRangeSelector() {
       </div>
 
       {showCustom && (
-        <div className="flex items-center gap-xs">
+        <div className="flex flex-wrap items-center gap-xs">
           <Calendar className="h-4 w-4 shrink-0 text-grey" strokeWidth={1.5} />
           <label className="sr-only" htmlFor="dr-from">
             From
@@ -103,8 +154,12 @@ export default function DateRangeSelector() {
             type="date"
             value={draftFrom}
             onChange={function (e) { setDraftFrom(e.target.value); }}
-            max={draftTo || todayStr()}
-            className="h-[28px] w-[130px] rounded-pill border border-ink/25 bg-white px-sm text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent-soft"
+            max={
+              isValidCustomRange(draftTo, draftTo, localToday)
+                ? draftTo
+                : localToday
+            }
+            className="min-h-11 w-[130px] rounded-pill border border-ink/25 bg-white px-sm text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent-soft"
           />
           <span className="text-[12px] text-grey">&ndash;</span>
           <label className="sr-only" htmlFor="dr-to">
@@ -116,13 +171,17 @@ export default function DateRangeSelector() {
             value={draftTo}
             onChange={function (e) { setDraftTo(e.target.value); }}
             min={draftFrom || ""}
-            max={todayStr()}
-            className="h-[28px] w-[130px] rounded-pill border border-ink/25 bg-white px-sm text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent-soft"
+            max={localToday}
+            className="min-h-11 w-[130px] rounded-pill border border-ink/25 bg-white px-sm text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent-soft"
           />
           <button
-            onClick={function () { applyRange("custom", draftFrom, draftTo); }}
-            disabled={!draftFrom || !draftTo}
-            className="h-[28px] rounded-pill bg-primary px-sm text-[12px] font-medium text-white hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+            onClick={function () {
+              if (canApplyCustom) {
+                applyRange("custom", draftFrom, draftTo);
+              }
+            }}
+            disabled={!canApplyCustom}
+            className="min-h-11 rounded-pill bg-primary px-sm text-[12px] font-medium text-white hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
           >
             Apply
           </button>

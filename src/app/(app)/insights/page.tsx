@@ -16,7 +16,13 @@ import { ReconcileQueueMetric } from "./reconcile-queue-metric";
 import { SnoozedAlertsCard, type SnoozedRow } from "./snoozed-alerts-card";
 import PourAnalyticsSection from "./pour-analytics-section";
 import DateRangeSelector from "./date-range-selector";
-import { dateRangeSince, dateRangeUntil } from "./date-range";
+import {
+  dateRangeLabel,
+  dateRangeSince,
+  dateRangeUntil,
+  normalizeInsightsRange,
+} from "./date-range";
+import { InsightScope } from "./insight-scope";
 import {
   OwnerMetricGrid,
   TodayStrip,
@@ -29,6 +35,10 @@ import { summarizeCellarHealth } from "@/lib/cellar-health/summary";
 import { CellarHealthPanel } from "./cellar-health-panel";
 import { fetchPricingRecommendations } from "@/lib/pricing-recommendations/fetch";
 import { PricingPlaysSection } from "./pricing-plays-section";
+import {
+  distributorSpendShare,
+  summarizeDistributorMetrics,
+} from "./distributor-metrics";
 
 type NullableDateRange = { range?: string; from?: string; to?: string };
 type SearchParams = Promise<NullableDateRange>;
@@ -296,9 +306,14 @@ export default async function DashboardPage({
   const { supabase, restaurantId: rid, restaurantName, user, userRole } = auth;
 
   // ── Date range from URL search params ──────────────────────────────
-  const range = sp.range ?? "all";
-  const rangeSince = dateRangeSince(range, sp.from);
-  const rangeUntil = dateRangeUntil(range, sp.to);
+  const { range, from, to } = normalizeInsightsRange(
+    sp.range,
+    sp.from,
+    sp.to,
+  );
+  const rangeSince = dateRangeSince(range, from);
+  const rangeUntil = dateRangeUntil(range, to);
+  const selectedRangeLabel = dateRangeLabel(range, from, to);
 
   const [
     drinkWindowAlerts,
@@ -340,7 +355,6 @@ export default async function DashboardPage({
     { data: scans },
     { data: inventoryItems },
     { data: cellarHealthRows, error: cellarHealthError },
-    { data: scanItems },
     { count: rawEightysixedCount },
     { count: rawDrinkNowCount },
     initPastDrinkWindow,
@@ -354,10 +368,6 @@ export default async function DashboardPage({
       supabase
         .from("cellar_health")
         .select("wine_id, segment")
-        .eq("restaurant_id", rid),
-      supabase
-        .from("inventory_items")
-        .select("quantity, unit_cost, invoice_scan_id, invoice_scans!inner(distributor_name)")
         .eq("restaurant_id", rid),
       // Server-side counts: a .select() read is capped at the PostgREST row
       // limit, which silently truncates on large cellars.
@@ -411,28 +421,13 @@ export default async function DashboardPage({
     varietalEntries.length - varietalBreakdown.length,
   );
 
-  // Distributor breakdown (filtered by date range via allScans)
-  const distMap = new Map<string, { scans: number; spend: number }>();
-  for (const scan of allScans) {
-    const existing = distMap.get(scan.distributor_name) ?? { scans: 0, spend: 0 };
-    existing.scans += 1;
-    distMap.set(scan.distributor_name, existing);
-  }
-
-  for (const item of scanItems ?? []) {
-    const distName = (item.invoice_scans as { distributor_name: string })?.distributor_name;
-    if (!distName) continue;
-    const existing = distMap.get(distName) ?? { scans: 0, spend: 0 };
-    existing.spend += item.quantity * item.unit_cost;
-    distMap.set(distName, existing);
-  }
-
-  const distTotalSpend =
-    [...distMap.values()].reduce(function (s, d) { return s + d.spend; }, 0) || 1;
-
-  const distributors = [...distMap.entries()]
-    .sort(function (a, b) { return b[1].spend - a[1].spend; })
-    .slice(0, 5);
+  // Distributor metrics are derived from the same range-filtered scans.
+  const distributorMetrics = summarizeDistributorMetrics(allScans);
+  const distTotalSpend = distributorMetrics.reduce(
+    function (sum, metric) { return sum + metric.spend; },
+    0,
+  );
+  const distributors = distributorMetrics.slice(0, 5);
 
   // Recent activity
   const recentScans = allScans.slice(0, 5);
@@ -543,12 +538,18 @@ export default async function DashboardPage({
         <div className="mt-md">
           <DateRangeSelector />
         </div>
+        <p className="mt-sm text-[12px] text-ink-muted">
+          Selected range applies to invoice scans, distributor metrics, and partial-bottle yield. Inventory value, bottle counts, availability, and varietal spend are current.
+        </p>
       </header>
 
       <TodayStrip exceptions={todayExceptions} />
       <ReconcileQueueMetric />
 
-      <YieldReportSection groups={yieldGroups} />
+      <YieldReportSection
+        groups={yieldGroups}
+        rangeLabel={selectedRangeLabel}
+      />
       <CellarHealthPanel summary={cellarHealthSummary} canRecompute={canEnrich} />
       {pricingRecommendations !== null && (
         <PricingPlaysSection
@@ -696,19 +697,29 @@ export default async function DashboardPage({
       <div className="grid gap-md md:grid-cols-2">
         {/* Hero metric */}
         <div className="rounded-lg border border-hairline bg-bridge-surface p-lg md:col-span-2 md:grid md:grid-cols-2 md:gap-lg md:p-xl">
-          <OwnerMetricGrid
-            metrics={{
-              inventoryValue,
-              totalBottles,
-              eightysixedCount,
-              drinkNowCount,
-            }}
-          />
+          <div>
+            <div className="mb-sm">
+              <InsightScope metric="inventory" kind="snapshot" />
+            </div>
+            <OwnerMetricGrid
+              metrics={{
+                inventoryValue,
+                totalBottles,
+                eightysixedCount,
+                drinkNowCount,
+              }}
+            />
+          </div>
 
           {/* Sparkline — items per scan */}
           <div className="mt-lg md:mt-0">
             <div className="mb-sm flex items-center justify-between text-caption font-medium uppercase text-grey">
               <span>Scan activity</span>
+              <InsightScope
+                metric="scan-activity"
+                kind="range"
+                label={selectedRangeLabel}
+              />
             </div>
             {allScans.length >= 2 ? (
               <Sparkline
@@ -728,9 +739,16 @@ export default async function DashboardPage({
         {/* BND-149 — Extraction accuracy KPI */}
         <div className="rounded-lg border border-hairline bg-bridge-surface p-lg">
           <div className="mb-md flex items-center justify-between">
-            <h3 className="text-[15px] font-medium text-ink">
-              Extraction accuracy
-            </h3>
+            <div>
+              <h3 className="text-[15px] font-medium text-ink">
+                Extraction accuracy
+              </h3>
+              <InsightScope
+                metric="extraction-accuracy"
+                kind="range"
+                label={selectedRangeLabel}
+              />
+            </div>
             <CheckCircle2
               className={`h-5 w-5 shrink-0 ${accuracyColor(extractionAccuracyPct)}`}
               strokeWidth={1.5}
@@ -773,9 +791,16 @@ export default async function DashboardPage({
         {/* BND-148 — Scan throughput */}
         <div className="rounded-lg border border-hairline bg-bridge-surface p-lg">
           <div className="mb-md flex items-center justify-between">
-            <h3 className="text-[15px] font-medium text-ink">
-              Scan throughput
-            </h3>
+            <div>
+              <h3 className="text-[15px] font-medium text-ink">
+                Scan throughput
+              </h3>
+              <InsightScope
+                metric="scan-throughput"
+                kind="range"
+                label={selectedRangeLabel}
+              />
+            </div>
             <History className="h-5 w-5 shrink-0 text-grey" strokeWidth={1.5} />
           </div>
           {throughputData.length === 0 ? (
@@ -803,9 +828,12 @@ export default async function DashboardPage({
         {/* Spend by varietal */}
         <div className="rounded-card border border-hairline bg-white p-lg">
           <div className="mb-md flex items-center justify-between">
-            <h3 className="text-[15px] font-medium text-ink">
-              Spend by varietal
-            </h3>
+            <div>
+              <h3 className="text-[15px] font-medium text-ink">
+                Spend by varietal
+              </h3>
+              <InsightScope metric="varietal-spend" kind="snapshot" />
+            </div>
             <span className="tabular text-[12px] text-grey">
               {formatMoney(varietalTotalAll)} total
             </span>
@@ -858,9 +886,16 @@ export default async function DashboardPage({
         {/* Top distributors */}
         <div className="rounded-card border border-hairline bg-white p-lg">
           <div className="mb-md flex items-center justify-between">
-            <h3 className="text-[15px] font-medium text-ink">
-              Top distributors
-            </h3>
+            <div>
+              <h3 className="text-[15px] font-medium text-ink">
+                Top distributors
+              </h3>
+              <InsightScope
+                metric="top-distributors"
+                kind="range"
+                label={selectedRangeLabel}
+              />
+            </div>
           </div>
           {distributors.length === 0 ? (
             <p className="text-[13px] text-grey">No scans yet</p>
@@ -875,17 +910,15 @@ export default async function DashboardPage({
                 </tr>
               </thead>
               <tbody>
-                {distributors.map(function (_a, i) {
-                  const name = _a[0];
-                  const data = _a[1];
-                  const pct = data.spend / distTotalSpend;
+                {distributors.map(function (metric, i) {
+                  const pct = distributorSpendShare(metric.spend, distTotalSpend);
                   return (
                     <tr
-                      key={name}
+                      key={metric.name}
                       className="border-t border-hairline"
                     >
                       <td className="px-sm py-sm">
-                        <div className="font-medium text-ink">{name}</div>
+                        <div className="font-medium text-ink">{metric.name}</div>
                         <div className="mt-2xs h-1.5 overflow-hidden rounded-pill bg-beige">
                           <div
                             className="h-full rounded-pill bg-primary"
@@ -897,13 +930,13 @@ export default async function DashboardPage({
                         </div>
                       </td>
                       <td className="px-sm py-sm text-right tabular text-ink">
-                        {formatMoney(data.spend)}
+                        {formatMoney(metric.spend)}
                       </td>
                       <td className="px-sm py-sm text-right tabular text-grey">
                         {Math.round(pct * 100)}%
                       </td>
                       <td className="px-sm py-sm text-right tabular text-grey">
-                        {data.scans}
+                        {metric.scans}
                       </td>
                     </tr>
                   );
@@ -916,9 +949,16 @@ export default async function DashboardPage({
         {/* Recent activity */}
         <div className="rounded-card border border-hairline bg-white p-lg md:col-span-2">
           <div className="mb-md flex items-center justify-between">
-            <h3 className="text-[15px] font-medium text-ink">
-              Recent activity
-            </h3>
+            <div>
+              <h3 className="text-[15px] font-medium text-ink">
+                Recent activity
+              </h3>
+              <InsightScope
+                metric="recent-activity"
+                kind="range"
+                label={selectedRangeLabel}
+              />
+            </div>
           </div>
           {recentScans.length === 0 ? (
             <div className="flex flex-col items-center justify-center px-md py-xl text-center">
