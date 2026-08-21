@@ -15,7 +15,7 @@
 - TypeScript: passed
 - ESLint: passed
 - Diff checks: clean
-- Team mobile Playwright: skipped because local fixture credentials were unavailable
+- Team mobile Playwright at audit time: skipped because local fixture credentials were unavailable
 - Independent product review: approved after fixes
 - Independent security-focused review: approved with no remaining findings
 
@@ -33,4 +33,8 @@ The invite selector remains Manager and Staff only because the existing invite e
 
 Membership rows are tenant-scoped before any admin identity lookup, the resolver uses only per-ID lookups with neutral independent fallbacks, service-role credentials remain server-only, non-owner payloads omit invitation tokens, no UUID is rendered as identity, and existing role, removal, copy, revoke, API, schema, and authorization behavior is preserved.
 
-The completed branch will receive the formal range-based security report and secrets scan before merge.
+The completed branch received the formal range-based security report and secrets scan before merge.
+
+## Post-audit landing evidence
+
+The local-only Playwright fixture was subsequently bootstrapped with sanitized seed data and ran unskipped. `e2e/team-mobile.test.ts` passed at exactly 390px, including pending owner actions, the 44px Create invite target, toolbar containment, and no document overflow. The formal range-based security report also validated as `PASS`, and Gitleaks found no leaks in the reviewed commit range.

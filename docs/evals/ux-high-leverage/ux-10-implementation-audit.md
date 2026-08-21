@@ -25,6 +25,10 @@ The authenticated Server Component layout now keeps the current restaurant and h
 
 Grok noted that responsive behavior is represented by compact class, edge shrink, and shell-spacing assertions rather than a production-safe authenticated 390px browser session. It also suggested future test strengthening for named-restaurant onboarding absence, empty and whitespace names through the real layout, explicit absence of disabled FAB attributes, and a narrower literal return type for `roleLabel`. None changed the approved runtime contract.
 
-## Evidence boundary
+## Evidence boundary at audit time
 
 No production-safe authenticated viewport fixture was available. Actual 390px collision behavior, Escape and outside-click interaction, and tab focus were not claimed as manually verified; the existing FAB interaction behavior was intentionally left unchanged and the automated move-specific contracts passed.
+
+## Post-audit landing evidence
+
+A sanitized local-only authenticated fixture subsequently verified the real shell at exactly 390px. Restaurant and role remained visible without overlapping TERR​OIR or Settings, all four mobile destinations were visible, the FAB exposed exactly Scan invoice, Pour, and 86 a wine, Escape closed it, and the hidden action menu returned to `inert` with `aria-hidden="true"`. No production or shared data was read or changed.

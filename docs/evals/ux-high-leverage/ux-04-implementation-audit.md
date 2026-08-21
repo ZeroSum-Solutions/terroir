@@ -14,7 +14,7 @@
 - TypeScript: passed
 - ESLint: passed
 - Diff checks: clean
-- Playwright mobile check: skipped because localhost fixture credentials were unavailable
+- Playwright mobile check at audit time: skipped because localhost fixture credentials were unavailable
 - Independent whole-move review: approved after two fixes
 
 ## Review fixes completed before audit
@@ -24,7 +24,11 @@
 
 ## Non-blocking observations
 
-Grok noted that the static zero-section recovery assertion is not scoped to the mobile wrapper and that computed 390px overflow and height remain unmeasured because the local-only Playwright fixture skipped. The implementation still has one mobile wrapper, wrap-only layout, scoped mobile action tests, explicit target-size classes, and a browser test that refuses non-local database writes and cleans up its fixture when credentials are available.
+Grok noted that the static zero-section recovery assertion is not scoped to the mobile wrapper and that computed 390px overflow and height were unmeasured at audit time because the local-only Playwright fixture skipped. The implementation still has one mobile wrapper, wrap-only layout, scoped mobile action tests, explicit target-size classes, and a browser test that refuses non-local database writes and cleans up its fixture when credentials are available.
+
+## Post-audit landing evidence
+
+The local-only Playwright fixture was subsequently bootstrapped with sanitized seed data and ran unskipped. `e2e/mobile-list-editor.test.ts` passed at exactly 390px, including essential action reachability, selected controls at least 44px high, and no document overflow. No production or shared data was read or changed.
 
 ## Audit conclusion
 

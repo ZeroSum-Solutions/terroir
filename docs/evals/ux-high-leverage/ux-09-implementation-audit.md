@@ -25,6 +25,10 @@ The public route retains its single published-list query, freshness is derived o
 
 Grok noted that the automated switcher guard excludes a `<select>` but would not detect every possible future switcher control, and that responsive behavior is covered by structural class assertions rather than a live 390px browser session. Grok also noted that the polite status region mounts only after Share resolves; this matches the approved plan but may be less reliable in some assistive-technology combinations.
 
-## Evidence boundary
+## Evidence boundary at audit time
 
 No live browser fixture was available without using shared or production data, so 390px overflow, print preview, keyboard activation, and post-load logo stability were not claimed as manually verified. The automated contract covers wrapping, intrinsic dimensions, focus tokens, print hiding, activation handlers, and status text.
+
+## Post-audit landing evidence
+
+A sanitized local-only fixture subsequently verified the real public route at exactly 390px. The page had no horizontal overflow; Share rendered at 50.8px high with a visible focus treatment; Enter and Space each activated the native Share path; print media hid Share; and explicit guest price labels remained visible. No production or shared data was read or changed.
