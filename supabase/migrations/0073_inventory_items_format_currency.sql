@@ -1,4 +1,4 @@
--- 0049_inventory_items_format_currency.sql
+-- 0073_inventory_items_format_currency.sql
 -- Add format and currency columns to inventory_items for invoice scan data fidelity.
 
 alter table public.inventory_items

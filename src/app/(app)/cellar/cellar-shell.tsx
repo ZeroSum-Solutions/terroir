@@ -199,7 +199,7 @@ export function CellarShell({
   ];
 
   return (
-    <section>
+    <section className="min-w-0 max-w-full overflow-x-hidden">
       {/* Dawn Hero */}
       <div className="-mx-md -mt-lg dawn-gradient px-md pb-lg pt-lg md:-mx-lg md:-mt-xl md:px-lg md:pb-xl md:pt-xl">
         <p className="text-caption font-medium uppercase text-grey">
@@ -235,7 +235,7 @@ export function CellarShell({
       <div className="-mx-md mb-md flex flex-wrap items-center gap-sm bg-beige px-md py-sm md:-mx-lg md:px-lg">
         {view === "list" && (
           <div
-            className="flex min-w-0 flex-1 gap-2xs overflow-x-auto pb-2xs md:flex-wrap md:pb-0"
+            className="flex min-w-0 max-w-full flex-1 flex-wrap gap-2xs pb-2xs md:pb-0"
             role="tablist"
             aria-label="Filter wines"
           >
@@ -247,7 +247,7 @@ export function CellarShell({
                 aria-selected={urlState.filter === c.id}
                 onClick={() => replaceUrlState({ filter: c.id })}
                 className={cn(
-                  "inline-flex h-[32px] shrink-0 items-center gap-xs rounded-pill border px-md text-[12.5px] font-medium transition-colors",
+                  "inline-flex min-h-11 shrink-0 items-center gap-xs rounded-pill border px-md text-[12.5px] font-medium transition-colors",
                   urlState.filter === c.id
                     ? "border-ink bg-ink text-beige"
                     : "border-ink/25 bg-transparent text-ink hover:bg-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
@@ -271,7 +271,7 @@ export function CellarShell({
           </div>
         )}
 
-        <div className="ml-auto flex shrink-0 items-center gap-xs">
+        <div className="flex w-full flex-wrap items-center gap-xs md:ml-auto md:w-auto md:flex-nowrap">
           <Link
             href="/cellar/open"
             className="inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill border border-ink/25 px-md text-[12.5px] font-medium text-ink hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
@@ -291,7 +291,7 @@ export function CellarShell({
             type="button"
             onClick={() => setSearchOpen(true)}
             aria-label="Search wines"
-            className="flex h-9 w-9 items-center justify-center rounded-pill text-ink-soft hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 md:hidden"
+            className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-soft hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 md:hidden"
           >
             <Search className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
@@ -318,7 +318,7 @@ export function CellarShell({
               type="button"
               onClick={() => setSettingsOpen(true)}
               aria-label="Cellar settings"
-              className="flex h-9 w-9 items-center justify-center rounded-pill text-ink-soft hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+              className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-soft hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
             >
               <Settings className="h-5 w-5" strokeWidth={2} aria-hidden />
             </button>
@@ -328,7 +328,7 @@ export function CellarShell({
             <button
               type="button"
               onClick={() => setReconcileOpen(true)}
-              className="inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-pill bg-primary px-md text-[12.5px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill bg-primary px-md text-[12.5px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
             >
               Reconcile {reconcileItems.length} open bottle
               {reconcileItems.length === 1 ? "" : "s"} →
@@ -349,7 +349,7 @@ export function CellarShell({
           <button
             type="button"
             onClick={() => replaceUrlState({ filter: "low" })}
-            className="inline-flex h-[26px] items-center rounded-pill border border-amber/30 px-sm text-[11.5px] font-medium text-amber hover:bg-white/50"
+            className="inline-flex min-h-11 items-center rounded-pill border border-amber/30 px-sm text-[11.5px] font-medium text-amber hover:bg-white/50"
           >
             Show
           </button>
@@ -413,7 +413,7 @@ export function CellarShell({
             <button
               type="button"
               onClick={() => setSearchOpen(false)}
-              className="h-[38px] rounded-pill px-sm text-[13px] font-medium text-ink-soft hover:bg-white/50"
+              className="min-h-11 rounded-pill px-sm text-[13px] font-medium text-ink-soft hover:bg-white/50"
             >
               Done
             </button>
@@ -524,7 +524,7 @@ function SearchInput({
         }}
         placeholder="Search name, producer, region…"
         autoFocus={autoFocus}
-        className="h-[38px] w-full rounded-pill border border-ink/20 bg-white/70 pl-[32px] pr-[36px] text-[13px] text-ink outline-none placeholder:text-grey focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15"
+        className="h-11 w-full rounded-pill border border-ink/20 bg-white/70 pl-[32px] pr-[36px] text-[13px] text-ink outline-none placeholder:text-grey focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15"
       />
       {value ? (
         <button
@@ -534,7 +534,7 @@ function SearchInput({
             onChange("");
             inputRef.current?.focus();
           }}
-          className="absolute right-2xs top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-pill text-grey hover:bg-white/60 hover:text-ink-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-primary/20"
+          className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-pill text-grey hover:bg-white/60 hover:text-ink-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-primary/20"
         >
           <X className="h-4 w-4" strokeWidth={2} aria-hidden />
         </button>
@@ -570,7 +570,7 @@ function ViewToggleButton({
       aria-pressed={active}
       aria-label={`${label} view`}
       className={cn(
-        "flex h-9 w-9 items-center justify-center text-ink-soft transition-colors",
+        "flex h-11 w-11 items-center justify-center text-ink-soft transition-colors",
         active && "bg-ink text-beige",
         !active && "hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
       )}

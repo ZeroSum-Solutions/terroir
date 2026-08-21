@@ -5,38 +5,9 @@
 -- 1. Add colour column
 ALTER TABLE public.wines ADD COLUMN colour text;
 
--- 2. Add manual_overrides column
-
 COMMENT ON COLUMN public.wines.colour IS 'BND-277 -- wine colour populated via LWIN catalog fallback.';
 
--- 3. Add manual_overrides column
-ALTER TABLE public.wines
-  ADD COLUMN manual_overrides text[] DEFAULT '{}';
-
-COMMENT ON COLUMN public.wines.manual_overrides IS
-  'BND-277/BND-278 -- manually overridden enrichable field categories (e.g., drink_window, region, varietal, country). Enrichment skips these fields.';
-
--- 4. Create add_manual_overrides RPC
-CREATE OR REPLACE FUNCTION public.add_manual_overrides(
-  p_wine_id uuid,
-  p_fields  text[]
-) RETURNS void
-LANGUAGE plpgsql
-SECURITY INVOKER
-AS $func$
-BEGIN
-  UPDATE public.wines
-  SET manual_overrides = array(
-    SELECT DISTINCT unnest(array_cat(manual_overrides, p_fields))
-  )
-  WHERE id = p_wine_id;
-END;
-$func$;
-
-COMMENT ON FUNCTION public.add_manual_overrides(uuid, text[]) IS
-  'BND-277/BND-278: merge field category overrides. Idempotent.';
-
-
+-- 2. Extend the 0048 manual-override-aware enrichment RPC with colour.
 CREATE OR REPLACE FUNCTION public.enrich_wines_batch(
   p_restaurant_id uuid,
   p_enrichments   jsonb

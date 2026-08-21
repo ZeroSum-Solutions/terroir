@@ -51,7 +51,7 @@ export function DesktopNavLinks({ role }: { role: Role }) {
             href={href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "py-sm text-[13px] font-normal underline-offset-4 transition-colors",
+              "inline-flex min-h-11 min-w-11 items-center justify-center py-sm text-[13px] font-normal underline-offset-4 transition-colors",
               active
                 ? "text-primary underline decoration-1"
                 : "text-ink-soft no-underline hover:text-primary",

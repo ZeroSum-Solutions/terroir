@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/lib/toast";
+import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
 
 vi.mock("next/navigation", () => ({
@@ -80,6 +81,19 @@ const openRow: CellarWineRow = {
   restaurant_default_target_pour_cost_pct: null,
   restaurant_default_target_markup_ratio: null,
 };
+const reconcileRow: OpenBottleRow = {
+  wine_id: "wine-1",
+  wine_list_item_id: "item-1",
+  producer: "Test Producer",
+  name: "Test Wine",
+  vintage: 2022,
+  size_ml: 750,
+  sealed_count: 0,
+  opened_at: "2026-08-20T12:00:00.000Z",
+  open_remaining_ml: 300,
+  glass_pour_ml: 148,
+  pour_size_mode: "fixed",
+};
 
 let container: HTMLDivElement;
 let root: Root;
@@ -102,6 +116,97 @@ describe("CellarShell open bottles route", () => {
         <ToastProvider>
           <CellarShell
             rows={[openRow]}
+            reconcileItems={[reconcileRow]}
+            cellarConfig={{
+              id: "cellar-1",
+              rows: 12,
+              columns: 16,
+              name: "Main cellar",
+              lowStockThreshold: 2,
+              reconcileVarianceThresholdOz: 1.5,
+            }}
+            gridData={{}}
+            restaurantName="Test Restaurant"
+            restaurantId="restaurant-1"
+            autoEightysixEnabled={false}
+            autoEightysixThresholdMl={148}
+            eightysixStrategy="hide"
+            defaultTargetPourCostPct={null}
+            defaultTargetMarkupRatio={null}
+            role="owner"
+            cellarSections={[{ id: "section-1", name: "Main cellar" }]}
+          />
+        </ToastProvider>,
+      );
+    });
+
+    const link = getByRole(container, "link", { name: /open bottles/i });
+    expect(link.getAttribute("href")).toBe("/cellar/open");
+    expect(link.textContent).toMatch(/1/);
+    expect(link.className).toMatch(/(?:^|\s)(?:h-11|min-h-11)(?:\s|$)/);
+
+    expect(container.querySelector("section")?.className).toContain(
+      "overflow-x-hidden",
+    );
+    container.querySelectorAll('[role="tab"]').forEach((tab) => {
+      expect(tab.className).toContain("min-h-11");
+    });
+    expect(
+      container.querySelector('[role="tablist"]')?.className.split(" "),
+    ).toContain("flex-wrap");
+    expect(
+      container
+        .querySelector('[data-cellar-facet-bar]')
+        ?.className.split(" "),
+    ).toContain("flex-wrap");
+    expect(link.parentElement?.className).toContain("w-full");
+    expect(link.parentElement?.className).toContain("flex-wrap");
+    const desktopSearch = container.querySelector<HTMLInputElement>(
+      'input[placeholder="Search name, producer, region…"]',
+    )!;
+    expect(desktopSearch.className).toContain("h-11");
+    container.querySelectorAll("[data-cellar-facet-bar] select").forEach((select) => {
+      expect(select.className.split(" ")).toContain("h-11");
+      expect(select.className.split(" ")).not.toContain("md:h-9");
+    });
+    for (const label of ["List view", "Grid view"]) {
+      const control = container.querySelector<HTMLElement>(`[aria-label="${label}"]`)!;
+      expect(control.className).toContain("h-11");
+      expect(control.className).toContain("w-11");
+    }
+    for (const label of ["Search wines", "Cellar settings", "Drag to reorder"]) {
+      const control = container.querySelector<HTMLElement>(
+        `[aria-label="${label}"]`,
+      );
+      expect(control, label).not.toBeNull();
+      expect(control?.className, label).toContain("w-11");
+      expect(control?.className, label).toContain("h-11");
+    }
+    for (const label of ["Reconcile 1 open bottle →", "Select wines", "Show"]) {
+      const control = [...container.querySelectorAll("button")].find(
+        (button) => button.textContent?.trim() === label,
+      );
+      expect(control, label).not.toBeUndefined();
+      expect(control?.className, label).toContain("min-h-11");
+    }
+  });
+
+  it("starts multi-vintage lineages collapsed and expands them on demand", () => {
+    const lineageRows = [
+      { ...openRow, lineage_id: "lineage-1" },
+      {
+        ...openRow,
+        wine_id: "wine-2",
+        vintage: 2021,
+        lineage_id: "lineage-1",
+      },
+    ];
+
+    act(() => {
+      root.render(
+        <ToastProvider>
+          <CellarShell
+            rows={lineageRows}
             reconcileItems={[]}
             cellarConfig={null}
             gridData={{}}
@@ -118,10 +223,62 @@ describe("CellarShell open bottles route", () => {
       );
     });
 
-    const link = getByRole(container, "link", { name: /open bottles/i });
-    expect(link.getAttribute("href")).toBe("/cellar/open");
-    expect(link.textContent).toMatch(/1/);
-    expect(link.className).toMatch(/(?:^|\s)(?:h-11|min-h-11)(?:\s|$)/);
+    const header = container.querySelector<HTMLButtonElement>(
+      "[data-lineage-header]",
+    )!;
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector("[data-lineage-children]")).toBeNull();
+
+    act(() => header.click());
+
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector("[data-lineage-children]")).not.toBeNull();
+  });
+
+  it("renders large cellars incrementally without hiding the remaining count", () => {
+    const rows = Array.from({ length: 60 }, (_, index) => ({
+      ...openRow,
+      wine_id: `wine-${index + 1}`,
+      name: `Wine ${index + 1}`,
+      section: "Main cellar",
+    }));
+
+    act(() => {
+      root.render(
+        <ToastProvider>
+          <CellarShell
+            rows={rows}
+            reconcileItems={[]}
+            cellarConfig={null}
+            gridData={{}}
+            restaurantName="Test Restaurant"
+            restaurantId="restaurant-1"
+            autoEightysixEnabled={false}
+            autoEightysixThresholdMl={148}
+            eightysixStrategy="hide"
+            defaultTargetPourCostPct={null}
+            defaultTargetMarkupRatio={null}
+            role="staff"
+            cellarSections={[{ id: "section-1", name: "Main cellar" }]}
+          />
+        </ToastProvider>,
+      );
+    });
+
+    expect(container.querySelectorAll('[aria-label="Drag to reorder"]')).toHaveLength(
+      50,
+    );
+    const showMore = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent?.includes("Show 10 more"),
+    )!;
+    expect(showMore.textContent).toContain("50 of 60");
+    expect(showMore.className).toContain("min-h-11");
+
+    act(() => showMore.click());
+
+    expect(container.querySelectorAll('[aria-label="Drag to reorder"]')).toHaveLength(
+      60,
+    );
   });
 });
 

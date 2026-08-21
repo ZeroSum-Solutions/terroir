@@ -151,7 +151,7 @@ export default async function ScansPage({
             role="radio"
             aria-checked={active}
             aria-label={`${f.label} (${countForChip})`}
-            className={`inline-flex h-8 items-center gap-xs rounded-pill border px-md text-[12px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 ${
+            className={`inline-flex min-h-11 items-center gap-xs rounded-pill border px-md text-[12px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 ${
               active
                 ? "border-ink bg-ink text-beige"
                 : "border-ink/25 bg-white text-grey hover:bg-bridge-surface"
@@ -176,7 +176,7 @@ export default async function ScansPage({
     <header className="mb-lg">
       <Link
         href="/scan"
-        className="mb-md inline-flex items-center gap-xs text-[13px] text-grey hover:text-ink"
+        className="mb-md inline-flex min-h-11 items-center gap-xs text-[13px] text-grey hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
       >
         <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
         Back to scanner
@@ -380,13 +380,13 @@ export default async function ScansPage({
         {page > 1 ? (
           <Link
             href={`/scans${buildQuery({ page: page - 1, status })}`}
-            className="inline-flex h-10 items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
+            className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={2} />
             Previous
           </Link>
         ) : (
-          <span className="inline-flex h-10 items-center gap-xs rounded-pill border border-hairline bg-white px-md text-[13px] font-medium text-grey opacity-50">
+          <span className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-white px-md text-[13px] font-medium text-grey opacity-50">
             <ChevronLeft className="h-4 w-4" strokeWidth={2} />
             Previous
           </span>
@@ -397,13 +397,13 @@ export default async function ScansPage({
         {hasMore ? (
           <Link
             href={`/scans${buildQuery({ page: page + 1, status })}`}
-            className="inline-flex h-10 items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
+            className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
           >
             Next
             <ChevronRight className="h-4 w-4" strokeWidth={2} />
           </Link>
         ) : (
-          <span className="inline-flex h-10 items-center gap-xs rounded-pill border border-hairline bg-white px-md text-[13px] font-medium text-grey opacity-50">
+          <span className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-white px-md text-[13px] font-medium text-grey opacity-50">
             Next
             <ChevronRight className="h-4 w-4" strokeWidth={2} />
           </span>

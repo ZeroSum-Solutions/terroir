@@ -1,75 +1,117 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { MagicLinkSubmit, ResetPasswordSubmit } from "./magic-link-submit";
+import { safeNext } from "@/lib/api/safe-redirect";
+import { authErrorMessage } from "@/lib/auth/redirects";
+import {
+  sendMagicLink,
+  sendPasswordReset,
+  signInWithPassword,
+  signUpWithPassword,
+} from "./actions";
+import {
+  MagicLinkSubmit,
+  PasswordSubmit,
+  ResetPasswordSubmit,
+} from "./magic-link-submit";
 
 export const metadata: Metadata = { title: "Sign in" };
 
 type SearchParams = Promise<{
-  sent?: string;
   error?: string;
+  mode?: string;
   next?: string;
-  /** When "1", show the forgot-password form instead of sign-in */
   forgot?: string;
-  /** When "1", forgot-password reset email was sent successfully */
+  sent?: string;
+  signup?: string;
   reset?: string;
-  /** When "1", password was successfully reset; user can now sign in */
   reset_done?: string;
 }>;
 
-async function sendMagicLink(formData: FormData) {
-  "use server";
+type LoginMode = "magic" | "password" | "signup";
 
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const next = String(formData.get("next") ?? "/");
-
-  if (!email) redirect(`/login?error=${encodeURIComponent("Enter your email.")}`);
-
-  const hdrs = await headers();
-  const origin =
-    hdrs.get("origin") ??
-    (hdrs.get("host") ? `https://${hdrs.get("host")}` : "http://localhost:3000");
-
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      shouldCreateUser: true,
-    },
-  });
-
-  if (error) {
-    redirect(`/login?error=${encodeURIComponent(error.message)}`);
-  }
-  redirect(`/login?sent=${encodeURIComponent(email)}`);
+function loginHref(mode: LoginMode, next: string): string {
+  const params = new URLSearchParams({ mode });
+  if (next !== "/") params.set("next", next);
+  return `/login?${params.toString()}`;
 }
 
-async function sendPasswordReset(formData: FormData) {
-  "use server";
+const inputClassName =
+  "min-h-11 rounded-pill border border-hairline bg-white px-md text-[16px] text-ink outline-none transition-colors focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash";
+const choiceClassName =
+  "inline-flex min-h-11 flex-1 items-center justify-center rounded-pill px-sm text-center text-[13px] font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-blush-wash";
+const textLinkClassName =
+  "inline-flex min-h-11 items-center justify-center rounded-pill px-sm text-center text-[13px] text-grey outline-none transition-colors hover:text-ink focus-visible:ring-[3px] focus-visible:ring-blush-wash";
 
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+function EmailField({ error }: { error?: string }) {
+  return (
+    <label htmlFor="login-email" className="flex flex-col gap-xs">
+      <span className="text-caption font-medium uppercase text-grey">
+        Work email
+      </span>
+      <input
+        id="login-email"
+        type="email"
+        name="email"
+        autoComplete="email"
+        inputMode="email"
+        required
+        aria-describedby={error ? "login-error" : undefined}
+        placeholder="you@restaurant.com…"
+        className={inputClassName}
+      />
+    </label>
+  );
+}
 
-  if (!email) redirect(`/login?forgot=1&error=${encodeURIComponent("Enter your email.")}`);
-
-  const hdrs = await headers();
-  const origin =
-    hdrs.get("origin") ??
-    (hdrs.get("host") ? `https://${hdrs.get("host")}` : "http://localhost:3000");
-
-  const supabase = await createClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/auth/callback`,
-  });
-
-  // Per security best-practice, always show a success message regardless of
-  // whether the email exists. This prevents account enumeration.
-  if (error) {
-    // Log server-side for observability, but show generic success to user
-    console.error("Password reset request failed:", error.message);
-  }
-  redirect(`/login?reset=1`);
+function PasswordFields({
+  error,
+  confirmation = false,
+}: {
+  error?: string;
+  confirmation?: boolean;
+}) {
+  return (
+    <>
+      <label htmlFor="login-password" className="flex flex-col gap-xs">
+        <span className="text-caption font-medium uppercase text-grey">
+          Password
+        </span>
+        <input
+          id="login-password"
+          type="password"
+          name="password"
+          autoComplete={confirmation ? "new-password" : "current-password"}
+          required
+          minLength={6}
+          maxLength={256}
+          aria-describedby={error ? "login-error" : undefined}
+          placeholder="At least 6 characters"
+          className={inputClassName}
+        />
+      </label>
+      {confirmation && (
+        <label
+          htmlFor="login-password-confirm"
+          className="flex flex-col gap-xs"
+        >
+          <span className="text-caption font-medium uppercase text-grey">
+            Confirm password
+          </span>
+          <input
+            id="login-password-confirm"
+            type="password"
+            name="confirm"
+            autoComplete="new-password"
+            required
+            minLength={6}
+            maxLength={256}
+            aria-describedby={error ? "login-error" : undefined}
+            placeholder="Enter the same password"
+            className={inputClassName}
+          />
+        </label>
+      )}
+    </>
+  );
 }
 
 export default async function LoginPage({
@@ -77,141 +119,216 @@ export default async function LoginPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { sent, error, next, forgot, reset, reset_done } = await searchParams;
-  // Server-only env var (no NEXT_PUBLIC_ prefix) — reading it here is fine
-  // because LoginPage is a Server Component and the value never reaches the
-  // client bundle. The value is only used to decide whether to render the
-  // dev-bypass button.
+  const {
+    error: errorCode,
+    mode,
+    next,
+    forgot,
+    sent,
+    signup,
+    reset,
+    reset_done,
+  } = await searchParams;
+  const safePostLoginPath = safeNext(next, "/");
+  const error = authErrorMessage(errorCode);
+  const isForgotPassword = forgot === "1";
+  const loginMode: LoginMode =
+    mode === "password" || mode === "signup" ? mode : "magic";
   const devBypassEmail =
     process.env.NODE_ENV !== "production"
       ? process.env.DEV_BYPASS_EMAIL
       : undefined;
 
-  const isForgotPassword = forgot === "1";
+  const title = isForgotPassword
+    ? "Reset your password"
+    : loginMode === "signup"
+      ? "Create your account"
+      : loginMode === "password"
+        ? "Sign in with password"
+        : "Sign in";
+  const description = isForgotPassword
+    ? "We’ll email you a secure reset link."
+    : loginMode === "signup"
+      ? "Use your work email and choose a password."
+      : loginMode === "password"
+        ? "Use your work email and password."
+        : "We’ll email you a secure, one-time magic link.";
 
   return (
-    <main className="dawn-gradient flex min-h-screen items-center justify-center px-lg py-xl">
-      <div className="w-full max-w-[420px] rounded-card border border-hairline bg-canvas p-xl">
-        <div className="mb-xl text-center">
+    <main className="dawn-gradient flex min-h-screen items-center justify-center px-md py-lg sm:px-lg sm:py-xl">
+      <div className="w-full max-w-[420px] rounded-card border border-hairline bg-canvas p-lg shadow-sm sm:p-xl">
+        <div className="mb-lg text-center">
           <div className="mb-sm font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink">
             TERR<span className="text-primary">OIR</span>
           </div>
           <h1 className="font-serif text-heading-sm leading-tight text-ink">
-            {isForgotPassword ? (
-              <>Reset your <em className="text-primary font-normal italic">password</em></>
-            ) : (
-              <>Sign <em className="text-primary font-normal italic">in</em></>
-            )}
+            {title}
           </h1>
           <p className="mt-xs text-[14px] font-light text-grey">
-            {isForgotPassword
-              ? "We&rsquo;ll email you a reset link."
-              : "We&rsquo;ll email you a magic link."}
+            {description}
           </p>
         </div>
 
+        {!isForgotPassword &&
+          sent !== "1" &&
+          signup !== "1" &&
+          reset !== "1" &&
+          reset_done !== "1" && (
+            <nav
+              aria-label="Sign-in method"
+              className="mb-lg flex gap-xs rounded-pill border border-hairline bg-bridge-surface p-1"
+            >
+              {([
+                ["magic", "Magic link"],
+                ["password", "Password"],
+                ["signup", "Sign up"],
+              ] as const).map(([value, label]) => (
+                <a
+                  key={value}
+                  href={loginHref(value, safePostLoginPath)}
+                  aria-current={loginMode === value ? "page" : undefined}
+                  className={`${choiceClassName} ${
+                    loginMode === value
+                      ? "bg-primary text-white shadow-sm"
+                      : "text-grey hover:bg-white hover:text-ink"
+                  }`}
+                >
+                  {label}
+                </a>
+              ))}
+            </nav>
+          )}
+
         {reset_done === "1" ? (
-          <div
-            role="status"
-            aria-live="polite"
-            className="rounded-md border border-sage-ink/30 bg-sage-wash p-lg text-[14px] text-sage-ink"
-          >
-            Password updated. Sign in with a magic link or your new password.
-          </div>
-        ) : sent ? (
-          <div
-            role="status"
-            aria-live="polite"
-            className="rounded-md border border-sage-ink/30 bg-sage-wash p-lg text-[14px] text-sage-ink"
-          >
-            Check <span className="font-medium">{sent}</span> for a sign-in link.
-            You can close this tab.
-          </div>
+          <StatusMessage>
+            Password updated. Sign in with your new password or a magic link.
+          </StatusMessage>
+        ) : sent === "1" ? (
+          <StatusMessage>Check your inbox for a sign-in link.</StatusMessage>
+        ) : signup === "1" ? (
+          <StatusMessage>
+            Check your inbox to continue creating your account.
+          </StatusMessage>
         ) : reset === "1" ? (
-          <div
-            role="status"
-            aria-live="polite"
-            className="rounded-md border border-sage-ink/30 bg-sage-wash p-lg text-[14px] text-sage-ink"
-          >
-            If that email is registered, we&rsquo;ve sent a password reset link.
-            Check your inbox.
-          </div>
+          <StatusMessage>
+            If that email is registered, we’ve sent a password reset link.
+          </StatusMessage>
         ) : isForgotPassword ? (
           <form action={sendPasswordReset} className="flex flex-col gap-md">
-            <label htmlFor="reset-email" className="flex flex-col gap-xs">
-              <span className="text-caption font-medium uppercase text-grey">
-                Work email
-              </span>
-              <input
-                id="reset-email"
-                type="email"
-                name="email"
-                autoComplete="email"
-                required
-                aria-describedby={error ? "reset-error" : undefined}
-                placeholder="you@restaurant.com…"
-                className="h-[42px] rounded-pill border border-hairline bg-white px-md text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
-              />
-            </label>
-            {error && (
-              <div id="reset-error" role="alert" className="text-[13px] text-primary">{error}</div>
-            )}
+            <EmailField error={error} />
+            <ErrorMessage error={error} />
             <ResetPasswordSubmit />
             <a
-              href="/login"
-              className="text-center text-[13px] text-grey hover:text-ink"
+              href={loginHref("magic", safePostLoginPath)}
+              className={textLinkClassName}
             >
               Back to sign in
             </a>
           </form>
+        ) : loginMode === "password" ? (
+          <form action={signInWithPassword} className="flex flex-col gap-md">
+            <input type="hidden" name="next" value={safePostLoginPath} />
+            <EmailField error={error} />
+            <PasswordFields error={error} />
+            <ErrorMessage error={error} />
+            <PasswordSubmit label="Sign in" />
+            <a href="/login?forgot=1" className={textLinkClassName}>
+              Forgot password?
+            </a>
+            <a
+              href={loginHref("magic", safePostLoginPath)}
+              className={textLinkClassName}
+            >
+              Sign in with a magic link
+            </a>
+          </form>
+        ) : loginMode === "signup" ? (
+          <form action={signUpWithPassword} className="flex flex-col gap-md">
+            <input type="hidden" name="next" value={safePostLoginPath} />
+            <EmailField error={error} />
+            <PasswordFields error={error} confirmation />
+            <ErrorMessage error={error} />
+            <PasswordSubmit label="Create account" />
+            <a
+              href={loginHref("password", safePostLoginPath)}
+              className={textLinkClassName}
+            >
+              Already have an account? Sign in
+            </a>
+          </form>
         ) : (
           <form action={sendMagicLink} className="flex flex-col gap-md">
-            <input type="hidden" name="next" value={next ?? "/"} />
-            <label htmlFor="login-email" className="flex flex-col gap-xs">
-              <span className="text-caption font-medium uppercase text-grey">
-                Work email
-              </span>
-              <input
-                id="login-email"
-                type="email"
-                name="email"
-                autoComplete="email"
-                required
-                aria-describedby={error ? "login-error" : undefined}
-                placeholder="you@restaurant.com…"
-                className="h-[42px] rounded-pill border border-hairline bg-white px-md text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
-              />
-            </label>
-            {error && (
-              <div id="login-error" role="alert" className="text-[13px] text-primary">{error}</div>
-            )}
+            <input type="hidden" name="next" value={safePostLoginPath} />
+            <EmailField error={error} />
+            <ErrorMessage error={error} />
             <MagicLinkSubmit />
-            <a
-              href="/login?forgot=1"
-              className="text-center text-[13px] text-grey hover:text-ink"
-            >
+            <a href="/login?forgot=1" className={textLinkClassName}>
               Forgot password?
+            </a>
+            <a
+              href={loginHref("password", safePostLoginPath)}
+              className={textLinkClassName}
+            >
+              Sign in with password
+            </a>
+            <a
+              href={loginHref("signup", safePostLoginPath)}
+              className={textLinkClassName}
+            >
+              Create an account
             </a>
           </form>
         )}
 
-        {devBypassEmail && !sent && reset !== "1" && reset_done !== "1" && (
-          <div className="mt-lg border-t border-hairline pt-lg">
-            <p className="mb-sm text-caption font-medium uppercase text-grey">
-              Dev only
-            </p>
-            <a
-              href="/api/dev-login"
-              className="flex h-[42px] items-center justify-center rounded-pill border border-beige-deep bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface"
-            >
-              Sign in as {devBypassEmail}
-            </a>
-            <p className="mt-xs text-[11px] text-grey">
-              Skips email. Disabled in production (no DEV_BYPASS_EMAIL set).
-            </p>
-          </div>
-        )}
+        {devBypassEmail &&
+          !sent &&
+          !signup &&
+          reset !== "1" &&
+          reset_done !== "1" && (
+            <div className="mt-lg border-t border-hairline pt-lg">
+              <p className="mb-sm text-caption font-medium uppercase text-grey">
+                Dev only
+              </p>
+              <a
+                href="/api/dev-login"
+                className="flex min-h-11 items-center justify-center rounded-pill border border-beige-deep bg-white px-md text-center text-[13px] font-medium text-ink outline-none hover:bg-bridge-surface focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+              >
+                Sign in as {devBypassEmail}
+              </a>
+              <p className="mt-xs text-[11px] text-grey">
+                Skips email. Disabled in production.
+              </p>
+            </div>
+          )}
       </div>
     </main>
+  );
+}
+
+function ErrorMessage({ error }: { error?: string }) {
+  return error ? (
+    <div
+      id="login-error"
+      role="alert"
+      aria-live="assertive"
+      className="rounded-md border border-primary/30 bg-blush-wash p-md text-[13px] text-primary"
+    >
+      {error}
+    </div>
+  ) : null;
+}
+
+function StatusMessage({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="rounded-md border border-sage-ink/30 bg-sage-wash p-lg text-[14px] text-sage-ink"
+    >
+      {children}
+      <a href="/login" className={`${textLinkClassName} mt-md w-full`}>
+        Return to sign in
+      </a>
+    </div>
   );
 }

@@ -47,7 +47,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${cormorant.variable} ${jetbrains.variable} h-full`}
+      className={`${inter.variable} ${cormorant.variable} ${jetbrains.variable} h-full overflow-x-clip`}
     >
       <body className="min-h-full">{children}</body>
     </html>

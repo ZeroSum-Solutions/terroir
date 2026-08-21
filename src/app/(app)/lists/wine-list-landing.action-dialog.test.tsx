@@ -43,6 +43,33 @@ describe("WineListLanding permanent-delete confirmation", () => {
     document.body.style.overflow = "";
   });
 
+  it("keeps every card action at least 44px tall on mobile", async () => {
+    const list = wineList({
+      id: "published-list",
+      name: "Published list",
+      archived: false,
+      is_published: true,
+      slug: "published-list",
+    });
+    const { container } = await mount(
+      <WineListLanding lists={[list]} archivedLists={[]} />,
+    );
+
+    for (const label of [
+      "Copy public link for Published list",
+      "Open public Published list list in a new tab",
+      "Clone Published list",
+      "Archive Published list",
+    ]) {
+      const control = container.querySelector<HTMLElement>(`[aria-label="${label}"]`)!;
+      expect(control.className, label).toContain("min-h-11");
+    }
+    expect(
+      container.querySelector<HTMLElement>('[aria-label="Archive Published list"]')
+        ?.className,
+    ).toContain("min-w-11");
+  });
+
   it.each([
     [
       true,

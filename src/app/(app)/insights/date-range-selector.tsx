@@ -131,7 +131,7 @@ export default function DateRangeSelector() {
                 }
               }}
               className={
-                "min-h-11 rounded-pill border px-sm py-2xs text-[12px] font-medium transition-colors " +
+                "min-h-11 min-w-11 rounded-pill border px-sm py-2xs text-[12px] font-medium transition-colors " +
                 (isActive
                   ? "border-ink bg-ink text-beige"
                   : "border-ink/25 text-ink hover:bg-bridge-surface")

@@ -165,7 +165,7 @@ export function ScanReview({
       <header className="mb-lg">
         <Link
           href="/scan"
-          className="mb-md inline-flex items-center gap-xs text-[13px] text-grey hover:text-ink"
+          className="mb-md inline-flex min-h-11 items-center gap-xs text-[13px] text-grey hover:text-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
           Back to scanner
@@ -178,7 +178,7 @@ export function ScanReview({
             <button
               type="button"
               onClick={handleExportCsv}
-              className="flex h-10 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:h-[38px]"
+              className="flex h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
               title="Download line items as CSV"
             >
               <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />

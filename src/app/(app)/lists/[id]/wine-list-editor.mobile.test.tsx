@@ -4,14 +4,21 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import type { WineListEditorSection } from "./wine-list-editor";
 
-const mocks = vi.hoisted(() => ({ refresh: vi.fn(), fetch: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  refresh: vi.fn(),
+  fetch: vi.fn(),
+  dndIds: [] as Array<string | undefined>,
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: mocks.refresh }),
 }));
 
 vi.mock("@dnd-kit/core", () => ({
-  DndContext: ({ children }: { children: ReactNode }) => children,
+  DndContext: ({ children, id }: { children: ReactNode; id?: string }) => {
+    mocks.dndIds.push(id);
+    return children;
+  },
   closestCenter: vi.fn(),
   PointerSensor: class {},
   TouchSensor: class {},
@@ -125,6 +132,7 @@ async function change(input: HTMLInputElement, value: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.dndIds.length = 0;
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
     value: 390,
@@ -133,6 +141,46 @@ beforeEach(() => {
     "fetch",
     mocks.fetch.mockResolvedValue(new Response(null, { status: 204 })),
   );
+});
+
+it("uses a stable drag-and-drop identifier during server rendering", () => {
+  renderToStaticMarkup(<WineListEditor {...editorProps()} />);
+
+  expect(mocks.dndIds).toContain("wine-list-sections-dnd");
+  expect(mocks.dndIds).not.toContain(undefined);
+});
+
+it("keeps the list-editor navigation and wine actions phone-sized", () => {
+  document.body.innerHTML = renderToStaticMarkup(
+    <WineListEditor {...editorProps()} />,
+  );
+
+  const controls = [
+    document.querySelector<HTMLAnchorElement>('a[href="/lists"]'),
+    [...document.querySelectorAll("button")].find(
+      (node) => node.textContent?.trim() === "Add wine",
+    ),
+    [...document.querySelectorAll("button")].find((node) =>
+      node.textContent?.includes("Add another wine"),
+    ),
+  ];
+  for (const control of controls) {
+    expect(control).not.toBeNull();
+    expect(control?.className).toContain("min-h-11");
+  }
+});
+
+it("keeps desktop list actions touch-sized for phone landscape", () => {
+  document.body.innerHTML = renderToStaticMarkup(
+    <WineListEditor {...editorProps()} />,
+  );
+  const desktopActions = document.querySelector(
+    'header [aria-label="List actions"]',
+  )!;
+
+  desktopActions.querySelectorAll("button,a").forEach((control) => {
+    expect(control.className).toContain("min-h-11");
+  });
 });
 
 afterEach(async () => {

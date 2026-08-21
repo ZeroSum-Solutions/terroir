@@ -79,6 +79,7 @@ type WineComparison = {
 type SearchParams = Promise<{
   sort?: string | string[];
   ord?: string | string[];
+  limit?: string | string[];
 }>;
 
 export default async function PriceComparisonPage({
@@ -90,6 +91,10 @@ export default async function PriceComparisonPage({
   const sf = typeof sp.sort === "string" ? sp.sort : null;
   const so =
     sp.ord === "asc" || sp.ord === "desc" ? sp.ord : sf ? "desc" : null;
+  const rawLimit = typeof sp.limit === "string" ? Number(sp.limit) : 25;
+  const pageLimit = Number.isFinite(rawLimit)
+    ? Math.min(500, Math.max(25, Math.floor(rawLimit)))
+    : 25;
   const auth = (await getAuthContext())!; // AppLayout redirects when null
   const { supabase, restaurantId: rid } = auth;
 
@@ -222,6 +227,23 @@ export default async function PriceComparisonPage({
       const cmp = a.wine.producer.localeCompare(b.wine.producer);
       return cmp !== 0 ? cmp : a.wine.name.localeCompare(b.wine.name);
     });
+  const visibleComparable = comparable.slice(0, pageLimit);
+  const visibleSingleSource = singleSource.slice(
+    0,
+    Math.max(0, pageLimit - visibleComparable.length),
+  );
+  const visibleComparisonCount =
+    visibleComparable.length + visibleSingleSource.length;
+  const maximumVisibleComparisonCount = Math.min(comparisons.length, 500);
+  const hasMoreComparisons =
+    visibleComparisonCount < maximumVisibleComparisonCount;
+  const showMoreParams = new URLSearchParams();
+  if (sf) showMoreParams.set("sort", sf);
+  if (so) showMoreParams.set("ord", so);
+  showMoreParams.set(
+    "limit",
+    String(Math.min(maximumVisibleComparisonCount, visibleComparisonCount + 25)),
+  );
 
   // Total savings opportunity
   const totalSavings = comparable.reduce(
@@ -402,7 +424,7 @@ export default async function PriceComparisonPage({
                 </tr>
               </thead>
               <tbody>
-                {comparable.map((comp) => {
+                {visibleComparable.map((comp) => {
                   const byDist = new Map<string, PriceEntry>();
                   for (const p of comp.prices) {
                     const existing = byDist.get(p.distributor);
@@ -543,7 +565,7 @@ export default async function PriceComparisonPage({
 
           {/* Mobile cards */}
           <div className="flex flex-col gap-md md:hidden">
-            {comparable.map((comp) => {
+            {visibleComparable.map((comp) => {
               const byDist = new Map<string, PriceEntry>();
               for (const p of comp.prices) {
                 const existing = byDist.get(p.distributor);
@@ -686,7 +708,7 @@ export default async function PriceComparisonPage({
                 </tr>
               </thead>
               <tbody>
-                {singleSource.map((comp) => {
+                {visibleSingleSource.map((comp) => {
                   const latest = pickMostRecent(comp.prices);
                   const latestDate = formatInvoiceDate(latest?.invoiceDate ?? null);
                   return (
@@ -763,7 +785,7 @@ export default async function PriceComparisonPage({
 
           {/* Mobile cards */}
           <div className="flex flex-col gap-sm md:hidden">
-            {singleSource.map((comp) => {
+            {visibleSingleSource.map((comp) => {
               const latest = pickMostRecent(comp.prices);
               const latestDate = formatInvoiceDate(latest?.invoiceDate ?? null);
               return (
@@ -838,6 +860,15 @@ export default async function PriceComparisonPage({
             })}
           </div>
         </div>
+      )}
+      {hasMoreComparisons && (
+        <Link
+          href={`/price-comparison?${showMoreParams.toString()}`}
+          className="mt-lg inline-flex min-h-11 w-full items-center justify-center rounded-pill border border-hairline bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+        >
+          Show {Math.min(25, comparisons.length - visibleComparisonCount)} more ·{" "}
+          {visibleComparisonCount} of {comparisons.length}
+        </Link>
       )}
     </section>
   );

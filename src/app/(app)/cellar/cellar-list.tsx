@@ -70,6 +70,7 @@ const FILTER_LABELS: Record<Exclude<CellarFilter, "all">, string> = {
 };
 
 type CellarSection = { id: string; name: string };
+const CELLAR_PAGE_SIZE = 50;
 
 export function CellarList({
   rows,
@@ -105,6 +106,25 @@ export function CellarList({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const paginationKey = [
+    query,
+    filter,
+    facets.producer,
+    facets.region,
+    facets.country,
+    facets.varietal,
+    facets.vintageMin,
+    facets.vintageMax,
+    facets.format,
+    facets.health,
+    groupBy,
+  ].join("\u0000");
+  const [pagination, setPagination] = useState({
+    key: paginationKey,
+    count: CELLAR_PAGE_SIZE,
+  });
+  const visibleCount =
+    pagination.key === paginationKey ? pagination.count : CELLAR_PAGE_SIZE;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -156,13 +176,17 @@ export function CellarList({
     () => applyFacets(filteredWithoutFacets, facets),
     [filteredWithoutFacets, facets],
   );
+  const visibleRows = useMemo(
+    () => filtered.slice(0, visibleCount),
+    [filtered, visibleCount],
+  );
   const counts = useMemo(
     () => facetCounts(filteredWithoutFacets, facets),
     [filteredWithoutFacets, facets],
   );
   const taxonomyGroups = useMemo(
-    () => (groupBy ? groupRows(filtered, groupBy) : []),
-    [filtered, groupBy],
+    () => (groupBy ? groupRows(visibleRows, groupBy) : []),
+    [visibleRows, groupBy],
   );
 
   // BND-063: group filtered wines by section. "Uncategorized" for wines
@@ -179,7 +203,7 @@ export function CellarList({
     // Always have uncategorized at the end
     groups.set("__uncategorized__", { name: "Uncategorized", wines: [] });
 
-    for (const wine of filtered) {
+    for (const wine of visibleRows) {
       const key = wine.section && sectionMap.has(wine.section) ? wine.section : "__uncategorized__";
       const group = groups.get(key);
       if (group) {
@@ -197,7 +221,7 @@ export function CellarList({
       }
     }
     return result;
-  }, [filtered, sections]);
+  }, [visibleRows, sections]);
 
   // BND-063: handle DnD — when a wine is dropped into a different section
   const handleDragEnd = useCallback(
@@ -295,7 +319,7 @@ export function CellarList({
         </p>
         <Link
           href="/scan"
-          className="mt-md inline-flex h-[40px] items-center justify-center rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
+          className="mt-md inline-flex min-h-11 items-center justify-center rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
         >
           Scan an invoice →
         </Link>
@@ -330,7 +354,7 @@ export function CellarList({
           <button
             type="button"
             onClick={onResetFilters}
-            className="mt-sm inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-md text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-primary/25"
+            className="mt-sm inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-white px-md text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-primary/25"
           >
             Clear filters & search
           </button>
@@ -355,7 +379,7 @@ export function CellarList({
             <button
               type="button"
               onClick={() => setSelectMode(true)}
-              className="inline-flex h-[32px] items-center gap-xs rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface transition-colors"
+              className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface transition-colors"
             >
               <CheckSquare className="h-4 w-4" strokeWidth={2} aria-hidden />
               Select wines
@@ -365,7 +389,7 @@ export function CellarList({
               <button
                 type="button"
                 onClick={selectAll}
-                className="inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface"
+                className="inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface"
               >
                 Select all ({filtered.length})
               </button>
@@ -373,7 +397,7 @@ export function CellarList({
                 <button
                   type="button"
                   onClick={deselectAll}
-                  className="inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
+                  className="inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
                 >
                   Clear
                 </button>
@@ -383,7 +407,7 @@ export function CellarList({
                   <button
                     type="button"
                     onClick={() => setAssignTarget(assignTarget ? null : "__open__")}
-                    className="inline-flex h-[32px] items-center gap-xs rounded-pill bg-primary px-sm text-[12px] font-medium text-white hover:bg-primary-hover"
+                    className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-sm text-[12px] font-medium text-white hover:bg-primary-hover"
                   >
                     <Layers className="h-4 w-4" strokeWidth={2} aria-hidden />
                     Assign {selectedIds.size} to section
@@ -396,7 +420,7 @@ export function CellarList({
                           key={s.id}
                           type="button"
                           onClick={() => setAssignTarget(s.name)}
-                          className="block w-full px-sm py-xs text-left text-[13px] text-ink hover:bg-bridge-surface"
+                          className="block min-h-11 w-full px-sm py-xs text-left text-[13px] text-ink hover:bg-bridge-surface"
                         >
                           {s.name}
                         </button>
@@ -414,7 +438,7 @@ export function CellarList({
                     type="button"
                     onClick={doBulkAssign}
                     disabled={busy}
-                    className="inline-flex h-[32px] items-center rounded-pill bg-primary px-sm text-[12px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+                    className="inline-flex min-h-11 items-center rounded-pill bg-primary px-sm text-[12px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
                   >
                     {busy ? "..." : "Confirm"}
                   </button>
@@ -422,7 +446,7 @@ export function CellarList({
                     type="button"
                     onClick={() => setAssignTarget(null)}
                     disabled={busy}
-                    className="inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface disabled:opacity-60"
+                    className="inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface disabled:opacity-60"
                   >
                     <X className="h-3 w-3" strokeWidth={2} aria-hidden />
                   </button>
@@ -431,7 +455,7 @@ export function CellarList({
               <button
                 type="button"
                 onClick={() => { setSelectMode(false); setSelectedIds(new Set()); setAssignTarget(null); }}
-                className="ml-auto inline-flex h-[32px] items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
+                className="ml-auto inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
               >
                 Done
               </button>
@@ -453,7 +477,7 @@ export function CellarList({
           ))}
         </div>
       ) : sections && sections.length > 0 ? (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext id="cellar-section-dnd" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <div className="flex flex-col gap-md">
             {sectionGroups.map((group) => (
               <SectionGroup
@@ -473,7 +497,7 @@ export function CellarList({
       ) : (
         <div className="flex flex-col divide-y divide-hairline rounded-card border border-hairline bg-white">
           <LineageBlockList
-            wines={filtered}
+            wines={visibleRows}
             renderRow={(row) => (
               <CellarRow
                 row={row}
@@ -482,6 +506,22 @@ export function CellarList({
               />
             )}
           />
+        </div>
+      )}
+      {visibleRows.length < filtered.length && (
+        <div className="mt-md flex justify-center">
+          <button
+            type="button"
+            onClick={() =>
+              setPagination({
+                key: paginationKey,
+                count: visibleCount + CELLAR_PAGE_SIZE,
+              })
+            }
+            className="inline-flex min-h-11 items-center justify-center rounded-pill border border-ink/20 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+          >
+            Show {Math.min(CELLAR_PAGE_SIZE, filtered.length - visibleRows.length)} more · {visibleRows.length} of {filtered.length}
+          </button>
         </div>
       )}
     </div>
@@ -593,7 +633,14 @@ function LineageBlockList({
   renderRow: (row: CellarWineRow) => React.ReactNode;
 }) {
   const blocks = useMemo(() => buildLineageBlocks(wines), [wines]);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<string>>(
+    () =>
+      new Set(
+        blocks.flatMap((block) =>
+          block.kind === "lineage" ? [block.lineageId] : [],
+        ),
+      ),
+  );
 
   const toggle = useCallback((lineageId: string) => {
     setCollapsed((prev) => {
@@ -855,7 +902,7 @@ function CellarRow({
           {...dragHandle.attributes}
           {...dragHandle.listeners}
           aria-label="Drag to reorder"
-          className="flex h-[44px] w-[36px] shrink-0 items-center justify-center cursor-grab active:cursor-grabbing text-grey hover:text-ink-soft touch:min-h-[44px] touch:min-w-[44px]"
+          className="flex h-11 w-11 shrink-0 items-center justify-center cursor-grab active:cursor-grabbing text-grey hover:text-ink-soft"
         >
           <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
         </button>

@@ -120,7 +120,7 @@ export function BrandKitPanel({
             Upload a logo, extract its palette, then generate accessible menu themes.
           </p>
         </div>
-        <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-xs rounded-pill border border-hairline bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface">
+        <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-xs rounded-pill border border-hairline bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface">
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
           {uploading ? "Extracting…" : "Upload logo"}
           <input
@@ -163,7 +163,7 @@ export function BrandKitPanel({
           type="button"
           disabled={!palette || generating}
           onClick={() => void generateThemes()}
-          className="inline-flex h-10 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-50"
         >
           {generating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Sparkles className="h-4 w-4" aria-hidden />}
           {generating ? "Designing…" : "Generate themes"}
@@ -197,7 +197,7 @@ export function BrandKitPanel({
                   aria-label={`Apply ${theme.name}`}
                   disabled={applying !== null}
                   onClick={() => void applyTheme(theme)}
-                  className="h-9 flex-1 rounded-pill bg-primary px-sm text-[12px] font-medium text-white disabled:opacity-50"
+                  className="h-11 flex-1 rounded-pill bg-primary px-sm text-[12px] font-medium text-white disabled:opacity-50"
                 >
                   {applying === theme.name ? "Applying…" : appliedTheme?.name === theme.name ? "Applied" : "Apply"}
                 </button>
@@ -205,7 +205,7 @@ export function BrandKitPanel({
                   type="button"
                   disabled={generating}
                   onClick={() => void generateThemes(theme)}
-                  className="h-9 rounded-pill border border-hairline px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50"
+                  className="h-11 rounded-pill border border-hairline px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50"
                 >
                   Refine
                 </button>

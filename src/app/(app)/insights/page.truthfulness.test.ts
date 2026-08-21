@@ -31,5 +31,28 @@ describe("Insights page metric scope", () => {
     expect(source).toMatch(
       /<YieldReportSection\s+groups=\{yieldGroups\}\s+rangeLabel=\{selectedRangeLabel\}\s*\/>/,
     );
+    expect(source).toMatch(
+      /href="\/api\/insights\/csv"[\s\S]*?className="flex min-h-11 /,
+    );
+    expect(source).toMatch(
+      /href=\{metricHref\("varietal", label\)\}[\s\S]*?className="flex min-h-11 /,
+    );
+    expect(source).toMatch(
+      /href="\/scan"[\s\S]*?className="mt-md inline-flex min-h-11 /,
+    );
+    expect(source).toContain(
+      "const visibleDrinkWindowAlerts = drinkWindowAlerts.slice(0, 6)",
+    );
+    expect(source).toContain("visibleDrinkWindowAlerts.map");
+    expect(source).toMatch(
+      /href=\{metricHref\("drink-now-count"\)\}[\s\S]*?View all \{drinkWindowAlerts\.length\} in Cellar/,
+    );
+    expect(source).toContain(
+      "const visiblePastDrinkWindowWines = pastDrinkWindowWines.slice(0, 12)",
+    );
+    expect(source).toContain("visiblePastDrinkWindowWines.map");
+    expect(source).toMatch(
+      /View all \{pastDrinkWindowWines\.length\} past-window wines in Cellar/,
+    );
   });
 });

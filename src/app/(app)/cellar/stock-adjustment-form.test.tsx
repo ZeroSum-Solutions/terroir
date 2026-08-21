@@ -20,4 +20,17 @@ describe("StockAdjustmentForm", () => {
     expect(document.querySelector('[name*="member"]')).toBeNull();
     expect(document.querySelector('[name*="actor"]')).toBeNull();
   });
+
+  it("keeps every stock-adjustment control at least 44px tall", () => {
+    document.body.innerHTML = renderToStaticMarkup(
+      <StockAdjustmentForm
+        wineId="wine-1"
+        reasons={[{ id: "reason-comp", label: "Guest recovery", category: "comp" }]}
+      />,
+    );
+
+    for (const control of document.querySelectorAll<HTMLElement>("input, select, button")) {
+      expect(control.className).toContain("h-11");
+    }
+  });
 });

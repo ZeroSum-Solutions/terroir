@@ -18,12 +18,12 @@ type OBRow = {
   opened_at: string;
   opened_by: string | null;
   remaining_ml: number;
-  size_ml: number;
   wines: {
     id: string;
     name: string;
     producer: string;
     vintage: number | null;
+    size_ml: number;
   } | null;
 };
 
@@ -34,7 +34,7 @@ export default async function OpenBottlesPage() {
   const { data: bottles, error: bottlesError } = await supabase
     .from("open_bottles")
     .select(
-      "id, wine_id, opened_at, opened_by, remaining_ml, size_ml, wines!inner(id, name, producer, vintage)",
+      "id, wine_id, opened_at, opened_by, remaining_ml, wines!inner(id, name, producer, vintage, size_ml)",
     )
     .eq("restaurant_id", restaurantId)
     .is("closed_at", null)
@@ -92,10 +92,11 @@ export default async function OpenBottlesPage() {
           <ul className="divide-y divide-hairline">
             {openBottles.map((bottle) => {
               const wine = bottle.wines;
+              const sizeMl = wine?.size_ml ?? 750;
               const remainingOz = bottle.remaining_ml / ML_PER_OZ;
               const remainingPct =
-                bottle.size_ml > 0
-                  ? Math.round((bottle.remaining_ml / bottle.size_ml) * 100)
+                sizeMl > 0
+                  ? Math.round((bottle.remaining_ml / sizeMl) * 100)
                   : 0;
               const openedDate = new Date(bottle.opened_at);
               const daysOpen = Math.floor(
@@ -131,7 +132,7 @@ export default async function OpenBottlesPage() {
                         />
                       </div>
                       <div className="mt-xs flex flex-wrap items-center gap-sm text-[12px] text-grey">
-                        <span>{formatBottleSize(bottle.size_ml)}</span>
+                        <span>{formatBottleSize(sizeMl)}</span>
                         <span aria-hidden>·</span>
                         <span>
                           {openedLabel}{" "}
@@ -178,7 +179,7 @@ export default async function OpenBottlesPage() {
                         )}
                       </div>
                       <div className="text-[13px] text-ink tabular">
-                        {formatBottleSize(bottle.size_ml)}
+                        {formatBottleSize(sizeMl)}
                       </div>
                       <div className="text-[13px] text-ink">
                         <span>{openedLabel}</span>

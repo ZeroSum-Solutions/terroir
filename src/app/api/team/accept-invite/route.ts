@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { rateLimit } from "@/lib/api/rate-limit";
 import { Errors } from "@/lib/api/errors";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 export const runtime = "nodejs";
 
@@ -60,8 +61,17 @@ export async function POST(request: NextRequest) {
     return Errors.badRequest("Invitation token is required.");
   }
 
+  // The invitee is not a restaurant member yet, so authenticated RLS cannot
+  // read the invitation or create the first membership. Keep identity proof on
+  // the user's client above, then use the server-only client for this bounded
+  // token + email-bound acceptance transaction.
+  const service = createServiceRoleClient();
+  if (!service) {
+    return Errors.internal("Failed to accept invitation.");
+  }
+
   // Find the invitation
-  const { data: invitation, error: findError } = await supabase
+  const { data: invitation, error: findError } = await service
     .from("invitations")
     .select("id, restaurant_id, role, email, expires_at, accepted_at")
     .eq("token", body.token)
@@ -80,16 +90,8 @@ export async function POST(request: NextRequest) {
     return Errors.notFound("Invalid or expired invitation.");
   }
 
-  if (invitation.accepted_at) {
-    return Errors.badRequest("This invitation has already been used.");
-  }
-
-  if (new Date(invitation.expires_at) < new Date()) {
-    return Errors.badRequest("This invitation has expired.");
-  }
-
   // Check if user already has a membership for this restaurant
-  const { data: existingMembership } = await supabase
+  const { data: existingMembership } = await service
     .from("memberships")
     .select("id")
     .eq("user_id", user.id)
@@ -99,7 +101,7 @@ export async function POST(request: NextRequest) {
 
   if (existingMembership) {
     // Mark invitation as accepted but don't create a duplicate membership
-    await supabase
+    await service
       .from("invitations")
       .update({ accepted_at: new Date().toISOString() })
       .eq("id", invitation.id);
@@ -111,8 +113,16 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  if (invitation.accepted_at) {
+    return Errors.badRequest("This invitation has already been used.");
+  }
+
+  if (new Date(invitation.expires_at) < new Date()) {
+    return Errors.badRequest("This invitation has expired.");
+  }
+
   // Create the membership
-  const { error: membershipError } = await supabase
+  const { error: membershipError } = await service
     .from("memberships")
     .insert({
       user_id: user.id,
@@ -120,7 +130,7 @@ export async function POST(request: NextRequest) {
       role: invitation.role,
     });
 
-  if (membershipError) {
+  if (membershipError && membershipError.code !== "23505") {
     console.error("membership insert failed:", membershipError);
     Sentry.captureException(membershipError, {
       tags: { surface: "team-accept-invite", phase: "membership-insert" },
@@ -134,7 +144,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Mark invitation as accepted
-  await supabase
+  await service
     .from("invitations")
     .update({ accepted_at: new Date().toISOString() })
     .eq("id", invitation.id);

@@ -37,4 +37,15 @@ describe("Fab", () => {
     expect(document.body.textContent).not.toContain("Voice command");
     expect(document.body.textContent).not.toContain("Coming in v2");
   });
+
+  it("keeps the trigger above the fixed mobile navigation", () => {
+    document.body.innerHTML = renderToStaticMarkup(<Fab />);
+    const trigger = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Open actions"]',
+    );
+
+    expect(trigger?.getAttribute("style")).toContain(
+      "bottom:calc(env(safe-area-inset-bottom) + 80px)",
+    );
+  });
 });

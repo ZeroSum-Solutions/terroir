@@ -36,4 +36,15 @@ describe("primary navigation", () => {
       ).toBe("page");
     },
   );
+
+  it("keeps desktop links touch-sized for phone landscape", () => {
+    document.body.innerHTML = renderToStaticMarkup(
+      <DesktopNavLinks role="staff" />,
+    );
+
+    document.querySelectorAll("a").forEach((link) => {
+      expect(link.className).toContain("min-h-11");
+      expect(link.className).toContain("min-w-11");
+    });
+  });
 });

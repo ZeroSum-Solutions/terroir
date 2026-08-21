@@ -53,10 +53,14 @@ describe("AppLayout shell context", () => {
     expect(context.textContent).toContain("Bar Norman");
     expect(context.textContent).toContain("Manager");
     expect(home.className).toContain("shrink-0");
+    expect(home.className).toContain("min-h-11");
     expect(settings.parentElement?.className).toContain("ml-auto");
     expect(settings.parentElement?.className).toContain("shrink-0");
     expect(root.querySelector('[data-desktop-nav="true"]')).not.toBeNull();
     expect(root.querySelector('[data-mobile-nav="true"]')).not.toBeNull();
+    expect(root.querySelector("header")?.parentElement?.className).toContain(
+      "overflow-x-hidden",
+    );
     expect(root.querySelector("main")?.className).toContain("pb-[88px]");
   });
 

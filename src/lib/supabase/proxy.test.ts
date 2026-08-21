@@ -24,6 +24,14 @@ describe("updateSession missing Supabase public config", () => {
     expect(res.headers.get("location")).toBeNull();
   });
 
+  it("allows the token-hash recovery exchange before a session exists", async () => {
+    const res = await updateSession(
+      requestFor("/auth/confirm?token_hash=proof&type=recovery"),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
+  });
+
   it("redirects protected routes to login in local/test environments", async () => {
     const res = await updateSession(requestFor("/cellar"));
     const location = res.headers.get("location");
@@ -34,6 +42,15 @@ describe("updateSession missing Supabase public config", () => {
     const url = new URL(location ?? "");
     expect(url.pathname).toBe("/login");
     expect(url.searchParams.get("next")).toBe("/cellar");
+  });
+
+  it("preserves the requested query string when redirecting to login", async () => {
+    const res = await updateSession(requestFor("/cellar?section=reds&page=2"));
+    const location = res.headers.get("location");
+    expect(location).toBeTruthy();
+    expect(new URL(location ?? "").searchParams.get("next")).toBe(
+      "/cellar?section=reds&page=2",
+    );
   });
 
   it("fails closed in production when required config is missing", async () => {

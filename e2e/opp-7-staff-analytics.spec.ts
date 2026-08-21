@@ -173,7 +173,9 @@ test.describe("@opp-7 staff, comp, and anomaly analytics", () => {
     await page.goto("/team");
     const analytics = page.getByRole("region", { name: "Member analytics" });
     await expect(analytics).toContainText("House median");
-    const row = page.locator(`[id="member-${userId}"]`);
+    const row = analytics.locator("tbody tr", {
+      hasText: process.env.DEV_BYPASS_EMAIL!,
+    });
     await expect(row).toContainText("Variance investigation");
     await expect(row.locator("[data-metric]")).toHaveCount(4);
   });

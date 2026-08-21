@@ -219,9 +219,22 @@ test.describe("BND-038 pour → reconcile", () => {
 
     // --- Step 1: land on /cellar and find the wine row ----------------
     await page.goto("/cellar");
+    await page
+      .getByPlaceholder("Search name, producer, region…")
+      .fill(wine.producer);
+    const lineageHeader = page
+      .locator('[data-lineage-header][aria-expanded="false"]', {
+        hasText: cardLabel,
+      })
+      .first();
+    if (await lineageHeader.count()) await lineageHeader.click();
     // Each row's trigger button carries the full row text (producer,
     // name, chips, glass count). Pick the first one for the chosen wine.
-    const row = page.getByRole("button").filter({ hasText: cardLabel }).first();
+    const row = page
+      .getByRole("button")
+      .filter({ hasText: cardLabel })
+      .filter({ hasText: /~\d+ glass/ })
+      .first();
     await expect(row).toBeVisible();
     const startText = (await row.textContent()) ?? "";
     const startMatch = startText.match(/~(\d+) glass/);

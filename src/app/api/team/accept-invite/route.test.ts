@@ -17,6 +17,14 @@ const mockFromMemberships = vi.fn();
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: () => mockGetUser() },
+    from: () => {
+      throw new Error("authenticated client must not perform invite acceptance writes");
+    },
+  }),
+}));
+
+vi.mock("@/lib/supabase/service-role", () => ({
+  createServiceRoleClient: () => ({
     from: (table: string) => {
       if (table === "invitations") return mockFromInvitations();
       if (table === "memberships") return mockFromMemberships();
@@ -226,5 +234,69 @@ describe("POST /api/team/accept-invite — email binding", () => {
     );
     expect(res.status).toBe(200);
     expect(membershipInsert).toHaveBeenCalled();
+  });
+
+  it("treats an already-accepted invitation as success for its existing member", async () => {
+    mockFromInvitations.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          single: async () => ({
+            data: {
+              id: "inv-accepted",
+              restaurant_id: "rest-1",
+              role: "staff",
+              email: "alice@example.com",
+              expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+              accepted_at: new Date().toISOString(),
+            },
+            error: null,
+          }),
+        }),
+      }),
+      update: () => ({ eq: async () => ({ error: null }) }),
+    });
+    mockFromMemberships.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            limit: () => ({
+              single: async () => ({ data: { id: "membership-1" }, error: null }),
+            }),
+          }),
+        }),
+      }),
+      insert: membershipInsert,
+    });
+
+    const res = await POST(makeJsonRequest({ token: "accepted-token" }));
+
+    expect(res.status).toBe(200);
+    expect(membershipInsert).not.toHaveBeenCalled();
+  });
+
+  it("treats a concurrent duplicate membership insert as an idempotent success", async () => {
+    mockFromInvitations.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          single: async () => ({
+            data: {
+              id: "inv-race",
+              restaurant_id: "rest-1",
+              role: "staff",
+              email: "alice@example.com",
+              expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+              accepted_at: null,
+            },
+            error: null,
+          }),
+        }),
+      }),
+      update: () => ({ eq: async () => ({ error: null }) }),
+    });
+    membershipInsert.mockResolvedValueOnce({ error: { code: "23505" } });
+
+    const res = await POST(makeJsonRequest({ token: "race-token" }));
+
+    expect(res.status).toBe(200);
   });
 });

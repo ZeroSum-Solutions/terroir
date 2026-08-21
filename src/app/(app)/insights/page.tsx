@@ -404,6 +404,8 @@ export default async function DashboardPage({
     pastDrinkWindowWines,
     pricingAlerts,
   );
+  const visibleDrinkWindowAlerts = drinkWindowAlerts.slice(0, 6);
+  const visiblePastDrinkWindowWines = pastDrinkWindowWines.slice(0, 12);
 
   // Varietal breakdown (current inventory — not time-filtered)
   const varietalMap = new Map<string, number>();
@@ -512,7 +514,7 @@ export default async function DashboardPage({
           <a
             href="/api/insights/csv"
             download="insights-export.csv"
-            className="flex h-[34px] items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+            className="flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
           >
             <svg
               width="16"
@@ -576,7 +578,7 @@ export default async function DashboardPage({
           </div>
           {drinkWindowAlerts.length > 0 && (
             <div className="flex flex-col gap-md">
-              {drinkWindowAlerts.map(function (alert) {
+              {visibleDrinkWindowAlerts.map(function (alert) {
                 return (
                   <BriefingAlertCard
                     key={alert.wine_id}
@@ -585,6 +587,14 @@ export default async function DashboardPage({
                   />
                 );
               })}
+              {drinkWindowAlerts.length > visibleDrinkWindowAlerts.length && (
+                <Link
+                  href={metricHref("drink-now-count")}
+                  className="inline-flex min-h-11 items-center justify-center self-start rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                >
+                  View all {drinkWindowAlerts.length} in Cellar
+                </Link>
+              )}
             </div>
           )}
           {canEnrich && (
@@ -622,7 +632,7 @@ export default async function DashboardPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {pastDrinkWindowWines.map(function (w, i) {
+                  {visiblePastDrinkWindowWines.map(function (w, i) {
                     return (
                       <tr
                         key={w.wine_id}
@@ -657,6 +667,15 @@ export default async function DashboardPage({
                 </tbody>
               </table>
             </div>
+            {pastDrinkWindowWines.length >
+              visiblePastDrinkWindowWines.length && (
+              <Link
+                href={metricHref("drink-now-count")}
+                className="mt-md inline-flex min-h-11 items-center justify-center rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+              >
+                View all {pastDrinkWindowWines.length} past-window wines in Cellar
+              </Link>
+            )}
           </div>
         </section>
       )}
@@ -851,7 +870,7 @@ export default async function DashboardPage({
                     <div key={label} data-metric={`varietal-${label}`}>
                       <Link
                         href={metricHref("varietal", label)}
-                        className="flex items-center gap-sm rounded-sm transition-colors hover:bg-bridge-surface"
+                        className="flex min-h-11 items-center gap-sm rounded-sm transition-colors hover:bg-bridge-surface"
                       >
                         <span className="w-[100px] shrink-0 truncate text-[13px] text-ink">
                           {label}
@@ -975,7 +994,7 @@ export default async function DashboardPage({
               </p>
               <Link
                 href="/scan"
-                className="mt-md inline-flex h-[34px] items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                className="mt-md inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
               >
                 <ScanLine className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                 Scan an invoice

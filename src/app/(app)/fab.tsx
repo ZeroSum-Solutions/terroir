@@ -83,8 +83,7 @@ function FabInner() {
   return (
     <div
       ref={containerRef}
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-30 md:hidden"
-      style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 80px)" }}
+      className="pointer-events-none fixed inset-0 z-30 md:hidden"
       aria-hidden={false}
     >
       {/* Action stack — fades+slides in. When closed, `inert` removes
@@ -96,7 +95,7 @@ function FabInner() {
           "pointer-events-none absolute right-md flex flex-col-reverse items-end gap-sm transition-opacity",
           open ? "opacity-100" : "opacity-0",
         )}
-        style={{ bottom: "72px" }}
+        style={{ bottom: "calc(env(safe-area-inset-bottom) + 152px)" }}
         role="menu"
         aria-label="Primary actions"
         aria-hidden={!open}
@@ -124,10 +123,11 @@ function FabInner() {
         aria-label={open ? "Close actions" : "Open actions"}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "pointer-events-auto absolute bottom-0 right-md grid h-14 w-14 place-items-center rounded-pill bg-primary text-white transition-transform duration-200",
+          "pointer-events-auto absolute right-md grid h-14 w-14 place-items-center rounded-pill bg-primary text-white transition-transform duration-200",
           "hover:bg-primary-hover active:scale-95",
           open && "rotate-45",
         )}
+        style={{ bottom: "calc(env(safe-area-inset-bottom) + 80px)" }}
       >
         {/* Single icon that rotates 45° to become close. Avoids icon
             swap flicker. */}

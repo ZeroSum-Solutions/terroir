@@ -60,6 +60,19 @@ describe("insights drill-down tree", () => {
 
     expect(document.querySelectorAll('[data-metric^="today-"]')).toHaveLength(1);
   });
+
+  it("lets every Today item shrink inside the phone-width grid", () => {
+    renderFixture();
+
+    const items = document.querySelectorAll<HTMLElement>(
+      '[data-metric^="today-"]',
+    );
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) {
+      expect(item.className).toContain("min-w-0");
+      expect(item.querySelector("a")?.className).toContain("min-w-0");
+    }
+  });
 });
 
 describe("selectTodayExceptions", () => {

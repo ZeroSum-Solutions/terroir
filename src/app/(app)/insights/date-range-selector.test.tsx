@@ -191,6 +191,7 @@ describe("DateRangeSelector", () => {
     expect(radios.length).toBeGreaterThan(0);
     radios.forEach((radio) => {
       expect(radio.className).toContain("min-h-11");
+      expect(radio.className).toContain("min-w-11");
     });
   });
 

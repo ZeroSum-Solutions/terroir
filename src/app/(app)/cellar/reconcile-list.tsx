@@ -210,7 +210,7 @@ function ReconcileRow({
 
       <div className="mb-sm">
         <div className="flex flex-wrap items-center gap-sm">
-          <label className="flex items-center gap-xs text-[13px] text-grey">
+          <label className="flex min-h-11 items-center gap-xs text-[13px] text-grey">
             <span>Actual:</span>
             <input
               type="number"
@@ -235,7 +235,7 @@ function ReconcileRow({
                   note: pending?.note,
                 });
               }}
-              className="h-[40px] w-[96px] rounded-pill border border-hairline bg-white px-sm text-[14px] font-mono tabular-nums outline-none focus:border-primary focus:ring-2 focus:ring-blush-wash"
+              className="h-11 w-[96px] rounded-pill border border-hairline bg-white px-sm text-[14px] font-mono tabular-nums outline-none focus:border-primary focus:ring-2 focus:ring-blush-wash"
               aria-label="Actual remaining volume in ml"
             />
           </label>
@@ -280,7 +280,7 @@ function ReconcileRow({
       </div>
 
       <div className="flex flex-wrap items-center gap-sm">
-        <label className="flex w-full items-center gap-xs sm:w-auto sm:flex-1">
+        <label className="flex min-h-11 w-full items-center gap-xs sm:w-auto sm:flex-1">
           <span className="text-[12px] text-grey whitespace-nowrap">
             Note:
           </span>
@@ -295,7 +295,7 @@ function ReconcileRow({
               })
             }
             placeholder="spill, miscount, etc."
-            className="h-[32px] flex-1 rounded-pill border border-hairline bg-white px-sm text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-blush-wash"
+            className="h-11 flex-1 rounded-pill border border-hairline bg-white px-sm text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-blush-wash"
           />
         </label>
       </div>

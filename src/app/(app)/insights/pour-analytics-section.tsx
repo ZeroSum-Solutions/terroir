@@ -204,7 +204,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
       ) : (
         <div className="grid gap-md md:grid-cols-2">
           {/* Pour volume by section chart */}
-          <div className="rounded-lg border border-hairline bg-bridge-surface p-md">
+          <div className="min-w-0 rounded-lg border border-hairline bg-bridge-surface p-md">
             <div className="mb-sm flex items-center gap-xs">
               <TrendingUp className="h-4 w-4 text-grey" strokeWidth={1.5} />
               <h3 className="text-[13px] font-medium text-ink">
@@ -235,7 +235,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
           </div>
 
           {/* Top wines by pour count */}
-          <div className="rounded-lg border border-hairline bg-bridge-surface p-md">
+          <div className="min-w-0 rounded-lg border border-hairline bg-bridge-surface p-md">
             <div className="mb-sm flex items-center gap-xs">
               <Wine className="h-4 w-4 text-grey" strokeWidth={1.5} />
               <h3 className="text-[13px] font-medium text-ink">
@@ -251,7 +251,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
                     <div key={w.wine_id} data-metric={`ranked-pours-${w.wine_id}`}>
                       <Link
                         href={metricHref("wine", w.wine_id)}
-                        className="flex items-center gap-sm rounded-sm p-xs transition-colors hover:bg-white"
+                        className="flex min-h-11 items-center gap-sm rounded-sm p-xs transition-colors hover:bg-white"
                       >
                         <span className="w-[18px] shrink-0 text-right tabular text-[11px] text-grey">
                           {i + 1}
@@ -275,7 +275,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
           </div>
 
           {/* Top wines by revenue — full width on desktop */}
-          <div className="rounded-lg border border-hairline bg-bridge-surface p-md md:col-span-2">
+          <div className="min-w-0 rounded-lg border border-hairline bg-bridge-surface p-md md:col-span-2">
             <div className="mb-sm flex items-center gap-xs">
               <DollarSign className="h-4 w-4 text-grey" strokeWidth={1.5} />
               <h3 className="text-[13px] font-medium text-ink">
@@ -293,10 +293,11 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
                     <div
                       key={w.wine_id}
                       data-metric={`ranked-revenue-${w.wine_id}`}
+                      className="min-w-0"
                     >
                       <Link
                         href={metricHref("wine", w.wine_id)}
-                        className="flex items-center gap-sm rounded-sm p-xs transition-colors hover:bg-white"
+                        className="flex min-h-11 items-center gap-sm rounded-sm p-xs transition-colors hover:bg-white"
                       >
                         <span className="w-[18px] shrink-0 text-right tabular text-[11px] text-grey">
                           {i + 1}

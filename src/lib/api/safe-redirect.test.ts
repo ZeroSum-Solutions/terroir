@@ -22,6 +22,15 @@ describe("safeNext", () => {
     expect(safeNext("//evil.example.com/x", FALLBACK)).toBe(FALLBACK);
   });
 
+  it("rejects encoded separators, malformed escapes, and control characters", () => {
+    expect(safeNext("/%2f%2fevil.example.com", FALLBACK)).toBe(FALLBACK);
+    expect(safeNext("/%5cevil.example.com", FALLBACK)).toBe(FALLBACK);
+    expect(safeNext("/%E0%A4%A", FALLBACK)).toBe(FALLBACK);
+    expect(safeNext("/cellar\nLocation: https://evil.example", FALLBACK)).toBe(
+      FALLBACK,
+    );
+  });
+
   it("rejects an absolute same-origin URL (we don't try to allowlist hosts)", () => {
     // We deliberately don't try to do per-env host matching — relative paths
     // only, full stop.
