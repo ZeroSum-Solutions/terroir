@@ -7,6 +7,7 @@ import { DesktopNavLinks, MobileNavLinks } from "./nav-links";
 import { Fab } from "./fab";
 import { ToastWrapper } from "./toast-wrapper";
 import { OnboardingModal } from "./onboarding-modal";
+import { ShellContext } from "./shell-context";
 
 export default async function AppLayout({
   children,
@@ -26,17 +27,19 @@ export default async function AppLayout({
       <header className="glass sticky top-0 z-10 flex h-[54px] items-center px-md md:px-lg">
         <Link
           href="/"
-          className="font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink"
+          className="shrink-0 font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink"
         >
           TERR<span className="text-primary">OIR</span>
         </Link>
+
+        <ShellContext restaurantName={restaurantName} role={userRole} />
 
         {/* Desktop nav */}
         <nav className="ml-xl hidden items-center gap-lg md:flex" aria-label="Primary">
           <DesktopNavLinks role={userRole} />
         </nav>
 
-        <div className="ml-auto flex items-center gap-sm md:gap-md">
+        <div className="ml-auto flex shrink-0 items-center gap-sm md:gap-md">
           <span className="hidden text-[12px] font-light tabular text-grey md:inline">
             {user.email}
           </span>
@@ -62,7 +65,7 @@ export default async function AppLayout({
       </nav>
 
       {/* Floating Action Button — mobile-only primary actions surface.
-          Speed-dial: tap "+" to reveal Scan / Pour / 86 / Voice (stub).
+          Speed-dial: tap "+" to reveal Scan / Pour / 86.
           Hidden on /scan (already a primary-action surface). */}
       <Fab />
 

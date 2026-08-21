@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Mic, Plus, PowerOff, ScanLine, Wine } from "lucide-react";
+import { Plus, PowerOff, ScanLine, Wine } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -20,35 +20,21 @@ import { cn } from "@/lib/utils";
  *   • Hidden on /scan (the page IS already a primary-action surface)
  *   • Hidden on /login and pre-auth states
  *
- * Speed-dial pattern: tap "+" → 4 actions reveal vertically with a
+ * Speed-dial pattern: tap "+" → 3 working actions reveal vertically with a
  * staggered fade/slide. Tap any action to navigate. Tap the ×
  * (rotated +) or backdrop to close.
- *
- * Voice action is currently a stub. v2 lands the Whisper integration
- * per the spec's magical-UX promotion (wine-food pairing + similar-
- * substitutes ship in v1.5; voice/camera in v2). The disabled state
- * with "Coming soon" tooltip seeds the affordance now so users see
- * the destination.
  */
 
 type Action = {
   label: string;
-  href?: string;
+  href: string;
   Icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  disabled?: boolean;
-  disabledReason?: string;
 };
 
 const ACTIONS: Action[] = [
   { label: "Scan invoice", href: "/scan", Icon: ScanLine },
   { label: "Pour", href: "/cellar?mode=pour", Icon: Wine },
   { label: "86 a wine", href: "/cellar?mode=eightysix", Icon: PowerOff },
-  {
-    label: "Voice command",
-    Icon: Mic,
-    disabled: true,
-    disabledReason: "Coming in v2",
-  },
 ];
 
 // Routes where the FAB is hidden — pages that are themselves a
@@ -123,9 +109,8 @@ function FabInner() {
             visible={open}
             staggerIndex={i}
             onActivate={() => {
-              if (action.disabled) return;
               setOpen(false);
-              if (action.href) router.push(action.href);
+              router.push(action.href);
             }}
           />
         ))}
@@ -163,7 +148,7 @@ function ActionPill({
   staggerIndex: number;
   onActivate: () => void;
 }) {
-  const { label, Icon, disabled, disabledReason } = action;
+  const { label, Icon } = action;
   const transitionDelay = visible ? `${staggerIndex * 40}ms` : "0ms";
 
   const inner = (
@@ -173,61 +158,27 @@ function ActionPill({
         visible
           ? "translate-y-0 opacity-100"
           : "pointer-events-none translate-y-2 opacity-0",
-        disabled && "opacity-60",
       )}
       style={{ transitionDelay }}
     >
       <span className="text-[12px] uppercase tracking-[0.06em] text-grey">
         {label}
       </span>
-      <span
-        className={cn(
-          "grid h-9 w-9 place-items-center rounded-pill",
-          disabled ? "bg-beige text-grey" : "bg-blush-wash text-primary",
-        )}
-      >
+      <span className="grid h-9 w-9 place-items-center rounded-pill bg-blush-wash text-primary">
         <Icon className="h-4 w-4" strokeWidth={2} />
       </span>
     </span>
   );
 
-  if (disabled) {
-    return (
-      <button
-        type="button"
-        disabled
-        title={disabledReason}
-        aria-label={`${label} (${disabledReason ?? "unavailable"})`}
-        className="pointer-events-auto cursor-not-allowed"
-      >
-        {inner}
-      </button>
-    );
-  }
-
-  if (action.href) {
-    return (
-      <Link
-        href={action.href}
-        onClick={onActivate}
-        aria-label={label}
-        role="menuitem"
-        className="pointer-events-auto"
-      >
-        {inner}
-      </Link>
-    );
-  }
-
   return (
-    <button
-      type="button"
+    <Link
+      href={action.href}
       onClick={onActivate}
       aria-label={label}
       role="menuitem"
       className="pointer-events-auto"
     >
       {inner}
-    </button>
+    </Link>
   );
 }
