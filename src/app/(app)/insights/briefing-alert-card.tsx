@@ -117,7 +117,7 @@ export function BriefingAlertCard({
           <div className="mt-md flex flex-wrap items-center gap-xs">
             <Link
               href={metricHref("wine", alert.wine_id)}
-              className="inline-flex h-[38px] items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
+              className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
             >
               View {alert.bottle_count} bottle{alert.bottle_count === 1 ? "" : "s"}
               <ChevronRight className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -127,7 +127,7 @@ export function BriefingAlertCard({
               disabled={busy}
               onClick={onSnooze}
               className={cn(
-                "inline-flex h-[38px] items-center gap-xs rounded-pill px-md text-[13px] font-medium text-grey hover:bg-bridge-surface disabled:opacity-60",
+                "inline-flex min-h-11 items-center gap-xs rounded-pill px-md text-[13px] font-medium text-grey hover:bg-bridge-surface disabled:opacity-60",
               )}
             >
               <X className="h-4 w-4" strokeWidth={2} aria-hidden />

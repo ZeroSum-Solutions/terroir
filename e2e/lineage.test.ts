@@ -123,6 +123,9 @@ test.describe("@opp-1 vintage lineage", () => {
   test("EV-1.1: siblings render as one expandable lineage block with per-vintage rows", async ({ page }) => {
     await login(page);
     await page.goto("/cellar");
+    await page
+      .getByPlaceholder("Search name, producer, region…")
+      .fill(PRODUCER);
 
     const block = page.locator("[data-lineage-id]", { hasText: PRODUCER });
     await expect(block).toHaveCount(1);
@@ -133,6 +136,7 @@ test.describe("@opp-1 vintage lineage", () => {
     await expect(rollup).toContainText("5 btls");
 
     // Per-vintage child rows, newest first, each its own row.
+    await expandLineage(block);
     const children = block.locator("[data-lineage-children]");
     await expect(children).toBeVisible();
     await expect(children.getByText("2016", { exact: false }).first()).toBeVisible();
@@ -146,8 +150,13 @@ test.describe("@opp-1 vintage lineage", () => {
   test("EV-1.2: duplicate suspects are chipped and merge combines stock", async ({ page }) => {
     await login(page);
     await page.goto("/cellar");
+    await page
+      .getByPlaceholder("Search name, producer, region…")
+      .fill(PRODUCER);
 
     const block = page.locator("[data-lineage-id]", { hasText: PRODUCER });
+    await expect(block).toHaveCount(1);
+    await expandLineage(block);
     await expect(
       block.locator("[data-duplicate-suspect]").first(),
     ).toBeVisible();
@@ -200,3 +209,11 @@ test.describe("@opp-1 vintage lineage", () => {
     expect(data).toHaveLength(2);
   });
 });
+
+async function expandLineage(block: ReturnType<Page["locator"]>) {
+  const header = block.locator("[data-lineage-header]");
+  if ((await header.getAttribute("aria-expanded")) !== "true") {
+    await header.click();
+  }
+  await expect(header).toHaveAttribute("aria-expanded", "true");
+}

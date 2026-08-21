@@ -69,6 +69,20 @@ describe("BrandKitPanel proposal identity", () => {
     ).toBe(false);
     await act(async () => root.unmount());
   });
+
+  it("keeps logo and theme actions at least 44px tall", async () => {
+    const { root, container } = await renderPanel(STORED_PROPOSALS);
+    const upload = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Upload logo"]',
+    )!;
+    const generate = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Generate themes"),
+    )!;
+
+    expect(upload.closest("label")?.className).toContain("min-h-11");
+    expect(generate.className).toContain("min-h-11");
+    await act(async () => root.unmount());
+  });
 });
 
 async function renderPanel(proposals: typeof STORED_PROPOSALS) {

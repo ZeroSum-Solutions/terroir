@@ -111,6 +111,38 @@ describe("PublishModal unpublish confirmation", () => {
     expect(dialogByTitle(container, "Unpublish list")).toBeUndefined();
   });
 
+  it.each([
+    { isPublished: false, currentSlug: null },
+    { isPublished: true, currentSlug: "dinner-list" },
+  ])("keeps the $isPublished publish state scrollable and touch sized", async ({ isPublished, currentSlug }) => {
+    const { container } = await mount(
+      <PublishModal
+        listId="list-touch"
+        listName="Dinner List"
+        currentSlug={currentSlug}
+        isPublished={isPublished}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const panel = container.querySelector<HTMLElement>("[data-publish-panel]");
+    expect(panel).not.toBeNull();
+    expect(panel?.className).toContain("max-h-[calc(100dvh-2rem)]");
+    expect(panel?.className).toContain("overflow-y-auto");
+
+    const controls = container.querySelectorAll<HTMLElement>(
+      'input, button, a[href]',
+    );
+    expect(controls.length).toBeGreaterThan(0);
+    for (const control of controls) {
+      expect(
+        control.className.includes("h-11") ||
+          control.className.includes("min-h-11"),
+        control.textContent?.trim() || control.id,
+      ).toBe(true);
+    }
+  });
+
   async function mount(element: ReactElement) {
     const container = document.createElement("div");
     document.body.append(container);

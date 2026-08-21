@@ -174,7 +174,7 @@ export function EditMetadataModal({
           onClick={onClose}
           aria-label="Close"
           disabled={busy}
-          className="flex h-8 w-8 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
         >
           <X className="h-4 w-4" strokeWidth={2} aria-hidden />
         </button>
@@ -189,7 +189,7 @@ export function EditMetadataModal({
             type="text"
             value={producer}
             onChange={(e) => setProducer(e.target.value)}
-            className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+            className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -200,7 +200,7 @@ export function EditMetadataModal({
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+            className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -214,7 +214,7 @@ export function EditMetadataModal({
             value={vintage}
             onChange={(e) => setVintage(e.target.value)}
             placeholder="e.g. 2020"
-            className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+            className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -226,7 +226,7 @@ export function EditMetadataModal({
             value={varietal}
             onChange={(e) => setVarietal(e.target.value)}
             placeholder="e.g. Cabernet Sauvignon"
-            className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+            className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -238,7 +238,7 @@ export function EditMetadataModal({
             value={region}
             onChange={(e) => setRegion(e.target.value)}
             placeholder="e.g. Napa Valley"
-            className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+            className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -273,7 +273,7 @@ export function EditMetadataModal({
                 value={dwStart}
                 onChange={(e) => setDwStart(e.target.value)}
                 placeholder="e.g. 2025"
-                className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+                className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
               />
             </Field>
             <Field label="Peak year" htmlFor="edit-dw-peak">
@@ -285,7 +285,7 @@ export function EditMetadataModal({
                 value={dwPeak}
                 onChange={(e) => setDwPeak(e.target.value)}
                 placeholder="e.g. 2030"
-                className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+                className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
               />
             </Field>
             <Field label="End year" htmlFor="edit-dw-end">
@@ -297,7 +297,7 @@ export function EditMetadataModal({
                 value={dwEnd}
                 onChange={(e) => setDwEnd(e.target.value)}
                 placeholder="e.g. 2035"
-                className="h-[40px] w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+                className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
               />
             </Field>
           </div>
@@ -319,7 +319,7 @@ export function EditMetadataModal({
           type="button"
           onClick={onClose}
           disabled={busy}
-          className="flex h-[40px] items-center rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
+          className="flex h-11 items-center rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
         >
           Cancel
         </button>
@@ -328,7 +328,7 @@ export function EditMetadataModal({
           onClick={handleSave}
           disabled={busy || !producer.trim() || !name.trim()}
           className={cn(
-            "flex h-[40px] items-center gap-sm rounded-pill px-md text-[13px] font-medium text-white transition-colors",
+            "flex h-11 items-center gap-sm rounded-pill px-md text-[13px] font-medium text-white transition-colors",
             dirty
               ? "bg-primary hover:bg-primary-hover"
               : "bg-primary/50",

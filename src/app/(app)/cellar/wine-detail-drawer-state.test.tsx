@@ -156,6 +156,41 @@ describe("WineDetailDrawer bottle state", () => {
     await act(async () => root.unmount());
   });
 
+  it("keeps the drawer open when Escape closes the nested metadata dialog", async () => {
+    const outerTrigger = document.createElement("button");
+    outerTrigger.textContent = "Open wine";
+    document.body.appendChild(outerTrigger);
+    outerTrigger.focus();
+    const onClose = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <ToastProvider>
+          <WineDetailDrawer row={row({})} canManage onClose={onClose} />
+        </ToastProvider>,
+      );
+    });
+    await flushFocusFrame();
+    const outerDialog = dialogByTitle(container, "Test Wine")!;
+    const editTrigger = button(outerDialog, "Edit metadata");
+    editTrigger.focus();
+    await click(editTrigger);
+    await flushFocusFrame();
+    expect(dialogByTitle(container, "Edit wine")).toBeDefined();
+
+    await pressEscape();
+
+    expect(dialogByTitle(container, "Edit wine")).toBeUndefined();
+    expect(dialogByTitle(container, "Test Wine")).toBeDefined();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(editTrigger);
+
+    await act(async () => root.unmount());
+  });
+
   it("keeps the 86 target and audit note after failure, then retries the same payload", async () => {
     const fetchMock = vi
       .fn()
@@ -214,6 +249,43 @@ describe("WineDetailDrawer bottle state", () => {
     expect(dialogByTitle(container, "Restore wine")).toBeUndefined();
     await act(async () => root.unmount());
   });
+
+  it("keeps the drawer controls touch sized", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <ToastProvider>
+          <WineDetailDrawer
+            row={row({})}
+            canManage
+            isOwner
+            onClose={() => undefined}
+          />
+        </ToastProvider>,
+      );
+    });
+
+    const labels = [
+      "Close",
+      "Preservation method",
+      "Re-enrich",
+      "Edit metadata",
+      "Delete wine",
+    ];
+    for (const label of labels) {
+      const control =
+        container.querySelector<HTMLElement>(`[aria-label="${label}"]`) ??
+        [...container.querySelectorAll<HTMLElement>("button")].find(
+          (item) => item.textContent?.trim() === label,
+        );
+      expect(control, label).toBeDefined();
+      expect(control?.className, label).toContain("h-11");
+    }
+
+    await act(async () => root.unmount());
+  });
 });
 
 async function renderDrawer(root: ReturnType<typeof createRoot>, value: CellarWineRow) {
@@ -262,6 +334,12 @@ function dialogByTitle(root: ParentNode, title: string) {
 
 function pressTab(shiftKey = false) {
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true }));
+}
+
+async function pressEscape() {
+  await act(async () => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
 }
 
 async function flushFocusFrame() {

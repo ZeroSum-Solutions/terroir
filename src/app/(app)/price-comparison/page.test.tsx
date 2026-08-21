@@ -166,6 +166,35 @@ describe("PriceComparisonPage", () => {
       ),
     ).toBeNull();
   });
+
+  it("renders a large pricing set incrementally", async () => {
+    const items = Array.from({ length: 60 }, (_, index) => ({
+      ...inventoryItem,
+      wine_id: `wine-${index}`,
+      wines: {
+        ...inventoryItem.wines,
+        id: `wine-${index}`,
+        name: `Reserve Red ${index}`,
+      },
+    }));
+    authenticate({
+      inventory_items: { data: items, error: null },
+      wines: { data: [], error: null },
+    });
+
+    const container = renderPage(
+      await PriceComparisonPage({ searchParams: Promise.resolve({}) }),
+    );
+
+    expect(
+      container.querySelectorAll('[aria-label="Flag as overpaid"]'),
+    ).toHaveLength(50);
+    const showMore = [...container.querySelectorAll("a")].find((link) =>
+      link.textContent?.includes("Show 25 more"),
+    );
+    expect(showMore?.getAttribute("href")).toContain("limit=50");
+    expect(showMore?.className).toContain("min-h-11");
+  });
 });
 
 function isHiddenFromAccessibility(element: HTMLElement) {

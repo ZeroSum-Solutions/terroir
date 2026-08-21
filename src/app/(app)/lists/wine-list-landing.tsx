@@ -271,7 +271,7 @@ export function WineListLanding({
                   type="button"
                   onClick={() => copyListLink(list)}
                   aria-label={`Copy public link for ${list.name}`}
-                  className="inline-flex h-[28px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                  className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
                 >
                   {justCopied ? (
                     <Check
@@ -293,7 +293,7 @@ export function WineListLanding({
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Open public ${list.name} list in a new tab`}
-                  className="inline-flex h-[28px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                  className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
                 >
                   <ExternalLink
                     className="h-3.5 w-3.5"
@@ -310,7 +310,7 @@ export function WineListLanding({
               onClick={() => cloneList(list)}
               disabled={isCloning}
               aria-label={`Clone ${list.name}`}
-              className="inline-flex h-[28px] items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft disabled:opacity-60"
+              className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft disabled:opacity-60"
             >
               <Files className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               Clone
@@ -326,7 +326,7 @@ export function WineListLanding({
                   ? `Restore ${list.name}`
                   : `Archive ${list.name}`
               }
-              className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-pill border border-hairline bg-canvas text-ink-subtle hover:bg-bridge-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft disabled:opacity-60"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-hairline bg-canvas text-ink-subtle hover:bg-bridge-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft disabled:opacity-60"
             >
               {list.archived ? (
                 <ArchiveRestore className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -341,7 +341,7 @@ export function WineListLanding({
                 onClick={() => requestDeleteList(list)}
                 disabled={isDeleting}
                 aria-label={`Permanently delete ${list.name}`}
-                className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-pill border border-hairline bg-canvas text-ink-subtle hover:bg-blush-wash hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-hairline bg-canvas text-ink-subtle hover:bg-blush-wash hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60"
               >
                 <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               </button>

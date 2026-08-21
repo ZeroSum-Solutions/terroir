@@ -39,6 +39,19 @@ afterEach(() => {
 });
 
 describe("ReconcileList variance presentation", () => {
+  it("keeps reconciliation form controls at least 44px tall", async () => {
+    await act(async () => root.render(<ReconcileList initialItems={[item]} />));
+    const actual = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Actual remaining volume in ml"]',
+    )!;
+    const note = container.querySelector<HTMLInputElement>(
+      'input[placeholder="spill, miscount, etc."]',
+    )!;
+
+    expect(actual.className).toContain("h-11");
+    expect(note.className).toContain("h-11");
+  });
+
   it.each([
     {
       name: "subthreshold over",

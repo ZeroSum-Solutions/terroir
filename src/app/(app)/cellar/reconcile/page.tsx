@@ -71,7 +71,7 @@ export default async function ReconcilePage() {
         </div>
         <Link
           href="/cellar/reconcile/history"
-          className="flex h-[38px] items-center gap-xs rounded-pill border border-ink/25 bg-white px-sm text-[13px] font-medium text-grey hover:bg-bridge-surface hover:text-ink transition-colors"
+          className="flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-white px-sm text-[13px] font-medium text-grey transition-colors hover:bg-bridge-surface hover:text-ink"
         >
           <History className="h-4 w-4" strokeWidth={1.5} />
           <span className="hidden sm:inline">History</span>

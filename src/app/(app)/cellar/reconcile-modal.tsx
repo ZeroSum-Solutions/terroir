@@ -86,7 +86,7 @@ export function ReconcileModal({
             type="button"
             onClick={onClose}
             aria-label="Close reconcile mode"
-            className="ml-md flex h-10 w-10 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
+            className="ml-md flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getAuthContext: vi.fn(),
+  select: vi.fn(),
 }));
 
 vi.mock("@/lib/auth-context", () => ({
@@ -15,7 +16,7 @@ type QueryResult = { data: unknown[] | null; error: unknown };
 
 function authenticate(result: QueryResult) {
   const chain = {
-    select: () => chain,
+    select: mocks.select,
     eq: () => chain,
     is: () => chain,
     order: () => chain,
@@ -24,6 +25,7 @@ function authenticate(result: QueryResult) {
       reject?: (reason: unknown) => unknown,
     ) => Promise.resolve(result).then(resolve, reject),
   };
+  mocks.select.mockReturnValue(chain);
 
   mocks.getAuthContext.mockResolvedValue({
     user: { id: "user-1" },
@@ -60,5 +62,17 @@ describe("OpenBottlesPage", () => {
     );
     expect(cellarLink?.className).toContain("h-11");
     expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("reads bottle size from the related wine instead of a missing open-bottle column", async () => {
+    authenticate({ data: [], error: null });
+
+    await OpenBottlesPage();
+
+    const selection = mocks.select.mock.calls[0]?.[0] as string;
+    expect(selection).not.toMatch(/remaining_ml,\s*size_ml/);
+    expect(selection).toContain(
+      "wines!inner(id, name, producer, vintage, size_ml)",
+    );
   });
 });

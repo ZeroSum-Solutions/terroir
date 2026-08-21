@@ -63,6 +63,12 @@ export function DrinkWindowTimeline({
   const markerHeight = isMini ? "h-[8px]" : "h-[30px]";
   const markerLabelTop = isMini ? "top-[24px]" : "top-[64px]";
   const axisFontSize = isMini ? "text-[10px]" : "text-[10px]";
+  const markerLabelTransform =
+    markerPct <= 15
+      ? "translateX(0)"
+      : markerPct >= 85
+        ? "translateX(-100%)"
+        : "translateX(-50%)";
 
   return (
     <div className={`relative w-full ${wrapperHeight}`} aria-hidden>
@@ -148,7 +154,7 @@ export function DrinkWindowTimeline({
         className={`absolute ${markerLabelTop} font-mono text-[11px] font-medium`}
         style={{
           left: `${markerPct}%`,
-          transform: "translateX(-50%)",
+          transform: markerLabelTransform,
           color: "var(--color-primary)",
           whiteSpace: "nowrap",
         }}

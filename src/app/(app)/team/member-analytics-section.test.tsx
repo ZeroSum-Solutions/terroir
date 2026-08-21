@@ -33,6 +33,11 @@ describe("MemberAnalyticsTable", () => {
     expect(metrics.every((metric) =>
       metric.querySelector("a")?.getAttribute("href") === "/team#member-czmw3l"
     )).toBe(true);
+    expect(
+      metrics.every((metric) =>
+        metric.querySelector("a")?.className.includes("min-h-11"),
+      ),
+    ).toBe(true);
   });
 
   it("renders scoped member identities with neutral fallbacks instead of UUID text", () => {

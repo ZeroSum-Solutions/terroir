@@ -38,5 +38,15 @@ describe("BriefingAlertCard", () => {
     expect(document.body.textContent).toContain("Snooze 30 days");
     expect(document.body.textContent).not.toContain("Add to menu");
     expect(document.body.textContent).not.toContain("Add to staff briefing");
+
+    const actions = [...document.querySelectorAll("a, button")].filter(
+      (action) =>
+        action.textContent?.includes("View 2 bottles") ||
+        action.textContent?.includes("Snooze 30 days"),
+    );
+    expect(actions).toHaveLength(2);
+    for (const action of actions) {
+      expect(action.className).toContain("min-h-11");
+    }
   });
 });

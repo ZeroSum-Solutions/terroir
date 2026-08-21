@@ -6,6 +6,8 @@ import { buildAcceptAction } from "./accept-action";
 import { QueueIssueRow } from "./issue-row";
 import type { QueueResponse } from "./types";
 
+const QUEUE_PAGE_SIZE = 25;
+
 export function ReconcileQueueClient() {
   const queue = useQueueData();
   if (queue.loading) return <QueueLoading />;
@@ -68,13 +70,21 @@ type QueueViewProps = {
 
 function QueueView(props: QueueViewProps) {
   const { data, rows, ready, selectedRows, selected, binByIssue, busy } = props;
+  const paginationKey = rows.map((row) => row.id).join("\u0000");
+  const [pagination, setPagination] = useState({
+    key: paginationKey,
+    count: QUEUE_PAGE_SIZE,
+  });
+  const visibleCount =
+    pagination.key === paginationKey ? pagination.count : QUEUE_PAGE_SIZE;
+  const visibleRows = rows.slice(0, visibleCount);
   return (
     <>
       <QueueHeader summary={data.summary} latestBatch={data.latest_batch} busy={busy} undo={props.undo} />
       {(props.message || props.mutationError) && <StatusBanner message={props.message} error={props.mutationError} />}
       {rows.length === 0 ? <QueueEmpty /> : (
         <div className="overflow-hidden rounded-card border border-hairline bg-canvas">
-          {rows.map((row) => (
+          {visibleRows.map((row) => (
           <QueueIssueRow
             key={row.id}
             row={row}
@@ -87,6 +97,21 @@ function QueueView(props: QueueViewProps) {
           />
           ))}
         </div>
+      )}
+      {visibleRows.length < rows.length && (
+        <button
+          type="button"
+          onClick={() =>
+            setPagination({
+              key: paginationKey,
+              count: visibleCount + QUEUE_PAGE_SIZE,
+            })
+          }
+          className="mt-md min-h-11 w-full rounded-pill border border-hairline bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+        >
+          Show {Math.min(QUEUE_PAGE_SIZE, rows.length - visibleRows.length)} more ·{" "}
+          {visibleRows.length} of {rows.length}
+        </button>
       )}
       {rows.length > 0 && (
         <BulkRail

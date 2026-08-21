@@ -58,8 +58,17 @@ test.describe("@opp-5 reconciliation queue", () => {
     expect(response.ok(), await response.text()).toBeTruthy();
     const payload = await response.json() as {
       summary: { itemCount: number; unitCount: number; atRisk: number };
+      issues: Array<{ id: string; kind: string; title: string }>;
     };
+    expect(payload.issues.filter((issue) => issue.title.includes(PRODUCER))).toHaveLength(4);
+    const uiQueueResponse = page.waitForResponse((candidate) =>
+      candidate.request().method() === "GET" &&
+      new URL(candidate.url()).pathname === "/api/reconcile-queue",
+    );
     await page.goto("/reconcile-queue");
+    const uiPayload = await (await uiQueueResponse).json() as typeof payload;
+    expect(uiPayload.issues.filter((issue) => issue.title.includes(PRODUCER))).toHaveLength(4);
+    await revealFixtureRows(page);
 
     const expected = `${payload.summary.itemCount} items · ${payload.summary.unitCount} units · $${formatRisk(payload.summary.atRisk)} at risk`;
     await expect(page.getByText(expected, { exact: true })).toBeVisible();
@@ -71,6 +80,7 @@ test.describe("@opp-5 reconciliation queue", () => {
   test("EV-5.2: ledger rows render in descending capital-at-risk order", async ({ page }) => {
     await login(page);
     await page.goto("/reconcile-queue");
+    await revealFixtureRows(page);
 
     const risks = await page.locator("[data-queue-row]", { hasText: PRODUCER }).evaluateAll((rows) =>
       rows.map((row) => Number((row as HTMLElement).dataset.risk)),
@@ -81,6 +91,7 @@ test.describe("@opp-5 reconciliation queue", () => {
   test("EV-5.3: scan suggestion cites field identity rather than similarity", async ({ page }) => {
     await login(page);
     await page.goto("/reconcile-queue");
+    await revealFixtureRows(page);
 
     const scanRow = page.locator('[data-queue-kind="unmatched_scan"]', { hasText: PRODUCER });
     await expect(scanRow.getByText("Field match", { exact: true })).toBeVisible();
@@ -90,6 +101,7 @@ test.describe("@opp-5 reconciliation queue", () => {
   test("EV-5.4: bulk accept then undo restores the invoice scan byte-for-byte", async ({ page }) => {
     await login(page);
     await page.goto("/reconcile-queue");
+    await revealFixtureRows(page);
     const row = page.locator('[data-queue-kind="unmatched_scan"]', { hasText: PRODUCER });
     await row.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Accept 1 item" }).click();
@@ -133,6 +145,22 @@ async function resolveMembership(admin: Admin): Promise<Membership> {
 async function login(page: Page) {
   const response = await page.request.get("/api/dev-login");
   expect(response.ok(), await response.text()).toBeTruthy();
+}
+
+async function revealFixtureRows(page: Page) {
+  const targets = page.locator("[data-queue-row]", { hasText: PRODUCER });
+  await expect(page.locator("[data-queue-row]").first()).toBeVisible();
+  for (let pageIndex = 0; pageIndex < 40; pageIndex += 1) {
+    if ((await targets.count()) >= 4) return;
+    const showMore = page.getByRole("button", { name: /^Show \d+ more/ });
+    if (!(await showMore.count())) break;
+    const before = await page.locator("[data-queue-row]").count();
+    await showMore.click();
+    await expect
+      .poll(() => page.locator("[data-queue-row]").count())
+      .toBeGreaterThan(before);
+  }
+  await expect(targets).toHaveCount(4);
 }
 
 async function insertBin(admin: Admin, restaurantId: string): Promise<string> {

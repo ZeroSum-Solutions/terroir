@@ -113,7 +113,7 @@ export function WineDetailDrawer({
     containerRef: dialogRef,
     onEscape: onClose,
     enabled: row !== null,
-    paused: pendingDirection !== null,
+    paused: pickerOpen || pendingDirection !== null || editOpen,
   });
 
   // BND-121: manually open a bottle without recording a pour
@@ -435,7 +435,7 @@ export function WineDetailDrawer({
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="flex h-8 w-8 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
             >
               <X className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
@@ -463,7 +463,7 @@ export function WineDetailDrawer({
                       type="button"
                       onClick={handleImageDelete}
                       disabled={uploading}
-                      className="absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-pill bg-black/50 text-white hover:bg-black/70 disabled:opacity-40"
+                      className="absolute top-2 right-2 flex h-11 w-11 items-center justify-center rounded-pill bg-black/50 text-white hover:bg-black/70 disabled:opacity-40"
                       aria-label="Remove image"
                     >
                       <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -606,7 +606,7 @@ export function WineDetailDrawer({
                     aria-label="Preservation method"
                     value={preservationMethod}
                     onChange={(event) => setPreservationMethod(event.target.value as PreservationMethod)}
-                    className="mt-xs h-10 w-full rounded-pill border border-hairline bg-white px-sm text-[13px] text-ink"
+                    className="mt-xs h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[13px] text-ink"
                   >
                     <option value="none">None</option>
                     <option value="coravin">Coravin</option>
@@ -662,7 +662,7 @@ export function WineDetailDrawer({
                   type="button"
                   disabled={busy}
                   onClick={doUndo}
-                  className="flex h-[40px] items-center justify-center gap-xs rounded-pill border border-amber/40 bg-amber-wash text-[13px] font-medium text-amber transition-colors hover:bg-amber-wash/70 disabled:opacity-60"
+                  className="flex h-11 items-center justify-center gap-xs rounded-pill border border-amber/40 bg-amber-wash text-[13px] font-medium text-amber transition-colors hover:bg-amber-wash/70 disabled:opacity-60"
                 >
                   <Undo2 className="h-4 w-4" strokeWidth={2} aria-hidden />
                   Undo last pour ({(lastPour.ml / ML_PER_OZ).toFixed(1)} oz)
@@ -695,7 +695,7 @@ export function WineDetailDrawer({
                     disabled={enriching}
                     onClick={doEnrich}
                     className={cn(
-                      "flex h-[40px] items-center justify-center gap-xs rounded-pill border text-[13px] font-medium transition-colors disabled:opacity-60",
+                      "flex h-11 items-center justify-center gap-xs rounded-pill border text-[13px] font-medium transition-colors disabled:opacity-60",
                       enrichMsg
                         ? "border-sage-ink/30 bg-sage-wash text-sage-ink"
                         : "border-ink/25 bg-white text-ink hover:bg-bridge-surface",
@@ -720,7 +720,7 @@ export function WineDetailDrawer({
                 <button
                   type="button"
                   onClick={() => setEditOpen(true)}
-                  className="flex h-[40px] items-center justify-center gap-xs rounded-pill border border-ink/25 bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface transition-colors"
+                  className="flex h-11 items-center justify-center gap-xs rounded-pill border border-ink/25 bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface transition-colors"
                 >
                   <Edit3 className="h-4 w-4" strokeWidth={2} aria-hidden />
                   Edit metadata
@@ -748,7 +748,7 @@ export function WineDetailDrawer({
                           type="button"
                           disabled={busy}
                           onClick={() => setMergeConfirm(null)}
-                          className="flex-1 h-[36px] rounded-pill border border-hairline bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
+                          className="h-11 flex-1 rounded-pill border border-hairline bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
                         >
                           Cancel
                         </button>
@@ -756,7 +756,7 @@ export function WineDetailDrawer({
                           type="button"
                           disabled={busy}
                           onClick={() => doMerge(dup.wine_id)}
-                          className="flex-1 h-[36px] rounded-pill bg-primary text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+                          className="h-11 flex-1 rounded-pill bg-primary text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
                         >
                           {busy ? "Merging..." : "Confirm merge"}
                         </button>
@@ -767,7 +767,7 @@ export function WineDetailDrawer({
                         type="button"
                         disabled={busy}
                         onClick={() => setMergeConfirm(dup.wine_id)}
-                        className="flex h-[36px] items-center justify-center rounded-pill border border-ink/25 bg-white px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
+                        className="flex h-11 items-center justify-center rounded-pill border border-ink/25 bg-white px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
                       >
                         Merge &ldquo;{dup.producer} {dup.name}
                         {dup.vintage ? ` ${dup.vintage}` : ""}&rdquo; into this record
@@ -793,7 +793,7 @@ export function WineDetailDrawer({
                           type="button"
                           disabled={busy}
                           onClick={() => setDeleteConfirm(false)}
-                          className="flex-1 h-[36px] rounded-pill border border-hairline bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
+                          className="h-11 flex-1 rounded-pill border border-hairline bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
                         >
                           Cancel
                         </button>
@@ -801,7 +801,7 @@ export function WineDetailDrawer({
                           type="button"
                           disabled={busy}
                           onClick={doDelete}
-                          className="flex-1 h-[36px] rounded-pill bg-primary text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+                          className="h-11 flex-1 rounded-pill bg-primary text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
                         >
                           {busy ? "Deleting..." : "Delete"}
                         </button>
@@ -812,7 +812,7 @@ export function WineDetailDrawer({
                       type="button"
                       disabled={busy}
                       onClick={() => setDeleteConfirm(true)}
-                      className="flex h-[40px] items-center justify-center gap-xs rounded-pill border border-primary/30 bg-white text-[13px] font-medium text-primary hover:bg-blush-wash transition-colors disabled:opacity-60"
+                      className="flex h-11 items-center justify-center gap-xs rounded-pill border border-primary/30 bg-white text-[13px] font-medium text-primary hover:bg-blush-wash transition-colors disabled:opacity-60"
                     >
                       <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
                       Delete wine

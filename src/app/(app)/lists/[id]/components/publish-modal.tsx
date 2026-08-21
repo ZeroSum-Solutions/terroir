@@ -182,7 +182,11 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div ref={trapRef} className="w-full max-w-[420px] rounded-card border border-hairline bg-canvas p-lg">
+      <div
+        ref={trapRef}
+        data-publish-panel
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-[420px] overflow-y-auto rounded-card border border-hairline bg-canvas p-lg"
+      >
         {!published ? (
           <>
             <h2 id="publish-title" className="font-serif text-[22px] text-ink">
@@ -212,7 +216,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                     setSlugError(null);
                   }}
                   placeholder="spring-2026"
-                  className="flex-1 h-[38px] bg-transparent px-0 pr-md text-[14px] text-ink placeholder:text-ink-muted/50 focus:outline-none"
+                  className="h-11 flex-1 bg-transparent px-0 pr-md text-[14px] text-ink placeholder:text-ink-muted/50 focus:outline-none"
                   autoComplete="off"
                   spellCheck={false}
                 />
@@ -228,7 +232,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
               <button
                 type="button"
                 onClick={onClose}
-                className="h-[38px] rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
+                className="h-11 rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
               >
                 Cancel
               </button>
@@ -236,7 +240,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                 type="button"
                 onClick={publish}
                 disabled={publishing}
-                className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+                className="h-11 rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
               >
                 {publishing ? "Publishing..." : "Publish"}
               </button>
@@ -263,7 +267,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                   <button
                     type="button"
                     onClick={copyUrl}
-                    className="shrink-0 rounded-pill px-sm py-xs text-[12px] font-medium text-primary hover:bg-blush-wash"
+                    className="inline-flex min-h-11 shrink-0 items-center rounded-pill px-sm py-xs text-[12px] font-medium text-primary hover:bg-blush-wash"
                   >
                     {copied ? "Copied!" : "Copy"}
                   </button>
@@ -271,7 +275,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                 <button
                   type="button"
                   onClick={downloadQr}
-                  className="mt-sm inline-flex h-[32px] items-center rounded-pill border border-hairline bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                  className="mt-sm inline-flex h-11 items-center rounded-pill border border-hairline bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
                 >
                   Download QR (PNG)
                 </button>
@@ -295,7 +299,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                       setSlugError(null);
                       setSlugSuccess(false);
                     }}
-                    className="flex-1 h-[38px] bg-transparent px-0 pr-md text-[14px] text-ink focus:outline-none"
+                    className="h-11 flex-1 bg-transparent px-0 pr-md text-[14px] text-ink focus:outline-none"
                     autoComplete="off"
                     spellCheck={false}
                   />
@@ -304,7 +308,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                   type="button"
                   onClick={saveSlug}
                   disabled={publishing || slugInput.trim().toLowerCase() === slug}
-                  className="h-[38px] shrink-0 rounded-pill border border-hairline px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-40"
+                  className="h-11 shrink-0 rounded-pill border border-hairline px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-40"
                 >
                   {publishing ? "..." : "Save"}
                 </button>
@@ -326,7 +330,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                 href={publicUrl ?? "#"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[13px] font-medium text-primary hover:underline"
+                className="inline-flex min-h-11 items-center text-[13px] font-medium text-primary hover:underline"
               >
                 Open in new tab
               </a>
@@ -338,14 +342,14 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                     setUnpublishOpen(true);
                   }}
                   disabled={publishing}
-                  className="h-[38px] rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
+                  className="h-11 rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
                 >
                   {publishing ? "Unpublishing..." : "Unpublish"}
                 </button>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
+                  className="h-11 rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
                 >
                   Done
                 </button>

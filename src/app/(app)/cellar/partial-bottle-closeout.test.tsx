@@ -23,4 +23,23 @@ describe("PartialBottleCloseout", () => {
     expect(document.querySelector('input[name="written_off_ml"]')).not.toBeNull();
     expect(document.querySelector('option[value="reason-1"]')?.textContent).toBe("Spoiled");
   });
+
+  it("keeps every close-out control at least 44px tall", () => {
+    document.body.innerHTML = renderToStaticMarkup(
+      <PartialBottleCloseout
+        bottle={{
+          id: "b-1",
+          wineId: "w-1",
+          theoreticalRemainingMl: 515,
+          preservationMethod: "coravin",
+          openedBy: "u-1",
+        }}
+        reasons={[{ id: "reason-1", label: "Spoiled", category: "spoilage" }]}
+      />,
+    );
+
+    for (const control of document.querySelectorAll<HTMLElement>("input, select, button")) {
+      expect(control.className).toContain("h-11");
+    }
+  });
 });

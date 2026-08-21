@@ -99,7 +99,7 @@ export function PriceInput({ value, onChange, muted }: PriceInputProps) {
           setEditing(true);
         }}
         className={cn(
-          "w-full rounded-md border border-transparent px-xs py-2xs text-right font-mono text-[14px] transition-colors hover:border-hairline hover:bg-white",
+          "min-h-11 w-full rounded-md border border-transparent px-xs py-2xs text-right font-mono text-[14px] transition-colors hover:border-hairline hover:bg-white",
           muted ? "text-ink-muted" : "text-ink",
         )}
       >
@@ -124,7 +124,7 @@ export function PriceInput({ value, onChange, muted }: PriceInputProps) {
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setEditing(false);
         }}
-        className="w-full rounded-md border border-primary bg-white py-2xs pl-md pr-xs text-right font-mono text-[14px] text-ink outline-none ring-2 ring-accent-soft"
+        className="min-h-11 w-full rounded-md border border-primary bg-white py-2xs pl-md pr-xs text-right font-mono text-[14px] text-ink outline-none ring-2 ring-accent-soft"
       />
     </div>
   );
@@ -167,7 +167,7 @@ function NameEdit({
           setEditing(true);
         }}
         className={cn(
-          "rounded-md border border-transparent px-xs py-2xs text-left transition-colors hover:border-hairline hover:bg-white",
+          "min-h-11 rounded-md border border-transparent px-xs py-2xs text-left transition-colors hover:border-hairline hover:bg-white",
           "font-serif text-[17px] font-medium",
           isOverridden ? "text-primary italic" : "text-ink",
         )}
@@ -197,7 +197,7 @@ function NameEdit({
         if (e.key === "Escape") setEditing(false);
       }}
       placeholder={item.wines.name}
-      className="w-full rounded-md border border-primary bg-white px-xs py-2xs font-serif text-[17px] font-medium text-ink outline-none ring-2 ring-accent-soft"
+      className="min-h-11 w-full rounded-md border border-primary bg-white px-xs py-2xs font-serif text-[17px] font-medium text-ink outline-none ring-2 ring-accent-soft"
     />
   );
 }
@@ -222,7 +222,7 @@ function PourConfigRow({
 
   return (
     <div className="flex flex-wrap items-center gap-sm text-[12px] text-ink-muted">
-      <label className="flex items-center gap-xs">
+      <label className="flex min-h-11 items-center gap-xs">
         <span className="shrink-0">Pour</span>
         <input
           type="number"
@@ -245,7 +245,7 @@ function PourConfigRow({
           }}
           placeholder="148"
           aria-label={`Pour size in ml for ${item.wines.name}`}
-          className="h-[28px] w-[64px] rounded-md border border-hairline bg-white px-xs text-right font-mono text-[12px] text-ink outline-none focus:border-primary focus:ring-2 focus:ring-accent-soft"
+          className="h-11 w-[64px] rounded-md border border-hairline bg-white px-xs text-right font-mono text-[12px] text-ink outline-none focus:border-primary focus:ring-2 focus:ring-accent-soft"
         />
         <span className="shrink-0 text-[11px] text-ink-subtle">ml</span>
         {ozHint && (
@@ -259,7 +259,7 @@ function PourConfigRow({
         )}
       >
         <legend className="sr-only">Pour size mode</legend>
-        <label className="flex items-center gap-xs">
+        <label className="flex min-h-11 items-center gap-xs">
           <input
             type="radio"
             name={nameRadio}
@@ -269,7 +269,7 @@ function PourConfigRow({
           />
           Fixed
         </label>
-        <label className="flex items-center gap-xs">
+        <label className="flex min-h-11 items-center gap-xs">
           <input
             type="radio"
             name={nameRadio}
@@ -303,7 +303,7 @@ export function WineRow({
       <div className="grid grid-cols-[28px_1fr_80px_80px_36px] items-center px-lg py-sm">
         <div
           aria-label="Drag to reorder"
-          className="cursor-grab text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100"
+          className="flex min-h-11 min-w-11 cursor-grab items-center justify-center text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100"
           {...dragHandleProps}
         >
           <GripVertical className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
@@ -347,7 +347,7 @@ export function WineRow({
           type="button"
           aria-label={`Remove ${item.wines.name}`}
           onClick={() => onDelete(item.id)}
-          className="flex h-8 w-8 items-center justify-center rounded-pill text-ink-subtle opacity-0 transition-opacity hover:bg-blush-wash hover:text-primary group-hover:opacity-100"
+          className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-subtle opacity-0 transition-opacity hover:bg-blush-wash hover:text-primary group-hover:opacity-100"
         >
           <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
         </button>
@@ -355,23 +355,24 @@ export function WineRow({
       {/* Desktop pour-config sub-row (offset to match the wine-name column). */}
       <div className="hidden border-t border-hairline/40 bg-bridge-surface/30 px-lg pb-sm pt-xs md:grid md:grid-cols-[28px_1fr]">
         <div />
-        <PourConfigRow item={item} onPourChange={onPourChange} />
+        <div className="min-w-0 space-y-xs">
+          <PourConfigRow item={item} onPourChange={onPourChange} />
           {/* BND-170: blurb input */}
-          <div className="flex items-start gap-sm">
+          <div className="flex min-w-0 items-start gap-sm">
             <textarea
               value={item.blurb ?? ""}
               onChange={(e) => onBlurbChange(item.id, e.target.value || null)}
               onBlur={(e) => { if (!e.target.value.trim()) onBlurbChange(item.id, null); }}
               placeholder="Add a note for guests (e.g., sommelier pick, pairing suggestion)"
               rows={2}
-              className="flex-1 rounded-md border border-hairline bg-white px-xs py-1 text-[12px] text-ink resize-none outline-none focus:border-primary focus:ring-2 focus:ring-accent-soft placeholder:text-ink-muted/50"
+              className="min-h-11 min-w-0 flex-1 resize-none rounded-md border border-hairline bg-white px-xs py-1 text-[12px] text-ink outline-none placeholder:text-ink-muted/50 focus:border-primary focus:ring-2 focus:ring-accent-soft"
             />
             {/* BND-171: hide toggle */}
             <button
               type="button"
               onClick={() => onHiddenChange(item.id, !item.hidden)}
               className={cn(
-                "shrink-0 rounded-pill px-sm py-1 text-[10.5px] font-medium uppercase tracking-wide transition-colors",
+                "min-h-11 shrink-0 rounded-pill px-sm py-1 text-[10.5px] font-medium uppercase tracking-wide transition-colors",
                 item.hidden ? "bg-amber-wash text-amber" : "bg-beige text-ink-soft hover:text-ink"
               )}
               title={item.hidden ? "Hidden from public list" : "Visible on public list"}
@@ -379,6 +380,7 @@ export function WineRow({
               {item.hidden ? "Hidden" : "Visible"}
             </button>
           </div>
+        </div>
       </div>
       </div>
 
@@ -408,7 +410,7 @@ export function WineRow({
             type="button"
             aria-label={`Options for ${item.wines.name}`}
             onClick={() => onDelete(item.id)}
-            className="ml-sm flex h-8 w-8 shrink-0 items-center justify-center rounded-pill text-ink-subtle hover:text-primary"
+            className="ml-sm flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-pill text-ink-subtle hover:text-primary"
           >
             <MoreHorizontal className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           </button>
@@ -457,7 +459,7 @@ export function WineRow({
             type="button"
             onClick={() => onHiddenChange(item.id, !item.hidden)}
             className={cn(
-              "mt-xs rounded-pill px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide transition-colors",
+              "mt-xs min-h-11 rounded-pill px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide transition-colors",
               item.hidden ? "bg-amber-wash text-amber" : "bg-beige text-ink-soft hover:text-ink"
             )}
             title={item.hidden ? "Hidden from public list" : "Visible on public list"}

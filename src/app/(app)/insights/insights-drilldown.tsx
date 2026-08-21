@@ -50,10 +50,11 @@ export function TodayStrip({ exceptions }: { exceptions: TodayException[] }) {
           <li
             key={`${exception.kind}:${exception.wineId}`}
             data-metric={`today-${exception.kind}-${exception.wineId}`}
+            className="min-w-0"
           >
             <Link
               href={metricHref("wine", exception.wineId)}
-              className="group flex h-full items-start justify-between gap-md rounded-lg border border-hairline bg-bridge-surface p-md transition-colors hover:bg-beige"
+              className="group flex h-full min-w-0 items-start justify-between gap-md rounded-lg border border-hairline bg-bridge-surface p-md transition-colors hover:bg-beige"
             >
               <span className="min-w-0">
                 <span
