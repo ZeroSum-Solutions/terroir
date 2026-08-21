@@ -113,6 +113,7 @@ export function WineDetailDrawer({
     containerRef: dialogRef,
     onEscape: onClose,
     enabled: row !== null,
+    paused: pendingDirection !== null,
   });
 
   // BND-121: manually open a bottle without recording a pour
@@ -347,7 +348,6 @@ export function WineDetailDrawer({
   const onConfirm86 = async (note: string | undefined) => {
     if (!row || !pendingDirection) return;
     const direction = pendingDirection;
-    setPendingDirection(null);
     setErrorMsg(null);
     setBusy(true);
     try {
@@ -363,6 +363,7 @@ export function WineDetailDrawer({
         throw new Error(payload?.error ?? `Request failed (${res.status}).`);
       }
       toast.success(direction === "eightysixed" ? "Marked as 86'd" : "Restored");
+      setPendingDirection(null);
       startTransition(() => router.refresh());
     } catch (err) {
       toast.error("Toggle failed");
@@ -568,7 +569,7 @@ export function WineDetailDrawer({
               <DecantTimeSection row={row} />
             )}
 
-            {errorMsg && (
+            {errorMsg && pendingDirection === null && (
               <div
                 role="alert"
                 className="mt-md rounded-md border border-primary/30 bg-blush-wash px-md py-sm text-[13px] text-primary"
@@ -843,6 +844,8 @@ export function WineDetailDrawer({
           open={true}
           wineName={row.name}
           direction={pendingDirection}
+          busy={busy}
+          error={errorMsg}
           onConfirm={(note: string | undefined) => onConfirm86(note)}
           onCancel={() => setPendingDirection(null)}
         />

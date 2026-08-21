@@ -36,6 +36,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
+import { ActionDialog } from "@/components/action-dialog";
 import type { WineList } from "@/lib/wine-list/types";
 import { type Template } from "@/lib/wine-list/types";
 import { SortableWineRow } from "./components/wine-row";
@@ -312,7 +313,9 @@ export function WineListEditor({
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
     setDeletingSection(true);
-    const targetId = deleteTarget.id;
+    setErrorToast(null);
+    const target = deleteTarget;
+    const targetId = target.id;
 
     // Optimistic update
     setSections((prev) => prev.filter((s) => s.id !== targetId));
@@ -326,8 +329,6 @@ export function WineListEditor({
       });
     }
 
-    setDeleteTarget(null);
-
     try {
       const res = await fetch(`/api/wine-list-sections/${targetId}`, {
         method: "DELETE",
@@ -335,10 +336,14 @@ export function WineListEditor({
 
       if (!res.ok) {
         startTransition(() => router.refresh());
-        setDeletingSection(false);
+        setErrorToast("Couldn't delete section. Please try again.");
+        return;
       }
+      setDeleteTarget(null);
     } catch {
       startTransition(() => router.refresh());
+      setErrorToast("Couldn't delete section. Please try again.");
+    } finally {
       setDeletingSection(false);
     }
   }, [deleteTarget, activeSection, router]);
@@ -1017,57 +1022,30 @@ export function WineListEditor({
         </div>
       )}
 
-      {/* Delete confirmation dialog (BND-163) */}
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-md">
-          <div className="w-full max-w-sm rounded-card border border-hairline bg-white">
-            <div className="px-lg py-lg">
-              <div className="flex items-start justify-between">
-                <h3 className="font-serif text-[18px] font-medium text-ink">
-                  Delete section
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setDeleteTarget(null)}
-                  className="rounded-pill p-1 text-ink-subtle hover:text-ink"
-                  aria-label="Close"
-                >
-                  <X className="h-4 w-4" strokeWidth={2} />
-                </button>
-              </div>
-              <p className="mt-sm text-[14px] text-ink-muted leading-relaxed">
-                Are you sure you want to delete{" "}
-                <strong className="text-ink">{deleteTarget.name}</strong>?
-              </p>
-              {deleteTarget.wine_list_items.length > 0 && (
-                <p className="mt-sm rounded-md bg-blush-wash px-sm py-sm text-[13px] text-primary font-medium">
-                  This will permanently remove{" "}
-                  {deleteTarget.wine_list_items.length} wine
-                  {deleteTarget.wine_list_items.length !== 1 ? "s" : ""} from
-                  this list.
-                </p>
-              )}
-              <div className="mt-lg flex justify-end gap-sm">
-                <button
-                  type="button"
-                  onClick={() => setDeleteTarget(null)}
-                  className="rounded-pill border border-hairline px-md py-1.5 text-[13px] font-medium text-ink-muted hover:bg-bridge-surface"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={confirmDelete}
-                  disabled={deletingSection}
-                  className="rounded-pill bg-primary px-md py-1.5 text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
-                >
-                  Delete section
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ActionDialog
+        open={deleteTarget !== null}
+        title="Delete section"
+        description={
+          deleteTarget
+            ? deleteTarget.wine_list_items.length > 0
+              ? `Delete "${deleteTarget.name}"? This will permanently remove ${deleteTarget.wine_list_items.length} wine${deleteTarget.wine_list_items.length !== 1 ? "s" : ""} from this list.`
+              : `Delete "${deleteTarget.name}"? This cannot be undone.`
+            : ""
+        }
+        confirmLabel="Delete section"
+        busy={deletingSection}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+      >
+        {errorToast && (
+          <p
+            role="alert"
+            className="rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"
+          >
+            {errorToast}
+          </p>
+        )}
+      </ActionDialog>
 
       {showAddWine && currentSection && (
         <AddWineModal
@@ -1081,6 +1059,7 @@ export function WineListEditor({
       {showPublish && (
         <PublishModal
           listId={list.id}
+          listName={list.name}
           currentSlug={list.slug}
           isPublished={list.is_published}
           onClose={() => {
@@ -1091,7 +1070,7 @@ export function WineListEditor({
       )}
 
       {/* Error toast for failed drag-and-drop reorders */}
-      {errorToast && (
+      {errorToast && deleteTarget === null && (
         <div className="fixed bottom-lg left-1/2 z-50 -translate-x-1/2 rounded-pill bg-primary px-lg py-sm text-[13px] font-medium text-white animate-in fade-in slide-in-from-bottom-2">
           {errorToast}
         </div>

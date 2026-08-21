@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ActionDialog } from "@/components/action-dialog";
 import { SCORED_FIELDS_COUNT } from "@/lib/scanner/scored-fields";
 import { cn } from "@/lib/utils";
 import type { LineItem, LineItemField, Scan } from "@/lib/scanner/types";
@@ -103,6 +104,18 @@ export function ResultsView({
 }: ResultsViewProps) {
   const { items, edits, source, rawText } = scan;
   const [rawTextOpen, setRawTextOpen] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [discardBusy, setDiscardBusy] = useState(false);
+
+  const confirmDiscard = () => {
+    setDiscardBusy(true);
+    try {
+      onScanAnother();
+      setDiscardOpen(false);
+    } finally {
+      setDiscardBusy(false);
+    }
+  };
 
   const { total, bottles, lowCount, accuracy } = useMemo(() => {
     const totalFields = items.length * SCORED_FIELDS_COUNT;
@@ -177,11 +190,7 @@ export function ResultsView({
           </div>
           <button
             type="button"
-            onClick={() => {
-              if (window.confirm("Clear this scan and all edits?")) {
-                onScanAnother();
-              }
-            }}
+            onClick={() => setDiscardOpen(true)}
             className="flex h-8 items-center gap-xs rounded-pill border border-ink/25 px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface hover:text-primary focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
           >
             <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
@@ -368,7 +377,7 @@ export function ResultsView({
         <div className="grid grid-cols-2 gap-sm md:flex md:gap-md">
           <button
             type="button"
-            onClick={onScanAnother}
+            onClick={() => setDiscardOpen(true)}
             className="flex h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:h-[38px] md:px-md"
           >
             <ScanLine className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -430,6 +439,16 @@ export function ResultsView({
           </div>
         </aside>
       )}
+
+      <ActionDialog
+        open={discardOpen}
+        title="Discard scan"
+        description="The current scan and all edits will be lost."
+        confirmLabel="Discard scan"
+        busy={discardBusy}
+        onClose={() => setDiscardOpen(false)}
+        onConfirm={confirmDiscard}
+      />
     </section>
   );
 }

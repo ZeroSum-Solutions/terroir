@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ActionDialog } from "@/components/action-dialog";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 
 interface QrCodeProps {
@@ -32,12 +33,13 @@ function QrCode({ url }: QrCodeProps) {
 
 interface PublishModalProps {
   listId: string;
+  listName: string;
   currentSlug: string | null;
   isPublished: boolean;
   onClose: () => void;
 }
 
-export function PublishModal({ listId, currentSlug, isPublished, onClose }: PublishModalProps) {
+export function PublishModal({ listId, listName, currentSlug, isPublished, onClose }: PublishModalProps) {
   const [publishing, setPublishing] = useState(false);
   const [slug, setSlug] = useState(currentSlug ?? "");
   const [slugInput, setSlugInput] = useState(currentSlug ?? "");
@@ -45,8 +47,13 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
   const [slugSuccess, setSlugSuccess] = useState(false);
   const [published, setPublished] = useState(isPublished);
   const [copied, setCopied] = useState(false);
+  const [unpublishOpen, setUnpublishOpen] = useState(false);
   const trapRef = useRef<HTMLDivElement>(null);
-  useFocusTrap({ containerRef: trapRef, onEscape: onClose });
+  useFocusTrap({
+    containerRef: trapRef,
+    onEscape: onClose,
+    paused: unpublishOpen,
+  });
 
   const publicUrl = slug
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/list/${slug}`
@@ -80,15 +87,28 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
 
   const unpublish = useCallback(async () => {
     setPublishing(true);
+    setSlugError(null);
     try {
       const res = await fetch(`/api/wine-lists/${listId}/publish`, {
         method: "DELETE",
       });
-      if (res.ok) {
-        setPublished(false);
-        setSlug("");
-        setSlugInput("");
+      if (!res.ok) {
+        let serverMessage: string | undefined;
+        try {
+          const data = (await res.json()) as { error?: unknown };
+          if (typeof data.error === "string") serverMessage = data.error;
+        } catch {
+          // non-JSON body — fall through to the existing error state
+        }
+        setSlugError(serverMessage ?? "Unpublish failed.");
+        return;
       }
+      setPublished(false);
+      setSlug("");
+      setSlugInput("");
+      setUnpublishOpen(false);
+    } catch {
+      setSlugError("Unpublish failed.");
     } finally {
       setPublishing(false);
     }
@@ -197,7 +217,7 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
                   spellCheck={false}
                 />
               </div>
-              {slugError && (
+              {slugError && !unpublishOpen && (
                 <p className="mt-xs text-[12px] text-primary" role="alert">
                   {slugError}
                 </p>
@@ -289,7 +309,7 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
                   {publishing ? "..." : "Save"}
                 </button>
               </div>
-              {slugError && (
+              {slugError && !unpublishOpen && (
                 <p className="mt-xs text-[12px] text-primary" role="alert">
                   {slugError}
                 </p>
@@ -313,7 +333,10 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
               <div className="flex gap-sm">
                 <button
                   type="button"
-                  onClick={unpublish}
+                  onClick={() => {
+                    setSlugError(null);
+                    setUnpublishOpen(true);
+                  }}
                   disabled={publishing}
                   className="h-[38px] rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
                 >
@@ -331,6 +354,25 @@ export function PublishModal({ listId, currentSlug, isPublished, onClose }: Publ
           </>
         )}
       </div>
+
+      <ActionDialog
+        open={unpublishOpen}
+        title="Unpublish list"
+        description={`Unpublish "${listName}"? Its public link will stop working immediately.`}
+        confirmLabel="Unpublish list"
+        busy={publishing}
+        onClose={() => setUnpublishOpen(false)}
+        onConfirm={unpublish}
+      >
+        {slugError && (
+          <p
+            role="alert"
+            className="rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"
+          >
+            {slugError}
+          </p>
+        )}
+      </ActionDialog>
     </div>
   );
 }

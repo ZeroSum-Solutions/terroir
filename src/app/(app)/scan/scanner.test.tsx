@@ -337,6 +337,7 @@ describe("Scanner progress reset", () => {
     await selectReadyFile(new File(["first"], "first.jpg", { type: "image/jpeg" }));
     expect(container.textContent).toContain("Invoice scan results");
     await clickButton("Clear");
+    await clickButton("Discard scan");
     processingRenderHistory.renders.length = 0;
     await selectReadyFile(new File(["second"], "second.jpg", { type: "image/jpeg" }));
 

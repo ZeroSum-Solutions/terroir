@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Check, Copy, Link2, Loader2, RefreshCw, Trash2, Users, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { RouteDataEmpty } from "@/components/route-data-state";
+import { ActionDialog } from "@/components/action-dialog";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { TimeAgo } from "@/components/time-ago";
 
@@ -56,6 +57,12 @@ export function TeamActions({
   const [memberActionError, setMemberActionError] = useState<string | null>(
     null,
   );
+  const [memberActionBusy, setMemberActionBusy] = useState(false);
+  const [pendingMemberRemoval, setPendingMemberRemoval] = useState<Member | null>(
+    null,
+  );
+  const [pendingInvitationRevocation, setPendingInvitationRevocation] =
+    useState<Invitation | null>(null);
 
   const isOwner = members.some(
     (m) => m.user_id === currentUserId && m.role === "owner",
@@ -162,33 +169,53 @@ export function TeamActions({
 
   const removeMember = async (memberId: string) => {
     setMemberActionError(null);
-    const res = await fetch(`/api/team/members/${memberId}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) {
+    setMemberActionBusy(true);
+    try {
+      const res = await fetch(`/api/team/members/${memberId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        setMemberActionError(
+          await extractServerError(res, "Couldn't remove member. Please try again."),
+        );
+        return;
+      }
+      setPendingMemberRemoval(null);
+      router.refresh();
+    } catch {
       setMemberActionError(
-        await extractServerError(res, "Couldn't remove member. Please try again."),
+        "Couldn't remove member. Please try again.",
       );
-      return;
+    } finally {
+      setMemberActionBusy(false);
     }
-    router.refresh();
   };
 
   const revokeInvitation = async (invitationId: string) => {
     setMemberActionError(null);
-    const res = await fetch(`/api/team/invite/${invitationId}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) {
+    setMemberActionBusy(true);
+    try {
+      const res = await fetch(`/api/team/invite/${invitationId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        setMemberActionError(
+          await extractServerError(
+            res,
+            "Couldn't revoke invitation. Please try again.",
+          ),
+        );
+        return;
+      }
+      setPendingInvitationRevocation(null);
+      router.refresh();
+    } catch {
       setMemberActionError(
-        await extractServerError(
-          res,
-          "Couldn't revoke invitation. Please try again.",
-        ),
+        "Couldn't revoke invitation. Please try again.",
       );
-      return;
+    } finally {
+      setMemberActionBusy(false);
     }
-    router.refresh();
   };
 
   const resendInvitation = async (invitationId: string) => {
@@ -226,7 +253,9 @@ export function TeamActions({
           )}
         </div>
 
-        {memberActionError && (
+        {memberActionError &&
+          pendingMemberRemoval === null &&
+          pendingInvitationRevocation === null && (
           <div
             role="alert"
             className="mb-sm flex items-start justify-between gap-sm rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"
@@ -314,9 +343,8 @@ export function TeamActions({
                           type="button"
                           aria-label="Remove team member"
                           onClick={() => {
-                            if (window.confirm("Remove this team member?")) {
-                              removeMember(member.id);
-                            }
+                            setMemberActionError(null);
+                            setPendingMemberRemoval(member);
                           }}
                           className="flex h-8 w-8 items-center justify-center rounded-md text-grey hover:bg-bridge-surface hover:text-primary"
                         >
@@ -432,13 +460,8 @@ export function TeamActions({
                             <button
                               type="button"
                               onClick={() => {
-                                if (
-                                  window.confirm(
-                                    `Revoke invitation for ${inv.email ?? "this address"}? The link will stop working immediately.`,
-                                  )
-                                ) {
-                                  revokeInvitation(inv.id);
-                                }
+                                setMemberActionError(null);
+                                setPendingInvitationRevocation(inv);
                               }}
                               aria-label={`Revoke invitation for ${inv.email ?? "invitation"}`}
                               className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-pill border border-beige-deep bg-white text-grey hover:bg-blush-wash hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
@@ -483,6 +506,50 @@ export function TeamActions({
           onCopy={copyLink}
         />
       )}
+
+      <ActionDialog
+        open={pendingMemberRemoval !== null}
+        title="Remove member"
+        description={`Member ${pendingMemberRemoval?.user_id.slice(0, 8) ?? ""} will lose access to this restaurant.`}
+        confirmLabel="Remove member"
+        busy={memberActionBusy}
+        onClose={() => setPendingMemberRemoval(null)}
+        onConfirm={() => {
+          if (pendingMemberRemoval) void removeMember(pendingMemberRemoval.id);
+        }}
+      >
+        {memberActionError && (
+          <p
+            role="alert"
+            className="rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"
+          >
+            {memberActionError}
+          </p>
+        )}
+      </ActionDialog>
+
+      <ActionDialog
+        open={pendingInvitationRevocation !== null}
+        title="Revoke invitation"
+        description={`Revoke invitation for ${pendingInvitationRevocation?.email ?? "this address"}? The link will stop working immediately.`}
+        confirmLabel="Revoke invitation"
+        busy={memberActionBusy}
+        onClose={() => setPendingInvitationRevocation(null)}
+        onConfirm={() => {
+          if (pendingInvitationRevocation) {
+            void revokeInvitation(pendingInvitationRevocation.id);
+          }
+        }}
+      >
+        {memberActionError && (
+          <p
+            role="alert"
+            className="rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"
+          >
+            {memberActionError}
+          </p>
+        )}
+      </ActionDialog>
     </>
   );
 }
