@@ -54,6 +54,11 @@ function configureProductionCapability() {
   vi.stubEnv("TEMP_AUTH_BYPASS_EXPIRES_AT", FUTURE_EXPIRY);
 }
 
+function configureDevelopmentBypass() {
+  configureBaseEnvironment("test");
+  vi.stubEnv("DEV_BYPASS_EMAIL", "developer@example.com");
+}
+
 function mockSuccessfulSupabaseLogin() {
   vi.stubGlobal(
     "fetch",
@@ -78,132 +83,21 @@ describe("GET /api/dev-login", () => {
     vi.unstubAllGlobals();
   });
 
-  it("uses a valid short-lived production capability for the scoped email", async () => {
+  it("hard-disables the route in production even with a valid legacy capability", async () => {
     configureProductionCapability();
     mockSuccessfulSupabaseLogin();
 
     const response = await GET(makeRequest());
 
-    expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("https://terroir.example/");
-    expect(response.headers.get("location")).not.toContain("token");
-    expectSafetyHeaders(response);
-    expect(fetch).toHaveBeenCalledWith(
-      "https://project.supabase.co/auth/v1/admin/generate_link",
-      expect.objectContaining({
-        body: JSON.stringify({
-          type: "magiclink",
-          email: "scoped@example.com",
-        }),
-      }),
-    );
-    expect(mockVerifyOtp).toHaveBeenCalledWith({
-      token_hash: "supabase-magic-link-proof",
-      type: "magiclink",
-    });
-  });
-
-  it.each([
-    {
-      name: "missing query token",
-      configure: configureProductionCapability,
-      request: () => makeRequestWithQuery(),
-    },
-    {
-      name: "empty query token",
-      configure: configureProductionCapability,
-      request: () => makeRequestWithQuery("token="),
-    },
-    {
-      name: "duplicate query token",
-      configure: configureProductionCapability,
-      request: () => makeRequestWithQuery("token=a&token=b"),
-    },
-    {
-      name: "oversized query token",
-      configure: configureProductionCapability,
-      request: () => makeRequest("x".repeat(513)),
-    },
-    {
-      name: "wrong raw token",
-      configure: configureProductionCapability,
-      request: () => makeRequest("wrong-token"),
-    },
-    {
-      name: "missing hash",
-      configure: () => {
-        vi.stubEnv("TEMP_AUTH_BYPASS_EMAIL", "scoped@example.com");
-        vi.stubEnv("TEMP_AUTH_BYPASS_EXPIRES_AT", FUTURE_EXPIRY);
-      },
-      request: makeRequest,
-    },
-    {
-      name: "invalid hash",
-      configure: () => {
-        configureProductionCapability();
-        vi.stubEnv("TEMP_AUTH_BYPASS_TOKEN_SHA256", "not-a-sha-256-hash");
-      },
-      request: makeRequest,
-    },
-    {
-      name: "missing expiry",
-      configure: () => {
-        vi.stubEnv("TEMP_AUTH_BYPASS_EMAIL", "scoped@example.com");
-        vi.stubEnv("TEMP_AUTH_BYPASS_TOKEN_SHA256", TOKEN_HASH);
-      },
-      request: makeRequest,
-    },
-    {
-      name: "invalid expiry",
-      configure: () => {
-        configureProductionCapability();
-        vi.stubEnv("TEMP_AUTH_BYPASS_EXPIRES_AT", "not-an-iso-timestamp");
-      },
-      request: makeRequest,
-    },
-    {
-      name: "expired capability",
-      configure: () => {
-        configureProductionCapability();
-        vi.stubEnv(
-          "TEMP_AUTH_BYPASS_EXPIRES_AT",
-          "2026-07-23T11:59:59.999Z",
-        );
-      },
-      request: makeRequest,
-    },
-  ])("hard-404s $name without disclosing the reason", async ({ configure, request }) => {
-    configure();
-    const requestFetch = vi.fn();
-    vi.stubGlobal("fetch", requestFetch);
-
-    const response = await GET(request());
-
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("Not found");
     expectSafetyHeaders(response);
-    expect(requestFetch).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
     expect(mockCreateClient).not.toHaveBeenCalled();
   });
 
-  it("does not fall back to the legacy raw-token environment variable", async () => {
-    vi.stubEnv("TEMP_AUTH_BYPASS_EMAIL", "scoped@example.com");
-    vi.stubEnv("TEMP_AUTH_BYPASS_TOKEN", "temporary-secret");
-    vi.stubEnv("TEMP_AUTH_BYPASS_EXPIRES_AT", FUTURE_EXPIRY);
-    const requestFetch = vi.fn();
-    vi.stubGlobal("fetch", requestFetch);
-
-    const response = await GET(makeRequest());
-
-    expect(response.status).toBe(404);
-    expect(await response.text()).toBe("Not found");
-    expectSafetyHeaders(response);
-    expect(requestFetch).not.toHaveBeenCalled();
-  });
-
   it("keeps the development-only email bypass independent of production capability config", async () => {
-    configureBaseEnvironment("test");
-    vi.stubEnv("DEV_BYPASS_EMAIL", "developer@example.com");
+    configureDevelopmentBypass();
     mockSuccessfulSupabaseLogin();
 
     const response = await GET(makeRequestWithQuery());
@@ -221,23 +115,8 @@ describe("GET /api/dev-login", () => {
     );
   });
 
-  it("never uses the development email in production", async () => {
-    vi.stubEnv("DEV_BYPASS_EMAIL", "developer@example.com");
-    vi.stubEnv("TEMP_AUTH_BYPASS_TOKEN_SHA256", TOKEN_HASH);
-    vi.stubEnv("TEMP_AUTH_BYPASS_EXPIRES_AT", FUTURE_EXPIRY);
-    const requestFetch = vi.fn();
-    vi.stubGlobal("fetch", requestFetch);
-
-    const response = await GET(makeRequest());
-
-    expect(response.status).toBe(404);
-    expect(await response.text()).toBe("Not found");
-    expectSafetyHeaders(response);
-    expect(requestFetch).not.toHaveBeenCalled();
-  });
-
   it("redacts a secret-bearing provider non-2xx response", async () => {
-    configureProductionCapability();
+    configureDevelopmentBypass();
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
@@ -245,7 +124,7 @@ describe("GET /api/dev-login", () => {
       ),
     );
 
-    const response = await GET(makeRequest());
+    const response = await GET(makeRequestWithQuery());
     const text = await response.text();
 
     expect(response.status).toBe(502);
@@ -261,7 +140,7 @@ describe("GET /api/dev-login", () => {
   });
 
   it("redacts a rejected provider request", async () => {
-    configureProductionCapability();
+    configureDevelopmentBypass();
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
@@ -269,7 +148,7 @@ describe("GET /api/dev-login", () => {
       }),
     );
 
-    const response = await GET(makeRequest());
+    const response = await GET(makeRequestWithQuery());
 
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({
@@ -300,10 +179,10 @@ describe("GET /api/dev-login", () => {
       response: () => Response.json({ hashed_token: "x".repeat(4097) }),
     },
   ])("redacts $name provider payloads without verifying", async ({ response }) => {
-    configureProductionCapability();
+    configureDevelopmentBypass();
     vi.stubGlobal("fetch", vi.fn(async () => response()));
 
-    const result = await GET(makeRequest());
+    const result = await GET(makeRequestWithQuery());
 
     expect(result.status).toBe(502);
     expect(await result.json()).toEqual({
@@ -332,14 +211,14 @@ describe("GET /api/dev-login", () => {
         ),
     },
   ])("redacts a $name", async ({ verify }) => {
-    configureProductionCapability();
+    configureDevelopmentBypass();
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => Response.json({ hashed_token: "valid-proof" })),
     );
     verify();
 
-    const response = await GET(makeRequest());
+    const response = await GET(makeRequestWithQuery());
     const text = await response.text();
 
     expect(response.status).toBe(502);

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Check, Loader2, X } from "lucide-react";
+import { readApiError } from "@/lib/api/client-error";
 
 export default function AcceptInvitePage() {
   const params = useParams<{ token: string }>();
@@ -14,29 +15,34 @@ export default function AcceptInvitePage() {
 
   useEffect(() => {
     async function accept() {
-      const res = await fetch("/api/team/accept-invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: params.token }),
-      });
+      try {
+        const res = await fetch("/api/team/accept-invite", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: params.token }),
+        });
 
-      const data = await res.json();
+        const data = await res.json().catch(() => null);
 
-      if (res.ok) {
-        setStatus("success");
-        setMessage(data.message ?? "You have joined the restaurant.");
-        // Redirect to role-aware home after 2 seconds; "/" hits the
-        // redirector at src/app/page.tsx which sends the user to
-        // /insights (owner) or /cellar (manager/staff).
-        setTimeout(() => router.push("/"), 2000);
-      } else {
-        if (res.status === 401) {
-          // Not logged in — redirect to login with return URL
-          router.push(`/login?next=/invite/${params.token}`);
-          return;
+        if (res.ok) {
+          setStatus("success");
+          setMessage(data?.message ?? "You have joined the restaurant.");
+          // Redirect to role-aware home after 2 seconds; "/" hits the
+          // redirector at src/app/page.tsx which sends the user to
+          // /insights (owner) or /cellar (manager/staff).
+          setTimeout(() => router.push("/"), 2000);
+        } else {
+          if (res.status === 401) {
+            // Not logged in — redirect to login with return URL
+            router.push(`/login?next=/invite/${params.token}`);
+            return;
+          }
+          setStatus("error");
+          setMessage(readApiError(data, "Failed to accept invitation.").message);
         }
+      } catch {
         setStatus("error");
-        setMessage(data.error ?? "Failed to accept invitation.");
+        setMessage("Failed to accept invitation.");
       }
     }
 
@@ -72,7 +78,7 @@ export default function AcceptInvitePage() {
             <button
               type="button"
               onClick={() => router.push("/login")}
-              className="mt-lg flex mx-auto h-[42px] items-center rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
+              className="mx-auto mt-lg flex h-11 items-center rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
             >
               Go to login
             </button>

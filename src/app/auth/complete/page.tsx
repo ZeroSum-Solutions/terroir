@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { safeNext } from "@/lib/api/safe-redirect";
+import { AUTH_LINK_ERROR } from "@/lib/auth/redirects";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -13,16 +15,16 @@ import { createClient } from "@/lib/supabase/client";
  */
 export default function AuthCompletePage() {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Wrapped in async IIFE so setError calls live inside a microtask
-    // callback rather than the effect body itself — satisfies
-    // react-hooks/set-state-in-effect while preserving behaviour.
     void (async () => {
+      const fail = () => {
+        history.replaceState(null, "", window.location.pathname);
+        router.replace(`/login?error=${AUTH_LINK_ERROR}`);
+      };
       const hash = window.location.hash.replace(/^#/, "");
       if (!hash) {
-        setError("Missing token. Open this link from your email or ask for a new one.");
+        fail();
         return;
       }
       const params = new URLSearchParams(hash);
@@ -31,42 +33,33 @@ export default function AuthCompletePage() {
       const hash_error = params.get("error_description");
 
       if (hash_error) {
-        setError(hash_error);
+        fail();
         return;
       }
       if (!access_token || !refresh_token) {
-        setError("Incomplete token in URL.");
+        fail();
         return;
       }
 
       const supabase = createClient();
       const { error } = await supabase.auth.setSession({ access_token, refresh_token });
       if (error) {
-        setError(error.message);
+        fail();
         return;
       }
+      const next = safeNext(
+        new URLSearchParams(window.location.search).get("next"),
+        "/",
+      );
       history.replaceState(null, "", window.location.pathname);
-      router.replace("/");
+      router.replace(next);
     })();
   }, [router]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-canvas px-lg">
+    <main className="dawn-gradient flex min-h-screen items-center justify-center px-lg">
       <div className="text-center">
-        {error ? (
-          <>
-            <h1 className="font-serif text-heading-sm text-ink">Sign-in failed</h1>
-            <p className="mt-sm text-[14px] text-primary">{error}</p>
-            <a
-              href="/login"
-              className="mt-md inline-block rounded-pill bg-primary px-md py-sm text-[14px] font-medium text-white hover:bg-primary-hover"
-            >
-              Back to sign in
-            </a>
-          </>
-        ) : (
-          <p className="text-[14px] font-light text-grey">Signing you in…</p>
-        )}
+        <p className="text-[14px] font-light text-grey">Signing you in…</p>
       </div>
     </main>
   );

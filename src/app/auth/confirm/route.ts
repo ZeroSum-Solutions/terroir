@@ -1,9 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { safeNext } from "@/lib/api/safe-redirect";
 import { AUTH_LINK_ERROR, appUrl, loginUrl } from "@/lib/auth/redirects";
 import { createClient } from "@/lib/supabase/server";
 
-const DEFAULT_POST_LOGIN_PATH = "/";
 const SAFE_HEADERS = {
   "Cache-Control": "no-store",
   "Referrer-Policy": "no-referrer",
@@ -18,20 +16,25 @@ function authLinkFailure() {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const code = searchParams.get("code");
-  const next = safeNext(searchParams.get("next"), DEFAULT_POST_LOGIN_PATH);
+  const tokenHash = searchParams.get("token_hash");
+  const type = searchParams.get("type");
 
-  if (!code) return authLinkFailure();
+  if (!tokenHash || tokenHash.length > 4096 || type !== "recovery") {
+    return authLinkFailure();
+  }
 
   try {
     const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { error } = await supabase.auth.verifyOtp({
+      type: "recovery",
+      token_hash: tokenHash,
+    });
     if (error) return authLinkFailure();
   } catch {
     return authLinkFailure();
   }
 
-  return NextResponse.redirect(appUrl(next), {
+  return NextResponse.redirect(appUrl("/auth/reset-password"), {
     status: 303,
     headers: SAFE_HEADERS,
   });

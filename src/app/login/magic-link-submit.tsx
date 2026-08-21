@@ -13,7 +13,7 @@ export function MagicLinkSubmit() {
       type="submit"
       disabled={pending}
       aria-disabled={pending}
-      className="flex h-[42px] items-center justify-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
+      className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white outline-none transition-colors hover:bg-primary-hover focus-visible:ring-[3px] focus-visible:ring-blush-wash disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
     >
       {pending ? (
         <>
@@ -37,7 +37,7 @@ export function ResetPasswordSubmit() {
       type="submit"
       disabled={pending}
       aria-disabled={pending}
-      className="flex h-[42px] items-center justify-center rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
+      className="flex min-h-11 items-center justify-center rounded-pill bg-primary px-md text-[14px] font-medium text-white outline-none transition-colors hover:bg-primary-hover focus-visible:ring-[3px] focus-visible:ring-blush-wash disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
     >
       {pending ? (
         <>
@@ -46,6 +46,28 @@ export function ResetPasswordSubmit() {
         </>
       ) : (
         "Send reset link"
+      )}
+    </button>
+  );
+}
+
+/** Submit button shared by password sign-in and account creation forms. */
+export function PasswordSubmit({ label }: { label: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      aria-disabled={pending}
+      className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white outline-none transition-colors hover:bg-primary-hover focus-visible:ring-[3px] focus-visible:ring-blush-wash disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
+    >
+      {pending ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
+          Working…
+        </>
+      ) : (
+        label
       )}
     </button>
   );
@@ -61,7 +83,7 @@ export function SetPasswordSubmit() {
       type="submit"
       disabled={pending}
       aria-disabled={pending}
-      className="flex h-[42px] items-center justify-center rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
+      className="flex min-h-11 items-center justify-center rounded-pill bg-primary px-md text-[14px] font-medium text-white outline-none transition-colors hover:bg-primary-hover focus-visible:ring-[3px] focus-visible:ring-blush-wash disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
     >
       {pending ? (
         <>

@@ -22,12 +22,12 @@ export default async function AppLayout({
   return (
     <RestaurantProvider restaurantId={restaurantId} restaurantName={restaurantName} userRole={userRole}>
       <ToastWrapper>
-    <div className="flex min-h-screen flex-col bg-canvas">
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-canvas">
       {/* Top bar — minimal on mobile, full nav on md+. Glass Nav per DESIGN.md. */}
       <header className="glass sticky top-0 z-10 flex h-[54px] items-center px-md md:px-lg">
         <Link
           href="/"
-          className="shrink-0 font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink"
+          className="inline-flex min-h-11 shrink-0 items-center font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink"
         >
           TERR<span className="text-primary">OIR</span>
         </Link>
