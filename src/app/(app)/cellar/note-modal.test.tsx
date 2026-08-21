@@ -98,6 +98,35 @@ describe("NoteModal action confirmation", () => {
     expect(dialogByTitle(container, "86 wine")).toBeDefined();
   });
 
+  it.each([
+    ["eightysixed", "86 Cabernet"],
+    ["restored", "Restore Cabernet"],
+  ] as const)(
+    "labels the %s note and keeps its action-specific controls touch sized",
+    async (direction, confirmLabel) => {
+      const { container } = await mount(
+        <NoteModal
+          open
+          wineName="Cabernet"
+          direction={direction}
+          onCancel={vi.fn()}
+          onConfirm={vi.fn()}
+        />,
+      );
+
+      const note = container.querySelector<HTMLTextAreaElement>("#eightysix-note")!;
+      expect(container.querySelector('label[for="eightysix-note"]')?.textContent).toBe(
+        "Note (optional)",
+      );
+      expect(note.getAttribute("aria-label")).toBeNull();
+      expect(note.getAttribute("maxlength")).toBe("500");
+      expect(note.className).toContain("min-h-11");
+      for (const name of ["Cancel", confirmLabel]) {
+        expect(button(container, name).className).toContain("min-h-11");
+      }
+    },
+  );
+
   async function mount(element: ReactElement) {
     const container = document.createElement("div");
     document.body.append(container);

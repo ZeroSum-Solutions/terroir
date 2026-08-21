@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ActionDialog } from "@/components/action-dialog";
+import { Field } from "@/components/field";
 
 interface NoteModalProps {
   open: boolean;
@@ -47,14 +48,19 @@ export function NoteModal({
       onConfirm={handleConfirm}
     >
       <>
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          maxLength={500}
-          rows={3}
-          placeholder="e.g., last bottle just poured"
-          className="w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
-        />
+        <Field id="eightysix-note" label="Note (optional)">
+          {(a11y) => (
+            <textarea
+              {...a11y}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={500}
+              rows={3}
+              placeholder="e.g., last bottle just poured"
+              className="mt-xs min-h-11 w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+            />
+          )}
+        </Field>
         {error && (
           <p
             role="alert"
