@@ -13,7 +13,7 @@ import { apiError, Errors } from "@/lib/api/errors";
 import { requireMembership } from "@/lib/api/auth";
 import { withApiHandler } from "@/lib/api/handler";
 import { parseParams } from "@/lib/api/validation";
-import { INVOICE_EXTRACTION_RETRY } from "@/lib/ai/models";
+import { INVOICE_EXTRACTION, INVOICE_EXTRACTION_RETRY } from "@/lib/ai/models";
 import { AiExtractError, extractFromOcr } from "@/lib/scanner/ai-extract";
 import {
   ScanIdParamsSchema,
@@ -22,6 +22,7 @@ import {
 import { scoreItems } from "@/lib/scanner/scoring";
 import type { LineItem } from "@/lib/scanner/types";
 import { validateInvoiceArithmetic } from "@/domains/scanning/invoice-arithmetic";
+import { withScanSpan } from "@/domains/scanning/scan-telemetry";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -107,7 +108,14 @@ export async function POST(
 
     let parsed;
     try {
-      parsed = await extractFromOcr(ocr);
+      // M1-1: same scan.extract / scan.extract.retry spans as the initial
+      // scan pass (src/domains/scanning/invoice-scan-service.ts), so a
+      // re-extraction's timing is visible the same way.
+      parsed = await withScanSpan(
+        "extract",
+        { attempt: 1, model: INVOICE_EXTRACTION.model, effort: INVOICE_EXTRACTION.effort ?? "default" },
+        () => extractFromOcr(ocr),
+      );
     } catch (error) {
       return mapExtractError(error, ocr.rawText);
     }
@@ -130,7 +138,15 @@ export async function POST(
     let arithmetic = validateInvoiceArithmetic(parsed);
     if (!arithmetic.ok) {
       try {
-        parsed = await extractFromOcr(ocr, INVOICE_EXTRACTION_RETRY);
+        parsed = await withScanSpan(
+          "extract.retry",
+          {
+            attempt: 2,
+            model: INVOICE_EXTRACTION_RETRY.model,
+            effort: INVOICE_EXTRACTION_RETRY.effort ?? "default",
+          },
+          () => extractFromOcr(ocr, INVOICE_EXTRACTION_RETRY),
+        );
       } catch (error) {
         return mapExtractError(error, ocr.rawText);
       }

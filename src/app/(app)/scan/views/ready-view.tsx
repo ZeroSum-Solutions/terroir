@@ -2,11 +2,12 @@
 
 import { ArrowRight, Camera, FileUp, ImageIcon, Wine } from "lucide-react";
 import { Check, ListOrdered, ScanLine } from "lucide-react";
-import { useRef } from "react";
+import { useRef, type RefObject } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { TimeAgo } from "@/components/time-ago";
 import { accuracyColor } from "@/lib/scanner/accuracy-color";
+import { markScanStage } from "@/lib/scanner/scan-timing";
 import type { RecentScan, ScanMode } from "@/lib/scanner/types";
 import { formatMoney } from "../components/field-inputs";
 
@@ -71,6 +72,13 @@ export function ReadyView({
   const fileRef = useRef<HTMLInputElement>(null);
   const isBottle = mode === "bottle";
 
+  // M1-1: client-side "capture" stage starts here — the moment the user
+  // taps to open the camera/file picker.
+  const beginCapture = (inputRef: RefObject<HTMLInputElement | null>) => {
+    markScanStage("capture", "start");
+    inputRef.current?.click();
+  };
+
   const handleFiles = (input: HTMLInputElement) => {
     const fileArr = input.files ? Array.from(input.files) : [];
     // Reset so re-selecting the exact same file (e.g. retaking a photo
@@ -78,6 +86,10 @@ export function ReadyView({
     // browsers/webviews otherwise treat an unchanged input as a no-op.
     input.value = "";
     if (fileArr.length === 0) return;
+    // M1-1: client-side "capture" stage ends here (started at the
+    // take-photo/upload-file button click below); reported once a scan id
+    // exists, in scanner.tsx's startScan.
+    markScanStage("capture", "end");
     onStart(fileArr);
   };
 
@@ -158,7 +170,7 @@ export function ReadyView({
 
       <button
         type="button"
-        onClick={() => cameraRef.current?.click()}
+        onClick={() => beginCapture(cameraRef)}
         className="flex min-h-11 w-full flex-col items-center justify-center rounded-card border-2 border-dashed border-beige-deep bg-bridge-surface px-lg py-2xl text-center transition-colors hover:border-primary hover:bg-blush-wash/40 focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:py-3xl"
       >
         <span className="mb-md flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white md:h-16 md:w-16">
@@ -175,7 +187,7 @@ export function ReadyView({
       <div className="mt-md grid grid-cols-2 gap-sm md:mt-lg md:gap-md">
         <button
           type="button"
-          onClick={() => cameraRef.current?.click()}
+          onClick={() => beginCapture(cameraRef)}
           className="flex h-12 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
         >
           <Camera className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -183,7 +195,7 @@ export function ReadyView({
         </button>
         <button
           type="button"
-          onClick={() => fileRef.current?.click()}
+          onClick={() => beginCapture(fileRef)}
           className="flex h-12 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
         >
           <FileUp className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
