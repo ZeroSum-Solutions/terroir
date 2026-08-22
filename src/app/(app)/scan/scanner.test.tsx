@@ -420,6 +420,46 @@ describe("Scanner mode-specific retry", () => {
   });
 });
 
+describe("Scanner client-side upload guards", () => {
+  it("rejects an oversized invoice file immediately, without calling fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await selectReadyFile(fileWithSize("invoice.jpg", "image/jpeg", 11 * 1024 * 1024));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Couldn’t read the invoice");
+    expect(container.textContent).toContain("10 MB");
+  });
+
+  it("rejects an oversized bottle photo immediately, without calling fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await clickButton("Bottle");
+    await selectReadyFile(fileWithSize("label.jpg", "image/jpeg", 21 * 1024 * 1024));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Couldn’t read the label");
+    expect(container.textContent).toContain("20 MB");
+  });
+
+  it("rejects selecting more than one bottle photo immediately, without calling fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await clickButton("Bottle");
+    await selectReadyFiles([
+      new File(["label 1"], "label-1.jpg", { type: "image/jpeg" }),
+      new File(["label 2"], "label-2.jpg", { type: "image/jpeg" }),
+    ]);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Couldn’t read the label");
+    expect(container.textContent).toContain("single");
+  });
+});
+
 describe("Scanner save and export feedback", () => {
   it("announces an invoice save failure with alert semantics", async () => {
     const fetchMock = vi.fn()
@@ -516,10 +556,20 @@ describe("Scanner save and export feedback", () => {
 });
 
 async function selectReadyFile(file: File) {
+  await selectReadyFiles([file]);
+}
+
+async function selectReadyFiles(files: File[]) {
   const input = [...container.querySelectorAll<HTMLInputElement>('input[type="file"]')].at(-1);
   if (!input) throw new Error("Could not find ready-state file input");
-  Object.defineProperty(input, "files", { configurable: true, value: [file] });
+  Object.defineProperty(input, "files", { configurable: true, value: files });
   await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+}
+
+function fileWithSize(name: string, type: string, size: number): File {
+  const file = new File(["stub"], name, { type });
+  Object.defineProperty(file, "size", { configurable: true, value: size });
+  return file;
 }
 
 async function clickButton(name: string) {

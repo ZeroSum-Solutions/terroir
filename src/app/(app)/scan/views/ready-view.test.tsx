@@ -70,6 +70,68 @@ describe("ReadyView", () => {
   });
 });
 
+describe("ReadyView upload limits and selection (M0-1)", () => {
+  it("advertises the real 10 MB invoice limit, not a mismatched 20 MB", async () => {
+    await renderReady("invoice");
+    expect(container.textContent).toContain("up to 10MB");
+    expect(container.textContent).not.toContain("up to 20MB");
+  });
+
+  it("advertises 20 MB for bottle photos", async () => {
+    await renderReady("bottle");
+    expect(container.textContent).toContain("up to 20MB");
+  });
+
+  it("does not allow multi-selecting bottle photos — one label per scan", async () => {
+    await renderReady("bottle");
+    const uploadInput = getUploadInput();
+    expect(uploadInput.multiple).toBe(false);
+  });
+
+  it("allows multi-selecting invoice files — a multi-page invoice is a real, supported batch", async () => {
+    await renderReady("invoice");
+    const uploadInput = getUploadInput();
+    expect(uploadInput.multiple).toBe(true);
+  });
+
+  it("resets the file input value after a selection so re-selecting the same file fires change again", async () => {
+    const onStart = vi.fn();
+    await act(async () => {
+      root.render(
+        <ReadyView
+          onStart={onStart}
+          mode="invoice"
+          onModeChange={() => {}}
+          recentScans={[]}
+          savedResult={null}
+          onDismissSaved={() => {}}
+        />,
+      );
+    });
+    const input = getUploadInput();
+    const file = new File(["invoice"], "invoice.jpg", { type: "image/jpeg" });
+    Object.defineProperty(input, "files", { configurable: true, value: [file] });
+    // jsdom doesn't simulate the browser populating `.value` from a fake
+    // `files` override, so spy on the setter directly: this proves the
+    // handler explicitly clears it (the real bug — some mobile browsers/
+    // webviews won't fire `change` again for the same file otherwise).
+    const setValue = vi.fn();
+    Object.defineProperty(input, "value", { configurable: true, get: () => "", set: setValue });
+
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+
+    expect(onStart).toHaveBeenCalledWith([file]);
+    expect(setValue).toHaveBeenCalledWith("");
+  });
+});
+
+function getUploadInput(): HTMLInputElement {
+  const inputs = [...container.querySelectorAll<HTMLInputElement>('input[type="file"]')];
+  const input = inputs.at(-1);
+  if (!input) throw new Error("Could not find upload file input");
+  return input;
+}
+
 async function renderReady(
   mode: ScanMode,
   onModeChange = vi.fn(),

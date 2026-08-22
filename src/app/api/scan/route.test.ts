@@ -437,6 +437,54 @@ describe("POST /api/scan", () => {
     expect(supabase.storage.upload).toHaveBeenCalledTimes(2);
   });
 
+  it("OCRs every page of a multi-page invoice and merges them into one Claude prompt (BND-081 / TER-CF-032)", async () => {
+    const supabase = makeSupabase();
+    auth.requireMembership.mockResolvedValue({
+      supabase,
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+    azure.analyzeInvoice.mockImplementation(async (buf: Buffer) =>
+      buf.toString().includes("page one")
+        ? { ...OK_OCR, rawText: "UNIQUE_PAGE_ONE_TEXT" }
+        : { ...OK_OCR, rawText: "UNIQUE_PAGE_TWO_TEXT" },
+    );
+    anthropic.parse.mockResolvedValue(makeParsedInvoice());
+    const fd = new FormData();
+    fd.append("file", new File(["page one"], "page-1.jpg", { type: "image/jpeg" }));
+    fd.append("file", new File(["page two"], "page-2.png", { type: "image/png" }));
+
+    const res = await POST(makeFormRequest(fd));
+
+    expect(res.status).toBe(200);
+    expect(azure.analyzeInvoice).toHaveBeenCalledTimes(2);
+    const promptText = JSON.stringify(anthropic.parse.mock.calls[0][0]);
+    expect(promptText).toContain("UNIQUE_PAGE_ONE_TEXT");
+    expect(promptText).toContain("UNIQUE_PAGE_TWO_TEXT");
+  });
+
+  it("rejects more than the page cap immediately, before any Azure/Anthropic work", async () => {
+    auth.requireMembership.mockResolvedValue({
+      supabase: makeSupabase(),
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+    const fd = new FormData();
+    for (let i = 0; i < 9; i++) {
+      fd.append("file", new File([`page ${i}`], `page-${i}.jpg`, { type: "image/jpeg" }));
+    }
+
+    const res = await POST(makeFormRequest(fd));
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.message).toMatch(/8 pages/i);
+    expect(azure.analyzeInvoice).not.toHaveBeenCalled();
+    expect(anthropic.parse).not.toHaveBeenCalled();
+  });
+
   it("stores HEIC pages with their real extension", async () => {
     const supabase = makeSupabase();
     auth.requireMembership.mockResolvedValue({

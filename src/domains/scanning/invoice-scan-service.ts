@@ -7,6 +7,7 @@ import {
 import {
   OcrError,
   extractOcr,
+  mergeOcrResults,
   type OcrResult,
 } from "@/adapters/ocr/azure-document-intelligence";
 import { scoreItems } from "@/lib/scanner/scoring";
@@ -35,6 +36,13 @@ export type ProcessInvoiceScanInput = {
   userId: string;
   fileBuffer: Buffer;
   mimeType: string;
+  /**
+   * Additional pages for a multi-page invoice submitted as several files
+   * in one batch (BND-081 / TER-CF-032). Each page is OCR'd independently
+   * and the results are merged before Claude extraction. Undefined for
+   * the common single-file case.
+   */
+  extraFiles?: Array<{ buffer: Buffer; mimeType: string }>;
   /** Already-created scanId for the JSON-body path, or null to create fresh. */
   preCreatedScanId?: string;
   /** Storage path for the JSON-body path (already persisted). */
@@ -59,6 +67,7 @@ export async function processInvoiceScanOnce(
     userId,
     fileBuffer,
     mimeType,
+    extraFiles,
     preCreatedScanId,
     preUploadedPath,
   } = input;
@@ -91,7 +100,11 @@ export async function processInvoiceScanOnce(
   let ocr: OcrResult | null = null;
 
   try {
-    ocr = await extractOcr(fileBuffer, mimeType);
+    const pages = [{ buffer: fileBuffer, mimeType }, ...(extraFiles ?? [])];
+    const ocrResults = await Promise.all(
+      pages.map((page) => extractOcr(page.buffer, page.mimeType)),
+    );
+    ocr = mergeOcrResults(ocrResults);
     const parsed = await extractFromOcr(ocr);
 
     if (parsed.lineItems.length === 0) {

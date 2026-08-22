@@ -1,0 +1,150 @@
+import { expect, test, type Page } from "@playwright/test";
+import { makeScan } from "../src/test/fixtures/invoices/scans";
+
+/**
+ * Regression coverage for the M0-1 mobile scan intake fix.
+ *
+ * Requires localhost Supabase + DEV_BYPASS_EMAIL, same as
+ * demo-critical-journeys.test.ts. /api/scan and /api/scan-bottle are
+ * intercepted via page.route() — these tests exercise the client
+ * plumbing (file selection, request shape, UI states) at a real mobile
+ * viewport, not the live Azure/Anthropic pipeline.
+ */
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const devEmail = process.env.DEV_BYPASS_EMAIL;
+const hasLocalFixtureCredentials = Boolean(
+  supabaseUrl &&
+    publishableKey &&
+    serviceRoleKey &&
+    devEmail &&
+    ["localhost", "127.0.0.1"].includes(new URL(supabaseUrl).hostname),
+);
+
+// A trivial "looks like a PDF" buffer. These tests mock /api/scan via
+// page.route(), so the request never reaches real OCR — only the file's
+// declared mimeType/size need to satisfy client + route validation.
+const fakePdf = (label: string) => Buffer.from(`%PDF-1.4 e2e fixture: ${label}`);
+
+test.describe("mobile scan intake regression (M0-1)", () => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(
+      !hasLocalFixtureCredentials,
+      "Requires localhost Supabase credentials and DEV_BYPASS_EMAIL.",
+    );
+    await page.setViewportSize({ width: 390, height: 844 });
+    const res = await page.request.get("/api/dev-login");
+    expect(res.ok()).toBeTruthy();
+  });
+
+  test("a camera-captured JPEG reaches a reviewable result", async ({ page }) => {
+    const scan = makeScan();
+    await page.route("**/api/scan", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(scan) });
+    });
+    await gotoFreshScanPage(page);
+
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Take photo" }).click();
+    const chooser = await fileChooserPromise;
+    expect(chooser.isMultiple()).toBe(false);
+    await chooser.setFiles({
+      name: "camera-capture.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+
+    await expect(page.getByRole("heading", { name: "Invoice scan results" })).toBeVisible();
+  });
+
+  test("a single-page PDF upload reaches a reviewable result", async ({ page }) => {
+    const scan = makeScan();
+    let requestBody: string[] = [];
+    await page.route("**/api/scan", async (route) => {
+      const request = route.request();
+      requestBody = [request.headers()["content-type"] ?? ""];
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(scan) });
+    });
+    await gotoFreshScanPage(page);
+
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Upload file" }).click();
+    const chooser = await fileChooserPromise;
+    await chooser.setFiles({ name: "invoice.pdf", mimeType: "application/pdf", buffer: fakePdf("single page") });
+
+    await expect(page.getByRole("heading", { name: "Invoice scan results" })).toBeVisible();
+    expect(requestBody[0]).toContain("multipart/form-data");
+  });
+
+  test("a multi-page invoice batch (2 files) sends every page to /api/scan", async ({ page }) => {
+    const scan = makeScan();
+    let fileFieldCount = 0;
+    await page.route("**/api/scan", async (route) => {
+      const body = route.request().postDataBuffer();
+      fileFieldCount = body ? body.toString("latin1").split('name="file"').length - 1 : 0;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(scan) });
+    });
+    await gotoFreshScanPage(page);
+
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Upload file" }).click();
+    const chooser = await fileChooserPromise;
+    expect(chooser.isMultiple()).toBe(true);
+    await chooser.setFiles([
+      { name: "page-1.pdf", mimeType: "application/pdf", buffer: fakePdf("page one") },
+      { name: "page-2.pdf", mimeType: "application/pdf", buffer: fakePdf("page two") },
+    ]);
+
+    await expect(page.getByRole("heading", { name: "Invoice scan results" })).toBeVisible();
+    expect(fileFieldCount).toBe(2);
+  });
+
+  test("an oversized invoice file fails immediately with a specific message and no network call", async ({ page }) => {
+    let scanRequests = 0;
+    await page.route("**/api/scan", async (route) => {
+      scanRequests += 1;
+      await route.continue();
+    });
+    await gotoFreshScanPage(page);
+
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Upload file" }).click();
+    const chooser = await fileChooserPromise;
+    await chooser.setFiles({
+      name: "huge-invoice.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.alloc(11 * 1024 * 1024, 65),
+    });
+
+    await expect(page.getByText("Couldn’t read the invoice")).toBeVisible();
+    await expect(page.getByText(/10 MB/)).toBeVisible();
+    expect(scanRequests).toBe(0);
+  });
+
+  test("bottle mode does not allow selecting more than one label photo", async ({ page }) => {
+    await gotoFreshScanPage(page);
+    await page.getByRole("button", { name: "Bottle", exact: true }).click();
+
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Upload file" }).click();
+    const chooser = await fileChooserPromise;
+    expect(chooser.isMultiple()).toBe(false);
+
+    await expect(
+      chooser.setFiles([
+        { name: "label-1.jpg", mimeType: "image/jpeg", buffer: Buffer.from("one") },
+        { name: "label-2.jpg", mimeType: "image/jpeg", buffer: Buffer.from("two") },
+      ]),
+    ).rejects.toThrow();
+  });
+});
+
+async function gotoFreshScanPage(page: Page) {
+  await page.goto("/scan");
+  await page.evaluate(() => localStorage.removeItem("terroir:current-scan"));
+  await page.reload();
+}

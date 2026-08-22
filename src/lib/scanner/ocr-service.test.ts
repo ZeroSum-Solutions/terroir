@@ -13,7 +13,7 @@ vi.mock("./azure", () => ({
   analyzeInvoice: (...args: unknown[]) => azure.analyzeInvoice(...args),
 }));
 
-const { extractOcr, OcrError } = await import("./ocr-service");
+const { extractOcr, OcrError, mergeOcrResults } = await import("./ocr-service");
 
 function okOcr(overrides: Partial<OcrResult> = {}): OcrResult {
   return {
@@ -103,5 +103,40 @@ describe("extractOcr", () => {
 
     expect(err).toBeInstanceOf(OcrError);
     expect(err.code).toBe("empty_text");
+  });
+});
+
+describe("mergeOcrResults", () => {
+  it("returns the single result unchanged when there is only one page", () => {
+    const single = okOcr();
+    expect(mergeOcrResults([single])).toBe(single);
+  });
+
+  it("concatenates raw text and tables across pages, in order", () => {
+    const page1 = okOcr({ rawText: "PAGE ONE TEXT", tables: [{ description: "Wine A" }] });
+    const page2 = okOcr({ rawText: "PAGE TWO TEXT", tables: [{ description: "Wine B" }] });
+
+    const merged = mergeOcrResults([page1, page2]);
+
+    expect(merged.rawText).toContain("PAGE ONE TEXT");
+    expect(merged.rawText).toContain("PAGE TWO TEXT");
+    expect(merged.rawText.indexOf("PAGE ONE TEXT")).toBeLessThan(
+      merged.rawText.indexOf("PAGE TWO TEXT"),
+    );
+    expect(merged.tables).toEqual([
+      { description: "Wine A" },
+      { description: "Wine B" },
+    ]);
+  });
+
+  it("takes the first non-empty header field across pages", () => {
+    const page1 = okOcr({ vendorName: undefined, invoiceNumber: undefined, invoiceDate: undefined });
+    const page2 = okOcr({ vendorName: "Distributor Co", invoiceNumber: "INV-77", invoiceDate: "2026-05-01" });
+
+    const merged = mergeOcrResults([page1, page2]);
+
+    expect(merged.vendorName).toBe("Distributor Co");
+    expect(merged.invoiceNumber).toBe("INV-77");
+    expect(merged.invoiceDate).toBe("2026-05-01");
   });
 });
