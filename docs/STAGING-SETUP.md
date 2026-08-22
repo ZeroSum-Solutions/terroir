@@ -39,22 +39,24 @@ Re-checked through the GitHub API and the Railway CLI while investigating why
 `Preview health` fails on every PR (INT-018 / G0-3). Two claims above no longer
 hold and change what "failure blocks promotion" can mean today:
 
-- **Neither `main` nor `staging` is currently a protected branch.**
+- **Branch protection status (updated after G0-4).** At investigation time,
   `GET /repos/wiggdevin/terroir/branches/main` and `.../branches/staging` both
-  return `"protected": false`. `GET .../branches/main/protection` and
-  `GET .../rulesets` both 403 with `"Upgrade to GitHub Pro or make this
-  repository public to enable this feature."` The repo's owner,
-  `ZeroSum-Solutions`, is confirmed on the GitHub **Free** org plan
-  (`GET /orgs/ZeroSum-Solutions` → `plan.name: "free"`). Branch protection
-  (required status checks, admin enforcement, linear history) is not available
-  for a **private** repo owned by a Free-plan org, regardless of what is
-  configured in the UI. This means no required check — not
-  `Typecheck / Lint / Test / Schema`, not `Staging smoke`, not a future
-  `Preview health` — currently blocks a merge to either branch. Restoring that
-  requires the owner to upgrade `ZeroSum-Solutions` to GitHub Team (or move the
-  repo to a Pro-plan personal account) before any required-check gate can be
-  re-enabled. This is a precondition for the "failure blocks promotion"
-  acceptance bar, independent of the Railway work below.
+  returned `"protected": false`, and `GET .../branches/main/protection` and
+  `GET .../rulesets` both 403'd with `"Upgrade to GitHub Pro or make this
+  repository public to enable this feature."` — the repo was private and its
+  owner, `ZeroSum-Solutions`, was on the GitHub Free org plan, which does not
+  support protected branches on a private repo. That observation was accurate
+  at the time. It was resolved the same day by slice **G0-4**: the repo was
+  flipped from private to **public** (~13:14 on 2026-08-22), which lifted the
+  plan restriction, and branch protection was installed on `main`. Re-verified
+  after G0-4: the repo is public (`visibility: "public"`); `main` requires the
+  status check `Typecheck / Lint / Test / Schema` and 1 approving review, and
+  blocks force pushes and branch deletion (`enforce_admins` and
+  `required_linear_history` are both currently `false`); `staging` remains
+  unprotected — `GET .../branches/staging/protection` now returns a plain 404
+  `"Branch not protected"` (no plan-upgrade error), i.e. it's simply not
+  configured, not blocked by the org plan. `Preview health` is not yet in
+  `main`'s required checks.
 - **Railway PR-preview environments are not enabled**, and no code change to
   `preview-health.yml` can create one. `railway environment list` (industrious-
   courtesy project) shows only two environments, `production` and `staging`;
@@ -98,8 +100,15 @@ hold and change what "failure blocks promotion" can mean today:
 Net: getting `Preview health` to two consecutive green runs needs, in order,
 (1) an isolated preview-safe Railway base environment backed by its own
 Supabase branch/project, (2) Railway PR Environments turned on against that
-base, then (3) the GitHub org plan upgraded so `main` can require the check at
-all. None of the three are reachable from this repository's code or CI config.
+base (or, for Option A, the Railway `staging` environment repointed at the
+`staging` git branch), then (3) once those runs are actually green, adding the
+check context `Preview health / Railway preview /api/health` to `main`'s
+existing required checks alongside `Typecheck / Lint / Test / Schema`. **Do
+not add that required check before the Railway side works** — with Railway PR
+previews still off, `Preview health` fails on every PR by design, and
+requiring it would block every merge to `main` on a check that can never pass
+yet. None of the three steps are reachable from this repository's code or CI
+config.
 
 ## Fixed staging environment
 
