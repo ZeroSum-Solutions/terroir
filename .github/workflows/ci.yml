@@ -55,18 +55,12 @@ jobs:
     # pulls) + Playwright browser install + the E2E run add real time on a
     # cold runner, so this needs more headroom than before.
     timeout-minutes: 25
-    env:
-      # Surface secrets to env at job level so a later step's `if:` can
-      # test them. Empty string when the secret isn't configured.
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 9
 
@@ -118,7 +112,12 @@ jobs:
         # differs from the committed file. Skipped silently when the
         # secret isn't configured — the check still runs for members
         # but doesn't block fork PRs that can't access secrets.
-        if: env.SUPABASE_ACCESS_TOKEN != ''
+        # Secrets are scoped to this step only (not job-level env) so
+        # third-party actions in this job never see them.
+        if: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
         run: pnpm run types:check
 
       - name: Down migrations check
@@ -133,7 +132,7 @@ jobs:
         run: pnpm run supabase:seed:local
 
       - name: Install Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1 (v1.7.1)
         with:
           version: 2.109.1
 
