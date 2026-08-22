@@ -33,6 +33,18 @@ function arrayMove<T>(array: T[], from: number, to: number): T[] {
   return result;
 }
 
+// Legacy cellar_config rows store `labels.sections` as plain name strings
+// (still written by grid-label callers). Normalize those into the
+// {id, name} shape this page edits, using the name itself as a stable id
+// so re-fetches don't reshuffle React keys or drag order.
+function normalizeSections(raw: unknown[]): Section[] {
+  return raw.map((entry) =>
+    typeof entry === "string"
+      ? { id: entry, name: entry }
+      : (entry as Section),
+  );
+}
+
 export default function CellarConfigPage() {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -64,7 +76,7 @@ export default function CellarConfigPage() {
         const config = await res.json();
         if (cancelled) return;
         if (config?.labels?.sections && Array.isArray(config.labels.sections)) {
-          setSections(config.labels.sections);
+          setSections(normalizeSections(config.labels.sections));
         }
       } catch (err) {
         if (!cancelled) {
@@ -176,17 +188,17 @@ export default function CellarConfigPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg px-md py-lg">
+    <div className="mx-auto max-w-[480px] px-md py-lg">
       <div className="mb-lg flex items-center gap-sm">
         <button
           type="button"
           onClick={() => router.back()}
           aria-label="Back to cellar"
-          className="flex h-10 w-10 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
         >
           <ArrowLeft className="h-5 w-5" strokeWidth={2} aria-hidden />
         </button>
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="font-serif text-[22px] font-medium text-ink">Cellar Sections</h1>
           <p className="text-[13px] text-grey">
             Organize your cellar into named groups like Reds by Region or Cult
@@ -273,7 +285,7 @@ export default function CellarConfigPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="delete-section-heading"
-            className="mx-md w-full max-w-sm rounded-card border border-hairline bg-white p-lg"
+            className="mx-md w-full max-w-[420px] rounded-card border border-hairline bg-white p-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <h3
@@ -290,7 +302,7 @@ export default function CellarConfigPage() {
                 type="button"
                 onClick={() => setDeleteTarget(null)}
                 disabled={busy}
-                className="flex-1 rounded-pill border border-ink/25 px-md py-sm text-[14px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
+                className="min-h-11 flex-1 rounded-pill border border-ink/25 px-md py-sm text-[14px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -298,7 +310,7 @@ export default function CellarConfigPage() {
                 type="button"
                 onClick={confirmDelete}
                 disabled={busy}
-                className="flex-1 rounded-pill bg-primary px-md py-sm text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+                className="min-h-11 flex-1 rounded-pill bg-primary px-md py-sm text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
               >
                 Delete
               </button>
@@ -375,7 +387,7 @@ function SortableSectionItem({
             onClick={() => onCommitEdit(section.id)}
             disabled={!editName.trim()}
             aria-label="Save rename"
-            className="flex h-8 w-8 items-center justify-center rounded-pill text-sage-ink hover:bg-sage-wash disabled:opacity-40"
+            className="flex h-11 w-11 items-center justify-center rounded-pill text-sage-ink hover:bg-sage-wash disabled:opacity-40"
           >
             <Check className="h-4 w-4" strokeWidth={2} aria-hidden />
           </button>
@@ -383,7 +395,7 @@ function SortableSectionItem({
             type="button"
             onClick={onCancelEdit}
             aria-label="Cancel rename"
-            className="flex h-8 w-8 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
+            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
           >
             <X className="h-4 w-4" strokeWidth={2} aria-hidden />
           </button>
@@ -396,7 +408,7 @@ function SortableSectionItem({
               {...attributes}
               {...listeners}
               aria-label={`Drag to reorder ${section.name}`}
-              className="flex h-8 w-6 shrink-0 items-center justify-center cursor-grab active:cursor-grabbing text-grey hover:text-ink touch:min-h-[44px] touch:min-w-[44px]"
+              className="flex h-11 w-11 shrink-0 items-center justify-center cursor-grab active:cursor-grabbing text-grey hover:text-ink"
             >
               <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
@@ -411,7 +423,7 @@ function SortableSectionItem({
               onClick={() => onStartEdit(section)}
               disabled={busy}
               aria-label={`Rename ${section.name}`}
-              className="flex h-8 w-8 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface disabled:opacity-40"
+              className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface disabled:opacity-40"
             >
               <Pencil className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
@@ -420,7 +432,7 @@ function SortableSectionItem({
               onClick={() => onDelete(section)}
               disabled={busy}
               aria-label={`Delete ${section.name}`}
-              className="flex h-8 w-8 items-center justify-center rounded-pill text-grey hover:bg-blush-wash hover:text-primary disabled:opacity-40"
+              className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-blush-wash hover:text-primary disabled:opacity-40"
             >
               <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
