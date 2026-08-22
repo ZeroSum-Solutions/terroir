@@ -68,12 +68,16 @@ describe("withScanSpan", () => {
     expect(fn).toHaveBeenCalledOnce();
   });
 
-  it("never calls fn a second time if it already started before startSpan's wrapper throws", async () => {
+  it("returns fn's successful value even when Sentry's own span bookkeeping throws after the callback completes", async () => {
+    // Simulates a Sentry outage/transport error surfacing from span.end()
+    // (or other post-callback bookkeeping) *after* fn already succeeded.
+    // The stage's real result must win — discarding it here would turn a
+    // completed scan.persist write into a reported scan failure.
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     let started = 0;
     sentryMock.startSpan.mockImplementation(async (_options, callback) => {
-      await callback();
-      // Simulate Sentry's own post-callback bookkeeping throwing after fn
-      // already ran to completion.
+      const value = await callback();
+      void value;
       throw new Error("span.end() blew up");
     });
 
@@ -82,9 +86,36 @@ describe("withScanSpan", () => {
       return "value";
     });
 
-    await expect(withScanSpan("extract.retry", {}, fn)).rejects.toThrow(
-      "span.end() blew up",
-    );
+    const result = await withScanSpan("persist", {}, fn);
+
+    expect(result).toBe("value");
+    expect(started).toBe(1);
+    expect(fn).toHaveBeenCalledOnce();
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("propagates fn's own rejection exactly, even if Sentry's wrapper rethrows a different error object on the way out", async () => {
+    // Simulates Sentry's real startSpan behavior of catching the callback's
+    // rejection, marking the span's error status, then rethrowing — but
+    // with a distinct error object, to prove the wrapper replays fn's own
+    // captured outcome rather than whatever Sentry rethrows.
+    const stageError = new Error("upstream OCR failure");
+    let started = 0;
+    sentryMock.startSpan.mockImplementation(async (_options, callback) => {
+      try {
+        return await callback();
+      } catch {
+        throw new Error("Sentry-wrapped: span ended with error status");
+      }
+    });
+
+    const fn = vi.fn().mockImplementation(async () => {
+      started += 1;
+      throw stageError;
+    });
+
+    await expect(withScanSpan("ocr.page", {}, fn)).rejects.toBe(stageError);
     expect(started).toBe(1);
     expect(fn).toHaveBeenCalledOnce();
   });
