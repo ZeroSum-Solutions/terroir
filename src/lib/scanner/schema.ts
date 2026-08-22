@@ -138,6 +138,7 @@ const PersistedLineItemSchema = z.object({
   region: z.string(),
   qty: z.number(),
   unitCost: z.number(),
+  lineTotal: z.number().nullable().optional(),
   currency: z.string().nullable(),
   format: z.string().nullable(),
   confidence: z.number(),

@@ -52,6 +52,7 @@ export const ScanLineItemSchema = z.object({
   region: z.string(),
   qty: z.number().int().positive(),
   unitCost: z.number().finite().nonnegative(),
+  lineTotal: z.number().nullable().optional(),
   currency: z.string().nullable().optional(),
   format: z.string().nullable().optional(),
   confidence: z.number().min(0).max(1),

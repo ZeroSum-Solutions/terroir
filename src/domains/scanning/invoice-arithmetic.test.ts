@@ -4,6 +4,7 @@ import {
   toAmount,
   validateInvoiceArithmetic,
   validateLineItemArithmetic,
+  validateLineItemsArithmetic,
 } from "./invoice-arithmetic";
 
 /**
@@ -391,5 +392,49 @@ describe("validateInvoiceArithmetic — invoice-level total mismatch", () => {
         actual: 100,
       }),
     );
+  });
+});
+
+
+describe("validateLineItemsArithmetic — save-scan re-validation (no invoice-level data available)", () => {
+  it("passes plain LineItem-shaped objects that reconcile", () => {
+    const result = validateLineItemsArithmetic([
+      { qty: 6, unitCost: 45, lineTotal: 270, currency: "USD" },
+      { qty: 3, unitCost: 62.5, lineTotal: 187.5, currency: "USD" },
+    ]);
+
+    expect(result.ok).toBe(true);
+    expect(result.issues).toEqual([]);
+  });
+
+  it("catches a per-line mismatch in the currently-being-saved items", () => {
+    const result = validateLineItemsArithmetic([
+      // True unit cost is $45 (6 x 45 = 270); saved payload carries $18.
+      { qty: 6, unitCost: 18, lineTotal: 270, currency: "USD" },
+    ]);
+
+    expect(result.ok).toBe(false);
+    expect(result.issues[0]).toMatchObject({ type: "line_mismatch" });
+  });
+
+  it("catches a currency mismatch across the items being saved", () => {
+    const result = validateLineItemsArithmetic([
+      { qty: 6, unitCost: 45, lineTotal: 270, currency: "USD" },
+      { qty: 3, unitCost: 62.5, lineTotal: 187.5, currency: "EUR" },
+    ]);
+
+    expect(result.ok).toBe(false);
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({ type: "currency_mismatch" }),
+    );
+  });
+
+  it("never invents an invoice-level check — passes when no line prints a total at all", () => {
+    const result = validateLineItemsArithmetic([
+      { qty: 6, unitCost: 45, lineTotal: null, currency: "USD" },
+      { qty: 3, unitCost: 62.5, lineTotal: null, currency: "USD" },
+    ]);
+
+    expect(result.ok).toBe(true);
   });
 });

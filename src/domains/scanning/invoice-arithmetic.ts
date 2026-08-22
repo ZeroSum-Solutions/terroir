@@ -16,15 +16,30 @@
  * document doesn't provide (missing line totals or an undisclosed tax line
  * just take that check out of scope, honestly, rather than guessing) and it
  * never auto-corrects a suspected error (case-vs-bottle confusion is
- * flagged, not fixed). The caller (`invoice-scan-service.ts`) decides what
- * to do with a failing result: retry once at higher effort, then route to
- * the existing human-confirmation path.
+ * flagged, not fixed).
+ *
+ * Two entry points, for the two places model output flows toward
+ * persistence:
+ *   - `validateInvoiceArithmetic` — the full check (line + currency +
+ *     invoice-level total) against a freshly extracted `ParsedInvoice`.
+ *     Used by `invoice-scan-service.ts` and the re-extract route, which
+ *     decide what to do with a failing result: retry once at higher
+ *     effort, then route to the existing human-confirmation path.
+ *   - `validateLineItemsArithmetic` — line + currency only, against a
+ *     plain array of `{ qty, unitCost, lineTotal?, currency? }` items. No
+ *     invoice-level total is available once items round-trip through the
+ *     client (localStorage / the save request body don't carry
+ *     `invoiceTotal`/`taxAndFees`), so this is what `/api/inventory/
+ *     save-scan` re-validates against the *currently-being-saved* items
+ *     right before they become `inventory_items` rows — never trusting a
+ *     client-supplied "already validated" claim from the earlier scan
+ *     response.
  */
 import type {
   ArithmeticIssue,
   ArithmeticValidation,
 } from "@/lib/scanner/types";
-import type { ParsedInvoice, ParsedLineItem } from "@/lib/scanner/schema";
+import type { ParsedInvoice } from "@/lib/scanner/schema";
 
 /** Absolute cents-level slack for a single line — covers float/rounding noise. */
 const LINE_TOLERANCE_ABS = 0.02;
@@ -91,6 +106,18 @@ export function toAmount(value: number | string | null | undefined): number | nu
   return null;
 }
 
+/**
+ * Structural shape both `ParsedLineItem` (fresh model output) and the
+ * client-round-tripped `LineItem` (post-edit, about to be saved) satisfy.
+ * Kept minimal on purpose so either type can be validated without a cast.
+ */
+export type LineArithmeticInput = {
+  qty: number | string;
+  unitCost: number | string;
+  lineTotal?: number | string | null;
+  currency?: string | null;
+};
+
 export type LineArithmeticStatus =
   | "ok"
   | "not_applicable"
@@ -109,7 +136,7 @@ export type LineArithmeticResult = {
  * actually provides, never invent a total to check against.
  */
 export function validateLineItemArithmetic(
-  item: ParsedLineItem,
+  item: LineArithmeticInput,
   lineIndex: number,
 ): LineArithmeticResult {
   if (item.lineTotal == null) return { status: "not_applicable" };
@@ -175,7 +202,9 @@ export function validateLineItemArithmetic(
  * as if equal would be exactly the kind of silent, model-established
  * "truth" this validation exists to prevent.
  */
-function validateCurrencyConsistency(items: ParsedLineItem[]): ArithmeticIssue[] {
+function validateCurrencyConsistency(
+  items: Pick<LineArithmeticInput, "currency">[],
+): ArithmeticIssue[] {
   const currencies = new Set(
     items.map((item) => item.currency).filter((c): c is string => Boolean(c)),
   );
@@ -186,6 +215,27 @@ function validateCurrencyConsistency(items: ParsedLineItem[]): ArithmeticIssue[]
       message: `Line items report inconsistent currencies (${[...currencies].sort().join(", ")}); cannot safely sum line totals without a conversion this system will not perform silently.`,
     },
   ];
+}
+
+/**
+ * Line-level + currency checks only — no invoice-level total check, since
+ * that requires `invoiceTotal`/`taxAndFees` which aren't available once
+ * items round-trip through the client. See `/api/inventory/save-scan`,
+ * which uses this to re-validate the items actually about to be persisted.
+ */
+export function validateLineItemsArithmetic(
+  items: LineArithmeticInput[],
+): ArithmeticValidation {
+  const issues: ArithmeticIssue[] = [];
+
+  items.forEach((item, lineIndex) => {
+    const result = validateLineItemArithmetic(item, lineIndex);
+    if (result.issue) issues.push(result.issue);
+  });
+
+  issues.push(...validateCurrencyConsistency(items));
+
+  return { ok: issues.length === 0, issues };
 }
 
 /**
@@ -234,14 +284,7 @@ function validateInvoiceTotal(parsed: ParsedInvoice): ArithmeticIssue[] {
  * trustworthy without a human looking at it.
  */
 export function validateInvoiceArithmetic(parsed: ParsedInvoice): ArithmeticValidation {
-  const issues: ArithmeticIssue[] = [];
-
-  parsed.lineItems.forEach((item, lineIndex) => {
-    const result = validateLineItemArithmetic(item, lineIndex);
-    if (result.issue) issues.push(result.issue);
-  });
-
-  issues.push(...validateCurrencyConsistency(parsed.lineItems));
+  const { issues } = validateLineItemsArithmetic(parsed.lineItems);
   issues.push(...validateInvoiceTotal(parsed));
 
   return { ok: issues.length === 0, issues };
