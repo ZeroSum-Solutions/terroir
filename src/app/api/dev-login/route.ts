@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { Errors } from "@/lib/api/errors";
 import { createClient } from "@/lib/supabase/server";
@@ -11,7 +12,14 @@ import { createClient } from "@/lib/supabase/server";
  * Claude Code's preview sandbox (which blocks external-origin redirects).
  *
  * DEV_BYPASS_EMAIL enables the route outside production. Production always
- * returns an opaque 404, regardless of legacy temporary-bypass variables.
+ * returns an opaque 404, regardless of legacy temporary-bypass variables —
+ * unconditionally, before any env var beyond NODE_ENV is even read, so the
+ * disabled path in production is a single early return with no branching
+ * on token/capability state (see docs/BREAK-GLASS.md).
+ *
+ * Every enabled invocation (the only case that reaches this route's real
+ * logic) is reported to Sentry with the actor email, timestamp, and reason,
+ * so any bypass login is auditable — see docs/BREAK-GLASS.md.
  */
 export const runtime = "nodejs";
 
@@ -47,6 +55,19 @@ export async function GET(request: NextRequest) {
   if (!email || !serviceRoleKey || !supabaseUrl) {
     return opaqueNotFound();
   }
+
+  // Audit trail: every enabled invocation is reported, regardless of the
+  // eventual outcome, so bypass usage is never silent. See
+  // docs/BREAK-GLASS.md for the retention/rotation policy this backs.
+  Sentry.captureMessage("dev-login bypass invoked", {
+    level: "warning",
+    tags: { route: "dev-login" },
+    extra: {
+      actor: email,
+      time: new Date().toISOString(),
+      reason: `DEV_BYPASS_EMAIL enabled outside production (NODE_ENV=${process.env.NODE_ENV})`,
+    },
+  });
 
   try {
     // Step 1: ask Supabase admin to mint a one-time magic-link proof.
