@@ -33,6 +33,83 @@ remains blocked until the reviewed workflow exists on `main`, its environment
 and release-owner restrictions are verified, and the exact current staging SHA
 has fresh smoke and database-recovery evidence.
 
+## Re-verification — 2026-08-22 (G0-3)
+
+Re-checked through the GitHub API and the Railway CLI while investigating why
+`Preview health` fails on every PR (INT-018 / G0-3). Two claims above no longer
+hold and change what "failure blocks promotion" can mean today:
+
+- **Branch protection status (updated after G0-4).** At investigation time,
+  `GET /repos/wiggdevin/terroir/branches/main` and `.../branches/staging` both
+  returned `"protected": false`, and `GET .../branches/main/protection` and
+  `GET .../rulesets` both 403'd with `"Upgrade to GitHub Pro or make this
+  repository public to enable this feature."` — the repo was private and its
+  owner, `ZeroSum-Solutions`, was on the GitHub Free org plan, which does not
+  support protected branches on a private repo. That observation was accurate
+  at the time. It was resolved the same day by slice **G0-4**: the repo was
+  flipped from private to **public** (~13:14 on 2026-08-22), which lifted the
+  plan restriction, and branch protection was installed on `main`. Re-verified
+  after G0-4: the repo is public (`visibility: "public"`); `main` requires the
+  status check `Typecheck / Lint / Test / Schema` and 1 approving review, and
+  blocks force pushes and branch deletion (`enforce_admins` and
+  `required_linear_history` are both currently `false`); `staging` remains
+  unprotected — `GET .../branches/staging/protection` now returns a plain 404
+  `"Branch not protected"` (no plan-upgrade error), i.e. it's simply not
+  configured, not blocked by the org plan. `Preview health` is not yet in
+  `main`'s required checks.
+- **Railway PR-preview environments are not enabled**, and no code change to
+  `preview-health.yml` can create one. `railway environment list` (industrious-
+  courtesy project) shows only two environments, `production` and `staging`;
+  there is no per-PR environment. `GET /repos/.../deployments?sha=<PR head>`
+  returns `[]` for every recent PR head SHA — Railway never records a
+  deployment for them. `preview-health.yml`'s poll logic (Railway bot PR
+  comment + matching deployment + `/api/health` 200) is confirmed correct: it
+  is exercising exactly what the Railway "PR Environments" dashboard feature
+  would produce if turned on, and there is nothing to detect because the
+  feature is off. Recent runs failing (e.g. run `32544129334`, PR #80) is the
+  intended fail-closed behavior added in commit `1cb8ef9` ("ci: fail closed on
+  missing Railway previews", 2026-08-20); before that commit the same
+  no-preview condition exited 0 as a "graceful skip" (see run `32345031675`),
+  which is why older PRs show green — they were never actually testing a
+  preview.
+- Turning PR Environments on as-is would fail the isolation bar this document
+  already sets (do not enable until every preview has its own Supabase
+  credentials, etc.): `railway variables --service terroir-web` on the
+  `production` environment shows live `ANTHROPIC_API_KEY`,
+  `NEXT_PUBLIC_SUPABASE_URL`/publishable key, `SENTRY_AUTH_TOKEN`, and
+  `ACTIVE_RESTAURANT_COOKIE_SECRET`. Railway's PR Environments feature clones
+  variables from a chosen base environment; only `production` and `staging`
+  exist to clone from, and neither is a preview-safe base today. Enabling PR
+  Environments therefore needs a new isolated base environment (its own
+  Supabase branch/project, its own cookie secret, no production keys) created
+  first, then PR Environments pointed at that base instead of `production`.
+- **Option A (fixed staging smoke) is not a working shortcut around the above
+  either, for a separate reason.** `GET /repos/.../deployments` shows
+  Railway's bot deploying the *same* SHA to both `industrious-courtesy /
+  production` and `industrious-courtesy / staging` at the same timestamp on
+  every push to `main` (e.g. SHA `beeb2d45` deployed to both environments at
+  `2026-08-22T01:46:11Z`). That means the Railway `staging` environment is
+  currently tracking `main`, not the `staging` git branch — consistent with
+  this document's own note above that the latest `staging`-tip run failed the
+  exact-candidate SHA-binding smoke (Railway staging was never actually
+  running the `staging` branch's code to bind against). Fixing Option A needs
+  the owner to repoint the Railway `staging` environment's deploy trigger at
+  the `staging` branch (Railway dashboard → service → Settings → Source), and
+  still depends on the branch-protection fix above to actually gate anything.
+
+Net: getting `Preview health` to two consecutive green runs needs, in order,
+(1) an isolated preview-safe Railway base environment backed by its own
+Supabase branch/project, (2) Railway PR Environments turned on against that
+base (or, for Option A, the Railway `staging` environment repointed at the
+`staging` git branch), then (3) once those runs are actually green, adding the
+check context `Preview health / Railway preview /api/health` to `main`'s
+existing required checks alongside `Typecheck / Lint / Test / Schema`. **Do
+not add that required check before the Railway side works** — with Railway PR
+previews still off, `Preview health` fails on every PR by design, and
+requiring it would block every merge to `main` on a check that can never pass
+yet. None of the three steps are reachable from this repository's code or CI
+config.
+
 ## Fixed staging environment
 
 The separately deployed staging origin is
