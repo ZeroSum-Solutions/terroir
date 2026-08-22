@@ -59,6 +59,10 @@ function probeSupabase(url: string, serviceKey: string): Promise<boolean> {
 export async function GET() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Railway sets this automatically for GitHub-triggered deploys. Lets the
+  // staging smoke gate confirm which commit is actually being served,
+  // rather than assuming a deploy landed just because the process is up.
+  const release = process.env.RAILWAY_GIT_COMMIT_SHA;
 
   let db: "connected" | "error" | "unconfigured" = "unconfigured";
   let dbReason:
@@ -83,6 +87,7 @@ export async function GET() {
       status: "ok",
       db,
       ...(dbReason ? { dbReason } : {}),
+      ...(release ? { release } : {}),
       timestamp: new Date().toISOString(),
     },
     { status: 200, headers: { "Cache-Control": "no-store" } },

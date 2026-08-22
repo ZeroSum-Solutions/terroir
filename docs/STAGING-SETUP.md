@@ -110,6 +110,56 @@ requiring it would block every merge to `main` on a check that can never pass
 yet. None of the three steps are reachable from this repository's code or CI
 config.
 
+## Option A implementation — 2026-08-22 (G0-3 runtime slice)
+
+Implemented the cheapest truthful version of Option A: a `Staging smoke`
+workflow on `main` (`.github/workflows/staging-smoke.yml`) that runs on every
+push to `main`, polls `https://terroir-web-staging.up.railway.app/api/health`
+for up to 7.5 minutes, and fails hard if it never observes the pushed commit's
+SHA reported as `release` with `db: "connected"` and `status: "ok"`. This is
+deliberately separate from, and smaller than, the migration/E2E `Staging
+smoke` workflow that already exists on `origin/staging` — that workflow
+belongs to the not-yet-reachable staging-branch model described above and is
+untouched by this change.
+
+Two findings from this investigation:
+
+- **Railway's `staging` environment tracking `main` (not a `staging` branch)
+  is accepted as the permanent model, not a defect to fix.** `railway service
+  source connect --help` confirms sources are connected at the *service*
+  level and fan out to "matching project environments" — there is no
+  per-environment branch override reachable from the CLI or from
+  `railway.toml`/config-as-code. Repointing the `staging` environment at the
+  `staging` git branch is therefore dashboard-only *and* would only affect
+  which commit staging serves, not add any capability this repo's code can
+  drive. Given that, staging-tracks-main is the simpler and equally honest
+  choice: the smoke gate now validates the exact commit that lands on `main`,
+  on the exact infrastructure (`industrious-courtesy` / `staging`) that
+  Railway already deploys it to. **No Railway-side change was made or is
+  required.**
+- **`/api/health` did not expose which commit it was serving.** Added a
+  `release` field sourced from `RAILWAY_GIT_COMMIT_SHA` (Railway's
+  automatically-injected env var for GitHub-triggered deploys; confirmed by
+  `railway variables --json` key names — it does not appear there because
+  it's a deploy-time reference variable, not a configured service variable).
+  The field is omitted whenever the variable is unset (local dev, tests,
+  non-Railway environments), so this is additive and non-breaking.
+
+Live-verified before merge: curling the current staging origin returns
+`{"status":"ok","db":"connected", ...}` with no `release` key yet (the field
+doesn't exist in production until this change deploys), and a single-attempt
+dry run of the workflow's poll logic against that live response correctly
+exits non-zero. Full end-to-end verification (a real push landing a matching
+`release` within the poll window) can only happen after this PR merges.
+
+**Remaining owner step:** merge this PR, then watch the `Staging smoke`
+workflow on the next two pushes to `main`. The G0-3 bar is two consecutive
+green runs; that can't be produced without merging. If either run fails,
+check the run log's "Last observed" line first — it reports the exact
+`http`/`release`/`db` values staging returned, which distinguishes "Railway
+just needs more time than 7.5 minutes for this build" (raise `MAX_ATTEMPTS`)
+from a genuine regression.
+
 ## Fixed staging environment
 
 The separately deployed staging origin is
