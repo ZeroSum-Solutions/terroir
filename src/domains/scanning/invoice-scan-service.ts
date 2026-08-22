@@ -10,11 +10,12 @@ import {
   mergeOcrResults,
   type OcrResult,
 } from "@/adapters/ocr/azure-document-intelligence";
-import { INVOICE_EXTRACTION_RETRY } from "@/lib/ai/models";
+import { INVOICE_EXTRACTION, INVOICE_EXTRACTION_RETRY } from "@/lib/ai/models";
 import { scoreItems } from "@/lib/scanner/scoring";
 import type { LineItem, Scan } from "@/lib/scanner/types";
 import type { Database } from "@/types/database";
 import { validateInvoiceArithmetic } from "./invoice-arithmetic";
+import { withScanSpan } from "./scan-telemetry";
 
 const OCR_STATUS = {
   not_configured: 500,
@@ -103,11 +104,34 @@ export async function processInvoiceScanOnce(
 
   try {
     const pages = [{ buffer: fileBuffer, mimeType }, ...(extraFiles ?? [])];
+    // M1-1: one span per page so a multi-page invoice's OCR fan-out is
+    // visible per-page, not just as a single lump sum.
     const ocrResults = await Promise.all(
-      pages.map((page) => extractOcr(page.buffer, page.mimeType)),
+      pages.map((page, pageIndex) =>
+        withScanSpan(
+          "ocr.page",
+          {
+            pageIndex,
+            pageCount: pages.length,
+            mimeType: page.mimeType,
+            byteSize: page.buffer.length,
+          },
+          () => extractOcr(page.buffer, page.mimeType),
+        ),
+      ),
     );
-    ocr = mergeOcrResults(ocrResults);
-    let parsed = await extractFromOcr(ocr);
+    ocr = await withScanSpan(
+      "ocr.merge",
+      { pageCount: pages.length },
+      async () => mergeOcrResults(ocrResults),
+    );
+    let parsed = await withScanSpan(
+      "extract",
+      { attempt: 1, model: INVOICE_EXTRACTION.model, effort: INVOICE_EXTRACTION.effort ?? "default" },
+      // Non-null: `ocr` was just assigned above; TS can't carry that
+      // narrowing through a closure passed to withScanSpan.
+      () => extractFromOcr(ocr!),
+    );
 
     if (parsed.lineItems.length === 0) {
       const { error: completionError } = await supabase
@@ -135,7 +159,15 @@ export async function processInvoiceScanOnce(
     // Anthropic SDK's own maxRetries or double-bill a flaky upstream.
     let arithmetic = validateInvoiceArithmetic(parsed);
     if (!arithmetic.ok) {
-      parsed = await extractFromOcr(ocr, INVOICE_EXTRACTION_RETRY);
+      parsed = await withScanSpan(
+        "extract.retry",
+        {
+          attempt: 2,
+          model: INVOICE_EXTRACTION_RETRY.model,
+          effort: INVOICE_EXTRACTION_RETRY.effort ?? "default",
+        },
+        () => extractFromOcr(ocr!, INVOICE_EXTRACTION_RETRY),
+      );
       arithmetic = validateInvoiceArithmetic(parsed);
     }
 
@@ -195,10 +227,12 @@ export async function processInvoiceScanOnce(
     if (preUploadedPath) {
       updatePayload.raw_image_path = preUploadedPath;
     }
-    const { error: completionError } = await supabase
-      .from("invoice_scans")
-      .update(updatePayload as never)
-      .eq("id", scanId);
+    const { error: completionError } = await withScanSpan(
+      "persist",
+      { itemCount: items.length, arithmeticOk: arithmetic.ok },
+      async () =>
+        supabase.from("invoice_scans").update(updatePayload as never).eq("id", scanId),
+    );
     if (completionError) throw completionError;
 
     return { status: 200, body: { scanId, ...result } };

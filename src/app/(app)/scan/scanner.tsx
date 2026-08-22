@@ -9,6 +9,7 @@ import {
   PersistedScanSchema,
 } from "@/lib/scanner/schema";
 import { SCORED_FIELDS_COUNT } from "@/lib/scanner/scored-fields";
+import { markScanStage, reportScanStage } from "@/lib/scanner/scan-timing";
 import { useRestaurant } from "@/lib/context/restaurant";
 import type {
   BottleScanResult,
@@ -85,19 +86,34 @@ class ScanError extends Error {
 }
 
 async function postScan(files: File[], signal: AbortSignal, key?: string | null): Promise<Scan> {
+  // M1-1: client-side "prep" (building the request) and "upload" (the
+  // network round trip) stages. scanId is the scan's own idempotency key
+  // so these reports correlate with the server-side spans in
+  // src/domains/scanning/scan-telemetry.ts.
+  const scanId = key ?? "unkeyed";
+  markScanStage("prep", "start");
   const body = new FormData();
   files.forEach(function(f) { body.append("file", f); });
   const headers: Record<string, string> = {};
   if (key) headers["Idempotency-Key"] = key;
+  markScanStage("prep", "end");
+  reportScanStage(scanId, "prep", { fileCount: files.length });
+
+  markScanStage("upload", "start");
   const res = await fetch("/api/scan", { method: "POST", body, signal, headers });
   if (!res.ok) {
     const failure = readApiError(
       await res.json().catch(() => null),
       `Scan failed (${res.status})`,
     );
+    markScanStage("upload", "end");
+    reportScanStage(scanId, "upload", { ok: false, status: res.status });
     throw new ScanError(failure.message, failure.rawText);
   }
-  return (await res.json()) as Scan;
+  const result = (await res.json()) as Scan;
+  markScanStage("upload", "end");
+  reportScanStage(scanId, "upload", { ok: true, status: res.status });
+  return result;
 }
 
 export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
@@ -201,15 +217,30 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
           ? crypto.randomUUID()
           : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     }
+    // M1-1: scanTelemetryId keys the client-side stage reports so they
+    // correlate across a retry even after scanKeyRef is cleared below.
+    const scanTelemetryId = scanKeyRef.current ?? "unkeyed";
+    reportScanStage(scanTelemetryId, "capture", { fileCount: files.length });
     try {
       const fresh = await postScan(files, ac.signal, scanKeyRef.current);
       if (ac.signal.aborted) return;
+      markScanStage("render", "start");
       setProgress(100);
       scanKeyRef.current = null; // 2xx → clear for next scan
       setScan(fresh);
       setOriginalItems([...fresh.items]);
       saveScan(fresh);
       setStatus(fresh.quality?.manualFallbackTriggered ? "review" : "results");
+      // Double rAF: wait for the browser to actually paint the new status
+      // before marking "render" done, not just for React to schedule it.
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            markScanStage("render", "end");
+            reportScanStage(scanTelemetryId, "render", { itemCount: fresh.items.length });
+          });
+        });
+      }
     } catch (err) {
       if (ac.signal.aborted) return;
       const message = err instanceof Error ? err.message : "Scan failed.";
