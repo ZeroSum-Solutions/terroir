@@ -70,9 +70,63 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
   // isn't left staring at a spinner that quietly disappears.
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const trapRef = useRef<HTMLDivElement>(null);
 
   useFocusTrap({ containerRef: trapRef, onEscape: onClose });
+
+  useEffect(() => {
+    const scrollY = window.scrollY;
+    const bodyStyle = document.body.style;
+    const rootStyle = document.documentElement.style;
+    const previousBody = {
+      overflow: bodyStyle.overflow,
+      position: bodyStyle.position,
+      top: bodyStyle.top,
+      width: bodyStyle.width,
+    };
+    const previousRootOverflow = rootStyle.overflow;
+
+    rootStyle.overflow = "hidden";
+    bodyStyle.overflow = "hidden";
+    bodyStyle.position = "fixed";
+    bodyStyle.top = `-${scrollY}px`;
+    bodyStyle.width = "100%";
+
+    return () => {
+      rootStyle.overflow = previousRootOverflow;
+      bodyStyle.overflow = previousBody.overflow;
+      bodyStyle.position = previousBody.position;
+      bodyStyle.top = previousBody.top;
+      bodyStyle.width = previousBody.width;
+      if (scrollY > 0) window.scrollTo(0, scrollY);
+    };
+  }, []);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const backdrop = backdropRef.current;
+    const panel = trapRef.current;
+    if (!viewport || !backdrop || !panel) return;
+
+    const syncToVisualViewport = () => {
+      backdrop.style.top = `${viewport.offsetTop}px`;
+      backdrop.style.left = `${viewport.offsetLeft}px`;
+      backdrop.style.right = "auto";
+      backdrop.style.bottom = "auto";
+      backdrop.style.width = `${viewport.width}px`;
+      backdrop.style.height = `${viewport.height}px`;
+      panel.style.maxHeight = `${viewport.height}px`;
+    };
+
+    syncToVisualViewport();
+    viewport.addEventListener("resize", syncToVisualViewport);
+    viewport.addEventListener("scroll", syncToVisualViewport);
+    return () => {
+      viewport.removeEventListener("resize", syncToVisualViewport);
+      viewport.removeEventListener("scroll", syncToVisualViewport);
+    };
+  }, []);
 
   // BND-040 — fetch pricing suggestion when a wine is selected. Cheap
   // (cached retail data only, no API quota burn). State is reset by the
@@ -216,7 +270,9 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 md:items-center"
+      ref={backdropRef}
+      data-add-wine-backdrop
+      className="fixed inset-0 z-50 flex items-end justify-center overscroll-contain bg-ink/40 md:items-center md:p-md"
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-wine-title"
@@ -224,8 +280,12 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div ref={trapRef} className="flex max-h-[85vh] w-full flex-col rounded-t-[20px] border border-hairline bg-canvas md:max-w-[480px] md:rounded-card">
-        <div className="border-b border-hairline px-lg py-md">
+      <div
+        ref={trapRef}
+        data-add-wine-panel
+        className="flex max-h-[100dvh] w-full min-w-0 flex-col overflow-hidden rounded-t-[20px] border border-hairline bg-canvas md:max-h-[calc(100dvh-2rem)] md:max-w-[480px] md:rounded-card"
+      >
+        <div className="shrink-0 border-b border-hairline px-lg py-md">
           <h2 id="add-wine-title" className="font-serif text-[20px] text-ink">
             Add wine to {activeSectionName}
           </h2>
@@ -236,11 +296,11 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
 
         {!selected ? (
           <>
-            <div className="flex gap-xs border-b border-hairline px-lg">
+            <div className="flex shrink-0 gap-xs border-b border-hairline px-lg">
               <button
                 type="button"
                 onClick={() => { setSearchMode("inventory"); setQuery(""); setCatalogError(null); }}
-                className={`px-sm py-xs text-[13px] font-medium border-b-2 transition-colors ${
+                className={`min-h-11 px-sm py-xs text-[13px] font-medium border-b-2 transition-colors ${
                   searchMode === "inventory"
                     ? "border-primary text-primary"
                     : "border-transparent text-ink-muted hover:text-ink"
@@ -251,7 +311,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
               <button
                 type="button"
                 onClick={() => { setSearchMode("catalog"); setQuery(""); setCatalogError(null); }}
-                className={`px-sm py-xs text-[13px] font-medium border-b-2 transition-colors ${
+                className={`min-h-11 px-sm py-xs text-[13px] font-medium border-b-2 transition-colors ${
                   searchMode === "catalog"
                     ? "border-primary text-primary"
                     : "border-transparent text-ink-muted hover:text-ink"
@@ -260,11 +320,10 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                 LWIN catalog
               </button>
             </div>
-            <div className="border-b border-hairline px-lg py-sm">
+            <div className="shrink-0 border-b border-hairline px-lg py-sm">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-sm top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" strokeWidth={2} aria-hidden="true" />
                 <input
-                  autoFocus
                   type="text"
                   value={query}
                   onChange={(e) => {
@@ -273,7 +332,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                   }}
                   placeholder="Search by producer or wine name…"
                   aria-label="Search wines"
-                  className="h-[38px] w-full rounded-pill border border-hairline bg-white pl-xl pr-sm text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                  className="h-11 w-full rounded-pill border border-hairline bg-white pl-xl pr-sm text-[16px] text-ink placeholder:text-ink-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft md:text-[14px]"
                 />
               </div>
             </div>
@@ -287,7 +346,10 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                 </p>
               </div>
             )}
-            <div className="flex-1 overflow-y-auto">
+            <div
+              data-add-wine-results
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+            >
               {loading ? (
                 <div className="flex items-center justify-center py-xl">
                   <Loader2 className="h-5 w-5 animate-spin text-ink-subtle" />
@@ -366,7 +428,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
             </div>
           </>
         ) : (
-          <div className="px-lg py-md overflow-y-auto">
+          <div className="min-h-0 overflow-y-auto overscroll-contain px-lg py-md">
             <div className="rounded-md border border-hairline bg-bridge-surface px-md py-sm">
               <div className="font-serif text-[17px] font-medium text-ink">
                 {selected.producer}, {selected.name}
@@ -390,7 +452,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     return (
                       <label
                         key={s.id}
-                        className="flex cursor-pointer items-center gap-sm rounded-pill px-sm py-xs transition-colors hover:bg-bridge-surface"
+                        className="flex min-h-11 cursor-pointer items-center gap-sm rounded-pill px-sm py-xs transition-colors hover:bg-bridge-surface"
                       >
                         <span
                           className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-xs border-2 transition-colors ${
@@ -441,7 +503,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                   <button
                     type="button"
                     onClick={applySuggestion}
-                    className="inline-flex items-center gap-2xs text-[11px] font-medium text-primary hover:underline"
+                    className="inline-flex min-h-11 items-center gap-2xs text-[11px] font-medium text-primary hover:underline"
                   >
                     <Sparkles className="h-3 w-3" strokeWidth={2} aria-hidden />
                     Use these
@@ -504,7 +566,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     value={glassPrice}
                     onChange={(e) => setGlassPrice(e.target.value)}
                     placeholder="—"
-                    className="h-[38px] w-full rounded-pill border border-hairline bg-white pl-md pr-sm text-right font-mono text-[14px] text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-accent-soft"
+                    className="h-11 w-full rounded-pill border border-hairline bg-white pl-md pr-sm text-right font-mono text-[16px] text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-accent-soft md:text-[14px]"
                   />
                 </div>
               </div>
@@ -523,7 +585,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     value={bottlePrice}
                     onChange={(e) => setBottlePrice(e.target.value)}
                     placeholder="—"
-                    className="h-[38px] w-full rounded-pill border border-hairline bg-white pl-md pr-sm text-right font-mono text-[14px] text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-accent-soft"
+                    className="h-11 w-full rounded-pill border border-hairline bg-white pl-md pr-sm text-right font-mono text-[16px] text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-accent-soft md:text-[14px]"
                   />
                 </div>
               </div>
@@ -531,13 +593,16 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
           </div>
         )}
 
-        <div className="border-t border-hairline px-lg py-md">
-          <div className="flex justify-end gap-sm">
+        <div
+          className="shrink-0 border-t border-hairline px-lg pt-md"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
+        >
+          <div className="flex flex-wrap justify-end gap-sm">
             {selected && (
               <button
                 type="button"
                 onClick={clearSelection}
-                className="h-[38px] rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
+                className="min-h-11 rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
               >
                 Back
               </button>
@@ -545,7 +610,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
             <button
               type="button"
               onClick={onClose}
-              className="h-[38px] rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
+              className="min-h-11 rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
             >
               Cancel
             </button>
@@ -554,7 +619,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                 type="button"
                 onClick={handleAdd}
                 disabled={adding || selectedSectionIds.size === 0}
-                className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+                className="min-h-11 rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
               >
                 {adding ? "Adding..." : `Add to ${selectedCount > 1 ? `${selectedCount} sections` : "list"}`}
               </button>

@@ -60,7 +60,7 @@ export function useFocusTrap({
     return () => {
       const previouslyFocused = previouslyFocusedRef.current;
       previouslyFocusedRef.current = null;
-      previouslyFocused?.focus?.();
+      previouslyFocused?.focus?.({ preventScroll: true });
     };
   }, [enabled]);
 
@@ -77,7 +77,7 @@ export function useFocusTrap({
       // focus if nothing in the container already has it.
       if (active instanceof HTMLElement && root.contains(active)) return;
       const focusables = focusableElements(root);
-      focusables[0]?.focus();
+      focusables[0]?.focus({ preventScroll: true });
     });
 
     function handleKey(e: KeyboardEvent) {
