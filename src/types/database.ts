@@ -409,6 +409,151 @@ export type Database = {
           },
         ]
       }
+      import_batch_rows: {
+        Row: {
+          applied_inventory_item_id: string | null
+          applied_wine_id: string | null
+          apply_status: string
+          batch_id: string
+          cost_status: string
+          created_at: string
+          id: string
+          lwin_id: string | null
+          lwin_score: number | null
+          lwin_status: string
+          manual_unit_cost: number | null
+          raw: Json
+          resolution: string
+          resolved_at: string | null
+          resolved_by: string | null
+          restaurant_id: string
+          row_number: number
+          row_state: string
+          updated_at: string
+          validation_errors: Json
+        }
+        Insert: {
+          applied_inventory_item_id?: string | null
+          applied_wine_id?: string | null
+          apply_status?: string
+          batch_id: string
+          cost_status?: string
+          created_at?: string
+          id?: string
+          lwin_id?: string | null
+          lwin_score?: number | null
+          lwin_status?: string
+          manual_unit_cost?: number | null
+          raw: Json
+          resolution?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          restaurant_id: string
+          row_number: number
+          row_state: string
+          updated_at?: string
+          validation_errors?: Json
+        }
+        Update: {
+          applied_inventory_item_id?: string | null
+          applied_wine_id?: string | null
+          apply_status?: string
+          batch_id?: string
+          cost_status?: string
+          created_at?: string
+          id?: string
+          lwin_id?: string | null
+          lwin_score?: number | null
+          lwin_status?: string
+          manual_unit_cost?: number | null
+          raw?: Json
+          resolution?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          restaurant_id?: string
+          row_number?: number
+          row_state?: string
+          updated_at?: string
+          validation_errors?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_batch_rows_applied_inventory_item_id_fkey"
+            columns: ["applied_inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_batch_rows_applied_wine_id_fkey"
+            columns: ["applied_wine_id"]
+            isOneToOne: false
+            referencedRelation: "wines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_batch_rows_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_batch_rows_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_batches: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          filename: string
+          id: string
+          restaurant_id: string
+          reverted_at: string | null
+          reverted_by: string | null
+          status: string
+          total_rows: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          filename: string
+          id?: string
+          restaurant_id: string
+          reverted_at?: string | null
+          reverted_by?: string | null
+          status?: string
+          total_rows: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          filename?: string
+          id?: string
+          restaurant_id?: string
+          reverted_at?: string | null
+          reverted_by?: string | null
+          status?: string
+          total_rows?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_batches_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_items: {
         Row: {
           added_at: string
@@ -1440,6 +1585,16 @@ export type Database = {
         Args: { p_fields: string[]; p_wine_id: string }
         Returns: undefined
       }
+      apply_import_batch_chunk: {
+        Args: { p_batch_id: string; p_limit?: number }
+        Returns: {
+          error_message: string
+          inventory_item_id: string
+          outcome: string
+          row_id: string
+          row_number: number
+        }[]
+      }
       claim_invoice_extract_job: {
         Args: { p_worker_id: string }
         Returns: {
@@ -1592,6 +1747,20 @@ export type Database = {
           wine_id: string
         }[]
       }
+      match_lwin_bulk: {
+        Args: { p_queries: Json; p_threshold?: number }
+        Returns: {
+          colour: string
+          country: string
+          display_name: string
+          idx: number
+          lwin_id: string
+          producer: string
+          region: string
+          score: number
+          varietal: string
+        }[]
+      }
       merge_wines: {
         Args: { p_source_wine_id: string; p_target_wine_id: string }
         Returns: Json
@@ -1681,6 +1850,7 @@ export type Database = {
         Args: { p_ordered_ids: string[] }
         Returns: undefined
       }
+      revert_import_batch: { Args: { p_batch_id: string }; Returns: number }
       seed_reason_codes: {
         Args: { p_restaurant_id: string }
         Returns: undefined
