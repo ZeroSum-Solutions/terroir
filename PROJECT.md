@@ -5,7 +5,7 @@ description: "Restaurant wine-management SaaS. Photograph an invoice on your pho
 resource: "https://github.com/wiggdevin/terroir"
 timestamp: "2026-07-12T12:14:39.648995+00:00"
 project_id: "repository-97f94ed515c75d1e"
-ownership: "active"
+ownership: "product"
 lifecycle: "active"
 verification_model: "openai-codex-root"
 verification_status: "PASS"
@@ -29,7 +29,7 @@ Restaurant wine-management SaaS for invoice scanning, cellar management, wine-li
 ## Current status
 
 - Lifecycle: active
-- Category: active
+- Category: product
 - Git branch: main
 - Working-tree changes at last scan: 0
 - Semantic confidence: high
