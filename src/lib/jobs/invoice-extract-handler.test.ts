@@ -26,18 +26,50 @@ function supabaseFor(opts: {
   fetchError?: unknown;
   downloadData?: unknown;
   downloadError?: unknown;
+  /** Whether the background_jobs claim-check (isStillClaimed) finds this worker still owns the job. Default true. */
+  stillClaimed?: boolean;
 }) {
-  const { scan = null, fetchError = null, downloadData = null, downloadError = null } = opts;
+  const {
+    scan = null,
+    fetchError = null,
+    downloadData = null,
+    downloadError = null,
+    stillClaimed = true,
+  } = opts;
   return {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            maybeSingle: vi.fn(async () => ({ data: scan, error: fetchError })),
+    from: vi.fn((table: string) => {
+      if (table === "invoice_scans") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn(async () => ({ data: scan, error: fetchError })),
+              })),
+            })),
           })),
-        })),
-      })),
-    })),
+        };
+      }
+      if (table === "background_jobs") {
+        // isStillClaimed's fencing read: id + restaurant_id + claimed_by + status.
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  eq: vi.fn(() => ({
+                    maybeSingle: vi.fn(async () => ({
+                      data: stillClaimed ? { id: "job-1" } : null,
+                      error: null,
+                    })),
+                  })),
+                })),
+              })),
+            })),
+          })),
+        };
+      }
+      throw new Error(`unexpected table in test mock: ${table}`);
+    }),
     storage: {
       from: vi.fn(() => ({
         download: vi.fn(async () => ({ data: downloadData, error: downloadError })),
@@ -97,6 +129,15 @@ describe("runInvoiceExtractJob", () => {
     expect(mockProcessInvoiceScanOnce).not.toHaveBeenCalled();
   });
 
+  it("succeeds without calling the extraction service when the scan is already in review (G1-12 arithmetic-mismatch outcome, no double-bill)", async () => {
+    const outcome = await runInvoiceExtractJob({
+      supabase: supabaseFor({ scan: { ...validScan, status: "review" } }) as never,
+      job: job(),
+    });
+    expect(outcome).toEqual({ kind: "succeeded", skippedExtraction: true });
+    expect(mockProcessInvoiceScanOnce).not.toHaveBeenCalled();
+  });
+
   it("dies when raw_image_path is missing", async () => {
     const outcome = await runInvoiceExtractJob({
       supabase: supabaseFor({ scan: { ...validScan, raw_image_path: null } }) as never,
@@ -132,6 +173,16 @@ describe("runInvoiceExtractJob", () => {
     });
     expect(outcome.kind).toBe("retry");
     expect((outcome as { code: string }).code).toBe("image_download_failed");
+  });
+
+  it("aborts WITHOUT calling the extraction service when the claim was lost before extraction started (closes the double-bill window)", async () => {
+    const outcome = await runInvoiceExtractJob({
+      supabase: supabaseFor({ scan: validScan, downloadData: fakeBlob, stillClaimed: false }) as never,
+      job: job(),
+    });
+    expect(outcome.kind).toBe("retry");
+    expect((outcome as { code: string }).code).toBe("claim_lost_before_extraction");
+    expect(mockProcessInvoiceScanOnce).not.toHaveBeenCalled();
   });
 
   it("succeeds when the extraction service returns 200, calling it with the pre-created scan", async () => {

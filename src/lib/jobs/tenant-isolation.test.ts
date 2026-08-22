@@ -294,5 +294,64 @@ describe.skipIf(!hasLiveDb)(
       expect(result.outcome).toBe("succeeded");
       expect(mockProcessInvoiceScanOnce).not.toHaveBeenCalled();
     });
+
+    it("aborts WITHOUT calling the extraction service when another worker has already stolen the claim (closes the double-bill window on reclaim)", async () => {
+      const pathA = `${restaurantA}/scan-claim-stolen.jpg`;
+      const { error: uploadError } = await supabase.storage
+        .from("invoice-images")
+        .upload(pathA, Buffer.from("fake-jpeg-bytes"), { contentType: "image/jpeg", upsert: true });
+      if (uploadError) throw uploadError;
+      storagePaths.push(pathA);
+
+      const { data: scan, error: scanErr } = await supabase
+        .from("invoice_scans")
+        .insert({
+          restaurant_id: restaurantA,
+          distributor_name: "Claim Stolen Distributor",
+          parsed_line_items: [],
+          final_line_items: [],
+          raw_image_path: pathA,
+          status: "processing",
+        } as never)
+        .select("id")
+        .single();
+      if (scanErr || !scan) throw scanErr ?? new Error("failed to insert scan for claim-stolen test");
+
+      const { data: insertedJob, error: jobErr } = await supabase
+        .from("background_jobs")
+        .insert({
+          restaurant_id: restaurantA,
+          job_type: "invoice_extract",
+          status: "queued",
+          subject_table: "invoice_scans",
+          subject_id: (scan as { id: string }).id,
+          idempotency_key: `claim-stolen-${(scan as { id: string }).id}`,
+        } as never)
+        .select("id")
+        .single();
+      if (jobErr || !insertedJob) throw jobErr ?? new Error("failed to insert job for claim-stolen test");
+
+      const claimed = await claimNextInvoiceExtractJob(supabase, "test-worker-original");
+      expect(claimed).not.toBeNull();
+      expect(claimed!.id).toBe((insertedJob as { id: string }).id);
+      expect(claimed!.claimedBy).toBe("test-worker-original");
+
+      // Simulate exactly what a concurrent stuck-job reclaim followed by a
+      // second worker's claim produces: the row is still "processing", but
+      // claimed_by now belongs to someone else. The ORIGINAL worker's
+      // in-memory `claimed` object is now stale — this is the scenario
+      // that produced the double-bill window.
+      const { error: stealError } = await supabase
+        .from("background_jobs")
+        .update({ claimed_by: "test-worker-thief" } as never)
+        .eq("id", claimed!.id);
+      if (stealError) throw stealError;
+
+      const outcome = await runInvoiceExtractJob({ supabase, job: claimed! });
+
+      expect(outcome.kind).toBe("retry");
+      expect((outcome as { code: string }).code).toBe("claim_lost_before_extraction");
+      expect(mockProcessInvoiceScanOnce).not.toHaveBeenCalled();
+    });
   },
 );

@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { processInvoiceScanOnce } from "@/domains/scanning/invoice-scan-service";
-import { INVOICE_IMAGE_BUCKET, SYSTEM_USER_PLACEHOLDER } from "@/lib/jobs/constants";
+import {
+  HEARTBEAT_INTERVAL_MS,
+  INVOICE_IMAGE_BUCKET,
+  SYSTEM_USER_PLACEHOLDER,
+} from "@/lib/jobs/constants";
+import { isStillClaimed, withClaimHeartbeat } from "@/lib/jobs/heartbeat";
 import type { ClaimedInvoiceExtractJob, JobOutcome } from "@/lib/jobs/types";
 import type { Database } from "@/types/database";
 
@@ -56,10 +61,15 @@ export async function runInvoiceExtractJob(params: {
   // ── No-double-bill guarantee ───────────────────────────────────────
   // A retried job (e.g. requeued by the stuck-job reclaim sweep after a
   // worker crash) whose extraction already persisted must not re-call
-  // Anthropic. invoice_scans.status === "complete" is the existing,
-  // already-persisted signal that the OCR+LLM pipeline already ran and
-  // wrote a result for this scan — checked here, before any provider call.
-  if (scan.status === "complete") {
+  // Anthropic. invoice_scans.status is the existing, already-persisted
+  // signal that the OCR+LLM pipeline already ran and wrote a result for
+  // this scan — checked here, before any provider call. Two statuses mean
+  // that: "complete" (arithmetic reconciled) and "review" (G1-12: the
+  // extraction succeeded and persisted, but arithmetic validation didn't
+  // reconcile, so it's flagged for manual review — that's a downstream
+  // data-quality outcome, not a reason to re-run the extraction).
+  const ALREADY_PERSISTED_STATUSES = new Set(["complete", "review"]);
+  if (ALREADY_PERSISTED_STATUSES.has(scan.status)) {
     return { kind: "succeeded", skippedExtraction: true };
   }
 
@@ -70,8 +80,11 @@ export async function runInvoiceExtractJob(params: {
       message: "raw_image_path is missing or not scoped to the job's restaurant.",
     };
   }
+  // Narrowed to a fresh local: property narrowing on `scan.raw_image_path`
+  // doesn't survive into the closure passed to withClaimHeartbeat below.
+  const rawImagePath = scan.raw_image_path;
 
-  const extension = scan.raw_image_path.split(".").pop()?.toLowerCase() ?? "";
+  const extension = rawImagePath.split(".").pop()?.toLowerCase() ?? "";
   const mimeType = EXTENSION_MIME[extension];
   if (!mimeType) {
     return {
@@ -83,7 +96,7 @@ export async function runInvoiceExtractJob(params: {
 
   const { data: fileData, error: downloadError } = await supabase.storage
     .from(INVOICE_IMAGE_BUCKET)
-    .download(scan.raw_image_path);
+    .download(rawImagePath);
   if (downloadError || !fileData) {
     return {
       kind: "retry",
@@ -94,19 +107,41 @@ export async function runInvoiceExtractJob(params: {
 
   const fileBuffer = Buffer.from(await fileData.arrayBuffer());
 
+  // ── Double-bill window: pre-call fencing check ─────────────────────
+  // The extraction call below has no bounded timeout and can legitimately
+  // run long enough to cross the stuck-job threshold. Without this check,
+  // a worker that has *already* been reclaimed (its lease is gone, a new
+  // worker owns this job) would still go ahead and call Anthropic/Azure —
+  // that's the double-bill window. Verify, via a fresh read, that this
+  // worker still holds the claim right now, immediately before starting
+  // the call. During the call itself, withClaimHeartbeat renews the lease
+  // periodically so a worker that's merely slow (not dead) is never
+  // reclaimed in the first place. See heartbeat.ts for what this can and
+  // can't guarantee, and complete.ts for the fenced completion writes
+  // that back this up.
+  if (!(await isStillClaimed(supabase, job))) {
+    return {
+      kind: "retry",
+      code: "claim_lost_before_extraction",
+      message: "Job was reclaimed by another worker before extraction started.",
+    };
+  }
+
   let result;
   try {
-    result = await processInvoiceScanOnce({
-      supabase,
-      restaurantId: job.restaurantId,
-      // Inert on this path: processInvoiceScanOnce only reads userId when
-      // creating a fresh invoice_scans row, which preCreatedScanId skips.
-      userId: job.createdBy ?? scan.created_by ?? SYSTEM_USER_PLACEHOLDER,
-      fileBuffer,
-      mimeType,
-      preCreatedScanId: scan.id,
-      preUploadedPath: scan.raw_image_path,
-    });
+    result = await withClaimHeartbeat(supabase, job, HEARTBEAT_INTERVAL_MS, () =>
+      processInvoiceScanOnce({
+        supabase,
+        restaurantId: job.restaurantId,
+        // Inert on this path: processInvoiceScanOnce only reads userId when
+        // creating a fresh invoice_scans row, which preCreatedScanId skips.
+        userId: job.createdBy ?? scan.created_by ?? SYSTEM_USER_PLACEHOLDER,
+        fileBuffer,
+        mimeType,
+        preCreatedScanId: scan.id,
+        preUploadedPath: rawImagePath,
+      }),
+    );
   } catch (error) {
     return {
       kind: "retry",

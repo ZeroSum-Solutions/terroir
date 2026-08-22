@@ -20,6 +20,15 @@ export const MAX_BACKOFF_MS = 15 * 60_000;
 /** A "processing" job claimed longer than this is considered stuck. */
 export const STUCK_AFTER_SECONDS = 5 * 60;
 
+/**
+ * While a claimed job is actively being worked (the extraction call, which
+ * has no bounded timeout and can legitimately run for a while), the claim
+ * lease is renewed this often so a worker that is slow but alive is never
+ * spuriously reclaimed as stuck. A third of the stuck threshold tolerates
+ * up to one missed/delayed heartbeat before the reclaim sweep could fire.
+ */
+export const HEARTBEAT_INTERVAL_MS = (STUCK_AFTER_SECONDS * 1_000) / 3;
+
 /** Worker loop tuning. */
 export const POLL_INTERVAL_MS = 5_000;
 export const RECLAIM_SWEEP_INTERVAL_MS = 60_000;

@@ -42,9 +42,32 @@ Added:
     with `attempt_count` incremented, or marks it `dead` once
     `max_attempts` is exhausted.
 
-The down migration was rehearsed against a local Supabase instance: applied
-up, exercised claim / idempotency-conflict / stuck-reclaim-to-requeue /
-stuck-reclaim-to-dead against real rows, applied down, diffed `\d
+### Down-migration data policy
+
+Rolling back this migration necessarily discards invoice_extract job
+history: any row with `job_type = 'invoice_extract'` (in ANY status —
+queued, processing, succeeded, or dead) or `status = 'dead'` (a status only
+this feature's code ever sets) cannot exist under the constraints the down
+file restores, so those rows are deleted before the constraints are
+re-added. This is a deliberate, destructive rollback choice, not an
+oversight — there is no non-destructive way to revert a vocabulary this
+feature's own rows already use. Non-invoice_extract rows, and rows in any
+status other than `dead`, are left untouched. The down file is wrapped in a
+single transaction (`begin; ... commit;`) so a failure at any step rolls
+back the whole file instead of leaving `background_jobs` with the new
+columns/indexes/functions gone but no status/job_type check constraint at
+all (a corrupted half-revert) — the failure mode a first version of this
+migration actually hit before this policy and the transaction wrap were
+added.
+
+The down migration was rehearsed against a local Supabase instance with
+rows present in **every** state before rolling back — queued, processing,
+succeeded, dead, plus a control row of a different job_type (`wine_enrichment`,
+status `queued`) to prove non-invoice_extract data survives untouched:
+applied up, exercised claim / idempotency-conflict / stuck-reclaim-to-requeue
+/ stuck-reclaim-to-dead against real rows, inserted one row in each of the
+four invoice_extract statuses plus the control row, applied down (all four
+invoice_extract rows removed, the control row intact), diffed `\d
 public.background_jobs` against the pre-migration schema (exact match), then
 re-applied up.
 
@@ -66,9 +89,12 @@ Backoff is exponential, deterministic (no jitter — a single worker process
 doesn't need it): `min(30s * 2^(attempt-1), 15min)`. See
 `src/lib/jobs/backoff.ts`.
 
-## Idempotent enqueue — cannot double-bill Anthropic on retry
+## Idempotent enqueue and double-bill avoidance
 
-Two distinct guarantees, at two different layers:
+Three distinct guarantees, at three different layers. The first two guard
+against double-*enqueuing* and double-*calling after a completed attempt*;
+the third guards against the harder case — a reclaim racing a still-alive
+worker — which an earlier version of this runbook understated.
 
 1. **Enqueue is idempotent.** `enqueueInvoiceExtractJob` uses the scan id as
    the job's `idempotency_key`. A second enqueue call for the same scan
@@ -79,15 +105,71 @@ Two distinct guarantees, at two different layers:
    application-level de-duplication.
 2. **A requeued/reclaimed job that already persisted a result skips
    re-calling the provider.** Before invoking `processInvoiceScanOnce`,
-   `runInvoiceExtractJob` checks `invoice_scans.status`. If it's already
-   `"complete"` (the existing, already-persisted signal that OCR+LLM
-   already ran and wrote a result), the job is marked `succeeded` without
-   touching Azure or Anthropic. This is the case a stuck-job reclaim can
-   hit: a worker crashes after `processInvoiceScanOnce` finishes writing
-   but before the job row is marked `succeeded`; the reclaim sweep requeues
-   the job; the next attempt sees `status = "complete"` and short-circuits.
+   `runInvoiceExtractJob` checks `invoice_scans.status` against
+   `{"complete", "review"}` — both are already-persisted signals that
+   OCR+LLM already ran and wrote a result for this scan (`"review"` is
+   G1-12's arithmetic-mismatch outcome: the extraction succeeded and
+   persisted, HTTP 200, just flagged for manual review of the numbers —
+   not a reason to re-run it). If the scan is in either state, the job is
+   marked `succeeded` without touching Azure or Anthropic. This is the
+   case a stuck-job reclaim can hit *after* a worker has actually crashed:
+   it dies after `processInvoiceScanOnce` finishes writing but before the
+   job row is marked `succeeded`; the reclaim sweep requeues the job; the
+   next attempt sees the persisted status and short-circuits.
+3. **A worker that is slow but still alive — not crashed — must not be
+   treated the same as a dead one.** `processInvoiceScanOnce`'s underlying
+   Azure/Anthropic calls have no configured timeout, so a legitimate call
+   can run long enough to cross `STUCK_AFTER_SECONDS` (5 minutes) on its
+   own. Without anything addressing this, the stuck-job reclaim sweep would
+   reclaim that job out from under the still-working original worker, a
+   second worker would claim it, and — since neither has written
+   `invoice_scans.status = "complete"` yet — *both* would call Anthropic on
+   the same job. Claim atomicity (`FOR UPDATE SKIP LOCKED`) does not by
+   itself prevent this: it only guarantees two workers can't claim the
+   *same row at the same instant*, not that a reclaim can't hand an
+   in-flight job to a second worker later. Two mechanisms close this,
+   implemented in `src/lib/jobs/heartbeat.ts`:
+   - **Heartbeat / lease renewal.** While the extraction call is in flight,
+     `withClaimHeartbeat` renews `claimed_at` every
+     `HEARTBEAT_INTERVAL_MS` (a third of the stuck threshold). As long as
+     the worker is alive and these renewals succeed, the reclaim sweep's
+     `claimed_at < now() - threshold` condition never matches this job —
+     it is never spuriously reclaimed in the first place. This is the
+     primary fix, and covers the common case (any call duration, as long
+     as the process is alive).
+   - **Pre-call fencing check.** Immediately before invoking
+     `processInvoiceScanOnce` — the expensive, billed call —
+     `isStillClaimed` does a fresh read verifying this worker still holds
+     the claim (id + restaurant_id + claimed_by + status='processing'). If
+     the lease is already gone (the job was reclaimed and a second worker
+     already owns it), the call is never made: the outcome is `retry` /
+     `claim_lost_before_extraction`, and the corresponding completion
+     write is a fenced no-op (the new owner is already responsible for the
+     job). This is what makes "a reclaimed-away worker cannot bill" an
+     enforced check rather than a hope, and is exactly what
+     `src/lib/jobs/invoice-extract-handler.test.ts`'s
+     `"aborts WITHOUT calling the extraction service when the claim was
+     lost before extraction started"` case and
+     `src/lib/jobs/tenant-isolation.test.ts`'s live-DB
+     `"aborts WITHOUT calling the extraction service when another worker
+     has already stolen the claim"` case prove.
 
-See `src/lib/jobs/invoice-extract-handler.ts`.
+   **What this does not close:** a worker cannot cancel
+   `processInvoiceScanOnce`'s in-flight network call once started —
+   it is an external black box with no cancellation hook. So there is a
+   genuine, narrow TOCTOU window between the pre-call check succeeding and
+   the call actually starting (milliseconds, not the multi-minute stuck
+   threshold) during which a reclaim could still theoretically race in.
+   Closing that residual window completely would require either adding
+   real timeouts/cancellation to `processInvoiceScanOnce` (out of bounds
+   for this slice — it's owned by G1-12 and treated as a black box here)
+   or an idempotency key on the provider call itself. Documented here
+   rather than silently narrowed: the fix reduces the double-bill window
+   from "any reclaim of a live worker, i.e. effectively guaranteed on slow
+   calls" to "a race measured in milliseconds around the start of the
+   call," not to zero.
+
+See `src/lib/jobs/invoice-extract-handler.ts` and `src/lib/jobs/heartbeat.ts`.
 
 ## Tenant isolation
 
@@ -103,14 +185,17 @@ with `tenant_mismatch_or_missing_subject` before any read or write touches
 the other tenant's data.
 
 `src/lib/jobs/tenant-isolation.test.ts` is the mandatory fixture proof:
-two restaurants, real Postgres, real service-role client. It asserts a
-crafted cross-tenant job is rejected with the other tenant's row left
-byte-for-byte unchanged, that a legitimate same-tenant job never touches a
-control row belonging to the other tenant, and the two idempotency
-guarantees above. It requires a live local Supabase and is skipped
-otherwise (`NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` unset)
-— the same convention `e2e/reconcile-queue.test.ts` and its siblings use
-for fixture tests that can't run on a bare CI runner. Run it locally:
+two restaurants, real Postgres, real service-role client, 5 cases. It
+asserts a crafted cross-tenant job is rejected with the other tenant's row
+left byte-for-byte unchanged, that a legitimate same-tenant job never
+touches a control row belonging to the other tenant, the two enqueue/replay
+idempotency guarantees above, and — against real Postgres, not a mock —
+that a worker whose claim has been stolen by another worker aborts before
+calling the extraction service (see "double-bill avoidance" above). It
+requires a live local Supabase and is skipped otherwise
+(`NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` unset) — the same
+convention `e2e/reconcile-queue.test.ts` and its siblings use for fixture
+tests that can't run on a bare CI runner. Run it locally:
 
 ```bash
 supabase start   # or: point the env vars at any local Postgres with 0075 applied
@@ -123,8 +208,9 @@ pnpm exec vitest run src/lib/jobs/tenant-isolation.test.ts
 
 - `supabase/migrations/0075_invoice_extract_jobs.sql` / `down/0075_invoice_extract_jobs.down.sql`
 - `src/lib/jobs/*` — enqueue, claim, reclaim, completion (fenced writes),
-  backoff, the invoice_extract handler, and the claim-run-complete
-  orchestration (`run-once.ts`)
+  heartbeat (claim-lease renewal + pre-call fencing check), backoff, the
+  invoice_extract handler, and the claim-run-complete orchestration
+  (`run-once.ts`)
 - `src/worker/index.ts` — the long-poll worker entrypoint (`pnpm run
   worker`, run via `tsx`; no build step, no compiled output)
 - `railway.worker.toml` — config-as-code for the Railway worker service
