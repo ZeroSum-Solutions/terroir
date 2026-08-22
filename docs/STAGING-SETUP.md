@@ -160,6 +160,55 @@ check the run log's "Last observed" line first — it reports the exact
 just needs more time than 7.5 minutes for this build" (raise `MAX_ATTEMPTS`)
 from a genuine regression.
 
+## Incident — 2026-08-22: repo transfer severed Railway auto-deploy (G0-3B)
+
+The first two `Staging smoke` runs after the Option A merge both failed with
+`release=<none>` on every attempt. Neither failure was the workflow's fault:
+**no Railway environment (staging or production) received any deploy on
+2026-08-22 at all.** The last webhook-triggered deploy was 2026-08-21 18:46
+PT.
+
+Root cause: the repository now lives at `ZeroSum-Solutions/terroir`, but the
+Railway GitHub App is installed only for the `wiggdevin` personal account —
+the `ZeroSum-Solutions` org has no Railway App installation. GitHub webhook
+delivery does not follow a repository transfer the way git-clone redirects
+do, so Railway stopped receiving push events entirely. All four Railway
+deploy triggers (and both services' sources) still name `wiggdevin/terroir`,
+and Railway refuses to update them to the org name until its App can see the
+repo ("Cannot update deployment trigger for ZeroSum-Solutions/terroir because
+no one in the project has access to it").
+
+What still works: the old repo name redirects for git *clones*, so manually
+fired deploys build the correct current `main`. Verified live: a manual fire
+built and served `2cd9c5d` on staging, `/api/health` exposed the new
+`release` field for the first time, and re-running the failed smoke run went
+green against it.
+
+**Interim procedure (until the App is installed)** — after each merge to
+`main`, fire both web deploys through Railway's public GraphQL API
+(`https://backboard.railway.com/graphql/v2`, authenticated with your Railway
+account token) with the `environmentTriggersDeploy` mutation, passing the
+project id plus the `terroir-web` service id and the target environment id
+(staging, then production). Ids come from `railway status` / the dashboard.
+The smoke workflow then goes green on its own once staging converges; if its
+poll window expired first, `gh run rerun <run-id>` after convergence.
+`terroir-worker` needs no fire: its triggers point at a stale integration
+branch and the worker deploy model is owned by the G1-6 slice.
+
+**Owner action (the real fix):** install the Railway GitHub App on the
+`ZeroSum-Solutions` org (GitHub → org Settings → GitHub Apps, or from
+Railway's dashboard: service → Settings → Source → reconnect repo), scoped to
+`terroir`. Then repoint the four deploy triggers and both service sources at
+`ZeroSum-Solutions/terroir` (dashboard, or `deploymentTriggerUpdate` /
+`serviceConnect` mutations) and verify the next push to `main` auto-deploys
+without a manual fire.
+
+Related hardening in this change: `staging-smoke.yml` now cancels a
+superseded in-progress run (`cancel-in-progress: true`). Two merges landing
+back-to-back previously queued two runs, and the older SHA's run could only
+ever time out red — staging converges exclusively on the newest `main` SHA.
+A cancelled run is not a failure signal; the newest SHA's run is the gate.
+
 ## Fixed staging environment
 
 The separately deployed staging origin is

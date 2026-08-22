@@ -31,9 +31,13 @@ on:
   push:
     branches: [main]
 
+# Back-to-back merges: staging only ever converges on the NEWEST main SHA,
+# so a superseded run polling for an older SHA can never succeed — cancel it
+# instead of letting it burn its full window and report a misleading red
+# (G0-3B, 2026-08-22).
 concurrency:
   group: staging-smoke-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   smoke:
