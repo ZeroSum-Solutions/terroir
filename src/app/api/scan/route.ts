@@ -44,6 +44,8 @@ function clientIp(request: NextRequest): string {
 }
 
 const MAX_BYTES = 10 * 1024 * 1024;
+/** Max pages (files) accepted in one multi-page invoice batch (BND-081 / TER-CF-032). */
+const MAX_INVOICE_PAGES = 8;
 const MIME_EXTENSIONS = new Map([
   ["image/jpeg", "jpg"],
   ["image/png", "png"],
@@ -224,6 +226,15 @@ async function postInvoiceScan(request: NextRequest) {
   });
   if (!parsed.ok) return parsed.response;
   const files = parsed.data.file;
+  // BND-081 / TER-CF-032: a multi-page invoice can be submitted as several
+  // files in one batch, but an unbounded batch would mean an unbounded
+  // number of paid Azure/Anthropic calls per request. Reject immediately,
+  // before touching either, rather than silently truncating the batch.
+  if (files.length > MAX_INVOICE_PAGES) {
+    return Errors.badRequest(
+      `Select up to ${MAX_INVOICE_PAGES} pages per invoice scan. You selected ${files.length}.`,
+    );
+  }
   for (const pageFile of files) {
     if (pageFile.size === 0) return Errors.badRequest("Empty file.");
     if (pageFile.size > MAX_BYTES) {
@@ -241,6 +252,18 @@ async function postInvoiceScan(request: NextRequest) {
   assertInvoiceExtractionConfigured();
 
   const fileBuffer = Buffer.from(new Uint8Array(await file.arrayBuffer()));
+  // BND-081 / TER-CF-032: OCR every additional page too, so a multi-page
+  // invoice submitted as multiple images/PDFs in one batch is extracted
+  // in full instead of only ever reading the first file.
+  const extraFiles =
+    files.length > 1
+      ? await Promise.all(
+          files.slice(1).map(async (pageFile) => ({
+            buffer: Buffer.from(new Uint8Array(await pageFile.arrayBuffer())),
+            mimeType: pageFile.type,
+          })),
+        )
+      : undefined;
 
   // BND-089: wrap the scan in idempotency so retries return the cached
   // result without re-running Azure OCR or Claude extraction.
@@ -255,6 +278,7 @@ async function postInvoiceScan(request: NextRequest) {
         userId: user.id,
         fileBuffer,
         mimeType: file.type,
+        extraFiles,
       }),
   });
 

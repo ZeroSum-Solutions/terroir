@@ -73,3 +73,25 @@ export async function extractOcr(
 
   return result;
 }
+
+/**
+ * Merge per-page OCR results into one document for extraction (BND-081 /
+ * TER-CF-032 — multi-page invoice submitted as multiple images/files in
+ * one batch). Text and tables are concatenated in page order; header
+ * fields (vendor/invoice number/date) typically only appear on the first
+ * page, so the first page that has each field wins.
+ *
+ * A single-page result is returned as-is (no allocation, no formatting
+ * change) so the overwhelmingly common single-file scan is unaffected.
+ */
+export function mergeOcrResults(results: OcrResult[]): OcrResult {
+  if (results.length === 1) return results[0];
+
+  return {
+    rawText: results.map((r) => r.rawText).join("\n\n"),
+    tables: results.flatMap((r) => r.tables),
+    vendorName: results.find((r) => r.vendorName)?.vendorName,
+    invoiceNumber: results.find((r) => r.invoiceNumber)?.invoiceNumber,
+    invoiceDate: results.find((r) => r.invoiceDate)?.invoiceDate,
+  };
+}

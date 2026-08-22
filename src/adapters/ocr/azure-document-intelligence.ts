@@ -1,6 +1,7 @@
 export {
   OcrError,
   extractOcr,
+  mergeOcrResults,
   type OcrErrorCode,
   type OcrResult,
   type OcrTable,

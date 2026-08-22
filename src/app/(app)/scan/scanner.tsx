@@ -28,6 +28,11 @@ import { BottleResultsView } from "./views/bottle-results-view";
 type Status = "ready" | "processing" | "review" | "results" | "bottle-results" | "error";
 type Feedback = { kind: "success" | "error"; message: string };
 const STORAGE_KEY = "terroir:current-scan";
+// Mirrors the server-side limits in /api/scan and /api/scan-bottle so an
+// oversized file fails immediately, client-side, instead of only after a
+// full network upload.
+const INVOICE_MAX_BYTES = 10 * 1024 * 1024;
+const BOTTLE_MAX_BYTES = 20 * 1024 * 1024;
 
 export { formatMoney } from "./components/field-inputs";
 
@@ -170,6 +175,15 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   }, [status]);
 
   const startScan = useCallback(async (files: File[]) => {
+    const oversized = files.find((f) => f.size > INVOICE_MAX_BYTES);
+    if (oversized) {
+      setLastFile(null);
+      setError(`"${oversized.name}" is larger than 10 MB. Choose a smaller photo or a lower-resolution scan.`);
+      setRawText(null);
+      setStatus("error");
+      return;
+    }
+
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
@@ -435,6 +449,14 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   }, [rawText]);
 
   const startBottleScan = useCallback(async (file: File) => {
+    if (file.size > BOTTLE_MAX_BYTES) {
+      setLastFile(null);
+      setError(`"${file.name}" is larger than 20 MB. Choose a smaller photo.`);
+      setRawText(null);
+      setStatus("error");
+      return;
+    }
+
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
@@ -542,6 +564,16 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const handleStart = useCallback(
     (files: File[]) => {
       if (mode === "bottle") {
+        // A bottle scan identifies one wine from one label photo — unlike
+        // an invoice, there's no multi-page concept to batch into. Reject
+        // immediately rather than silently scanning only the first photo.
+        if (files.length > 1) {
+          setLastFile(null);
+          setError("Select a single bottle photo. Take or choose one photo per wine.");
+          setRawText(null);
+          setStatus("error");
+          return;
+        }
         if (files[0]) startBottleScan(files[0]);
       } else {
         startScan(files);

@@ -71,8 +71,12 @@ export function ReadyView({
   const fileRef = useRef<HTMLInputElement>(null);
   const isBottle = mode === "bottle";
 
-  const handleFiles = (files: FileList | null) => {
-    const fileArr = files ? Array.from(files) : [];
+  const handleFiles = (input: HTMLInputElement) => {
+    const fileArr = input.files ? Array.from(input.files) : [];
+    // Reset so re-selecting the exact same file (e.g. retaking a photo
+    // after "New photo") reliably fires `change` again — some mobile
+    // browsers/webviews otherwise treat an unchanged input as a no-op.
+    input.value = "";
     if (fileArr.length === 0) return;
     onStart(fileArr);
   };
@@ -164,7 +168,7 @@ export function ReadyView({
           {isBottle ? "Tap to photograph label" : "Tap to photograph"}
         </h2>
         <p className="mt-xs text-[13px] text-grey">
-          {isBottle ? "JPG or PNG · up to 20MB" : "JPG, PNG, or PDF · up to 20MB"}
+          {isBottle ? "JPG or PNG · up to 20MB" : "JPG, PNG, or PDF · up to 10MB"}
         </p>
       </button>
 
@@ -193,15 +197,18 @@ export function ReadyView({
         accept="image/*"
         capture="environment"
         className="sr-only"
-        onChange={(e) => handleFiles(e.target.files)}
+        onChange={(e) => handleFiles(e.currentTarget)}
       />
       <input
         ref={fileRef}
         type="file"
         accept={isBottle ? "image/jpeg,image/png" : "image/*,application/pdf"}
-        multiple
+        // A multi-page invoice can genuinely be scanned as several files
+        // in one batch (BND-081 / TER-CF-032); a bottle scan identifies
+        // one wine from one label photo, so there's nothing to batch.
+        multiple={!isBottle}
         className="sr-only"
-        onChange={(e) => handleFiles(e.target.files)}
+        onChange={(e) => handleFiles(e.currentTarget)}
       />
 
       {!isBottle && <RecentScansList scans={recentScans} />}
