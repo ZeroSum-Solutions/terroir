@@ -1,0 +1,87 @@
+# G0-3 — Option A staging smoke (see docs/STAGING-SETUP.md).
+#
+# Railway's `staging` environment is confirmed (via the GitHub Deployments
+# API) to deploy whatever lands on `main`, not a separate `staging` branch —
+# every push to `main` triggers the same-SHA deploy to both `production` and
+# `staging` at once. Railway's `service source connect` CLI attaches one
+# GitHub branch per *service* and fans out to matching environments; it has
+# no per-environment branch override, so config-as-code cannot express a
+# "staging tracks its own branch" model here. This workflow accepts that
+# reality instead of pretending otherwise: it smoke-tests the SHA that
+# Railway staging actually serves after every push to `main`.
+#
+# This is intentionally the small Option-A gate only — polling `/api/health`
+# until the deployed release matches the pushed commit and the process
+# reports itself healthy. It is unrelated to the larger `staging`-branch
+# smoke/migration/E2E workflow that already exists on `origin/staging` (a
+# different, not-yet-reachable model tracked separately).
+#
+# Fails hard (non-zero exit) on:
+#   - timeout: no attempt matched before attempts were exhausted
+#   - mismatch: staging never reported the pushed SHA as its release
+#   - unhealthy: staging reported a different status or a disconnected DB
+#
+# SECURITY: the only inputs are the hardcoded staging origin and
+# `github.sha`, a GitHub-authored trusted value for a push event. Nothing
+# PR-author-controlled is interpolated into `run:` blocks.
+
+name: Staging smoke
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: staging-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Railway staging /api/health
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Poll staging until it serves this commit healthily
+        env:
+          STAGING_ORIGIN: https://terroir-web-staging.up.railway.app
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -e
+          MAX_ATTEMPTS=30
+          SLEEP_S=15
+
+          echo "Waiting for $STAGING_ORIGIN/api/health to report release=$HEAD_SHA and a connected database..."
+
+          last_release=""
+          last_db=""
+          last_http_code="000"
+
+          for i in $(seq 1 "$MAX_ATTEMPTS"); do
+            response=$(curl -sS --max-time 15 -w '\n%{http_code}' "$STAGING_ORIGIN/api/health" || printf '\n000')
+            last_http_code=$(printf '%s' "$response" | tail -n1)
+            body=$(printf '%s' "$response" | sed '$d')
+
+            if [ "$last_http_code" = "200" ]; then
+              last_release=$(printf '%s' "$body" | jq -r '.release // empty')
+              last_db=$(printf '%s' "$body" | jq -r '.db // empty')
+              last_status=$(printf '%s' "$body" | jq -r '.status // empty')
+
+              if [ "$last_release" = "$HEAD_SHA" ] && [ "$last_db" = "connected" ] && [ "$last_status" = "ok" ]; then
+                echo "✅ Staging is healthy and serving $HEAD_SHA"
+                exit 0
+              fi
+
+              echo "Attempt $i/$MAX_ATTEMPTS: release=${last_release:-<none>} db=${last_db:-<none>} (want release=$HEAD_SHA db=connected)"
+            else
+              echo "Attempt $i/$MAX_ATTEMPTS: /api/health returned HTTP $last_http_code"
+            fi
+
+            if [ "$i" -lt "$MAX_ATTEMPTS" ]; then
+              sleep "$SLEEP_S"
+            fi
+          done
+
+          echo "❌ Staging never converged on a healthy $HEAD_SHA within $((MAX_ATTEMPTS * SLEEP_S))s."
+          echo "    Last observed: http=$last_http_code release=${last_release:-<none>} db=${last_db:-<none>}"
+          exit 1

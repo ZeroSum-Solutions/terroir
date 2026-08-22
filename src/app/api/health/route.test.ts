@@ -69,6 +69,7 @@ describe("GET /api/health", () => {
     vi.setSystemTime(new Date("2026-07-24T10:00:00.000Z"));
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    vi.stubEnv("RAILWAY_GIT_COMMIT_SHA", "");
     vi.clearAllMocks();
   });
 
@@ -137,5 +138,21 @@ describe("GET /api/health", () => {
 
     await expectHealth({ db: "error", dbReason: "probe_failed" });
     expect(mockHttpsRequest).not.toHaveBeenCalled();
+  });
+
+  it("reports the deployed commit SHA when Railway provides it", async () => {
+    vi.stubEnv("RAILWAY_GIT_COMMIT_SHA", "a".repeat(40));
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(body.release).toBe("a".repeat(40));
+  });
+
+  it("omits release when Railway has not set a commit SHA", async () => {
+    const response = await GET();
+    const body = await response.json();
+
+    expect(body).not.toHaveProperty("release");
   });
 });
