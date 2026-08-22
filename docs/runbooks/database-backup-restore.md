@@ -11,10 +11,15 @@ credentials and the offline age identity live only in ZS Vault. Never put a
 database URL, password, or age identity in command arguments or logs.
 The dump includes every non-system, non-extension-owned schema discovered at
 runtime. The job fails if the archive schema inventory omits any such source
-schema, so a later migration cannot silently fall outside a static allowlist.
-The archive, source table counts, migration version, and ten content checksums
-are all read from one exported PostgreSQL snapshot, so concurrent production
-writes cannot create self-inconsistent evidence.
+schema, or if any individual application table present at dump time has no
+corresponding `TABLE DATA` entry in the archive, so a later migration cannot
+silently fall outside a static allowlist and a single missing table cannot
+hide inside an otherwise-healthy backup. The archive, source table counts,
+migration version, and ten content checksums are all read from one exported
+PostgreSQL snapshot, so concurrent production writes cannot create
+self-inconsistent evidence. See `docs/RESTORE-DRILL.md` for the disposable
+Docker-based restore drill that proves the exact per-table row counts in the
+dump actually restore.
 
 ## One-time provisioning
 

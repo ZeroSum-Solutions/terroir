@@ -89,6 +89,57 @@ export function assertSchemaCoverage({ source, archive }) {
   }
 }
 
+export function parseArchiveTables(listing) {
+  const tables = new Set();
+  for (const line of listing.split("\n")) {
+    const match = line.match(
+      /^\d+;\s+\d+\s+\d+\s+TABLE DATA\s+(\S+)\s+(\S+)\s+\S+\s*$/u,
+    );
+    if (match) tables.add(`${match[1]}.${match[2]}`);
+  }
+  return tables;
+}
+
+function sourceTables() {
+  const output = run("psql", [
+    `service=${SERVICE_NAME}`,
+    "-X",
+    "-A",
+    "-t",
+    "-q",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-c",
+    snapshotSql(`select n.nspname || '.' || c.relname
+     from pg_catalog.pg_class c
+     join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+     where c.relkind = 'r'
+       and n.nspname <> 'information_schema'
+       and n.nspname !~ '^pg_'
+       and not exists (
+         select 1
+         from pg_catalog.pg_depend d
+         where d.classid = 'pg_catalog.pg_class'::regclass
+           and d.objid = c.oid
+           and d.deptype = 'e'
+       )
+     order by n.nspname collate "C", c.relname collate "C"`),
+  ]);
+  return output
+    .split("\n")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+export function assertTableCoverage({ source, archive }) {
+  const missing = source.filter((table) => !archive.has(table));
+  if (missing.length > 0) {
+    throw new Error(
+      `Database dump omitted table data for: ${missing.join(", ")}`,
+    );
+  }
+}
+
 export function assertDumpCoverage({
   dumpFile = process.env.BACKUP_DUMP_FILE,
 } = {}) {
@@ -97,6 +148,10 @@ export function assertDumpCoverage({
   assertSchemaCoverage({
     source: sourceSchemas(),
     archive: parseArchiveSchemas(listing),
+  });
+  assertTableCoverage({
+    source: sourceTables(),
+    archive: parseArchiveTables(listing),
   });
 }
 
