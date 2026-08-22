@@ -27,6 +27,8 @@ Parsing guidelines:
 
 - Currency is the 3-letter ISO currency code (e.g., USD, EUR, GBP). Default to USD if not specified. Use null if ambiguous.
 - Format is the bottle size (e.g., 750ml, 1.5L, 375ml, 3L). Default to 750ml if not specified. Use null if the invoice does not indicate a bottle size.
+- If a line shows a printed extended/line total, report it in lineTotal, converted to a plain decimal the same way as unitCost. Leave it null if the invoice does not print one for that line — never calculate it yourself.
+- Report the invoice's printed grand total in invoiceTotal, and the sum of any printed tax/delivery/fee lines in taxAndFees. Leave either null if the invoice does not print one — these are downstream-validated against your line items, so report only what is actually printed, never a computed or estimated figure.
 
 Confidence scoring:
 - 0.95-1.0: clean typed print, all fields unambiguous

@@ -10,9 +10,11 @@ import {
   mergeOcrResults,
   type OcrResult,
 } from "@/adapters/ocr/azure-document-intelligence";
+import { INVOICE_EXTRACTION_RETRY } from "@/lib/ai/models";
 import { scoreItems } from "@/lib/scanner/scoring";
 import type { LineItem, Scan } from "@/lib/scanner/types";
 import type { Database } from "@/types/database";
+import { validateInvoiceArithmetic } from "./invoice-arithmetic";
 
 const OCR_STATUS = {
   not_configured: 500,
@@ -105,7 +107,7 @@ export async function processInvoiceScanOnce(
       pages.map((page) => extractOcr(page.buffer, page.mimeType)),
     );
     ocr = mergeOcrResults(ocrResults);
-    const parsed = await extractFromOcr(ocr);
+    let parsed = await extractFromOcr(ocr);
 
     if (parsed.lineItems.length === 0) {
       const { error: completionError } = await supabase
@@ -124,6 +126,19 @@ export async function processInvoiceScanOnce(
       };
     }
 
+    // G1-12: no model should establish financial truth. Deterministic
+    // arithmetic validation runs on every fresh extraction; a mismatch gets
+    // exactly one retry at higher effort (INVOICE_EXTRACTION_RETRY) before
+    // falling back to human review. The retry is a single additional real
+    // call — it only fires on a successful-but-inconsistent response, never
+    // in response to a transient error, so it can't compound with the
+    // Anthropic SDK's own maxRetries or double-bill a flaky upstream.
+    let arithmetic = validateInvoiceArithmetic(parsed);
+    if (!arithmetic.ok) {
+      parsed = await extractFromOcr(ocr, INVOICE_EXTRACTION_RETRY);
+      arithmetic = validateInvoiceArithmetic(parsed);
+    }
+
     const parsedAt = new Date().toISOString();
     const items: LineItem[] = parsed.lineItems.map((item, idx) => ({
       id: `${parsedAt}-${idx}`,
@@ -134,11 +149,18 @@ export async function processInvoiceScanOnce(
       region: item.region,
       qty: item.qty,
       unitCost: item.unitCost,
+      lineTotal: item.lineTotal ?? null,
       currency: item.currency ?? null,
       format: item.format ?? null,
       confidence: item.confidence,
       lowFields: item.lowFields.length > 0 ? item.lowFields : undefined,
     })) as LineItem[];
+
+    const quality = scoreItems(items);
+    if (!arithmetic.ok) {
+      quality.manualFallbackTriggered = true;
+      quality.reason = "arithmetic_mismatch";
+    }
 
     const result: Scan = {
       source: {
@@ -149,8 +171,9 @@ export async function processInvoiceScanOnce(
       },
       items,
       edits: {},
-      quality: scoreItems(items),
+      quality,
       rawText: ocr.rawText,
+      arithmetic,
     };
 
     const updatePayload: Record<string, unknown> = {
@@ -160,9 +183,14 @@ export async function processInvoiceScanOnce(
       ocr_text: JSON.parse(JSON.stringify(ocr)),
       parsed_line_items: JSON.parse(JSON.stringify(parsed.lineItems)),
       final_line_items: JSON.parse(JSON.stringify(items)),
-      accuracy_score: result.quality?.avgConfidence ?? null,
+      // Arithmetic mismatch overrides the self-reported confidence score:
+      // deterministic evidence the numbers don't add up is stronger signal
+      // than the model's own confidence, and 0 keeps accuracy_score's
+      // existing 0..1 "how much to trust this" semantics rather than adding
+      // a new meaning to the column.
+      accuracy_score: arithmetic.ok ? (quality.avgConfidence ?? null) : 0,
       item_count: items.length,
-      status: "complete",
+      status: arithmetic.ok ? "complete" : "review",
     };
     if (preUploadedPath) {
       updatePayload.raw_image_path = preUploadedPath;

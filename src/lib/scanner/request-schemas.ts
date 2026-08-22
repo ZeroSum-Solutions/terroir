@@ -101,7 +101,9 @@ const ScanSchema = z.object({
       lowConfidenceItems: z.number().int().nonnegative(),
       totalItems: z.number().int().nonnegative(),
       manualFallbackTriggered: z.boolean(),
-      reason: z.enum(["low_confidence", "too_few_items", "both"]).optional(),
+      reason: z
+        .enum(["low_confidence", "too_few_items", "both", "arithmetic_mismatch"])
+        .optional(),
     })
     .optional(),
   rawText: z.string().optional(),

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BOTTLE_SCAN,
   INVOICE_EXTRACTION,
+  INVOICE_EXTRACTION_RETRY,
   MENU_DESIGN,
   WINE_ENRICHMENT,
   WINE_ENRICHMENT_TOKENS_PER_WINE,
@@ -19,6 +20,14 @@ describe("Claude model profile contract", () => {
       model: "claude-sonnet-5",
       effort: "medium",
       maxTokens: 16000,
+    });
+  });
+
+  it("pins the invoice extraction retry profile (G1-12 arithmetic mismatch)", () => {
+    expect(INVOICE_EXTRACTION_RETRY).toEqual({
+      model: "claude-sonnet-5",
+      effort: "high",
+      maxTokens: 24000,
     });
   });
 
@@ -57,7 +66,12 @@ describe("Claude model profile contract", () => {
   it("leaves thinking headroom under every output cap", () => {
     // Sonnet 5 has adaptive thinking on by default and thinking counts
     // against max_tokens, so a cap sized only for the response truncates.
-    for (const profile of [INVOICE_EXTRACTION, BOTTLE_SCAN, MENU_DESIGN]) {
+    for (const profile of [
+      INVOICE_EXTRACTION,
+      INVOICE_EXTRACTION_RETRY,
+      BOTTLE_SCAN,
+      MENU_DESIGN,
+    ]) {
       expect(profile.maxTokens).toBeGreaterThanOrEqual(4000);
     }
   });

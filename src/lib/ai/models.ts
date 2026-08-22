@@ -63,6 +63,23 @@ export const INVOICE_EXTRACTION: ModelProfile = {
 };
 
 /**
+ * Retry profile for invoice extraction (G1-12).
+ *
+ * Deterministic arithmetic validation (qty x unit cost vs. printed line
+ * total; line-total sum vs. printed invoice total — see
+ * `src/domains/scanning/invoice-arithmetic.ts`) can catch a first-pass
+ * extraction that doesn't add up. One retry at higher effort follows before
+ * falling back to human review; this is that retry's profile. Same model
+ * and token family as INVOICE_EXTRACTION — only effort and headroom step up,
+ * since a bad read is a reasoning-budget problem, not a model problem.
+ */
+export const INVOICE_EXTRACTION_RETRY: ModelProfile = {
+  model: "claude-sonnet-5",
+  effort: "high",
+  maxTokens: 24000,
+};
+
+/**
  * Bottle-label identification from a phone photo (vision).
  *
  * Medium, not low. This path has no eval — there is no labelled corpus of

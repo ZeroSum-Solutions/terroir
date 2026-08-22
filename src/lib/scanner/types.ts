@@ -18,6 +18,8 @@ export type LineItem = {
   region: string;
   qty: number;
   unitCost: number;
+  /** Extended total for this line as printed on the invoice, if shown. */
+  lineTotal?: number | null;
   currency?: string | null;
   format?: string | null;
   confidence: number;
@@ -36,7 +38,34 @@ export type ScanQuality = {
   lowConfidenceItems: number;
   totalItems: number;
   manualFallbackTriggered: boolean;
-  reason?: "low_confidence" | "too_few_items" | "both";
+  reason?: "low_confidence" | "too_few_items" | "both" | "arithmetic_mismatch";
+};
+
+/**
+ * Outcome of deterministic invoice arithmetic validation (G1-12) — see
+ * `src/domains/scanning/invoice-arithmetic.ts`. Never establishes financial
+ * truth itself; it only flags disagreements between extracted numbers for a
+ * human to resolve.
+ */
+export type ArithmeticIssueType =
+  | "line_mismatch"
+  | "case_bottle_confusion"
+  | "currency_mismatch"
+  | "invoice_total_mismatch";
+
+export type ArithmeticIssue = {
+  type: ArithmeticIssueType;
+  lineIndex?: number;
+  message: string;
+  expected?: number;
+  actual?: number;
+  /** Case-pack size (e.g. 12) that would reconcile a case_bottle_confusion issue. */
+  multiplier?: number;
+};
+
+export type ArithmeticValidation = {
+  ok: boolean;
+  issues: ArithmeticIssue[];
 };
 
 export type Scan = {
@@ -45,6 +74,7 @@ export type Scan = {
   edits: Record<string, true>;
   quality?: ScanQuality;
   rawText?: string;
+  arithmetic?: ArithmeticValidation;
 };
 
 export type RecentScan = {

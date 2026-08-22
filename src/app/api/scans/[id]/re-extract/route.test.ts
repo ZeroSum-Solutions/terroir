@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
+import { INVOICE_EXTRACTION_RETRY } from "@/lib/ai/models";
 
 const auth = vi.hoisted(() => ({ requireMembership: vi.fn() }));
 vi.mock("@/lib/api/auth", () => ({
@@ -236,5 +237,106 @@ describe("POST /api/scans/[id]/re-extract", () => {
 
     expect(response.status).toBe(500);
     expect(JSON.stringify(await response.json())).not.toContain("private");
+  });
+
+  describe("G1-12 arithmetic retry-then-review gate", () => {
+    function reconciledLine(overrides: Record<string, unknown> = {}) {
+      return {
+        name: "Barolo",
+        producer: "Test Producer",
+        vintage: 2019,
+        varietal: "Nebbiolo",
+        region: "Piedmont",
+        qty: 1,
+        unitCost: 95,
+        lineTotal: 95,
+        currency: "EUR",
+        format: "1.5L",
+        confidence: 0.98,
+        lowFields: [],
+        ...overrides,
+      };
+    }
+
+    it("retries once at higher effort, then marks the scan for review when the retry still fails", async () => {
+      const db = makeSupabase();
+      authorize(db.supabase);
+      // First pass: unit cost misread (95 -> 60) against a correctly-read
+      // line total. Retry returns the same mismatch — never corrects itself.
+      extraction.extractFromOcr.mockReset();
+      extraction.extractFromOcr
+        .mockResolvedValueOnce({
+          distributor: "Test Importer",
+          invoiceNumber: "INV-42",
+          invoiceDate: "2026-07-12",
+          lineItems: [reconciledLine({ unitCost: 60 })],
+        })
+        .mockResolvedValueOnce({
+          distributor: "Test Importer",
+          invoiceNumber: "INV-42",
+          invoiceDate: "2026-07-12",
+          lineItems: [reconciledLine({ unitCost: 60 })],
+        });
+
+      const response = await call();
+
+      expect(extraction.extractFromOcr).toHaveBeenCalledTimes(2);
+      expect(extraction.extractFromOcr.mock.calls[1][1]).toEqual(
+        INVOICE_EXTRACTION_RETRY,
+      );
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.arithmetic.ok).toBe(false);
+      expect(body.quality.manualFallbackTriggered).toBe(true);
+      expect(body.quality.reason).toBe("arithmetic_mismatch");
+
+      const update = db.builder.update.mock.calls[0][0];
+      expect(update).toMatchObject({ status: "review", accuracy_score: 0 });
+    });
+
+    it("does not retry when the extraction already reconciles", async () => {
+      const db = makeSupabase();
+      authorize(db.supabase);
+      extraction.extractFromOcr.mockReset();
+      extraction.extractFromOcr.mockResolvedValueOnce({
+        distributor: "Test Importer",
+        invoiceNumber: "INV-42",
+        invoiceDate: "2026-07-12",
+        lineItems: [reconciledLine()],
+      });
+
+      const response = await call();
+
+      expect(extraction.extractFromOcr).toHaveBeenCalledOnce();
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.arithmetic.ok).toBe(true);
+
+      const update = db.builder.update.mock.calls[0][0];
+      expect(update).toMatchObject({ status: "complete" });
+    });
+
+    it("propagates a transient retry-call error without attempting a third call", async () => {
+      const db = makeSupabase();
+      authorize(db.supabase);
+      extraction.extractFromOcr.mockReset();
+      extraction.extractFromOcr
+        .mockResolvedValueOnce({
+          distributor: "Test Importer",
+          invoiceNumber: "INV-42",
+          invoiceDate: "2026-07-12",
+          lineItems: [reconciledLine({ unitCost: 60 })],
+        })
+        .mockRejectedValueOnce(
+          new AiExtractError("rate_limited", "provider-specific detail"),
+        );
+
+      const response = await call();
+
+      expect(extraction.extractFromOcr).toHaveBeenCalledTimes(2);
+      expect(response.status).toBe(429);
+      expect(db.builder.update).not.toHaveBeenCalled();
+    });
   });
 });
