@@ -79,6 +79,38 @@ describe("useFocusTrap paused lifecycle", () => {
     expect(onEscape).not.toHaveBeenCalled();
     await act(async () => root.unmount());
   });
+
+  it("focuses the first control without scrolling the page", async () => {
+    const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => root.render(<SingleTrap paused={false} onEscape={vi.fn()} />));
+    await flushFocusFrame();
+
+    expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
+    await act(async () => root.unmount());
+    focusSpy.mockRestore();
+  });
+
+  it("allows Tab wrapping to reveal the destination control", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => root.render(<TwoControlTrap />));
+    await flushFocusFrame();
+    const first = button(container, "First");
+    const last = button(container, "Last");
+    const focusSpy = vi.spyOn(first, "focus");
+
+    last.focus();
+    pressTab();
+
+    expect(focusSpy).toHaveBeenCalledWith();
+    await act(async () => root.unmount());
+    focusSpy.mockRestore();
+  });
 });
 
 function NestedTrapHarness() {
@@ -128,6 +160,17 @@ function SingleTrap({ paused, onEscape }: { paused: boolean; onEscape: () => voi
   return (
     <div ref={ref}>
       <button type="button">Only control</button>
+    </div>
+  );
+}
+
+function TwoControlTrap() {
+  const ref = useRef<HTMLDivElement>(null);
+  useFocusTrap({ containerRef: ref, onEscape: vi.fn() });
+  return (
+    <div ref={ref}>
+      <button type="button">First</button>
+      <button type="button">Last</button>
     </div>
   );
 }

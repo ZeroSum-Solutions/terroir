@@ -97,6 +97,63 @@ test.describe("mobile wine-list editor", () => {
       ),
     ).toBe(true);
   });
+
+  test("add-wine modal stays inside the visual viewport and owns scrolling", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loginWithLocalFixture(page);
+    await page.goto(`/lists/${listId}`);
+
+    const addWine = page.locator("main button").filter({ hasText: "Add wine" });
+    await addWine.scrollIntoViewIfNeeded();
+    const pageScrollBefore = await page.evaluate(() => window.scrollY);
+    await addWine.click();
+
+    const dialog = page.getByRole("dialog", { name: /Add wine to/ });
+    const panel = dialog.locator("[data-add-wine-panel]");
+    const results = dialog.locator("[data-add-wine-results]");
+    const search = dialog.getByRole("textbox", { name: "Search wines" });
+    await expect(dialog).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe("hidden");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+    expect(await search.evaluate((input) => getComputedStyle(input).fontSize)).toBe("16px");
+    expect(await search.evaluate((input) => document.activeElement === input)).toBe(false);
+
+    await expect
+      .poll(() =>
+        results.evaluate(
+          (element) => element.scrollHeight > element.clientHeight,
+        ),
+      )
+      .toBe(true);
+    const resultsBox = await results.boundingBox();
+    expect(resultsBox).not.toBeNull();
+    await page.mouse.move(
+      resultsBox!.x + resultsBox!.width / 2,
+      resultsBox!.y + resultsBox!.height / 2,
+    );
+    await page.mouse.wheel(0, 600);
+    await expect
+      .poll(() => results.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(pageScrollBefore);
+
+    await search.click();
+    await page.setViewportSize({ width: 390, height: 500 });
+    await expect.poll(() => panel.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        viewportHeight: window.innerHeight,
+      };
+    })).toMatchObject({ top: 0, bottom: 500, viewportHeight: 500 });
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
+  });
 });
 
 function localAdminClient() {
