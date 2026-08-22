@@ -72,12 +72,15 @@ export type Database = {
       background_jobs: {
         Row: {
           attempt_count: number
+          claimed_at: string | null
+          claimed_by: string | null
           created_at: string
           created_by: string | null
           error_code: string | null
           error_message: string | null
           finished_at: string | null
           id: string
+          idempotency_key: string | null
           job_type: string
           max_attempts: number
           metadata: Json
@@ -92,12 +95,15 @@ export type Database = {
         }
         Insert: {
           attempt_count?: number
+          claimed_at?: string | null
+          claimed_by?: string | null
           created_at?: string
           created_by?: string | null
           error_code?: string | null
           error_message?: string | null
           finished_at?: string | null
           id?: string
+          idempotency_key?: string | null
           job_type: string
           max_attempts?: number
           metadata?: Json
@@ -112,12 +118,15 @@ export type Database = {
         }
         Update: {
           attempt_count?: number
+          claimed_at?: string | null
+          claimed_by?: string | null
           created_at?: string
           created_by?: string | null
           error_code?: string | null
           error_message?: string | null
           finished_at?: string | null
           id?: string
+          idempotency_key?: string | null
           job_type?: string
           max_attempts?: number
           metadata?: Json
@@ -1431,6 +1440,38 @@ export type Database = {
         Args: { p_fields: string[]; p_wine_id: string }
         Returns: undefined
       }
+      claim_invoice_extract_job: {
+        Args: { p_worker_id: string }
+        Returns: {
+          attempt_count: number
+          claimed_at: string | null
+          claimed_by: string | null
+          created_at: string
+          created_by: string | null
+          error_code: string | null
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          idempotency_key: string | null
+          job_type: string
+          max_attempts: number
+          metadata: Json
+          restaurant_id: string
+          result: Json
+          run_after: string
+          started_at: string | null
+          status: string
+          subject_id: string | null
+          subject_table: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "background_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       cleanup_scan_idempotency: { Args: never; Returns: undefined }
       close_open_bottle: {
         Args: {
@@ -1554,6 +1595,38 @@ export type Database = {
       merge_wines: {
         Args: { p_source_wine_id: string; p_target_wine_id: string }
         Returns: Json
+      }
+      reclaim_stuck_invoice_extract_jobs: {
+        Args: { p_stuck_after_seconds: number }
+        Returns: {
+          attempt_count: number
+          claimed_at: string | null
+          claimed_by: string | null
+          created_at: string
+          created_by: string | null
+          error_code: string | null
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          idempotency_key: string | null
+          job_type: string
+          max_attempts: number
+          metadata: Json
+          restaurant_id: string
+          result: Json
+          run_after: string
+          started_at: string | null
+          status: string
+          subject_id: string | null
+          subject_table: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "background_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       reconcile_open_bottle: {
         Args: { p_new_remaining_ml: number; p_note?: string; p_wine_id: string }

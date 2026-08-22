@@ -1,6 +1,7 @@
 packages: []
 allowBuilds:
   '@sentry/cli': true
+  esbuild: true
   puppeteer: true
   sharp: true
   unrs-resolver: true
