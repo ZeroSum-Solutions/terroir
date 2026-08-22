@@ -21,15 +21,34 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  *      returns to its "No changes yet" rest state.
  *
  * Assertions are RELATIVE (delta = -1 glass) so the test survives
- * concurrent edits to the shared Supabase DB. Skipped in CI until we
- * have a dedicated test project + seeded fixtures — locally it
- * exercises the real RPC + trigger pipeline end-to-end.
+ * concurrent edits to the target Supabase DB.
+ *
+ * G1-8: previously skipped unconditionally in CI ("no dedicated test
+ * project + seeded fixtures"). CI now starts its own ephemeral local
+ * Supabase (supabase start, standard local ports), applies every
+ * migration, and seeds it via `pnpm run supabase:seed:local:apply`
+ * (.github/workflows/ci.yml) before this spec runs — a fresh,
+ * disposable-per-run database, not a shared one. That removes the
+ * original blocker, so the test now runs in CI too. What stays gated
+ * is *which* database this is allowed to touch: the guard below skips
+ * unless NEXT_PUBLIC_SUPABASE_URL is a loopback host, so pointing this
+ * suite at a real staging/production project (locally or otherwise)
+ * skips instead of pouring/reconciling real inventory.
  */
+
+function isLoopbackSupabaseUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
 
 test.describe("BND-038 pour → reconcile", () => {
   test.skip(
-    !!process.env.CI,
-    "Requires DEV_BYPASS_EMAIL; shared DB — run locally only for now.",
+    !isLoopbackSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    "Requires a loopback NEXT_PUBLIC_SUPABASE_URL (local Supabase) + DEV_BYPASS_EMAIL.",
   );
 
   test.describe.configure({ mode: "serial" });
@@ -57,7 +76,11 @@ test.describe("BND-038 pour → reconcile", () => {
   // Service-role client for the setup/verification reads that used
   // to go through /api/open-bottles. DEBT-018 deleted that route; the
   // RPC (SECURITY DEFINER, restaurant-scoped) is the canonical path
-  // now. Local-only — service-role key is never present in CI.
+  // now. The describe-level skip above already restricts this whole
+  // file to a loopback NEXT_PUBLIC_SUPABASE_URL, so the service-role
+  // key in scope here — whether from a developer's .env.local or the
+  // ephemeral local Supabase CI starts for this job — only ever
+  // targets a disposable local database.
   function adminClient() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
