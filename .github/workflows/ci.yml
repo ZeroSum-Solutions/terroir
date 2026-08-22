@@ -7,16 +7,18 @@
 #   4. typecheck    (tsc --noEmit)
 #   5. lint         (next lint / eslint)
 #   6. unit tests   (vitest run)
-#   7. contract tests (DB security/API envelopes)
-#   8. schema drift (supabase/schema.snapshot.sql must equal a fresh
+#   7. build        (next build — catches build-only failures tsc/lint/tests
+#                    miss, e.g. invalid route segment config)
+#   8. contract tests (DB security/API envelopes)
+#   9. schema drift (supabase/schema.snapshot.sql must equal a fresh
 #                    concatenation of supabase/migrations/*.sql)
-#   9. types drift  (src/types/database.ts must equal the live schema's
+#  10. types drift  (src/types/database.ts must equal the live schema's
 #                    current generated types) — skipped when
 #                    SUPABASE_ACCESS_TOKEN is not set (fork PRs etc.)
-#  10. downs check  (every forward migration from 0011 onward has a
+#  11. downs check  (every forward migration from 0011 onward has a
 #                    paired supabase/migrations/down/*.down.sql file —
 #                    INT-006)
-#  11. local seed dry-run (sanitized production-like fixtures still build)
+#  12. local seed dry-run (sanitized production-like fixtures still build)
 #
 # The schema-drift step turns "someone added a migration but forgot to
 # update the snapshot" into a hard failure. To regenerate the snapshot
@@ -86,6 +88,13 @@ jobs:
 
       - name: Test
         run: pnpm run test
+
+      - name: Build
+        # Catches build-only failures that typecheck/lint/tests don't:
+        # tsc accepts things `next build` rejects (e.g. invalid route
+        # segment config, bad dynamic imports). No env vars are required —
+        # verified locally that main builds clean with none set.
+        run: pnpm run build
 
       - name: Contract tests
         run: pnpm run test:contracts
