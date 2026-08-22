@@ -1,6 +1,13 @@
 import { redirect } from "next/navigation";
 import { getAuthContext } from "@/lib/auth-context";
 
+// PROOF-OF-BREAKAGE (ci/g0-2-proof-broken, scratch, not for merge):
+// an invalid route segment config value. tsc accepts this (it's just a
+// plain exported const), but `next build` validates it against the
+// route segment config type and fails. Demonstrates the new Build CI
+// step catching what typecheck/lint/tests miss.
+export const dynamic = "invalid-value";
+
 /**
  * Public root. Redirects to either /login (unauthed) or the role-
  * appropriate landing page (authed).
