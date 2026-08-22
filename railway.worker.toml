@@ -1,0 +1,28 @@
+# G1-6 — Railway worker service config-as-code.
+#
+# NOT applied automatically. In the Railway dashboard, point the
+# `terroir-worker` service at this file (Service Settings -> Config-as-code
+# -> Config Path = railway.worker.toml) so it runs the invoice_extract job
+# runner instead of terroir-web's `pnpm start`. Do not replace the web
+# service's root railway.toml — that stays terroir-web's config.
+#
+# No [build] section: Railpack auto-detects Node/pnpm the same way it does
+# for terroir-web, and the worker needs no extra build step beyond the
+# normal install.
+#
+# No healthcheckPath: the worker has no HTTP surface (it's a long-poll
+# loop against Postgres, not a request handler), so Railway's restart
+# policy is the only liveness signal — an uncaught fatal error exits
+# non-zero (see src/worker/index.ts's unhandled-rejection/exception
+# handlers) and Railway restarts the process.
+#
+# Required service variables (identical to terroir-web's — see README.md
+# "Deploy" section and .env.example): NEXT_PUBLIC_SUPABASE_URL,
+# SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY,
+# AZURE_DOC_INTELLIGENCE_ENDPOINT, AZURE_DOC_INTELLIGENCE_KEY. No new
+# variables are introduced by this slice.
+
+[deploy]
+startCommand = "pnpm run worker"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
