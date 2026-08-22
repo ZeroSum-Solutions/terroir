@@ -19,6 +19,11 @@
 #                    paired supabase/migrations/down/*.down.sql file —
 #                    INT-006)
 #  12. local seed dry-run (sanitized production-like fixtures still build)
+#  13. E2E critical journeys (G1-8) — scan→commit, list publish, pour, run
+#                    headless against a real, disposable local Supabase
+#                    (supabase start + every migration + the same seed
+#                    fixtures as step 12, applied for real this time).
+#                    Screenshots/traces upload as job artifacts on failure.
 #
 # The schema-drift step turns "someone added a migration but forgot to
 # update the snapshot" into a hard failure. To regenerate the snapshot
@@ -46,7 +51,10 @@ jobs:
   check:
     name: Typecheck / Lint / Test / Schema
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 10 min covered the original checks; local Supabase start (docker image
+    # pulls) + Playwright browser install + the E2E run add real time on a
+    # cold runner, so this needs more headroom than before.
+    timeout-minutes: 25
     env:
       # Surface secrets to env at job level so a later step's `if:` can
       # test them. Empty string when the secret isn't configured.
@@ -123,3 +131,59 @@ jobs:
         # Builds sanitized, production-like fixture data and prints counts.
         # No database writes happen without --confirm.
         run: pnpm run supabase:seed:local
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.109.1
+
+      - name: Start local Supabase
+        # No supabase/config.toml is committed (docs/RESTORE-DRILL.md notes
+        # why), so `init` generates one with the CLI's standard local ports
+        # and demo keys, then `start` applies every file in
+        # supabase/migrations/ into a fresh Postgres + PostgREST + GoTrue
+        # stack that lives only for this job — not a shared database.
+        run: |
+          supabase init --with-vscode-settings=false --with-intellij-settings=false
+          supabase start
+
+      - name: Export local Supabase env for E2E
+        run: |
+          supabase status -o env \
+            --override-name api.url=NEXT_PUBLIC_SUPABASE_URL \
+            --override-name auth.anon_key=NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY \
+            --override-name auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY \
+            2>/dev/null \
+            | grep -E '^(NEXT_PUBLIC_SUPABASE_URL|NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY|SUPABASE_SERVICE_ROLE_KEY)=' \
+            | tr -d '"' >> "$GITHUB_ENV"
+          # Must match Playwright's baseURL (playwright.config.ts) exactly —
+          # the app derives every auth redirect from this origin rather than
+          # trusting the request Host (docs/AUTH-SETUP.md), so a mismatch
+          # against the host tests actually navigate to drops session
+          # cookies across the redirect.
+          echo "NEXT_PUBLIC_APP_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV"
+          echo "ACTIVE_RESTAURANT_COOKIE_SECRET=ci-e2e-cookie-secret-not-sensitive" >> "$GITHUB_ENV"
+          echo "DEV_BYPASS_EMAIL=owner+local@terroir.test" >> "$GITHUB_ENV"
+
+      - name: Seed local Supabase for E2E
+        run: pnpm run supabase:seed:local:apply
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E — critical journeys (scan→commit, list publish, pour)
+        # playwright.config.ts's webServer starts `pnpm dev` itself and
+        # waits for port 3000. That has to be dev mode, not a production
+        # build/start: /api/dev-login hard-404s whenever NODE_ENV=production,
+        # unconditionally and by design (docs/BREAK-GLASS.md) — there is no
+        # env var that reopens it, so E2E can only drive auth through dev
+        # mode's bypass.
+        run: pnpm exec playwright test e2e/demo-critical-journeys.test.ts e2e/pour-flow.test.ts
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: test-results/
+          retention-days: 7

@@ -638,8 +638,34 @@ async function ensureUsers(supabase) {
     });
     if (error) throw error;
     ids[seedUser.role] = data.user.id;
+
+    // handle_new_user() (supabase/migrations/0001_auth_boundary.sql) fires
+    // on every auth.users insert and auto-provisions its own restaurant +
+    // owner membership. That's correct for real signups, but here it leaves
+    // each seed user (manager/staff included) with a second, empty
+    // restaurant alongside the deterministic one seeded below — a stray
+    // membership that makes "most recent membership" lookups (dev-login,
+    // requireMembership, E2E fixtures) non-deterministic. Remove the
+    // trigger's restaurant immediately; cascade deletes its membership too.
+    await removeAutoProvisionedRestaurant(supabase, data.user.id);
   }
   return ids;
+}
+
+async function removeAutoProvisionedRestaurant(supabase, userId) {
+  const { data: autoMemberships, error } = await supabase
+    .from("memberships")
+    .select("restaurant_id")
+    .eq("user_id", userId);
+  if (error) throw error;
+  for (const membership of autoMemberships ?? []) {
+    if (membership.restaurant_id === RESTAURANT_ID) continue;
+    const { error: deleteError } = await supabase
+      .from("restaurants")
+      .delete()
+      .eq("id", membership.restaurant_id);
+    if (deleteError) throw deleteError;
+  }
 }
 
 async function upsertRows(supabase, table, rows, options = {}) {
