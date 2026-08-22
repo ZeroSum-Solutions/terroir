@@ -118,6 +118,32 @@ describe("validateLineItemArithmetic", () => {
     );
     expect(result.status).toBe("ok");
   });
+
+  describe("Grok-6: qty-scaled tolerance replaces the old relative-to-total slack", () => {
+    it("flags a $1.00 mismatch on a large unit cost — the old relative term let this hide as rounding", () => {
+      // qty=1 unitCost=1000 lineTotal=999: the old |expected|*0.001 relative
+      // term alone gave $1.00 of slack, accepting this outright. The
+      // qty-scaled formula caps slack at 0.02 + 1*0.005 = $0.025.
+      const result = validateLineItemArithmetic(
+        makeLineItem({ qty: 1, unitCost: 1000, lineTotal: 999 }),
+        0,
+      );
+      expect(result.status).toBe("mismatch");
+      expect(result.issue).toMatchObject({ type: "line_mismatch", expected: 1000, actual: 999 });
+    });
+
+    it("still tolerates a case-quantity's worth of half-cent unit-cost rounding", () => {
+      // 12 x $33.33 = $399.96; the printed total is $400.00 — a $0.04
+      // drift consistent with a per-unit price rounded to 2dp. 12 units x
+      // $0.005 = $0.06 of per-unit slack (on top of the $0.02 floor)
+      // covers it.
+      const result = validateLineItemArithmetic(
+        makeLineItem({ qty: 12, unitCost: 33.33, lineTotal: 400.0 }),
+        0,
+      );
+      expect(result.status).toBe("ok");
+    });
+  });
 });
 
 describe("validateInvoiceArithmetic — clean invoice (must be unaffected)", () => {
@@ -390,6 +416,32 @@ describe("validateInvoiceArithmetic — invoice-level total mismatch", () => {
         type: "invoice_total_mismatch",
         expected: 65,
         actual: 100,
+      }),
+    );
+  });
+
+  it("Grok-6: flags a $10 drift on a $10,000 invoice — the old relative term let this hide as rounding", () => {
+    // Line totals sum to exactly $10,000; the printed invoice total is
+    // $9,990. The old |expected|*0.001 relative term alone gave $10.00 of
+    // slack here, accepting this outright. The dropped-relative-term
+    // formula floors at max(0.05, lineCount * 0.02) — a few cents, not $10.
+    const invoice = makeInvoice({
+      lineItems: [
+        makeLineItem({ qty: 100, unitCost: 60, lineTotal: 6000 }),
+        makeLineItem({ name: "Barolo", qty: 100, unitCost: 40, lineTotal: 4000 }),
+      ],
+      invoiceTotal: 9990,
+      taxAndFees: null,
+    });
+
+    const result = validateInvoiceArithmetic(invoice);
+
+    expect(result.ok).toBe(false);
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        type: "invoice_total_mismatch",
+        expected: 10000,
+        actual: 9990,
       }),
     );
   });

@@ -159,16 +159,41 @@ export async function processInvoiceScanOnce(
     // Anthropic SDK's own maxRetries or double-bill a flaky upstream.
     let arithmetic = validateInvoiceArithmetic(parsed);
     if (!arithmetic.ok) {
-      parsed = await withScanSpan(
-        "extract.retry",
-        {
-          attempt: 2,
-          model: INVOICE_EXTRACTION_RETRY.model,
-          effort: INVOICE_EXTRACTION_RETRY.effort ?? "default",
-        },
-        () => extractFromOcr(ocr!, INVOICE_EXTRACTION_RETRY),
-      );
-      arithmetic = validateInvoiceArithmetic(parsed);
+      try {
+        const retryParsed = await withScanSpan(
+          "extract.retry",
+          {
+            attempt: 2,
+            model: INVOICE_EXTRACTION_RETRY.model,
+            effort: INVOICE_EXTRACTION_RETRY.effort ?? "default",
+          },
+          () => extractFromOcr(ocr!, INVOICE_EXTRACTION_RETRY),
+        );
+        // Grok-3: an empty retry is not a reconciling result — it's the
+        // model finding nothing on a second pass. Adopting it would
+        // discard the first (non-empty, merely arithmetic-inconsistent)
+        // extraction and persist a wine-free "complete" scan. Keep the
+        // first parsed result and let its already-failing arithmetic
+        // route to the human-review path below instead.
+        if (retryParsed.lineItems.length > 0) {
+          parsed = retryParsed;
+          arithmetic = validateInvoiceArithmetic(parsed);
+        }
+      } catch (retryError) {
+        // Grok-4: a transient retry failure (rate limit, upstream error,
+        // parse failure) must not discard a usable first extraction. Per
+        // the G1-12 design, an unreconciled extraction already falls back
+        // to human review — a failed retry is just another way to land
+        // there, not a reason to fail the whole scan. First-attempt
+        // errors are unaffected: this catch only wraps the retry call.
+        console.error("extract.retry failed; falling back to first extraction:", retryError);
+        Sentry.captureException(retryError, {
+          tags: {
+            stage: "ai-extract-retry",
+            code: retryError instanceof AiExtractError ? retryError.code : "unknown",
+          },
+        });
+      }
     }
 
     const parsedAt = new Date().toISOString();
@@ -227,21 +252,45 @@ export async function processInvoiceScanOnce(
     if (preUploadedPath) {
       updatePayload.raw_image_path = preUploadedPath;
     }
-    const { error: completionError } = await withScanSpan(
+    // Grok-2: fenced on the row still being 'processing' — a worker
+    // reclaimed mid-call (see heartbeat.ts: renewal failures are
+    // best-effort) must never clobber a result another worker's attempt
+    // already persisted (complete/review). `.select("id")` lets us detect
+    // whether the fence actually matched.
+    const { data: persistedRows, error: completionError } = await withScanSpan(
       "persist",
       { itemCount: items.length, arithmeticOk: arithmetic.ok },
       async () =>
-        supabase.from("invoice_scans").update(updatePayload as never).eq("id", scanId),
+        supabase
+          .from("invoice_scans")
+          .update(updatePayload as never)
+          .eq("id", scanId)
+          .eq("status", "processing")
+          .select("id"),
     );
     if (completionError) throw completionError;
+    if (!persistedRows || persistedRows.length === 0) {
+      return {
+        status: 409,
+        body: {
+          scanId,
+          code: "scan_superseded",
+          message: "Scan was already completed by another worker attempt.",
+        },
+      };
+    }
 
     return { status: 200, body: { scanId, ...result } };
   } catch (error) {
     try {
+      // Grok-2: fenced the same way as the success persist above — a
+      // stale worker's failure write must never overwrite a result
+      // another worker's attempt already persisted.
       await supabase
         .from("invoice_scans")
         .update({ status: "failed" })
-        .eq("id", scanId);
+        .eq("id", scanId)
+        .eq("status", "processing");
     } catch {}
 
     if (error instanceof OcrError) {

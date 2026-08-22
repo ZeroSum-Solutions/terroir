@@ -162,6 +162,15 @@ function classifyResult(result: { status: number; body: unknown }): JobOutcome {
   const code = body?.code ?? `http_${result.status}`;
   const message = body?.message ?? `Extraction returned status ${result.status}.`;
 
+  // Grok-2: a fenced write that lost the race (another attempt already
+  // persisted this scan's result) is not a failure to retry or kill —
+  // it's the same "already persisted" outcome as the ALREADY_PERSISTED
+  // status check above, just discovered later, at persist time instead
+  // of before the provider call.
+  if (code === "scan_superseded") {
+    return { kind: "succeeded", skippedExtraction: true };
+  }
+
   if (RETRYABLE_CODES.has(code) || result.status >= 500) {
     return { kind: "retry", code, message };
   }

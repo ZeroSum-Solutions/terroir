@@ -317,7 +317,7 @@ describe("POST /api/scans/[id]/re-extract", () => {
       expect(update).toMatchObject({ status: "complete" });
     });
 
-    it("propagates a transient retry-call error without attempting a third call", async () => {
+    it("falls back to the first extraction when the retry call throws, without attempting a third call (Grok-5: a transient retry failure must not discard a usable first extraction)", async () => {
       const db = makeSupabase();
       authorize(db.supabase);
       extraction.extractFromOcr.mockReset();
@@ -335,8 +335,49 @@ describe("POST /api/scans/[id]/re-extract", () => {
       const response = await call();
 
       expect(extraction.extractFromOcr).toHaveBeenCalledTimes(2);
-      expect(response.status).toBe(429);
-      expect(db.builder.update).not.toHaveBeenCalled();
+      // The first extraction's (already-failing) arithmetic routes to
+      // human review — never treated as a request failure.
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.arithmetic.ok).toBe(false);
+
+      const update = db.builder.update.mock.calls[0][0];
+      expect(update).toMatchObject({ status: "review", accuracy_score: 0 });
+      // The first extraction's line items are what gets persisted, never
+      // wiped by the failed retry.
+      expect(update.final_line_items).toHaveLength(1);
+    });
+
+    it("keeps the first extraction when the retry returns no line items (Grok-5: an empty retry must never wipe stored line items with [])", async () => {
+      const db = makeSupabase();
+      authorize(db.supabase);
+      extraction.extractFromOcr.mockReset();
+      extraction.extractFromOcr
+        .mockResolvedValueOnce({
+          distributor: "Test Importer",
+          invoiceNumber: "INV-42",
+          invoiceDate: "2026-07-12",
+          lineItems: [reconciledLine({ unitCost: 60 })],
+        })
+        .mockResolvedValueOnce({
+          distributor: "Test Importer",
+          invoiceNumber: "INV-42",
+          invoiceDate: "2026-07-12",
+          lineItems: [],
+        });
+
+      const response = await call();
+
+      expect(extraction.extractFromOcr).toHaveBeenCalledTimes(2);
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.items).toHaveLength(1);
+      expect(body.arithmetic.ok).toBe(false);
+
+      const update = db.builder.update.mock.calls[0][0];
+      expect(update).toMatchObject({ status: "review", accuracy_score: 0 });
+      expect(update.parsed_line_items).toHaveLength(1);
+      expect(update.final_line_items).toHaveLength(1);
     });
   });
 });

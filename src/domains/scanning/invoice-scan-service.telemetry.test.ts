@@ -92,10 +92,20 @@ function mismatchedInvoice(confidence = 0.9) {
 }
 
 function makeSupabase() {
-  const builder = {
-    update: vi.fn(() => builder),
-    eq: vi.fn(async () => ({ data: null, error: null })),
-  };
+  // Chainable AND directly awaitable, matching real supabase-js query
+  // builders — the persist write now chains .eq().eq().select("id")
+  // (fenced on status='processing', Grok-2); resolving with a non-empty
+  // row array means the fence matches, keeping these span-emission tests
+  // on the same 200 happy path as before.
+  function node(): Record<string, unknown> {
+    const n: Record<string, unknown> = {};
+    n.eq = vi.fn(() => n);
+    n.select = vi.fn(() => n);
+    n.then = (resolve: (v: unknown) => void, reject?: (e: unknown) => void) =>
+      Promise.resolve({ data: [{ id: "scan-a" }], error: null }).then(resolve, reject);
+    return n;
+  }
+  const builder = { update: vi.fn(() => node()) };
   return { supabase: { from: vi.fn(() => builder) } };
 }
 

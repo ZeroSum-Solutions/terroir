@@ -43,24 +43,29 @@ import type { ParsedInvoice } from "@/lib/scanner/schema";
 
 /** Absolute cents-level slack for a single line — covers float/rounding noise. */
 const LINE_TOLERANCE_ABS = 0.02;
-/** Relative slack layered on top for larger line values. */
-const LINE_TOLERANCE_REL = 0.001;
+/**
+ * Per-unit slack layered on top of the absolute floor. The one legitimate
+ * source of drift a printed 2dp unit cost can carry is that it's itself a
+ * rounded display of a finer-grained contractual price (e.g. a per-case
+ * price divided into a per-bottle one) — half a cent of that rounding can
+ * independently land on each unit, so the slack scales with quantity
+ * rather than with the dollar size of the line. A flat relative-to-total
+ * term was dropped because it let large-dollar mismatches (a misread
+ * three- or four-figure unit cost) hide inside "rounding".
+ */
+const LINE_TOLERANCE_PER_UNIT = 0.005;
 /** Floor for the invoice-level tolerance regardless of line count. */
 const INVOICE_TOLERANCE_FLOOR = 0.05;
 
 /** Common wine case-pack sizes checked for unit-cost/case-cost confusion. */
 const CASE_PACK_SIZES = [6, 12] as const;
 
-function tolerance(expected: number): number {
-  return Math.max(LINE_TOLERANCE_ABS, Math.abs(expected) * LINE_TOLERANCE_REL);
+function tolerance(qty: number): number {
+  return LINE_TOLERANCE_ABS + qty * LINE_TOLERANCE_PER_UNIT;
 }
 
-function invoiceTolerance(expected: number, lineCount: number): number {
-  return Math.max(
-    INVOICE_TOLERANCE_FLOOR,
-    lineCount * LINE_TOLERANCE_ABS,
-    Math.abs(expected) * LINE_TOLERANCE_REL,
-  );
+function invoiceTolerance(lineCount: number): number {
+  return Math.max(INVOICE_TOLERANCE_FLOOR, lineCount * LINE_TOLERANCE_ABS);
 }
 
 // Plain "1234.56" or "1234" — no separators to disambiguate.
@@ -157,13 +162,13 @@ export function validateLineItemArithmetic(
   }
 
   const expected = qty * unitCost;
-  if (Math.abs(expected - lineTotal) <= tolerance(expected)) {
+  if (Math.abs(expected - lineTotal) <= tolerance(qty)) {
     return { status: "ok" };
   }
 
   for (const caseSize of CASE_PACK_SIZES) {
     const scaled = expected * caseSize;
-    if (Math.abs(scaled - lineTotal) <= tolerance(scaled)) {
+    if (Math.abs(scaled - lineTotal) <= tolerance(qty)) {
       return {
         status: "case_bottle_confusion",
         issue: {
@@ -262,7 +267,7 @@ function validateInvoiceTotal(parsed: ParsedInvoice): ArithmeticIssue[] {
 
   const taxAndFees = parsed.taxAndFees == null ? 0 : (toAmount(parsed.taxAndFees) ?? 0);
   const expected = sum + taxAndFees;
-  const tol = invoiceTolerance(expected, parsed.lineItems.length);
+  const tol = invoiceTolerance(parsed.lineItems.length);
   if (Math.abs(expected - invoiceTotal) <= tol) return [];
 
   return [

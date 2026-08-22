@@ -62,7 +62,13 @@ vi.mock("@/lib/api/rate-limit", () => ({
   rateLimit: (...args: unknown[]) => rateLimitMock.rateLimit(...args),
 }));
 
-function makeSupabase() { return { from: vi.fn().mockReturnThis(), insert: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: { id: "scan-1" }, error: null }), update: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), storage: { from: vi.fn().mockReturnThis(), download: vi.fn().mockRejectedValue(new Error("not found")), upload: vi.fn().mockResolvedValue({ error: null }) }, rpc: vi.fn(), catch: vi.fn().mockReturnThis() }; }
+// Grok-2: processInvoiceScanOnce's persist write now chains
+// .eq().eq().select("id") and reads back `data` to detect whether its
+// fence on status='processing' matched. Making the shared mockReturnThis()
+// object itself thenable — resolving with a non-empty row, `error: null`
+// — keeps every existing .eq()-only chain in this file resolving exactly
+// as before while satisfying the new fencing check.
+function makeSupabase() { return { from: vi.fn().mockReturnThis(), insert: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: { id: "scan-1" }, error: null }), update: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), storage: { from: vi.fn().mockReturnThis(), download: vi.fn().mockRejectedValue(new Error("not found")), upload: vi.fn().mockResolvedValue({ error: null }) }, rpc: vi.fn(), catch: vi.fn().mockReturnThis(), then: (resolve: (v: unknown) => void, reject?: (e: unknown) => void) => Promise.resolve({ data: [{ id: "scan-1" }], error: null }).then(resolve, reject) }; }
 
 const { POST } = await import("./route");
 // Reset the Anthropic singleton between tests so the env-var missing

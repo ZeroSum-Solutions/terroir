@@ -138,7 +138,7 @@ export async function POST(
     let arithmetic = validateInvoiceArithmetic(parsed);
     if (!arithmetic.ok) {
       try {
-        parsed = await withScanSpan(
+        const retryParsed = await withScanSpan(
           "extract.retry",
           {
             attempt: 2,
@@ -147,10 +147,22 @@ export async function POST(
           },
           () => extractFromOcr(ocr, INVOICE_EXTRACTION_RETRY),
         );
+        // Grok-5: an empty retry is not a reconciling result — adopting it
+        // would wipe this scan's existing parsed_/final_line_items with []
+        // at status 'complete'. Keep the first extraction (and its
+        // already-failing arithmetic) instead. Mirrors the same gate in
+        // invoice-scan-service.ts.
+        if (retryParsed.lineItems.length > 0) {
+          parsed = retryParsed;
+          arithmetic = validateInvoiceArithmetic(parsed);
+        }
       } catch (error) {
-        return mapExtractError(error, ocr.rawText);
+        // Grok-5: symmetric with the empty-retry case above — a transient
+        // retry failure must not discard a usable first extraction. Fall
+        // back to it (and its failing arithmetic) instead of returning an
+        // error. The first-attempt catch above is unaffected.
+        console.error("extract.retry failed; falling back to first extraction:", error);
       }
-      arithmetic = validateInvoiceArithmetic(parsed);
     }
 
     const parsedAt = new Date().toISOString();
