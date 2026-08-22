@@ -168,6 +168,10 @@ The first two `Staging smoke` runs after the Option A merge both failed with
 2026-08-22 at all.** The last webhook-triggered deploy was 2026-08-21 18:46
 PT.
 
+(The "every push to `main` triggers the same-SHA deploy" statements in the
+sections above were accurate up to that deploy and hold again only once the
+owner action below is completed.)
+
 Root cause: the repository now lives at `ZeroSum-Solutions/terroir`, but the
 Railway GitHub App is installed only for the `wiggdevin` personal account —
 the `ZeroSum-Solutions` org has no Railway App installation. GitHub webhook
