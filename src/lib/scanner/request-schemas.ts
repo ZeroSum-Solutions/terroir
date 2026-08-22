@@ -52,6 +52,7 @@ export const ScanLineItemSchema = z.object({
   region: z.string(),
   qty: z.number().int().positive(),
   unitCost: z.number().finite().nonnegative(),
+  lineTotal: z.number().nullable().optional(),
   currency: z.string().nullable().optional(),
   format: z.string().nullable().optional(),
   confidence: z.number().min(0).max(1),
@@ -101,7 +102,9 @@ const ScanSchema = z.object({
       lowConfidenceItems: z.number().int().nonnegative(),
       totalItems: z.number().int().nonnegative(),
       manualFallbackTriggered: z.boolean(),
-      reason: z.enum(["low_confidence", "too_few_items", "both"]).optional(),
+      reason: z
+        .enum(["low_confidence", "too_few_items", "both", "arithmetic_mismatch"])
+        .optional(),
     })
     .optional(),
   rawText: z.string().optional(),

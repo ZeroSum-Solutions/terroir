@@ -14,6 +14,7 @@ import {
   parseJson,
   parseMultipart,
 } from "@/lib/api/validation";
+import { validateLineItemsArithmetic } from "@/domains/scanning/invoice-arithmetic";
 import { SaveInvoiceScanBodySchema } from "@/lib/scanner/request-schemas";
 import { SCORED_FIELDS } from "@/lib/scanner/scored-fields";
 import type { LineItem, Scan } from "@/lib/scanner/types";
@@ -133,6 +134,26 @@ async function saveScanOnce(opts: {
 }): Promise<{ status: number; body: unknown }> {
   const { supabase, restaurantId, scan, originalItems, file } = opts;
 
+  // ── Arithmetic validation (G1-12) ───────────────────────────────
+  // Re-validated server-side, against the items actually about to become
+  // inventory_items rows — a client-supplied "already validated" claim
+  // (e.g. the `arithmetic` field the extraction response carried) is
+  // never trusted on its own. No model should establish financial truth,
+  // and neither should an unverified client payload. See
+  // src/domains/scanning/invoice-arithmetic.ts.
+  const arithmetic = validateLineItemsArithmetic(scan.items);
+  if (!arithmetic.ok) {
+    return {
+      status: 422,
+      body: {
+        code: "arithmetic_mismatch",
+        message:
+          "These numbers don't add up — review and correct the flagged wines before saving.",
+        issues: arithmetic.issues,
+      },
+    };
+  }
+
   // ── Accuracy score ───────────────────────────────────────────────
   const accuracyScore = computeAccuracy(scan);
 
@@ -149,6 +170,11 @@ async function saveScanOnce(opts: {
       edits: JSON.parse(JSON.stringify(scan.edits)) as Json,
       accuracy_score: accuracyScore,
       item_count: scan.items.length,
+      // Arithmetic reconciled (or had nothing to check) by this point —
+      // the row is a settled, human-confirmed record, not an in-flight
+      // one. Previously left unset, which defaulted to "processing"
+      // forever for every scan saved through this path.
+      status: "complete",
     })
     .select("id")
     .single();

@@ -19,7 +19,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { getAnthropicClient } from "@/lib/ai/anthropic-client";
-import { INVOICE_EXTRACTION } from "@/lib/ai/models";
+import { INVOICE_EXTRACTION, type ModelProfile } from "@/lib/ai/models";
 import {
   ParsedInvoiceSchema,
   type ParsedInvoice,
@@ -82,7 +82,16 @@ export function buildOcrContext(ocr: OcrResult): string {
   return ocrContext;
 }
 
-export async function extractFromOcr(ocr: OcrResult): Promise<ParsedInvoice> {
+/**
+ * @param profile Model profile to run this extraction under. Defaults to
+ *   `INVOICE_EXTRACTION`; callers retrying after a failed arithmetic
+ *   validation pass `INVOICE_EXTRACTION_RETRY` instead (see
+ *   `src/domains/scanning/invoice-arithmetic.ts`).
+ */
+export async function extractFromOcr(
+  ocr: OcrResult,
+  profile: ModelProfile = INVOICE_EXTRACTION,
+): Promise<ParsedInvoice> {
   let client: Anthropic;
   try {
     client = getAnthropicClient();
@@ -98,11 +107,11 @@ export async function extractFromOcr(ocr: OcrResult): Promise<ParsedInvoice> {
   let response;
   try {
     response = await client.messages.parse({
-      model: INVOICE_EXTRACTION.model,
-      max_tokens: INVOICE_EXTRACTION.maxTokens,
+      model: profile.model,
+      max_tokens: profile.maxTokens,
       output_config: {
         format: zodOutputFormat(ParsedInvoiceSchema),
-        effort: INVOICE_EXTRACTION.effort,
+        effort: profile.effort,
       },
       system: SYSTEM_PROMPT,
       messages: [

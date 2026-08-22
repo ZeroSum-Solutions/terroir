@@ -47,6 +47,13 @@ export const ParsedLineItemSchema = z.object({
     .describe(
       "Unit cost per bottle in US dollars. Numeric only, no currency symbol. If the invoice prints a European comma decimal, convert to a period.",
     ),
+  lineTotal: z
+    .number()
+    .nullable()
+    .optional()
+    .describe(
+      "Extended total for this line exactly as printed on the invoice (qty x unit cost), converted to a plain decimal number using the same convention as unitCost. Null if the invoice does not print a line total column for this line. Never calculate or invent this value — only report a printed total.",
+    ),
   currency: z
     .string()
     .nullable()
@@ -88,6 +95,20 @@ export const ParsedInvoiceSchema = z.object({
   lineItems: z.array(ParsedLineItemSchema).describe(
     "All wine line items on the invoice. Skip non-wine lines (shipping, tax, totals, gift cards).",
   ),
+  invoiceTotal: z
+    .number()
+    .nullable()
+    .optional()
+    .describe(
+      "The final total amount due, exactly as printed on the invoice (the grand total, after any tax or fees). Null if no total is printed anywhere on the invoice.",
+    ),
+  taxAndFees: z
+    .number()
+    .nullable()
+    .optional()
+    .describe(
+      "Sum of any tax, delivery, or other non-wine charges printed as separate line items on the invoice. Null if the invoice discloses no such charges — never estimate or invent this value.",
+    ),
 });
 
 export type ParsedInvoice = z.infer<typeof ParsedInvoiceSchema>;
@@ -117,6 +138,7 @@ const PersistedLineItemSchema = z.object({
   region: z.string(),
   qty: z.number(),
   unitCost: z.number(),
+  lineTotal: z.number().nullable().optional(),
   currency: z.string().nullable(),
   format: z.string().nullable(),
   confidence: z.number(),
@@ -128,7 +150,9 @@ const PersistedScanQualitySchema = z.object({
   lowConfidenceItems: z.number(),
   totalItems: z.number(),
   manualFallbackTriggered: z.boolean(),
-  reason: z.enum(["low_confidence", "too_few_items", "both"]).optional(),
+  reason: z
+    .enum(["low_confidence", "too_few_items", "both", "arithmetic_mismatch"])
+    .optional(),
 });
 
 export const PersistedScanSchema = z.object({

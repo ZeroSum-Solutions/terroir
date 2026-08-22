@@ -153,6 +153,21 @@ describe("extractFromOcr", () => {
     expect(callArgs.messages[0].content).toContain("<invoice_text>");
   });
 
+  it("uses the provided profile instead of the default (G1-12 retry path)", async () => {
+    anthropic.parse.mockResolvedValue(happyParse());
+
+    await extractFromOcr(okOcr(), {
+      model: "claude-sonnet-5",
+      effort: "high",
+      maxTokens: 24000,
+    });
+
+    const callArgs = anthropic.parse.mock.calls[0][0];
+    expect(callArgs.model).toBe("claude-sonnet-5");
+    expect(callArgs.max_tokens).toBe(24000);
+    expect(callArgs.output_config.effort).toBe("high");
+  });
+
   it("throws AiExtractError('not_configured') when ANTHROPIC_API_KEY is missing", async () => {
     delete process.env.ANTHROPIC_API_KEY;
 

@@ -58,16 +58,19 @@ const supabaseBehavior: SupabaseBehavior = {
 const calls: {
   deleteInvoiceScanCalled: boolean;
   inventoryInserts: unknown[];
+  invoiceScansInserts: unknown[];
   rpc: Array<{ fn: string; args: unknown }>;
 } = {
   deleteInvoiceScanCalled: false,
   inventoryInserts: [],
+  invoiceScansInserts: [],
   rpc: [],
 };
 
 function resetSupabaseCallRecords() {
   calls.deleteInvoiceScanCalled = false;
   calls.inventoryInserts = [];
+  calls.invoiceScansInserts = [];
   calls.rpc = [];
 }
 
@@ -76,11 +79,14 @@ function buildSupabaseStub() {
     from(table: string) {
       if (table === "invoice_scans") {
         return {
-          insert: () => ({
-            select: () => ({
-              single: async () => supabaseBehavior.invoiceScansInsert,
-            }),
-          }),
+          insert: (row: unknown) => {
+            calls.invoiceScansInserts.push(row);
+            return {
+              select: () => ({
+                single: async () => supabaseBehavior.invoiceScansInsert,
+              }),
+            };
+          },
           delete: () => ({
             eq: async () => {
               calls.deleteInvoiceScanCalled = true;
@@ -433,5 +439,118 @@ describe("POST /api/inventory/save-scan", () => {
     // Wines were created, but inventory failed — clean up the parent row.
     expect(calls.inventoryInserts).toHaveLength(1);
     expect(calls.deleteInvoiceScanCalled).toBe(true);
+  });
+
+  // ── G1-12: arithmetic re-validation ─────────────────────────────────
+  //
+  // This is the disqualifying gap a fresh critic found: this route creates
+  // the *permanent* invoice_scans + inventory_items rows and previously
+  // never re-checked arithmetic on the items it was about to persist — it
+  // trusted whatever the client sent. These prove the server re-validates
+  // scan.items itself (never a client-supplied "already validated" claim)
+  // and refuses to write anything when it doesn't reconcile.
+
+  it("rejects a payload whose line items fail arithmetic validation, before any DB write", async () => {
+    authedAsA();
+    const scan = makeScan({
+      items: [
+        // True unit cost is $45 (6 x 45 = $270, the printed line total);
+        // this payload carries $18 instead.
+        makeLineItem({ id: "item-1", qty: 6, unitCost: 18, lineTotal: 270 }),
+      ],
+    });
+
+    const res = await POST(
+      makeJsonRequest({ scan, originalItems: scan.items }),
+    );
+
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.error.code).toBe("arithmetic_mismatch");
+    expect(calls.rpc).toHaveLength(0);
+    expect(calls.inventoryInserts).toHaveLength(0);
+    expect(calls.invoiceScansInserts).toHaveLength(0);
+  });
+
+  it("rejects a payload with inconsistent currencies across line items", async () => {
+    authedAsA();
+    const scan = makeScan({
+      items: [
+        makeLineItem({ id: "item-1", currency: "USD" }),
+        makeLineItem({
+          id: "item-2",
+          name: "Cabernet Sauvignon",
+          qty: 3,
+          unitCost: 850,
+          currency: "EUR",
+        }),
+      ],
+    });
+
+    const res = await POST(
+      makeJsonRequest({ scan, originalItems: scan.items }),
+    );
+
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.error.code).toBe("arithmetic_mismatch");
+    expect(calls.rpc).toHaveLength(0);
+    expect(calls.inventoryInserts).toHaveLength(0);
+    expect(calls.invoiceScansInserts).toHaveLength(0);
+  });
+
+  it("does not trust a client-supplied arithmetic verdict on the scan object", async () => {
+    authedAsA();
+    // The client claims this scan already passed arithmetic validation —
+    // the server must re-check scan.items itself regardless.
+    const scan = makeScan({
+      items: [makeLineItem({ id: "item-1", qty: 6, unitCost: 18, lineTotal: 270 })],
+      arithmetic: { ok: true, issues: [] },
+    });
+
+    const res = await POST(
+      makeJsonRequest({ scan, originalItems: scan.items }),
+    );
+
+    expect(res.status).toBe(422);
+    expect(calls.inventoryInserts).toHaveLength(0);
+    expect(calls.invoiceScansInserts).toHaveLength(0);
+  });
+
+  it("accepts and persists a payload whose line items reconcile, marking the row complete", async () => {
+    authedAsA();
+    const scan = makeScan({
+      items: [
+        makeLineItem({ id: "item-1", qty: 6, unitCost: 32.5, lineTotal: 195 }),
+        makeLineItem({
+          id: "item-2",
+          name: "Cabernet Sauvignon",
+          qty: 3,
+          unitCost: 850,
+          lineTotal: 2550,
+        }),
+      ],
+    });
+
+    const res = await POST(
+      makeJsonRequest({ scan, originalItems: scan.items }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(calls.inventoryInserts).toHaveLength(1);
+    expect(calls.invoiceScansInserts).toHaveLength(1);
+    expect(calls.invoiceScansInserts[0]).toMatchObject({ status: "complete" });
+  });
+
+  it("still saves an invoice that never prints line totals at all (nothing to check, honestly)", async () => {
+    authedAsA();
+    const scan = makeScan(); // default fixture carries no lineTotal on either item
+
+    const res = await POST(
+      makeJsonRequest({ scan, originalItems: scan.items }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(calls.inventoryInserts).toHaveLength(1);
   });
 });
