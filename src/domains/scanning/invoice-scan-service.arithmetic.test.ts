@@ -23,10 +23,15 @@ class MockAiExtractError extends Error {
 
 const mockExtractOcr = vi.fn();
 const mockExtractFromOcr = vi.fn();
-vi.mock("@/adapters/ocr/azure-document-intelligence", () => ({
-  OcrError: class OcrError extends Error {},
-  extractOcr: (...args: unknown[]) => mockExtractOcr(...args),
-}));
+vi.mock("@/adapters/ocr/azure-document-intelligence", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/adapters/ocr/azure-document-intelligence")>();
+  return {
+    ...actual,
+    OcrError: class OcrError extends Error {},
+    extractOcr: (...args: unknown[]) => mockExtractOcr(...args),
+  };
+});
 vi.mock("@/adapters/llm/anthropic-invoice-extraction", () => ({
   AiExtractError: MockAiExtractError,
   extractFromOcr: (...args: unknown[]) => mockExtractFromOcr(...args),
