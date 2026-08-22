@@ -15,6 +15,7 @@
     "test:contracts": "vitest run src/test/contracts src/lib/api/errors.contract.test.ts src/lib/api/validation.contract.test.ts src/lib/api/handler.contract.test.ts",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "worker": "tsx src/worker/index.ts",
     "verify:api-contract": "node scripts/verify-api-contract.mjs",
     "generate:product-conformance": "node scripts/generate-product-contract-conformance.mjs --write",
     "verify:product-conformance": "node scripts/generate-product-contract-conformance.mjs --check",
@@ -63,6 +64,7 @@
     "eslint-config-next": "16.2.4",
     "happy-dom": "^20.9.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.12",
     "typescript": "^5",
     "vitest": "^4.1.4"
   }
