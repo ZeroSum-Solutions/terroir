@@ -8,9 +8,14 @@ const mockVerifyOtp = vi.fn();
 const mockCreateClient = vi.fn(async () => ({
   auth: { verifyOtp: mockVerifyOtp },
 }));
+const mockCaptureMessage = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: () => mockCreateClient(),
+}));
+
+vi.mock("@sentry/nextjs", () => ({
+  captureMessage: (...args: unknown[]) => mockCaptureMessage(...args),
 }));
 
 const { GET } = await import("./route");
@@ -35,6 +40,10 @@ function makeRequestWithQuery(query = ""): NextRequest {
 function expectSafetyHeaders(response: Response) {
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+}
+
+function headerEntries(response: Response): Record<string, string> {
+  return Object.fromEntries([...response.headers.entries()]);
 }
 
 function configureBaseEnvironment(nodeEnv: "production" | "test") {
@@ -94,6 +103,43 @@ describe("GET /api/dev-login", () => {
     expectSafetyHeaders(response);
     expect(fetch).not.toHaveBeenCalled();
     expect(mockCreateClient).not.toHaveBeenCalled();
+    expect(mockCaptureMessage).not.toHaveBeenCalled();
+  });
+
+  it("returns a byte-identical, header-identical 404 in production for no token, an invalid token, and a valid legacy-capability token — proving no timing or body signal distinguishes them", async () => {
+    mockSuccessfulSupabaseLogin();
+
+    // (i) no token at all.
+    const noToken = await GET(makeRequestWithQuery());
+    const noTokenBody = await noToken.text();
+
+    // (ii) an invalid/garbage token.
+    const invalidToken = await GET(makeRequest("not-a-real-token"));
+    const invalidTokenBody = await invalidToken.text();
+
+    // (iii) a VALID legacy-capability token — the case that would have to
+    // do real verification work if the route branched on it.
+    configureProductionCapability();
+    const validToken = await GET(makeRequest(TOKEN_HASH));
+    const validTokenBody = await validToken.text();
+
+    for (const [response, body] of [
+      [noToken, noTokenBody],
+      [invalidToken, invalidTokenBody],
+      [validToken, validTokenBody],
+    ] as const) {
+      expect(response.status).toBe(404);
+      expect(body).toBe("Not found");
+      expect(headerEntries(response)).toEqual(headerEntries(noToken));
+    }
+
+    // The timing guarantee: none of the three requests did any Supabase
+    // work, so there is no expensive-verification-then-404 code path for a
+    // clock to distinguish. Asserting zero admin-API calls IS the timing
+    // guarantee — a mocked-clock latency assertion would be flaky theater.
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mockCreateClient).not.toHaveBeenCalled();
+    expect(mockCaptureMessage).not.toHaveBeenCalled();
   });
 
   it("keeps the development-only email bypass independent of production capability config", async () => {
@@ -104,6 +150,18 @@ describe("GET /api/dev-login", () => {
 
     expect(response.status).toBe(303);
     expectSafetyHeaders(response);
+    expect(mockCaptureMessage).toHaveBeenCalledTimes(1);
+    expect(mockCaptureMessage).toHaveBeenCalledWith(
+      "dev-login bypass invoked",
+      expect.objectContaining({
+        level: "warning",
+        extra: expect.objectContaining({
+          actor: "developer@example.com",
+          time: "2026-07-23T12:00:00.000Z",
+          reason: expect.stringContaining("DEV_BYPASS_EMAIL"),
+        }),
+      }),
+    );
     expect(fetch).toHaveBeenCalledWith(
       "https://project.supabase.co/auth/v1/admin/generate_link",
       expect.objectContaining({
