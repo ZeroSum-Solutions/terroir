@@ -36,6 +36,18 @@ describe("SettingsDropdown touch targets", () => {
     expect(trigger.className).toContain("w-11");
   });
 
+  it("uses the immediate project focus outline on the Settings trigger", async () => {
+    const container = await mount(<SettingsDropdown />);
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Settings"]',
+    )!;
+
+    expect(trigger.className).toContain("focus-visible:outline-primary");
+    expect(trigger.className).toContain("focus-visible:outline-offset-2");
+    expect(trigger.className).toContain("focus-visible:transition-none");
+    expect(trigger.className).not.toMatch(/focus:ring/);
+  });
+
   it("keeps every Settings menu action at least 44px tall", async () => {
     const container = await mount(<SettingsDropdown />);
     const trigger = container.querySelector<HTMLButtonElement>(
@@ -60,6 +72,32 @@ describe("SettingsDropdown touch targets", () => {
     for (const action of actions) {
       expect.soft(action.className, action.textContent?.trim()).toContain(
         "min-h-11",
+      );
+    }
+  });
+
+  it("uses the project focus outline on every Settings menu action", async () => {
+    const container = await mount(<SettingsDropdown />);
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Settings"]',
+    )!;
+
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const actions = [
+      ...container.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+    ];
+    for (const action of actions) {
+      expect.soft(action.className, action.textContent?.trim()).toContain(
+        "focus-visible:outline-primary",
+      );
+      expect.soft(action.className, action.textContent?.trim()).toContain(
+        "focus-visible:transition-none",
+      );
+      expect.soft(action.className, action.textContent?.trim()).not.toMatch(
+        /focus:ring/,
       );
     }
   });

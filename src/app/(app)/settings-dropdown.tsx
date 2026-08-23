@@ -59,7 +59,7 @@ export function SettingsDropdown() {
         aria-label="Settings"
         aria-expanded={open}
         aria-haspopup="true"
-        className="flex h-11 w-11 items-center justify-center rounded-pill text-grey transition-colors hover:bg-bridge-surface hover:text-ink md:h-auto md:w-auto md:border md:border-beige-deep md:bg-white md:px-md md:py-sm"
+        className="flex h-11 w-11 items-center justify-center rounded-pill text-grey transition-colors hover:bg-bridge-surface hover:text-ink focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary md:h-auto md:w-auto md:border md:border-beige-deep md:bg-white md:px-md md:py-sm"
       >
         <Settings className="h-5 w-5 md:h-4 md:w-4" strokeWidth={1.75} aria-hidden="true" />
       </button>
@@ -73,7 +73,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <DollarSign className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Pricing
@@ -84,7 +84,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <Archive className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Bins
@@ -95,7 +95,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <ClipboardCheck className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Reconcile
@@ -106,7 +106,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <Users className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Team
@@ -117,7 +117,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <Upload className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Import
@@ -129,7 +129,7 @@ export function SettingsDropdown() {
                 type="submit"
                 role="menuitem"
                 tabIndex={-1}
-                className="flex min-h-11 w-full items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface"
+                className="flex min-h-11 w-full items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               >
                 <LogOut className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
                 Sign out

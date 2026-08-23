@@ -124,7 +124,7 @@ function FabInner() {
         onClick={() => setOpen((v) => !v)}
         className={cn(
           "pointer-events-auto absolute right-md grid h-14 w-14 place-items-center rounded-pill bg-primary text-white transition-transform duration-200",
-          "hover:bg-primary-hover active:scale-95",
+          "hover:bg-primary-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
           open && "rotate-45",
         )}
         style={{ bottom: "calc(env(safe-area-inset-bottom) + 80px)" }}
@@ -176,7 +176,7 @@ function ActionPill({
       onClick={onActivate}
       aria-label={label}
       role="menuitem"
-      className="pointer-events-auto"
+      className="pointer-events-auto inline-flex rounded-pill focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
     >
       {inner}
     </Link>
