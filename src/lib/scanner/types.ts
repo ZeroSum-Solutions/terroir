@@ -89,14 +89,37 @@ export type RecentScan = {
 
 export type ScanMode = "invoice" | "bottle";
 
-export type BottleScanResult = {
+/**
+ * Identity-sensitive bottle fields eligible for low-confidence flagging
+ * (walkthrough §1.2, item 3). Varietal/country are extracted but not
+ * flaggable — they aren't identity-critical the way producer/name/vintage/
+ * region/format are for matching a photographed bottle to a cellar record.
+ */
+export type BottleField = "producer" | "name" | "vintage" | "region" | "format";
+
+/** One ranked wine-identification candidate from a bottle-label photo. */
+export type BottleCandidate = {
   name: string;
   producer: string;
   vintage: number | null;
   varietal: string;
   region: string;
   country: string | null;
+  /** Bottle size as printed/depicted (e.g. "750ml", "Magnum (1.5L)"). Null if not visible. */
+  format: string | null;
+  /** Model's self-assessed confidence for this candidate, 0-1 — not a measured accuracy. */
   confidence: number;
+  /** Identity-sensitive fields the model is uncertain about for this candidate. */
+  lowFields: BottleField[];
   notes: string | null;
+};
+
+/**
+ * Result of a bottle-label scan: 1-3 ranked candidates, best first. The
+ * model returns more than one only when the label is genuinely ambiguous —
+ * see BOTTLE_SYSTEM_PROMPT.
+ */
+export type BottleScanResult = {
+  candidates: BottleCandidate[];
   parsedAt: string;
 };

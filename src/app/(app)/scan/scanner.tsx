@@ -187,9 +187,22 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const [lastFiles, setLastFiles] = useState<File[]>([]);
   const [mode, setMode] = useState<ScanMode>("invoice");
   const [bottleResult, setBottleResult] = useState<BottleScanResult | null>(null);
+  // Immediate-acknowledgment preview (walkthrough §1.2, item 7): an object
+  // URL for the just-picked label photo, set synchronously before the
+  // /api/scan-bottle round-trip resolves so ProcessingView can render the
+  // user's own photo instead of a generic icon.
+  const [bottlePreviewUrl, setBottlePreviewUrlState] = useState<string | null>(null);
+  const bottlePreviewUrlRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scanTimeoutRef = useRef<number | null>(null);
   const timedOutRef = useRef(false);
+
+  const setBottlePreview = useCallback((file: File | null) => {
+    if (bottlePreviewUrlRef.current) URL.revokeObjectURL(bottlePreviewUrlRef.current);
+    const url = file ? URL.createObjectURL(file) : null;
+    bottlePreviewUrlRef.current = url;
+    setBottlePreviewUrlState(url);
+  }, []);
 
   const clearScanTimeout = useCallback(() => {
     if (scanTimeoutRef.current != null) {
@@ -212,6 +225,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     () => () => {
       abortRef.current?.abort();
       clearScanTimeout();
+      if (bottlePreviewUrlRef.current) URL.revokeObjectURL(bottlePreviewUrlRef.current);
     },
     [clearScanTimeout],
   );
@@ -415,10 +429,11 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     saveScan(null);
     setScan(null);
     setBottleResult(null);
+    setBottlePreview(null);
     setError(null);
     setRawText(null);
     setStatus("ready");
-  }, [clearScanTimeout]);
+  }, [clearScanTimeout, setBottlePreview]);
 
   const cancelScan = useCallback(() => {
     abortRef.current?.abort();
@@ -605,6 +620,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     abortRef.current = ac;
 
     setLastFile(file);
+    setBottlePreview(file);
     setProgress(0);
     setStatus("processing");
     setError(null);
@@ -640,7 +656,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     } finally {
       if (abortRef.current === ac) abortRef.current = null;
     }
-  }, []);
+  }, [setBottlePreview]);
 
   const retryScan = useCallback(() => {
     if (mode === "bottle") {
@@ -661,6 +677,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       varietal: string;
       region: string;
       country: string | null;
+      format: string | null;
       qty: number;
       unitCost: number;
     }) => {
@@ -694,6 +711,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         }
         bottleSaveKeyRef.current = null;
         setBottleResult(null);
+        setBottlePreview(null);
         setSavedResult({ itemCount: 1, wineCount: 1 });
         setStatus("ready");
       } catch (err) {
@@ -703,7 +721,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         setIsSaving(false);
       }
     },
-    [isSaving],
+    [isSaving, setBottlePreview],
   );
 
   const handleStart = useCallback(
@@ -740,6 +758,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
           stage={stageForProgress(mode, progress)}
           mode={mode}
           onCancel={cancelScan}
+          previewUrl={bottlePreviewUrl}
         />
       )}
       {status === "error" && (

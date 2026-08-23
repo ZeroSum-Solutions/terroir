@@ -67,14 +67,20 @@ const invoiceResult: Scan = {
 };
 
 const bottleResult: BottleScanResult = {
-  name: "Test Pinot Noir",
-  producer: "Test Producer",
-  vintage: 2022,
-  varietal: "Pinot Noir",
-  region: "Willamette Valley",
-  country: "United States",
-  confidence: 0.95,
-  notes: null,
+  candidates: [
+    {
+      name: "Test Pinot Noir",
+      producer: "Test Producer",
+      vintage: 2022,
+      varietal: "Pinot Noir",
+      region: "Willamette Valley",
+      country: "United States",
+      format: null,
+      confidence: 0.95,
+      lowFields: [],
+      notes: null,
+    },
+  ],
   parsedAt: "2026-08-20T12:00:00.000Z",
 };
 

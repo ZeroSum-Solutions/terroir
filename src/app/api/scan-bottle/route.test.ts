@@ -170,14 +170,20 @@ describe("POST /api/scan-bottle", () => {
       messages: {
         parse: vi.fn().mockResolvedValue({
           parsed_output: {
-            name: "Volnay",
-            producer: "Domaine Test",
-            vintage: 2022,
-            varietal: "Pinot Noir",
-            region: "Burgundy",
-            country: "France",
-            confidence: 0.98,
-            notes: null,
+            candidates: [
+              {
+                name: "Volnay",
+                producer: "Domaine Test",
+                vintage: 2022,
+                varietal: "Pinot Noir",
+                region: "Burgundy",
+                country: "France",
+                format: "750ml",
+                confidence: 0.98,
+                lowFields: [],
+                notes: null,
+              },
+            ],
           },
         }),
       },
@@ -197,9 +203,105 @@ describe("POST /api/scan-bottle", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      name: "Volnay",
-      producer: "Domaine Test",
-      confidence: 0.98,
+      candidates: [
+        expect.objectContaining({
+          name: "Volnay",
+          producer: "Domaine Test",
+          confidence: 0.98,
+        }),
+      ],
+    });
+  });
+
+  it("passes through multiple ranked candidates with per-field low-confidence flags", async () => {
+    const supabase = makeSupabase({ data: null, error: null });
+    allow(supabase);
+    mockGetAnthropicClient.mockReturnValue({
+      messages: {
+        parse: vi.fn().mockResolvedValue({
+          parsed_output: {
+            candidates: [
+              {
+                name: "Volnay 1er Cru",
+                producer: "Domaine Test",
+                vintage: 2019,
+                varietal: "Pinot Noir",
+                region: "Burgundy",
+                country: "France",
+                format: null,
+                confidence: 0.62,
+                lowFields: ["vintage", "format"],
+                notes: "Vintage partially obscured by a torn label.",
+              },
+              {
+                name: "Volnay Villages",
+                producer: "Domaine Test",
+                vintage: 2017,
+                varietal: "Pinot Noir",
+                region: "Burgundy",
+                country: "France",
+                format: null,
+                confidence: 0.41,
+                lowFields: ["name", "vintage"],
+                notes: null,
+              },
+            ],
+          },
+        }),
+      },
+    });
+    const form = new FormData();
+    form.append(
+      "file",
+      new File(["label"], "label.jpg", { type: "image/jpeg" }),
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/scan-bottle", {
+        method: "POST",
+        body: form,
+      }) as unknown as NextRequest,
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.candidates).toHaveLength(2);
+    expect(body.candidates[0]).toMatchObject({
+      name: "Volnay 1er Cru",
+      confidence: 0.62,
+      lowFields: ["vintage", "format"],
+    });
+    expect(body.candidates[1]).toMatchObject({
+      name: "Volnay Villages",
+      confidence: 0.41,
+      lowFields: ["name", "vintage"],
+    });
+  });
+
+  it("returns parse_failed when the model returns no candidates", async () => {
+    const supabase = makeSupabase({ data: null, error: null });
+    allow(supabase);
+    mockGetAnthropicClient.mockReturnValue({
+      messages: {
+        parse: vi.fn().mockResolvedValue({ parsed_output: null }),
+      },
+    });
+    const form = new FormData();
+    form.append(
+      "file",
+      new File(["label"], "label.jpg", { type: "image/jpeg" }),
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/scan-bottle", {
+        method: "POST",
+        body: form,
+      }) as unknown as NextRequest,
+    );
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      error: { code: "parse_failed" },
     });
   });
 
