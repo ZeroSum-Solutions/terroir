@@ -268,7 +268,7 @@ export default function CellarConfigPage() {
           disabled={busy || !newName.trim()}
           className={cn(
             "flex h-[44px] shrink-0 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors",
-            "hover:bg-primary-hover disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+            "hover:bg-primary-hover disabled:opacity-60 focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
           )}
         >
           <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -370,7 +370,7 @@ function SortableSectionItem({
       )}
     >
       {editingId === section.id ? (
-        <div className="flex flex-1 items-center gap-xs">
+        <div className="flex min-w-0 flex-1 items-center gap-xs">
           <input
             type="text"
             value={editName}

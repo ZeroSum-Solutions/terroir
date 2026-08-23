@@ -181,6 +181,23 @@ describe("Manage Cellar Sections mobile layout", () => {
     expect(input.className).not.toMatch(/\bpy-1\b/);
   });
 
+  it("lets the entire inline rename row shrink inside a 320px list item", async () => {
+    stubConfigFetch({ id: "a", name: "Reds" });
+    const { container } = await mount(<CellarConfigPage />);
+    await flushLoad();
+
+    const rename = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Rename Reds"]',
+    )!;
+    await act(async () => rename.click());
+
+    const input = container.querySelector<HTMLInputElement>(
+      'li input[type="text"]',
+    )!;
+    const renameRow = input.parentElement!;
+    expect(renameRow.className).toContain("min-w-0");
+  });
+
   it("lets the new-section input shrink instead of pushing Add off-screen", async () => {
     stubConfigFetch({ id: "a", name: "Reds" });
     const { container } = await mount(<CellarConfigPage />);
@@ -219,6 +236,19 @@ describe("Manage Cellar Sections mobile layout", () => {
     )!;
     expect(renameInput.className).toContain("focus-visible:outline-primary");
     expect(renameInput.className).not.toMatch(/focus:ring/);
+  });
+
+  it("shows the burgundy outline immediately on the Add button", async () => {
+    stubConfigFetch({ id: "a", name: "Reds" });
+    const { container } = await mount(<CellarConfigPage />);
+    await flushLoad();
+
+    const addButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Add",
+    )!;
+    expect(addButton.className).toContain("focus-visible:outline-primary");
+    expect(addButton.className).toContain("focus-visible:transition-none");
+    expect(addButton.className).not.toMatch(/focus:ring/);
   });
 
   it("disables native touch-scroll handling on the drag handle so dnd-kit's TouchSensor can activate", async () => {

@@ -48,4 +48,34 @@ describe("Fab", () => {
       "bottom:calc(env(safe-area-inset-bottom) + 80px)",
     );
   });
+
+  it("uses the project focus outline on the trigger and action links", () => {
+    document.body.innerHTML = renderToStaticMarkup(<Fab />);
+    const trigger = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Open actions"]',
+    )!;
+    const actions = [
+      ...document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+    ];
+
+    expect(trigger.className).toContain("focus-visible:outline-primary");
+    expect(trigger.className).toContain("focus-visible:outline-offset-2");
+    expect(trigger.className).not.toMatch(/focus:ring/);
+    for (const action of actions) {
+      expect(action.className).toContain("focus-visible:outline-primary");
+      expect(action.className).not.toMatch(/focus:ring/);
+    }
+  });
+
+  it("places the action menu after its trigger in forward keyboard order", () => {
+    document.body.innerHTML = renderToStaticMarkup(<Fab />);
+    const trigger = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Open actions"]',
+    )!;
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
+
+    expect(
+      trigger.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });
