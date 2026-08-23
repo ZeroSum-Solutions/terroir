@@ -86,10 +86,30 @@ function FabInner() {
       className="pointer-events-none fixed inset-0 z-30 md:hidden"
       aria-hidden={false}
     >
-      {/* Action stack — fades+slides in. When closed, `inert` removes
-          the menu from the tab order and accessibility tree so keyboard
-          and screen-reader users can't reach the hidden actions through
-          the visual cloak (opacity-0 alone leaves them focusable). */}
+      {/* Trigger button. */}
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={open ? "Close actions" : "Open actions"}
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "pointer-events-auto absolute right-md grid h-14 w-14 place-items-center rounded-pill bg-primary text-white transition-transform duration-200",
+          "hover:bg-primary-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+          open && "rotate-45",
+        )}
+        style={{ bottom: "calc(env(safe-area-inset-bottom) + 80px)" }}
+      >
+        {/* Single icon that rotates 45° to become close. Avoids icon
+            swap flicker. */}
+        <Plus className="h-6 w-6" strokeWidth={2.25} aria-hidden />
+      </button>
+
+      {/* Action stack — fades+slides in. It follows the trigger in DOM
+          order so forward Tab enters the open menu. When closed, `inert`
+          removes the menu from the tab order and accessibility tree so
+          keyboard and screen-reader users can't reach hidden actions
+          through the visual cloak (opacity-0 alone leaves them focusable). */}
       <div
         className={cn(
           "pointer-events-none absolute right-md flex flex-col-reverse items-end gap-sm transition-opacity",
@@ -114,25 +134,6 @@ function FabInner() {
           />
         ))}
       </div>
-
-      {/* Trigger button. */}
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label={open ? "Close actions" : "Open actions"}
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "pointer-events-auto absolute right-md grid h-14 w-14 place-items-center rounded-pill bg-primary text-white transition-transform duration-200",
-          "hover:bg-primary-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
-          open && "rotate-45",
-        )}
-        style={{ bottom: "calc(env(safe-area-inset-bottom) + 80px)" }}
-      >
-        {/* Single icon that rotates 45° to become close. Avoids icon
-            swap flicker. */}
-        <Plus className="h-6 w-6" strokeWidth={2.25} aria-hidden />
-      </button>
     </div>
   );
 }

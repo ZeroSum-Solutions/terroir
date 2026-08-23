@@ -66,4 +66,16 @@ describe("Fab", () => {
       expect(action.className).not.toMatch(/focus:ring/);
     }
   });
+
+  it("places the action menu after its trigger in forward keyboard order", () => {
+    document.body.innerHTML = renderToStaticMarkup(<Fab />);
+    const trigger = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Open actions"]',
+    )!;
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
+
+    expect(
+      trigger.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });
