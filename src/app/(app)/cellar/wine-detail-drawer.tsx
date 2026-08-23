@@ -64,6 +64,11 @@ export function WineDetailDrawer({
   const [editOpen, setEditOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dismissed, setDismissed] = useState(false);
+  const closeDrawer = useCallback(() => {
+    setDismissed(true);
+    onClose();
+  }, [onClose]);
 
   // BND-119: track last pour for undo.
   const [lastPour, setLastPour] = useState<{ ml: number } | null>(null);
@@ -111,8 +116,8 @@ export function WineDetailDrawer({
 
   useFocusTrap({
     containerRef: dialogRef,
-    onEscape: onClose,
-    enabled: row !== null,
+    onEscape: closeDrawer,
+    enabled: row !== null && !dismissed,
     paused: pickerOpen || pendingDirection !== null || editOpen,
   });
 
@@ -414,7 +419,7 @@ export function WineDetailDrawer({
 
   return (
     <>
-      {row && (
+      {row && !dismissed && (
         <div
           ref={dialogRef}
           role="dialog"
@@ -433,7 +438,7 @@ export function WineDetailDrawer({
             </h2>
             <button
               type="button"
-              onClick={onClose}
+              onClick={closeDrawer}
               aria-label="Close"
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
             >
