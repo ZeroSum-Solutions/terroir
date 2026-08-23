@@ -15,7 +15,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { splitLogicalRecords, AmbiguousRecordSplitError } from "../../../scripts/validate-bulk-import";
+import {
+  splitLogicalRecords,
+  AmbiguousRecordSplitError,
+  UnsupportedLineEndingError,
+  isBlankRecord,
+} from "../../../scripts/validate-bulk-import";
+import { mulberry32 } from "../../../scripts/fixtures/generate-partner-cellar.mjs";
+import { parseCsv } from "@/domains/import/csv-parser";
+
+// Canonical 13-column header + a minimal-but-valid data row, shared by the
+// line-ending-matrix and contract tests below (they only care about
+// structural parsing, not the fixture's dedup/spelling-noise logic).
+const CANONICAL_HEADER =
+  "producer,name,vintage,varietal,region,country,size_ml,format,currency,quantity,unit_cost,bin,section";
+
+function validRow(producer: string, name: string, qty: number | string = 1): string {
+  return `${producer},${name},,,,,,,,${qty},,,`;
+}
 
 const TSX = join(process.cwd(), "node_modules", ".bin", "tsx");
 const VALIDATOR_CLI = join(process.cwd(), "scripts", "validate-bulk-import.ts");
@@ -58,6 +75,41 @@ describe("splitLogicalRecords (quote-state-aware chunk boundary splitter)", () =
 
   it("fails CLOSED (throws) on an unterminated quote instead of guessing a boundary", () => {
     expect(() => splitLogicalRecords('producer,name\n"Domaine A,Cuvee 1\n')).toThrow(AmbiguousRecordSplitError);
+  });
+
+  it("fails CLOSED (throws UnsupportedLineEndingError) on a bare \\r outside quotes, not followed by \\n", () => {
+    // Classic pre-OS X Excel/Mac export: lone \r as the only line terminator.
+    // Silently treating this the way \r is treated inside CRLF (invisible)
+    // would collapse the whole file into one "record" — see round-3 critic
+    // fix item 1.
+    expect(() => splitLogicalRecords("producer,name\ra,b\r")).toThrow(UnsupportedLineEndingError);
+  });
+
+  it("does NOT flag a \\r that is part of a proper CRLF pair", () => {
+    // The trailing \r stays part of the sliced record text (unchanged,
+    // pre-existing behavior) — the real parseCsv() skips it the same way
+    // wherever it appears, so this is harmless; the point of this test is
+    // only that CRLF must NOT throw.
+    expect(splitLogicalRecords("a,b\r\nc,d\r\n")).toEqual(["a,b\r", "c,d\r"]);
+  });
+
+  it("does NOT flag a literal \\r inside a quoted field (it is data, not a line ending)", () => {
+    const text = 'producer,name\n"Domaine A","line1\rline2"\n';
+    expect(splitLogicalRecords(text)).toEqual(["producer,name", '"Domaine A","line1\rline2"']);
+  });
+});
+
+describe("isBlankRecord (parser-as-oracle blank-line detection)", () => {
+  it("treats a genuinely empty record as blank", () => {
+    expect(isBlankRecord("")).toBe(true);
+  });
+
+  it("treats a record of only commas (multiple empty fields) as NOT blank", () => {
+    expect(isBlankRecord(",,")).toBe(false);
+  });
+
+  it("treats an ordinary data record as NOT blank", () => {
+    expect(isBlankRecord("Producer A,Wine A,,,,,,,,1,,,")).toBe(false);
   });
 });
 
@@ -188,12 +240,300 @@ describe("validate-bulk-import.ts — sha256 integrity check (fix item 2)", () =
   });
 });
 
+// ---------------------------------------------------------------------------
+// Round-3 gauntlet critic fixes. Every regression below drives the SHIPPED
+// CLI as a subprocess (via runValidator()/tsx) with the exit code asserted —
+// never the internal splitLogicalRecords()/isBlankRecord() functions alone —
+// per the round-3 requirement that these be proven at the CLI boundary a
+// human/CI actually runs.
+// ---------------------------------------------------------------------------
+
+describe("validate-bulk-import.ts — bare-CR line endings refuse loudly instead of a false PASS (round-3 critic fix item 1, CRITICAL)", () => {
+  it("a file using only lone \\r (pre-OS X Excel/Mac) line endings exits non-zero and never reports a false PASS", () => {
+    const d = tmp();
+    const rows = [
+      CANONICAL_HEADER,
+      validRow("Producer A", "Wine A"),
+      validRow("Producer B", "Wine B"),
+      validRow("Producer C", "Wine C"),
+    ];
+    // Bare CR only — no \n anywhere in the file.
+    const csvPath = join(d, "lone-cr.csv");
+    writeFileSync(csvPath, rows.join("\r"));
+
+    const result = runValidator(csvPath);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).not.toContain("=== RESULT: PASS ===");
+    // The pre-fix bug reported this as a header with 0 data rows and PASSed.
+    expect(result.stdout).not.toMatch(/Rows parsed:\s+0\b/);
+    expect(result.stderr).toContain("--- FATAL: unsupported line endings ---");
+    expect(result.stderr).toContain("pre-OS X Excel/Mac line ending");
+  });
+});
+
+describe("validate-bulk-import.ts — header-only file is never a PASS (round-3 critic fix item 2, HIGH)", () => {
+  it("completely invalid header columns with zero data rows exits non-zero and reports the missing headers", () => {
+    const d = tmp();
+    const csvPath = join(d, "bad-header-only.csv");
+    writeFileSync(csvPath, "foo,bar,baz\n");
+
+    const result = runValidator(csvPath);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("Missing required headers:");
+    expect(result.stdout).not.toContain("All required headers present.");
+    expect(result.stdout).not.toContain("=== RESULT: PASS ===");
+    expect(result.stdout).toContain("=== RESULT: FAIL ===");
+  });
+
+  it("valid header columns with zero data rows still fails — there is nothing to rehearse the import against", () => {
+    const d = tmp();
+    const csvPath = join(d, "good-header-only.csv");
+    writeFileSync(csvPath, `${CANONICAL_HEADER}\n`);
+
+    const result = runValidator(csvPath);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("All required headers present.");
+    expect(result.stdout).toContain("File has a header row but no data rows.");
+    expect(result.stdout).not.toContain("=== RESULT: PASS ===");
+  });
+});
+
+describe("validate-bulk-import.ts — blank-line row-number attribution (round-3 critic fix item 3, HIGH)", () => {
+  it("attributes the correct spreadsheet row number to a failure AFTER a blank line, not the parser's post-drop index", () => {
+    const d = tmp();
+    const lines = [
+      CANONICAL_HEADER,
+      validRow("Producer One", "Wine One"), // data row 1 — valid
+      "", // data row 2 — blank line, dropped by the real parser
+      validRow("", "Missing Producer Wine"), // data row 3 — INVALID (empty producer)
+      validRow("Producer Four", "Wine Four"), // data row 4 — valid
+    ];
+    const csvPath = join(d, "blank-interleaved.csv");
+    writeFileSync(csvPath, lines.join("\n") + "\n");
+
+    const result = runValidator(csvPath);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toMatch(/Rows parsed:\s+3\b/);
+    expect(result.stdout).toMatch(/Blank lines skipped:\s+1\b/);
+    // Correct: data row 3, counting the blank line as its own row (what a
+    // human sees in their spreadsheet). The pre-fix bug reported "row 2"
+    // (the parser's post-blank-drop output index).
+    expect(result.stdout).toContain("row 3: invalid");
+    expect(result.stdout).not.toContain("row 2: invalid");
+  });
+});
+
+describe("validate-bulk-import.ts — full failure diagnostics written to file (round-3 critic fix item 4, MEDIUM)", () => {
+  it("writes the complete untagged-failure list to <csv>.failures.json even though the terminal truncates to 10", () => {
+    const d = tmp();
+    const invalidCount = 15;
+    const lines = [CANONICAL_HEADER];
+    for (let i = 0; i < invalidCount; i++) {
+      lines.push(validRow("", `Bad Wine ${i}`)); // empty producer -> invalid, untagged (no manifest)
+    }
+    const csvPath = join(d, "dirty-real-file.csv");
+    writeFileSync(csvPath, lines.join("\n") + "\n");
+
+    const result = runValidator(csvPath);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toMatch(/Rows invalid:\s+15\b/);
+    // Terminal still only summarizes the first ten.
+    expect(result.stdout).toContain("... and 5 more");
+
+    const failuresPath = join(d, "dirty-real-file.failures.json");
+    expect(result.stdout).toContain(`Full failure list (15 rows) written to: ${failuresPath}`);
+
+    const report = JSON.parse(readFileSync(failuresPath, "utf8"));
+    expect(report.total_untagged_failures).toBe(15);
+    expect(report.failures).toHaveLength(15);
+    expect(report.failures.every((f: { outcome: string }) => f.outcome === "invalid")).toBe(true);
+    // The complete list must include rows beyond the terminal's cutoff.
+    expect(report.failures.map((f: { rowIndex: number }) => f.rowIndex)).toContain(15);
+  });
+});
+
+describe("validate-bulk-import.ts — line-ending matrix", () => {
+  const rows3 = [validRow("P1", "Wine One"), validRow("P2", "Wine Two"), validRow("P3", "Wine Three")];
+
+  it("LF-only line endings parse and validate cleanly", () => {
+    const d = tmp();
+    const csvPath = join(d, "lf.csv");
+    writeFileSync(csvPath, [CANONICAL_HEADER, ...rows3].join("\n") + "\n");
+    const result = runValidator(csvPath);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/Rows parsed:\s+3\b/);
+    expect(result.stdout).toContain("=== RESULT: PASS ===");
+  });
+
+  it("CRLF line endings parse and validate cleanly", () => {
+    const d = tmp();
+    const csvPath = join(d, "crlf.csv");
+    writeFileSync(csvPath, [CANONICAL_HEADER, ...rows3].join("\r\n") + "\r\n");
+    const result = runValidator(csvPath);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/Rows parsed:\s+3\b/);
+    expect(result.stdout).toContain("=== RESULT: PASS ===");
+  });
+
+  it("mixed CRLF and LF line endings (different tools touched the same file) parse and validate cleanly", () => {
+    const d = tmp();
+    const csvPath = join(d, "mixed.csv");
+    const csvText = `${CANONICAL_HEADER}\r\n${rows3[0]}\n${rows3[1]}\r\n${rows3[2]}\n`;
+    writeFileSync(csvPath, csvText);
+    const result = runValidator(csvPath);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/Rows parsed:\s+3\b/);
+    expect(result.stdout).toContain("=== RESULT: PASS ===");
+  });
+
+  it("a file with no trailing newline still parses its final row", () => {
+    const d = tmp();
+    const csvPath = join(d, "no-trailing-newline.csv");
+    writeFileSync(csvPath, [CANONICAL_HEADER, ...rows3].join("\n"));
+    const result = runValidator(csvPath);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/Rows parsed:\s+3\b/);
+    expect(result.stdout).toContain("=== RESULT: PASS ===");
+  });
+
+  it("a UTF-8 BOM at the start of the file is stripped and does not corrupt the first header cell", () => {
+    const d = tmp();
+    const csvPath = join(d, "bom.csv");
+    const bom = Buffer.from([0xef, 0xbb, 0xbf]);
+    const body = Buffer.from([CANONICAL_HEADER, ...rows3].join("\n") + "\n", "utf8");
+    writeFileSync(csvPath, Buffer.concat([bom, body]));
+    const result = runValidator(csvPath);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("All required headers present.");
+    expect(result.stdout).toMatch(/Rows parsed:\s+3\b/);
+    expect(result.stdout).toContain("=== RESULT: PASS ===");
+  });
+
+  it("a completely empty file fails closed rather than crashing", () => {
+    const d = tmp();
+    const csvPath = join(d, "empty.csv");
+    writeFileSync(csvPath, "");
+    const result = runValidator(csvPath);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("File is empty (no header row).");
+    expect(result.stdout).not.toContain("=== RESULT: PASS ===");
+  });
+
+  it("an unterminated quote at EOF fails closed via the shipped CLI, not just the internal splitter", () => {
+    const d = tmp();
+    const csvPath = join(d, "unterminated-quote.csv");
+    writeFileSync(csvPath, `${CANONICAL_HEADER}\n"Domaine Open,Cuvee 1\n`);
+    const result = runValidator(csvPath);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("cannot determine record boundaries");
+    expect(result.stdout).not.toContain("=== RESULT: PASS ===");
+  });
+});
+
+describe("validate-bulk-import.ts — 1:1 record<->row contract against the real parser (property test)", () => {
+  // The critic's named root cause: there is no reliable one-to-one contract
+  // between the records splitLogicalRecords() emits and the rows the real
+  // parseCsv() emits. This generates deterministic, seeded, adversarially-
+  // shaped (but well-formed — no bare CR, no unterminated quotes; those are
+  // covered as their own fail-closed cases above) CSV texts and checks the
+  // real parser's output against the splitter's own record boundaries.
+  const ALPHABET = "abcdefghij ABCDEFGHIJ01234567";
+
+  function randomWord(rng: () => number): string {
+    const len = 1 + Math.floor(rng() * 6);
+    let s = "";
+    for (let i = 0; i < len; i++) s += ALPHABET[Math.floor(rng() * ALPHABET.length)];
+    return s;
+  }
+
+  function randomCell(rng: () => number): string {
+    const kind = Math.floor(rng() * 5);
+    if (kind === 0) return "";
+    if (kind === 1) return randomWord(rng);
+    if (kind === 2) return `"${randomWord(rng)},${randomWord(rng)}"`;
+    if (kind === 3) return `"He said ""${randomWord(rng)}"" ok"`;
+    return `"${randomWord(rng)}\n${randomWord(rng)}"`;
+  }
+
+  function randomRecord(rng: () => number, blankChance: number): string {
+    if (rng() < blankChance) return "";
+    const numCols = 1 + Math.floor(rng() * 4);
+    const cells: string[] = [];
+    for (let c = 0; c < numCols; c++) cells.push(randomCell(rng));
+    return cells.join(",");
+  }
+
+  function randomCsvText(seed: number): string {
+    const rng = mulberry32(seed);
+    const headerCols = 2 + Math.floor(rng() * 3);
+    const header: string[] = [];
+    for (let c = 0; c < headerCols; c++) header.push(randomWord(rng));
+    const numRecords = Math.floor(rng() * 25);
+    const records: string[] = [];
+    for (let i = 0; i < numRecords; i++) records.push(randomRecord(rng, 0.15));
+    const trailingNewline = rng() < 0.5;
+    return [header.join(","), ...records].join("\n") + (trailingNewline ? "\n" : "");
+  }
+
+  const SEED_BASE = 987654321;
+  const CASES = 200;
+
+  it(`holds across ${CASES} deterministic randomized adversarial inputs`, () => {
+    for (let caseIndex = 0; caseIndex < CASES; caseIndex++) {
+      const text = randomCsvText(SEED_BASE + caseIndex);
+
+      // Guard: this generator never emits bare CR or unterminated quotes,
+      // so the splitter must never throw for these cases.
+      const records = splitLogicalRecords(text);
+      expect(records.length).toBeGreaterThan(0);
+      const [header, ...dataRecords] = records;
+      const nonBlankRecords = dataRecords.filter((r) => !isBlankRecord(r));
+
+      const result = parseCsv(text);
+      expect(result.ok).toBe(true);
+      if (!result.ok) continue;
+
+      // The core invariant: exactly one real-parser output row per
+      // non-blank record the splitter found.
+      expect(result.rows.length).toBe(nonBlankRecords.length);
+
+      // A stronger check: each surviving record, parsed completely alone
+      // (header + just that one record), must produce byte-identical cells
+      // to what the joint whole-text parse produced for it — the exact
+      // property the chunk/per-record-fallback dual path in main() relies
+      // on to ever be safe.
+      for (let k = 0; k < nonBlankRecords.length; k++) {
+        const isolated = parseCsv(`${header}\n${nonBlankRecords[k]}\n`);
+        expect(isolated.ok).toBe(true);
+        if (isolated.ok) {
+          expect(result.rows[k]).toEqual(isolated.rows[0]);
+        }
+      }
+    }
+  });
+});
+
 describe("run-bulk-import-test.sh — default no-arg flow (fix item 4)", () => {
   it("generates base + extras, validates both, and exits 0 with a final PASS line", () => {
     const result = spawnSync("bash", [RUNNER_SH], { encoding: "utf8", cwd: process.cwd() });
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("nv_literal:");
     expect(result.stdout).toContain("--- Barcode (EAN-13) ---");
-    expect(result.stdout).toContain("=== run-bulk-import-test: PASS (base + extras) ===");
+    expect(result.stdout).toContain("=== run-bulk-import-test: PASS (base + extras + dirty) ===");
+  }, 30_000);
+
+  it("also generates + validates the --dirty variant, exercising poisoned-chunk isolation end to end (round-3 critic fix item 5, MEDIUM)", () => {
+    const result = spawnSync("bash", [RUNNER_SH], { encoding: "utf8", cwd: process.cwd() });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("fixtures/generated/dirty/partner-cellar-20k.csv");
+    expect(result.stdout).toContain(
+      "oversized_field: expected=16 seen=16 matched=16 (OK — expected-invalid-under-current-importer)",
+    );
+    expect(result.stdout).toContain(
+      "bad_vintage_text: expected=17 seen=17 matched=17 (OK — expected-invalid-under-current-importer)",
+    );
+    expect(result.stdout).toContain(
+      "negative_quantity: expected=17 seen=17 matched=17 (OK — expected-invalid-under-current-importer)",
+    );
   }, 30_000);
 });

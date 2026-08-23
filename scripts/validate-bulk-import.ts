@@ -34,10 +34,21 @@
  * quoted field in half at whatever chunk boundary it happens to cross,
  * corrupting that record and shifting every row number after it. If the
  * splitter can't resolve where a record ends (an unterminated quote through
- * EOF), it fails CLOSED — throws, and this script exits non-zero rather
- * than guessing.
+ * EOF, or a bare `\r` outside quotes not followed by `\n` — see
+ * UnsupportedLineEndingError below), it fails CLOSED — throws, and this
+ * script exits non-zero rather than guessing.
+ *
+ * The 1:1 contract this script depends on: every chunk of raw text handed
+ * to parseCsv() must produce exactly one output row per non-blank record
+ * splitLogicalRecords() found in it (parseCsv() itself silently drops any
+ * fully-blank record — see isBlankRecord() below). That contract is
+ * asserted at runtime, not assumed: a chunk where the counts disagree fails
+ * closed rather than reporting a row number that might be wrong.
  *
  * Exit code: this script is intentionally strict. It exits non-zero when:
+ *   - the file cannot be split into unambiguous logical records at all
+ *     (unterminated quote, or unsupported bare-CR line endings);
+ *   - the file has a header but zero data rows;
  *   - any record fails to parse (unparseable) — unless a manifest tags that
  *     exact row index as an expected-invalid row (see below) whose expected
  *     outcome is "unparseable" (e.g. the --dirty oversized_field group);
@@ -56,11 +67,13 @@
  * run. That is a deliberate, documented stance for now — a later piece can
  * relax this for real-world files that legitimately contain some bad rows;
  * today this script's job is a strict self-test of the fixture + importer
- * pairing, not a lenient real-file reviewer.
+ * pairing, not a lenient real-file reviewer. When there are untagged
+ * failures, the terminal prints only the first ten; the complete list is
+ * always written to "<csv-without-ext>.failures.json" alongside the input.
  */
 
 import { createHash } from "node:crypto";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { decodeCsvBuffer, parseCsv } from "../src/domains/import/csv-parser";
 import { mapHeader, validateRow, type ValidatedRow } from "../src/domains/import/row-validator";
@@ -101,9 +114,24 @@ type Manifest = {
 // machines ever disagreed about what counts as "inside quotes", a chunk
 // boundary could still land mid-field; keeping the exact same start-of-field
 // rule is what guarantees they don't.
+//
+// A bare `\r` (not followed by `\n`) outside quotes gets the same fail-
+// closed treatment as an unterminated quote. csv-parser.ts's own `\r`
+// handling — inherited here on purpose, see the `\r` branch below — treats
+// EVERY `\r` as invisible whitespace and relies on `\n` alone to end a
+// record. That is correct for CRLF, but a file using lone-CR line endings
+// (classic pre-OS X Excel/Mac export — a real thing partners send) has NO
+// `\n` at all: every intended record break is silently swallowed and the
+// whole file collapses into one giant "record", which upstream would then
+// get misread as a header with zero data rows and a false PASS. Splitting
+// still agreeing with the real parser about this degenerate case is not a
+// defense of it — so this splitter refuses the file outright the moment it
+// sees a `\r` outside quotes that isn't immediately followed by `\n`,
+// instead of ever handing that ambiguous text to the chunker.
 // ---------------------------------------------------------------------------
 
 export class AmbiguousRecordSplitError extends Error {}
+export class UnsupportedLineEndingError extends Error {}
 
 export function splitLogicalRecords(text: string): string[] {
   const records: string[] = [];
@@ -143,6 +171,15 @@ export function splitLogicalRecords(text: string): string[] {
       continue;
     }
     if (char === "\r") {
+      if (text[i + 1] !== "\n") {
+        throw new UnsupportedLineEndingError(
+          "A bare carriage return (\\r) was found outside any quoted field, not followed by a line " +
+            "feed (\\n). This is a classic pre-OS X Excel/Mac line ending — the importer's CSV parser " +
+            "does not treat a lone \\r as a record break, so it would silently merge every logical " +
+            "record after this point into one. Convert this file to Unix (LF) or Windows (CRLF) line " +
+            "endings before validating or importing it.",
+        );
+      }
       i += 1;
       continue;
     }
@@ -169,6 +206,23 @@ export function splitLogicalRecords(text: string): string[] {
   // Drop one fully-blank trailing record (a file that ends with a newline).
   if (records.length > 0 && records[records.length - 1] === "") records.pop();
   return records;
+}
+
+/**
+ * Is this logical record one the real parseCsv() silently drops as a fully
+ * blank line (its own `pushRow()` rule: exactly one field, and that field
+ * is empty)? Rather than reimplement that field-parsing rule a second time
+ * — which is exactly how the splitter/parser disagreement this fix is
+ * closing happened in the first place — this asks the real parser itself:
+ * a standalone record that parseCsv() would drop as blank is, when parsed
+ * completely alone, indistinguishable from an empty file (its `rows` array
+ * ends up empty), which is the one condition parseCsv() reports as the
+ * "empty_file" error. A non-blank record, standalone, always parses `ok`
+ * (it is simply treated as a one-row "header" with no data rows).
+ */
+export function isBlankRecord(record: string): boolean {
+  const probe = parseCsv(`${record}\n`);
+  return !probe.ok && probe.error.code === "empty_file";
 }
 
 function sha256HexOfBuffer(buffer: Buffer): string {
@@ -235,6 +289,14 @@ function main() {
   try {
     allRecords = splitLogicalRecords(text);
   } catch (err) {
+    if (err instanceof UnsupportedLineEndingError) {
+      console.error("");
+      console.error("--- FATAL: unsupported line endings ---");
+      console.error(err.message);
+      console.error("");
+      console.error("=== RESULT: FAIL ===");
+      process.exit(1);
+    }
     if (err instanceof AmbiguousRecordSplitError) {
       console.error("");
       console.error("--- FATAL: cannot determine record boundaries ---");
@@ -253,6 +315,45 @@ function main() {
   }
 
   const [headerRecord, ...dataRecords] = allRecords;
+
+  // --- Header / column mapping ------------------------------------------
+  let columnToField: ReturnType<typeof mapHeader>["columnToField"] | null = null;
+  let missingRequired: ReturnType<typeof mapHeader>["missingRequired"] = [];
+  let barcodeColumnIndex = -1;
+
+  function ensureHeaderMapped(header: string[]) {
+    if (columnToField) return;
+    const mapped = mapHeader(header);
+    columnToField = mapped.columnToField;
+    missingRequired = mapped.missingRequired;
+    barcodeColumnIndex = header.findIndex((h) => h.trim().toLowerCase() === "barcode");
+  }
+
+  // Header validation runs unconditionally, even for a header-only file
+  // with zero data rows (fix item 2) — it must never be skipped just
+  // because the chunk loop below never gets a chunk to iterate over.
+  // Parsed through the real parseCsv() (the header record is already a
+  // complete, well-formed logical record by construction —
+  // splitLogicalRecords() would have thrown above otherwise), not
+  // reimplemented here.
+  const headerParse = parseCsv(`${headerRecord}\n`);
+  if (!headerParse.ok) {
+    console.error("");
+    console.error("--- FATAL: header row failed to parse ---");
+    console.error(`${headerParse.error.code}: ${headerParse.error.message}`);
+    console.error("");
+    console.error("=== RESULT: FAIL ===");
+    process.exit(1);
+  }
+  ensureHeaderMapped(headerParse.header);
+
+  // A file with a header and nothing else is not a pass (fix item 2): there
+  // is nothing here to rehearse the bulk import against. This is checked
+  // unconditionally, independent of the header-mapping result above, so a
+  // header-only file with EITHER valid or invalid headers still fails.
+  if (dataRecords.length === 0) {
+    fail("File has a header row but no data rows.");
+  }
 
   if (dataRecords.length > MAX_ROWS) {
     console.log(
@@ -293,11 +394,6 @@ function main() {
     }
   }
 
-  // --- Header / column mapping ------------------------------------------
-  let columnToField: ReturnType<typeof mapHeader>["columnToField"] | null = null;
-  let missingRequired: ReturnType<typeof mapHeader>["missingRequired"] = [];
-  let barcodeColumnIndex = -1;
-
   let rowsParsed = 0;
   let rowsUnparseable = 0;
   let rowsValid = 0;
@@ -309,14 +405,6 @@ function main() {
   let barcodeSeen = 0;
   let barcodeValid = 0;
   const barcodeMismatches: number[] = [];
-
-  function ensureHeaderMapped(header: string[]) {
-    if (columnToField) return;
-    const mapped = mapHeader(header);
-    columnToField = mapped.columnToField;
-    missingRequired = mapped.missingRequired;
-    barcodeColumnIndex = header.findIndex((h) => h.trim().toLowerCase() === "barcode");
-  }
 
   function classifyOutcome(rowIndex: number, outcome: RowOutcome, detail: string) {
     const tag = knownBad.get(rowIndex);
@@ -385,14 +473,52 @@ function main() {
     classifyOutcome(rowIndex, "unparseable", reason);
   }
 
+  // The real parseCsv() silently drops any fully-blank logical record (its
+  // own `pushRow()` rule), so its `rows` output is not 1:1 with
+  // `dataRecords` the moment a blank line appears anywhere but at EOF.
+  // Precomputing which records are blank — via the real parser itself, see
+  // isBlankRecord() — lets rowIndex always mean "the Nth data row counting
+  // every physical row a human would see in their spreadsheet, blank lines
+  // included" instead of drifting off by one after each blank line (fix
+  // item 3). It also gives an exact expected non-blank count per chunk,
+  // which becomes an explicit, checked invariant below rather than an
+  // assumption: the real parser's row output MUST be 1:1 with the
+  // records this validator believes survived (root cause: see module doc).
+  const blankFlags = dataRecords.map(isBlankRecord);
+  let blankLinesSkipped = 0;
+
   for (let offset = 0; offset < dataRecords.length; offset += MAX_ROWS) {
     const chunkRecords = dataRecords.slice(offset, offset + MAX_ROWS);
+    const chunkBlankFlags = blankFlags.slice(offset, offset + chunkRecords.length);
+    const nonBlankOriginalOffsets: number[] = [];
+    chunkBlankFlags.forEach((isBlank, k) => {
+      if (isBlank) blankLinesSkipped += 1;
+      else nonBlankOriginalOffsets.push(k);
+    });
+
     const chunkText = [headerRecord, ...chunkRecords].join("\n") + "\n";
     const result = parseCsv(chunkText);
 
     if (result.ok) {
       ensureHeaderMapped(result.header);
-      result.rows.forEach((cells, k) => processRow(offset + k + 1, cells));
+      if (result.rows.length !== nonBlankOriginalOffsets.length) {
+        // The 1:1 record<->row contract this whole chunking strategy
+        // depends on has broken: the real parser did not emit exactly one
+        // row per non-blank record this validator expected. Trusting row
+        // numbers past this point would be a guess, not a fact — fail
+        // closed instead of reporting numbers that might be wrong.
+        console.error("");
+        console.error("--- FATAL: record<->row count mismatch between splitter and real parser ---");
+        console.error(
+          `Chunk at data-row offset ${offset}: expected ${nonBlankOriginalOffsets.length} non-blank ` +
+            `record(s) but the real parser emitted ${result.rows.length} row(s). Cannot trust row-number ` +
+            "attribution for the rest of this file.",
+        );
+        console.error("");
+        console.error("=== RESULT: FAIL ===");
+        process.exit(1);
+      }
+      result.rows.forEach((cells, k) => processRow(offset + nonBlankOriginalOffsets[k] + 1, cells));
       continue;
     }
 
@@ -400,6 +526,7 @@ function main() {
     // poisoned record (e.g. an oversized field) doesn't mark every sibling
     // record in the chunk unparseable (see module doc + fix item 5).
     for (let k = 0; k < chunkRecords.length; k++) {
+      if (chunkBlankFlags[k]) continue; // a blank line is never a row the real importer would see.
       const rowIndex = offset + k + 1;
       const singleText = `${headerRecord}\n${chunkRecords[k]}\n`;
       const singleResult = parseCsv(singleText);
@@ -429,6 +556,7 @@ function main() {
   console.log(`Rows unparseable:         ${rowsUnparseable}${rowsUnparseable > 0 ? "  (parser-level rejection)" : ""}`);
   console.log(`Rows valid:               ${rowsValid}`);
   console.log(`Rows invalid:             ${rowsInvalid}`);
+  console.log(`Blank lines skipped:      ${blankLinesSkipped}${blankLinesSkipped > 0 ? "  (dropped by parser, like the real importer — row numbers below still count them)" : ""}`);
   console.log(`Distinct raw variant keys: ${distinctRawVariantKeys.size}`);
   console.log(`Wall-clock:               ${wallClockMs} ms`);
 
@@ -482,6 +610,16 @@ function main() {
     }
     if (untaggedFailures.length > 10) console.log(`  ... and ${untaggedFailures.length - 10} more`);
     fail(`${untaggedFailures.length} row(s) outside any expected-invalid tagged group failed to parse or validate.`);
+
+    // The terminal only summarizes (fix item 4) — a dirty real-world file
+    // can have thousands of failures, and a human repairing it needs the
+    // complete, machine-readable list, not just the first ten.
+    const failuresPath = (csvPath.endsWith(".csv") ? csvPath.slice(0, -4) : csvPath) + ".failures.json";
+    writeFileSync(
+      failuresPath,
+      JSON.stringify({ csv: csvPath, total_untagged_failures: untaggedFailures.length, failures: untaggedFailures }, null, 2) + "\n",
+    );
+    console.log(`Full failure list (${untaggedFailures.length} rows) written to: ${failuresPath}`);
   }
 
   if (barcodeColumnIndex >= 0) {

@@ -4,10 +4,15 @@
 # No arg:   generates the deterministic 20,000-row partner-cellar fixture
 #           (idempotent — same seed, same bytes every time) PLUS its
 #           --extras variant (barcode/supplier/acquisition_date/
-#           purchase_price columns), and runs the P1 validation below
-#           against both — this is what exercises the barcode/EAN-13 path
-#           end to end in the default flow, not just when --extras is
-#           passed by hand.
+#           purchase_price columns) AND its --dirty variant (50 tagged
+#           expected-invalid rows appended — bad_vintage_text,
+#           negative_quantity, oversized_field), and runs the P1 validation
+#           below against all three — this is what exercises the
+#           barcode/EAN-13 path AND the poisoned-chunk isolation path
+#           (a real dirty export's oversized field failing a whole
+#           MAX_ROWS-sized parseCsv() chunk, isolated back down to the one
+#           poisoned record) end to end in the default flow, not just when
+#           --extras/--dirty are passed by hand.
 # With arg: runs the same validation against an arbitrary CSV (the real
 #           partner file, once it arrives). Ground-truth-manifest assertions
 #           that don't apply to a file with no manifest are skipped
@@ -33,15 +38,22 @@ cd "$(dirname "$0")/.."
 CSV_PATH="${1:-}"
 
 if [ -z "$CSV_PATH" ]; then
-  echo "=== Generating deterministic 20k partner-cellar fixture (base + --extras) ==="
+  echo "=== Generating deterministic 20k partner-cellar fixture (base + --extras + --dirty) ==="
   node scripts/fixtures/generate-partner-cellar.mjs
   node scripts/fixtures/generate-partner-cellar.mjs --extras
+  # --dirty writes the same "partner-cellar-20k.csv" filename slot as the
+  # clean base fixture (dirty is a variant of the base file, not a new
+  # column set like --extras) — give it its own --out-dir so it doesn't
+  # clobber the clean fixture validated just above.
+  node scripts/fixtures/generate-partner-cellar.mjs --dirty --out-dir fixtures/generated/dirty
   echo ""
   npx tsx scripts/validate-bulk-import.ts "fixtures/generated/partner-cellar-20k.csv"
   echo ""
   npx tsx scripts/validate-bulk-import.ts "fixtures/generated/partner-cellar-20k-extras.csv"
   echo ""
-  echo "=== run-bulk-import-test: PASS (base + extras) ==="
+  npx tsx scripts/validate-bulk-import.ts "fixtures/generated/dirty/partner-cellar-20k.csv"
+  echo ""
+  echo "=== run-bulk-import-test: PASS (base + extras + dirty) ==="
 else
   npx tsx scripts/validate-bulk-import.ts "$CSV_PATH"
 fi
