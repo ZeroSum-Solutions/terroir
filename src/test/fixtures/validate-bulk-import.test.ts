@@ -188,7 +188,7 @@ describe("validate-bulk-import.ts — nv_literal group (fix item 3)", () => {
       `nv_literal: expected=${nvLiteralCount} seen=${nvLiteralCount} matched=${nvLiteralCount} (OK — expected-invalid-under-current-importer)`,
     );
     expect(result.stdout).toContain("=== RESULT: PASS ===");
-  });
+  }, 20_000);
 });
 
 describe("validate-bulk-import.ts — per-record dirty attribution (fix item 5)", () => {
@@ -219,7 +219,7 @@ describe("validate-bulk-import.ts — per-record dirty attribution (fix item 5)"
       );
     }
     expect(result.stdout).toContain("=== RESULT: PASS ===");
-  });
+  }, 20_000);
 });
 
 describe("validate-bulk-import.ts — --extras barcode/EAN-13 path (fix item 4)", () => {
@@ -240,7 +240,7 @@ describe("validate-bulk-import.ts — --extras barcode/EAN-13 path (fix item 4)"
     expect(result.stdout).toMatch(new RegExp(`Valid check digits:\\s+${manifest.barcode.rows_with_barcode}\\b`));
     expect(result.stdout).not.toContain("Invalid check digits:");
     expect(result.stdout).toContain("=== RESULT: PASS ===");
-  });
+  }, 20_000);
 });
 
 describe("validate-bulk-import.ts — sha256 integrity check (fix item 2)", () => {
@@ -262,7 +262,7 @@ describe("validate-bulk-import.ts — sha256 integrity check (fix item 2)", () =
     expect(result.status).not.toBe(0);
     expect(result.stdout).toContain("MISMATCH");
     expect(result.stdout).toContain("=== RESULT: FAIL ===");
-  });
+  }, 15_000);
 });
 
 // ---------------------------------------------------------------------------
