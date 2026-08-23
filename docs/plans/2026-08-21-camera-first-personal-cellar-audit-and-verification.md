@@ -107,7 +107,7 @@ The clean re-audit marked F-07, F-16, and N-01 through N-06 resolved. It confirm
 - [x] PRD acceptance criteria distinguish core and conditional gates.
 - [x] Implementation ownership leaves one schema/migration editor and no overlapping invoice/bottle/search-security ownership.
 - [x] The plan aligns to Terroir's existing gauntlet protocol without reusing completed Top-10 acceptance criteria.
-- [x] No production code, migration, staging, deployment, commit, or external repository code/data import occurred.
+- [x] No production code, migration, staging, deployment, or external repository code/data import occurred during the planning and audit work.
 - [x] Final files are readable, contain no unresolved placeholder markers, and match the verified repository baseline.
 
 Final verification result: `PASS`
