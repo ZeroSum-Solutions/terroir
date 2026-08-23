@@ -312,12 +312,12 @@ export default function ScanBottlePage() {
             <div className="flex items-center gap-sm">
               <span className="inline-flex items-center gap-xs rounded-pill bg-beige px-sm py-xs text-[13px] font-medium text-ink-soft">
                 <List className="h-3.5 w-3.5" strokeWidth={2.5} />
-                {session.length} scanned
+                <span className="tabular">{session.length}</span> scanned
               </span>
               <button
                 type="button"
                 onClick={handleEndSession}
-                className="flex h-[36px] items-center gap-xs rounded-pill border border-ink/25 bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface transition-colors"
+                className="flex h-[36px] items-center gap-xs rounded-pill border border-ink/25 bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
               >
                 End session
               </button>
@@ -375,7 +375,7 @@ export default function ScanBottlePage() {
           <button
             type="button"
             onClick={handleNewSession}
-            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover"
+            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
           >
             <Camera className="h-4 w-4" strokeWidth={2} />
             Start new session
@@ -411,7 +411,7 @@ export default function ScanBottlePage() {
               setPhase("manual");
               setError(null);
             }}
-            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
+            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             <Keyboard className="h-4 w-4" strokeWidth={2} />
             Enter code manually
@@ -426,9 +426,9 @@ export default function ScanBottlePage() {
               <Camera className="h-8 w-8 text-grey" strokeWidth={1.5} />
             </div>
             <div>
-              <p className="text-[15px] font-medium text-ink">
+              <h2 className="font-serif text-[22px] text-ink">
                 Camera not available
-              </p>
+              </h2>
               <p className="mt-xs text-[13px] text-grey">
                 Enter the bottle&rsquo;s wine code manually.
               </p>
@@ -436,7 +436,7 @@ export default function ScanBottlePage() {
             <button
               type="button"
               onClick={() => setPhase("manual")}
-              className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary px-lg text-[14px] font-medium text-white hover:bg-primary-hover"
+              className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary px-lg text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
             >
               <Keyboard className="h-4 w-4" strokeWidth={2} />
               Enter code
@@ -464,7 +464,7 @@ export default function ScanBottlePage() {
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
                 placeholder="Enter the code from the bottle label"
-                className="w-full rounded-pill border border-hairline bg-white px-md py-sm font-mono text-[14px] text-ink placeholder:text-grey focus:border-primary focus:outline-none focus:ring-2 focus:ring-blush-wash"
+                className="w-full rounded-pill border border-hairline bg-white px-md py-sm font-mono text-[14px] text-ink placeholder:text-grey focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
               />
               <p className="mt-xs text-[12px] text-grey">
                 The code is printed below the QR code on the bottle label.
@@ -473,7 +473,7 @@ export default function ScanBottlePage() {
             <button
               type="submit"
               disabled={!manualCode.trim()}
-              className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+              className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:opacity-50"
             >
               <Search className="h-4 w-4" strokeWidth={2} />
               Look up wine
@@ -485,7 +485,7 @@ export default function ScanBottlePage() {
               setPhase("scanning");
               setError(null);
             }}
-            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
+            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             <Camera className="h-4 w-4" strokeWidth={2} />
             Use camera instead
@@ -545,7 +545,7 @@ export default function ScanBottlePage() {
                 setSearchQuery("");
                 setSearchResults([]);
               }}
-              className="flex h-[44px] items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
+              className="flex h-[44px] items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
             >
               <X className="h-4 w-4" strokeWidth={2} />
               Correct
@@ -557,7 +557,7 @@ export default function ScanBottlePage() {
                 setSection("");
                 setBinLocation("");
               }}
-              className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover"
+              className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
             >
               <Check className="h-4 w-4" strokeWidth={2} />
               Confirm
@@ -584,7 +584,7 @@ export default function ScanBottlePage() {
               value={searchQuery}
               onChange={(e) => handleCorrectSearch(e.target.value)}
               placeholder="Search by producer, name, or vintage..."
-              className="w-full rounded-pill border border-hairline bg-white px-md py-sm text-[14px] text-ink placeholder:text-grey focus:border-primary focus:outline-none focus:ring-2 focus:ring-blush-wash"
+              className="w-full rounded-pill border border-hairline bg-white px-md py-sm text-[14px] text-ink placeholder:text-grey focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
             />
           </div>
 
@@ -599,7 +599,7 @@ export default function ScanBottlePage() {
                   <button
                     type="button"
                     onClick={() => handleCorrectSelect(w)}
-                    className="flex w-full items-start gap-md px-md py-md text-left hover:bg-bridge-surface"
+                    className="flex w-full items-start gap-md px-md py-md text-left hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-inset"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-serif text-[17px] font-medium text-ink">
@@ -634,7 +634,7 @@ export default function ScanBottlePage() {
           <button
             type="button"
             onClick={() => setPhase("matched")}
-            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
+            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             <X className="h-4 w-4" strokeWidth={2} />
             Cancel
@@ -670,7 +670,7 @@ export default function ScanBottlePage() {
                   value={section}
                   onChange={(e) => setSection(e.target.value)}
                   placeholder='e.g. "Red Room", "Main Cellar"'
-                  className="w-full rounded-pill border border-hairline bg-white px-md py-sm text-[14px] text-ink placeholder:text-grey focus:border-primary focus:outline-none focus:ring-2 focus:ring-blush-wash"
+                  className="w-full rounded-pill border border-hairline bg-white px-md py-sm text-[14px] text-ink placeholder:text-grey focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
                 />
               </div>
               <div>
@@ -687,14 +687,14 @@ export default function ScanBottlePage() {
                   value={binLocation}
                   onChange={(e) => setBinLocation(e.target.value)}
                   placeholder='e.g. "A-12", "Shelf 3, Row 5"'
-                  className="w-full rounded-pill border border-hairline bg-white px-md py-sm text-[14px] text-ink placeholder:text-grey focus:border-primary focus:outline-none focus:ring-2 focus:ring-blush-wash"
+                  className="w-full rounded-pill border border-hairline bg-white px-md py-sm text-[14px] text-ink placeholder:text-grey focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
                 />
               </div>
               <div className="grid grid-cols-2 gap-sm">
                 <button
                   type="button"
                   onClick={() => setPhase("matched")}
-                  className="flex h-[44px] items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
+                  className="flex h-[44px] items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                 >
                   <X className="h-4 w-4" strokeWidth={2} />
                   Back
@@ -702,7 +702,7 @@ export default function ScanBottlePage() {
                 <button
                   type="submit"
                   disabled={!section.trim() || !binLocation.trim() || confirming}
-                  className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+                  className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:opacity-50"
                 >
                   <Check className="h-4 w-4" strokeWidth={2} />
                   {confirming ? "Saving..." : "Save location"}
@@ -720,9 +720,9 @@ export default function ScanBottlePage() {
               <Check className="h-7 w-7 text-white" strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-[17px] font-medium text-ink">
+              <h2 className="font-serif text-[22px] text-ink">
                 Bottle confirmed
-              </p>
+              </h2>
               <p className="mt-xs font-serif text-[17px] font-medium text-ink">
                 {wine.producer} {wine.name}
                 {wine.vintage ? " (" + wine.vintage + ")" : ""}
@@ -740,7 +740,7 @@ export default function ScanBottlePage() {
               <button
                 type="button"
                 onClick={handleScanAgain}
-                className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary px-xl text-[14px] font-medium text-white hover:bg-primary-hover"
+                className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary px-xl text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
               >
                 <Camera className="h-4 w-4" strokeWidth={2} />
                 Scan another bottle
@@ -749,10 +749,10 @@ export default function ScanBottlePage() {
                 <button
                   type="button"
                   onClick={handleEndSession}
-                  className="flex h-[44px] items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
+                  className="flex h-[44px] items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                 >
                   <List className="h-4 w-4" strokeWidth={2} />
-                  End session ({session.length} scanned)
+                  End session (<span className="tabular">{session.length}</span> scanned)
                 </button>
               )}
             </div>
@@ -770,9 +770,9 @@ export default function ScanBottlePage() {
               />
             </div>
             <div>
-              <p className="text-[15px] font-medium text-ink">
+              <h2 className="font-serif text-[22px] text-ink">
                 Lookup failed
-              </p>
+              </h2>
               <p className="mt-xs text-[13px] text-grey">{error}</p>
               {payload && (
                 <p className="mt-sm font-mono text-[12px] text-grey">
@@ -784,7 +784,7 @@ export default function ScanBottlePage() {
               <button
                 type="button"
                 onClick={handleScanAgain}
-                className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover"
+                className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
               >
                 <Camera className="h-4 w-4" strokeWidth={2} />
                 Try again
@@ -796,7 +796,7 @@ export default function ScanBottlePage() {
                     setPhase("manual");
                     setError(null);
                   }}
-                  className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
+                  className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                 >
                   <Keyboard className="h-4 w-4" strokeWidth={2} />
                   Enter code manually

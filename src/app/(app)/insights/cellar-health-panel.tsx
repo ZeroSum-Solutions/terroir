@@ -11,6 +11,19 @@ const LABELS: Record<CellarHealthSegment, string> = {
   healthy: "Healthy",
 };
 
+// Background tint per segment carries the same risk/health meaning as the
+// badge system elsewhere (DESIGN.md): window_risk reads as an informational
+// window-closing heads-up, hold as a positive appreciating-asset call,
+// dead_stock as a plain warning, cash_trap as the "sleepy capital" risk
+// case, and healthy stays the quiet neutral default.
+const SEGMENT_BG: Record<CellarHealthSegment, string> = {
+  window_risk: "bg-powder-wash",
+  hold: "bg-sage-wash",
+  dead_stock: "bg-amber-wash",
+  cash_trap: "bg-blush-wash",
+  healthy: "bg-white",
+};
+
 export function CellarHealthPanel({
   summary,
   canRecompute,
@@ -38,7 +51,7 @@ export function CellarHealthPanel({
         {summary.map((item) => {
           const href = `/cellar?health=${item.segment}`;
           return (
-            <div key={item.segment} className="rounded-lg border border-hairline bg-bridge-surface p-sm">
+            <div key={item.segment} className={`rounded-lg border border-hairline p-sm ${SEGMENT_BG[item.segment]}`}>
               <h3 className="text-[12px] font-medium text-ink">{LABELS[item.segment]}</h3>
               <div className="mt-xs grid grid-cols-2 gap-xs">
                 <div data-metric={`cellar-health-${item.segment}-value`}>

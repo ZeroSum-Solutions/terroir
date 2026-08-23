@@ -14,15 +14,20 @@ export default function ListEditorLoading() {
       </div>
       <div className="flex-1">
         <Skeleton className="h-[28px] w-48 mb-md" />
-        <div className="space-y-2xs">
+        <div className="rounded-card border border-hairline bg-white">
           {Array.from({ length: 8 }, (_, i) => (
-            <div key={i} className="flex items-center gap-md rounded-md border border-hairline bg-white px-md py-md">
-              <Skeleton className="h-10 w-10 shrink-0 rounded-sm" />
-              <div className="flex-1 space-y-xs">
-                <Skeleton className="h-[15px] w-48" />
+            <div
+              key={i}
+              className="grid grid-cols-[28px_1fr_80px_80px_36px] items-center gap-md border-b border-hairline px-lg py-sm last:border-b-0"
+            >
+              <div />
+              <div className="space-y-xs">
+                <Skeleton className="h-[17px] w-48" />
                 <Skeleton className="h-[12px] w-32" />
               </div>
-              <Skeleton className="h-[16px] w-12" />
+              <Skeleton className="h-[14px] w-12 justify-self-end" />
+              <Skeleton className="h-[14px] w-12 justify-self-end" />
+              <div />
             </div>
           ))}
         </div>

@@ -79,7 +79,7 @@ export function ExportCsvButton({ rows }: { rows: PriceComparisonCsvRow[] }) {
     <button
       type="button"
       onClick={handleClick}
-      className="flex min-h-11 items-center justify-center gap-sm rounded-pill border border-hairline bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2"
+      className="flex min-h-11 items-center justify-center gap-sm rounded-pill border border-hairline bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
       title="Download price comparison as CSV"
     >
       <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />

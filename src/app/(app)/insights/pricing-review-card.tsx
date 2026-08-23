@@ -181,7 +181,7 @@ function PricingReviewRow({
         </span>
         <Link
           href={metricHref("wine", alert.wine_id)}
-          className="inline-flex h-[30px] items-center gap-2xs rounded-pill border border-ink/25 bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface"
+          className="inline-flex h-[30px] items-center gap-2xs rounded-pill border border-ink/25 bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
         >
           Review
           <ChevronRight className="h-3 w-3" strokeWidth={2} aria-hidden />
@@ -191,7 +191,7 @@ function PricingReviewRow({
           onClick={onSnooze}
           disabled={busy}
           aria-label="Snooze 30 days"
-          className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-pill text-grey hover:bg-bridge-surface disabled:opacity-60"
+          className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:opacity-60"
         >
           <X className="h-3 w-3" strokeWidth={2} aria-hidden />
         </button>

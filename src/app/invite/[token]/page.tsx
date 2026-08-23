@@ -50,12 +50,15 @@ export default function AcceptInvitePage() {
   }, [params.token, router]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-canvas px-md">
-      <div className="w-full max-w-sm rounded-card border border-hairline bg-canvas p-lg text-center">
+    <main className="dawn-gradient flex min-h-screen items-center justify-center px-md py-lg sm:px-lg sm:py-xl">
+      <div className="glass w-full max-w-[420px] rounded-card p-lg text-center sm:p-xl">
+        <div className="mb-lg font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink">
+          TERR<span className="text-primary">OIR</span>
+        </div>
         {status === "loading" && (
           <>
             <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" aria-hidden="true" />
-            <p className="mt-md text-[15px] text-ink">Joining restaurant...</p>
+            <p className="mt-md text-[15px] text-ink">Joining restaurant…</p>
           </>
         )}
         {status === "success" && (
@@ -63,9 +66,9 @@ export default function AcceptInvitePage() {
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-sage-wash">
               <Check className="h-6 w-6 text-sage-ink" strokeWidth={2.5} aria-hidden="true" />
             </div>
-            <p className="mt-md text-[15px] font-medium text-ink">{message}</p>
+            <p className="mt-md font-serif text-[19px] font-medium text-ink">{message}</p>
             <p className="mt-xs text-[13px] text-grey">
-              Redirecting to Terroir...
+              Redirecting to Terroir…
             </p>
           </>
         )}
@@ -78,7 +81,7 @@ export default function AcceptInvitePage() {
             <button
               type="button"
               onClick={() => router.push("/login")}
-              className="mx-auto mt-lg flex h-11 items-center rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
+              className="mx-auto mt-lg flex min-h-11 items-center rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/30 focus-visible:ring-offset-2"
             >
               Go to login
             </button>

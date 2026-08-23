@@ -47,7 +47,7 @@ export function RecomputePricingRecommendationsButton() {
         type="button"
         onClick={recompute}
         disabled={busy}
-        className="inline-flex h-11 items-center rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:cursor-wait disabled:opacity-60"
+        className="inline-flex h-11 items-center rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-wait disabled:opacity-60"
       >
         {busy ? "Recomputing…" : "Recompute"}
       </button>

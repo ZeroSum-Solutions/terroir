@@ -31,7 +31,7 @@ export function TemplatePicker({
           disabled={disabled}
           aria-pressed={current === t}
           className={cn(
-            "flex min-h-11 items-center justify-between rounded-pill px-sm py-xs text-[14px] transition-colors disabled:pointer-events-none",
+            "flex min-h-11 items-center justify-between rounded-pill px-sm py-xs text-[14px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:pointer-events-none",
             current === t
               ? "bg-bridge-surface font-medium text-ink"
               : "text-ink-muted hover:bg-bridge-surface hover:text-ink",

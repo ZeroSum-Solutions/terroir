@@ -110,7 +110,7 @@ function IssueControl({ row, bins, binId, onBinChange }: Pick<Props, "row" | "bi
         aria-label={`Bin for ${row.title}`}
         value={binId ?? ""}
         onChange={(event) => onBinChange(event.target.value)}
-        className="h-11 w-full rounded-pill border border-beige-deep bg-white px-md text-[13px] text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-blush-wash"
+        className="h-11 w-full rounded-pill border border-beige-deep bg-white px-md text-[13px] text-ink focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
       >
         <option value="">Choose bin</option>
         {bins.map((bin) => <option key={bin.id} value={bin.id}>{bin.zone ? `${bin.zone} · ` : ""}{bin.code}</option>)}
@@ -120,5 +120,5 @@ function IssueControl({ row, bins, binId, onBinChange }: Pick<Props, "row" | "bi
 }
 
 function formatRisk(value: number): string {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
+  return new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }

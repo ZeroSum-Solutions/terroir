@@ -11,6 +11,12 @@ export default function ScansLoading() {
           <Skeleton className="h-8 w-40" />
           <Skeleton className="h-6 w-16 rounded-pill" />
         </div>
+        <div className="mt-md flex flex-wrap gap-xs">
+          <Skeleton className="h-9 w-16 rounded-pill" />
+          <Skeleton className="h-9 w-24 rounded-pill" />
+          <Skeleton className="h-9 w-28 rounded-pill" />
+          <Skeleton className="h-9 w-20 rounded-pill" />
+        </div>
       </header>
 
       {/* Desktop skeleton */}

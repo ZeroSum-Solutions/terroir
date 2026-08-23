@@ -467,11 +467,11 @@ export default async function DashboardPage({
   if (allScans.length === 0 && items.length === 0 && yieldGroups.length === 0) {
     return (
       <section>
-        <header className="mb-xl">
+        <header className="mb-lg md:mb-xl">
           <p className="text-caption font-medium uppercase text-grey">
             {restaurantName}
           </p>
-          <h1 className="mt-xs font-serif text-heading-sm font-normal text-ink">
+          <h1 className="mt-xs font-serif text-heading font-normal text-ink">
             Dashboard
           </h1>
         </header>
@@ -489,7 +489,7 @@ export default async function DashboardPage({
           </p>
           <Link
             href="/scan"
-            className="mt-lg flex h-[38px] items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
+            className="mt-lg flex h-[38px] items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
           >
             <ScanLine className="h-4 w-4" strokeWidth={2} />
             Go to scanner
@@ -501,20 +501,26 @@ export default async function DashboardPage({
 
   return (
     <section>
-      <header className="mb-lg md:mb-xl">
-        <div className="flex flex-wrap items-center justify-between gap-md">
+      {/* Dawn Hero — the one atmospheric moment on this page, per DESIGN.md's
+          canonical anatomy (gradient hero with glass stat tiles, resolving
+          into a beige bridge band, then the white workspace). Contained
+          within the padded app shell rather than edge-to-edge. Copy is
+          unchanged from the prior "Dashboard" heading — no new marketing
+          copy is introduced here, only the atmospheric surface. */}
+      <div className="dawn-gradient relative mb-lg overflow-hidden rounded-card px-lg py-xl md:mb-xl md:px-2xl md:py-2xl">
+        <div className="flex flex-wrap items-start justify-between gap-md">
           <div>
             <p className="text-caption font-medium uppercase text-grey">
               {restaurantName}
             </p>
-            <h1 className="mt-xs font-serif text-heading-sm font-normal text-ink">
+            <h1 className="mt-xs font-serif text-heading font-normal text-ink">
               Dashboard
             </h1>
           </div>
           <a
             href="/api/insights/csv"
             download="insights-export.csv"
-            className="flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+            className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
           >
             <svg
               width="16"
@@ -536,14 +542,31 @@ export default async function DashboardPage({
           </a>
         </div>
 
-        {/* Date range selector */}
-        <div className="mt-md">
-          <DateRangeSelector />
+        {/* Glass stat tiles — the correct DESIGN.md treatment for stat
+            tiles sitting ON the dawn gradient (solid ivory + hairline is
+            reserved for the same tiles on white surfaces). */}
+        <div className="relative mt-xl">
+          <div className="mb-sm">
+            <InsightScope metric="inventory" kind="snapshot" />
+          </div>
+          <OwnerMetricGrid
+            metrics={{
+              inventoryValue,
+              totalBottles,
+              eightysixedCount,
+              drinkNowCount,
+            }}
+          />
         </div>
-        <p className="mt-sm text-[12px] text-ink-muted">
+      </div>
+
+      {/* Bridge band — the one beige toolbar strip on this page, per DESIGN.md */}
+      <div className="mb-lg rounded-card bg-beige px-md py-sm md:mb-xl md:px-lg md:py-md">
+        <DateRangeSelector />
+        <p className="mt-xs text-[12px] text-ink-soft">
           Selected range applies to invoice scans, distributor metrics, and partial-bottle yield. Inventory value, bottle counts, availability, and varietal spend are current.
         </p>
-      </header>
+      </div>
 
       <TodayStrip exceptions={todayExceptions} />
       <ReconcileQueueMetric />
@@ -590,7 +613,7 @@ export default async function DashboardPage({
               {drinkWindowAlerts.length > visibleDrinkWindowAlerts.length && (
                 <Link
                   href={metricHref("drink-now-count")}
-                  className="inline-flex min-h-11 items-center justify-center self-start rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                  className="inline-flex min-h-11 items-center justify-center self-start rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                 >
                   View all {drinkWindowAlerts.length} in Cellar
                 </Link>
@@ -671,7 +694,7 @@ export default async function DashboardPage({
               visiblePastDrinkWindowWines.length && (
               <Link
                 href={metricHref("drink-now-count")}
-                className="mt-md inline-flex min-h-11 items-center justify-center rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                className="mt-md inline-flex min-h-11 items-center justify-center rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
               >
                 View all {pastDrinkWindowWines.length} past-window wines in Cellar
               </Link>
@@ -713,50 +736,36 @@ export default async function DashboardPage({
         <PourAnalyticsSection />
       </div>
 
+      <h2 className="mb-md text-caption font-medium uppercase text-grey">
+        Scan &amp; spend
+      </h2>
       <div className="grid gap-md md:grid-cols-2">
-        {/* Hero metric */}
-        <div className="rounded-lg border border-hairline bg-bridge-surface p-lg md:col-span-2 md:grid md:grid-cols-2 md:gap-lg md:p-xl">
-          <div>
-            <div className="mb-sm">
-              <InsightScope metric="inventory" kind="snapshot" />
-            </div>
-            <OwnerMetricGrid
-              metrics={{
-                inventoryValue,
-                totalBottles,
-                eightysixedCount,
-                drinkNowCount,
-              }}
+        {/* Scan activity sparkline */}
+        <div className="rounded-card border border-hairline bg-white p-lg md:col-span-2">
+          <div className="mb-sm flex items-center justify-between text-caption font-medium uppercase text-grey">
+            <span>Scan activity</span>
+            <InsightScope
+              metric="scan-activity"
+              kind="range"
+              label={selectedRangeLabel}
             />
           </div>
-
-          {/* Sparkline — items per scan */}
-          <div className="mt-lg md:mt-0">
-            <div className="mb-sm flex items-center justify-between text-caption font-medium uppercase text-grey">
-              <span>Scan activity</span>
-              <InsightScope
-                metric="scan-activity"
-                kind="range"
-                label={selectedRangeLabel}
-              />
+          {allScans.length >= 2 ? (
+            <Sparkline
+              data={allScans
+                .slice(0, 12)
+                .reverse()
+                .map(function (s) { return { value: s.item_count, date: s.created_at }; })}
+            />
+          ) : (
+            <div className="flex h-[100px] items-center justify-center text-[13px] text-grey">
+              More data needed for trend
             </div>
-            {allScans.length >= 2 ? (
-              <Sparkline
-                data={allScans
-                  .slice(0, 12)
-                  .reverse()
-                  .map(function (s) { return { value: s.item_count, date: s.created_at }; })}
-              />
-            ) : (
-              <div className="flex h-[100px] items-center justify-center text-[13px] text-grey">
-                More data needed for trend
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
         {/* BND-149 — Extraction accuracy KPI */}
-        <div className="rounded-lg border border-hairline bg-bridge-surface p-lg">
+        <div className="rounded-card border border-hairline bg-white p-lg">
           <div className="mb-md flex items-center justify-between">
             <div>
               <h3 className="text-[15px] font-medium text-ink">
@@ -779,7 +788,7 @@ export default async function DashboardPage({
             <div>
               <div className="flex items-baseline gap-xs">
                 <span
-                  className={`font-serif text-[30px] font-normal leading-none ${accuracyColor(extractionAccuracyPct)}`}
+                  className={`font-serif text-[30px] font-normal leading-none tabular ${accuracyColor(extractionAccuracyPct)}`}
                 >
                   {extractionAccuracyPct}%
                 </span>
@@ -792,7 +801,7 @@ export default async function DashboardPage({
                 {Math.round(totalAutoAcceptedFields)} auto-accepted
               </p>
               {latestScanAccuracy !== null && (
-                <div className="mt-md flex items-center gap-sm rounded-md bg-white px-sm py-sm">
+                <div className="mt-md flex items-center gap-sm rounded-md bg-bridge-surface px-sm py-sm">
                   <Activity className="h-4 w-4 shrink-0 text-grey" strokeWidth={1.5} />
                   <span className="text-[12px] text-grey">
                     Latest scan:{" "}
@@ -808,7 +817,7 @@ export default async function DashboardPage({
         </div>
 
         {/* BND-148 — Scan throughput */}
-        <div className="rounded-lg border border-hairline bg-bridge-surface p-lg">
+        <div className="rounded-card border border-hairline bg-white p-lg">
           <div className="mb-md flex items-center justify-between">
             <div>
               <h3 className="text-[15px] font-medium text-ink">
@@ -827,7 +836,7 @@ export default async function DashboardPage({
           ) : (
             <div>
               <div className="flex items-baseline gap-xs">
-                <span className="font-serif text-[30px] font-normal leading-none text-ink">
+                <span className="font-serif text-[30px] font-normal leading-none tabular text-ink">
                   {avgScansPerWeek}
                 </span>
                 <span className="text-[12px] text-grey">
@@ -994,7 +1003,7 @@ export default async function DashboardPage({
               </p>
               <Link
                 href="/scan"
-                className="mt-md inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                className="mt-md inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
               >
                 <ScanLine className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                 Scan an invoice
@@ -1017,7 +1026,7 @@ export default async function DashboardPage({
                     key={scan.id}
                     href={`/scan/${scan.id}`}
                     aria-label={`View scan from ${scan.distributor_name}, ${scan.item_count} wines, ${formatMoney(scanTotal)}, ${relative}`}
-                    className={`flex items-center gap-md rounded-sm py-sm transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft ${i > 0 ? "border-t border-hairline" : ""}`}
+                    className={`flex items-center gap-md rounded-sm py-sm transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${i > 0 ? "border-t border-hairline" : ""}`}
                   >
                     <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-bridge-surface text-grey">
                       <ScanLine className="h-4 w-4" strokeWidth={1.75} />

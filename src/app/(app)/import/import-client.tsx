@@ -192,25 +192,27 @@ function UploadStep({
   error: string | null;
 }) {
   return (
-    <div className="rounded-card border border-hairline bg-canvas p-lg">
+    <div className="rounded-card border border-hairline bg-white p-lg">
       <label
         htmlFor="import-file"
-        className="flex min-h-11 cursor-pointer flex-col items-center justify-center gap-sm rounded-card border border-dashed border-beige-deep bg-bridge-surface px-lg py-xl text-center"
+        className="flex min-h-11 cursor-pointer flex-col items-center justify-center gap-sm rounded-card border-2 border-dashed border-beige-deep bg-bridge-surface px-lg py-xl text-center transition-colors hover:border-primary hover:bg-blush-wash/40 focus-within:outline-none focus-within:ring-2 focus-within:ring-primary/25"
       >
-        <Upload className="h-6 w-6 text-grey" aria-hidden="true" />
+        <input
+          ref={fileInputRef}
+          id="import-file"
+          type="file"
+          accept=".csv,text/csv"
+          className="sr-only"
+          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+        />
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white">
+          <Upload className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
+        </span>
         <span className="text-[14px] font-medium text-ink">
           {file ? file.name : "Choose a CSV file"}
         </span>
         <span className="text-caption text-grey">.csv up to 5 MB</span>
       </label>
-      <input
-        ref={fileInputRef}
-        id="import-file"
-        type="file"
-        accept=".csv,text/csv"
-        className="sr-only"
-        onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-      />
 
       {error && (
         <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-primary">
@@ -223,7 +225,7 @@ function UploadStep({
         type="button"
         disabled={!file || previewing}
         onClick={onPreview}
-        className="mt-lg flex min-h-11 w-full items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-lg flex min-h-11 w-full items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {previewing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
         {previewing ? "Reading file…" : "Preview import"}
@@ -232,7 +234,7 @@ function UploadStep({
       <a
         href={`data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE_CSV)}`}
         download="cellar-import-template.csv"
-        className="mt-md flex min-h-11 items-center justify-center text-[13px] font-medium text-ink-muted underline underline-offset-4"
+        className="mt-md flex min-h-11 items-center justify-center text-[13px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
       >
         Download CSV template
       </a>
@@ -260,7 +262,7 @@ function PreviewStep({
   const canConfirm = summary.validRows > 0;
 
   return (
-    <div className="rounded-card border border-hairline bg-canvas p-lg">
+    <div className="rounded-card border border-hairline bg-white p-lg">
       <h2 className="font-serif text-[20px] text-ink">Preview: {filename}</h2>
       <dl className="mt-md grid grid-cols-2 gap-sm text-[13px]">
         <SummaryStat label="Total rows" value={summary.totalRows} />
@@ -278,7 +280,7 @@ function PreviewStep({
           </h3>
           <ul className="mt-xs space-y-2xs">
             {errorRows.map((row) => (
-              <li key={row.rowNumber} className="rounded-card bg-bridge-surface px-sm py-xs text-[13px] text-ink">
+              <li key={row.rowNumber} className="rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink">
                 Row {row.rowNumber}: {row.errors.map((e) => e.message).join(" ")}
               </li>
             ))}
@@ -302,7 +304,7 @@ function PreviewStep({
         <button
           type="button"
           onClick={onBack}
-          className="min-h-11 flex-1 rounded-pill border border-hairline bg-white px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface"
+          className="min-h-11 flex-1 rounded-pill border border-ink/25 bg-white px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
         >
           Choose a different file
         </button>
@@ -310,7 +312,7 @@ function PreviewStep({
           type="button"
           disabled={!canConfirm || confirming}
           onClick={onConfirm}
-          className="flex min-h-11 flex-1 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex min-h-11 flex-1 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {confirming ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
           {confirming ? "Creating import…" : "Confirm import"}
@@ -327,7 +329,7 @@ function SummaryStat({ label, value }: { label: string; value: number }) {
   return (
     <div>
       <dt className="text-caption text-grey">{label}</dt>
-      <dd className="font-serif text-[20px] text-ink">{value}</dd>
+      <dd className="tabular text-[20px] font-medium text-ink">{value}</dd>
     </div>
   );
 }
@@ -423,7 +425,7 @@ function BatchStep({
   }, [batch.batch.id, onDone]);
 
   return (
-    <div className="rounded-card border border-hairline bg-canvas p-lg">
+    <div className="rounded-card border border-hairline bg-white p-lg">
       <div className="flex items-center justify-between">
         <h2 className="font-serif text-[20px] text-ink">{batch.batch.filename}</h2>
         <StatusBadge status={batch.batch.status} />
@@ -450,7 +452,7 @@ function BatchStep({
           </h3>
           <ul className="mt-xs space-y-sm">
             {pending.map((row) => (
-              <li key={row.id} className="rounded-card border border-hairline p-sm">
+              <li key={row.id} className="rounded-lg border border-hairline bg-white p-sm">
                 <p className="text-[14px] text-ink">
                   Row {row.row_number}: {row.raw.producer} — {row.raw.name}
                 </p>
@@ -467,7 +469,7 @@ function BatchStep({
                       placeholder="Unit cost"
                       value={manualCostDrafts[row.id] ?? ""}
                       onChange={(e) => setManualCostDrafts((prev) => ({ ...prev, [row.id]: e.target.value }))}
-                      className="min-h-11 w-28 rounded-card border border-hairline px-sm text-[14px]"
+                      className="min-h-11 w-28 rounded-pill border border-hairline bg-white px-sm text-[14px] focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
                     />
                   )}
                   <button
@@ -478,14 +480,14 @@ function BatchStep({
                       void resolveRow(row.id, "include", manualUnitCost);
                     }}
                     disabled={row.cost_status === "missing" && !manualCostDrafts[row.id]}
-                    className="min-h-11 rounded-pill bg-ink px-md text-[13px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Include anyway
                   </button>
                   <button
                     type="button"
                     onClick={() => void resolveRow(row.id, "exclude")}
-                    className="min-h-11 rounded-pill border border-hairline px-md text-[13px] font-medium text-ink"
+                    className="min-h-11 rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                   >
                     Exclude
                   </button>
@@ -502,7 +504,7 @@ function BatchStep({
             type="button"
             disabled={applying}
             onClick={applyAll}
-            className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {applying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {applying ? `Applying… (${appliedCount} of ${batch.batch.total_rows})` : `Apply ${eligibleNotApplied.length} row(s)`}
@@ -513,7 +515,7 @@ function BatchStep({
           <button
             type="button"
             onClick={() => setRevertDialogOpen(true)}
-            className="flex min-h-11 items-center justify-center gap-xs rounded-pill border border-hairline px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface"
+            className="flex min-h-11 items-center justify-center gap-xs rounded-pill border border-ink/25 bg-white px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
             Revert this import
@@ -523,7 +525,7 @@ function BatchStep({
         <button
           type="button"
           onClick={onDone}
-          className="min-h-11 rounded-pill px-lg text-[14px] font-medium text-ink-muted underline underline-offset-4"
+          className="min-h-11 rounded-pill px-lg text-[14px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
         >
           Start a new import
         </button>
@@ -575,7 +577,7 @@ function RecentImports({
               type="button"
               onClick={() => onOpen(b.id)}
               className={cn(
-                "flex min-h-11 w-full items-center justify-between rounded-card border border-hairline bg-canvas px-sm text-left text-[13px] text-ink transition-colors hover:bg-bridge-surface",
+                "flex min-h-11 w-full items-center justify-between rounded-lg border border-hairline bg-white px-sm text-left text-[13px] text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
               )}
             >
               <span className="truncate">{b.filename}</span>

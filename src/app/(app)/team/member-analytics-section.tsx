@@ -31,8 +31,14 @@ export function MemberAnalyticsSection({
     return () => controller.abort();
   }, []);
 
-  if (error) return <p role="alert" className="mt-lg text-[13px] text-primary">{error}</p>;
-  if (!data) return <div className="mt-lg h-32 animate-pulse rounded-md bg-bridge-surface" />;
+  if (error) {
+    return (
+      <p role="alert" className="mt-lg rounded-md border border-primary/30 bg-blush-wash px-md py-sm text-[13px] text-primary">
+        {error}
+      </p>
+    );
+  }
+  if (!data) return <div className="mt-lg h-32 animate-pulse rounded-card bg-bridge-surface" />;
   return <MemberAnalyticsTable data={data} identities={identities} />;
 }
 
@@ -85,7 +91,7 @@ export function MemberAnalyticsTable({
 }
 
 function Metric({ href, name, children }: { href: string; name: string; children: React.ReactNode }) {
-  return <td data-metric={name} className="py-sm pr-md"><Link href={href} className="inline-flex min-h-11 min-w-11 items-center text-ink underline decoration-beige-deep underline-offset-2">{children}</Link></td>;
+  return <td data-metric={name} className="py-sm pr-md"><Link href={href} className="tabular inline-flex min-h-11 min-w-11 items-center rounded-sm text-ink underline decoration-beige-deep underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25">{children}</Link></td>;
 }
 
 function formatRate(rate: number) {

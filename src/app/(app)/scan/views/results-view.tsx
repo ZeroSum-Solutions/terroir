@@ -41,14 +41,14 @@ function SummaryRow({ items, bottles, total, lowCount }: SummaryRowProps) {
     value: React.ReactNode;
     tone?: "warning" | "success";
   }> = [
-    { label: "Line items", value: items },
-    { label: "Bottles", value: bottles },
+    { label: "Line items", value: <span className="tabular">{items}</span> },
+    { label: "Bottles", value: <span className="tabular">{bottles}</span> },
     { label: "Invoice total", value: <span className="tabular">${formatMoney(total)}</span> },
     {
       label: "Need review",
       value: (
         <>
-          {lowCount}
+          <span className="tabular">{lowCount}</span>
           <span className="ml-xs text-[12px] font-normal text-grey">fields</span>
         </>
       ),
@@ -153,7 +153,7 @@ export function ResultsView({
           <button
             type="button"
             onClick={() => setRawTextOpen(!rawTextOpen)}
-            className="flex w-full items-center justify-between rounded-lg border border-hairline bg-white p-md text-[13px] font-medium text-ink focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
+            className="flex w-full items-center justify-between rounded-lg border border-hairline bg-white p-md text-[13px] font-medium text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             <span className="flex items-center gap-sm">
               <FileText className="h-4 w-4 text-grey" strokeWidth={1.75} />
@@ -193,7 +193,7 @@ export function ResultsView({
           <button
             type="button"
             onClick={() => setDiscardOpen(true)}
-            className="flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface hover:text-primary focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
+            className="flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
             Clear
@@ -205,7 +205,7 @@ export function ResultsView({
         <div className="flex flex-col gap-sm">
           <Field id="scan-supplier" label="Supplier">
             {(a11y) => (
-              <div className="relative mt-xs flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--color-blush-wash)]">
+              <div className="relative mt-xs flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25">
                 <input
                   {...a11y}
                   value={source.distributor}
@@ -218,7 +218,7 @@ export function ResultsView({
           <div className="flex items-center gap-sm">
             <Field id="scan-invoice-number" label="Invoice number" className="flex-1">
               {(a11y) => (
-                <div className="relative mt-xs flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--color-blush-wash)]">
+                <div className="relative mt-xs flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25">
                   <input
                     {...a11y}
                     value={source.invoiceNo}
@@ -230,7 +230,7 @@ export function ResultsView({
             </Field>
             <Field id="scan-delivery-date" label="Delivery date" className="flex-1">
               {(a11y) => (
-                <div className="relative mt-xs flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--color-blush-wash)]">
+                <div className="relative mt-xs flex w-full items-center rounded-pill border border-hairline bg-white px-md py-xs transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25">
                   <input
                     {...a11y}
                     type="date"
@@ -357,7 +357,7 @@ export function ResultsView({
                   <IconButton
                     label={`Remove ${it.name}`}
                     onClick={() => onRemove(it.id)}
-                    className="rounded-pill text-grey hover:bg-bridge-surface hover:text-primary"
+                    className="rounded-pill text-grey hover:bg-bridge-surface hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                   >
                     <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                   </IconButton>
@@ -396,7 +396,7 @@ export function ResultsView({
           <button
             type="button"
             onClick={() => setDiscardOpen(true)}
-            className="flex min-h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:px-md"
+            className="flex min-h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 md:px-md"
           >
             <ScanLine className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
             <span className="hidden sm:inline">Scan another</span>
@@ -406,7 +406,7 @@ export function ResultsView({
             <button
               type="button"
               onClick={onExportCsv}
-              className="flex min-h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:flex-none md:px-md"
+              className="flex min-h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 md:flex-none md:px-md"
               title="Export as CSV"
             >
               <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -415,7 +415,7 @@ export function ResultsView({
             <button
               type="button"
               onClick={onExportAccuracy}
-              className="flex min-h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 md:flex-none md:px-md"
+              className="flex min-h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 md:flex-none md:px-md"
               title="Export accuracy JSON (source + items + per-field edits)"
             >
               <FileJson className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -426,7 +426,7 @@ export function ResultsView({
             type="button"
             onClick={onSaveToInventory}
             disabled={isSaving}
-            className="col-span-2 flex min-h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 disabled:opacity-60 md:px-md"
+            className="col-span-2 flex min-h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:opacity-60 md:px-md"
           >
             {isSaving ? (
               <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" />

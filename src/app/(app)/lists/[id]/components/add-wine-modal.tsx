@@ -332,7 +332,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                   }}
                   placeholder="Search by producer or wine name…"
                   aria-label="Search wines"
-                  className="h-11 w-full rounded-pill border border-hairline bg-white pl-xl pr-sm text-[16px] text-ink placeholder:text-ink-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft md:text-[14px]"
+                  className="h-11 w-full rounded-pill border border-hairline bg-white pl-xl pr-sm text-[16px] text-ink placeholder:text-ink-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 md:text-[14px]"
                 />
               </div>
             </div>
@@ -566,7 +566,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     value={glassPrice}
                     onChange={(e) => setGlassPrice(e.target.value)}
                     placeholder="—"
-                    className="h-11 w-full rounded-pill border border-hairline bg-white pl-md pr-sm text-right font-mono text-[16px] text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-accent-soft md:text-[14px]"
+                    className="h-11 w-full rounded-pill border border-hairline bg-white pl-md pr-sm text-right font-mono text-[16px] text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25 md:text-[14px]"
                   />
                 </div>
               </div>
@@ -585,7 +585,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     value={bottlePrice}
                     onChange={(e) => setBottlePrice(e.target.value)}
                     placeholder="—"
-                    className="h-11 w-full rounded-pill border border-hairline bg-white pl-md pr-sm text-right font-mono text-[16px] text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-accent-soft md:text-[14px]"
+                    className="h-11 w-full rounded-pill border border-hairline bg-white pl-md pr-sm text-right font-mono text-[16px] text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25 md:text-[14px]"
                   />
                 </div>
               </div>
@@ -602,7 +602,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
               <button
                 type="button"
                 onClick={clearSelection}
-                className="min-h-11 rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
+                className="min-h-11 rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
               >
                 Back
               </button>
@@ -610,7 +610,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
             <button
               type="button"
               onClick={onClose}
-              className="min-h-11 rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
+              className="min-h-11 rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
             >
               Cancel
             </button>
@@ -619,7 +619,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                 type="button"
                 onClick={handleAdd}
                 disabled={adding || selectedSectionIds.size === 0}
-                className="min-h-11 rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+                className="min-h-11 rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:opacity-60"
               >
                 {adding ? "Adding..." : `Add to ${selectedCount > 1 ? `${selectedCount} sections` : "list"}`}
               </button>
