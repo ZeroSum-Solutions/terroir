@@ -1,0 +1,874 @@
+{
+  "generator_seed": 20260823,
+  "generator_version": "1.0.0",
+  "flags": {
+    "extras": false,
+    "dirty": false
+  },
+  "total_rows": 500,
+  "clean_row_count": 500,
+  "dirty_row_count": 0,
+  "csv_sha256": "f20be5fe53e35a68b9dabd34cdccd8b7fc6d5fa146347aa869b88284d7136c0e",
+  "columns": [
+    "producer",
+    "name",
+    "vintage",
+    "varietal",
+    "region",
+    "country",
+    "size_ml",
+    "format",
+    "currency",
+    "quantity",
+    "unit_cost",
+    "bin",
+    "section"
+  ],
+  "expected_unique_variant_count": 461,
+  "full_universe_variant_count": 4200,
+  "category_summary": {
+    "famous": 10,
+    "nv": 28,
+    "long_tail": 63,
+    "adjacent_vintage_variants": 7,
+    "format_sibling_variants": 13,
+    "spelling_noise_variants": 3
+  },
+  "duplicate_spelling_groups": [
+    {
+      "id": "sg-039",
+      "type": "producer_reorder",
+      "canonical_form": {
+        "producer": "Domaine Michel Gros",
+        "name": "Vosne-Romanee Clos"
+      },
+      "alt_form": {
+        "producer": "Michel Gros Domaine",
+        "name": "Vosne-Romanee Clos"
+      },
+      "vintage": 2012,
+      "size_ml": 750,
+      "canonical_row_indexes": [
+        148
+      ],
+      "alt_row_indexes": []
+    },
+    {
+      "id": "sg-008",
+      "type": "accent_stripped",
+      "canonical_form": {
+        "producer": "Señorío de Valdemoro",
+        "name": "Crianza"
+      },
+      "alt_form": {
+        "producer": "Senorio de Valdemoro",
+        "name": "Crianza"
+      },
+      "vintage": 2017,
+      "size_ml": 750,
+      "canonical_row_indexes": [
+        238
+      ],
+      "alt_row_indexes": []
+    },
+    {
+      "id": "sg-030",
+      "type": "punctuation_spacing",
+      "canonical_form": {
+        "producer": "Maison Bonnet",
+        "name": "Meursault-Perrieres"
+      },
+      "alt_form": {
+        "producer": "Maison Bonnet",
+        "name": "Meursault Perrieres"
+      },
+      "vintage": 2017,
+      "size_ml": 750,
+      "canonical_row_indexes": [
+        456
+      ],
+      "alt_row_indexes": []
+    }
+  ],
+  "adjacent_vintage_groups": [
+    {
+      "id": "av-001",
+      "producer": "Maison Aubert",
+      "name": "Sonnenlage Riesling",
+      "size_ml": 750,
+      "vintages": [
+        {
+          "vintage": 2014,
+          "variant_key": "Maison Aubert␟Sonnenlage Riesling␟2014␟750",
+          "row_indexes": [
+            92
+          ]
+        }
+      ]
+    },
+    {
+      "id": "av-027",
+      "producer": "Sinclair Wines",
+      "name": "Sauvignon Blanc Reserve",
+      "size_ml": 750,
+      "vintages": [
+        {
+          "vintage": 2014,
+          "variant_key": "Sinclair Wines␟Sauvignon Blanc Reserve␟2014␟750",
+          "row_indexes": [
+            107,
+            384
+          ]
+        }
+      ]
+    },
+    {
+      "id": "av-017",
+      "producer": "Bodega Ruiz",
+      "name": "Clos de la Chapelle Tempranillo",
+      "size_ml": 750,
+      "vintages": [
+        {
+          "vintage": 2015,
+          "variant_key": "Bodega Ruiz␟Clos de la Chapelle Tempranillo␟2015␟750",
+          "row_indexes": [
+            113
+          ]
+        }
+      ]
+    },
+    {
+      "id": "av-018",
+      "producer": "Windward Pass Winery",
+      "name": "Cabernet Sauvignon",
+      "size_ml": 750,
+      "vintages": [
+        {
+          "vintage": 2015,
+          "variant_key": "Windward Pass Winery␟Cabernet Sauvignon␟2015␟750",
+          "row_indexes": [
+            144
+          ]
+        }
+      ]
+    },
+    {
+      "id": "av-024",
+      "producer": "Tenuta Romano",
+      "name": "Les Chaumes",
+      "size_ml": 750,
+      "vintages": [
+        {
+          "vintage": 2016,
+          "variant_key": "Tenuta Romano␟Les Chaumes␟2016␟750",
+          "row_indexes": [
+            154
+          ]
+        }
+      ]
+    },
+    {
+      "id": "av-009",
+      "producer": "Ashworth Estate",
+      "name": "Estate Sauvignon Blanc",
+      "size_ml": 750,
+      "vintages": [
+        {
+          "vintage": 2016,
+          "variant_key": "Ashworth Estate␟Estate Sauvignon Blanc␟2016␟750",
+          "row_indexes": [
+            164
+          ]
+        }
+      ]
+    },
+    {
+      "id": "av-010",
+      "producer": "Fairweather Winery",
+      "name": "Grenache Reserve",
+      "size_ml": 750,
+      "vintages": [
+        {
+          "vintage": 2016,
+          "variant_key": "Fairweather Winery␟Grenache Reserve␟2016␟750",
+          "row_indexes": [
+            187
+          ]
+        }
+      ]
+    }
+  ],
+  "format_sibling_groups": [
+    {
+      "id": "fs-005",
+      "producer": "Weingut Brandt",
+      "name": "Le Clos Perdu",
+      "vintage": 2007,
+      "sizes": [
+        {
+          "size_ml": 375,
+          "format": "Half Bottle",
+          "variant_key": "Weingut Brandt␟Le Clos Perdu␟2007␟375",
+          "row_indexes": [
+            7
+          ]
+        },
+        {
+          "size_ml": 3000,
+          "format": "Double Magnum",
+          "variant_key": "Weingut Brandt␟Le Clos Perdu␟2007␟3000",
+          "row_indexes": [
+            398
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fs-016",
+      "producer": "Hartley Estate",
+      "name": "Estate Cabernet Sauvignon",
+      "vintage": 1984,
+      "sizes": [
+        {
+          "size_ml": 750,
+          "format": "Bottle",
+          "variant_key": "Hartley Estate␟Estate Cabernet Sauvignon␟1984␟750",
+          "row_indexes": [
+            19
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fs-020",
+      "producer": "Bodega Contreras",
+      "name": "Malbec Reserve",
+      "vintage": 1985,
+      "sizes": [
+        {
+          "size_ml": 3000,
+          "format": "Double Magnum",
+          "variant_key": "Bodega Contreras␟Malbec Reserve␟1985␟3000",
+          "row_indexes": [
+            47
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fs-018",
+      "producer": "Caldwell Vineyards",
+      "name": "Estate Sauvignon Blanc",
+      "vintage": 1984,
+      "sizes": [
+        {
+          "size_ml": 375,
+          "format": "Half Bottle",
+          "variant_key": "Caldwell Vineyards␟Estate Sauvignon Blanc␟1984␟375",
+          "row_indexes": [
+            91
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fs-015",
+      "producer": "Maison Chapelle",
+      "name": "Sonnenlage",
+      "vintage": 2000,
+      "sizes": [
+        {
+          "size_ml": 1500,
+          "format": "Magnum",
+          "variant_key": "Maison Chapelle␟Sonnenlage␟2000␟1500",
+          "row_indexes": [
+            115
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fs-019",
+      "producer": "Holloway Estate",
+      "name": "Sauvignon Blanc",
+      "vintage": 2017,
+      "sizes": [
+        {
+          "size_ml": 375,
+          "format": "Half Bottle",
+          "variant_key": "Holloway Estate␟Sauvignon Blanc␟2017␟375",
+          "row_indexes": [
+            160,
+            294
+          ]
+        },
+        {
+          "size_ml": 750,
+          "format": "Bottle",
+          "variant_key": "Holloway Estate␟Sauvignon Blanc␟2017␟750",
+          "row_indexes": [
+            439
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fs-009",
+      "producer": "Hollow Farms Cellars",
+      "name": "Clos du Moulin Nero d'Avola",
+      "vintage": 2007,
+      "sizes": [
+        {
+          "size_ml": 1500,
+          "format": "Magnum",
+          "variant_key": "Hollow Farms Cellars␟Clos du Moulin Nero d'Avola␟2007␟1500",
+          "row_indexes": [
+            162
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fs-001",
+      "producer": "Hollow Bluff Wine Co.",
+      "name": "Quinta da Serra Tempranillo",
+      "vintage": 2020,
+      "sizes": [
+        {
+          "size_ml": 750,
+          "format": "Bottle",
+          "variant_key": "Hollow Bluff Wine Co.␟Quinta da Serra Tempranillo␟2020␟750",
+          "row_indexes": [
+            194
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fs-010",
+      "producer": "Marais Vineyards",
+      "name": "Chenin Blanc",
+      "vintage": 2000,
+      "sizes": [
+        {
+          "size_ml": 3000,
+          "format": "Double Magnum",
+          "variant_key": "Marais Vineyards␟Chenin Blanc␟2000␟3000",
+          "row_indexes": [
+            233
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fs-024",
+      "producer": "Cantina Colombo",
+      "name": "Clos du Moulin Barbera",
+      "vintage": 2012,
+      "sizes": [
+        {
+          "size_ml": 1500,
+          "format": "Magnum",
+          "variant_key": "Cantina Colombo␟Clos du Moulin Barbera␟2012␟1500",
+          "row_indexes": [
+            303
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fs-008",
+      "producer": "Podere Barbieri",
+      "name": "Les Chaumes Cabernet Sauvignon",
+      "vintage": 2008,
+      "sizes": [
+        {
+          "size_ml": 750,
+          "format": "Bottle",
+          "variant_key": "Podere Barbieri␟Les Chaumes Cabernet Sauvignon␟2008␟750",
+          "row_indexes": [
+            359
+          ]
+        }
+      ]
+    }
+  ],
+  "nv_variants": [
+    {
+      "producer": "Quinta do Ferreira",
+      "name": "20 Year Tawny",
+      "varietal": "Port Blend",
+      "region": "Douro",
+      "country": "Portugal",
+      "famous": false,
+      "row_indexes": [
+        2
+      ]
+    },
+    {
+      "producer": "Domaine Lefevre",
+      "name": "Brut Tradition",
+      "varietal": "Champagne Blend",
+      "region": "Champagne",
+      "country": "France",
+      "famous": false,
+      "row_indexes": [
+        14,
+        45
+      ]
+    },
+    {
+      "producer": "Quinta da Rocha",
+      "name": "20 Year Tawny",
+      "varietal": "Port Blend",
+      "region": "Douro",
+      "country": "Portugal",
+      "famous": false,
+      "row_indexes": [
+        21,
+        228
+      ]
+    },
+    {
+      "producer": "Domaine Bertrand",
+      "name": "Brut Rose NV",
+      "varietal": "Champagne Blend",
+      "region": "Champagne",
+      "country": "France",
+      "famous": false,
+      "row_indexes": [
+        23
+      ]
+    },
+    {
+      "producer": "Quinta da Silva",
+      "name": "20 Year Tawny",
+      "varietal": "Port Blend",
+      "region": "Douro",
+      "country": "Portugal",
+      "famous": false,
+      "row_indexes": [
+        26
+      ]
+    },
+    {
+      "producer": "Maison Moreau",
+      "name": "Brut Rose NV",
+      "varietal": "Champagne Blend",
+      "region": "Champagne",
+      "country": "France",
+      "famous": false,
+      "row_indexes": [
+        43
+      ]
+    },
+    {
+      "producer": "Quinta da Costa",
+      "name": "White Port",
+      "varietal": "Port Blend",
+      "region": "Douro",
+      "country": "Portugal",
+      "famous": false,
+      "row_indexes": [
+        51
+      ]
+    },
+    {
+      "producer": "Caves Riviere",
+      "name": "Blanc de Blancs NV",
+      "varietal": "Champagne Blend",
+      "region": "Champagne",
+      "country": "France",
+      "famous": false,
+      "row_indexes": [
+        53
+      ]
+    },
+    {
+      "producer": "Maison Fontaine",
+      "name": "Brut Rose NV",
+      "varietal": "Champagne Blend",
+      "region": "Champagne",
+      "country": "France",
+      "famous": false,
+      "row_indexes": [
+        62
+      ]
+    },
+    {
+      "producer": "Caves Delacroix",
+      "name": "Brut Tradition",
+      "varietal": "Champagne Blend",
+      "region": "Champagne",
+      "country": "France",
+      "famous": false,
+      "row_indexes": [
+        114
+      ]
+    },
+    {
+      "producer": "Quinta da Rocha",
+      "name": "White Port",
+      "varietal": "Port Blend",
+      "region": "Douro",
+      "country": "Portugal",
+      "famous": false,
+      "row_indexes": [
+        166
+      ]
+    },
+    {
+      "producer": "Caves Chapelle",
+      "name": "Brut Tradition",
+      "varietal": "Champagne Blend",
+      "region": "Champagne",
+      "country": "France",
+      "famous": false,
+      "row_indexes": [
+        191
+      ]
+    },
+    {
+      "producer": "Quinta da Silva",
+      "name": "Tawny Port",
+      "varietal": "Port Blend",
+      "region": "Douro",
+      "country": "Portugal",
+      "famous": false,
+      "row_indexes": [
+        200
+      ]
+    },
+    {
+      "producer": "Bodegas Navarro",
+      "name": "Oloroso",
+      "varietal": "Palomino",
+      "region": "Jerez",
+      "country": "Spain",
+      "famous": false,
+      "row_indexes": [
+        219
+      ]
+    },
+    {
+      "producer": "Bodegas Herrera",
+      "name": "Palo Cortado",
+      "varietal": "Palomino",
+      "region": "Jerez",
+      "country": "Spain",
+      "famous": false,
+      "row_indexes": [
+        235
+      ]
+    },
+    {
+      "producer": "Casa Rocha",
+      "name": "Fine Ruby Reserve",
+      "varietal": "Port Blend",
+      "region": "Douro",
+      "country": "Portugal",
+      "famous": false,
+      "row_indexes": [
+        247
+      ]
+    },
+    {
+      "producer": "Caves Marchand",
+      "name": "Brut Reserve",
+      "varietal": "Champagne Blend",
+      "region": "Champagne",
+      "country": "France",
+      "famous": false,
+      "row_indexes": [
+        265
+      ]
+    },
+    {
+      "producer": "Domaine Fontaine",
+      "name": "Blanc de Noirs NV",
+      "varietal": "Champagne Blend",
+      "region": "Champagne",
+      "country": "France",
+      "famous": false,
+      "row_indexes": [
+        317
+      ]
+    },
+    {
+      "producer": "Quinta da Pereira",
+      "name": "Fine Ruby Reserve",
+      "varietal": "Port Blend",
+      "region": "Douro",
+      "country": "Portugal",
+      "famous": false,
+      "row_indexes": [
+        330
+      ]
+    },
+    {
+      "producer": "Casa Rocha",
+      "name": "20 Year Tawny",
+      "varietal": "Port Blend",
+      "region": "Douro",
+      "country": "Portugal",
+      "famous": false,
+      "row_indexes": [
+        335
+      ]
+    },
+    {
+      "producer": "Maison Chapelle",
+      "name": "Brut Reserve",
+      "varietal": "Champagne Blend",
+      "region": "Champagne",
+      "country": "France",
+      "famous": false,
+      "row_indexes": [
+        339
+      ]
+    },
+    {
+      "producer": "Casa Pereira",
+      "name": "Ruby Port",
+      "varietal": "Port Blend",
+      "region": "Douro",
+      "country": "Portugal",
+      "famous": false,
+      "row_indexes": [
+        341
+      ]
+    },
+    {
+      "producer": "Domaine Moreau",
+      "name": "Blanc de Noirs NV",
+      "varietal": "Champagne Blend",
+      "region": "Champagne",
+      "country": "France",
+      "famous": false,
+      "row_indexes": [
+        352
+      ]
+    },
+    {
+      "producer": "Casa Nogueira",
+      "name": "20 Year Tawny",
+      "varietal": "Port Blend",
+      "region": "Douro",
+      "country": "Portugal",
+      "famous": false,
+      "row_indexes": [
+        399
+      ]
+    },
+    {
+      "producer": "Quinta da Rocha",
+      "name": "10 Year Tawny",
+      "varietal": "Port Blend",
+      "region": "Douro",
+      "country": "Portugal",
+      "famous": false,
+      "row_indexes": [
+        447
+      ]
+    },
+    {
+      "producer": "Hacienda Castillo",
+      "name": "Oloroso",
+      "varietal": "Palomino",
+      "region": "Jerez",
+      "country": "Spain",
+      "famous": false,
+      "row_indexes": [
+        480
+      ]
+    },
+    {
+      "producer": "Bodega Campos",
+      "name": "Manzanilla",
+      "varietal": "Palomino",
+      "region": "Jerez",
+      "country": "Spain",
+      "famous": false,
+      "row_indexes": [
+        489
+      ]
+    },
+    {
+      "producer": "Taittinger",
+      "name": "Brut Reserve",
+      "varietal": "Champagne Blend",
+      "region": "Champagne",
+      "country": "France",
+      "famous": true,
+      "row_indexes": [
+        494
+      ]
+    }
+  ],
+  "famous_variants": [
+    {
+      "producer": "Penfolds",
+      "name": "Grange",
+      "vintage": 2018,
+      "nv": false,
+      "row_indexes": [
+        111,
+        411
+      ]
+    },
+    {
+      "producer": "Chateau Lafite Rothschild",
+      "name": "Grand Vin",
+      "vintage": 2005,
+      "nv": false,
+      "row_indexes": [
+        122
+      ]
+    },
+    {
+      "producer": "Bond",
+      "name": "Vecina",
+      "vintage": 2010,
+      "nv": false,
+      "row_indexes": [
+        209,
+        463
+      ]
+    },
+    {
+      "producer": "Ridge Vineyards",
+      "name": "Monte Bello",
+      "vintage": 2015,
+      "nv": false,
+      "row_indexes": [
+        256
+      ]
+    },
+    {
+      "producer": "Domaine de la Romanee-Conti",
+      "name": "Romanee-Conti",
+      "vintage": 2015,
+      "nv": false,
+      "row_indexes": [
+        280
+      ]
+    },
+    {
+      "producer": "Harlan Estate",
+      "name": "Estate",
+      "vintage": 2005,
+      "nv": false,
+      "row_indexes": [
+        300
+      ]
+    },
+    {
+      "producer": "Bond",
+      "name": "Vecina",
+      "vintage": 2005,
+      "nv": false,
+      "row_indexes": [
+        438
+      ]
+    },
+    {
+      "producer": "Domaine Leroy",
+      "name": "Musigny",
+      "vintage": 2005,
+      "nv": false,
+      "row_indexes": [
+        440
+      ]
+    },
+    {
+      "producer": "Chateau Cos d'Estournel",
+      "name": "Grand Vin",
+      "vintage": 2010,
+      "nv": false,
+      "row_indexes": [
+        449
+      ]
+    },
+    {
+      "producer": "Taittinger",
+      "name": "Brut Reserve",
+      "vintage": null,
+      "nv": true,
+      "row_indexes": [
+        494
+      ]
+    }
+  ],
+  "long_tail_row_indexes": [
+    12,
+    22,
+    27,
+    31,
+    33,
+    42,
+    44,
+    57,
+    71,
+    72,
+    75,
+    84,
+    87,
+    94,
+    102,
+    109,
+    117,
+    120,
+    126,
+    129,
+    131,
+    136,
+    139,
+    144,
+    159,
+    162,
+    170,
+    171,
+    172,
+    179,
+    186,
+    190,
+    194,
+    202,
+    237,
+    242,
+    243,
+    252,
+    278,
+    283,
+    298,
+    299,
+    301,
+    304,
+    308,
+    312,
+    316,
+    327,
+    344,
+    347,
+    356,
+    361,
+    362,
+    363,
+    407,
+    410,
+    413,
+    417,
+    426,
+    430,
+    431,
+    453,
+    460,
+    462,
+    471,
+    473,
+    475,
+    492
+  ],
+  "barcode": null,
+  "dirty_rows": []
+}
