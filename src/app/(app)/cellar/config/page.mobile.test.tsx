@@ -120,6 +120,121 @@ describe("Manage Cellar Sections mobile layout", () => {
     expect(cancelButton.className).toContain("min-h-11");
     expect(deleteButton.className).toContain("min-h-11");
   });
+
+  it("gives the row-level delete button a distinct rest-state color from rename, not just adjacency", async () => {
+    stubConfigFetch({ id: "a", name: "Reds" });
+    const { container } = await mount(<CellarConfigPage />);
+    await flushLoad();
+
+    const rename = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Rename Reds"]',
+    )!;
+    const del = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Delete Reds"]',
+    )!;
+
+    // Touch devices never see :hover, so the two icon buttons must already
+    // read differently at rest — not just on a hover state that mobile
+    // never triggers.
+    expect(rename.className).toContain("text-grey");
+    expect(del.className).not.toContain("text-grey");
+    expect(del.className).toMatch(/text-primary/);
+
+    // And they need real breathing room between them, not a 2px seam.
+    const actionsRow = rename.parentElement!;
+    expect(actionsRow.className).not.toContain("gap-2xs");
+    expect(actionsRow.className).toContain("gap-xs");
+  });
+
+  it("wraps long section names instead of truncating them mid-word", async () => {
+    stubConfigFetch({
+      id: "a",
+      name: "A Very Long Section Name For Testing Wrap Behavior",
+    });
+    const { container } = await mount(<CellarConfigPage />);
+    await flushLoad();
+
+    const nameSpan = container.querySelector("li span")!;
+    expect(nameSpan.className).not.toContain("truncate");
+    expect(nameSpan.className).toContain("break-words");
+    expect(nameSpan.textContent).toBe(
+      "A Very Long Section Name For Testing Wrap Behavior",
+    );
+  });
+
+  it("gives the inline rename input a real touch target instead of a 32px sliver", async () => {
+    stubConfigFetch({ id: "a", name: "Reds" });
+    const { container } = await mount(<CellarConfigPage />);
+    await flushLoad();
+
+    const rename = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Rename Reds"]',
+    )!;
+    await act(async () => rename.click());
+
+    const input = container.querySelector<HTMLInputElement>(
+      'li input[type="text"]',
+    )!;
+    expect(input.className).toContain("min-h-11");
+    // The old `py-1` sizing produced a ~32px input beside 44px Save/Cancel
+    // buttons; py-1 must not sneak back in.
+    expect(input.className).not.toMatch(/\bpy-1\b/);
+  });
+
+  it("lets the new-section input shrink instead of pushing Add off-screen", async () => {
+    stubConfigFetch({ id: "a", name: "Reds" });
+    const { container } = await mount(<CellarConfigPage />);
+    await flushLoad();
+
+    const input = container.querySelector<HTMLInputElement>(
+      'input[placeholder^="New section name"]',
+    )!;
+    const addButton = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Add",
+    )!;
+
+    // Without min-w-0, the input's intrinsic content width refuses to
+    // shrink in a flex row, pushing Add past the 320px viewport edge.
+    expect(input.className).toContain("min-w-0");
+    expect(addButton.className).toContain("shrink-0");
+  });
+
+  it("uses the outline focus-visible pattern, not ring utilities, on every input", async () => {
+    stubConfigFetch({ id: "a", name: "Reds" });
+    const { container } = await mount(<CellarConfigPage />);
+    await flushLoad();
+
+    const newSectionInput = container.querySelector<HTMLInputElement>(
+      'input[placeholder^="New section name"]',
+    )!;
+    expect(newSectionInput.className).toContain("focus-visible:outline-primary");
+    expect(newSectionInput.className).not.toMatch(/focus:ring/);
+
+    const rename = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Rename Reds"]',
+    )!;
+    await act(async () => rename.click());
+    const renameInput = container.querySelector<HTMLInputElement>(
+      'li input[type="text"]',
+    )!;
+    expect(renameInput.className).toContain("focus-visible:outline-primary");
+    expect(renameInput.className).not.toMatch(/focus:ring/);
+  });
+
+  it("disables native touch-scroll handling on the drag handle so dnd-kit's TouchSensor can activate", async () => {
+    // Without touch-action: none, the browser's own pan-to-scroll gesture
+    // wins the race on the first touchmove and fires pointercancel before
+    // dnd-kit's TouchSensor (delay: 200ms) ever activates — reorder is
+    // silently non-functional under real touch even though mouse drags work.
+    stubConfigFetch({ id: "a", name: "Reds" });
+    const { container } = await mount(<CellarConfigPage />);
+    await flushLoad();
+
+    const dragHandle = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Drag to reorder Reds"]',
+    )!;
+    expect(dragHandle.className).toContain("touch-none");
+  });
 });
 
 function stubConfigFetch(sections: unknown) {
