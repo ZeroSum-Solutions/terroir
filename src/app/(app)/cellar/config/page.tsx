@@ -199,7 +199,7 @@ export default function CellarConfigPage() {
           <ArrowLeft className="h-5 w-5" strokeWidth={2} aria-hidden />
         </button>
         <div className="min-w-0 flex-1 pt-1.5">
-          <h1 className="font-serif text-[22px] font-medium text-ink">Cellar Sections</h1>
+          <h1 className="font-serif text-[22px] font-normal text-ink">Cellar Sections</h1>
           <p className="text-[13px] text-grey">
             Organize your cellar into named groups like Reds by Region or Cult
             Cabs.
@@ -290,7 +290,7 @@ export default function CellarConfigPage() {
           >
             <h3
               id="delete-section-heading"
-              className="font-serif text-[18px] font-medium text-ink"
+              className="font-serif text-[18px] font-normal text-ink"
             >
               Delete section?
             </h3>
@@ -366,7 +366,7 @@ function SortableSectionItem({
       style={style}
       className={cn(
         "flex items-center justify-between px-md py-sm",
-        isDragging && "bg-bridge-surface rounded-lg",
+        isDragging && "touch-none bg-bridge-surface rounded-lg",
       )}
     >
       {editingId === section.id ? (
@@ -408,7 +408,7 @@ function SortableSectionItem({
               {...attributes}
               {...listeners}
               aria-label={`Drag to reorder ${section.name}`}
-              className="flex h-11 w-11 shrink-0 items-center justify-center cursor-grab active:cursor-grabbing text-grey hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="flex h-11 w-11 shrink-0 touch-none items-center justify-center cursor-grab active:cursor-grabbing text-grey hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>

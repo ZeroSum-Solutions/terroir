@@ -220,6 +220,21 @@ describe("Manage Cellar Sections mobile layout", () => {
     expect(renameInput.className).toContain("focus-visible:outline-primary");
     expect(renameInput.className).not.toMatch(/focus:ring/);
   });
+
+  it("disables native touch-scroll handling on the drag handle so dnd-kit's TouchSensor can activate", async () => {
+    // Without touch-action: none, the browser's own pan-to-scroll gesture
+    // wins the race on the first touchmove and fires pointercancel before
+    // dnd-kit's TouchSensor (delay: 200ms) ever activates — reorder is
+    // silently non-functional under real touch even though mouse drags work.
+    stubConfigFetch({ id: "a", name: "Reds" });
+    const { container } = await mount(<CellarConfigPage />);
+    await flushLoad();
+
+    const dragHandle = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Drag to reorder Reds"]',
+    )!;
+    expect(dragHandle.className).toContain("touch-none");
+  });
 });
 
 function stubConfigFetch(sections: unknown) {
