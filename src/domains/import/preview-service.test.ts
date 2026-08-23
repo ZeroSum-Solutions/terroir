@@ -1,0 +1,106 @@
+import { describe, expect, it, vi } from "vitest";
+import { buildImportPreview } from "./preview-service";
+
+function csv(rows: string) {
+  return Buffer.from(`producer,name,vintage,quantity,unit_cost\n${rows}`);
+}
+
+function makeSupabase(matchRows: Array<{ idx: number; lwin_id: string | null; score: number | null }> = []) {
+  const from = vi.fn();
+  const insert = vi.fn();
+  const update = vi.fn();
+  const rpc = vi.fn().mockResolvedValue({ data: matchRows, error: null });
+  return {
+    from: (...args: unknown[]) => {
+      from(...args);
+      return { insert, update, select: () => ({ insert, update }) };
+    },
+    rpc,
+    _from: from,
+    _insert: insert,
+    _update: update,
+  } as unknown as Parameters<typeof buildImportPreview>[0] & {
+    _from: typeof from;
+    _insert: typeof insert;
+    _update: typeof update;
+  };
+}
+
+describe("buildImportPreview", () => {
+  it("performs zero database writes and zero table reads — only a read-only RPC call", async () => {
+    const supabase = makeSupabase([{ idx: 0, lwin_id: "LWIN001", score: 0.9 }]);
+    await buildImportPreview(supabase, csv("Domaine A,Cuvee 1,2020,6,24.50\n"));
+
+    expect(supabase._from).not.toHaveBeenCalled();
+    expect(supabase._insert).not.toHaveBeenCalled();
+    expect(supabase._update).not.toHaveBeenCalled();
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      "match_lwin_bulk",
+      expect.objectContaining({ p_queries: expect.any(Array) }),
+    );
+  });
+
+  it("returns a per-row preview with row numbers, LWIN status, and cost status", async () => {
+    const supabase = makeSupabase([{ idx: 0, lwin_id: "LWIN001", score: 0.95 }]);
+    const result = await buildImportPreview(
+      supabase,
+      csv("Domaine A,Cuvee 1,2020,6,24.50\nDomaine B,Cuvee 2,2019,3,\n"),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows[0]).toMatchObject({
+      rowNumber: 1,
+      rowState: "valid",
+      lwinStatus: "matched",
+      lwinId: "LWIN001",
+      costStatus: "present",
+      resolution: "auto",
+    });
+    expect(result.rows[1]).toMatchObject({
+      rowNumber: 2,
+      rowState: "valid",
+      lwinStatus: "unmatched",
+      costStatus: "missing",
+      resolution: "pending",
+    });
+    expect(result.summary).toMatchObject({
+      totalRows: 2,
+      validRows: 2,
+      matchedRows: 1,
+      unmatchedRows: 1,
+      missingCostRows: 1,
+      readyToApplyRows: 1,
+      pendingResolutionRows: 1,
+    });
+  });
+
+  it("marks an invalid row as error and excludes it from LWIN matching", async () => {
+    const supabase = makeSupabase([]);
+    const result = await buildImportPreview(supabase, csv(",Missing Producer,2020,6,10\n"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows[0]).toMatchObject({ rowState: "error", resolution: "exclude" });
+    expect(result.summary.errorRows).toBe(1);
+
+    // Nothing valid to match — the RPC round trip is skipped entirely.
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("returns a top-level error for missing required headers", async () => {
+    const supabase = makeSupabase([]);
+    const result = await buildImportPreview(supabase, Buffer.from("region,country\nBurgundy,France\n"));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("missing_headers");
+    expect(result.error.missingHeaders).toEqual(expect.arrayContaining(["producer", "name", "quantity"]));
+  });
+
+  it("returns a top-level error for an unparseable file without touching the database", async () => {
+    const supabase = makeSupabase([]);
+    const result = await buildImportPreview(supabase, Buffer.from(""));
+    expect(result.ok).toBe(false);
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+});

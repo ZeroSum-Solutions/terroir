@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 76,
+    "extensionDiscoveredCount": 83,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -430,6 +430,48 @@
       "operationId": "api:GET:/api/health",
       "classification": "exact",
       "concreteRequirementId": "TER-CF-180",
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:GET:/api/import/batches",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/import/batches",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:GET:/api/import/batches/{param}",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/import/batches/{param}/apply",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/import/batches/{param}/revert",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:PATCH:/api/import/batches/{param}/rows/{param}",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/import/preview",
+      "classification": "extension",
+      "concreteRequirementId": null,
       "semanticAliasContext": []
     },
     {

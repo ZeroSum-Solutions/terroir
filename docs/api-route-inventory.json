@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 80,
-  "discoveredOperationCount": 93,
+  "routeFileCount": 86,
+  "discoveredOperationCount": 100,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/bins",
@@ -211,6 +211,83 @@
         "file": "src/app/api/health/route.ts",
         "exportKind": "function-declaration",
         "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/import/batches",
+      "method": "GET",
+      "path": "/api/import/batches",
+      "source": {
+        "file": "src/app/api/import/batches/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/import/batches",
+      "method": "POST",
+      "path": "/api/import/batches",
+      "source": {
+        "file": "src/app/api/import/batches/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/import/batches/{param}",
+      "method": "GET",
+      "path": "/api/import/batches/[id]",
+      "source": {
+        "file": "src/app/api/import/batches/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/import/batches/{param}/apply",
+      "method": "POST",
+      "path": "/api/import/batches/[id]/apply",
+      "source": {
+        "file": "src/app/api/import/batches/[id]/apply/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/import/batches/{param}/revert",
+      "method": "POST",
+      "path": "/api/import/batches/[id]/revert",
+      "source": {
+        "file": "src/app/api/import/batches/[id]/revert/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:PATCH:/api/import/batches/{param}/rows/{param}",
+      "method": "PATCH",
+      "path": "/api/import/batches/[id]/rows/[rowId]",
+      "source": {
+        "file": "src/app/api/import/batches/[id]/rows/[rowId]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/import/preview",
+      "method": "POST",
+      "path": "/api/import/preview",
+      "source": {
+        "file": "src/app/api/import/preview/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
         "moduleSpecifier": null
       }
     },

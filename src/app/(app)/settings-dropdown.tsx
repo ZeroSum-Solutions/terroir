@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Archive, ClipboardCheck, DollarSign, LogOut, Settings, Users } from "lucide-react";
+import { Archive, ClipboardCheck, DollarSign, LogOut, Settings, Upload, Users } from "lucide-react";
 
 export function SettingsDropdown() {
   const [open, setOpen] = useState(false);
@@ -111,10 +111,21 @@ export function SettingsDropdown() {
               <Users className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Team
             </Link>
+            <Link
+              ref={(el) => { itemsRef.current[4] = el; }}
+              href="/import"
+              onClick={close}
+              role="menuitem"
+              tabIndex={-1}
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-surface-muted"
+            >
+              <Upload className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
+              Import
+            </Link>
             <div className="mx-md my-xs border-t border-border" role="separator" />
             <form action="/auth/signout" method="post">
               <button
-                ref={(el) => { itemsRef.current[4] = el; }}
+                ref={(el) => { itemsRef.current[5] = el; }}
                 type="submit"
                 role="menuitem"
                 tabIndex={-1}
