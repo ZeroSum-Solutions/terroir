@@ -219,6 +219,18 @@ describe("runInvoiceExtractJob", () => {
     expect(outcome.kind).toBe(expectedKind);
   });
 
+  it("treats a 409 scan_superseded result as succeeded/skipped (Grok-2: fenced write lost the race)", async () => {
+    mockProcessInvoiceScanOnce.mockResolvedValue({
+      status: 409,
+      body: { code: "scan_superseded", message: "Scan was already completed by another worker attempt." },
+    });
+    const outcome = await runInvoiceExtractJob({
+      supabase: supabaseFor({ scan: validScan, downloadData: fakeBlob }) as never,
+      job: job(),
+    });
+    expect(outcome).toEqual({ kind: "succeeded", skippedExtraction: true });
+  });
+
   it("retries any 5xx even with an unrecognized code", async () => {
     mockProcessInvoiceScanOnce.mockResolvedValue({ status: 503, body: {} });
     const outcome = await runInvoiceExtractJob({

@@ -82,4 +82,96 @@ describe("enqueueInvoiceExtractJob", () => {
       }),
     ).rejects.toBe(dbError);
   });
+
+  /** Builds a supabase stub for the unique-violation + fetch-existing path. */
+  function supabaseForConflict(opts: {
+    existingStatus: string;
+    revive?: { data: Array<{ id: string }> | null; error: unknown };
+  }) {
+    const uniqueViolation = { code: "23505", message: "duplicate key" };
+    const existingRow = { id: "job-existing", status: opts.existingStatus };
+    const updateSpy = vi.fn((patch: Record<string, unknown>) => {
+      capturedPatch = patch;
+      return {
+        eq: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            select: vi.fn(async () => opts.revive ?? { data: [existingRow], error: null }),
+          })),
+        })),
+      };
+    });
+    let capturedPatch: Record<string, unknown> | undefined;
+    const supabase = {
+      from: vi.fn(() => ({
+        insert: vi.fn(() => ({
+          select: vi.fn(() => ({
+            single: vi.fn(async () => ({ data: null, error: uniqueViolation })),
+          })),
+        })),
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              single: vi.fn(async () => ({ data: existingRow, error: null })),
+            })),
+          })),
+        })),
+        update: updateSpy,
+      })),
+    };
+    return { supabase, updateSpy, getPatch: () => capturedPatch };
+  }
+
+  it("revives a dead job back to queued (fields reset) instead of returning it dead", async () => {
+    const { supabase, updateSpy, getPatch } = supabaseForConflict({ existingStatus: "dead" });
+
+    const result = await enqueueInvoiceExtractJob({
+      supabase: supabase as never,
+      restaurantId: "restaurant-a",
+      scanId: "scan-1",
+    });
+
+    expect(result).toEqual({ jobId: "job-existing", created: false });
+    expect(updateSpy).toHaveBeenCalledOnce();
+    expect(getPatch()).toMatchObject({
+      status: "queued",
+      attempt_count: 0,
+      error_code: null,
+      error_message: null,
+      claimed_by: null,
+      claimed_at: null,
+    });
+    expect(typeof getPatch()!.run_after).toBe("string");
+  });
+
+  it.each(["queued", "processing", "succeeded"])(
+    "does not attempt to revive a %s job — just returns it",
+    async (status) => {
+      const { supabase, updateSpy } = supabaseForConflict({ existingStatus: status });
+
+      const result = await enqueueInvoiceExtractJob({
+        supabase: supabase as never,
+        restaurantId: "restaurant-a",
+        scanId: "scan-1",
+      });
+
+      expect(result).toEqual({ jobId: "job-existing", created: false });
+      expect(updateSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it("returns the existing id, created:false when a dead-row revival races and matches 0 rows", async () => {
+    const { supabase, updateSpy } = supabaseForConflict({
+      existingStatus: "dead",
+      revive: { data: [], error: null },
+    });
+
+    const result = await enqueueInvoiceExtractJob({
+      supabase: supabase as never,
+      restaurantId: "restaurant-a",
+      scanId: "scan-1",
+    });
+
+    expect(result).toEqual({ jobId: "job-existing", created: false });
+    expect(updateSpy).toHaveBeenCalledOnce();
+  });
 });

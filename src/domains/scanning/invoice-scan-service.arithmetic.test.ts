@@ -85,12 +85,24 @@ function mismatchedInvoice(confidence = 0.9) {
 
 function makeSupabase() {
   const updates: Array<Record<string, unknown>> = [];
+  // Chainable AND directly awaitable, matching real supabase-js query
+  // builders: the persist write chains .eq().eq().select("id") (fenced on
+  // status='processing' — Grok-2); resolving with a non-empty row array
+  // by default means the fence matches, same as the pre-fencing behavior
+  // these tests already assumed.
+  function node(): Record<string, unknown> {
+    const n: Record<string, unknown> = {};
+    n.eq = vi.fn(() => n);
+    n.select = vi.fn(() => n);
+    n.then = (resolve: (v: unknown) => void, reject?: (e: unknown) => void) =>
+      Promise.resolve({ data: [{ id: "scan-a" }], error: null }).then(resolve, reject);
+    return n;
+  }
   const builder = {
     update: vi.fn((payload: Record<string, unknown>) => {
       updates.push(payload);
-      return builder;
+      return node();
     }),
-    eq: vi.fn(async () => ({ data: null, error: null })),
   };
   return {
     updates,
@@ -188,7 +200,7 @@ describe("processInvoiceScanOnce — G1-12 arithmetic retry-then-review gate", (
     });
   });
 
-  it("propagates a transient retry-call error without attempting a third call (no double-billing)", async () => {
+  it("falls back to the first extraction when the retry call throws, without attempting a third call (Grok-4: a transient retry failure must not discard a usable first extraction)", async () => {
     mockExtractFromOcr
       .mockResolvedValueOnce(mismatchedInvoice())
       .mockRejectedValueOnce(
@@ -199,9 +211,50 @@ describe("processInvoiceScanOnce — G1-12 arithmetic retry-then-review gate", (
     const result = await runScan(supabase);
 
     expect(mockExtractFromOcr).toHaveBeenCalledTimes(2);
-    expect(result.status).toBe(502);
-    expect((result.body as { code: string }).code).toBe("upstream_error");
-    // Falls back to the existing failure path — never left as "complete".
-    expect(updates.at(-1)).toMatchObject({ status: "failed" });
+    // The first extraction's (already-failing) arithmetic routes to human
+    // review — never treated as a scan failure.
+    expect(result.status).toBe(200);
+    const body = result.body as { arithmetic: { ok: boolean } };
+    expect(body.arithmetic.ok).toBe(false);
+    expect(updates.at(-1)).toMatchObject({
+      status: "review",
+      accuracy_score: 0,
+    });
+    expect(updates.some((u) => u.status === "failed")).toBe(false);
+  });
+
+  it("keeps the first extraction when the retry returns no line items (Grok-3: an empty retry must not wipe non-empty data)", async () => {
+    mockExtractFromOcr.mockResolvedValueOnce(mismatchedInvoice()).mockResolvedValueOnce({
+      distributor: "Test Distributor",
+      invoiceNumber: "INV-1",
+      invoiceDate: "2026-07-24",
+      lineItems: [],
+      invoiceTotal: null,
+      taxAndFees: null,
+    });
+    const { supabase, updates } = makeSupabase();
+
+    const result = await runScan(supabase);
+
+    expect(mockExtractFromOcr).toHaveBeenCalledTimes(2);
+    expect(result.status).toBe(200);
+    const body = result.body as {
+      items: unknown[];
+      arithmetic: { ok: boolean };
+    };
+    expect(body.items).toHaveLength(3);
+    expect(body.arithmetic.ok).toBe(false);
+    const lastUpdate = updates.at(-1) as {
+      status: string;
+      item_count: number;
+      accuracy_score: number;
+      parsed_line_items: unknown[];
+    };
+    expect(lastUpdate).toMatchObject({
+      status: "review",
+      item_count: 3,
+      accuracy_score: 0,
+    });
+    expect(lastUpdate.parsed_line_items).toHaveLength(3);
   });
 });

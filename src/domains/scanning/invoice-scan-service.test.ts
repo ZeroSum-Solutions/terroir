@@ -54,17 +54,26 @@ describe("processInvoiceScanOnce persistence boundary", () => {
       ],
     });
     let updateCount = 0;
+    // Chainable AND directly awaitable, matching real supabase-js query
+    // builders: the persist write chains .eq().eq().select(), the
+    // catch-path failed write chains only .eq().eq() with no .select().
+    function updateResult(result: { data: unknown; error: unknown }) {
+      const node: Record<string, unknown> = {};
+      node.eq = vi.fn(() => node);
+      node.select = vi.fn(() => node);
+      node.then = (resolve: (v: unknown) => void, reject?: (e: unknown) => void) =>
+        Promise.resolve(result).then(resolve, reject);
+      return node;
+    }
     const supabase = {
       from: vi.fn(() => ({
-        update: vi.fn(() => ({
-          eq: vi.fn(async () => {
-            updateCount += 1;
-            return {
-              data: null,
-              error: updateCount === 1 ? completionError : null,
-            };
-          }),
-        })),
+        update: vi.fn(() => {
+          updateCount += 1;
+          return updateResult({
+            data: updateCount === 1 ? null : [],
+            error: updateCount === 1 ? completionError : null,
+          });
+        }),
       })),
     };
 
