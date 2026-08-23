@@ -61,8 +61,8 @@ cat <<EOF
  Dev login:   ${DEV_BYPASS_EMAIL:-devlocal@terroir.test}
 
  Next steps:
-   pnpm dev -p 3100
-   curl -i "${APP_URL:-http://localhost:3100}/api/dev-login"   # expect a 30x + session cookies
+   pnpm dev -p 3000
+   curl -i "${APP_URL:-http://localhost:3000}/api/dev-login"   # expect a 30x + session cookies
    pnpm test                                                    # unit suite
    pnpm test:e2e                                                # playwright e2e
 
