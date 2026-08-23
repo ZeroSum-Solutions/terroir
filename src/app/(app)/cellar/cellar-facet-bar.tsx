@@ -107,7 +107,7 @@ export function CellarFacetBar({
   }
 
   return (
-    <div data-cellar-facet-bar className="mb-md flex max-w-full flex-col gap-xs">
+    <div data-cellar-facet-bar className="mb-md flex max-w-full flex-col gap-sm">
       <div className="flex flex-wrap items-center gap-xs">
         {showProducer && (
           <FacetSelect
@@ -143,7 +143,7 @@ export function CellarFacetBar({
       </div>
 
       {appliedChips.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2xs">
+        <div className="flex flex-wrap items-center gap-x-2xs gap-y-lg">
           {appliedChips.map((chip) => (
             <span
               key={chip.key}
@@ -154,7 +154,7 @@ export function CellarFacetBar({
                 type="button"
                 onClick={chip.onRemove}
                 aria-label={`Remove ${chip.label} filter`}
-                className="flex h-6 w-6 items-center justify-center rounded-pill text-grey hover:bg-white hover:text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                className="flex h-11 w-11 shrink-0 -my-[6px] items-center justify-center rounded-pill text-grey hover:bg-white hover:text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
               >
                 <X className="h-3 w-3" strokeWidth={2.5} aria-hidden />
               </button>
@@ -166,7 +166,7 @@ export function CellarFacetBar({
               onFacetsChange(CLEAR_ALL_PATCH);
               onGroupByChange(null);
             }}
-            className="h-8 shrink-0 rounded-pill px-sm text-[11.5px] font-medium text-grey hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+            className="flex h-11 shrink-0 -my-[6px] items-center justify-center rounded-pill px-sm text-[11.5px] font-medium text-grey hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             Clear all
           </button>

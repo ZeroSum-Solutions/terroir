@@ -27,8 +27,12 @@ export type CellarCounterDef = {
  * chips — plus a fourth chip ("Open") duplicated again by the standalone
  * "Open bottles" link. Tapping a hero tile did nothing; tapping the chip
  * below it applied the filter. This builds ONE list of counters that are
- * simultaneously the KPI display and the filter navigation, so there is
- * exactly one on-screen representation of each count.
+ * simultaneously the KPI display and the filter navigation, collapsing
+ * the tile grid and the chip row into a single on-screen representation.
+ * The one exception is "Open bottles": it stays as its own link in the
+ * utility row because it points somewhere genuinely different — a
+ * dedicated close-out page, not this list filtered to open wines — so
+ * its count still appears twice on the page by design, not by omission.
  */
 export function buildCellarCounters(alerts: CellarCounterAlerts): CellarCounterDef[] {
   const counters: CellarCounterDef[] = [
