@@ -55,6 +55,7 @@ export default function DateRangeSelector() {
   const normalizedTo = normalizedRange.to ?? "";
 
   const [showCustom, setShowCustom] = useState(currentRange === "custom");
+  const [pendingRange, setPendingRange] = useState<RangeOption | null>(null);
   const [draftFrom, setDraftFrom] = useState(
     currentRange === "custom" && normalizedFrom ? normalizedFrom : ytdStart(),
   );
@@ -77,6 +78,7 @@ export default function DateRangeSelector() {
       from: currentFrom,
       to: currentTo,
     });
+    setPendingRange(null);
     setShowCustom(currentRange === "custom");
     setDraftFrom(
       currentRange === "custom" && normalizedFrom ? normalizedFrom : ytdStart(),
@@ -115,7 +117,7 @@ export default function DateRangeSelector() {
         aria-label="Date range"
       >
         {RANGE_OPTIONS.map(function (opt) {
-          const isActive = currentRange === opt.value;
+          const isActive = (pendingRange ?? currentRange) === opt.value;
           return (
             <button
               key={opt.value}
@@ -127,6 +129,7 @@ export default function DateRangeSelector() {
                   setShowCustom(true);
                 } else {
                   setShowCustom(false);
+                  setPendingRange(opt.value);
                   applyRange(opt.value);
                 }
               }}

@@ -56,6 +56,23 @@ describe("DateRangeSelector", () => {
     container.remove();
   });
 
+  it("marks a tapped range selected before the router commits it", async () => {
+    await act(async () => root.render(<DateRangeSelector />));
+    const thirtyDays = [...container.querySelectorAll('[role="radio"]')].find(
+      (radio) => radio.textContent === "30d",
+    )!;
+    const ninetyDays = [...container.querySelectorAll('[role="radio"]')].find(
+      (radio) => radio.textContent === "90d",
+    )!;
+
+    await act(async () =>
+      ninetyDays.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+
+    expect(ninetyDays.getAttribute("aria-checked")).toBe("true");
+    expect(thirtyDays.getAttribute("aria-checked")).toBe("false");
+  });
+
   it("offers Custom and applies its dates without dropping unrelated params", async () => {
     await act(async () => root.render(<DateRangeSelector />));
     const custom = [...container.querySelectorAll("button")].find(

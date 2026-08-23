@@ -88,6 +88,29 @@ describe("WineDetailDrawer bottle state", () => {
     expect(drawerStateKey(first)).not.toBe(drawerStateKey(replacement));
   });
 
+  it("hides immediately when Close is tapped while its URL owner catches up", async () => {
+    const onClose = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <ToastProvider>
+          <WineDetailDrawer row={row({})} canManage onClose={onClose} />
+        </ToastProvider>,
+      );
+    });
+
+    await click(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!,
+    );
+
+    expect(dialogByTitle(container, "Test Wine")).toBeUndefined();
+    expect(onClose).toHaveBeenCalledOnce();
+    await act(async () => root.unmount());
+  });
+
   it("pauses the drawer trap while the nested 86 dialog owns and restores focus", async () => {
     const outerTrigger = document.createElement("button");
     outerTrigger.textContent = "Open wine";
