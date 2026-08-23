@@ -155,6 +155,15 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const [scan, setScan] = useState<Scan | null>(null);
   const [originalItems, setOriginalItems] = useState<LineItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  // Authoritative synchronous guard against a double-tap double-submit:
+  // `isSaving` state only flips the button's `disabled` attribute on the
+  // NEXT render (~10ms later), so two native click events dispatched in
+  // the same synchronous task both see the stale `isSaving === false`
+  // closure and both pass the `if (isSaving) return` check, firing two
+  // POSTs. A ref is read AND written synchronously, before any render, so
+  // the second same-tick call sees the first call's write immediately.
+  // Shared by both save paths below since they share `isSaving` itself.
+  const isSavingRef = useRef(false);
   // BND-006: UUIDv4 generated on the first save attempt and reused across
   // retries of the SAME logical save. Cleared on a successful 2xx (or on a
   // 4xx validation error) so the next save starts with a fresh key; held
@@ -522,7 +531,8 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   }, [scan]);
 
   const saveToInventory = useCallback(async () => {
-    if (!scan || isSaving) return;
+    if (!scan || isSavingRef.current) return;
+    isSavingRef.current = true;
     setIsSaving(true);
     // Reuse an existing key on retry, or mint a new one on first attempt.
     if (!saveKeyRef.current) {
@@ -569,9 +579,10 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       const message = err instanceof Error ? err.message : "Save failed.";
       setFeedback({ kind: "error", message });
     } finally {
+      isSavingRef.current = false;
       setIsSaving(false);
     }
-  }, [scan, originalItems, isSaving, lastFile]);
+  }, [scan, originalItems, lastFile]);
 
   const enterManualEntry = useCallback(() => {
     const parsedAt = new Date().toISOString();
@@ -681,7 +692,8 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       qty: number;
       unitCost: number;
     }) => {
-      if (isSaving) return;
+      if (isSavingRef.current) return;
+      isSavingRef.current = true;
       setIsSaving(true);
       if (!bottleSaveKeyRef.current) {
         bottleSaveKeyRef.current =
@@ -718,10 +730,11 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         const message = err instanceof Error ? err.message : "Save failed.";
         setFeedback({ kind: "error", message });
       } finally {
+        isSavingRef.current = false;
         setIsSaving(false);
       }
     },
-    [isSaving, setBottlePreview],
+    [setBottlePreview],
   );
 
   const handleStart = useCallback(

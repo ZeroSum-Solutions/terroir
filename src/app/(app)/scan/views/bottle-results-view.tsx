@@ -37,8 +37,24 @@ function confidenceBadgeClass(confidence: number) {
   return "bg-blush-wash text-primary";
 }
 
-/** Read-only identity field row used before the user chooses to correct details. */
-function InfoRow({ label, value, low }: { label: string; value: string; low?: boolean }) {
+/**
+ * Read-only identity field row used before the user chooses to correct
+ * details. `emphasis` renders the value in the DESIGN.md wine-name
+ * treatment (Cormorant Garamond, 17px, weight 500, never bold, never
+ * smaller than 17px) — used for the wine-name row only; every other
+ * identity field stays Inter body text.
+ */
+function InfoRow({
+  label,
+  value,
+  low,
+  emphasis,
+}: {
+  label: string;
+  value: string;
+  low?: boolean;
+  emphasis?: boolean;
+}) {
   return (
     <div>
       <div className="mb-2xs flex flex-wrap items-center gap-xs">
@@ -54,7 +70,8 @@ function InfoRow({ label, value, low }: { label: string; value: string; low?: bo
       </div>
       <div
         className={cn(
-          "rounded-sm border border-transparent px-sm py-xs text-[14px] text-ink",
+          "rounded-sm border border-transparent px-sm py-xs text-ink",
+          emphasis ? "font-serif text-[17px] font-medium" : "text-[14px]",
           low && "border-l-[3px] border-l-primary bg-blush-wash/60",
         )}
       >
@@ -202,7 +219,7 @@ export function BottleResultsView({
 
         {stage === "review" ? (
           <div className="flex flex-col gap-md">
-            <InfoRow label="Wine name" value={active.name} low={isLow("name")} />
+            <InfoRow label="Wine name" value={active.name} low={isLow("name")} emphasis />
             <InfoRow label="Producer" value={active.producer} low={isLow("producer")} />
             <div className="grid grid-cols-2 gap-sm md:grid-cols-3">
               <InfoRow

@@ -85,6 +85,50 @@ describe("BottleResultsView — confidence display", () => {
   });
 });
 
+describe("BottleResultsView — wine name typography (DESIGN.md)", () => {
+  // Round-2 critic finding: the review-stage wine name rendered as plain
+  // Inter 14px body text. DESIGN.md requires wine names in Cormorant
+  // Garamond, never smaller than 17px, weight <=500, never bold.
+  it("renders the review-stage wine name in the DESIGN.md serif treatment", async () => {
+    await renderView({ result: makeResult([candidate({ name: "Volnay 1er Cru" })]) });
+
+    const valueEl = [...container.querySelectorAll("div")].find(
+      (el) => el.children.length === 0 && el.textContent?.trim() === "Volnay 1er Cru",
+    );
+    expect(valueEl).toBeTruthy();
+    const className = valueEl!.className;
+    expect(className).toContain("font-serif");
+    expect(className).toContain("text-[17px]");
+    expect(className).toContain("font-medium");
+    expect(className).not.toContain("text-[14px]");
+    expect(className).not.toContain("font-bold");
+  });
+
+  it("does not apply the wine-name serif treatment to other identity fields", async () => {
+    await renderView({
+      result: makeResult([candidate({ name: "Volnay 1er Cru", producer: "Domaine Test" })]),
+    });
+
+    const producerValueEl = [...container.querySelectorAll("div")].find(
+      (el) => el.children.length === 0 && el.textContent?.trim() === "Domaine Test",
+    );
+    expect(producerValueEl).toBeTruthy();
+    expect(producerValueEl!.className).not.toContain("font-serif");
+    expect(producerValueEl!.className).toContain("text-[14px]");
+  });
+
+  it("keeps the editing-stage wine name input in the same serif treatment", async () => {
+    await renderView({ result: makeResult([candidate({ name: "Volnay 1er Cru" })]) });
+    await act(async () => buttonNamed("correct details").click());
+
+    const nameInput = container.querySelector('input[aria-label="Wine name"]') as HTMLInputElement;
+    expect(nameInput.className).toContain("font-serif");
+    expect(nameInput.className).toContain("text-[17px]");
+    expect(nameInput.className).toContain("font-medium");
+    expect(nameInput.className).not.toContain("font-bold");
+  });
+});
+
 describe("BottleResultsView — per-field low-confidence flags", () => {
   it("visibly flags identity fields the model listed as low-confidence", async () => {
     await renderView({
