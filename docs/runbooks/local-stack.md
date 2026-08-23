@@ -17,8 +17,10 @@ Idempotent — safe to re-run. It will:
 3. `supabase start` (no-op if already running).
 4. `supabase db reset` — drops and recreates the local DB, applying every
    migration in `supabase/migrations/` from scratch.
-5. Seed the dev-login bypass user (`scripts/local/seed-local.mjs`).
-6. Print connection info and next steps.
+5. Wait for the API to actually be ready (see "Post-reset readiness"
+   below) before touching it.
+6. Seed the dev-login bypass user (`scripts/local/seed-local.mjs`).
+7. Print connection info and next steps.
 
 Then boot the app against it:
 
@@ -26,6 +28,25 @@ Then boot the app against it:
 pnpm dev -p 3000
 curl -i http://localhost:3000/api/dev-login   # expect a 30x + session cookies
 ```
+
+## Post-reset readiness
+
+`supabase db reset` restarts the `auth` (GoTrue) container, which gets a new
+internal Docker IP. Kong (the local API gateway) can keep routing
+`/auth/v1/*` to the STALE IP for a few seconds afterward, returning
+transient `502`s — which can break the seed step (or any test run) that
+starts immediately after bring-up.
+
+`dev-stack.sh` closes this race: after `supabase db reset` and before
+seeding, it polls `http://127.0.0.1:57321/auth/v1/health` and
+`http://127.0.0.1:57321/rest/v1/` (with the local anon/publishable key from
+`.env.local`) until both return `200`, for up to ~30s. If it sees `502`s
+persist past a few seconds, it automatically runs `docker restart` once on
+this repo's Kong container (name derived from `supabase/config.toml`'s
+`project_id`, e.g. `supabase_kong_terroir-vw-local`) to clear the stale
+upstream IP, then keeps polling within the same overall timeout. If the API
+still isn't healthy by the deadline, `dev-stack.sh` exits non-zero with a
+loud message instead of seeding against a possibly-broken stack.
 
 ## Teardown
 

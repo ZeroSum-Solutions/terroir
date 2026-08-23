@@ -41,8 +41,8 @@ check "55321 (another project's local stack) refused" 1 $?
 probe_url "http://127.0.0.1:56321"
 check "56321 (another project's local stack) refused" 1 $?
 
-probe_url "https://qcfmwphlaekfkqwkfyth.supabase.co"
-check "hosted production URL refused (string comparison only — no request sent)" 1 $?
+probe_url "https://fake-hosted-project.supabase.co"
+check "hosted URL refused (string comparison only — no request sent)" 1 $?
 
 probe_url "http://127.0.0.1:57321"
 check "57321 (this repo's configured port) passes" 0 $?
