@@ -14,8 +14,8 @@ import { ReconcileModal } from "./reconcile-modal";
 import { AutoEightysixModal } from "./auto-eightysix-modal";
 import { CellarGridView, CellarSetup } from "./cellar-grid";
 import { resolveCellarNavigationIntent } from "./cellar-navigation";
-import { type CellarUrlFilter } from "@/lib/cellar-facets/url-state";
 import { useCellarUrlState } from "./use-cellar-url-state";
+import { buildCellarCounters, CellarCounters } from "./cellar-counters";
 
 type CellarSection = { id: string; name: string };
 
@@ -185,18 +185,17 @@ export function CellarShell({
     return { totalBottles, openCount, outCount, lowCount, drinkNowCount, holdCount };
   }, [rows]);
 
-  const FILTER_CHIPS: Array<{ id: CellarUrlFilter; label: string; count?: number }> = [
-    { id: "all", label: "All" },
-    { id: "open", label: "Open", count: alerts.openCount },
-    { id: "out", label: "86'd", count: alerts.outCount },
-    { id: "low", label: "Low stock", count: alerts.lowCount },
-    ...(alerts.drinkNowCount > 0
-      ? [{ id: "drink-now" as const, label: "Drink now", count: alerts.drinkNowCount }]
-      : []),
-    ...(alerts.holdCount > 0
-      ? [{ id: "hold" as const, label: "Hold", count: alerts.holdCount }]
-      : []),
-  ];
+  const counters = useMemo(() => buildCellarCounters(alerts), [alerts]);
+  const selectCounter = useCallback(
+    (filter: (typeof counters)[number]["id"]) => {
+      replaceUrlState({ filter });
+      // Counters stay visible (and functional) in Grid view too, since
+      // they're also the hero's KPI display — tapping one switches back
+      // to the filtered List view rather than looking like a dead control.
+      setView("list");
+    },
+    [replaceUrlState],
+  );
 
   return (
     <section className="min-w-0 max-w-full overflow-x-hidden">
@@ -208,69 +207,20 @@ export function CellarShell({
         <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink md:text-heading">
           A cellar beyond the <em className="italic font-normal text-primary">ordinary</em>
         </h1>
-        {cellarConfig && (
-          <p className="mt-sm max-w-[480px] text-body-light font-light text-ink-soft">
-            {cellarConfig.rows} × {cellarConfig.columns} grid
-          </p>
-        )}
 
-        {/* Glass stat tiles — derived from data already on the page */}
-        <div className="mt-lg grid grid-cols-2 gap-xs md:grid-cols-4 md:gap-sm">
-          <StatTile label="Bottles on hand" value={alerts.totalBottles.toLocaleString()} />
-          <StatTile
-            label="Drink now"
-            value={alerts.drinkNowCount}
-            tone={alerts.drinkNowCount > 0 ? "warn" : undefined}
+        {/* Counters-as-navigation — one compact row is both the hero's KPI
+            display and the filter tabs (M2-15 §2.2/§2.3). */}
+        <div className="mt-md">
+          <CellarCounters
+            counters={counters}
+            activeFilter={urlState.filter}
+            onSelect={selectCounter}
           />
-          <StatTile
-            label="Low stock"
-            value={alerts.lowCount}
-            tone={alerts.lowCount > 0 ? "warn" : undefined}
-          />
-          <StatTile label="86'd" value={alerts.outCount} />
         </div>
       </div>
 
       {/* Bridge Band */}
       <div className="-mx-md mb-md flex flex-wrap items-center gap-sm bg-beige px-md py-sm md:-mx-lg md:px-lg">
-        {view === "list" && (
-          <div
-            className="flex min-w-0 max-w-full flex-1 flex-wrap gap-2xs pb-2xs md:pb-0"
-            role="tablist"
-            aria-label="Filter wines"
-          >
-            {FILTER_CHIPS.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                role="tab"
-                aria-selected={urlState.filter === c.id}
-                onClick={() => replaceUrlState({ filter: c.id })}
-                className={cn(
-                  "inline-flex min-h-11 shrink-0 items-center gap-xs rounded-pill border px-md text-[12.5px] font-medium transition-colors",
-                  urlState.filter === c.id
-                    ? "border-ink bg-ink text-beige"
-                    : "border-ink/25 bg-transparent text-ink hover:bg-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
-                )}
-              >
-                {c.label}
-                {c.count !== undefined && (
-                  <span
-                    className={cn(
-                      "tabular inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-pill px-xs text-[10px]",
-                      urlState.filter === c.id
-                        ? "bg-white/25 text-beige"
-                        : "bg-white/70 text-ink-soft",
-                    )}
-                  >
-                    {c.count}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-
         <div className="flex w-full flex-wrap items-center gap-xs md:ml-auto md:w-auto md:flex-nowrap">
           <Link
             href="/cellar/open"
@@ -455,30 +405,6 @@ export function CellarShell({
         />
       )}
     </section>
-  );
-}
-
-function StatTile({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string | number;
-  tone?: "warn";
-}) {
-  return (
-    <div className="glass rounded-lg px-md py-sm">
-      <div className="text-caption font-medium uppercase text-grey">{label}</div>
-      <div
-        className={cn(
-          "mt-2xs font-serif text-[28px] font-normal leading-none md:text-[30px]",
-          tone === "warn" ? "text-primary" : "text-ink",
-        )}
-      >
-        {value}
-      </div>
-    </div>
   );
 }
 
