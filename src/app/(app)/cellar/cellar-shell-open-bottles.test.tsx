@@ -170,14 +170,16 @@ describe("CellarShell open bottles route", () => {
     expect(
       container.querySelector('[role="tablist"]')?.className.split(" "),
     ).toContain("flex-wrap");
-    // M2-15 §2.4: the facet bar's outer wrapper stacks its compact control
-    // row above the applied-filter chip row (flex-col), so the row that
-    // actually needs to wrap on narrow viewports is now the first child.
+    // M2-15 §2.4 residuals audit: the compact control row (Producer/Region +
+    // Filters) must read as ONE row down to 320px rather than wrapping into a
+    // multi-row block, so it's flex-nowrap (with overflow-x-auto as a
+    // fallback) — not flex-wrap. The applied-filter chip row is a separate
+    // sibling that still wraps.
     expect(
       container
         .querySelector('[data-cellar-facet-bar] > div')
         ?.className.split(" "),
-    ).toContain("flex-wrap");
+    ).toEqual(expect.arrayContaining(["flex-nowrap", "overflow-x-auto"]));
     expect(link.parentElement?.className).toContain("w-full");
     expect(link.parentElement?.className).toContain("flex-wrap");
     const desktopSearch = container.querySelector<HTMLInputElement>(

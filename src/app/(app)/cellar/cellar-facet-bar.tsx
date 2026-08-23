@@ -108,7 +108,15 @@ export function CellarFacetBar({
 
   return (
     <div data-cellar-facet-bar className="mb-md flex max-w-full flex-col gap-sm">
-      <div className="flex flex-wrap items-center gap-xs">
+      {/*
+        M2-15 §2.4 follow-up (residuals audit) — Producer/Region + the
+        Filters button must read as ONE compact row, never a wrapped
+        multi-row block, down to 320px. `flex-nowrap` plus each select's
+        narrower mobile cap (below) keeps all three controls on one line
+        at 320–430px with room to spare; `overflow-x-auto` is a safety net
+        for unusually long producer/region text, not the primary UX.
+      */}
+      <div className="flex flex-nowrap items-center gap-xs overflow-x-auto">
         {showProducer && (
           <FacetSelect
             label="Producer"
@@ -320,5 +328,8 @@ function FacetSelect({
   );
 }
 
+// Capped narrower on mobile so Producer + Region + the Filters button share
+// one row down to 320px (each select would otherwise size toward its widest
+// option's text); md: restores the roomier desktop width.
 const selectClassName =
-  "h-11 max-w-[180px] rounded-pill border border-ink/20 bg-white px-sm text-[12px] text-ink outline-none hover:bg-bridge-surface focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15";
+  "h-11 max-w-[88px] md:max-w-[180px] rounded-pill border border-ink/20 bg-white px-sm text-[12px] text-ink outline-none hover:bg-bridge-surface focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15";

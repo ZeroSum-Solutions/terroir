@@ -94,6 +94,19 @@ describe("CellarFacetBar", () => {
     expect(button(container, /^Filters/)).toBeDefined();
   });
 
+  it("keeps Producer, Region, and Filters on one non-wrapping row (residuals audit — was 2 rows down to 320px)", async () => {
+    const { container } = await mount({});
+    const row = container.querySelector<HTMLElement>("[data-cellar-facet-bar] > div");
+    const classes = row?.className.split(/\s+/) ?? [];
+    expect(classes).toContain("flex-nowrap");
+    expect(classes).not.toContain("flex-wrap");
+    expect(classes).toContain("overflow-x-auto");
+    // Each compact-row select is capped narrow enough on mobile that
+    // Producer + Region + the Filters button fit one row at 320px.
+    const producerSelect = labelledSelect(container, "Producer")!;
+    expect(producerSelect.className).toContain("max-w-[88px]");
+  });
+
   it("hides a compact-row control once it has only one selectable option", async () => {
     const { container } = await mount({
       counts: { ...diverseCounts, region: options("Napa") },
