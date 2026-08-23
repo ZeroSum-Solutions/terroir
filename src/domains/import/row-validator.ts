@@ -6,6 +6,7 @@ import {
   REQUIRED_HEADERS,
   type CanonicalHeader,
 } from "./constants";
+import { normalizeVintage, MIN_VINTAGE, CURRENT_YEAR } from "../identity/normalize";
 
 export type FieldError = { field: string; message: string };
 
@@ -54,9 +55,6 @@ export function mapHeader(header: string[]): {
   return { columnToField, missingRequired };
 }
 
-const CURRENT_YEAR = new Date().getFullYear();
-const MIN_VINTAGE = 1900;
-
 function cell(cells: string[], columnToField: Map<number, CanonicalHeader>, field: CanonicalHeader): string {
   for (const [index, mapped] of columnToField) {
     if (mapped === field) return (cells[index] ?? "").trim();
@@ -83,14 +81,19 @@ export function validateRow(
   const name = get("name");
   if (!name) errors.push({ field: "name", message: "Wine name is required." });
 
+  // P2 NV fix (docs/plans/2026-08-23-p2-identity-spine.md §5): literal
+  // "NV" and its closed-allowlist siblings ("N V", "non vintage", "MV",
+  // etc. — see normalizeVintage) are the identity fact "no vintage," not
+  // malformed data. normalizeVintage throws for anything else that isn't
+  // a valid year in range, preserving today's rejection behavior for
+  // genuinely bad text ("202X", "circa 1998", "'98") unchanged.
   let vintage: number | null = null;
   const vintageRaw = get("vintage");
   if (vintageRaw) {
-    const parsed = Number.parseInt(vintageRaw, 10);
-    if (!Number.isInteger(parsed) || parsed < MIN_VINTAGE || parsed > CURRENT_YEAR + 1) {
+    try {
+      vintage = normalizeVintage(vintageRaw);
+    } catch {
       errors.push({ field: "vintage", message: `Vintage must be a year between ${MIN_VINTAGE} and ${CURRENT_YEAR + 1}.` });
-    } else {
-      vintage = parsed;
     }
   }
 
