@@ -80,7 +80,11 @@ test.describe("mobile scan intake regression (M0-1)", () => {
     expect(requestBody[0]).toContain("multipart/form-data");
   });
 
-  test("a multi-page invoice batch (2 files) sends every page to /api/scan", async ({ page }) => {
+  test("a multi-page invoice batch (2 photographed pages) sends every page to /api/scan", async ({ page }) => {
+    // AF01: a PDF is already a complete multi-page document, so batching
+    // more than one together is rejected client-side (see the "three PDFs"
+    // test below) — this multi-file batch path is for photographing
+    // several pages of ONE physical invoice, hence images here, not PDFs.
     const scan = makeScan();
     let fileFieldCount = 0;
     await page.route("**/api/scan", async (route) => {
@@ -95,12 +99,61 @@ test.describe("mobile scan intake regression (M0-1)", () => {
     const chooser = await fileChooserPromise;
     expect(chooser.isMultiple()).toBe(true);
     await chooser.setFiles([
-      { name: "page-1.pdf", mimeType: "application/pdf", buffer: fakePdf("page one") },
-      { name: "page-2.pdf", mimeType: "application/pdf", buffer: fakePdf("page two") },
+      { name: "page-1.jpg", mimeType: "image/jpeg", buffer: Buffer.from("page one") },
+      { name: "page-2.jpg", mimeType: "image/jpeg", buffer: Buffer.from("page two") },
     ]);
 
     await expect(page.getByRole("heading", { name: "Invoice scan results" })).toBeVisible();
     expect(fileFieldCount).toBe(2);
+  });
+
+  test("AF01: three PDFs selected together fail immediately with a specific message and no network call", async ({ page }) => {
+    // The owner's exact production report — uploading three PDFs (each a
+    // complete multi-entry invoice) produced no usable result and no
+    // visible error. Each PDF is already a complete document, so batching
+    // several is rejected instantly instead of merged into one invoice.
+    let scanRequests = 0;
+    await page.route("**/api/scan", async (route) => {
+      scanRequests += 1;
+      await route.continue();
+    });
+    await gotoFreshScanPage(page);
+
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Upload file" }).click();
+    const chooser = await fileChooserPromise;
+    await chooser.setFiles([
+      { name: "invoice-1.pdf", mimeType: "application/pdf", buffer: fakePdf("invoice one") },
+      { name: "invoice-2.pdf", mimeType: "application/pdf", buffer: fakePdf("invoice two") },
+      { name: "invoice-3.pdf", mimeType: "application/pdf", buffer: fakePdf("invoice three") },
+    ]);
+
+    await expect(page.getByText("Couldn’t read the invoice")).toBeVisible();
+    await expect(page.getByText(/3 PDFs/)).toBeVisible();
+    await expect(page.getByText(/one PDF per invoice/)).toBeVisible();
+    expect(scanRequests).toBe(0);
+  });
+
+  test("AF01: an unsupported file type fails immediately with a specific message and no network call", async ({ page }) => {
+    let scanRequests = 0;
+    await page.route("**/api/scan", async (route) => {
+      scanRequests += 1;
+      await route.continue();
+    });
+    await gotoFreshScanPage(page);
+
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Upload file" }).click();
+    const chooser = await fileChooserPromise;
+    await chooser.setFiles({
+      name: "notes.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("not an invoice"),
+    });
+
+    await expect(page.getByText("Couldn’t read the invoice")).toBeVisible();
+    await expect(page.getByText(/supported file type/)).toBeVisible();
+    expect(scanRequests).toBe(0);
   });
 
   test("an oversized invoice file fails immediately with a specific message and no network call", async ({ page }) => {

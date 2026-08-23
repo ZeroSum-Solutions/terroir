@@ -246,6 +246,18 @@ async function postInvoiceScan(request: NextRequest) {
       );
     }
   }
+  // A PDF is already a complete multi-page document, unlike a photo — so
+  // batching more than one together (as the multi-page "several files in
+  // one batch" path above allows for photos) means merging two or more
+  // unrelated invoices into one, which garbles OCR text/tables together,
+  // multiplies Azure + Anthropic work, and reliably fails arithmetic
+  // validation. Reject immediately rather than silently merging them.
+  const pdfCount = files.filter((f) => f.type === "application/pdf").length;
+  if (pdfCount > 1) {
+    return Errors.badRequest(
+      `Upload one PDF per invoice. You selected ${pdfCount} PDFs — scan each invoice separately, or take a photo of each page for a multi-page paper invoice.`,
+    );
+  }
   const file = files[0];
 
   // Preflight Anthropic config before Azure processing.

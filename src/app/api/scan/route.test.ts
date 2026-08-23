@@ -491,6 +491,47 @@ describe("POST /api/scan", () => {
     expect(anthropic.parse).not.toHaveBeenCalled();
   });
 
+  it("rejects a batch with more than one PDF, before any Azure/Anthropic work (BND-AF01)", async () => {
+    auth.requireMembership.mockResolvedValue({
+      supabase: makeSupabase(),
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+    const fd = new FormData();
+    fd.append("file", new File(["invoice one"], "invoice-1.pdf", { type: "application/pdf" }));
+    fd.append("file", new File(["invoice two"], "invoice-2.pdf", { type: "application/pdf" }));
+    fd.append("file", new File(["invoice three"], "invoice-3.pdf", { type: "application/pdf" }));
+
+    const res = await POST(makeFormRequest(fd));
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.message).toMatch(/one PDF per invoice/i);
+    expect(body.error.message).toContain("3 PDFs");
+    expect(azure.analyzeInvoice).not.toHaveBeenCalled();
+    expect(anthropic.parse).not.toHaveBeenCalled();
+  });
+
+  it("still allows a single multi-page PDF alongside other image pages", async () => {
+    const supabase = makeSupabase();
+    auth.requireMembership.mockResolvedValue({
+      supabase,
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+    azure.analyzeInvoice.mockResolvedValue(OK_OCR);
+    anthropic.parse.mockResolvedValue(makeParsedInvoice());
+    const fd = new FormData();
+    fd.append("file", pdfFile());
+    fd.append("file", new File(["page two"], "page-2.jpg", { type: "image/jpeg" }));
+
+    const res = await POST(makeFormRequest(fd));
+
+    expect(res.status).toBe(200);
+  });
+
   it("stores HEIC pages with their real extension", async () => {
     const supabase = makeSupabase();
     auth.requireMembership.mockResolvedValue({

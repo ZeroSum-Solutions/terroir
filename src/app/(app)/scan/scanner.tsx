@@ -34,6 +34,38 @@ const STORAGE_KEY = "terroir:current-scan";
 // full network upload.
 const INVOICE_MAX_BYTES = 10 * 1024 * 1024;
 const BOTTLE_MAX_BYTES = 20 * 1024 * 1024;
+// Mirrors MAX_INVOICE_PAGES in /api/scan/route.ts.
+const MAX_INVOICE_PAGES = 8;
+// Mirrors ALLOWED_MIME in /api/scan/route.ts, so an unsupported file type
+// fails immediately, client-side, instead of only after a round trip.
+const ALLOWED_INVOICE_MIME = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/heic",
+  "image/heif",
+  "application/pdf",
+]);
+const ALLOWED_INVOICE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "heic", "heif", "pdf"]);
+// A request that never resolves (dropped connection, stalled proxy) must
+// still fail visibly rather than leaving the user staring at "still
+// working" forever — generous ceiling above the ~90s Azure OCR budget
+// plus one Claude extraction retry.
+const SCAN_TIMEOUT_MS = 150_000;
+
+function fileExtension(name: string): string {
+  const idx = name.lastIndexOf(".");
+  return idx === -1 ? "" : name.slice(idx + 1).toLowerCase();
+}
+
+/**
+ * Some mobile browsers/webviews hand over a camera-captured file with no
+ * declared MIME type (or a generic one) — fall back to the extension
+ * rather than rejecting a legitimate photo or PDF outright.
+ */
+function isAllowedInvoiceFile(file: File): boolean {
+  if (file.type) return ALLOWED_INVOICE_MIME.has(file.type);
+  return ALLOWED_INVOICE_EXTENSIONS.has(fileExtension(file.name));
+}
 
 export { formatMoney } from "./components/field-inputs";
 
@@ -149,9 +181,22 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const [error, setError] = useState<string | null>(null);
   const [rawText, setRawText] = useState<string | null>(null);
   const [lastFile, setLastFile] = useState<File | null>(null);
+  // The full originally-selected invoice batch (possibly several files),
+  // preserved so a recoverable error's "Retry" resubmits everything the
+  // user picked — not just the first file (see BND-089 retry gap).
+  const [lastFiles, setLastFiles] = useState<File[]>([]);
   const [mode, setMode] = useState<ScanMode>("invoice");
   const [bottleResult, setBottleResult] = useState<BottleScanResult | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const scanTimeoutRef = useRef<number | null>(null);
+  const timedOutRef = useRef(false);
+
+  const clearScanTimeout = useCallback(() => {
+    if (scanTimeoutRef.current != null) {
+      window.clearTimeout(scanTimeoutRef.current);
+      scanTimeoutRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -163,7 +208,13 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     });
   }, []);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      clearScanTimeout();
+    },
+    [clearScanTimeout],
+  );
 
   useEffect(() => {
     if (!feedback) return;
@@ -191,9 +242,46 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   }, [status]);
 
   const startScan = useCallback(async (files: File[]) => {
+    // Client-side pre-validation — every case below must fail immediately,
+    // before any network call, with a specific and visible explanation.
+    // Retry is never offered for these: the same files would fail the same
+    // way, so lastFiles is cleared rather than preserved.
+    const unsupported = files.find((f) => !isAllowedInvoiceFile(f));
+    if (unsupported) {
+      setLastFile(null);
+      setLastFiles([]);
+      setError(`"${unsupported.name}" isn't a supported file type. Upload a JPG, PNG, HEIC, or PDF.`);
+      setRawText(null);
+      setStatus("error");
+      return;
+    }
+
+    // A PDF is already a complete multi-page document, unlike a photo —
+    // batching more than one together would silently merge unrelated
+    // invoices into one garbled result (mirrors the /api/scan check).
+    const pdfCount = files.filter((f) => f.type === "application/pdf" || fileExtension(f.name) === "pdf").length;
+    if (pdfCount > 1) {
+      setLastFile(null);
+      setLastFiles([]);
+      setError(`You selected ${pdfCount} PDFs. Upload one PDF per invoice — scan each invoice separately, or take a photo of each page instead.`);
+      setRawText(null);
+      setStatus("error");
+      return;
+    }
+
+    if (files.length > MAX_INVOICE_PAGES) {
+      setLastFile(null);
+      setLastFiles([]);
+      setError(`Select up to ${MAX_INVOICE_PAGES} pages per invoice scan. You selected ${files.length}.`);
+      setRawText(null);
+      setStatus("error");
+      return;
+    }
+
     const oversized = files.find((f) => f.size > INVOICE_MAX_BYTES);
     if (oversized) {
       setLastFile(null);
+      setLastFiles([]);
       setError(`"${oversized.name}" is larger than 10 MB. Choose a smaller photo or a lower-resolution scan.`);
       setRawText(null);
       setStatus("error");
@@ -201,10 +289,19 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     }
 
     abortRef.current?.abort();
+    clearScanTimeout();
     const ac = new AbortController();
     abortRef.current = ac;
+    timedOutRef.current = false;
+    // A stalled/dropped connection must fail visibly instead of leaving
+    // "still working" on screen forever — see SCAN_TIMEOUT_MS.
+    scanTimeoutRef.current = window.setTimeout(() => {
+      timedOutRef.current = true;
+      ac.abort();
+    }, SCAN_TIMEOUT_MS);
 
     setLastFile(files[0]);
+    setLastFiles(files);
     setProgress(0);
     setStatus("processing");
     setError(null);
@@ -242,15 +339,22 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         });
       }
     } catch (err) {
-      if (ac.signal.aborted) return;
-      const message = err instanceof Error ? err.message : "Scan failed.";
+      // A user-initiated cancel also aborts the signal — only treat this
+      // as a silent, expected abort when OUR timeout didn't cause it.
+      if (ac.signal.aborted && !timedOutRef.current) return;
+      const message = timedOutRef.current
+        ? "This is taking longer than expected. Check your connection and try again."
+        : err instanceof Error
+          ? err.message
+          : "Scan failed.";
       setError(message);
-      setRawText(err instanceof ScanError ? err.rawText ?? null : null);
+      setRawText(!timedOutRef.current && err instanceof ScanError ? err.rawText ?? null : null);
       setStatus("error");
     } finally {
+      clearScanTimeout();
       if (abortRef.current === ac) abortRef.current = null;
     }
-  }, []);
+  }, [clearScanTimeout]);
 
   const updateField = useCallback(
     (id: string, field: LineItemField, value: string | number | null) => {
@@ -300,6 +404,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
 
   const startOver = useCallback(() => {
     abortRef.current?.abort();
+    clearScanTimeout();
     scanKeyRef.current = null;
     saveScan(null);
     setScan(null);
@@ -307,17 +412,18 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     setError(null);
     setRawText(null);
     setStatus("ready");
-  }, []);
+  }, [clearScanTimeout]);
 
   const cancelScan = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    clearScanTimeout();
     scanKeyRef.current = null;
     setProgress(0);
     setError(null);
     setRawText(null);
     setStatus("ready");
-  }, []);
+  }, [clearScanTimeout]);
 
   const exportCsv = useCallback(() => {
     if (!scan) return;
@@ -531,13 +637,15 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   }, []);
 
   const retryScan = useCallback(() => {
-    if (!lastFile) return;
     if (mode === "bottle") {
-      startBottleScan(lastFile);
-    } else {
-      startScan([lastFile]);
+      if (lastFile) startBottleScan(lastFile);
+    } else if (lastFiles.length > 0) {
+      // Resubmit the FULL originally-selected batch, not just the first
+      // file — a recoverable (network) error must not silently drop the
+      // other pages of a multi-file invoice on retry.
+      startScan(lastFiles);
     }
-  }, [lastFile, mode, startBottleScan, startScan]);
+  }, [lastFile, lastFiles, mode, startBottleScan, startScan]);
 
   const saveBottleToInventory = useCallback(
     async (wine: {
@@ -613,6 +721,8 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     [mode, startBottleScan, startScan],
   );
 
+  const hasRetryableFile = mode === "bottle" ? !!lastFile : lastFiles.length > 0;
+
   if (!hydrated) return <ReadyView onStart={handleStart} mode={mode} onModeChange={setMode} recentScans={recentScans} savedResult={null} onDismissSaved={() => {}} />;
 
   return (
@@ -630,9 +740,9 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         <ErrorView
           mode={mode}
           message={error ?? "Unknown error."}
-          onRetry={lastFile ? retryScan : startOver}
+          onRetry={hasRetryableFile ? retryScan : startOver}
           onNewPhoto={startOver}
-          hasFile={!!lastFile}
+          hasFile={hasRetryableFile}
           onManual={enterManualEntry}
         />
       )}

@@ -458,6 +458,125 @@ describe("Scanner client-side upload guards", () => {
     expect(container.textContent).toContain("Couldn’t read the label");
     expect(container.textContent).toContain("single");
   });
+
+  it("rejects an unsupported invoice file type immediately, without calling fetch (AF01)", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await selectReadyFile(new File(["not an invoice"], "notes.txt", { type: "text/plain" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Couldn’t read the invoice");
+    expect(container.textContent).toContain("notes.txt");
+    expect(container.textContent).toContain("isn't a supported file type");
+    // Not recoverable by retrying the same bad selection.
+    expect(container.querySelector("button")?.textContent).not.toContain("Retry");
+  });
+
+  it("rejects three PDFs selected together immediately, without calling fetch (AF01 — the owner's exact case)", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await selectReadyFiles([
+      new File(["invoice one"], "invoice-1.pdf", { type: "application/pdf" }),
+      new File(["invoice two"], "invoice-2.pdf", { type: "application/pdf" }),
+      new File(["invoice three"], "invoice-3.pdf", { type: "application/pdf" }),
+    ]);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Couldn’t read the invoice");
+    expect(container.textContent).toContain("3 PDFs");
+    expect(container.textContent).toContain("one PDF per invoice");
+  });
+
+  it("still allows a single PDF through client-side validation", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(responseWithJson(Promise.resolve(invoiceResult)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await selectReadyFile(new File(["invoice"], "invoice.pdf", { type: "application/pdf" }));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Invoice scan results");
+  });
+
+  it("still allows multiple photographed pages (not PDFs) through client-side validation", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(responseWithJson(Promise.resolve(invoiceResult)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await selectReadyFiles([
+      new File(["page one"], "page-1.jpg", { type: "image/jpeg" }),
+      new File(["page two"], "page-2.png", { type: "image/png" }),
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Invoice scan results");
+  });
+
+  it("retries a recoverable network error with the FULL originally-selected batch, not just the first file", async () => {
+    const retry = deferred<Response>();
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error("network error"))
+      .mockReturnValueOnce(retry.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await selectReadyFiles([
+      new File(["invoice one"], "invoice-1.pdf", { type: "application/pdf" }),
+      new File(["page two"], "page-2.jpg", { type: "image/jpeg" }),
+      new File(["page three"], "page-3.jpg", { type: "image/jpeg" }),
+    ]);
+    expect(container.textContent).toContain("Couldn’t read the invoice");
+    fetchMock.mockClear();
+    await clickButton("Retry invoice scan");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const retriedFormData = fetchMock.mock.calls[0][1].body as FormData;
+    expect(retriedFormData.getAll("file")).toHaveLength(3);
+  });
+
+  it("a camera-captured JPEG reaches processing through the camera input specifically", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(responseWithJson(Promise.resolve(invoiceResult)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await selectCameraFile(new File(["camera capture"], "camera-capture.jpg", { type: "image/jpeg" }));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Invoice scan results");
+  });
+
+  it("shows a specific, visible error when the scan request never resolves (dropped/stalled connection)", async () => {
+    vi.useFakeTimers();
+    try {
+      // A real fetch() rejects with AbortError once its signal aborts —
+      // replicate that so the timeout's ac.abort() actually settles this
+      // otherwise-never-resolving request, the way a real network stall
+      // eventually would once our own client-side ceiling fires.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          (_url: string | URL | Request, init?: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener("abort", () =>
+                reject(new DOMException("The operation was aborted", "AbortError")),
+              );
+            }),
+        ),
+      );
+
+      await selectReadyFile(new File(["invoice"], "invoice.jpg", { type: "image/jpeg" }));
+      expect(container.textContent).toContain("Uploading invoice");
+
+      await act(async () => {
+        vi.advanceTimersByTime(150_001);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(container.textContent).toContain("Couldn’t read the invoice");
+      expect(container.textContent).toContain("taking longer than expected");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("Scanner save and export feedback", () => {
@@ -560,9 +679,21 @@ async function selectReadyFile(file: File) {
 }
 
 async function selectReadyFiles(files: File[]) {
+  // ReadyView renders the camera input first, then the upload input — the
+  // upload input is the "Upload file" / multi-file path exercised here.
   const input = [...container.querySelectorAll<HTMLInputElement>('input[type="file"]')].at(-1);
   if (!input) throw new Error("Could not find ready-state file input");
   Object.defineProperty(input, "files", { configurable: true, value: files });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+}
+
+async function selectCameraFile(file: File) {
+  // The camera-origin input is the FIRST file input ReadyView renders
+  // (accept="image/*" capture="environment") — distinct from the general
+  // upload input "Upload file" targets.
+  const input = container.querySelectorAll<HTMLInputElement>('input[type="file"]')[0];
+  if (!input) throw new Error("Could not find camera input");
+  Object.defineProperty(input, "files", { configurable: true, value: [file] });
   await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
 }
 
