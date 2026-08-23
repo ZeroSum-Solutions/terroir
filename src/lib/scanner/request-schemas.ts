@@ -38,6 +38,7 @@ export const SaveBottleScanBodySchema = z.object({
     varietal: z.string(),
     region: z.string(),
     country: z.string().nullable(),
+    format: z.string().nullable().optional(),
     qty: z.number().int().positive(),
     unitCost: z.number().finite().nonnegative(),
   }),

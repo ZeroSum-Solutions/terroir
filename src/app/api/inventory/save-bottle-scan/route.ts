@@ -22,6 +22,7 @@ type SaveBottleBody = {
     varietal: string;
     region: string;
     country: string | null;
+    format?: string | null;
     qty: number;
     unitCost: number;
   };
@@ -103,6 +104,7 @@ async function saveBottleOnce(opts: {
       invoice_scan_id: null,
       quantity: wine.qty,
       unit_cost: wine.unitCost,
+      format: wine.format ?? null,
       added_via: "bottle_scan" as const,
     });
 

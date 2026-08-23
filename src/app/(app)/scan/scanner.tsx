@@ -155,6 +155,15 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const [scan, setScan] = useState<Scan | null>(null);
   const [originalItems, setOriginalItems] = useState<LineItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  // Authoritative synchronous guard against a double-tap double-submit:
+  // `isSaving` state only flips the button's `disabled` attribute on the
+  // NEXT render (~10ms later), so two native click events dispatched in
+  // the same synchronous task both see the stale `isSaving === false`
+  // closure and both pass the `if (isSaving) return` check, firing two
+  // POSTs. A ref is read AND written synchronously, before any render, so
+  // the second same-tick call sees the first call's write immediately.
+  // Shared by both save paths below since they share `isSaving` itself.
+  const isSavingRef = useRef(false);
   // BND-006: UUIDv4 generated on the first save attempt and reused across
   // retries of the SAME logical save. Cleared on a successful 2xx (or on a
   // 4xx validation error) so the next save starts with a fresh key; held
@@ -187,9 +196,22 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const [lastFiles, setLastFiles] = useState<File[]>([]);
   const [mode, setMode] = useState<ScanMode>("invoice");
   const [bottleResult, setBottleResult] = useState<BottleScanResult | null>(null);
+  // Immediate-acknowledgment preview (walkthrough §1.2, item 7): an object
+  // URL for the just-picked label photo, set synchronously before the
+  // /api/scan-bottle round-trip resolves so ProcessingView can render the
+  // user's own photo instead of a generic icon.
+  const [bottlePreviewUrl, setBottlePreviewUrlState] = useState<string | null>(null);
+  const bottlePreviewUrlRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scanTimeoutRef = useRef<number | null>(null);
   const timedOutRef = useRef(false);
+
+  const setBottlePreview = useCallback((file: File | null) => {
+    if (bottlePreviewUrlRef.current) URL.revokeObjectURL(bottlePreviewUrlRef.current);
+    const url = file ? URL.createObjectURL(file) : null;
+    bottlePreviewUrlRef.current = url;
+    setBottlePreviewUrlState(url);
+  }, []);
 
   const clearScanTimeout = useCallback(() => {
     if (scanTimeoutRef.current != null) {
@@ -212,6 +234,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     () => () => {
       abortRef.current?.abort();
       clearScanTimeout();
+      if (bottlePreviewUrlRef.current) URL.revokeObjectURL(bottlePreviewUrlRef.current);
     },
     [clearScanTimeout],
   );
@@ -415,10 +438,11 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     saveScan(null);
     setScan(null);
     setBottleResult(null);
+    setBottlePreview(null);
     setError(null);
     setRawText(null);
     setStatus("ready");
-  }, [clearScanTimeout]);
+  }, [clearScanTimeout, setBottlePreview]);
 
   const cancelScan = useCallback(() => {
     abortRef.current?.abort();
@@ -507,7 +531,8 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   }, [scan]);
 
   const saveToInventory = useCallback(async () => {
-    if (!scan || isSaving) return;
+    if (!scan || isSavingRef.current) return;
+    isSavingRef.current = true;
     setIsSaving(true);
     // Reuse an existing key on retry, or mint a new one on first attempt.
     if (!saveKeyRef.current) {
@@ -554,9 +579,10 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       const message = err instanceof Error ? err.message : "Save failed.";
       setFeedback({ kind: "error", message });
     } finally {
+      isSavingRef.current = false;
       setIsSaving(false);
     }
-  }, [scan, originalItems, isSaving, lastFile]);
+  }, [scan, originalItems, lastFile]);
 
   const enterManualEntry = useCallback(() => {
     const parsedAt = new Date().toISOString();
@@ -605,6 +631,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     abortRef.current = ac;
 
     setLastFile(file);
+    setBottlePreview(file);
     setProgress(0);
     setStatus("processing");
     setError(null);
@@ -640,7 +667,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     } finally {
       if (abortRef.current === ac) abortRef.current = null;
     }
-  }, []);
+  }, [setBottlePreview]);
 
   const retryScan = useCallback(() => {
     if (mode === "bottle") {
@@ -661,10 +688,12 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       varietal: string;
       region: string;
       country: string | null;
+      format: string | null;
       qty: number;
       unitCost: number;
     }) => {
-      if (isSaving) return;
+      if (isSavingRef.current) return;
+      isSavingRef.current = true;
       setIsSaving(true);
       if (!bottleSaveKeyRef.current) {
         bottleSaveKeyRef.current =
@@ -694,16 +723,18 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         }
         bottleSaveKeyRef.current = null;
         setBottleResult(null);
+        setBottlePreview(null);
         setSavedResult({ itemCount: 1, wineCount: 1 });
         setStatus("ready");
       } catch (err) {
         const message = err instanceof Error ? err.message : "Save failed.";
         setFeedback({ kind: "error", message });
       } finally {
+        isSavingRef.current = false;
         setIsSaving(false);
       }
     },
-    [isSaving],
+    [setBottlePreview],
   );
 
   const handleStart = useCallback(
@@ -740,6 +771,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
           stage={stageForProgress(mode, progress)}
           mode={mode}
           onCancel={cancelScan}
+          previewUrl={bottlePreviewUrl}
         />
       )}
       {status === "error" && (

@@ -30,9 +30,16 @@ interface ProcessingViewProps {
   stage: ScanStage;
   mode: ScanMode;
   onCancel: () => void;
+  /**
+   * Object URL for the just-captured photo, set synchronously on file
+   * selection (before the network round-trip resolves) so the user sees
+   * their own photo rather than a generic icon — the walkthrough §1.2
+   * "immediate acknowledgment" requirement.
+   */
+  previewUrl?: string | null;
 }
 
-export function ProcessingView({ progress, stage, mode, onCancel }: ProcessingViewProps) {
+export function ProcessingView({ progress, stage, mode, onCancel, previewUrl }: ProcessingViewProps) {
   const capped = progress >= 90;
   const isBottle = mode === "bottle";
   const steps = isBottle ? BOTTLE_STEPS : INVOICE_STEPS;
@@ -41,9 +48,17 @@ export function ProcessingView({ progress, stage, mode, onCancel }: ProcessingVi
   return (
     <section className="flex min-h-[60vh] items-center justify-center">
       <div className="w-full max-w-[420px] rounded-card border border-hairline bg-white p-xl text-center">
-        <div className="mx-auto mb-md flex h-16 w-16 items-center justify-center rounded-full bg-blush-wash text-primary">
-          <Sparkles className="h-7 w-7" strokeWidth={1.5} aria-hidden="true" />
-        </div>
+        {previewUrl ? (
+          <img
+            src={previewUrl}
+            alt="Captured photo"
+            className="mx-auto mb-md h-20 w-20 rounded-lg border border-hairline object-cover"
+          />
+        ) : (
+          <div className="mx-auto mb-md flex h-16 w-16 items-center justify-center rounded-full bg-blush-wash text-primary">
+            <Sparkles className="h-7 w-7" strokeWidth={1.5} aria-hidden="true" />
+          </div>
+        )}
         <h2 className="font-serif text-[22px] text-ink">
           {isBottle ? "Reading the label" : "Reading your invoice"}
         </h2>

@@ -172,4 +172,30 @@ describe("POST /api/inventory/save-bottle-scan", () => {
       ],
     });
   });
+
+  it("persists the bottle format on the inventory item when provided", async () => {
+    const supabase = makeSupabase({});
+    allow(supabase);
+
+    const response = await POST(request({ format: "Magnum (1.5L)" }));
+
+    expect(response.status).toBe(200);
+    expect(supabase.calls).toContainEqual({
+      method: "inventory:insert",
+      args: [expect.objectContaining({ format: "Magnum (1.5L)" })],
+    });
+  });
+
+  it("defaults the inventory format to null when omitted", async () => {
+    const supabase = makeSupabase({});
+    allow(supabase);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(supabase.calls).toContainEqual({
+      method: "inventory:insert",
+      args: [expect.objectContaining({ format: null })],
+    });
+  });
 });

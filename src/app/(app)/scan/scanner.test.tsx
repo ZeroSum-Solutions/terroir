@@ -67,14 +67,20 @@ const invoiceResult: Scan = {
 };
 
 const bottleResult: BottleScanResult = {
-  name: "Test Pinot Noir",
-  producer: "Test Producer",
-  vintage: 2022,
-  varietal: "Pinot Noir",
-  region: "Willamette Valley",
-  country: "United States",
-  confidence: 0.95,
-  notes: null,
+  candidates: [
+    {
+      name: "Test Pinot Noir",
+      producer: "Test Producer",
+      vintage: 2022,
+      varietal: "Pinot Noir",
+      region: "Willamette Valley",
+      country: "United States",
+      format: null,
+      confidence: 0.95,
+      lowFields: [],
+      notes: null,
+    },
+  ],
   parsedAt: "2026-08-20T12:00:00.000Z",
 };
 
@@ -688,6 +694,79 @@ describe("Scanner save and export feedback", () => {
 
     findRegion("alert", "accuracy cleanup blocked");
     expect(container.textContent).not.toContain("Exported accuracy report");
+  });
+});
+
+describe("Scanner double-submit guard", () => {
+  // Round-2 critic finding: `isSaving` state only flips a button's
+  // `disabled` attribute on the NEXT render — two native clicks dispatched
+  // in the same synchronous task (double-tap) both run against the stale
+  // `isSaving === false` closure and both fire a save request. The fix is
+  // a ref checked AND set synchronously inside the handler itself.
+  it("sends exactly one bottle save request when Confirm is double-clicked in the same tick", async () => {
+    const saveDeferred = deferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(responseWithJson(Promise.resolve(bottleResult)))
+      .mockReturnValue(saveDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await clickButton("Bottle");
+    await selectReadyFile(new File(["label"], "label.jpg", { type: "image/jpeg" }));
+    expect(container.textContent).toContain("Wine identified");
+
+    const confirmButton = buttonNamed("Confirm & save");
+    await act(async () => {
+      // No `await` between these two — both clicks land in the same
+      // synchronous task, exactly like a double-tap.
+      confirmButton.click();
+      confirmButton.click();
+    });
+
+    const saveCalls = fetchMock.mock.calls.filter(
+      (call) => call[0] === "/api/inventory/save-bottle-scan",
+    );
+    expect(saveCalls).toHaveLength(1);
+
+    await act(async () => {
+      saveDeferred.resolve(
+        responseWithJson(Promise.resolve({ wineId: "wine-1" })),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  });
+
+  it("sends exactly one invoice save request when Save to Inventory is double-clicked in the same tick", async () => {
+    const saveDeferred = deferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(responseWithJson(Promise.resolve(invoiceResult)))
+      .mockReturnValue(saveDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await selectReadyFile(new File(["invoice"], "invoice.jpg", { type: "image/jpeg" }));
+
+    const saveButton = buttonNamed("Save to Inventory");
+    await act(async () => {
+      saveButton.click();
+      saveButton.click();
+    });
+
+    const saveCalls = fetchMock.mock.calls.filter(
+      (call) => call[0] === "/api/inventory/save-scan",
+    );
+    expect(saveCalls).toHaveLength(1);
+
+    await act(async () => {
+      saveDeferred.resolve(
+        responseWithJson(
+          Promise.resolve({ scanId: "scan-1", itemCount: 1, wineCount: 1 }),
+        ),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
   });
 });
 

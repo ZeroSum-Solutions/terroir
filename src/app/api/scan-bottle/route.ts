@@ -140,19 +140,23 @@ async function postBottleScan(request: NextRequest) {
     });
 
     const parsed = response.parsed_output;
-    if (!parsed) {
+    if (!parsed || parsed.candidates.length === 0) {
       return Errors.unprocessable("parse_failed", "Could not identify the wine from this photo. Try a clearer photo of the label.");
     }
 
     const result: BottleScanResult = {
-      name: parsed.name,
-      producer: parsed.producer,
-      vintage: parsed.vintage,
-      varietal: parsed.varietal,
-      region: parsed.region,
-      country: parsed.country,
-      confidence: parsed.confidence,
-      notes: parsed.notes,
+      candidates: parsed.candidates.map((candidate) => ({
+        name: candidate.name,
+        producer: candidate.producer,
+        vintage: candidate.vintage,
+        varietal: candidate.varietal,
+        region: candidate.region,
+        country: candidate.country,
+        format: candidate.format,
+        confidence: candidate.confidence,
+        lowFields: candidate.lowFields,
+        notes: candidate.notes,
+      })),
       parsedAt: new Date().toISOString(),
     };
 
