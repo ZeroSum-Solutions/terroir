@@ -11,6 +11,8 @@
  * "<csv-without-ext>.manifest.json" and uses it if present; otherwise it
  * skips the manifest cross-check (this is what lets the same entry point
  * run against a real partner file later, with no ground-truth manifest).
+ * If manifest-path IS given explicitly, it must exist and must be a
+ * genuine partner-cellar manifest — see PASS_PRECONDITIONS below.
  *
  * A note on MAX_ROWS: the current importer's csv-parser rejects any file
  * with more than MAX_ROWS (5000) data rows in a single parseCsv() call —
@@ -41,27 +43,57 @@
  * The 1:1 contract this script depends on: every chunk of raw text handed
  * to parseCsv() must produce exactly one output row per non-blank record
  * splitLogicalRecords() found in it (parseCsv() itself silently drops any
- * fully-blank record — see isBlankRecord() below). That contract is
- * asserted at runtime, not assumed: a chunk where the counts disagree fails
- * closed rather than reporting a row number that might be wrong.
+ * fully-blank record — see isBlankRecord() below).
  *
- * Exit code: this script is intentionally strict. It exits non-zero when:
- *   - the file cannot be split into unambiguous logical records at all
- *     (unterminated quote, or unsupported bare-CR line endings);
- *   - the file has a header but zero data rows;
- *   - any record fails to parse (unparseable) — unless a manifest tags that
- *     exact row index as an expected-invalid row (see below) whose expected
- *     outcome is "unparseable" (e.g. the --dirty oversized_field group);
- *   - any row NOT tagged by the manifest as expected-invalid fails
- *     row-validator validation;
- *   - a manifest-tagged expected-invalid row unexpectedly validates fine
- *     (the fixture's dirty-injection or the importer's behavior drifted);
- *   - a manifest-tagged group's observed row count doesn't match the
- *     manifest's count for that group;
- *   - the file's total row count doesn't match manifest.total_rows;
- *   - the CSV's sha256 doesn't match manifest.csv_sha256 (computed over the
- *     raw file bytes and actually compared — not just printed);
- *   - any --extras barcode fails its EAN-13 check digit.
+ * ---------------------------------------------------------------------
+ * Round-4 note on WHY the exit-code logic below looks the way it does.
+ *
+ * Three straight rounds of review found the same class of bug: this script
+ * printed "=== RESULT: PASS ===" on a file it had not actually, meaningfully
+ * read (a corrupted chunk boundary; a lone-CR file that parsed zero rows; a
+ * valid header followed only by blank lines, also zero rows). Each fix
+ * closed one specific door instead of asking "what is the COMPLETE set of
+ * things that must be true for a PASS to mean anything?".
+ *
+ * This version answers that question once, in one place: see
+ * PASS_PRECONDITIONS and evaluateVerdict() below. Every reason this script
+ * can print "=== RESULT: FAIL ===" is a named entry in that list, checked
+ * by evaluateVerdict() — the ONLY function in this file that decides
+ * pass/fail and the ONLY call to process.exit() with a validation-derived
+ * code. Nothing upstream of it may print "PASS"; nothing upstream of it may
+ * suppress a reason it would otherwise report. If you are adding a new
+ * check, add it to PASS_PRECONDITIONS — not as a one-off condition
+ * elsewhere in this file.
+ *
+ * The full, current list (see PASS_PRECONDITIONS for the authoritative,
+ * literal set) covers: the CSV path exists and is readable; its line
+ * endings are ones we understand; its logical record boundaries are
+ * resolvable; the file is not empty; the header parses and maps every
+ * required column; the file has at least one NON-BLANK data record (not
+ * merely a non-zero logical-record count — a header followed only by blank
+ * lines must fail, see has_nonblank_data_records); every chunk's real-parser
+ * row count matches the non-blank record count this script expected; every
+ * manifest-tagged dirty-row category is recognized; every row NOT tagged as
+ * expected-invalid actually validated; every manifest-tagged group's
+ * observed count and outcomes match what the manifest promised; the total
+ * row count matches the manifest; every barcode's EAN-13 check digit is
+ * correct and agrees with the manifest; and — when a manifest is supplied,
+ * whether via an explicit argument or an auto-detected sibling file — that
+ * the manifest path exists (an EXPLICITLY specified path that is missing is
+ * a hard failure, not "no manifest"), that it is valid JSON, that it is
+ * genuinely a partner-cellar manifest (not just any JSON file — see
+ * isValidManifestShape()), and that its csv_sha256 matches the file's
+ * actual bytes.
+ *
+ * Deliberately OUT of PASS_PRECONDITIONS: whether this script's own
+ * <csv>.failures.json report artifact could be written or cleaned up (see
+ * syncFailuresReport()). That is bookkeeping about this tool's own output
+ * file, not about whether the CSV was validated correctly, so an I/O
+ * problem there is reported as a warning AFTER the verdict — never as an
+ * unhandled crash, and never by silently swallowing the validation result
+ * that already finished (round-4 defect: an unwritable failures.json used
+ * to throw mid-report and lose the whole completed summary).
+ *
  * With NO manifest (a real file with no ground truth), there are no tagged
  * groups, so ANY parse or validation failure is "untagged" and fails the
  * run. That is a deliberate, documented stance for now — a later piece can
@@ -69,11 +101,13 @@
  * today this script's job is a strict self-test of the fixture + importer
  * pairing, not a lenient real-file reviewer. When there are untagged
  * failures, the terminal prints only the first ten; the complete list is
- * always written to "<csv-without-ext>.failures.json" alongside the input.
+ * always written to "<csv-without-ext>.failures.json" alongside the input
+ * (and that file is removed if a later rerun has none — see
+ * syncFailuresReport()).
  */
 
 import { createHash } from "node:crypto";
-import { readFileSync, existsSync, writeFileSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { decodeCsvBuffer, parseCsv } from "../src/domains/import/csv-parser";
 import { mapHeader, validateRow, type ValidatedRow } from "../src/domains/import/row-validator";
@@ -210,7 +244,7 @@ export function splitLogicalRecords(text: string): string[] {
 
 /**
  * Is this logical record one the real parseCsv() silently drops as a fully
- * blank line (its own `pushRow()` rule: exactly one field, and that field
+ * blank line (its own `pushRow()` rule): exactly one field, and that field
  * is empty)? Rather than reimplement that field-parsing rule a second time
  * — which is exactly how the splitter/parser disagreement this fix is
  * closing happened in the first place — this asks the real parser itself:
@@ -246,194 +280,323 @@ type GroupStat = {
   mismatches: { rowIndex: number; outcome: RowOutcome; detail: string }[];
 };
 
-function main() {
-  const [, , csvPathArg, manifestPathArg] = process.argv;
-  const csvPath = csvPathArg ?? "fixtures/generated/partner-cellar-20k.csv";
+/**
+ * Does this parsed value look like a manifest THIS generator produced,
+ * rather than just any syntactically valid JSON file (round-4 defect: a
+ * critic pointed this script at package.json and every ground-truth check
+ * silently no-oped)? Every manifest this repo's fixture generator has ever
+ * written — base, --extras, --dirty, the 500-row sample — carries all of
+ * these fields with these exact types (see
+ * scripts/fixtures/generate-partner-cellar.mjs); package.json, or any other
+ * unrelated JSON file, does not.
+ */
+function isValidManifestShape(value: unknown): value is Manifest {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.generator_seed === "number" &&
+    typeof v.generator_version === "string" &&
+    typeof v.total_rows === "number" &&
+    typeof v.clean_row_count === "number" &&
+    typeof v.dirty_row_count === "number" &&
+    typeof v.csv_sha256 === "string" &&
+    /^[0-9a-f]{64}$/i.test(v.csv_sha256) &&
+    Array.isArray(v.columns) &&
+    v.columns.every((c) => typeof c === "string")
+  );
+}
 
-  console.log("=== P1 bulk-import validation runner ===");
-  console.log("(This entry point will grow to cover import + enrichment in later pieces.)");
-  console.log(`CSV:      ${csvPath}`);
+// ---------------------------------------------------------------------------
+// RunState — everything this script observed about one (csv, manifest)
+// pair. buildRunState() below NEVER calls process.exit() and NEVER lets an
+// exception escape for a condition this file is meant to validate against;
+// it only ever returns a RunState, as far as it was able to get. Deciding
+// what that means for pass/fail is entirely evaluateVerdict()'s job — see
+// PASS_PRECONDITIONS. This separation is the whole point: there is exactly
+// one place downstream of here that can print "PASS".
+// ---------------------------------------------------------------------------
 
-  if (!existsSync(csvPath)) {
-    console.error(`File not found: ${csvPath}`);
-    process.exit(1);
-  }
+interface RunState {
+  csvPath: string;
+  manifestPathArg: string | null;
 
-  let manifestPath = manifestPathArg ?? null;
-  if (!manifestPath) {
-    const guess = csvPath.replace(/\.csv$/, ".manifest.json");
-    if (guess !== csvPath && existsSync(guess)) manifestPath = guess;
-  }
-  let manifest: Manifest | null = null;
-  if (manifestPath && existsSync(manifestPath)) {
-    manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-    console.log(`Manifest: ${manifestPath}`);
+  csvExists: boolean;
+  csvReadError: string | null;
+  buffer: Buffer | null;
+
+  splitErrorReason: "unsupported_line_ending" | "ambiguous_record_split" | null;
+  splitErrorMessage: string | null;
+
+  allRecords: string[] | null;
+  headerRecord: string | null;
+  dataRecords: string[];
+
+  headerParseErrorReason: string | null;
+  missingRequiredHeaders: string[];
+  barcodeColumnIndex: number;
+
+  blankFlags: boolean[];
+  nonBlankDataRecordCount: number;
+
+  chunkMismatch: { offset: number; expected: number; actual: number } | null;
+
+  manifestPath: string | null;
+  manifestExplicitPathMissing: boolean;
+  manifestJsonError: string | null;
+  manifestShapeInvalid: boolean;
+  manifest: Manifest | null;
+
+  rowsParsed: number;
+  rowsUnparseable: number;
+  rowsValid: number;
+  rowsInvalid: number;
+  blankLinesSkipped: number;
+  distinctRawVariantKeys: Set<string>;
+  sampleInvalidReasons: string[];
+  untaggedFailures: { rowIndex: number; outcome: RowOutcome; detail: string }[];
+  unknownDirtyCategories: string[];
+  groupStats: Map<string, GroupStat>;
+  groupExpectations: Map<string, GroupExpectation>;
+
+  barcodeSeen: number;
+  barcodeValid: number;
+  barcodeMismatches: number[];
+
+  wallClockMs: number;
+}
+
+function initState(csvPath: string, manifestPathArg: string | null): RunState {
+  return {
+    csvPath,
+    manifestPathArg,
+    csvExists: false,
+    csvReadError: null,
+    buffer: null,
+    splitErrorReason: null,
+    splitErrorMessage: null,
+    allRecords: null,
+    headerRecord: null,
+    dataRecords: [],
+    headerParseErrorReason: null,
+    missingRequiredHeaders: [],
+    barcodeColumnIndex: -1,
+    blankFlags: [],
+    nonBlankDataRecordCount: 0,
+    chunkMismatch: null,
+    manifestPath: null,
+    manifestExplicitPathMissing: false,
+    manifestJsonError: null,
+    manifestShapeInvalid: false,
+    manifest: null,
+    rowsParsed: 0,
+    rowsUnparseable: 0,
+    rowsValid: 0,
+    rowsInvalid: 0,
+    blankLinesSkipped: 0,
+    distinctRawVariantKeys: new Set(),
+    sampleInvalidReasons: [],
+    untaggedFailures: [],
+    unknownDirtyCategories: [],
+    groupStats: new Map(),
+    groupExpectations: new Map(),
+    barcodeSeen: 0,
+    barcodeValid: 0,
+    barcodeMismatches: [],
+    wallClockMs: 0,
+  };
+}
+
+/**
+ * Resolve + load the manifest, independent of whether the CSV itself could
+ * be read at all — a broken CSV path and a broken manifest path are two
+ * separate facts and both must be reported. Fail-CLOSED at every step (an
+ * unreadable file, invalid JSON, or the wrong shape all stop here and leave
+ * state.manifest === null) rather than let a raw exception escape (round-4
+ * defect: malformed JSON used to produce an unhandled stack trace).
+ */
+function loadManifest(state: RunState): void {
+  let resolvedPath: string | null = null;
+  if (state.manifestPathArg) {
+    if (!existsSync(state.manifestPathArg)) {
+      // An EXPLICITLY specified manifest path that doesn't exist is a hard
+      // error, not "no manifest supplied" — the user asked for ground-truth
+      // verification and silently getting none is exactly the trust defect
+      // round-4 named (round-4 defect #2).
+      state.manifestExplicitPathMissing = true;
+      return;
+    }
+    resolvedPath = state.manifestPathArg;
   } else {
-    console.log("Manifest: (none found — skipping ground-truth assertions)");
+    const guess = state.csvPath.replace(/\.csv$/, ".manifest.json");
+    if (guess !== state.csvPath && existsSync(guess)) resolvedPath = guess;
   }
-  console.log("");
+  if (!resolvedPath) return; // no manifest in play at all — a documented, valid state.
+  state.manifestPath = resolvedPath;
 
-  let hasFailure = false;
-  const failureReasons: string[] = [];
-  function fail(reason: string) {
-    hasFailure = true;
-    failureReasons.push(reason);
+  let raw: string;
+  try {
+    raw = readFileSync(resolvedPath, "utf8");
+  } catch (err) {
+    state.manifestJsonError = `Could not read manifest file "${resolvedPath}": ${(err as Error).message}`;
+    return;
   }
 
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    state.manifestJsonError = `Manifest "${resolvedPath}" is not valid JSON: ${(err as Error).message}`;
+    return;
+  }
+
+  if (!isValidManifestShape(parsed)) {
+    state.manifestShapeInvalid = true;
+    return;
+  }
+
+  state.manifest = parsed;
+}
+
+function roundMs(ms: number): number {
+  return Math.round(ms * 100) / 100;
+}
+
+/** True once the header has been read AND successfully parsed — the point
+ * past which every later stage (required-headers, blank accounting, the
+ * chunk loop) has data worth looking at. */
+function reachedHeader(state: RunState): boolean {
+  return (
+    state.csvExists &&
+    !state.csvReadError &&
+    state.splitErrorReason === null &&
+    state.allRecords !== null &&
+    state.allRecords.length > 0 &&
+    state.headerParseErrorReason === null
+  );
+}
+
+function buildRunState(csvPath: string, manifestPathArg: string | null): RunState {
+  const state = initState(csvPath, manifestPathArg);
   const startMs = performance.now();
 
-  const buffer = readFileSync(csvPath);
-  const text = decodeCsvBuffer(buffer);
+  state.csvExists = existsSync(csvPath);
+  // Manifest resolution is independent of the CSV file's own fate — both
+  // are checked regardless of the other's outcome.
+  loadManifest(state);
 
-  let allRecords: string[];
+  if (!state.csvExists) {
+    state.wallClockMs = roundMs(performance.now() - startMs);
+    return state;
+  }
+
   try {
-    allRecords = splitLogicalRecords(text);
+    state.buffer = readFileSync(csvPath);
+  } catch (err) {
+    state.csvReadError = `Could not read CSV file "${csvPath}": ${(err as Error).message}`;
+    state.wallClockMs = roundMs(performance.now() - startMs);
+    return state;
+  }
+
+  const text = decodeCsvBuffer(state.buffer);
+
+  try {
+    state.allRecords = splitLogicalRecords(text);
   } catch (err) {
     if (err instanceof UnsupportedLineEndingError) {
-      console.error("");
-      console.error("--- FATAL: unsupported line endings ---");
-      console.error(err.message);
-      console.error("");
-      console.error("=== RESULT: FAIL ===");
-      process.exit(1);
+      state.splitErrorReason = "unsupported_line_ending";
+      state.splitErrorMessage = err.message;
+    } else if (err instanceof AmbiguousRecordSplitError) {
+      state.splitErrorReason = "ambiguous_record_split";
+      state.splitErrorMessage = err.message;
+    } else {
+      throw err; // a genuine programmer error, not a validation-domain condition.
     }
-    if (err instanceof AmbiguousRecordSplitError) {
-      console.error("");
-      console.error("--- FATAL: cannot determine record boundaries ---");
-      console.error(err.message);
-      console.error("");
-      console.error("=== RESULT: FAIL ===");
-      process.exit(1);
-    }
-    throw err;
+    state.wallClockMs = roundMs(performance.now() - startMs);
+    return state;
   }
 
-  if (allRecords.length === 0) {
-    console.error("File is empty (no header row).");
-    console.error("=== RESULT: FAIL ===");
-    process.exit(1);
+  if (state.allRecords.length === 0) {
+    state.wallClockMs = roundMs(performance.now() - startMs);
+    return state; // empty file — has no header at all.
   }
 
-  const [headerRecord, ...dataRecords] = allRecords;
+  const [headerRecord, ...dataRecords] = state.allRecords;
+  state.headerRecord = headerRecord;
+  state.dataRecords = dataRecords;
 
-  // --- Header / column mapping ------------------------------------------
-  let columnToField: ReturnType<typeof mapHeader>["columnToField"] | null = null;
-  let missingRequired: ReturnType<typeof mapHeader>["missingRequired"] = [];
-  let barcodeColumnIndex = -1;
-
-  function ensureHeaderMapped(header: string[]) {
-    if (columnToField) return;
-    const mapped = mapHeader(header);
-    columnToField = mapped.columnToField;
-    missingRequired = mapped.missingRequired;
-    barcodeColumnIndex = header.findIndex((h) => h.trim().toLowerCase() === "barcode");
-  }
-
-  // Header validation runs unconditionally, even for a header-only file
-  // with zero data rows (fix item 2) — it must never be skipped just
-  // because the chunk loop below never gets a chunk to iterate over.
-  // Parsed through the real parseCsv() (the header record is already a
-  // complete, well-formed logical record by construction —
-  // splitLogicalRecords() would have thrown above otherwise), not
-  // reimplemented here.
   const headerParse = parseCsv(`${headerRecord}\n`);
   if (!headerParse.ok) {
-    console.error("");
-    console.error("--- FATAL: header row failed to parse ---");
-    console.error(`${headerParse.error.code}: ${headerParse.error.message}`);
-    console.error("");
-    console.error("=== RESULT: FAIL ===");
-    process.exit(1);
+    state.headerParseErrorReason = `${headerParse.error.code}: ${headerParse.error.message}`;
+    state.wallClockMs = roundMs(performance.now() - startMs);
+    return state;
   }
-  ensureHeaderMapped(headerParse.header);
+  const mapped = mapHeader(headerParse.header);
+  const columnToField = mapped.columnToField;
+  state.missingRequiredHeaders = mapped.missingRequired;
+  state.barcodeColumnIndex = headerParse.header.findIndex((h) => h.trim().toLowerCase() === "barcode");
 
-  // A file with a header and nothing else is not a pass (fix item 2): there
-  // is nothing here to rehearse the bulk import against. This is checked
-  // unconditionally, independent of the header-mapping result above, so a
-  // header-only file with EITHER valid or invalid headers still fails.
-  if (dataRecords.length === 0) {
-    fail("File has a header row but no data rows.");
-  }
+  // The real parseCsv() silently drops any fully-blank logical record (its
+  // own `pushRow()` rule), so its `rows` output is not 1:1 with
+  // `dataRecords` the moment a blank line appears anywhere but at EOF.
+  // Precomputing which records are blank — via the real parser itself, see
+  // isBlankRecord() — lets rowIndex always mean "the Nth data row counting
+  // every physical row a human would see in their spreadsheet, blank lines
+  // included" instead of drifting off by one after each blank line. It also
+  // gives an exact expected non-blank count, both per chunk (an explicit,
+  // checked invariant — see parser_row_counts_match) and across the WHOLE
+  // file (nonBlankDataRecordCount — see has_nonblank_data_records, the
+  // round-4 critical fix: dataRecords.length alone is NOT this number).
+  state.blankFlags = dataRecords.map(isBlankRecord);
+  state.nonBlankDataRecordCount = state.blankFlags.filter((isBlank) => !isBlank).length;
 
-  if (dataRecords.length > MAX_ROWS) {
-    console.log(
-      `NOTE: file has ${dataRecords.length} data rows, exceeding the current importer's ` +
-        `MAX_ROWS=${MAX_ROWS}. A single real upload would be rejected outright ` +
-        `(too_many_rows). Chunking into groups of ${MAX_ROWS} logical records (never raw ` +
-        `lines) to still get full-file parse/validate statistics from the real ` +
-        `csv-parser + row-validator.`,
-    );
-  }
-
-  // --- Manifest-driven "expected invalid" classification --------------------
+  // --- Manifest-driven "expected invalid" classification ------------------
   const knownBad = new Map<number, { group: string; expectation: GroupExpectation }>();
-  const groupStats = new Map<string, GroupStat>();
-  const groupExpectations = new Map<string, GroupExpectation>();
-
   function registerExpected(group: string, rowIndex: number, expectation: GroupExpectation) {
     knownBad.set(rowIndex, { group, expectation });
-    groupExpectations.set(group, expectation);
-    const stat = groupStats.get(group) ?? { expectedCount: 0, seenCount: 0, matchedCount: 0, mismatches: [] };
+    state.groupExpectations.set(group, expectation);
+    const stat = state.groupStats.get(group) ?? { expectedCount: 0, seenCount: 0, matchedCount: 0, mismatches: [] };
     stat.expectedCount += 1;
-    groupStats.set(group, stat);
+    state.groupStats.set(group, stat);
   }
-
-  if (manifest?.dirty_rows) {
-    for (const dr of manifest.dirty_rows) {
+  if (state.manifest?.dirty_rows) {
+    for (const dr of state.manifest.dirty_rows) {
       const expectation = DIRTY_CATEGORY_EXPECTATION[dr.category];
       if (!expectation) {
-        fail(`Manifest dirty_rows contains unknown category "${dr.category}" — no expectation defined for it.`);
+        state.unknownDirtyCategories.push(dr.category);
         continue;
       }
       registerExpected(dr.category, dr.row_index, expectation);
     }
   }
-  if (manifest?.nv_literal_rows) {
-    for (const nv of manifest.nv_literal_rows) {
+  if (state.manifest?.nv_literal_rows) {
+    for (const nv of state.manifest.nv_literal_rows) {
       registerExpected("nv_literal", nv.row_index, { outcome: "invalid", field: "vintage" });
     }
   }
 
-  let rowsParsed = 0;
-  let rowsUnparseable = 0;
-  let rowsValid = 0;
-  let rowsInvalid = 0;
-  const distinctRawVariantKeys = new Set<string>();
-  const sampleInvalidReasons: string[] = [];
-  const untaggedFailures: { rowIndex: number; outcome: RowOutcome; detail: string }[] = [];
-
-  let barcodeSeen = 0;
-  let barcodeValid = 0;
-  const barcodeMismatches: number[] = [];
-
   function classifyOutcome(rowIndex: number, outcome: RowOutcome, detail: string) {
     const tag = knownBad.get(rowIndex);
     if (!tag) {
-      if (outcome !== "valid") {
-        untaggedFailures.push({ rowIndex, outcome, detail });
-      }
+      if (outcome !== "valid") state.untaggedFailures.push({ rowIndex, outcome, detail });
       return;
     }
-    const stat = groupStats.get(tag.group)!;
+    const stat = state.groupStats.get(tag.group)!;
     stat.seenCount += 1;
     const outcomeMatches =
       outcome === tag.expectation.outcome && (!tag.expectation.field || detail.includes(tag.expectation.field));
-    if (outcomeMatches) {
-      stat.matchedCount += 1;
-    } else {
-      stat.mismatches.push({ rowIndex, outcome, detail });
-    }
+    if (outcomeMatches) stat.matchedCount += 1;
+    else stat.mismatches.push({ rowIndex, outcome, detail });
   }
 
   function checkBarcode(rowIndex: number, cells: string[]) {
-    if (barcodeColumnIndex < 0) return;
-    const barcode = (cells[barcodeColumnIndex] ?? "").trim();
+    if (state.barcodeColumnIndex < 0) return;
+    const barcode = (cells[state.barcodeColumnIndex] ?? "").trim();
     if (!barcode) return;
-    barcodeSeen += 1;
+    state.barcodeSeen += 1;
     const twelve = barcode.slice(0, 12);
     const check = barcode.slice(12);
     if (!/^\d{12}$/.test(twelve) || !/^\d$/.test(check)) {
-      barcodeMismatches.push(rowIndex);
+      state.barcodeMismatches.push(rowIndex);
       return;
     }
     let sum = 0;
@@ -443,56 +606,39 @@ function main() {
     }
     const mod = sum % 10;
     const expectedCheck = mod === 0 ? 0 : 10 - mod;
-    if (String(expectedCheck) === check) {
-      barcodeValid += 1;
-    } else {
-      barcodeMismatches.push(rowIndex);
-    }
+    if (String(expectedCheck) === check) state.barcodeValid += 1;
+    else state.barcodeMismatches.push(rowIndex);
   }
 
   function processRow(rowIndex: number, cells: string[]) {
-    rowsParsed += 1;
-    const validated: ValidatedRow = validateRow(cells, columnToField!);
+    state.rowsParsed += 1;
+    const validated: ValidatedRow = validateRow(cells, columnToField);
     let detail = "";
     if (validated.state === "valid") {
-      rowsValid += 1;
+      state.rowsValid += 1;
       classifyOutcome(rowIndex, "valid", "");
     } else {
-      rowsInvalid += 1;
+      state.rowsInvalid += 1;
       detail = validated.errors.map((e) => `${e.field}: ${e.message}`).join("; ");
-      if (sampleInvalidReasons.length < 5) sampleInvalidReasons.push(detail);
+      if (state.sampleInvalidReasons.length < 5) state.sampleInvalidReasons.push(detail);
       classifyOutcome(rowIndex, "invalid", detail);
     }
     const key = `${validated.raw.producer}|${validated.raw.name}|${validated.raw.vintage ?? "NV"}|${validated.raw.size_ml}`;
-    distinctRawVariantKeys.add(key);
+    state.distinctRawVariantKeys.add(key);
     checkBarcode(rowIndex, cells);
   }
 
   function recordUnparseable(rowIndex: number, reason: string) {
-    rowsUnparseable += 1;
+    state.rowsUnparseable += 1;
     classifyOutcome(rowIndex, "unparseable", reason);
   }
 
-  // The real parseCsv() silently drops any fully-blank logical record (its
-  // own `pushRow()` rule), so its `rows` output is not 1:1 with
-  // `dataRecords` the moment a blank line appears anywhere but at EOF.
-  // Precomputing which records are blank — via the real parser itself, see
-  // isBlankRecord() — lets rowIndex always mean "the Nth data row counting
-  // every physical row a human would see in their spreadsheet, blank lines
-  // included" instead of drifting off by one after each blank line (fix
-  // item 3). It also gives an exact expected non-blank count per chunk,
-  // which becomes an explicit, checked invariant below rather than an
-  // assumption: the real parser's row output MUST be 1:1 with the
-  // records this validator believes survived (root cause: see module doc).
-  const blankFlags = dataRecords.map(isBlankRecord);
-  let blankLinesSkipped = 0;
-
   for (let offset = 0; offset < dataRecords.length; offset += MAX_ROWS) {
     const chunkRecords = dataRecords.slice(offset, offset + MAX_ROWS);
-    const chunkBlankFlags = blankFlags.slice(offset, offset + chunkRecords.length);
+    const chunkBlankFlags = state.blankFlags.slice(offset, offset + chunkRecords.length);
     const nonBlankOriginalOffsets: number[] = [];
     chunkBlankFlags.forEach((isBlank, k) => {
-      if (isBlank) blankLinesSkipped += 1;
+      if (isBlank) state.blankLinesSkipped += 1;
       else nonBlankOriginalOffsets.push(k);
     });
 
@@ -500,23 +646,27 @@ function main() {
     const result = parseCsv(chunkText);
 
     if (result.ok) {
-      ensureHeaderMapped(result.header);
       if (result.rows.length !== nonBlankOriginalOffsets.length) {
         // The 1:1 record<->row contract this whole chunking strategy
         // depends on has broken: the real parser did not emit exactly one
-        // row per non-blank record this validator expected. Trusting row
-        // numbers past this point would be a guess, not a fact — fail
-        // closed instead of reporting numbers that might be wrong.
-        console.error("");
-        console.error("--- FATAL: record<->row count mismatch between splitter and real parser ---");
-        console.error(
-          `Chunk at data-row offset ${offset}: expected ${nonBlankOriginalOffsets.length} non-blank ` +
-            `record(s) but the real parser emitted ${result.rows.length} row(s). Cannot trust row-number ` +
-            "attribution for the rest of this file.",
-        );
-        console.error("");
-        console.error("=== RESULT: FAIL ===");
-        process.exit(1);
+        // row per non-blank record this script expected. Trusting row
+        // numbers past this point would be a guess, not a fact — stop
+        // here and let parser_row_counts_match (PASS_PRECONDITIONS) fail
+        // the run, instead of reporting numbers that might be wrong.
+        //
+        // As of round 4, this remains a DRIFT TRIPWIRE, not a live
+        // guarantee: splitLogicalRecords() and parseCsv() share the exact
+        // same quote-tracking rule by construction (see the module doc on
+        // the splitter above), and isBlankRecord() determines blankness by
+        // asking the real parser itself — so there is no known input for
+        // which this branch is reachable today. A ~12,000-case
+        // differential fuzz (see the "1:1 record<->row contract" test in
+        // validate-bulk-import.test.ts) plus a manual state-machine
+        // argument both back this. It stays wired to a hard failure so
+        // that if the two implementations ever DO drift apart, this script
+        // fails closed instead of silently mis-attributing row numbers.
+        state.chunkMismatch = { offset, expected: nonBlankOriginalOffsets.length, actual: result.rows.length };
+        break;
       }
       result.rows.forEach((cells, k) => processRow(offset + nonBlankOriginalOffsets[k] + 1, cells));
       continue;
@@ -524,7 +674,7 @@ function main() {
 
     // Chunk-level failure: fall back to per-record isolation so ONE
     // poisoned record (e.g. an oversized field) doesn't mark every sibling
-    // record in the chunk unparseable (see module doc + fix item 5).
+    // record in the chunk unparseable.
     for (let k = 0; k < chunkRecords.length; k++) {
       if (chunkBlankFlags[k]) continue; // a blank line is never a row the real importer would see.
       const rowIndex = offset + k + 1;
@@ -534,41 +684,330 @@ function main() {
         recordUnparseable(rowIndex, `${singleResult.error.code}: ${singleResult.error.message}`);
         continue;
       }
-      ensureHeaderMapped(singleResult.header);
       processRow(rowIndex, singleResult.rows[0]);
     }
   }
 
-  const wallClockMs = Math.round((performance.now() - startMs) * 100) / 100;
+  state.wallClockMs = roundMs(performance.now() - startMs);
+  return state;
+}
 
-  // --- Reporting ----------------------------------------------------------
+// ---------------------------------------------------------------------------
+// PASS_PRECONDITIONS — the complete, single source of truth for this
+// script's verdict.
+//
+// Every entry below must hold (its check() must return null) for
+// evaluateVerdict() to report a PASS. Nothing outside this list may cause a
+// PASS to print; nothing outside this list may suppress a reason it found.
+// This is the single guard function/list the round-4 review asked for: read
+// this array top to bottom and you have the complete, exact answer to
+// "under what circumstances can this tool print PASS?"
+//
+// Each check(state) returns either `null` (satisfied — including "not
+// applicable to this run", e.g. a barcode check when there is no barcode
+// column) or a human-readable string explaining exactly what failed.
+// ---------------------------------------------------------------------------
+
+interface Precondition {
+  id: string;
+  check: (state: RunState) => string | null;
+}
+
+export const PASS_PRECONDITIONS: Precondition[] = [
+  {
+    id: "csv_exists",
+    check: (s) => (s.csvExists ? null : `CSV file not found: ${s.csvPath}`),
+  },
+  {
+    id: "csv_readable",
+    check: (s) => s.csvReadError,
+  },
+  {
+    id: "line_endings_supported",
+    check: (s) => (s.splitErrorReason === "unsupported_line_ending" ? s.splitErrorMessage : null),
+  },
+  {
+    id: "record_boundaries_resolvable",
+    check: (s) => (s.splitErrorReason === "ambiguous_record_split" ? s.splitErrorMessage : null),
+  },
+  {
+    id: "file_not_empty",
+    check: (s) =>
+      s.csvExists && !s.csvReadError && s.splitErrorReason === null && s.allRecords !== null && s.allRecords.length === 0
+        ? "File is empty (no header row)."
+        : null,
+  },
+  {
+    id: "header_parses",
+    check: (s) => (s.headerParseErrorReason ? `Header row failed to parse: ${s.headerParseErrorReason}` : null),
+  },
+  {
+    id: "required_headers_present",
+    check: (s) =>
+      reachedHeader(s) && s.missingRequiredHeaders.length > 0
+        ? `Missing required headers: ${s.missingRequiredHeaders.join(", ")}`
+        : null,
+  },
+  {
+    id: "has_nonblank_data_records",
+    // THE round-4 critical fix. A header followed only by blank lines has
+    // dataRecords.length > 0 (raw logical records) but ZERO rows the real
+    // importer would ever see — checking dataRecords.length alone (as
+    // round 3 did) is exactly the bug: it guarantees a non-zero LOGICAL
+    // record count, not a non-zero DATA record count. Only
+    // nonBlankDataRecordCount answers "is there anything here to rehearse
+    // the import against."
+    check: (s) => {
+      if (!reachedHeader(s)) return null;
+      if (s.nonBlankDataRecordCount > 0) return null;
+      if (s.dataRecords.length === 0) return "File has a header row but no data rows.";
+      return (
+        `File has a header row but ${s.dataRecords.length} data row(s), all of which are blank — a header ` +
+        "followed only by blank lines is not a pass (there is nothing here to rehearse the import against)."
+      );
+    },
+  },
+  {
+    id: "parser_row_counts_match",
+    check: (s) =>
+      s.chunkMismatch
+        ? `Chunk at data-row offset ${s.chunkMismatch.offset}: expected ${s.chunkMismatch.expected} non-blank ` +
+          `record(s) but the real parser emitted ${s.chunkMismatch.actual} row(s). Row-number attribution past ` +
+          "this point cannot be trusted."
+        : null,
+  },
+  {
+    id: "no_unknown_manifest_dirty_categories",
+    check: (s) => {
+      if (s.unknownDirtyCategories.length === 0) return null;
+      const uniq = [...new Set(s.unknownDirtyCategories)];
+      return `Manifest dirty_rows contains unknown categor${uniq.length === 1 ? "y" : "ies"} (no expectation defined): ${uniq.join(", ")}.`;
+    },
+  },
+  {
+    id: "no_untagged_failures",
+    check: (s) =>
+      s.untaggedFailures.length > 0
+        ? `${s.untaggedFailures.length} row(s) outside any expected-invalid tagged group failed to parse or validate.`
+        : null,
+  },
+  {
+    id: "tagged_group_counts_match",
+    check: (s) => {
+      const bad: string[] = [];
+      for (const [group, stat] of s.groupStats) {
+        if (stat.seenCount !== stat.expectedCount) {
+          bad.push(`group "${group}": expected ${stat.expectedCount} tagged row(s) but saw ${stat.seenCount}`);
+        }
+      }
+      return bad.length > 0 ? bad.join("; ") + "." : null;
+    },
+  },
+  {
+    id: "tagged_group_outcomes_match",
+    check: (s) => {
+      const bad: string[] = [];
+      for (const [group, stat] of s.groupStats) {
+        for (const m of stat.mismatches) {
+          bad.push(
+            `group "${group}" row ${m.rowIndex} expected ${s.groupExpectations.get(group)?.outcome}, got ${m.outcome} (${m.detail})`,
+          );
+        }
+      }
+      return bad.length > 0 ? bad.join("; ") + "." : null;
+    },
+  },
+  {
+    id: "total_rows_match_manifest",
+    check: (s) => {
+      if (!s.manifest || typeof s.manifest.total_rows !== "number") return null;
+      const totalRowsSeen = s.rowsParsed + s.rowsUnparseable;
+      return totalRowsSeen !== s.manifest.total_rows
+        ? `Total rows seen (${totalRowsSeen}) does not match manifest.total_rows (${s.manifest.total_rows}).`
+        : null;
+    },
+  },
+  {
+    id: "barcodes_pass_check_digit",
+    check: (s) =>
+      s.barcodeMismatches.length > 0
+        ? `${s.barcodeMismatches.length} barcode(s) failed EAN-13 check-digit verification (rows: ${s.barcodeMismatches.slice(0, 10).join(", ")}).`
+        : null,
+  },
+  {
+    id: "barcode_manifest_cross_check",
+    check: (s) => {
+      if (!s.manifest?.barcode) return null;
+      const mb = s.manifest.barcode;
+      const reasons: string[] = [];
+      if (s.barcodeSeen !== mb.rows_with_barcode) {
+        reasons.push(
+          `barcode row count (${s.barcodeSeen}) does not match manifest.barcode.rows_with_barcode (${mb.rows_with_barcode})`,
+        );
+      }
+      if (mb.all_check_digits_valid && s.barcodeMismatches.length > 0) {
+        reasons.push("manifest claims all_check_digits_valid=true but this run found mismatches");
+      }
+      return reasons.length > 0 ? reasons.join("; ") + "." : null;
+    },
+  },
+  {
+    id: "manifest_explicit_path_exists",
+    check: (s) =>
+      s.manifestExplicitPathMissing
+        ? `Manifest path was explicitly specified but does not exist: ${s.manifestPathArg}`
+        : null,
+  },
+  {
+    id: "manifest_is_valid_json",
+    check: (s) => s.manifestJsonError,
+  },
+  {
+    id: "manifest_is_genuinely_ours",
+    check: (s) =>
+      s.manifestShapeInvalid
+        ? `Manifest "${s.manifestPath}" parsed as JSON but is not a recognized partner-cellar manifest ` +
+          "(missing/invalid required fields such as generator_seed, csv_sha256, columns) — refusing to run " +
+          "ground-truth checks against an arbitrary JSON file."
+        : null,
+  },
+  {
+    id: "csv_sha256_matches_manifest",
+    check: (s) => {
+      if (!s.manifest?.csv_sha256 || !s.buffer) return null;
+      const actual = sha256HexOfBuffer(s.buffer);
+      return actual !== s.manifest.csv_sha256
+        ? `CSV sha256 (${actual}) does not match manifest.csv_sha256 (${s.manifest.csv_sha256}) — file may be corrupted or stale.`
+        : null;
+    },
+  },
+];
+
+/** The single guard: runs every precondition above and returns the
+ * complete verdict. This is the ONLY function in this file that decides
+ * pass/fail. */
+function evaluateVerdict(state: RunState): { pass: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  for (const p of PASS_PRECONDITIONS) {
+    const reason = p.check(state);
+    if (reason) reasons.push(reason);
+  }
+  return { pass: reasons.length === 0, reasons };
+}
+
+// ---------------------------------------------------------------------------
+// Reporting — pure presentation over a RunState. Prints nothing that
+// influences evaluateVerdict(); influenced BY the state evaluateVerdict()
+// also reads, never the other way around.
+// ---------------------------------------------------------------------------
+
+function manifestStatusLine(state: RunState): string {
+  if (state.manifestExplicitPathMissing) {
+    return `Manifest: ${state.manifestPathArg} (explicitly specified but not found)`;
+  }
+  if (!state.manifestPath) {
+    return "Manifest: (none found — skipping ground-truth assertions)";
+  }
+  if (state.manifestJsonError) {
+    return `Manifest: ${state.manifestPath} (found, but invalid JSON)`;
+  }
+  if (state.manifestShapeInvalid) {
+    return `Manifest: ${state.manifestPath} (found, but not a recognized partner-cellar manifest)`;
+  }
+  return `Manifest: ${state.manifestPath}`;
+}
+
+function printReport(state: RunState): void {
+  console.log("=== P1 bulk-import validation runner ===");
+  console.log("(This entry point will grow to cover import + enrichment in later pieces.)");
+  console.log(`CSV:      ${state.csvPath}`);
+
+  if (!state.csvExists) {
+    console.error(`File not found: ${state.csvPath}`);
+    return;
+  }
+
+  console.log(manifestStatusLine(state));
+  console.log("");
+
+  if (state.csvReadError) {
+    console.error("");
+    console.error("--- FATAL: could not read CSV file ---");
+    console.error(state.csvReadError);
+    return;
+  }
+
+  if (state.splitErrorReason === "unsupported_line_ending") {
+    console.error("");
+    console.error("--- FATAL: unsupported line endings ---");
+    console.error(state.splitErrorMessage);
+    return;
+  }
+  if (state.splitErrorReason === "ambiguous_record_split") {
+    console.error("");
+    console.error("--- FATAL: cannot determine record boundaries ---");
+    console.error(state.splitErrorMessage);
+    return;
+  }
+  if (state.allRecords !== null && state.allRecords.length === 0) {
+    console.error("File is empty (no header row).");
+    return;
+  }
+  if (state.headerParseErrorReason) {
+    console.error("");
+    console.error("--- FATAL: header row failed to parse ---");
+    console.error(state.headerParseErrorReason);
+    return;
+  }
+
+  // Header parsed successfully — full report from here on.
+  if (state.dataRecords.length > MAX_ROWS) {
+    console.log(
+      `NOTE: file has ${state.dataRecords.length} data rows, exceeding the current importer's ` +
+        `MAX_ROWS=${MAX_ROWS}. A single real upload would be rejected outright ` +
+        `(too_many_rows). Chunking into groups of ${MAX_ROWS} logical records (never raw ` +
+        `lines) to still get full-file parse/validate statistics from the real ` +
+        `csv-parser + row-validator.`,
+    );
+  }
+
   console.log("--- Header mapping ---");
-  if (missingRequired.length > 0) {
-    console.log(`Missing required headers: ${missingRequired.join(", ")}`);
-    fail(`Missing required headers: ${missingRequired.join(", ")}`);
+  if (state.missingRequiredHeaders.length > 0) {
+    console.log(`Missing required headers: ${state.missingRequiredHeaders.join(", ")}`);
   } else {
     console.log("All required headers present.");
   }
 
   console.log("");
   console.log("--- Results ---");
-  console.log(`Rows parsed:              ${rowsParsed}`);
-  console.log(`Rows unparseable:         ${rowsUnparseable}${rowsUnparseable > 0 ? "  (parser-level rejection)" : ""}`);
-  console.log(`Rows valid:               ${rowsValid}`);
-  console.log(`Rows invalid:             ${rowsInvalid}`);
-  console.log(`Blank lines skipped:      ${blankLinesSkipped}${blankLinesSkipped > 0 ? "  (dropped by parser, like the real importer — row numbers below still count them)" : ""}`);
-  console.log(`Distinct raw variant keys: ${distinctRawVariantKeys.size}`);
-  console.log(`Wall-clock:               ${wallClockMs} ms`);
+  console.log(`Rows parsed:              ${state.rowsParsed}`);
+  console.log(
+    `Rows unparseable:         ${state.rowsUnparseable}${state.rowsUnparseable > 0 ? "  (parser-level rejection)" : ""}`,
+  );
+  console.log(`Rows valid:               ${state.rowsValid}`);
+  console.log(`Rows invalid:             ${state.rowsInvalid}`);
+  console.log(
+    `Blank lines skipped:      ${state.blankLinesSkipped}${
+      state.blankLinesSkipped > 0 ? "  (dropped by parser, like the real importer — row numbers below still count them)" : ""
+    }`,
+  );
+  console.log(`Distinct raw variant keys: ${state.distinctRawVariantKeys.size}`);
+  console.log(`Wall-clock:               ${state.wallClockMs} ms`);
 
-  const totalRowsSeen = rowsParsed + rowsUnparseable;
-  if (manifest && typeof manifest.total_rows === "number" && totalRowsSeen !== manifest.total_rows) {
-    fail(`Total rows seen (${totalRowsSeen}) does not match manifest.total_rows (${manifest.total_rows}).`);
+  if (state.chunkMismatch) {
+    console.log("");
+    console.log("--- FATAL: record<->row count mismatch between splitter and real parser ---");
+    console.log(
+      `Chunk at data-row offset ${state.chunkMismatch.offset}: expected ${state.chunkMismatch.expected} non-blank ` +
+        `record(s) but the real parser emitted ${state.chunkMismatch.actual} row(s). Processing stopped; row-number ` +
+        "attribution past this point cannot be trusted.",
+    );
   }
 
-  if (sampleInvalidReasons.length > 0) {
+  if (state.sampleInvalidReasons.length > 0) {
     console.log("");
     console.log("--- Sample invalid-row reasons ---");
-    for (const r of sampleInvalidReasons) console.log(`  ${r}`);
+    for (const r of state.sampleInvalidReasons) console.log(`  ${r}`);
   }
 
   // Small crafted/test files only: dump every distinct variant key so a
@@ -576,79 +1015,59 @@ function main() {
   // embedded newline) without reimplementing the parser itself. The real
   // 20k-row fixture has thousands of distinct keys, so this section is
   // silent for it.
-  if (distinctRawVariantKeys.size > 0 && distinctRawVariantKeys.size <= 20) {
+  if (state.distinctRawVariantKeys.size > 0 && state.distinctRawVariantKeys.size <= 20) {
     console.log("");
     console.log("--- Distinct variant keys (small file — showing all) ---");
-    for (const key of distinctRawVariantKeys) console.log(`  ${key}`);
+    for (const key of state.distinctRawVariantKeys) console.log(`  ${key}`);
   }
 
-  if (groupStats.size > 0) {
+  if (state.groupStats.size > 0) {
     console.log("");
     console.log("--- Expected-invalid groups (manifest-tagged) ---");
-    for (const [group, stat] of groupStats) {
+    for (const [group, stat] of state.groupStats) {
       const ok = stat.seenCount === stat.expectedCount && stat.mismatches.length === 0;
       console.log(
         `  ${group}: expected=${stat.expectedCount} seen=${stat.seenCount} matched=${stat.matchedCount} ${
           ok ? "(OK — expected-invalid-under-current-importer)" : "(MISMATCH)"
         }`,
       );
-      if (stat.seenCount !== stat.expectedCount) {
-        fail(`Group "${group}": expected ${stat.expectedCount} tagged rows but saw ${stat.seenCount}.`);
-      }
       for (const m of stat.mismatches.slice(0, 5)) {
-        console.log(`    row ${m.rowIndex}: expected ${groupExpectations.get(group)?.outcome}, got ${m.outcome} (${m.detail})`);
-        fail(`Group "${group}" row ${m.rowIndex} did not match its expected outcome (got ${m.outcome}: ${m.detail}).`);
+        console.log(`    row ${m.rowIndex}: expected ${state.groupExpectations.get(group)?.outcome}, got ${m.outcome} (${m.detail})`);
       }
     }
   }
 
-  if (untaggedFailures.length > 0) {
+  if (state.untaggedFailures.length > 0) {
     console.log("");
     console.log("--- Unexpected failures (rows NOT tagged as expected-invalid) ---");
-    for (const u of untaggedFailures.slice(0, 10)) {
+    for (const u of state.untaggedFailures.slice(0, 10)) {
       console.log(`  row ${u.rowIndex}: ${u.outcome} — ${u.detail}`);
     }
-    if (untaggedFailures.length > 10) console.log(`  ... and ${untaggedFailures.length - 10} more`);
-    fail(`${untaggedFailures.length} row(s) outside any expected-invalid tagged group failed to parse or validate.`);
-
-    // The terminal only summarizes (fix item 4) — a dirty real-world file
-    // can have thousands of failures, and a human repairing it needs the
-    // complete, machine-readable list, not just the first ten.
-    const failuresPath = (csvPath.endsWith(".csv") ? csvPath.slice(0, -4) : csvPath) + ".failures.json";
-    writeFileSync(
-      failuresPath,
-      JSON.stringify({ csv: csvPath, total_untagged_failures: untaggedFailures.length, failures: untaggedFailures }, null, 2) + "\n",
-    );
-    console.log(`Full failure list (${untaggedFailures.length} rows) written to: ${failuresPath}`);
+    if (state.untaggedFailures.length > 10) console.log(`  ... and ${state.untaggedFailures.length - 10} more`);
   }
 
-  if (barcodeColumnIndex >= 0) {
+  if (state.barcodeColumnIndex >= 0) {
     console.log("");
     console.log("--- Barcode (EAN-13) ---");
-    console.log(`Rows with barcode:        ${barcodeSeen}`);
-    console.log(`Valid check digits:       ${barcodeValid}`);
-    if (barcodeMismatches.length > 0) {
-      console.log(`Invalid check digits:     ${barcodeMismatches.length} (rows: ${barcodeMismatches.slice(0, 10).join(", ")})`);
-      fail(`${barcodeMismatches.length} barcode(s) failed EAN-13 check-digit verification.`);
+    console.log(`Rows with barcode:        ${state.barcodeSeen}`);
+    console.log(`Valid check digits:       ${state.barcodeValid}`);
+    if (state.barcodeMismatches.length > 0) {
+      console.log(
+        `Invalid check digits:     ${state.barcodeMismatches.length} (rows: ${state.barcodeMismatches.slice(0, 10).join(", ")})`,
+      );
     }
-    if (manifest?.barcode) {
-      const mb = manifest.barcode;
+    if (state.manifest?.barcode) {
+      const mb = state.manifest.barcode;
       console.log(`Manifest expects:         ${mb.rows_with_barcode} rows with barcode, all_check_digits_valid=${mb.all_check_digits_valid}`);
-      if (barcodeSeen !== mb.rows_with_barcode) {
-        fail(`Barcode row count (${barcodeSeen}) does not match manifest.barcode.rows_with_barcode (${mb.rows_with_barcode}).`);
-      }
-      if (mb.all_check_digits_valid && barcodeMismatches.length > 0) {
-        fail("Manifest claims all_check_digits_valid=true but this run found mismatches.");
-      }
     }
   }
 
-  if (manifest) {
+  if (state.manifest) {
     console.log("");
     console.log("--- Manifest cross-check ---");
-    if (typeof manifest.expected_unique_variant_count === "number") {
-      const naive = distinctRawVariantKeys.size;
-      const expected = manifest.expected_unique_variant_count;
+    if (typeof state.manifest.expected_unique_variant_count === "number") {
+      const naive = state.distinctRawVariantKeys.size;
+      const expected = state.manifest.expected_unique_variant_count;
       console.log(`Ground-truth unique variants:     ${expected}`);
       console.log(`Naive distinct raw variant keys:  ${naive}`);
       console.log(
@@ -657,31 +1076,90 @@ function main() {
           : `  (raw count is ${naive > expected ? "higher" : "lower"} than ground truth by ${Math.abs(naive - expected)} — expected when spelling-noise groups are present; a real dedup pass must close this gap; informational only, not a failure)`,
       );
     }
-    if (manifest.category_summary) {
-      console.log(`Category summary (from manifest): ${JSON.stringify(manifest.category_summary)}`);
+    if (state.manifest.category_summary) {
+      console.log(`Category summary (from manifest): ${JSON.stringify(state.manifest.category_summary)}`);
     }
 
     console.log("");
     console.log("--- sha256 integrity check ---");
-    const actualSha = sha256HexOfBuffer(buffer);
+    const actualSha = state.buffer ? sha256HexOfBuffer(state.buffer) : "(unavailable)";
     console.log(`Computed csv_sha256:  ${actualSha}`);
-    if (manifest.csv_sha256) {
-      console.log(`Manifest csv_sha256:  ${manifest.csv_sha256}`);
-      if (actualSha === manifest.csv_sha256) {
-        console.log("  MATCH");
-      } else {
-        console.log("  MISMATCH");
-        fail(`CSV sha256 (${actualSha}) does not match manifest.csv_sha256 (${manifest.csv_sha256}) — file may be corrupted or stale.`);
-      }
+    if (state.manifest.csv_sha256) {
+      console.log(`Manifest csv_sha256:  ${state.manifest.csv_sha256}`);
+      console.log(actualSha === state.manifest.csv_sha256 ? "  MATCH" : "  MISMATCH");
     } else {
       console.log("  (manifest has no csv_sha256 field — skipping)");
     }
+  } else if (state.manifestJsonError || state.manifestShapeInvalid || state.manifestExplicitPathMissing) {
+    console.log("");
+    console.log("--- Manifest cross-check ---");
+    console.log("  SKIPPED — the supplied manifest failed validation (see failure reasons below); no ground-truth assertions were run.");
+  }
+}
+
+/**
+ * Keep "<csv>.failures.json" in sync with THIS run's untagged failures —
+ * written when there are any, removed when there are none (round-4 defect:
+ * a stale failures.json from a previous bad run used to survive next to a
+ * now-passing CSV, so a machine reading the directory would see failures
+ * that no longer exist).
+ *
+ * Deliberately called AFTER the verdict has already been printed, and
+ * deliberately never throws: this is bookkeeping about this script's own
+ * report artifact, not about the CSV's validity (see the module doc's
+ * "Deliberately OUT of PASS_PRECONDITIONS" note). Round-4 defect: an
+ * unwritable path here used to throw mid-report and lose the whole
+ * completed validation summary — now it can only ever print a warning
+ * after that summary has already been reported in full.
+ */
+function syncFailuresReport(state: RunState): void {
+  if (!state.csvExists) return;
+  const failuresPath = (state.csvPath.endsWith(".csv") ? state.csvPath.slice(0, -4) : state.csvPath) + ".failures.json";
+
+  if (state.untaggedFailures.length > 0) {
+    try {
+      writeFileSync(
+        failuresPath,
+        JSON.stringify(
+          { csv: state.csvPath, total_untagged_failures: state.untaggedFailures.length, failures: state.untaggedFailures },
+          null,
+          2,
+        ) + "\n",
+      );
+      console.log(`Full failure list (${state.untaggedFailures.length} rows) written to: ${failuresPath}`);
+    } catch (err) {
+      console.error(
+        `WARNING: could not write failure report to ${failuresPath}: ${(err as Error).message}. ` +
+          "The validation result above is unaffected — only this on-disk report is missing.",
+      );
+    }
+    return;
   }
 
+  if (existsSync(failuresPath)) {
+    try {
+      unlinkSync(failuresPath);
+      console.log(`Removed stale failure report from a previous run: ${failuresPath}`);
+    } catch (err) {
+      console.error(
+        `WARNING: a stale failure report exists at ${failuresPath} but could not be removed: ${(err as Error).message}.`,
+      );
+    }
+  }
+}
+
+function main() {
+  const [, , csvPathArg, manifestPathArg] = process.argv;
+  const csvPath = csvPathArg ?? "fixtures/generated/partner-cellar-20k.csv";
+
+  const state = buildRunState(csvPath, manifestPathArg ?? null);
+  printReport(state);
+
+  const verdict = evaluateVerdict(state);
   console.log("");
-  if (hasFailure) {
+  if (!verdict.pass) {
     console.log("--- Failure reasons ---");
-    for (const r of failureReasons) console.log(`  - ${r}`);
+    for (const r of verdict.reasons) console.log(`  - ${r}`);
     console.log("");
     console.log("=== RESULT: FAIL ===");
   } else {
@@ -689,7 +1167,9 @@ function main() {
   }
   console.log("=== done ===");
 
-  process.exit(hasFailure ? 1 : 0);
+  syncFailuresReport(state);
+
+  process.exit(verdict.pass ? 0 : 1);
 }
 
 // Guarded like scripts/fixtures/generate-partner-cellar.mjs's isMain check —
