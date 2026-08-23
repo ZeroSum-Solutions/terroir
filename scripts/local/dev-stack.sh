@@ -39,75 +39,14 @@ fi
 # shellcheck disable=SC1091
 source scripts/local/assert-local-db.sh
 
-# Derive this repo's Kong container name from supabase/config.toml's
-# project_id (supabase-cli names containers "supabase_<service>_<project_id>")
-# instead of hardcoding it, so this keeps working if project_id ever changes.
-_kong_container_name() {
-  local project_id
-  project_id="$(
-    awk -F'=' '
-      /^project_id[ \t]*=/ {
-        val = $2
-        gsub(/[ \t"]/, "", val)
-        print val
-        exit
-      }
-    ' supabase/config.toml 2>/dev/null
-  )"
-  if [ -z "$project_id" ]; then
-    # Fallback: this repo's known project_id, in case config.toml is ever
-    # unreadable/reformatted in a way the awk above can't parse.
-    project_id="terroir-vw-local"
-  fi
-  echo "supabase_kong_${project_id}"
-}
-
-# Poll until the API is actually serving traffic, not just "container
-# started". Guards against the Kong-stale-upstream-IP race described above:
-# if 502s persist past a few seconds, restart Kong once (clears its cached
-# upstream IPs) and keep polling. Bounded overall — never hangs forever.
-_wait_for_api_ready() {
-  local base_url="$1" anon_key="$2" container="$3"
-  local timeout_s=30 restart_after_s=5
-  local start_ts elapsed auth_code rest_code restarted=0
-
-  echo "dev-stack: waiting for the API to be ready (up to ${timeout_s}s)..."
-
-  start_ts="$(date +%s)"
-  while true; do
-    auth_code="$(curl -s -o /dev/null -w '%{http_code}' "${base_url}/auth/v1/health" 2>/dev/null || echo 000)"
-    rest_code="$(curl -s -o /dev/null -w '%{http_code}' -H "apikey: ${anon_key}" "${base_url}/rest/v1/" 2>/dev/null || echo 000)"
-
-    if [ "$auth_code" = "200" ] && [ "$rest_code" = "200" ]; then
-      echo "dev-stack: API ready (auth/v1/health=${auth_code}, rest/v1/=${rest_code})."
-      return 0
-    fi
-
-    elapsed=$(( $(date +%s) - start_ts ))
-
-    if [ "$restarted" -eq 0 ] && [ "$elapsed" -ge "$restart_after_s" ] \
-       && { [ "$auth_code" = "502" ] || [ "$rest_code" = "502" ]; }; then
-      echo "dev-stack: got 502 ${elapsed}s post-reset (auth=${auth_code}, rest=${rest_code})" >&2
-      echo "dev-stack: this is Kong holding a stale Docker IP for the restarted auth container." >&2
-      echo "dev-stack: restarting ${container} once to clear its upstream cache, then resuming..." >&2
-      docker restart "$container" >/dev/null 2>&1 || true
-      restarted=1
-    fi
-
-    if [ "$elapsed" -ge "$timeout_s" ]; then
-      echo "" >&2
-      echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
-      echo "!! dev-stack: API did not become ready within ${timeout_s}s.          !!" >&2
-      echo "!!   auth/v1/health = ${auth_code}   rest/v1/ = ${rest_code}          !!" >&2
-      echo "!! Refusing to seed against a possibly-broken stack.                 !!" >&2
-      echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
-      echo "" >&2
-      return 1
-    fi
-
-    sleep 1
-  done
-}
+# _kong_container_name, _http_code, and _wait_for_api_ready live in their own
+# sourceable file so the node seed script (scripts/seed-local-supabase.mjs)
+# can share this exact readiness gate instead of a second, hand-rolled node
+# implementation that could drift from this one. See
+# scripts/local/wait-for-api-ready.sh and docs/runbooks/local-stack.md
+# "Post-reset readiness".
+# shellcheck disable=SC1091
+source scripts/local/wait-for-api-ready.sh
 
 echo ""
 echo "=== dev-stack: supabase start ==="

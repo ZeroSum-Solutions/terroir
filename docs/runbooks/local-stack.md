@@ -92,7 +92,9 @@ history, etc.) for manual QA or demo purposes, see `docs/LOCAL-SUPABASE.md`
 and run `pnpm run supabase:seed:local:apply` afterward — that script seeds
 its own set of users (`owner+local@terroir.test` etc.) against the
 deterministic restaurant id documented there. The two seeds are
-independent and can both be applied to the same local DB.
+independent and can both be applied to the same local DB. `LOCAL-SUPABASE.md`
+is canonical for that seed script's contents and usage only — this doc
+remains canonical for the stack's ports, bring-up, and safety model.
 
 ## Safety model
 

@@ -188,6 +188,28 @@ function assertWriteAllowed() {
     env: process.env,
     stdio: "inherit",
   });
+
+  // Readiness gate, shared with scripts/local/dev-stack.sh (the canonical
+  // bring-up entry point) via scripts/local/wait-for-api-ready.sh rather
+  // than a second, hand-rolled node implementation that could drift from
+  // it. `dev-stack.sh` only seeds after `supabase db reset` because that
+  // reset restarts the auth (GoTrue) container and Kong can keep routing
+  // to its stale Docker IP for a few seconds, returning transient 502s —
+  // see docs/runbooks/local-stack.md "Post-reset readiness". This script
+  // is also a supported, directly-invokable entry point (someone can run
+  // `supabase db reset` themselves and then call this seeder straight
+  // away), so it needs the identical protection: without it, a sequential
+  // writer like ensureUsers()/upsertRows() can fail partway through a run
+  // against a not-yet-ready API instead of refusing cleanly up front.
+  execFileSync(
+    "bash",
+    [
+      "scripts/local/wait-for-api-ready.sh",
+      SUPABASE_URL,
+      SERVICE_ROLE_KEY,
+    ],
+    { env: process.env, stdio: "inherit" },
+  );
 }
 
 function buildRows(userIds = DRY_USER_IDS) {
