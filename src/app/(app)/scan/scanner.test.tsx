@@ -489,6 +489,20 @@ describe("Scanner client-side upload guards", () => {
     expect(container.textContent).toContain("one PDF per invoice");
   });
 
+  it("rejects a PDF mixed with a JPEG immediately, without calling fetch (AF01 round 2 — the mixed-batch gap)", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await selectReadyFiles([
+      new File(["invoice"], "invoice.pdf", { type: "application/pdf" }),
+      new File(["extra page"], "page-2.jpg", { type: "image/jpeg" }),
+    ]);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Couldn’t read the invoice");
+    expect(container.textContent).toContain("A PDF is a complete invoice on its own");
+  });
+
   it("still allows a single PDF through client-side validation", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(responseWithJson(Promise.resolve(invoiceResult)));
     vi.stubGlobal("fetch", fetchMock);
@@ -519,8 +533,11 @@ describe("Scanner client-side upload guards", () => {
       .mockReturnValueOnce(retry.promise);
     vi.stubGlobal("fetch", fetchMock);
 
+    // All photos (no PDF) — a PDF mixed with anything else is now rejected
+    // client-side before any fetch, so a genuine multi-file *network* retry
+    // can only be exercised with an all-images batch.
     await selectReadyFiles([
-      new File(["invoice one"], "invoice-1.pdf", { type: "application/pdf" }),
+      new File(["page one"], "page-1.jpg", { type: "image/jpeg" }),
       new File(["page two"], "page-2.jpg", { type: "image/jpeg" }),
       new File(["page three"], "page-3.jpg", { type: "image/jpeg" }),
     ]);

@@ -256,14 +256,20 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       return;
     }
 
-    // A PDF is already a complete multi-page document, unlike a photo —
-    // batching more than one together would silently merge unrelated
-    // invoices into one garbled result (mirrors the /api/scan check).
+    // A PDF is already a complete multi-page document, unlike a photo — so
+    // combining one with ANY other file (another PDF, or a loose photo)
+    // would silently merge unrelated documents into one garbled result
+    // (mirrors the /api/scan check). Only two shapes are allowed: exactly
+    // one PDF alone, or up to MAX_INVOICE_PAGES photos with no PDF at all.
     const pdfCount = files.filter((f) => f.type === "application/pdf" || fileExtension(f.name) === "pdf").length;
-    if (pdfCount > 1) {
+    if (pdfCount > 0 && files.length > 1) {
       setLastFile(null);
       setLastFiles([]);
-      setError(`You selected ${pdfCount} PDFs. Upload one PDF per invoice — scan each invoice separately, or take a photo of each page instead.`);
+      setError(
+        pdfCount > 1
+          ? `You selected ${pdfCount} PDFs. Upload one PDF per invoice — scan each invoice separately, or take a photo of each page instead.`
+          : "A PDF is a complete invoice on its own — upload it by itself, or upload photos without a PDF.",
+      );
       setRawText(null);
       setStatus("error");
       return;

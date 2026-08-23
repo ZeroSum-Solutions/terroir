@@ -134,6 +134,31 @@ test.describe("mobile scan intake regression (M0-1)", () => {
     expect(scanRequests).toBe(0);
   });
 
+  test("AF01 round 2: a PDF mixed with a JPEG fails immediately with a specific message and no network call", async ({ page }) => {
+    // Round-2 gap the critic found: 1 PDF + 1 JPEG was silently accepted
+    // and merged as "one invoice" — the original bug's mechanism via a
+    // different file combination. A PDF may never be combined with
+    // anything else, not just with other PDFs.
+    let scanRequests = 0;
+    await page.route("**/api/scan", async (route) => {
+      scanRequests += 1;
+      await route.continue();
+    });
+    await gotoFreshScanPage(page);
+
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Upload file" }).click();
+    const chooser = await fileChooserPromise;
+    await chooser.setFiles([
+      { name: "invoice.pdf", mimeType: "application/pdf", buffer: fakePdf("invoice") },
+      { name: "extra-page.jpg", mimeType: "image/jpeg", buffer: Buffer.from("extra page") },
+    ]);
+
+    await expect(page.getByText("Couldn’t read the invoice")).toBeVisible();
+    await expect(page.getByText(/complete invoice on its own/)).toBeVisible();
+    expect(scanRequests).toBe(0);
+  });
+
   test("AF01: an unsupported file type fails immediately with a specific message and no network call", async ({ page }) => {
     let scanRequests = 0;
     await page.route("**/api/scan", async (route) => {

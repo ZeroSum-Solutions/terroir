@@ -166,7 +166,7 @@ export function BottleResultsView({
         <button
           type="button"
           onClick={onScanAnother}
-          className="flex h-12 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 md:h-[38px]"
+          className="flex h-12 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary md:h-[38px]"
         >
           <RotateCcw className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           Scan another
@@ -175,7 +175,7 @@ export function BottleResultsView({
           type="button"
           onClick={handleSave}
           disabled={isSaving || !name.trim() || !producer.trim()}
-          className="flex h-12 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:opacity-50 md:h-[38px]"
+          className="flex h-12 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 md:h-[38px]"
         >
           {isSaving ? (
             <>Saving...</>

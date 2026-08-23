@@ -507,29 +507,32 @@ describe("POST /api/scan", () => {
 
     expect(res.status).toBe(400);
     const body = await res.json();
+    expect(body.error.code).toBe("mixed_pdf_batch");
     expect(body.error.message).toMatch(/one PDF per invoice/i);
     expect(body.error.message).toContain("3 PDFs");
     expect(azure.analyzeInvoice).not.toHaveBeenCalled();
     expect(anthropic.parse).not.toHaveBeenCalled();
   });
 
-  it("still allows a single multi-page PDF alongside other image pages", async () => {
-    const supabase = makeSupabase();
+  it("rejects a single PDF mixed with an image page (BND-AF01 round 2 — a PDF may never be combined with anything else)", async () => {
     auth.requireMembership.mockResolvedValue({
-      supabase,
+      supabase: makeSupabase(),
       user: { id: "u1" },
       restaurantId: "restaurant-A",
       role: "owner",
     });
-    azure.analyzeInvoice.mockResolvedValue(OK_OCR);
-    anthropic.parse.mockResolvedValue(makeParsedInvoice());
     const fd = new FormData();
     fd.append("file", pdfFile());
     fd.append("file", new File(["page two"], "page-2.jpg", { type: "image/jpeg" }));
 
     const res = await POST(makeFormRequest(fd));
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe("mixed_pdf_batch");
+    expect(body.error.message).toMatch(/complete invoice on its own/i);
+    expect(azure.analyzeInvoice).not.toHaveBeenCalled();
+    expect(anthropic.parse).not.toHaveBeenCalled();
   });
 
   it("stores HEIC pages with their real extension", async () => {

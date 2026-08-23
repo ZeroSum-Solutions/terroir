@@ -165,3 +165,99 @@ empty/missing, in case that WebKit behavior is real on some devices.
   test to use photographed pages (images) instead of 2 PDFs (which the fix
   now rejects), and added new tests for the 3-PDF and unsupported-type
   instant-reject cases.
+
+## Round 2 (critic findings, addressed)
+
+The critic drove PR #115 and found two remaining gaps:
+
+### 1. Functional gap: PDF mixed with a non-PDF file was silently accepted
+
+The round-1 fix only rejected a batch with `pdfCount > 1` — so exactly one
+PDF plus any number of other files (e.g. 1 PDF + 1 JPEG) sailed through
+untouched and got merged as "one invoice," reproducing the original bug's
+mechanism via a different file combination. Fixed by generalizing the rule
+to `pdfCount > 0 && files.length > 1` (any PDF combined with ANY other
+file, including another PDF) in both `scanner.tsx` (client, instant, zero
+network) and `route.ts` (server, `400 mixed_pdf_batch`). The two allowed
+shapes are now exactly: one PDF alone, or up to 8 photos with no PDF at
+all. The message adapts: multiple PDFs keeps the round-1 "Upload one PDF
+per invoice — you selected N PDFs" wording; a single PDF mixed with photos
+gets "A PDF is a complete invoice on its own — upload it by itself, or
+upload photos without a PDF."
+
+The pre-existing route test asserting 200 for "a single multi-page PDF
+alongside other image pages" was inverted (not deleted) to assert the new
+400/`mixed_pdf_batch` — that combination is now intentionally rejected. The
+scanner-level retry-preservation test, which had used a PDF+2-JPEGs batch,
+was changed to an all-images batch so it continues to exercise a genuine
+multi-file *network* retry (a PDF+other mix now never reaches the network
+at all, so it can't be used to test retry behavior any more).
+
+Verified with measured evidence:
+- Client, real browser: 1 PDF + 1 JPEG → `Couldn't read the invoice` / "A
+  PDF is a complete invoice on its own…", **0 requests** to `/api/scan`.
+  Screenshot: `10-instant-reject-mixed-pdf-jpeg.png`.
+- Server, raw multipart POST (bypassing the client entirely, cookie-authed
+  `fetch` with a real two-part `FormData`, one PDF + one JPEG): `400`,
+  `{"error":{"code":"mixed_pdf_batch","message":"A PDF is a complete
+  invoice on its own. Upload it by itself, or upload photos without a
+  PDF."}}`.
+- Server, 3 PDFs (unchanged case): still `400 mixed_pdf_batch`, "Upload one
+  PDF per invoice… You selected 3 PDFs…".
+
+### 2. Design contract: focus-visible used a ring, not the outline pattern
+
+`error-view.tsx`, `processing-view.tsx`, and every sibling file in
+`src/app/(app)/scan/views/` (`ready-view.tsx`, `results-view.tsx`,
+`bottle-results-view.tsx`, `confidence-gate.tsx`) used
+`focus-visible:outline-none focus-visible:ring-2
+focus-visible:ring-primary/25` (or `/30` + `ring-offset-2`) — DESIGN.md's
+`.glass` utility is unlayered and defeats ring box-shadows, and the
+project's own working pattern (`cellar-counters.tsx`) uses a real
+`outline` instead. Swapped all 24 occurrences across those 6 files to
+`focus-visible:outline focus-visible:outline-2
+focus-visible:outline-offset-2 focus-visible:outline-primary`, matching
+`cellar-counters.tsx` exactly.
+
+Verified with a **real keyboard Tab** (not `.focus()` — a raw
+`element.focus()` call doesn't reliably trigger Chromium's
+`:focus-visible` heuristic, especially right after a mouse interaction;
+using it produced a false pass in round 1). Methodology: a real mouse
+click on an empty corner of the viewport (establishes "last input was a
+mouse" baseline), then real `Tab` key presses via `page.keyboard.press`
+until `document.activeElement` is the target `<button>`, then
+`getComputedStyle`. Desktop Chromium (no mobile-device emulation) was used
+for this specific check — the iPhone-14 touch-emulated profile produced
+unreliable Tab-stop navigation in this environment (focus kept reverting
+to `<body>`), which is a Playwright/mobile-emulation quirk unrelated to
+the CSS under test; the computed style is a browser-engine property
+independent of viewport size.
+
+Measured, on all four named buttons (Retry invoice scan, New photo, Enter
+manually, Cancel scan):
+
+```
+outlineStyle:  solid
+outlineWidth:  2px
+outlineColor:  rgb(114, 47, 55)   // #722f37 — DESIGN.md's burgundy accent
+outlineOffset: 2px
+boxShadow:     none
+```
+
+### Round-2 files changed (in addition to round 1)
+
+- `src/app/(app)/scan/scanner.tsx` — generalized PDF-mixing rule.
+- `src/app/api/scan/route.ts` — generalized PDF-mixing rule, `400` with
+  `code: "mixed_pdf_batch"`.
+- `src/app/api/scan/route.test.ts` — inverted the single-PDF-plus-image
+  test to assert the new rejection; added `mixed_pdf_batch` code
+  assertions.
+- `src/app/(app)/scan/scanner.test.tsx` — new mixed PDF+JPEG rejection
+  test; retry-preservation test switched to an all-images batch.
+- `e2e/scan-intake-mobile.test.ts` — new mixed PDF+JPEG e2e rejection
+  test.
+- `src/app/(app)/scan/views/error-view.tsx`, `processing-view.tsx`,
+  `ready-view.tsx`, `results-view.tsx`, `bottle-results-view.tsx`,
+  `confidence-gate.tsx` — focus-visible ring → outline.
+- `docs/screenshots/af01-scan/10-instant-reject-mixed-pdf-jpeg.png` — new
+  evidence screenshot.
