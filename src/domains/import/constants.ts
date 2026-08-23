@@ -34,8 +34,18 @@ export const APPLY_CHUNK_SIZE = 100;
 export const LWIN_MATCH_THRESHOLD = 0.3;
 
 /** Rows sent to match_lwin_bulk per RPC call. Keeps the request payload
- * and the per-call planner work bounded even for the largest allowed file. */
-export const LWIN_MATCH_BATCH_SIZE = 300;
+ * and the per-call planner work bounded even for the largest allowed file.
+ *
+ * Was 300 — reduced as part of the C07 perf fix (db audit 2026-08-23,
+ * see supabase/migrations/0078_match_lwin_trgm_fastpath.sql). Even with
+ * that fix's indexed trigram prefilter, a worst-case chunk where every
+ * row's producer shares a very common word (e.g. "Domaine", "Chateau")
+ * measured ~12s for a 300-row all-common-prefix batch against a
+ * ~130,000-row catalog — over the `authenticated` role's 8s
+ * statement_timeout. The same worst case measured ~4.4s at 100 rows,
+ * comfortably inside budget with margin for a larger production
+ * catalog and concurrent load. */
+export const LWIN_MATCH_BATCH_SIZE = 100;
 
 /** Canonical CSV column names, in the order the downloadable template uses. */
 export const CANONICAL_HEADERS = [
