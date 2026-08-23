@@ -79,7 +79,7 @@ export function CellarCounters({
               // separate (non-glass) class branch, and focus goes through
               // `outline`, which glass never touches.
               selected
-                ? "border border-ink bg-ink text-beige focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-beige"
+                ? "border border-ink bg-ink text-beige focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                 : "glass text-ink hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
             )}
           >
