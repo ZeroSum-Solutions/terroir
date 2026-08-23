@@ -37,6 +37,11 @@ export const TOTAL_ROWS = 20000;
 export const SAMPLE_ROWS = 500;
 export const DIRTY_ROW_COUNT = 50;
 export const TARGET_VARIANT_TOTAL = 4200;
+// Real cellar exports sometimes write the literal text "NV" in the vintage
+// column instead of leaving it blank. These variants are counted out of
+// TARGET_VARIANT_TOTAL (not on top of it), so the headline unique-variant
+// count is unaffected by this group's size.
+export const NV_LITERAL_VARIANT_COUNT = 13;
 
 const CANONICAL_HEADERS = [
   "producer",
@@ -652,6 +657,27 @@ function buildVariants(rng, universe) {
     push(seed, { famous: false, nv: true, longTail: false, adjacentFamily: null, formatFamily: null, spellingGroupId: null, spellingType: null });
   }
 
+  // NV literal-text pool — same non-vintage wine styles as the pool above,
+  // but tagged separately (nvLiteral) so the manifest and CSV rendering can
+  // treat them as their own group: cleanRecordToCells writes the literal
+  // text "NV" into the vintage column for these instead of leaving it
+  // blank. The current row-validator (row-validator.ts) rejects non-numeric
+  // vintage text, so every row in this group is a documented, tagged,
+  // expected-invalid case under today's importer — not a blank/missing
+  // vintage like the pool above.
+  for (let i = 0; i < NV_LITERAL_VARIANT_COUNT; i++) {
+    const seed = pickUnique(universe, rng, () => {
+      const kind = NV_KINDS[i % NV_KINDS.length];
+      const surnames = SURNAME_POOLS[kind.surnamePool];
+      const surname = rng.pick(surnames);
+      const prefix = rng.pick(kind.prefixes);
+      const producer = `${prefix} ${surname}`;
+      const name = rng.pick(kind.names);
+      return { producer, name, varietal: kind.varietal, region: kind.region, country: kind.country, vintage: null, sizeMl: 750 };
+    });
+    push(seed, { famous: false, nv: false, nvLiteral: true, longTail: false, adjacentFamily: null, formatFamily: null, spellingGroupId: null, spellingType: null });
+  }
+
   // Regular pool — fills the remainder up to TARGET_VARIANT_TOTAL.
   const consumedSoFar = variants.length;
   const regularCount = TARGET_VARIANT_TOTAL - consumedSoFar;
@@ -696,7 +722,7 @@ function buildPurchaseRecords(variants, rowCounts, rng, extras) {
   variants.forEach((v, idx) => {
     const count = rowCounts[idx];
     for (let k = 0; k < count; k++) {
-      const category = v.tags.nv ? NV_KINDS.find((kk) => kk.varietal === v.varietal)?.kind ?? null : null;
+      const category = (v.tags.nv || v.tags.nvLiteral) ? NV_KINDS.find((kk) => kk.varietal === v.varietal)?.kind ?? null : null;
       const quantity = sampleQuantity(rng);
       const unitCost = sampleUnitCost(rng);
       const currency = sampleCurrency(rng);
@@ -828,7 +854,7 @@ function cleanRecordToCells(r, extras) {
   const cells = [
     r.producer,
     r.name,
-    v.vintage === null ? "" : String(v.vintage),
+    v.tags.nvLiteral ? "NV" : (v.vintage === null ? "" : String(v.vintage)),
     v.varietal,
     v.region,
     v.country,
@@ -890,10 +916,11 @@ function buildManifest(records, dirtyRecords, extras, csvText, universeVariantCo
     byId.get(r.variant.id).rows.push(r);
   }
 
-  const categoryTotals = { famous: 0, nv: 0, longTail: 0, adjacentVintage: 0, formatSibling: 0, spellingNoise: 0 };
+  const categoryTotals = { famous: 0, nv: 0, nvLiteral: 0, longTail: 0, adjacentVintage: 0, formatSibling: 0, spellingNoise: 0 };
   for (const { variant } of byId.values()) {
     if (variant.tags.famous) categoryTotals.famous++;
     if (variant.tags.nv) categoryTotals.nv++;
+    if (variant.tags.nvLiteral) categoryTotals.nvLiteral++;
     if (variant.tags.longTail) categoryTotals.longTail++;
     if (variant.tags.adjacentFamily) categoryTotals.adjacentVintage++;
     if (variant.tags.formatFamily) categoryTotals.formatSibling++;
@@ -978,6 +1005,22 @@ function buildManifest(records, dirtyRecords, extras, csvText, universeVariantCo
 
   const longTailRowIndexes = [...byId.values()].filter((e) => e.variant.tags.longTail).flatMap((e) => e.rows.map((r) => r.rowIndex)).sort((a, b) => a - b);
 
+  // nv_literal_rows — rows whose vintage cell is the literal text "NV".
+  // Tagged as its own expected-invalid-under-current-importer group (see
+  // row-validator.ts:86, which rejects non-numeric vintage text): a later
+  // importer piece that special-cases the literal "NV" token must make
+  // every one of these rows validate.
+  const nvLiteralRows = [...byId.values()]
+    .filter((e) => e.variant.tags.nvLiteral)
+    .flatMap((e) =>
+      e.rows.map((r) => ({
+        row_index: r.rowIndex,
+        producer: e.variant.producer,
+        name: e.variant.name,
+      })),
+    )
+    .sort((a, b) => a.row_index - b.row_index);
+
   let barcode = null;
   if (extras) {
     const withBarcode = records.filter((r) => r.extra.barcode);
@@ -1015,6 +1058,7 @@ function buildManifest(records, dirtyRecords, extras, csvText, universeVariantCo
     category_summary: {
       famous: categoryTotals.famous,
       nv: categoryTotals.nv,
+      nv_literal_variants: categoryTotals.nvLiteral,
       long_tail: categoryTotals.longTail,
       adjacent_vintage_variants: categoryTotals.adjacentVintage,
       format_sibling_variants: categoryTotals.formatSibling,
@@ -1028,6 +1072,7 @@ function buildManifest(records, dirtyRecords, extras, csvText, universeVariantCo
     long_tail_row_indexes: longTailRowIndexes,
     barcode,
     dirty_rows: dirtyRows,
+    nv_literal_rows: nvLiteralRows,
   };
 }
 
@@ -1068,9 +1113,14 @@ function main() {
     const manifest = buildManifest(dataset.records, dataset.dirtyRecords, args.extras, csvText, universeVariantCount);
     const outDir = args.outDir ?? join("fixtures", "generated");
     mkdirSync(outDir, { recursive: true });
-    writeFileSync(join(outDir, "partner-cellar-20k.csv"), csvText);
-    writeFileSync(join(outDir, "partner-cellar-20k.manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
-    console.log(`Wrote ${outDir}/partner-cellar-20k.csv (${dataset.records.length + dataset.dirtyRecords.length} data rows) + manifest`);
+    // --extras gets its own filename (rather than overwriting the base
+    // file) so a single run can produce both variants side by side — this
+    // is what lets run-bulk-import-test.sh validate the extras/barcode
+    // path in the same default invocation as the base file.
+    const baseName = args.extras ? "partner-cellar-20k-extras" : "partner-cellar-20k";
+    writeFileSync(join(outDir, `${baseName}.csv`), csvText);
+    writeFileSync(join(outDir, `${baseName}.manifest.json`), JSON.stringify(manifest, null, 2) + "\n");
+    console.log(`Wrote ${outDir}/${baseName}.csv (${dataset.records.length + dataset.dirtyRecords.length} data rows) + manifest`);
     console.log(`Unique variants: ${universeVariantCount}`);
   }
 }

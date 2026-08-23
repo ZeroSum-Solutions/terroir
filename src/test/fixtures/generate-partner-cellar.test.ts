@@ -5,6 +5,7 @@
 // repo's normal `pnpm test`.
 
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   generateDataset,
+  buildManifest,
   toCsvText,
   computeEan13CheckDigit,
   normalizeForDedup,
@@ -19,10 +21,11 @@ import {
   TOTAL_ROWS,
   SAMPLE_ROWS,
   FORMAT_LABEL,
+  NV_LITERAL_VARIANT_COUNT,
 } from "../../../scripts/fixtures/generate-partner-cellar.mjs";
 import { decodeCsvBuffer, parseCsv } from "@/domains/import/csv-parser";
 import { mapHeader, validateRow } from "@/domains/import/row-validator";
-import { MAX_ROWS, CANONICAL_HEADERS } from "@/domains/import/constants";
+import { CANONICAL_HEADERS } from "@/domains/import/constants";
 
 const CLI = join(process.cwd(), "scripts", "fixtures", "generate-partner-cellar.mjs");
 
@@ -34,34 +37,15 @@ function runCli(args: string[]) {
   return result;
 }
 
-/** Parse + validate an entire CSV text with the REAL repo csv-parser and
- * row-validator, chunking at MAX_ROWS the same way scripts/validate-bulk-import.ts
- * does (the current importer's single-call parseCsv() caps at MAX_ROWS rows). */
-function parseAndValidateAll(csvText: string) {
-  const lines = csvText.split("\n");
-  if (lines[lines.length - 1] === "") lines.pop();
-  const [header, ...dataLines] = lines;
-  let validCount = 0;
-  let invalidCount = 0;
-  let unparseableCount = 0;
-  let columnToField: ReturnType<typeof mapHeader>["columnToField"] | null = null;
-  for (let offset = 0; offset < dataLines.length; offset += MAX_ROWS) {
-    const chunk = dataLines.slice(offset, offset + MAX_ROWS);
-    const chunkText = [header, ...chunk].join("\n") + "\n";
-    const result = parseCsv(chunkText);
-    if (!result.ok) {
-      unparseableCount += chunk.length;
-      continue;
-    }
-    if (!columnToField) columnToField = mapHeader(result.header).columnToField;
-    for (const cells of result.rows) {
-      const validated = validateRow(cells, columnToField);
-      if (validated.state === "valid") validCount++;
-      else invalidCount++;
-    }
-  }
-  return { validCount, invalidCount, unparseableCount };
-}
+// Whole-file parse+validate accounting (chunking at MAX_ROWS, sha256
+// verification, manifest-tagged expected-invalid groups, ...) is the
+// shipped runner's job (scripts/validate-bulk-import.ts) — see
+// src/test/fixtures/validate-bulk-import.test.ts, which drives that CLI
+// directly via subprocess rather than reimplementing its chunking logic
+// here. A prior version of this file had its own naive `text.split("\n")`
+// chunker; that duplicated (and, pre-fix, diverged from) the real script's
+// record-boundary handling, so it was removed in favor of driving the
+// shipped runner end to end.
 
 describe("generate-partner-cellar CLI", () => {
   const tempDirs: string[] = [];
@@ -103,17 +87,59 @@ describe("generate-partner-cellar CLI", () => {
     const committed = readFileSync(join(process.cwd(), "fixtures", "partner-cellar-sample-500.csv"));
     expect(fresh.equals(committed)).toBe(true);
   });
+
+  it("locks the committed golden manifest's csv_sha256 against the committed CSV's actual bytes", () => {
+    // The manifest's csv_sha256 is only trustworthy if something actually
+    // recomputes and compares it (see scripts/validate-bulk-import.ts's
+    // sha256 integrity check) rather than just printing it. This pins the
+    // committed golden fixture's claimed hash to its real bytes so the two
+    // can never silently drift apart.
+    const committedCsv = readFileSync(join(process.cwd(), "fixtures", "partner-cellar-sample-500.csv"));
+    const committedManifest = JSON.parse(
+      readFileSync(join(process.cwd(), "fixtures", "partner-cellar-sample-500.manifest.json"), "utf8"),
+    );
+    const actualSha = createHash("sha256").update(committedCsv).digest("hex");
+    expect(committedManifest.csv_sha256).toBe(actualSha);
+  });
 });
 
 describe("row-validator conformance", () => {
-  it("every default (clean, non-extras) row passes the CURRENT row-validator", () => {
+  it("every default row passes the CURRENT row-validator EXCEPT the tagged nv_literal group", () => {
+    // Each row is rendered + parsed individually with the real toCsvText()
+    // / parseCsv() (a single-record file never needs chunking), so this
+    // exercises the real product code for all 20,000 rows without
+    // reimplementing any chunking or line-splitting.
     const dataset = generateDataset({ extras: false, dirty: false });
     expect(dataset.records.length).toBe(TOTAL_ROWS);
-    const csvText = toCsvText(dataset.records, [], false);
-    const { validCount, invalidCount, unparseableCount } = parseAndValidateAll(csvText);
-    expect(unparseableCount).toBe(0);
-    expect(invalidCount).toBe(0);
-    expect(validCount).toBe(TOTAL_ROWS);
+    const nvLiteralVariantIds = new Set(dataset.variants.filter((v) => v.tags.nvLiteral).map((v) => v.id));
+    const expectedNvLiteralRowCount = dataset.records.filter((r) => nvLiteralVariantIds.has(r.variant.id)).length;
+    expect(expectedNvLiteralRowCount).toBeGreaterThan(0);
+
+    let validCount = 0;
+    let invalidNvLiteralCount = 0;
+    let invalidOtherCount = 0;
+    for (const record of dataset.records) {
+      const rowCsvText = toCsvText([record], [], false);
+      const result = parseCsv(rowCsvText);
+      expect(result.ok).toBe(true);
+      if (!result.ok) continue;
+      const { columnToField } = mapHeader(result.header);
+      const validated = validateRow(result.rows[0], columnToField);
+      if (validated.state === "valid") {
+        validCount++;
+      } else if (nvLiteralVariantIds.has(record.variant.id)) {
+        invalidNvLiteralCount++;
+        // The current row-validator has no special case for the literal
+        // text "NV" (row-validator.ts:86) — it rejects it as a non-numeric
+        // vintage, same as any other unparseable year text.
+        expect(validated.errors.some((e) => e.field === "vintage" && /year/i.test(e.message))).toBe(true);
+      } else {
+        invalidOtherCount++;
+      }
+    }
+    expect(invalidOtherCount).toBe(0);
+    expect(invalidNvLiteralCount).toBe(expectedNvLiteralRowCount);
+    expect(validCount).toBe(TOTAL_ROWS - expectedNvLiteralRowCount);
   });
 
   it("decodes cleanly as UTF-8 with no BOM issues", () => {
@@ -155,16 +181,18 @@ describe("category coverage", () => {
   });
 
   it("has the expected exact category totals for this seed", () => {
-    const totals = { famous: 0, nv: 0, adjacentVintage: 0, formatSibling: 0, spellingNoise: 0 };
+    const totals = { famous: 0, nv: 0, nvLiteral: 0, adjacentVintage: 0, formatSibling: 0, spellingNoise: 0 };
     for (const v of dataset.variants) {
       if (v.tags.famous) totals.famous++;
       if (v.tags.nv) totals.nv++;
+      if (v.tags.nvLiteral) totals.nvLiteral++;
       if (v.tags.adjacentFamily) totals.adjacentVintage++;
       if (v.tags.formatFamily) totals.formatSibling++;
       if (v.tags.spellingGroupId) totals.spellingNoise++;
     }
     expect(totals.famous).toBe(130);
     expect(totals.nv).toBe(260);
+    expect(totals.nvLiteral).toBe(NV_LITERAL_VARIANT_COUNT);
     expect(totals.adjacentVintage).toBe(90);
     expect(totals.formatSibling).toBe(100);
     expect(totals.spellingNoise).toBe(40);
@@ -174,6 +202,21 @@ describe("category coverage", () => {
     const nvVariants = dataset.variants.filter((v) => v.tags.nv);
     expect(nvVariants.length).toBeGreaterThan(0);
     for (const v of nvVariants) expect(v.vintage).toBeNull();
+  });
+
+  it("nv_literal variants carry a null internal vintage but render the literal text \"NV\"", () => {
+    const nvLiteralVariants = dataset.variants.filter((v) => v.tags.nvLiteral);
+    expect(nvLiteralVariants.length).toBe(NV_LITERAL_VARIANT_COUNT);
+    for (const v of nvLiteralVariants) {
+      expect(v.vintage).toBeNull();
+      expect(v.tags.nv).toBe(false); // distinct group from the blank-vintage NV pool
+      const record = dataset.records.find((r) => r.variant.id === v.id);
+      expect(record).toBeDefined();
+      const csvText = toCsvText([record!], [], false);
+      const vintageCol = CANONICAL_HEADERS.indexOf("vintage");
+      const dataLine = csvText.split("\n")[1];
+      expect(dataLine.split(",")[vintageCol]).toBe("NV");
+    }
   });
 
   it("adjacent-vintage families cover exactly {2014,2015,2016} and stay distinct variant keys", () => {
@@ -266,6 +309,26 @@ describe("manifest row indexes vs rendered CSV", () => {
         expect(cells[producerCol]).toBe(v.producer);
         expect(cells[vintageCol]).toBe(String(v.vintage));
       }
+    }
+  });
+
+  it("manifest nv_literal_rows point at rows whose vintage cell is exactly the literal text \"NV\"", () => {
+    const dataset = generateDataset({ extras: false, dirty: false });
+    const csvText = toCsvText(dataset.records, [], false);
+    const manifest = buildManifest(dataset.records, [], false, csvText, dataset.variants.length);
+    const lines = csvText.split("\n");
+    if (lines[lines.length - 1] === "") lines.pop();
+    const bodyLines = lines.slice(1);
+    const vintageCol = CANONICAL_HEADERS.indexOf("vintage");
+
+    const nvLiteralVariantIds = new Set(dataset.variants.filter((v) => v.tags.nvLiteral).map((v) => v.id));
+    const expectedRowCount = dataset.records.filter((r) => nvLiteralVariantIds.has(r.variant.id)).length;
+
+    expect(manifest.nv_literal_rows.length).toBe(expectedRowCount);
+    expect(manifest.category_summary.nv_literal_variants).toBe(nvLiteralVariantIds.size);
+    for (const entry of manifest.nv_literal_rows) {
+      const cells = bodyLines[entry.row_index - 1].split(",");
+      expect(cells[vintageCol]).toBe("NV");
     }
   });
 });
