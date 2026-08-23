@@ -111,7 +111,7 @@ import { readFileSync, existsSync, writeFileSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { decodeCsvBuffer, parseCsv } from "../src/domains/import/csv-parser";
 import { mapHeader, validateRow, type ValidatedRow } from "../src/domains/import/row-validator";
-import { MAX_ROWS } from "../src/domains/import/constants";
+import { MAX_ROWS, HEADER_SYNONYMS, type CanonicalHeader } from "../src/domains/import/constants";
 
 type DirtyRowEntry = { row_index: number; category: string; detail?: string };
 type NvLiteralRowEntry = { row_index: number; producer?: string; name?: string };
@@ -130,6 +130,7 @@ type Manifest = {
   clean_row_count?: number;
   dirty_row_count?: number;
   csv_sha256?: string;
+  columns?: string[];
   dirty_rows?: DirtyRowEntry[];
   nv_literal_rows?: NvLiteralRowEntry[];
   barcode?: BarcodeManifest;
@@ -263,6 +264,181 @@ function sha256HexOfBuffer(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
+// ---------------------------------------------------------------------------
+// Encoding fidelity (round-5 CRITICAL fix).
+//
+// decodeCsvBuffer() (src/domains/import/csv-parser.ts) decodes UTF-8
+// NON-FATALLY: any byte sequence that isn't valid UTF-8 is silently replaced
+// with a U+FFFD replacement character. That turns the partner's actual bytes
+// into DIFFERENT cellar data (a mangled vintage digit, a truncated producer
+// name, ...) and this tool used to certify the result as good. This section
+// re-decodes the raw bytes ourselves, BEFORE calling decodeCsvBuffer, to
+// catch that — this file may not edit csv-parser.ts, so the only lever
+// available is to predict its lossy behavior and refuse to certify it.
+//
+// The FATAL decode below is deliberately the test, rather than counting
+// U+FFFD characters in decodeCsvBuffer's own output: a source file that
+// genuinely, validly contains the U+FFFD character encodes it as valid UTF-8
+// bytes (EF BF BD), and a fatal decode of THOSE bytes never throws. Only a
+// byte sequence that is not valid UTF-8 at all — the case decodeCsvBuffer
+// would silently mangle — makes the fatal decoder throw. This is what
+// distinguishes "decoding introduced a U+FFFD" from "the source genuinely
+// contains one" without ever inspecting the (already-mangled) decoded text.
+// ---------------------------------------------------------------------------
+
+export type EncodingIssue = { kind: "utf16le_bom" | "utf16be_bom" | "invalid_utf8"; message: string };
+
+export function detectEncodingIssue(buffer: Buffer): EncodingIssue | null {
+  // UTF-16 (with a BOM) is the other encoding a real export plausibly
+  // arrives in. It is NOT caught by the fatal-UTF-8 check below for
+  // pure-ASCII content: UTF-16LE text like "Acme" is the byte sequence
+  // 41 00 63 00 6D 00 65 00 — every one of those bytes is independently
+  // valid UTF-8 (ASCII 'A', NUL, 'c', NUL, ...), so a fatal UTF-8 decode
+  // would NOT throw. It would just silently interleave a NUL byte after
+  // every character, corrupting every field without ever raising an error.
+  // The BOM itself is the only reliable signal, so it is checked explicitly,
+  // first, at the byte level.
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+    return {
+      kind: "utf16le_bom",
+      message:
+        "File begins with a UTF-16LE byte-order mark (bytes FF FE) — this is a UTF-16-encoded file, not UTF-8. " +
+        "Decoding UTF-16 bytes as UTF-8 does not fail loudly: for plain-ASCII content it silently produces " +
+        "readable-looking text with a NUL byte spliced in after every character, corrupting every field. " +
+        "Re-export this file as UTF-8 before importing.",
+    };
+  }
+  if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
+    return {
+      kind: "utf16be_bom",
+      message:
+        "File begins with a UTF-16BE byte-order mark (bytes FE FF) — this is a UTF-16-encoded file, not UTF-8. " +
+        "Decoding UTF-16 bytes as UTF-8 does not fail loudly: for plain-ASCII content it silently produces " +
+        "readable-looking text with a NUL byte spliced in after every character, corrupting every field. " +
+        "Re-export this file as UTF-8 before importing.",
+    };
+  }
+
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+    return null; // Byte-for-byte valid UTF-8 — decodeCsvBuffer cannot lose or alter anything here.
+  } catch {
+    // At least one byte sequence is not valid UTF-8. decodeCsvBuffer() would
+    // silently replace it with U+FFFD and this run would certify a file
+    // that is no longer byte-identical to what the partner sent. Windows-1252
+    // (a WHATWG-legacy single-byte encoding with a mapping for every byte
+    // value) never fails to decode, so it is used here only as an
+    // informational HINT for the operator, never as a second detector.
+    const hasHighBytes = buffer.some((b) => b >= 0x80);
+    const latin1Hint = hasHighBytes
+      ? " If this file was actually exported as Latin-1/Windows-1252 (a common spreadsheet default), " +
+        `re-interpreting these exact bytes that way reads: ${JSON.stringify(
+          new TextDecoder("windows-1252").decode(buffer).slice(0, 200),
+        )}`
+      : "";
+    return {
+      kind: "invalid_utf8",
+      message:
+        "File contains at least one byte sequence that is not valid UTF-8. Decoding it anyway (as the current " +
+        "importer does) silently replaces every such sequence with a U+FFFD replacement character, changing the " +
+        "partner's actual data into DIFFERENT data and certifying the result as good. Re-export this file as " +
+        `UTF-8.${latin1Hint}`,
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate canonical-header detection (round-5 HIGH fix).
+//
+// mapHeader() (src/domains/import/row-validator.ts) silently keeps only the
+// FIRST column that maps to a given canonical field and discards every later
+// column mapping to the same field — see its `if (field && !seen.has(field))`
+// guard. Two columns both named e.g. "cost" and "price" (both synonyms for
+// unit_cost) is an ambiguous file: which one did the partner actually mean?
+// Silently picking "whichever came first" is a guess this tool must not
+// rubber-stamp. row-validator.ts may not be edited, so this independently
+// re-derives the same column->field mapping (via the same exported
+// HEADER_SYNONYMS table) purely to detect the collision mapHeader() itself
+// stays silent about.
+// ---------------------------------------------------------------------------
+
+export function detectDuplicateHeaderMappings(header: string[]): { field: CanonicalHeader; columns: string[] }[] {
+  const byField = new Map<CanonicalHeader, string[]>();
+  header.forEach((rawName) => {
+    const key = rawName.trim().toLowerCase();
+    const field = HEADER_SYNONYMS[key];
+    if (!field) return;
+    const columns = byField.get(field) ?? [];
+    columns.push(rawName);
+    byField.set(field, columns);
+  });
+  const duplicates: { field: CanonicalHeader; columns: string[] }[] = [];
+  for (const [field, columns] of byField) {
+    if (columns.length > 1) duplicates.push({ field, columns });
+  }
+  return duplicates;
+}
+
+// ---------------------------------------------------------------------------
+// Silent numeric-text coercion detection (round-5 CRITICAL fix).
+//
+// row-validator.ts's vintage/size_ml/quantity fields use Number.parseInt()
+// and unit_cost uses Number.parseFloat() — both accept a numeric PREFIX and
+// silently ignore trailing garbage ("2015xyz" -> 2015, "750ml" -> 750,
+// "3abc" -> 3, "12.34USD" -> 12.34). When the coerced value also happens to
+// satisfy that field's range check, validateRow() returns the row as
+// state: "valid" with NO indication anywhere that the cell's literal text
+// was not a clean number — this tool used to certify that row as good.
+//
+// This is checked ONLY on rows validateRow() returns as "valid": that is
+// the exact condition under which the coercion is silently ACCEPTED into a
+// PASS. A row that ends up "invalid" for any reason (including this same
+// field coincidentally failing ITS range check, e.g. dirty_vintage_text's
+// "202X" -> 202, which is below MIN_VINTAGE) already fails loudly through
+// the existing tagged/untagged-failure machinery — flagging it a second time
+// here would only conflict with categories this file already tags correctly
+// (see DIRTY_CATEGORY_EXPECTATION) without catching anything new.
+//
+// row-validator.ts's own `cell()` helper (unexported) is reimplemented here
+// verbatim rather than guessed at, so this reads the exact same raw value
+// validateRow() itself parses.
+// ---------------------------------------------------------------------------
+
+type NumericFieldKind = "int" | "float";
+const NUMERIC_FIELDS: { field: CanonicalHeader; kind: NumericFieldKind }[] = [
+  { field: "vintage", kind: "int" },
+  { field: "size_ml", kind: "int" },
+  { field: "quantity", kind: "int" },
+  { field: "unit_cost", kind: "float" },
+];
+const INTEGER_LITERAL = /^[+-]?\d+$/;
+const FLOAT_LITERAL = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
+
+function rawCellFor(cells: string[], columnToField: Map<number, CanonicalHeader>, field: CanonicalHeader): string {
+  for (const [index, mapped] of columnToField) {
+    if (mapped === field) return (cells[index] ?? "").trim();
+  }
+  return "";
+}
+
+export type NumericCoercionRisk = { field: CanonicalHeader; raw: string; coercedTo: string };
+
+export function detectNumericCoercions(
+  cells: string[],
+  columnToField: Map<number, CanonicalHeader>,
+): NumericCoercionRisk[] {
+  const risks: NumericCoercionRisk[] = [];
+  for (const spec of NUMERIC_FIELDS) {
+    const raw = rawCellFor(cells, columnToField, spec.field);
+    if (!raw) continue;
+    const literalOk = spec.kind === "int" ? INTEGER_LITERAL.test(raw) : FLOAT_LITERAL.test(raw);
+    if (literalOk) continue;
+    const parsed = spec.kind === "int" ? Number.parseInt(raw, 10) : Number.parseFloat(raw);
+    if (Number.isFinite(parsed)) risks.push({ field: spec.field, raw, coercedTo: String(parsed) });
+  }
+  return risks;
+}
+
 type RowOutcome = "valid" | "invalid" | "unparseable";
 
 type GroupExpectation = { outcome: RowOutcome; field?: string };
@@ -324,6 +500,8 @@ interface RunState {
   csvReadError: string | null;
   buffer: Buffer | null;
 
+  encodingIssue: EncodingIssue | null;
+
   splitErrorReason: "unsupported_line_ending" | "ambiguous_record_split" | null;
   splitErrorMessage: string | null;
 
@@ -332,7 +510,9 @@ interface RunState {
   dataRecords: string[];
 
   headerParseErrorReason: string | null;
+  headerCells: string[] | null;
   missingRequiredHeaders: string[];
+  duplicateHeaderMappings: { field: CanonicalHeader; columns: string[] }[];
   barcodeColumnIndex: number;
 
   blankFlags: boolean[];
@@ -345,6 +525,7 @@ interface RunState {
   manifestJsonError: string | null;
   manifestShapeInvalid: boolean;
   manifest: Manifest | null;
+  manifestFieldTypeErrors: string[];
 
   rowsParsed: number;
   rowsUnparseable: number;
@@ -355,6 +536,7 @@ interface RunState {
   sampleInvalidReasons: string[];
   untaggedFailures: { rowIndex: number; outcome: RowOutcome; detail: string }[];
   unknownDirtyCategories: string[];
+  numericCoercionRisks: (NumericCoercionRisk & { rowIndex: number })[];
   groupStats: Map<string, GroupStat>;
   groupExpectations: Map<string, GroupExpectation>;
 
@@ -372,13 +554,16 @@ function initState(csvPath: string, manifestPathArg: string | null): RunState {
     csvExists: false,
     csvReadError: null,
     buffer: null,
+    encodingIssue: null,
     splitErrorReason: null,
     splitErrorMessage: null,
     allRecords: null,
     headerRecord: null,
     dataRecords: [],
     headerParseErrorReason: null,
+    headerCells: null,
     missingRequiredHeaders: [],
+    duplicateHeaderMappings: [],
     barcodeColumnIndex: -1,
     blankFlags: [],
     nonBlankDataRecordCount: 0,
@@ -388,6 +573,7 @@ function initState(csvPath: string, manifestPathArg: string | null): RunState {
     manifestJsonError: null,
     manifestShapeInvalid: false,
     manifest: null,
+    manifestFieldTypeErrors: [],
     rowsParsed: 0,
     rowsUnparseable: 0,
     rowsValid: 0,
@@ -397,6 +583,7 @@ function initState(csvPath: string, manifestPathArg: string | null): RunState {
     sampleInvalidReasons: [],
     untaggedFailures: [],
     unknownDirtyCategories: [],
+    numericCoercionRisks: [],
     groupStats: new Map(),
     groupExpectations: new Map(),
     barcodeSeen: 0,
@@ -497,6 +684,17 @@ function buildRunState(csvPath: string, manifestPathArg: string | null): RunStat
     return state;
   }
 
+  // Checked BEFORE decodeCsvBuffer() ever runs: once that non-fatal UTF-8
+  // decode has happened, the information needed to detect its own lossiness
+  // (which bytes were invalid) is already gone. See detectEncodingIssue()
+  // above for why this predicts decodeCsvBuffer's behavior instead of
+  // editing it (src/domains/import/** is off-limits this round).
+  state.encodingIssue = detectEncodingIssue(state.buffer);
+  if (state.encodingIssue) {
+    state.wallClockMs = roundMs(performance.now() - startMs);
+    return state;
+  }
+
   const text = decodeCsvBuffer(state.buffer);
 
   try {
@@ -532,7 +730,9 @@ function buildRunState(csvPath: string, manifestPathArg: string | null): RunStat
   }
   const mapped = mapHeader(headerParse.header);
   const columnToField = mapped.columnToField;
+  state.headerCells = headerParse.header;
   state.missingRequiredHeaders = mapped.missingRequired;
+  state.duplicateHeaderMappings = detectDuplicateHeaderMappings(headerParse.header);
   state.barcodeColumnIndex = headerParse.header.findIndex((h) => h.trim().toLowerCase() === "barcode");
 
   // The real parseCsv() silently drops any fully-blank logical record (its
@@ -558,19 +758,40 @@ function buildRunState(csvPath: string, manifestPathArg: string | null): RunStat
     stat.expectedCount += 1;
     state.groupStats.set(group, stat);
   }
-  if (state.manifest?.dirty_rows) {
-    for (const dr of state.manifest.dirty_rows) {
-      const expectation = DIRTY_CATEGORY_EXPECTATION[dr.category];
-      if (!expectation) {
-        state.unknownDirtyCategories.push(dr.category);
-        continue;
+  // Guarded with Array.isArray(): isValidManifestShape() does not (and
+  // cannot cheaply) check the element type of these two OPTIONAL arrays, so
+  // a shape-valid manifest can still carry a `dirty_rows` or
+  // `nv_literal_rows` field that isn't an array at all (e.g. a number or a
+  // string). A bare `for...of` over that used to throw a raw TypeError here
+  // — before evaluateVerdict() ever ran — exiting 1 by crashing instead of
+  // by verdict (round-5 MEDIUM fix). Skipping the loop and recording a
+  // named reason (see manifest_optional_arrays_well_typed) keeps this
+  // failing closed without ever letting an exception escape.
+  if (state.manifest?.dirty_rows !== undefined) {
+    if (Array.isArray(state.manifest.dirty_rows)) {
+      for (const dr of state.manifest.dirty_rows) {
+        const expectation = DIRTY_CATEGORY_EXPECTATION[dr.category];
+        if (!expectation) {
+          state.unknownDirtyCategories.push(dr.category);
+          continue;
+        }
+        registerExpected(dr.category, dr.row_index, expectation);
       }
-      registerExpected(dr.category, dr.row_index, expectation);
+    } else {
+      state.manifestFieldTypeErrors.push(
+        `manifest.dirty_rows is present but is not an array (got ${typeof state.manifest.dirty_rows}).`,
+      );
     }
   }
-  if (state.manifest?.nv_literal_rows) {
-    for (const nv of state.manifest.nv_literal_rows) {
-      registerExpected("nv_literal", nv.row_index, { outcome: "invalid", field: "vintage" });
+  if (state.manifest?.nv_literal_rows !== undefined) {
+    if (Array.isArray(state.manifest.nv_literal_rows)) {
+      for (const nv of state.manifest.nv_literal_rows) {
+        registerExpected("nv_literal", nv.row_index, { outcome: "invalid", field: "vintage" });
+      }
+    } else {
+      state.manifestFieldTypeErrors.push(
+        `manifest.nv_literal_rows is present but is not an array (got ${typeof state.manifest.nv_literal_rows}).`,
+      );
     }
   }
 
@@ -617,6 +838,12 @@ function buildRunState(csvPath: string, manifestPathArg: string | null): RunStat
     if (validated.state === "valid") {
       state.rowsValid += 1;
       classifyOutcome(rowIndex, "valid", "");
+      // Only checked on rows the real validator accepts as "valid" — see
+      // detectNumericCoercions()'s module doc for why that is exactly the
+      // condition under which a coerced value is silently ACCEPTED.
+      for (const risk of detectNumericCoercions(cells, columnToField)) {
+        state.numericCoercionRisks.push({ rowIndex, ...risk });
+      }
     } else {
       state.rowsInvalid += 1;
       detail = validated.errors.map((e) => `${e.field}: ${e.message}`).join("; ");
@@ -723,6 +950,10 @@ export const PASS_PRECONDITIONS: Precondition[] = [
     check: (s) => s.csvReadError,
   },
   {
+    id: "encoding_is_faithful",
+    check: (s) => s.encodingIssue?.message ?? null,
+  },
+  {
     id: "line_endings_supported",
     check: (s) => (s.splitErrorReason === "unsupported_line_ending" ? s.splitErrorMessage : null),
   },
@@ -749,6 +980,20 @@ export const PASS_PRECONDITIONS: Precondition[] = [
         : null,
   },
   {
+    id: "no_ambiguous_duplicate_header_mapping",
+    check: (s) => {
+      if (!reachedHeader(s) || s.duplicateHeaderMappings.length === 0) return null;
+      const detail = s.duplicateHeaderMappings
+        .map((d) => `"${d.field}" <- columns [${d.columns.map((c) => `"${c}"`).join(", ")}]`)
+        .join("; ");
+      return (
+        "Header row maps more than one column to the same canonical field. The importer's header-mapping logic " +
+        "silently keeps only the FIRST matching column for a field and discards every later column's data — an " +
+        `ambiguous file a human must resolve, not a guess this tool will make: ${detail}.`
+      );
+    },
+  },
+  {
     id: "has_nonblank_data_records",
     // THE round-4 critical fix. A header followed only by blank lines has
     // dataRecords.length > 0 (raw logical records) but ZERO rows the real
@@ -764,6 +1009,28 @@ export const PASS_PRECONDITIONS: Precondition[] = [
       return (
         `File has a header row but ${s.dataRecords.length} data row(s), all of which are blank — a header ` +
         "followed only by blank lines is not a pass (there is nothing here to rehearse the import against)."
+      );
+    },
+  },
+  {
+    id: "within_importer_row_limit",
+    // Round-5 HIGH fix: a "PASS" from this tool must mean "a real upload of
+    // this exact file would import successfully" — it never has meant that
+    // for any file over MAX_ROWS, because a single real upload of such a
+    // file is rejected outright (too_many_rows) before parsing a single
+    // row. This script chunks around that limit ONLY so it can still
+    // report full-file parse/validate statistics; that chunking is a
+    // feature of this VALIDATION tool, not of the product, and must never
+    // be mistaken for evidence that today's importer would accept the file
+    // whole. MAX_ROWS is read from the shared constant so this check stays
+    // correct automatically if/when that cap is raised.
+    check: (s) => {
+      if (s.dataRecords.length <= MAX_ROWS) return null;
+      return (
+        `File has ${s.dataRecords.length} data rows, exceeding the current importer's MAX_ROWS=${MAX_ROWS}. A ` +
+        "real upload of this exact file would be rejected outright by the live importer (too_many_rows) before " +
+        "a single row is stored — the parse/validate statistics in this report come from chunking the file for " +
+        "this tool's own diagnostic purposes and do not describe what a real upload of this file would do today."
       );
     },
   },
@@ -818,6 +1085,22 @@ export const PASS_PRECONDITIONS: Precondition[] = [
     },
   },
   {
+    id: "no_silent_numeric_coercion",
+    check: (s) => {
+      if (s.numericCoercionRisks.length === 0) return null;
+      const sample = s.numericCoercionRisks
+        .slice(0, 10)
+        .map((r) => `row ${r.rowIndex} ${r.field}: "${r.raw}" -> ${r.coercedTo}`)
+        .join("; ");
+      return (
+        `${s.numericCoercionRisks.length} row(s) validate as clean only because Number.parseInt/parseFloat ` +
+        "silently truncated non-numeric trailing text instead of rejecting it outright — the row is otherwise " +
+        "valid, so today's importer would silently store a DIFFERENT value than the partner's file literally " +
+        `contains: ${sample}.`
+      );
+    },
+  },
+  {
     id: "total_rows_match_manifest",
     check: (s) => {
       if (!s.manifest || typeof s.manifest.total_rows !== "number") return null;
@@ -826,6 +1109,47 @@ export const PASS_PRECONDITIONS: Precondition[] = [
         ? `Total rows seen (${totalRowsSeen}) does not match manifest.total_rows (${s.manifest.total_rows}).`
         : null;
     },
+  },
+  {
+    id: "manifest_row_counts_sum_to_total",
+    check: (s) => {
+      if (!s.manifest) return null;
+      const { clean_row_count: clean, dirty_row_count: dirty, total_rows: total } = s.manifest;
+      if (typeof clean !== "number" || typeof dirty !== "number" || typeof total !== "number") return null;
+      return clean + dirty !== total
+        ? `manifest.clean_row_count (${clean}) + manifest.dirty_row_count (${dirty}) = ${clean + dirty}, which ` +
+          `does not equal manifest.total_rows (${total}).`
+        : null;
+    },
+  },
+  {
+    id: "manifest_dirty_row_count_matches_dirty_rows_array",
+    check: (s) => {
+      if (!s.manifest || typeof s.manifest.dirty_row_count !== "number") return null;
+      // A non-array dirty_rows is reported by manifest_optional_arrays_well_typed instead — this check only
+      // reconciles the count when there is an actual array to reconcile it against.
+      if (s.manifest.dirty_rows !== undefined && !Array.isArray(s.manifest.dirty_rows)) return null;
+      const actual = s.manifest.dirty_rows?.length ?? 0;
+      return s.manifest.dirty_row_count !== actual
+        ? `manifest.dirty_row_count (${s.manifest.dirty_row_count}) does not match the length of manifest.dirty_rows (${actual}).`
+        : null;
+    },
+  },
+  {
+    id: "manifest_columns_match_actual_header",
+    check: (s) => {
+      if (!s.manifest?.columns || !reachedHeader(s) || !s.headerCells) return null;
+      const actualHeader = s.headerCells.map((h) => h.trim());
+      const expected = s.manifest.columns;
+      const matches = actualHeader.length === expected.length && actualHeader.every((h, i) => h === expected[i]);
+      return matches
+        ? null
+        : `manifest.columns (${JSON.stringify(expected)}) does not match the CSV's actual header row (${JSON.stringify(actualHeader)}).`;
+    },
+  },
+  {
+    id: "manifest_optional_arrays_well_typed",
+    check: (s) => (s.manifestFieldTypeErrors.length > 0 ? s.manifestFieldTypeErrors.join(" ") : null),
   },
   {
     id: "barcodes_pass_check_digit",
@@ -937,6 +1261,13 @@ function printReport(state: RunState): void {
     return;
   }
 
+  if (state.encodingIssue) {
+    console.error("");
+    console.error("--- FATAL: encoding problem ---");
+    console.error(state.encodingIssue.message);
+    return;
+  }
+
   if (state.splitErrorReason === "unsupported_line_ending") {
     console.error("");
     console.error("--- FATAL: unsupported line endings ---");
@@ -962,13 +1293,17 @@ function printReport(state: RunState): void {
 
   // Header parsed successfully — full report from here on.
   if (state.dataRecords.length > MAX_ROWS) {
+    console.log("");
+    console.log("=== IMPORT LIMIT: this file exceeds what a real upload accepts today ===");
     console.log(
-      `NOTE: file has ${state.dataRecords.length} data rows, exceeding the current importer's ` +
-        `MAX_ROWS=${MAX_ROWS}. A single real upload would be rejected outright ` +
-        `(too_many_rows). Chunking into groups of ${MAX_ROWS} logical records (never raw ` +
-        `lines) to still get full-file parse/validate statistics from the real ` +
-        `csv-parser + row-validator.`,
+      `File has ${state.dataRecords.length} data rows; the live importer's MAX_ROWS is ${MAX_ROWS}. A single ` +
+        "real upload of this exact file would be rejected outright (too_many_rows) before a single row is " +
+        `stored. The statistics below come from chunking the file into groups of ${MAX_ROWS} logical records ` +
+        "(never raw lines) purely so this TOOL can still report full-file parse/validate numbers — that " +
+        "chunking is not something today's real importer does, and this file cannot PASS as a result (see " +
+        "within_importer_row_limit below).",
     );
+    console.log("");
   }
 
   console.log("--- Header mapping ---");

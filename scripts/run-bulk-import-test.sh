@@ -27,8 +27,16 @@
 # matching) extend this SAME entry point rather than adding a new one.
 #
 # validate-bulk-import.ts exits non-zero on any real anomaly (see its module
-# doc), and `set -e` below means this script exits non-zero the moment
-# either sub-run does.
+# doc). The three 20k-scale fixtures generated below currently ALL exceed
+# the live importer's MAX_ROWS cap (see constants.ts) — a round-5 fix made
+# validate-bulk-import.ts report that honestly (within_importer_row_limit)
+# instead of silently PASSing a file a real upload would reject at row
+# 5,001. That means, until a later piece raises that cap, these three
+# sub-runs are EXPECTED to exit non-zero even on a perfectly well-formed
+# fixture — this script tracks each sub-run's exit status itself (rather
+# than dying at the first one via `set -e`) so all three still run and
+# report in full, and prints an honest final banner reflecting whichever
+# actually happened.
 #
 # No DB, no network, no dev server required.
 
@@ -47,13 +55,21 @@ if [ -z "$CSV_PATH" ]; then
   # clobber the clean fixture validated just above.
   node scripts/fixtures/generate-partner-cellar.mjs --dirty --out-dir fixtures/generated/dirty
   echo ""
-  npx tsx scripts/validate-bulk-import.ts "fixtures/generated/partner-cellar-20k.csv"
+
+  overall_status=0
+  npx tsx scripts/validate-bulk-import.ts "fixtures/generated/partner-cellar-20k.csv" || overall_status=$?
   echo ""
-  npx tsx scripts/validate-bulk-import.ts "fixtures/generated/partner-cellar-20k-extras.csv"
+  npx tsx scripts/validate-bulk-import.ts "fixtures/generated/partner-cellar-20k-extras.csv" || overall_status=$?
   echo ""
-  npx tsx scripts/validate-bulk-import.ts "fixtures/generated/dirty/partner-cellar-20k.csv"
+  npx tsx scripts/validate-bulk-import.ts "fixtures/generated/dirty/partner-cellar-20k.csv" || overall_status=$?
   echo ""
-  echo "=== run-bulk-import-test: PASS (base + extras + dirty) ==="
+
+  if [ "$overall_status" -eq 0 ]; then
+    echo "=== run-bulk-import-test: PASS (base + extras + dirty) ==="
+  else
+    echo "=== run-bulk-import-test: FAIL (base + extras + dirty) — see failure reasons above ==="
+  fi
+  exit "$overall_status"
 else
   npx tsx scripts/validate-bulk-import.ts "$CSV_PATH"
 fi
