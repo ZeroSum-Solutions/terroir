@@ -110,7 +110,7 @@ export function CellarFilterSheet({
             type="button"
             onClick={onClose}
             aria-label="Close filters"
-            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
@@ -195,14 +195,14 @@ export function CellarFilterSheet({
           <button
             type="button"
             onClick={handleReset}
-            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill border border-ink/20 text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill border border-ink/20 text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             Reset
           </button>
           <button
             type="button"
             onClick={handleApply}
-            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill bg-primary text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill bg-primary text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             Apply
           </button>
@@ -213,7 +213,7 @@ export function CellarFilterSheet({
 }
 
 const fieldSelectClassName =
-  "h-11 w-full rounded-pill border border-ink/20 bg-white px-sm text-[13px] text-ink outline-none hover:bg-bridge-surface focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15";
+  "h-11 w-full rounded-pill border border-ink/20 bg-white px-sm text-[13px] text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 
 function SheetField({
   label,

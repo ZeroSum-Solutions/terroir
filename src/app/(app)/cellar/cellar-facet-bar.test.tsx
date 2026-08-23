@@ -94,6 +94,19 @@ describe("CellarFacetBar", () => {
     expect(button(container, /^Filters/)).toBeDefined();
   });
 
+  it("keeps Producer, Region, and Filters on one non-wrapping row (residuals audit — was 2 rows down to 320px)", async () => {
+    const { container } = await mount({});
+    const row = container.querySelector<HTMLElement>("[data-cellar-facet-bar] > div");
+    const classes = row?.className.split(/\s+/) ?? [];
+    expect(classes).toContain("flex-nowrap");
+    expect(classes).not.toContain("flex-wrap");
+    expect(classes).toContain("overflow-x-auto");
+    // Each compact-row select is capped narrow enough on mobile that
+    // Producer + Region + the Filters button fit one row at 320px.
+    const producerSelect = labelledSelect(container, "Producer")!;
+    expect(producerSelect.className).toContain("max-w-[88px]");
+  });
+
   it("hides a compact-row control once it has only one selectable option", async () => {
     const { container } = await mount({
       counts: { ...diverseCounts, region: options("Napa") },
@@ -247,6 +260,38 @@ describe("CellarFacetBar", () => {
     );
     expect(onGroupByChange).toHaveBeenCalledWith(null);
   });
+
+  it("uses the project's outline focus pattern (never outline-none + a box-shadow ring) on every facet-surface control", async () => {
+    // Residuals audit — the `.glass` utility sets box-shadow as unlayered
+    // CSS that always beats Tailwind's layered ring-* utilities, so any
+    // focus-visible:ring-* on these controls is an automatic fail. Every
+    // control here must carry the outline-based pattern instead.
+    const onFacetsChange = vi.fn();
+    const onGroupByChange = vi.fn();
+    const { container } = await mount({
+      facets: { ...emptyFacets, producer: "Alpha Estate", health: "hold" },
+      groupBy: "region",
+      onFacetsChange,
+      onGroupByChange,
+    });
+
+    expectFocusOutlinePattern(labelledSelect(container, "Producer")!);
+    expectFocusOutlinePattern(labelledSelect(container, "Region")!);
+    expectFocusOutlinePattern(button(container, /^Filters/));
+    expectFocusOutlinePattern(chipRemoveButton(container, "Producer: Alpha Estate"));
+    expectFocusOutlinePattern(button(container, "Clear all"));
+
+    await click(button(container, /^Filters/));
+    const dialog = container.querySelector('[role="dialog"]')!;
+    expectFocusOutlinePattern(labelledSelect(dialog, "Country")!);
+    expectFocusOutlinePattern(labelledSelect(dialog, "Varietal")!);
+    expectFocusOutlinePattern(labelledSelect(dialog, "Group by")!);
+    expectFocusOutlinePattern(
+      dialog.querySelector<HTMLButtonElement>('button[aria-label="Close filters"]')!,
+    );
+    expectFocusOutlinePattern(button(dialog, "Reset"));
+    expectFocusOutlinePattern(button(dialog, "Apply"));
+  });
 });
 
 function labelledSelect(root: ParentNode, label: string) {
@@ -269,6 +314,18 @@ function chipRemoveButton(root: ParentNode, chipLabel: string) {
 
 async function click(element: HTMLElement) {
   await act(async () => element.click());
+}
+
+function expectFocusOutlinePattern(element: HTMLElement) {
+  const classes = element.className.split(/\s+/);
+  expect(classes).toContain("focus-visible:outline");
+  expect(classes).toContain("focus-visible:outline-2");
+  expect(classes).toContain("focus-visible:outline-offset-2");
+  expect(classes).toContain("focus-visible:outline-primary");
+  // The banned pattern this replaces: `.glass`'s unlayered CSS beats a
+  // layered Tailwind ring, so outline-none + a ring is an automatic fail.
+  expect(classes).not.toContain("outline-none");
+  expect(classes.some((c) => c.startsWith("focus-visible:ring"))).toBe(false);
 }
 
 async function selectValue(select: HTMLSelectElement, value: string) {

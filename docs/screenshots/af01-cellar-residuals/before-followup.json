@@ -1,0 +1,148 @@
+{
+  "primaryOptionCounts": [
+    {
+      "label": "Producer",
+      "optionCount": 42,
+      "options": [
+        "All producer",
+        "Achaval Ferrer (1)",
+        "Argiolas (1)",
+        "Ata Rangi (1)",
+        "Benanti (1)",
+        "Biondi-Santi (1)",
+        "Ca' del Bosco (1)",
+        "Catena Zapata (1)",
+        "Cayuse Vineyards (1)",
+        "Chateau Rieussec (1)",
+        "Clos Mogador (1)",
+        "Cloudy Bay (1)",
+        "Concha y Toro (1)",
+        "Dal Forno Romano (1)",
+        "Dario Princic (1)",
+        "Domaine Combier (1)",
+        "Domaine Tempier (1)",
+        "Domäne Wachau (1)",
+        "Donkey and Goat (1)",
+        "Emiliana Organico (1)",
+        "Eyrie Vineyards (1)",
+        "Failla Wines (1)",
+        "Felton Road (1)",
+        "Giacomo Conterno (1)",
+        "J.J. Prum (1)",
+        "Klein Constantia (1)",
+        "Lingua Franca (1)",
+        "Louis Michel (1)",
+        "Montevertine (1)",
+        "Montinore Estate (1)",
+        "Muga (1)",
+        "Penfolds (1)",
+        "Pieropan (1)",
+        "Ridge Vineyards (2)",
+        "Rosa (1)",
+        "Rossignol-Trapet (1)",
+        "Schiopetto (1)",
+        "Schramsberg Vineyards (1)",
+        "Shaw and Smith (1)",
+        "Test Producer (1)",
+        "Turley Wine Cellars (1)",
+        "Vega Sicilia (1)"
+      ]
+    },
+    {
+      "label": "Region",
+      "optionCount": 42,
+      "options": [
+        "All region",
+        "Adelaide Hills, South Australia, Australia (1)",
+        "Bandol, Provence (1)",
+        "Bannockburn, Central Otago, New Zealand (1)",
+        "Burgundy (1)",
+        "Casablanca Valley, Chile (1)",
+        "Chablis, Burgundy (1)",
+        "Chianti Classico, Tuscany (1)",
+        "Collio, Friuli-Venezia Giulia (2)",
+        "Constantia, South Africa (1)",
+        "Crozes-Hermitage, Northern Rhône (1)",
+        "Douro (1)",
+        "Dry Creek Valley, Sonoma County, California (1)",
+        "Dundee Hills, Willamette Valley, Oregon (1)",
+        "El Dorado, Sierra Foothills, California (1)",
+        "Eola-Amity Hills, Willamette Valley, Oregon (1)",
+        "Etna, Sicily (1)",
+        "Franciacorta, Lombardy (1)",
+        "Gevrey-Chambertin, Burgundy (1)",
+        "Gualtallary, Mendoza, Argentina (1)",
+        "Lujan de Cuyo, Mendoza, Argentina (1)",
+        "Marlborough, New Zealand (1)",
+        "Martinborough, New Zealand (1)",
+        "Mendocino Ridge, California (1)",
+        "Montalcino, Tuscany (1)",
+        "Mosel (1)",
+        "Napa Valley, California (1)",
+        "North Coast, California (1)",
+        "Peumo, Cachapoal Valley, Chile (1)",
+        "Priorat, Catalonia (1)",
+        "Ribera del Duero, Castilla y León (1)",
+        "Rioja Alta (1)",
+        "Santa Cruz Mountains, California (1)",
+        "Sardinia (1)",
+        "Sauternes, Bordeaux (1)",
+        "Serralunga d'Alba, Piedmont (1)",
+        "Soave Classico, Veneto (1)",
+        "South Australia, Australia (1)",
+        "Valpolicella, Veneto (1)",
+        "Wachau, Lower Austria (1)",
+        "Walla Walla Valley, Washington (1)",
+        "Willamette Valley, Oregon (1)"
+      ]
+    }
+  ],
+  "secondaryOptionCounts": [
+    {
+      "label": "Country",
+      "optionCount": 13
+    },
+    {
+      "label": "Varietal",
+      "optionCount": 26
+    },
+    {
+      "label": "Vintage from",
+      "optionCount": 9
+    },
+    {
+      "label": "Vintage to",
+      "optionCount": 9
+    },
+    {
+      "label": "Format",
+      "optionCount": 4
+    },
+    {
+      "label": "Group by",
+      "optionCount": 5
+    }
+  ],
+  "navResults": [
+    {
+      "name": "Open",
+      "url": "http://localhost:3103/cellar",
+      "ariaSelected": "false"
+    },
+    {
+      "name": "86'd",
+      "url": "http://localhost:3103/cellar",
+      "ariaSelected": "false"
+    },
+    {
+      "name": "Drink now",
+      "url": "http://localhost:3103/cellar?filter=out",
+      "ariaSelected": "false"
+    },
+    {
+      "name": "All",
+      "url": "http://localhost:3103/cellar?filter=out",
+      "ariaSelected": "false"
+    }
+  ]
+}

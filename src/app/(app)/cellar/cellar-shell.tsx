@@ -200,17 +200,17 @@ export function CellarShell({
   return (
     <section className="min-w-0 max-w-full overflow-x-hidden">
       {/* Dawn Hero */}
-      <div className="-mx-md -mt-lg dawn-gradient px-md pb-lg pt-lg md:-mx-lg md:-mt-xl md:px-lg md:pb-xl md:pt-xl">
-        <p className="text-caption font-medium uppercase text-grey">
+      <div className="-mx-md -mt-lg dawn-gradient px-md pb-lg pt-lg max-[359px]:pb-xs max-[359px]:pt-xs md:-mx-lg md:-mt-xl md:px-lg md:pb-xl md:pt-xl">
+        <p className="truncate text-caption font-medium uppercase text-grey">
           {restaurantName} · Cellar
         </p>
-        <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink md:text-heading">
+        <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink max-[359px]:mt-2xs max-[359px]:text-[22px] md:text-heading">
           A cellar beyond the <em className="italic font-normal text-primary">ordinary</em>
         </h1>
 
         {/* Counters-as-navigation — one compact row is both the hero's KPI
             display and the filter tabs (M2-15 §2.2/§2.3). */}
-        <div className="mt-md">
+        <div className="mt-md max-[359px]:mt-xs">
           <CellarCounters
             counters={counters}
             activeFilter={urlState.filter}

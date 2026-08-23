@@ -1,0 +1,368 @@
+{
+  "320": {
+    "heroRect": {
+      "x": 0,
+      "y": 54,
+      "width": 320,
+      "height": 264.59375,
+      "top": 54,
+      "right": 320,
+      "bottom": 318.59375,
+      "left": 0
+    },
+    "heroHeightFraction": 0.3134997037914692,
+    "viewportHeight": 844,
+    "counterButtons": [
+      {
+        "text": "All124",
+        "rect": {
+          "x": 18,
+          "y": 198.59375,
+          "width": 89.671875,
+          "height": 44
+        },
+        "ariaSelected": "true",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      },
+      {
+        "text": "Open11",
+        "rect": {
+          "x": 115.671875,
+          "y": 198.59375,
+          "width": 92.09375,
+          "height": 44
+        },
+        "ariaSelected": "false",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      },
+      {
+        "text": "86'd1",
+        "rect": {
+          "x": 215.765625,
+          "y": 198.59375,
+          "width": 81.546875,
+          "height": 44
+        },
+        "ariaSelected": "false",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      },
+      {
+        "text": "Low stock0",
+        "rect": {
+          "x": 18,
+          "y": 250.59375,
+          "width": 130.4375,
+          "height": 44
+        },
+        "ariaSelected": "false",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      },
+      {
+        "text": "Drink now9",
+        "rect": {
+          "x": 156.4375,
+          "y": 250.59375,
+          "width": 128.71875,
+          "height": 44
+        },
+        "ariaSelected": "false",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      }
+    ],
+    "openBottlesRect": {
+      "x": 18,
+      "y": 332.59375,
+      "width": 127.078125,
+      "height": 44
+    },
+    "facetBarInfo": {
+      "rect": {
+        "x": 18,
+        "y": 460.59375,
+        "width": 284,
+        "height": 96,
+        "scrollWidth": 284,
+        "clientWidth": 284
+      },
+      "controlRects": [
+        {
+          "tag": "LABEL",
+          "text": "ProducerAll producerAchaval Fe",
+          "y": 461,
+          "height": 44
+        },
+        {
+          "tag": "LABEL",
+          "text": "RegionAll regionAdelaide Hills",
+          "y": 513,
+          "height": 44
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Filters",
+          "y": 513,
+          "height": 44
+        }
+      ],
+      "distinctRowCount": 2
+    },
+    "smallTargets": [],
+    "horizontalOverflow": false,
+    "documentScrollWidth": 320,
+    "documentClientWidth": 320
+  },
+  "390": {
+    "heroRect": {
+      "x": 0,
+      "y": 54,
+      "width": 390,
+      "height": 217.296875,
+      "top": 54,
+      "right": 390,
+      "bottom": 271.296875,
+      "left": 0
+    },
+    "heroHeightFraction": 0.25746075236966826,
+    "viewportHeight": 844,
+    "counterButtons": [
+      {
+        "text": "All124",
+        "rect": {
+          "x": 18,
+          "y": 151.296875,
+          "width": 89.671875,
+          "height": 44
+        },
+        "ariaSelected": "true",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      },
+      {
+        "text": "Open11",
+        "rect": {
+          "x": 115.671875,
+          "y": 151.296875,
+          "width": 92.09375,
+          "height": 44
+        },
+        "ariaSelected": "false",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      },
+      {
+        "text": "86'd1",
+        "rect": {
+          "x": 215.765625,
+          "y": 151.296875,
+          "width": 81.546875,
+          "height": 44
+        },
+        "ariaSelected": "false",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      },
+      {
+        "text": "Low stock0",
+        "rect": {
+          "x": 18,
+          "y": 203.296875,
+          "width": 130.4375,
+          "height": 44
+        },
+        "ariaSelected": "false",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      },
+      {
+        "text": "Drink now9",
+        "rect": {
+          "x": 156.4375,
+          "y": 203.296875,
+          "width": 128.71875,
+          "height": 44
+        },
+        "ariaSelected": "false",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      }
+    ],
+    "openBottlesRect": {
+      "x": 18,
+      "y": 285.296875,
+      "width": 127.078125,
+      "height": 44
+    },
+    "facetBarInfo": {
+      "rect": {
+        "x": 18,
+        "y": 413.296875,
+        "width": 354,
+        "height": 96,
+        "scrollWidth": 354,
+        "clientWidth": 354
+      },
+      "controlRects": [
+        {
+          "tag": "LABEL",
+          "text": "ProducerAll producerAchaval Fe",
+          "y": 413,
+          "height": 44
+        },
+        {
+          "tag": "LABEL",
+          "text": "RegionAll regionAdelaide Hills",
+          "y": 465,
+          "height": 44
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Filters",
+          "y": 465,
+          "height": 44
+        }
+      ],
+      "distinctRowCount": 2
+    },
+    "smallTargets": [],
+    "horizontalOverflow": false,
+    "documentScrollWidth": 390,
+    "documentClientWidth": 390
+  },
+  "430": {
+    "heroRect": {
+      "x": 0,
+      "y": 54,
+      "width": 430,
+      "height": 217.296875,
+      "top": 54,
+      "right": 430,
+      "bottom": 271.296875,
+      "left": 0
+    },
+    "heroHeightFraction": 0.25746075236966826,
+    "viewportHeight": 844,
+    "counterButtons": [
+      {
+        "text": "All124",
+        "rect": {
+          "x": 18,
+          "y": 151.296875,
+          "width": 89.671875,
+          "height": 44
+        },
+        "ariaSelected": "true",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      },
+      {
+        "text": "Open11",
+        "rect": {
+          "x": 115.671875,
+          "y": 151.296875,
+          "width": 92.09375,
+          "height": 44
+        },
+        "ariaSelected": "false",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      },
+      {
+        "text": "86'd1",
+        "rect": {
+          "x": 215.765625,
+          "y": 151.296875,
+          "width": 81.546875,
+          "height": 44
+        },
+        "ariaSelected": "false",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      },
+      {
+        "text": "Low stock0",
+        "rect": {
+          "x": 18,
+          "y": 203.296875,
+          "width": 130.4375,
+          "height": 44
+        },
+        "ariaSelected": "false",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      },
+      {
+        "text": "Drink now9",
+        "rect": {
+          "x": 156.4375,
+          "y": 203.296875,
+          "width": 128.71875,
+          "height": 44
+        },
+        "ariaSelected": "false",
+        "labelHeight": 16.796875,
+        "lineHeight": 16.8,
+        "wrapped": false
+      }
+    ],
+    "openBottlesRect": {
+      "x": 18,
+      "y": 285.296875,
+      "width": 127.078125,
+      "height": 44
+    },
+    "facetBarInfo": {
+      "rect": {
+        "x": 18,
+        "y": 413.296875,
+        "width": 394,
+        "height": 96,
+        "scrollWidth": 394,
+        "clientWidth": 394
+      },
+      "controlRects": [
+        {
+          "tag": "LABEL",
+          "text": "ProducerAll producerAchaval Fe",
+          "y": 413,
+          "height": 44
+        },
+        {
+          "tag": "LABEL",
+          "text": "RegionAll regionAdelaide Hills",
+          "y": 413,
+          "height": 44
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Filters",
+          "y": 465,
+          "height": 44
+        }
+      ],
+      "distinctRowCount": 2
+    },
+    "smallTargets": [],
+    "horizontalOverflow": false,
+    "documentScrollWidth": 430,
+    "documentClientWidth": 430
+  }
+}

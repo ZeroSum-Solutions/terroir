@@ -108,7 +108,15 @@ export function CellarFacetBar({
 
   return (
     <div data-cellar-facet-bar className="mb-md flex max-w-full flex-col gap-sm">
-      <div className="flex flex-wrap items-center gap-xs">
+      {/*
+        M2-15 §2.4 follow-up (residuals audit) — Producer/Region + the
+        Filters button must read as ONE compact row, never a wrapped
+        multi-row block, down to 320px. `flex-nowrap` plus each select's
+        narrower mobile cap (below) keeps all three controls on one line
+        at 320–430px with room to spare; `overflow-x-auto` is a safety net
+        for unusually long producer/region text, not the primary UX.
+      */}
+      <div className="flex flex-nowrap items-center gap-xs overflow-x-auto">
         {showProducer && (
           <FacetSelect
             label="Producer"
@@ -129,7 +137,7 @@ export function CellarFacetBar({
           <button
             type="button"
             onClick={() => setSheetOpen(true)}
-            className="inline-flex h-11 shrink-0 items-center gap-xs rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+            className="inline-flex h-11 shrink-0 items-center gap-xs rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             Filters
@@ -154,7 +162,7 @@ export function CellarFacetBar({
                 type="button"
                 onClick={chip.onRemove}
                 aria-label={`Remove ${chip.label} filter`}
-                className="flex h-11 w-11 shrink-0 -my-[6px] items-center justify-center rounded-pill text-grey hover:bg-white hover:text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                className="flex h-11 w-11 shrink-0 -my-[6px] items-center justify-center rounded-pill text-grey hover:bg-white hover:text-ink-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               >
                 <X className="h-3 w-3" strokeWidth={2.5} aria-hidden />
               </button>
@@ -166,7 +174,7 @@ export function CellarFacetBar({
               onFacetsChange(CLEAR_ALL_PATCH);
               onGroupByChange(null);
             }}
-            className="flex h-11 shrink-0 -my-[6px] items-center justify-center rounded-pill px-sm text-[11.5px] font-medium text-grey hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+            className="flex h-11 shrink-0 -my-[6px] items-center justify-center rounded-pill px-sm text-[11.5px] font-medium text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             Clear all
           </button>
@@ -320,5 +328,8 @@ function FacetSelect({
   );
 }
 
+// Capped narrower on mobile so Producer + Region + the Filters button share
+// one row down to 320px (each select would otherwise size toward its widest
+// option's text); md: restores the roomier desktop width.
 const selectClassName =
-  "h-11 max-w-[180px] rounded-pill border border-ink/20 bg-white px-sm text-[12px] text-ink outline-none hover:bg-bridge-surface focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15";
+  "h-11 max-w-[88px] md:max-w-[180px] rounded-pill border border-ink/20 bg-white px-sm text-[12px] text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
