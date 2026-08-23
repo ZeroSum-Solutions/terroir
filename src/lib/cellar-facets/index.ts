@@ -79,6 +79,15 @@ export function facetCounts<T extends CellarFacetRow>(
   };
 }
 
+/**
+ * M2-15 §2.4 — a facet control is only worth showing when picking it could
+ * actually change the result set. `isUnknown` options are a disabled
+ * placeholder ("Unknown"), not a real choice, so they don't count.
+ */
+export function hasSelectableOptions(options: readonly FacetCount[]): boolean {
+  return options.filter((option) => !option.isUnknown).length > 1;
+}
+
 export function groupRows<T extends CellarFacetRow>(
   rows: readonly T[],
   groupBy: CellarGroupBy,

@@ -81,6 +81,22 @@ const openRow: CellarWineRow = {
   restaurant_default_target_pour_cost_pct: null,
   restaurant_default_target_markup_ratio: null,
 };
+// M2-15 §2.4: the facet bar only renders a control (and only renders at
+// all) when the current rows give it more than one selectable option, so
+// this second row exists purely to keep Producer/Region diversified for
+// the "route reachable" test below — it's otherwise inert (not open, not
+// low, not 86'd, no drink-window data) so it doesn't perturb any of that
+// test's other counter/button assertions.
+const secondRow: CellarWineRow = {
+  ...openRow,
+  wine_id: "wine-2",
+  producer: "Second Producer",
+  region: "Second Region",
+  open_remaining_ml: null,
+  opened_at: null,
+  open_bottle_id: null,
+  sealed_count: 12,
+};
 const reconcileRow: OpenBottleRow = {
   wine_id: "wine-1",
   wine_list_item_id: "item-1",
@@ -115,7 +131,7 @@ describe("CellarShell open bottles route", () => {
       root.render(
         <ToastProvider>
           <CellarShell
-            rows={[openRow]}
+            rows={[openRow, secondRow]}
             reconcileItems={[reconcileRow]}
             cellarConfig={{
               id: "cellar-1",
@@ -154,9 +170,12 @@ describe("CellarShell open bottles route", () => {
     expect(
       container.querySelector('[role="tablist"]')?.className.split(" "),
     ).toContain("flex-wrap");
+    // M2-15 §2.4: the facet bar's outer wrapper stacks its compact control
+    // row above the applied-filter chip row (flex-col), so the row that
+    // actually needs to wrap on narrow viewports is now the first child.
     expect(
       container
-        .querySelector('[data-cellar-facet-bar]')
+        .querySelector('[data-cellar-facet-bar] > div')
         ?.className.split(" "),
     ).toContain("flex-wrap");
     expect(link.parentElement?.className).toContain("w-full");
