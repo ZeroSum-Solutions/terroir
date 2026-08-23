@@ -11,6 +11,7 @@ import { readApiError } from "@/lib/api/client-error";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
 import { SCORED_FIELDS } from "@/lib/scanner/scored-fields";
 import type { LineItem, LineItemField } from "@/lib/scanner/types";
+import { IconButton } from "@/components/icon-button";
 import { MoneyInput, QtyStepper, TextInput, VintageInput } from "./field-inputs";
 import { LineItemCard } from "./line-item-card";
 
@@ -306,9 +307,9 @@ export function ScanReview({
                       <td className="p-sm"><div className="flex justify-center"><QtyStepper value={it.qty} onChange={(v) => updateField(it.id, "qty", v)} /></div></td>
                       <td className="p-sm"><MoneyInput value={it.unitCost} low={isLow(it, "unitCost")} edited={isEdited(it, "unitCost")} onCommit={(v) => updateField(it.id, "unitCost", v)} /></td>
                       <td className="p-sm text-center">
-                        <button type="button" aria-label={`Remove ${it.name}`} onClick={() => removeItem(it.id)} className="inline-flex h-9 w-9 items-center justify-center rounded-pill text-grey hover:bg-white hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25">
+                        <IconButton label={`Remove ${it.name}`} onClick={() => removeItem(it.id)} className="rounded-pill text-grey hover:bg-white hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25">
                           <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                        </button>
+                        </IconButton>
                       </td>
                     </tr>
                   ))}

@@ -31,21 +31,13 @@ export function TemplatePicker({
           disabled={disabled}
           aria-pressed={current === t}
           className={cn(
-            "flex min-h-11 items-center justify-between rounded-pill px-sm py-xs text-[14px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:pointer-events-none",
+            "flex min-h-11 items-center justify-between rounded-pill px-sm py-xs text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:pointer-events-none",
             current === t
               ? "bg-bridge-surface font-medium text-ink"
               : "text-ink-muted hover:bg-bridge-surface hover:text-ink",
           )}
         >
-          <span
-            className={
-              t === "classic" || t === "minimal"
-                ? "font-serif"
-                : "font-sans"
-            }
-          >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-          </span>
+          <span>{t.charAt(0).toUpperCase() + t.slice(1)}</span>
           {current === t && (
             <Check
               className="h-3.5 w-3.5 text-primary"

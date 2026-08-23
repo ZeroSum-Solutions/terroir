@@ -395,9 +395,8 @@ export default async function PublicWineListPage({
       {/* Footer — hidden when printing so the menu doesn't carry a
           "Powered by Terroir" line on a paper copy. */}
       <footer className="mt-3xl border-t border-hairline pt-lg text-center print:hidden">
-        <p className="text-[12px] text-ink-subtle">
-          Powered by{" "}
-          <span className="font-serif font-medium text-primary">Terroir</span>
+        <p className="text-caption font-medium uppercase text-grey">
+          Powered by Terroir
         </p>
       </footer>
     </main>
