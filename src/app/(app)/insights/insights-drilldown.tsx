@@ -114,12 +114,16 @@ export function OwnerMetricGrid({ metrics }: { metrics: OwnerMetrics }) {
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-sm md:gap-md">
+    <div className="grid grid-cols-2 gap-sm md:grid-cols-4 md:gap-md">
       {items.map((item) => (
         <div key={item.key} data-metric={item.key}>
           <Link
             href={metricHref(item.key)}
-            className="group block rounded-lg border border-hairline bg-white p-sm transition-colors hover:bg-bridge-surface"
+            // `.glass` sets box-shadow as unlayered CSS (see globals.css) so
+            // it always wins over Tailwind's layered ring-* utilities on the
+            // same element — never combine it with one of those. Focus goes
+            // through `outline`, which glass never touches.
+            className="glass group block rounded-lg p-md transition-transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             <span className="flex items-center gap-xs text-caption font-medium uppercase text-grey">
               {item.label}
@@ -129,7 +133,7 @@ export function OwnerMetricGrid({ metrics }: { metrics: OwnerMetrics }) {
                 aria-hidden
               />
             </span>
-            <span className="mt-xs block font-serif text-[30px] font-normal leading-none text-ink">
+            <span className="mt-xs block font-serif text-[30px] font-normal leading-none tabular text-ink">
               {item.value}
             </span>
           </Link>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getAuthContext } from "@/lib/auth-context";
 import { ArrowLeft, ChevronLeft, ChevronRight, FileText, ScanLine } from "lucide-react";
+import { RouteDataEmpty } from "@/components/route-data-state";
 import { ExportCsvButton } from "./export-csv-button";
 
 export const runtime = "nodejs";
@@ -151,7 +152,7 @@ export default async function ScansPage({
             role="radio"
             aria-checked={active}
             aria-label={`${f.label} (${countForChip})`}
-            className={`inline-flex min-h-11 items-center gap-xs rounded-pill border px-md text-[12px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2 ${
+            className={`inline-flex min-h-11 items-center gap-xs rounded-pill border px-md text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${
               active
                 ? "border-ink bg-ink text-beige"
                 : "border-ink/25 bg-white text-grey hover:bg-bridge-surface"
@@ -221,17 +222,19 @@ export default async function ScansPage({
     return (
       <section>
         {headerBlock}
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <ScanLine className="mb-md h-12 w-12 text-grey" strokeWidth={1.5} />
-          <p className="text-[15px] font-medium text-ink">{emptyCopy.title}</p>
-          <p className="mt-xs text-[14px] text-grey">{emptyCopy.body}</p>
-          <Link
-            href="/scan"
-            className="mt-lg inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-lg text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
-          >
-            Scan an invoice
-          </Link>
-        </div>
+        <RouteDataEmpty
+          icon={<ScanLine className="h-6 w-6" strokeWidth={1.5} />}
+          title={emptyCopy.title}
+          description={emptyCopy.body}
+          action={
+            <Link
+              href="/scan"
+              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
+            >
+              Scan an invoice
+            </Link>
+          }
+        />
       </section>
     );
   }
@@ -276,7 +279,7 @@ export default async function ScansPage({
                 <td className="px-md py-sm">
                   <Link
                     href={`/scan/${s.id}`}
-                    className="block text-ink hover:text-primary"
+                    className="block text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                   >
                     <span className="font-mono text-[13px] tabular">
                       {s.invoice_date ?? s.created_at.slice(0, 10)}
@@ -286,7 +289,7 @@ export default async function ScansPage({
                 <td className="px-md py-sm">
                   <Link
                     href={`/scan/${s.id}`}
-                    className="block font-medium text-ink hover:text-primary"
+                    className="block font-medium text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                   >
                     {s.distributor_name}
                   </Link>
@@ -294,7 +297,7 @@ export default async function ScansPage({
                 <td className="px-md py-sm">
                   <Link
                     href={`/scan/${s.id}`}
-                    className="block font-mono text-[13px] text-grey"
+                    className="block font-mono text-[13px] text-grey focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                   >
                     {s.invoice_number ?? "—"}
                   </Link>
@@ -302,13 +305,13 @@ export default async function ScansPage({
                 <td className="px-md py-sm text-center">
                   <Link
                     href={`/scan/${s.id}`}
-                    className="block font-mono tabular text-ink"
+                    className="block font-mono tabular text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                   >
                     {s.item_count}
                   </Link>
                 </td>
                 <td className="px-md py-sm text-center">
-                  <Link href={`/scan/${s.id}`} className="block">
+                  <Link href={`/scan/${s.id}`} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25">
                     <span
                       className={`inline-block rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide ${statusBadge(s.status)}`}
                     >
@@ -317,7 +320,7 @@ export default async function ScansPage({
                   </Link>
                 </td>
                 <td className="px-md py-sm text-center">
-                  <Link href={`/scan/${s.id}`} className="block">
+                  <Link href={`/scan/${s.id}`} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25">
                     <span className="font-mono text-[13px] text-grey tabular">
                       {s.accuracy_score != null
                         ? `${Math.round(s.accuracy_score * 100)}%`
@@ -337,7 +340,7 @@ export default async function ScansPage({
           <Link
             key={s.id}
             href={`/scan/${s.id}`}
-            className="flex items-center gap-md rounded-lg border border-hairline bg-white p-md hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
+            className="flex items-center gap-md rounded-lg border border-hairline bg-white p-md hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-bridge-surface">
               <FileText className="h-5 w-5 text-grey" strokeWidth={1.5} />
@@ -380,7 +383,7 @@ export default async function ScansPage({
         {page > 1 ? (
           <Link
             href={`/scans${buildQuery({ page: page - 1, status })}`}
-            className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
+            className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={2} />
             Previous
@@ -397,7 +400,7 @@ export default async function ScansPage({
         {hasMore ? (
           <Link
             href={`/scans${buildQuery({ page: page + 1, status })}`}
-            className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
+            className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             Next
             <ChevronRight className="h-4 w-4" strokeWidth={2} />

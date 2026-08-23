@@ -73,7 +73,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-surface-muted"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface"
             >
               <DollarSign className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Pricing
@@ -84,7 +84,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-surface-muted"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface"
             >
               <Archive className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Bins
@@ -95,7 +95,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-surface-muted"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface"
             >
               <ClipboardCheck className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Reconcile
@@ -106,7 +106,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-surface-muted"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface"
             >
               <Users className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Team
@@ -117,19 +117,19 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-surface-muted"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface"
             >
               <Upload className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Import
             </Link>
-            <div className="mx-md my-xs border-t border-border" role="separator" />
+            <div className="mx-md my-xs border-t border-hairline" role="separator" />
             <form action="/auth/signout" method="post">
               <button
                 ref={(el) => { itemsRef.current[5] = el; }}
                 type="submit"
                 role="menuitem"
                 tabIndex={-1}
-                className="flex min-h-11 w-full items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-surface-muted"
+                className="flex min-h-11 w-full items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface"
               >
                 <LogOut className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
                 Sign out

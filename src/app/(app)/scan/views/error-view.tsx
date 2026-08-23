@@ -29,7 +29,7 @@ export function ErrorView({ mode, message, onRetry, onNewPhoto, hasFile, onManua
             <button
               type="button"
               onClick={onRetry}
-              className="flex h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
+              className="flex h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
             >
               <RotateCw className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
               {isBottle ? "Retry label scan" : "Retry invoice scan"}
@@ -39,7 +39,7 @@ export function ErrorView({ mode, message, onRetry, onNewPhoto, hasFile, onManua
             <button
               type="button"
               onClick={onNewPhoto}
-              className="flex h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
+              className="flex h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
             >
               <Camera className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
               New photo
@@ -48,7 +48,7 @@ export function ErrorView({ mode, message, onRetry, onNewPhoto, hasFile, onManua
               <button
                 type="button"
                 onClick={onManual}
-                className="flex h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
+                className="flex h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
               >
                 Enter manually
               </button>

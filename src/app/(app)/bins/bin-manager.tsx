@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Archive, Pencil, Plus, Search, X } from "lucide-react";
+import { IconButton } from "@/components/icon-button";
 import {
   findBottleMatches,
   type BottleInventoryRow,
@@ -42,7 +43,7 @@ export function BinManager({ bins, inventory, canManage, unplacedCount }: Props)
 }
 
 function ManagerToolbar({ query, onQueryChange, canManage, onCreate }: { query: string; onQueryChange: (value: string) => void; canManage: boolean; onCreate: () => void }) {
-  return <div className="mb-lg grid gap-sm md:grid-cols-[minmax(0,1fr)_auto]"><SearchBox query={query} onChange={onQueryChange} />{canManage && <button type="button" onClick={onCreate} className="flex h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"><Plus className="h-4 w-4" strokeWidth={2} aria-hidden />Create bin</button>}</div>;
+  return <div className="mb-lg grid gap-sm md:grid-cols-[minmax(0,1fr)_auto]"><SearchBox query={query} onChange={onQueryChange} />{canManage && <button type="button" onClick={onCreate} className="flex h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"><Plus className="h-4 w-4" strokeWidth={2} aria-hidden />Create bin</button>}</div>;
 }
 
 function UnplacedAnchor({ count }: { count: number }) {
@@ -61,7 +62,7 @@ function SearchBox({ query, onChange }: { query: string; onChange: (value: strin
         value={query}
         onChange={(event) => onChange(event.target.value)}
         placeholder="Find a bottle by wine or producer"
-        className="h-11 w-full rounded-pill border border-hairline bg-white pl-[40px] pr-sm text-[14px] text-ink outline-none placeholder:text-grey focus:border-primary focus:ring-2 focus:ring-blush-wash"
+        className="h-11 w-full rounded-pill border border-hairline bg-white pl-[40px] pr-sm text-[14px] text-ink placeholder:text-grey focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
       />
     </label>
   );
@@ -127,10 +128,20 @@ function BinRow({ bin, canManage, busy, editingId, draft, onDraftChange, onEdit,
     <tr data-bin-row className="border-t border-hairline hover:bg-bridge-surface">
       <td className="px-md py-sm font-mono font-medium text-ink">{bin.code}</td>
       <td className="px-md py-sm text-grey">{bin.zone ?? "—"}</td>
-      <td className="px-md py-sm text-ink">{bin.occupancy}</td>
+      <td className="px-md py-sm text-ink">
+        <div>{bin.occupancy}</div>
+        {bin.capacity != null && bin.capacity > 0 && (
+          <div className="mt-2xs h-1.5 w-full max-w-[160px] overflow-hidden rounded-pill bg-beige">
+            <div
+              className="h-full rounded-pill bg-primary"
+              style={{ width: `${Math.min(100, (bin.bottleCount / bin.capacity) * 100)}%` }}
+            />
+          </div>
+        )}
+      </td>
       <td className="px-md py-sm text-right tabular text-grey">{bin.capacity ?? "—"}</td>
       <td className="px-md py-sm text-right tabular text-grey">{bin.priority}</td>
-      {canManage && <td className="px-sm py-sm"><div className="flex justify-end gap-2xs"><button type="button" aria-label={`Edit bin ${bin.code}`} onClick={() => onEdit(bin)} className="flex h-11 w-11 items-center justify-center rounded-md text-grey hover:bg-bridge-surface hover:text-ink"><Pencil className="h-3.5 w-3.5" aria-hidden /></button><button type="button" aria-label={`Retire bin ${bin.code}`} onClick={() => onRetire(bin)} disabled={busy} className="flex h-11 w-11 items-center justify-center rounded-md text-grey hover:bg-blush-wash hover:text-primary disabled:opacity-50"><Archive className="h-3.5 w-3.5" aria-hidden /></button></div></td>}
+      {canManage && <td className="px-sm py-sm"><div className="flex justify-end gap-2xs"><IconButton label={`Edit bin ${bin.code}`} onClick={() => onEdit(bin)} className="rounded-md text-grey hover:bg-bridge-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"><Pencil className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton><IconButton label={`Retire bin ${bin.code}`} onClick={() => onRetire(bin)} disabled={busy} className="rounded-md text-grey hover:bg-blush-wash hover:text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"><Archive className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton></div></td>}
     </tr>
   );
 }
@@ -140,5 +151,5 @@ function FormPanel({ title, children }: { title: string; children: React.ReactNo
 }
 
 function ErrorBanner({ message, dismiss }: { message: string; dismiss: () => void }) {
-  return <div role="alert" className="mb-md flex items-center justify-between gap-sm rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"><span>{message}</span><button type="button" onClick={dismiss} aria-label="Dismiss error" className="flex h-11 w-11 shrink-0 items-center justify-center"><X className="h-4 w-4" aria-hidden /></button></div>;
+  return <div role="alert" className="mb-md flex items-center justify-between gap-sm rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"><span>{message}</span><IconButton label="Dismiss error" onClick={dismiss} className="shrink-0 rounded-md text-primary/70 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"><X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton></div>;
 }

@@ -159,7 +159,7 @@ export default function DateRangeSelector() {
                 ? draftTo
                 : localToday
             }
-            className="min-h-11 w-[130px] rounded-pill border border-ink/25 bg-white px-sm text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent-soft"
+            className="min-h-11 w-[130px] rounded-pill border border-ink/25 bg-white px-sm text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-primary/25"
           />
           <span className="text-[12px] text-grey">&ndash;</span>
           <label className="sr-only" htmlFor="dr-to">
@@ -172,7 +172,7 @@ export default function DateRangeSelector() {
             onChange={function (e) { setDraftTo(e.target.value); }}
             min={draftFrom || ""}
             max={localToday}
-            className="min-h-11 w-[130px] rounded-pill border border-ink/25 bg-white px-sm text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent-soft"
+            className="min-h-11 w-[130px] rounded-pill border border-ink/25 bg-white px-sm text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-primary/25"
           />
           <button
             onClick={function () {

@@ -102,7 +102,7 @@ function PricingRow({ row }: { row: PricingPlay }) {
     >
       <Link
         href={metricHref("wine", row.wineId)}
-        className="group min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+        className="group min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
       >
         <span className="block truncate font-serif text-[17px] font-medium text-ink group-hover:text-primary">
           {row.wine.producer}, {row.wine.name}

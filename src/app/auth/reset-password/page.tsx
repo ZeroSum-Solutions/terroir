@@ -42,11 +42,11 @@ export default async function ResetPasswordPage({
   if (!data.user) redirect(loginUrl({ error: "link" }));
 
   const inputClassName =
-    "min-h-11 rounded-pill border border-hairline bg-white px-md text-[16px] text-ink outline-none transition-colors focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash";
+    "min-h-11 rounded-pill border border-hairline bg-white px-md text-[16px] text-ink outline-none transition-colors focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/25";
 
   return (
     <main className="dawn-gradient flex min-h-screen items-center justify-center px-md py-lg sm:px-lg sm:py-xl">
-      <div className="w-full max-w-[420px] rounded-card border border-hairline bg-canvas p-lg shadow-sm sm:p-xl">
+      <div className="glass w-full max-w-[420px] rounded-card p-lg sm:p-xl">
         <div className="mb-xl text-center">
           <div className="mb-sm font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink">
             TERR<span className="text-primary">OIR</span>

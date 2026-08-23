@@ -166,8 +166,8 @@ function QueueHeader({ summary, latestBatch, busy, undo }: { summary: QueueRespo
         <p className="mt-xs text-[14px] tabular-nums text-grey">{summary.itemCount} items · {summary.unitCount} units · ${formatRisk(summary.atRisk)} at risk</p>
       </div>
       {latestBatch && (
-        <button type="button" onClick={undo} disabled={busy} className="flex h-11 items-center gap-xs rounded-pill border border-beige-deep bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50">
-          <Undo2 className="h-4 w-4" aria-hidden />Undo latest batch
+        <button type="button" onClick={undo} disabled={busy} className="flex h-11 items-center gap-xs rounded-pill border border-beige-deep bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:opacity-50">
+          <Undo2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />Undo latest batch
         </button>
       )}
     </header>
@@ -177,12 +177,12 @@ function QueueHeader({ summary, latestBatch, busy, undo }: { summary: QueueRespo
 function BulkRail({ busy, selectedCount, readyCount, allReadySelected, accept, toggleAll }: { busy: boolean; selectedCount: number; readyCount: number; allReadySelected: boolean; accept: () => void; toggleAll: () => void }) {
   return (
     <div className="glass sticky bottom-[72px] z-10 mt-md flex flex-wrap items-center justify-between gap-sm rounded-lg px-sm py-sm md:bottom-md md:px-md">
-      <button type="button" onClick={toggleAll} disabled={busy || readyCount === 0} className="h-11 rounded-pill px-sm text-[13px] font-medium text-grey hover:bg-bridge-surface disabled:opacity-40">
+      <button type="button" onClick={toggleAll} disabled={busy || readyCount === 0} className="h-11 rounded-pill px-sm text-[13px] font-medium text-grey hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:opacity-40">
         {allReadySelected ? "Clear actionable" : `Select actionable (${readyCount})`}
       </button>
-      <span className="text-[12px] tabular-nums text-grey">{selectedCount} selected</span>
-      <button type="button" onClick={accept} disabled={busy || selectedCount === 0} className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-45">
-        {busy ? <RefreshCw className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}
+      <span className="text-[12px] tabular text-grey">{selectedCount} selected</span>
+      <button type="button" onClick={accept} disabled={busy || selectedCount === 0} className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:opacity-45">
+        {busy ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={1.75} aria-hidden /> : <Check className="h-4 w-4" strokeWidth={2} aria-hidden />}
         Accept {selectedCount} item{selectedCount === 1 ? "" : "s"}
       </button>
     </div>
@@ -194,7 +194,7 @@ function QueueLoading() {
 }
 
 function QueueError({ message, retry }: { message: string; retry: () => void }) {
-  return <div role="alert" className="rounded-md border border-primary/30 bg-blush-wash p-md text-[13px] text-primary"><p>{message}</p><button type="button" onClick={retry} className="mt-sm h-11 rounded-pill border border-primary/30 bg-white px-md font-medium">Try again</button></div>;
+  return <div role="alert" className="rounded-md border border-primary/30 bg-blush-wash p-md text-[13px] text-primary"><p>{message}</p><button type="button" onClick={retry} className="mt-sm h-11 rounded-pill border border-primary/30 bg-white px-md font-medium hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25">Try again</button></div>;
 }
 
 function QueueEmpty() {
@@ -243,5 +243,5 @@ async function responseMessage(response: Response): Promise<string> {
 }
 
 function formatRisk(value: number): string {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
+  return new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }

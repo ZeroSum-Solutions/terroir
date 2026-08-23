@@ -110,7 +110,7 @@ export function ProcessingView({ progress, stage, mode, onCancel }: ProcessingVi
         <button
           type="button"
           onClick={onCancel}
-          className="mt-lg h-11 rounded-pill border border-ink/25 bg-white px-lg text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
+          className="mt-lg h-11 rounded-pill border border-ink/25 bg-white px-lg text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
         >
           Cancel scan
         </button>

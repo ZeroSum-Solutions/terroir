@@ -5,6 +5,7 @@ import { Check, Copy, Link2, Loader2, RefreshCw, Trash2, Users, X } from "lucide
 import { useRouter } from "next/navigation";
 import { RouteDataEmpty } from "@/components/route-data-state";
 import { ActionDialog } from "@/components/action-dialog";
+import { IconButton } from "@/components/icon-button";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import {
   ROLE_DESCRIPTIONS,
@@ -256,7 +257,7 @@ export function TeamActions({
             <button
               type="button"
               onClick={openInvite}
-              className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
+              className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
             >
               <Link2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               Create invite link
@@ -272,14 +273,13 @@ export function TeamActions({
             className="mb-sm flex items-start justify-between gap-sm rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"
           >
             <span>{memberActionError}</span>
-            <button
-              type="button"
+            <IconButton
+              label="Dismiss error"
               onClick={() => setMemberActionError(null)}
-              aria-label="Dismiss error"
-              className="-mr-2xs flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-primary/70 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              className="shrink-0 rounded-md text-primary/70 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
             >
-              <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-            </button>
+              <X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+            </IconButton>
           </div>
         )}
 
@@ -293,7 +293,7 @@ export function TeamActions({
                 <button
                   type="button"
                   onClick={openInvite}
-                  className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
+                  className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
                 >
                   <Link2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                   Create invite link
@@ -334,7 +334,7 @@ export function TeamActions({
                         aria-label={`Change role for ${member.name}`}
                         value={member.role}
                         onChange={(e) => changeRole(member.id, e.target.value)}
-                        className="min-h-11 rounded-pill border border-hairline bg-white px-sm text-[13px] text-ink"
+                        className="min-h-11 rounded-pill border border-hairline bg-white px-sm text-[13px] text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                       >
                         <option value="owner">Owner</option>
                         <option value="manager">Manager</option>
@@ -346,21 +346,20 @@ export function TeamActions({
                       </span>
                     )}
                     {isOwner && !isCurrentUser && (
-                      <button
-                        type="button"
-                        aria-label={`Remove ${member.name}`}
+                      <IconButton
+                        label={`Remove ${member.name}`}
                         onClick={() => {
                           setMemberActionError(null);
                           setPendingMemberRemoval(member);
                         }}
-                        className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-grey hover:bg-bridge-surface hover:text-primary"
+                        className="rounded-md text-grey hover:bg-blush-wash hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                       >
                         <Trash2
                           className="h-3.5 w-3.5"
-                          strokeWidth={2}
+                          strokeWidth={1.75}
                           aria-hidden
                         />
-                      </button>
+                      </IconButton>
                     )}
                   </div>
                 </li>
@@ -430,7 +429,7 @@ export function TeamActions({
                           type="button"
                           onClick={() => copyInvitationLink(inv)}
                           aria-label={`Copy invite link for ${identity}`}
-                          className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-beige-deep bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash"
+                          className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-beige-deep bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                         >
                           {justCopied ? (
                             <Check className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -444,22 +443,21 @@ export function TeamActions({
                         type="button"
                         onClick={() => resendInvitation(inv.id)}
                         aria-label={`Resend invitation for ${identity}`}
-                        className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-beige-deep bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash"
+                        className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-beige-deep bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                       >
                         <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                         Resend
                       </button>
-                      <button
-                        type="button"
+                      <IconButton
+                        label={`Revoke invitation for ${identity}`}
                         onClick={() => {
                           setMemberActionError(null);
                           setPendingInvitationRevocation(inv);
                         }}
-                        aria-label={`Revoke invitation for ${identity}`}
-                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-beige-deep bg-white text-grey hover:bg-blush-wash hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        className="rounded-pill border border-beige-deep bg-white text-grey hover:bg-blush-wash hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
                       >
-                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                      </button>
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                      </IconButton>
                     </div>
                   )}
                 </li>
@@ -583,7 +581,7 @@ function InviteModal({
     >
       <div
         ref={trapRef}
-        className="glass mx-md w-full max-w-[420px] rounded-lg p-lg"
+        className="glass mx-md w-full max-w-[420px] rounded-card p-lg"
       >
         <h3
           id="invite-modal-title"
@@ -620,7 +618,7 @@ function InviteModal({
                     onCreate();
                   }
                 }}
-                className="mt-xs min-h-11 w-full rounded-pill border border-hairline bg-white px-md text-[14px] text-ink"
+                className="mt-xs min-h-11 w-full rounded-pill border border-hairline bg-white px-md text-[14px] text-ink focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
               />
               <p className="mt-xs text-[12px] text-grey">
                 The link will only work for this address.
@@ -640,7 +638,7 @@ function InviteModal({
                 onChange={(e) =>
                   setInviteRole(e.target.value as "manager" | "staff")
                 }
-                className="mt-xs min-h-11 w-full rounded-pill border border-hairline bg-white px-md text-[14px] text-ink"
+                className="mt-xs min-h-11 w-full rounded-pill border border-hairline bg-white px-md text-[14px] text-ink focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
               >
                 <option value="manager">Manager</option>
                 <option value="staff">Staff</option>
@@ -663,7 +661,7 @@ function InviteModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex min-h-11 items-center rounded-pill border border-beige-deep bg-white px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
+                className="flex min-h-11 items-center rounded-pill border border-beige-deep bg-white px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
               >
                 Cancel
               </button>
@@ -671,7 +669,7 @@ function InviteModal({
                 type="button"
                 onClick={onCreate}
                 disabled={creating || inviteEmail.trim().length === 0}
-                className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+                className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:opacity-60"
               >
                 {creating && (
                   <Loader2
@@ -694,14 +692,14 @@ function InviteModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex min-h-11 items-center rounded-pill border border-beige-deep bg-white px-md text-[14px] font-medium text-ink hover:bg-bridge-surface"
+                className="flex min-h-11 items-center rounded-pill border border-beige-deep bg-white px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
               >
                 Done
               </button>
               <button
                 type="button"
                 onClick={onCopy}
-                className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
+                className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
               >
                 {copied ? (
                   <Check className="h-4 w-4" strokeWidth={2} />
