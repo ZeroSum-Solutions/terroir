@@ -14,7 +14,7 @@
 // convention e2e/reconcile-queue.test.ts and its siblings use for
 // live-fixture tests that can't run on a bare CI runner.
 import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 
 const mockProcessInvoiceScanOnce = vi.fn();
@@ -32,6 +32,77 @@ const { processOneInvoiceExtractJob } = await import("@/lib/jobs/run-once");
 const hasLiveDb = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
 );
+// Fail LOUD, never skip, when the live stack should be there (integration
+// critic finding): a silent describe.skipIf here once let a full run
+// report green with every MANDATORY live-DB suite unexecuted. CI always
+// brings up the local stack, so a missing env var there is an error, not
+// a reason to skip.
+if (!hasLiveDb && process.env.CI) {
+  throw new Error(
+    "MANDATORY live-DB suite: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY / SUPABASE_SERVICE_ROLE_KEY missing in CI - refusing to skip silently.",
+  );
+}
+
+const hasPublishableKey = Boolean(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+
+/**
+ * Mints a real one-off authenticated staff session for `restaurantId`,
+ * mirroring src/domains/import/tenant-isolation.test.ts's signedInClient.
+ *
+ * Blast radius from C20 (migration 0083, a sibling fix lane, landed before
+ * this C25 fix started): enqueue_invoice_extract_job is SECURITY DEFINER
+ * and requires a real auth.uid() — it raises "authentication required"
+ * (auth.uid() is null under a service-role connection, independent of any
+ * EXECUTE grant). This file's pre-existing tests called
+ * enqueueInvoiceExtractJob with the service-role client, which was the
+ * only option before 0083 replaced enqueue.ts's raw table access with this
+ * RPC. Discovered by re-running this file's full suite per the "watch for
+ * blast radius" requirement while verifying C25, not one of C25's own
+ * findings — fixed here because it now fails `pnpm test` on this branch.
+ */
+async function staffSession(
+  admin: SupabaseClient<Database>,
+  restaurantId: string,
+): Promise<{ client: SupabaseClient<Database>; userId: string }> {
+  const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const email = `fix-staff-${unique}@terroir.test`;
+  const password = `Fix-Test-${unique}!`;
+
+  const { data: user, error: userErr } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+  if (userErr || !user) throw userErr ?? new Error("failed to create staff test user");
+
+  const { error: memErr } = await admin.from("memberships").insert({
+    user_id: user.user.id,
+    restaurant_id: restaurantId,
+    role: "staff",
+  } as never);
+  if (memErr) throw memErr;
+
+  const throwaway = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    { auth: { persistSession: false } },
+  );
+  const { data: session, error: signInErr } = await throwaway.auth.signInWithPassword({
+    email,
+    password,
+  });
+  if (signInErr || !session.session) throw signInErr ?? new Error("staff sign-in failed");
+
+  const client = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      global: { headers: { Authorization: `Bearer ${session.session.access_token}` } },
+    },
+  );
+  return { client, userId: user.user.id };
+}
 
 describe.skipIf(!hasLiveDb)(
   "G1-6 invoice_extract runner: cross-tenant containment (MANDATORY)",
@@ -187,11 +258,13 @@ describe.skipIf(!hasLiveDb)(
         },
       );
 
+      const staffA = await staffSession(supabase, restaurantA);
       const enqueueResult = await enqueueInvoiceExtractJob({
-        supabase,
+        supabase: staffA.client,
         restaurantId: restaurantA,
         scanId: (scanA as { id: string }).id,
       });
+      await supabase.auth.admin.deleteUser(staffA.userId);
       expect(enqueueResult.created).toBe(true);
 
       const result = await processOneInvoiceExtractJob(supabase, "test-worker-legit");
@@ -248,8 +321,10 @@ describe.skipIf(!hasLiveDb)(
       if (error || !scan) throw error ?? new Error("failed to insert scan for idempotency test");
       const scanId = (scan as { id: string }).id;
 
-      const first = await enqueueInvoiceExtractJob({ supabase, restaurantId: restaurantA, scanId });
-      const second = await enqueueInvoiceExtractJob({ supabase, restaurantId: restaurantA, scanId });
+      const staffA = await staffSession(supabase, restaurantA);
+      const first = await enqueueInvoiceExtractJob({ supabase: staffA.client, restaurantId: restaurantA, scanId });
+      const second = await enqueueInvoiceExtractJob({ supabase: staffA.client, restaurantId: restaurantA, scanId });
+      await supabase.auth.admin.deleteUser(staffA.userId);
 
       expect(first.created).toBe(true);
       expect(second.created).toBe(false);
@@ -285,7 +360,9 @@ describe.skipIf(!hasLiveDb)(
       if (error || !scan) throw error ?? new Error("failed to insert already-complete scan");
       const scanId = (scan as { id: string }).id;
 
-      const enqueueResult = await enqueueInvoiceExtractJob({ supabase, restaurantId: restaurantA, scanId });
+      const staffA = await staffSession(supabase, restaurantA);
+      const enqueueResult = await enqueueInvoiceExtractJob({ supabase: staffA.client, restaurantId: restaurantA, scanId });
+      await supabase.auth.admin.deleteUser(staffA.userId);
       const result = await processOneInvoiceExtractJob(supabase, "test-worker-retry");
 
       expect(result.processed).toBe(true);
@@ -353,5 +430,107 @@ describe.skipIf(!hasLiveDb)(
       expect((outcome as { code: string }).code).toBe("claim_lost_before_extraction");
       expect(mockProcessInvoiceScanOnce).not.toHaveBeenCalled();
     });
+
+    // C25 (db audit 2026-08-23): enqueueInvoiceExtractJob used to revive a
+    // dead job via a raw client-scoped UPDATE. background_jobs has no
+    // UPDATE policy for `authenticated` at all, so — before migration 0083
+    // (landed by a sibling fix lane closing C20, which also revoked the
+    // authenticated INSERT/UPDATE/DELETE table grants outright) — that
+    // UPDATE reached RLS with a table-level grant but no permissive
+    // policy, silently affecting 0 rows: HTTP 200, empty array, no error,
+    // indistinguishable from a legitimate race. This block locks that fix
+    // in from an authenticated staff member's real session, not
+    // service_role, since the whole point is what RLS/grants do to a
+    // real client. describe.skipIf below also requires the anon/publishable
+    // key needed to sign a real user in.
+    describe.skipIf(!hasPublishableKey)(
+      "enqueue_invoice_extract_job dead-job revival (C25)",
+      () => {
+        it("a real authenticated staff member's raw UPDATE against a dead job fails LOUD (not a silent no-op), and the sanctioned RPC actually revives it", async () => {
+          const staffA = await staffSession(supabase, restaurantA);
+
+          const { data: scan, error: scanErr } = await supabase
+            .from("invoice_scans")
+            .insert({
+              restaurant_id: restaurantA,
+              distributor_name: "C25 Dead Job Distributor",
+              parsed_line_items: [],
+              final_line_items: [],
+              status: "failed",
+            } as never)
+            .select("id")
+            .single();
+          if (scanErr || !scan) throw scanErr ?? new Error("failed to insert scan for C25 test");
+          const scanId = (scan as { id: string }).id;
+
+          const { data: job, error: jobErr } = await supabase
+            .from("background_jobs")
+            .insert({
+              restaurant_id: restaurantA,
+              created_by: staffA.userId,
+              job_type: "invoice_extract",
+              status: "dead",
+              subject_table: "invoice_scans",
+              subject_id: scanId,
+              idempotency_key: scanId,
+              attempt_count: 5,
+              max_attempts: 5,
+            } as never)
+            .select("id")
+            .single();
+          if (jobErr || !job) throw jobErr ?? new Error("failed to insert dead job for C25 test");
+          const jobId = (job as { id: string }).id;
+
+          // The forged raw revive UPDATE the pre-0083 enqueue.ts issued
+          // client-side. Must fail with an explicit error now, not a
+          // silent 200/[].
+          const { data: rawResult, error: rawError } = await staffA.client
+            .from("background_jobs")
+            .update({
+              status: "queued",
+              attempt_count: 0,
+              claimed_by: null,
+              claimed_at: null,
+            } as never)
+            .eq("id", jobId)
+            .eq("status", "dead")
+            .select("id");
+
+          expect(rawResult).toBeNull();
+          expect(rawError).not.toBeNull();
+          expect((rawError as { code?: string } | null)?.code).toBe("42501");
+
+          const { data: afterRaw } = await supabase
+            .from("background_jobs")
+            .select("status, attempt_count")
+            .eq("id", jobId)
+            .single();
+          expect(afterRaw?.status).toBe("dead");
+          expect(afterRaw?.attempt_count).toBe(5);
+
+          // The sanctioned path: the real staff session calls the RPC.
+          const { data: rpcResult, error: rpcError } = await staffA.client
+            .rpc("enqueue_invoice_extract_job", {
+              p_restaurant_id: restaurantA,
+              p_scan_id: scanId,
+            } as never)
+            .single();
+          expect(rpcError).toBeNull();
+          expect((rpcResult as { job_id: string; created: boolean } | null)?.job_id).toBe(jobId);
+          expect((rpcResult as { job_id: string; created: boolean } | null)?.created).toBe(false);
+
+          const { data: afterRpc } = await supabase
+            .from("background_jobs")
+            .select("status, attempt_count, claimed_by")
+            .eq("id", jobId)
+            .single();
+          expect(afterRpc?.status).toBe("queued");
+          expect(afterRpc?.attempt_count).toBe(0);
+          expect(afterRpc?.claimed_by).toBeNull();
+
+          await supabase.auth.admin.deleteUser(staffA.userId);
+        });
+      },
+    );
   },
 );

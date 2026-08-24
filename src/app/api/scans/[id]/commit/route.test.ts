@@ -36,6 +36,10 @@ function makeSupabase(options: {
   batchError?: unknown;
   inventoryError?: unknown;
   lwin?: "reject" | "throw" | "ok";
+  /** C15: rows the atomic claim UPDATE ... WHERE committed_at IS NULL returns. Default: one row (claim succeeded). */
+  claim?: { data?: unknown; error: unknown };
+  /** C15: error from the release-on-failure UPDATE (committed_at back to null). */
+  releaseError?: unknown;
 } = {}) {
   const fetchBuilder = {
     select: vi.fn(() => fetchBuilder),
@@ -49,11 +53,38 @@ function makeSupabase(options: {
       ),
     ),
   };
+  const claimCalls: Record<string, unknown>[] = [];
+  const releaseCalls: Record<string, unknown>[] = [];
+  const invoiceScansTable = {
+    ...fetchBuilder,
+    update: vi.fn((payload: Record<string, unknown>) => {
+      if (payload.committed_at === null) {
+        releaseCalls.push(payload);
+        return {
+          eq: vi.fn(() => ({
+            eq: vi.fn(() => Promise.resolve({ error: options.releaseError ?? null })),
+          })),
+        };
+      }
+      claimCalls.push(payload);
+      return {
+        eq: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            is: vi.fn(() => ({
+              select: vi.fn(() =>
+                Promise.resolve(options.claim ?? { data: [{ id: SCAN_ID }], error: null }),
+              ),
+            })),
+          })),
+        })),
+      };
+    }),
+  };
   const insert = vi.fn(() =>
     Promise.resolve({ error: options.inventoryError ?? null }),
   );
   const from = vi.fn((table: string) =>
-    table === "invoice_scans" ? fetchBuilder : { insert },
+    table === "invoice_scans" ? invoiceScansTable : { insert },
   );
   const rpc = vi.fn((name: string) => {
     if (name === "find_or_create_wines_batch") {
@@ -66,7 +97,7 @@ function makeSupabase(options: {
     if (options.lwin === "reject") return Promise.reject(new Error("LWIN reject"));
     return Promise.resolve({ data: null, error: null });
   });
-  return { supabase: { from, rpc }, insert, rpc };
+  return { supabase: { from, rpc }, insert, rpc, claimCalls, releaseCalls };
 }
 
 function authorize(supabase: unknown) {
@@ -169,5 +200,64 @@ describe("POST /api/scans/[id]/commit", () => {
 
     expect(response.status).toBe(500);
     expect(JSON.stringify(await response.json())).not.toContain("sensitive");
+  });
+
+  describe("C15: idempotent commit claim", () => {
+    it("returns 409 without touching wines or inventory when the scan is already committed", async () => {
+      const db = makeSupabase({ claim: { data: [], error: null } });
+      authorize(db.supabase);
+
+      const response = await call();
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: {
+          code: "scan_already_committed",
+          message: "This scan has already been committed to inventory.",
+        },
+      });
+      expect(db.rpc).not.toHaveBeenCalled();
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+
+    it("claims the scan (committed_at set, fenced on committed_at IS NULL) before any wine/inventory work", async () => {
+      const db = makeSupabase();
+      authorize(db.supabase);
+
+      await call();
+
+      expect(db.claimCalls).toHaveLength(1);
+      expect(typeof db.claimCalls[0].committed_at).toBe("string");
+    });
+
+    it("releases the claim (committed_at back to null) when the wine RPC fails, so a retry is not permanently blocked", async () => {
+      const db = makeSupabase({ batchError: { message: "rpc boom" } });
+      authorize(db.supabase);
+
+      const response = await call();
+
+      expect(response.status).toBe(500);
+      expect(db.insert).not.toHaveBeenCalled();
+      expect(db.releaseCalls).toEqual([{ committed_at: null }]);
+    });
+
+    it("releases the claim when the inventory insert fails", async () => {
+      const db = makeSupabase({ inventoryError: { message: "sensitive inventory detail" } });
+      authorize(db.supabase);
+
+      await call();
+
+      expect(db.releaseCalls).toEqual([{ committed_at: null }]);
+    });
+
+    it("does NOT release the claim on a successful commit", async () => {
+      const db = makeSupabase();
+      authorize(db.supabase);
+
+      const response = await call();
+
+      expect(response.status).toBe(200);
+      expect(db.releaseCalls).toEqual([]);
+    });
   });
 });

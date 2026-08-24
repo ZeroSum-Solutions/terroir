@@ -224,7 +224,11 @@ test.describe("mobile demo critical journeys", () => {
         {
           baseUrl: "http://localhost:3000",
           emailDomain: "terroir.test",
-          mailboxUrl: "http://127.0.0.1:54324",
+          // Mailpit lives on the committed local stack's 57324 (see
+          // supabase/config.toml), not the supabase-cli default 54324 —
+          // E2E_MAILBOX_URL (exported in ci.yml from `supabase status`)
+          // wins so a port change never silently breaks this again.
+          mailboxUrl: process.env.E2E_MAILBOX_URL ?? "http://127.0.0.1:57324",
           runId: String(run),
           supabaseUrl: supabaseUrl!,
           serviceRoleKey: serviceRoleKey!,

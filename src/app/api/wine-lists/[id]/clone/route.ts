@@ -123,6 +123,12 @@ export async function POST(
       const itemInserts = items.map((item) => ({
         section_id: newSection.id,
         wine_id: item.wine_id,
+        // C05 (db audit 2026-08-23): restaurant_id is now required, FK-
+        // enforced against the wine's own restaurant_id — restaurantId is
+        // already this handler's own verified tenant (requireRole), and
+        // every cloned wine_id belongs to it (source list was fetched
+        // scoped to restaurant_id above).
+        restaurant_id: restaurantId,
         bottle_price: item.bottle_price,
         glass_price: item.glass_price,
         glass_pour_ml: item.glass_pour_ml,

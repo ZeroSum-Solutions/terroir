@@ -16,13 +16,24 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import { confirmImportBatch, applyImportBatchChunk, revertImportBatch } from "./batch-service";
+import { confirmImportBatch, applyImportBatchChunk, resolveImportBatchRow, revertImportBatch } from "./batch-service";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const hasLiveDb = Boolean(supabaseUrl && publishableKey && serviceRoleKey);
+// Fail LOUD, never skip, when the live stack should be there (integration
+// critic finding): a silent describe.skipIf here once let a full run
+// report green with every MANDATORY live-DB suite unexecuted. CI always
+// brings up the local stack, so a missing env var there is an error, not
+// a reason to skip.
+if (!hasLiveDb && process.env.CI) {
+  throw new Error(
+    "MANDATORY live-DB suite: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY / SUPABASE_SERVICE_ROLE_KEY missing in CI - refusing to skip silently.",
+  );
+}
+
 
 function csvBuffer() {
   return Buffer.from("producer,name,vintage,quantity,unit_cost\nCross Tenant Producer,Cross Tenant Wine,2020,6,24.50\n");
@@ -140,13 +151,17 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
     const { data: rowsAsB } = await userBClient.from("import_batch_rows").select("id").eq("batch_id", batchId);
     expect(rowsAsB ?? []).toHaveLength(0);
 
-    // User B calling apply on it processes nothing — RLS filters the
-    // function's own SELECT to zero rows, so the loop body never runs.
-    const applyAsB = await applyImportBatchChunk(userBClient, batchId);
-    expect(applyAsB.processed).toHaveLength(0);
+    // User B calling apply on it now fails loudly instead of silently
+    // processing nothing: C17 (0082) added an explicit re-validation
+    // inside apply_import_batch_chunk that raises P0002 when the batch
+    // itself isn't visible to the caller (RLS on import_batches filters
+    // it out for a non-member of restaurant A), turning what used to be
+    // a silent "processed zero rows" no-op into an actionable error —
+    // the same idiom revert_import_batch already uses (see below).
+    await expect(applyImportBatchChunk(userBClient, batchId)).rejects.toMatchObject({ code: "P0002" });
 
-    // Prove that "processed nothing" really means nothing happened to
-    // tenant A's data: as user A, the row is still not_applied.
+    // Prove that the rejected attempt really did nothing to tenant A's
+    // data: as user A, the row is still not_applied.
     const { data: rowsAsA } = await userAClient.from("import_batch_rows").select("apply_status").eq("batch_id", batchId);
     expect(rowsAsA).toEqual([{ apply_status: "not_applied" }]);
 
@@ -212,7 +227,31 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
 
     const confirmed = await confirmImportBatch(userAClient, restaurantA, userAId, "second-import.csv", csvBuffer());
     expect(confirmed.ok).toBe(true);
-    if (!confirmed.ok) return;
+    if (!confirmed.ok || confirmed.alreadyExists) return;
+
+    // P3 (2026-08-23-p3-chunked-import.md §1.5 tier 2) added real
+    // inventory-level duplicate prevention: this row's wine identity +
+    // normalized (bin, section) now matches the pre-existing manual
+    // inventory row inserted above (same wine, no bin/section on either
+    // side) — create_import_batch correctly flags it resolution='pending'
+    // with duplicate_reason.type='existing_inventory' instead of silently
+    // auto-applying a second, unrelated inventory_items row for the same
+    // wine at the same (empty) location. That's the intended new
+    // behavior this test now exercises: the operator explicitly resolves
+    // it ('include' — a genuine second lot, same as this test always
+    // intended), and only THEN does the row apply.
+    const { data: pendingRow, error: pendingErr } = await userAClient
+      .from("import_batch_rows")
+      .select("id, resolution, duplicate_reason")
+      .eq("batch_id", confirmed.batchId)
+      .single();
+    if (pendingErr || !pendingRow) throw pendingErr ?? new Error("expected exactly one row");
+    const row = pendingRow as { id: string; resolution: string; duplicate_reason: unknown };
+    expect(row.resolution).toBe("pending");
+    expect(row.duplicate_reason).toMatchObject({ type: "existing_inventory" });
+
+    const resolved = await resolveImportBatchRow(userAClient, restaurantA, userAId, row.id, "include");
+    expect(resolved).toEqual({ ok: true });
 
     const applied = await applyImportBatchChunk(userAClient, confirmed.batchId);
     expect(applied.processed).toEqual([expect.objectContaining({ outcome: "applied" })]);

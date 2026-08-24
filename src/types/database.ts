@@ -311,6 +311,65 @@ export type Database = {
           },
         ]
       }
+      canonical_wines: {
+        Row: {
+          colour: string | null
+          country: string | null
+          created_at: string
+          created_by_restaurant_id: string | null
+          created_by_user_id: string | null
+          cuvee: string
+          cuvee_norm: string
+          id: string
+          identity_status: string
+          lwin7: string | null
+          producer: string
+          producer_norm: string
+          region: string | null
+          updated_at: string
+        }
+        Insert: {
+          colour?: string | null
+          country?: string | null
+          created_at?: string
+          created_by_restaurant_id?: string | null
+          created_by_user_id?: string | null
+          cuvee: string
+          cuvee_norm?: string
+          id?: string
+          identity_status?: string
+          lwin7?: string | null
+          producer: string
+          producer_norm?: string
+          region?: string | null
+          updated_at?: string
+        }
+        Update: {
+          colour?: string | null
+          country?: string | null
+          created_at?: string
+          created_by_restaurant_id?: string | null
+          created_by_user_id?: string | null
+          cuvee?: string
+          cuvee_norm?: string
+          id?: string
+          identity_status?: string
+          lwin7?: string | null
+          producer?: string
+          producer_norm?: string
+          region?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "canonical_wines_created_by_restaurant_id_fkey"
+            columns: ["created_by_restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cellar_config: {
         Row: {
           columns: number
@@ -409,15 +468,62 @@ export type Database = {
           },
         ]
       }
+      identity_merge_log: {
+        Row: {
+          id: string
+          merge_type: string
+          merged_at: string
+          merged_by: string | null
+          moved_counts: Json
+          restaurant_id: string | null
+          source_id: string
+          source_snapshot: Json
+          target_id: string
+        }
+        Insert: {
+          id?: string
+          merge_type: string
+          merged_at?: string
+          merged_by?: string | null
+          moved_counts: Json
+          restaurant_id?: string | null
+          source_id: string
+          source_snapshot: Json
+          target_id: string
+        }
+        Update: {
+          id?: string
+          merge_type?: string
+          merged_at?: string
+          merged_by?: string | null
+          moved_counts?: Json
+          restaurant_id?: string | null
+          source_id?: string
+          source_snapshot?: Json
+          target_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "identity_merge_log_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       import_batch_rows: {
         Row: {
           applied_inventory_item_id: string | null
           applied_wine_id: string | null
+          apply_attempts: number
           apply_status: string
           batch_id: string
           cost_status: string
           created_at: string
+          duplicate_reason: Json | null
           id: string
+          last_error_message: string | null
           lwin_id: string | null
           lwin_score: number | null
           lwin_status: string
@@ -435,11 +541,14 @@ export type Database = {
         Insert: {
           applied_inventory_item_id?: string | null
           applied_wine_id?: string | null
+          apply_attempts?: number
           apply_status?: string
           batch_id: string
           cost_status?: string
           created_at?: string
+          duplicate_reason?: Json | null
           id?: string
+          last_error_message?: string | null
           lwin_id?: string | null
           lwin_score?: number | null
           lwin_status?: string
@@ -457,11 +566,14 @@ export type Database = {
         Update: {
           applied_inventory_item_id?: string | null
           applied_wine_id?: string | null
+          apply_attempts?: number
           apply_status?: string
           batch_id?: string
           cost_status?: string
           created_at?: string
+          duplicate_reason?: Json | null
           id?: string
+          last_error_message?: string | null
           lwin_id?: string | null
           lwin_score?: number | null
           lwin_status?: string
@@ -492,23 +604,19 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "import_batch_rows_batch_id_fkey"
-            columns: ["batch_id"]
+            foreignKeyName: "import_batch_rows_batch_restaurant_fkey"
+            columns: ["batch_id", "restaurant_id"]
             isOneToOne: false
             referencedRelation: "import_batches"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "import_batch_rows_restaurant_id_fkey"
-            columns: ["restaurant_id"]
-            isOneToOne: false
-            referencedRelation: "restaurants"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "restaurant_id"]
           },
         ]
       }
       import_batches: {
         Row: {
+          chunk_index: number | null
+          chunk_total: number | null
+          content_sha256: string | null
           created_at: string
           created_by: string | null
           filename: string
@@ -516,11 +624,15 @@ export type Database = {
           restaurant_id: string
           reverted_at: string | null
           reverted_by: string | null
+          session_id: string | null
           status: string
           total_rows: number
           updated_at: string
         }
         Insert: {
+          chunk_index?: number | null
+          chunk_total?: number | null
+          content_sha256?: string | null
           created_at?: string
           created_by?: string | null
           filename: string
@@ -528,11 +640,15 @@ export type Database = {
           restaurant_id: string
           reverted_at?: string | null
           reverted_by?: string | null
+          session_id?: string | null
           status?: string
           total_rows: number
           updated_at?: string
         }
         Update: {
+          chunk_index?: number | null
+          chunk_total?: number | null
+          content_sha256?: string | null
           created_at?: string
           created_by?: string | null
           filename?: string
@@ -540,6 +656,7 @@ export type Database = {
           restaurant_id?: string
           reverted_at?: string | null
           reverted_by?: string | null
+          session_id?: string | null
           status?: string
           total_rows?: number
           updated_at?: string
@@ -547,6 +664,57 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "import_batches_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_batches_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "import_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_sessions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          declared_chunk_total: number | null
+          id: string
+          label: string | null
+          restaurant_id: string
+          source_sha256: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          declared_chunk_total?: number | null
+          id?: string
+          label?: string | null
+          restaurant_id: string
+          source_sha256?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          declared_chunk_total?: number | null
+          id?: string
+          label?: string | null
+          restaurant_id?: string
+          source_sha256?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_sessions_restaurant_id_fkey"
             columns: ["restaurant_id"]
             isOneToOne: false
             referencedRelation: "restaurants"
@@ -681,6 +849,7 @@ export type Database = {
       invoice_scans: {
         Row: {
           accuracy_score: number | null
+          committed_at: string | null
           created_at: string
           created_by: string | null
           distributor_name: string
@@ -696,9 +865,11 @@ export type Database = {
           raw_image_path: string | null
           restaurant_id: string
           status: string
+          updated_at: string
         }
         Insert: {
           accuracy_score?: number | null
+          committed_at?: string | null
           created_at?: string
           created_by?: string | null
           distributor_name: string
@@ -714,9 +885,11 @@ export type Database = {
           raw_image_path?: string | null
           restaurant_id: string
           status?: string
+          updated_at?: string
         }
         Update: {
           accuracy_score?: number | null
+          committed_at?: string | null
           created_at?: string
           created_by?: string | null
           distributor_name?: string
@@ -732,6 +905,7 @@ export type Database = {
           raw_image_path?: string | null
           restaurant_id?: string
           status?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -1234,8 +1408,70 @@ export type Database = {
           },
         ]
       }
+      wine_aliases: {
+        Row: {
+          canonical_wine_id: string | null
+          confidence: number | null
+          created_at: string
+          id: string
+          match_method: string
+          raw_cuvee: string | null
+          raw_producer: string | null
+          restaurant_id: string | null
+          source: string
+          wine_variant_id: string | null
+        }
+        Insert: {
+          canonical_wine_id?: string | null
+          confidence?: number | null
+          created_at?: string
+          id?: string
+          match_method: string
+          raw_cuvee?: string | null
+          raw_producer?: string | null
+          restaurant_id?: string | null
+          source?: string
+          wine_variant_id?: string | null
+        }
+        Update: {
+          canonical_wine_id?: string | null
+          confidence?: number | null
+          created_at?: string
+          id?: string
+          match_method?: string
+          raw_cuvee?: string | null
+          raw_producer?: string | null
+          restaurant_id?: string | null
+          source?: string
+          wine_variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wine_aliases_canonical_wine_id_fkey"
+            columns: ["canonical_wine_id"]
+            isOneToOne: false
+            referencedRelation: "canonical_wines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wine_aliases_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wine_aliases_wine_variant_id_fkey"
+            columns: ["wine_variant_id"]
+            isOneToOne: false
+            referencedRelation: "wine_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wine_lineages: {
         Row: {
+          canonical_wine_id: string | null
           created_at: string
           cuvee_norm: string
           id: string
@@ -1244,6 +1480,7 @@ export type Database = {
           restaurant_id: string
         }
         Insert: {
+          canonical_wine_id?: string | null
           created_at?: string
           cuvee_norm: string
           id?: string
@@ -1252,6 +1489,7 @@ export type Database = {
           restaurant_id: string
         }
         Update: {
+          canonical_wine_id?: string | null
           created_at?: string
           cuvee_norm?: string
           id?: string
@@ -1260,6 +1498,13 @@ export type Database = {
           restaurant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "wine_lineages_canonical_wine_id_fkey"
+            columns: ["canonical_wine_id"]
+            isOneToOne: false
+            referencedRelation: "canonical_wines"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "wine_lineages_restaurant_id_fkey"
             columns: ["restaurant_id"]
@@ -1282,6 +1527,7 @@ export type Database = {
           name_override: string | null
           position: number
           pour_size_mode: string
+          restaurant_id: string
           section_id: string
           tasting_note: string | null
           updated_at: string
@@ -1299,6 +1545,7 @@ export type Database = {
           name_override?: string | null
           position?: number
           pour_size_mode?: string
+          restaurant_id: string
           section_id: string
           tasting_note?: string | null
           updated_at?: string
@@ -1316,12 +1563,20 @@ export type Database = {
           name_override?: string | null
           position?: number
           pour_size_mode?: string
+          restaurant_id?: string
           section_id?: string
           tasting_note?: string | null
           updated_at?: string
           wine_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "wine_list_items_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "wine_list_items_section_id_fkey"
             columns: ["section_id"]
@@ -1335,6 +1590,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "wines"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wine_list_items_wine_restaurant_fkey"
+            columns: ["wine_id", "restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "wines"
+            referencedColumns: ["id", "restaurant_id"]
           },
         ]
       }
@@ -1426,9 +1688,67 @@ export type Database = {
           },
         ]
       }
+      wine_variants: {
+        Row: {
+          canonical_wine_id: string
+          created_at: string
+          display_name: string | null
+          gtin: string | null
+          id: string
+          lwin11: string | null
+          lwin16: string | null
+          restaurant_id: string
+          size_ml: number
+          updated_at: string
+          vintage: number | null
+        }
+        Insert: {
+          canonical_wine_id: string
+          created_at?: string
+          display_name?: string | null
+          gtin?: string | null
+          id?: string
+          lwin11?: string | null
+          lwin16?: string | null
+          restaurant_id: string
+          size_ml?: number
+          updated_at?: string
+          vintage?: number | null
+        }
+        Update: {
+          canonical_wine_id?: string
+          created_at?: string
+          display_name?: string | null
+          gtin?: string | null
+          id?: string
+          lwin11?: string | null
+          lwin16?: string | null
+          restaurant_id?: string
+          size_ml?: number
+          updated_at?: string
+          vintage?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wine_variants_canonical_wine_id_fkey"
+            columns: ["canonical_wine_id"]
+            isOneToOne: false
+            referencedRelation: "canonical_wines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wine_variants_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wines: {
         Row: {
           alert_snoozed_until: string | null
+          canonical_wine_id: string | null
           colour: string | null
           country: string | null
           created_at: string
@@ -1444,6 +1764,7 @@ export type Database = {
           last_enriched_at: string | null
           lineage_id: string | null
           lwin_id: string | null
+          lwin_match_score: number | null
           manual_overrides: string[] | null
           name: string
           overpaid_flag: boolean
@@ -1470,9 +1791,11 @@ export type Database = {
           updated_at: string
           varietal: string | null
           vintage: number | null
+          wine_variant_id: string | null
         }
         Insert: {
           alert_snoozed_until?: string | null
+          canonical_wine_id?: string | null
           colour?: string | null
           country?: string | null
           created_at?: string
@@ -1488,6 +1811,7 @@ export type Database = {
           last_enriched_at?: string | null
           lineage_id?: string | null
           lwin_id?: string | null
+          lwin_match_score?: number | null
           manual_overrides?: string[] | null
           name: string
           overpaid_flag?: boolean
@@ -1514,9 +1838,11 @@ export type Database = {
           updated_at?: string
           varietal?: string | null
           vintage?: number | null
+          wine_variant_id?: string | null
         }
         Update: {
           alert_snoozed_until?: string | null
+          canonical_wine_id?: string | null
           colour?: string | null
           country?: string | null
           created_at?: string
@@ -1532,6 +1858,7 @@ export type Database = {
           last_enriched_at?: string | null
           lineage_id?: string | null
           lwin_id?: string | null
+          lwin_match_score?: number | null
           manual_overrides?: string[] | null
           name?: string
           overpaid_flag?: boolean
@@ -1558,8 +1885,16 @@ export type Database = {
           updated_at?: string
           varietal?: string | null
           vintage?: number | null
+          wine_variant_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "wines_canonical_wine_id_fkey"
+            columns: ["canonical_wine_id"]
+            isOneToOne: false
+            referencedRelation: "canonical_wines"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "wines_lineage_id_fkey"
             columns: ["lineage_id"]
@@ -1573,6 +1908,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "restaurants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wines_variant_tenant_fk"
+            columns: ["wine_variant_id", "restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "wine_variants"
+            referencedColumns: ["id", "restaurant_id"]
           },
         ]
       }
@@ -1657,9 +1999,41 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      count_import_batch_rows: {
+        Args: { p_batch_id: string }
+        Returns: {
+          applied: number
+          eligible_not_applied: number
+          excluded: number
+          pending: number
+          total: number
+        }[]
+      }
+      create_import_batch: {
+        Args: {
+          p_chunk_index?: number
+          p_chunk_total?: number
+          p_content_sha256?: string
+          p_created_by: string
+          p_filename: string
+          p_restaurant_id: string
+          p_rows: Json
+          p_session_id?: string
+          p_source_sha256?: string
+          p_total_rows: number
+        }
+        Returns: Json
+      }
       dismiss_pricing_alert: {
         Args: { p_days?: number; p_wine_id: string }
         Returns: string
+      }
+      enqueue_invoice_extract_job: {
+        Args: { p_restaurant_id: string; p_scan_id: string }
+        Returns: {
+          created: boolean
+          job_id: string
+        }[]
       }
       enrich_wines_batch: {
         Args: { p_enrichments: Json; p_restaurant_id: string }
@@ -1683,6 +2057,7 @@ export type Database = {
         Returns: string[]
       }
       generate_slug: { Args: { input: string }; Returns: string }
+      identity_normalize_text: { Args: { raw: string }; Returns: string }
       is_member: { Args: { r_id: string }; Returns: boolean }
       is_member_with_role: {
         Args: {
@@ -1760,6 +2135,15 @@ export type Database = {
           score: number
           varietal: string
         }[]
+      }
+      member_restaurant_ids: { Args: never; Returns: string[] }
+      member_restaurant_ids_with_role: {
+        Args: { required: Database["public"]["Enums"]["membership_role"] }
+        Returns: string[]
+      }
+      merge_canonical_wines: {
+        Args: { p_source_id: string; p_target_id: string }
+        Returns: Json
       }
       merge_wines: {
         Args: { p_source_wine_id: string; p_target_wine_id: string }
@@ -1850,7 +2234,19 @@ export type Database = {
         Args: { p_ordered_ids: string[] }
         Returns: undefined
       }
+      resolve_wine_variants_bulk: {
+        Args: { p_restaurant_id: string; p_variants: Json }
+        Returns: {
+          canonical_created: boolean
+          canonical_match_method: string
+          canonical_wine_id: string
+          idx: number
+          variant_created: boolean
+          wine_variant_id: string
+        }[]
+      }
       revert_import_batch: { Args: { p_batch_id: string }; Returns: number }
+      revert_import_session: { Args: { p_session_id: string }; Returns: Json }
       seed_reason_codes: {
         Args: { p_restaurant_id: string }
         Returns: undefined
@@ -1880,6 +2276,7 @@ export type Database = {
         Args: { p_days?: number; p_wine_id: string }
         Returns: string
       }
+      unaccent: { Args: { "": string }; Returns: string }
       undo_last_pour: {
         Args: { p_wine_id: string }
         Returns: {

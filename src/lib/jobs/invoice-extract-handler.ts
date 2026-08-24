@@ -73,6 +73,32 @@ export async function runInvoiceExtractJob(params: {
     return { kind: "succeeded", skippedExtraction: true };
   }
 
+  // C04 (db audit 2026-08-23): a scan can reach status='failed' from a
+  // prior attempt's fenced catch-path write (invoice-scan-service.ts),
+  // which fences on status='processing'. If this retry proceeds straight
+  // to processInvoiceScanOnce with the scan still 'failed', that same
+  // fencing is what breaks: the eventual success write (`.eq("status",
+  // "processing")`) misses (0 rows), the persist is reported as
+  // `scan_superseded`, and this job gets marked 'succeeded' even though
+  // the scan is permanently stuck at 'failed' with no data — a real
+  // result silently discarded and misreported as success. Resetting the
+  // fence back to 'processing' here, fenced on the row still being
+  // 'failed', restores the invariant every other fenced write in this
+  // pipeline depends on before any of them run again. Safe under
+  // concurrency: idempotency_key = scanId is unique, so only one
+  // background_jobs row — and therefore only one claim — can ever exist
+  // for a given scanId (see 0083's enqueue_invoice_extract_job).
+  if (scan.status === "failed") {
+    const { error: resetError } = await supabase
+      .from("invoice_scans")
+      .update({ status: "processing" } as never)
+      .eq("id", scan.id)
+      .eq("status", "failed");
+    if (resetError) {
+      return { kind: "retry", code: "failed_reset_failed", message: resetError.message };
+    }
+  }
+
   if (!scan.raw_image_path || !scan.raw_image_path.startsWith(`${job.restaurantId}/`)) {
     return {
       kind: "dead",

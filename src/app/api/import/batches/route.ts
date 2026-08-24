@@ -15,6 +15,7 @@ import { apiError, Errors } from "@/lib/api/errors";
 import { fileField, parseMultipart } from "@/lib/api/validation";
 import { confirmImportBatch } from "@/domains/import/batch-service";
 import { validateUploadedCsvFile } from "@/domains/import/upload-validation";
+import { ConfirmBatchSessionFieldsSchema } from "@/domains/import/request-schemas";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -22,7 +23,11 @@ export const maxDuration = 60;
 const CONFIRM_RATE_LIMIT = 10;
 const CONFIRM_RATE_WINDOW_MS = 60 * 1000;
 
-const ConfirmSchema = z.object({ file: fileField });
+// P3 §3.2: optional session/chunk fields alongside the file, for a
+// multi-chunk onboarding upload. All optional — a plain, non-chunked
+// single-file upload omits every one of these and behaves exactly as
+// before.
+const ConfirmSchema = z.object({ file: fileField }).merge(ConfirmBatchSessionFieldsSchema);
 
 export async function GET() {
   return withApiHandler(getBatches);
@@ -62,7 +67,7 @@ async function postBatches(request: NextRequest) {
 
   const parsed = await parseMultipart(request, ConfirmSchema, { message: "Expected a CSV file upload." });
   if (!parsed.ok) return parsed.response;
-  const { file } = parsed.data;
+  const { file, sessionId, chunkIndex, chunkTotal, sourceSha256 } = parsed.data;
 
   const uploadCheck = validateUploadedCsvFile(file);
   if (!uploadCheck.ok) {
@@ -72,15 +77,31 @@ async function postBatches(request: NextRequest) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const result = await confirmImportBatch(supabase, restaurantId, user.id, file.name, buffer);
+  const result = await confirmImportBatch(supabase, restaurantId, user.id, file.name, buffer, {
+    sessionId,
+    chunkIndex,
+    chunkTotal,
+    sourceSha256,
+  });
 
   if (!result.ok) {
     const details = result.error.missingHeaders ? { missingHeaders: result.error.missingHeaders } : undefined;
     return apiError(422, result.error.code, result.error.message, details);
   }
 
+  // P3 §2.2 (C09): identical content (or the same session+chunk_index)
+  // was already confirmed — a resume pointer, not a fresh 201. The client
+  // should offer "already uploaded as batch {batchId} ({status}) — call
+  // /apply on it" rather than treating this as an error.
+  if (result.alreadyExists) {
+    return NextResponse.json(
+      { batchId: result.batchId, alreadyExists: true, status: result.status, counts: result.counts },
+      { status: 200 },
+    );
+  }
+
   return NextResponse.json(
-    { batchId: result.batchId, totalRows: result.totalRows, summary: result.summary },
+    { batchId: result.batchId, alreadyExists: false, totalRows: result.totalRows, summary: result.summary },
     { status: 201 },
   );
 }

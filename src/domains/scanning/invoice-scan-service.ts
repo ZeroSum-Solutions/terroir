@@ -286,9 +286,25 @@ export async function processInvoiceScanOnce(
       // Grok-2: fenced the same way as the success persist above — a
       // stale worker's failure write must never overwrite a result
       // another worker's attempt already persisted.
+      //
+      // C04 (db audit 2026-08-23): if OCR already succeeded before the
+      // failure (e.g. the LLM extraction call itself threw), persist the
+      // ocr_text we already paid for. Without this, a 'failed' scan has
+      // no recovery path at all: ocr_text is otherwise written only by
+      // the success branch above, and POST /api/scans/[id]/re-extract
+      // requires ocr_text to be non-null (422 missing_ocr_text) — so a
+      // transient extraction failure on an otherwise-successful OCR pass
+      // was previously a permanent dead end for the app's own re-extract
+      // affordance (src/app/(app)/scan/[id]/components/re-extract-button.tsx).
+      // An OCR-stage failure still has nothing to persist and stays a
+      // genuine terminal failure, which is correct.
+      const failurePayload: Record<string, unknown> = { status: "failed" };
+      if (ocr) {
+        failurePayload.ocr_text = JSON.parse(JSON.stringify(ocr));
+      }
       await supabase
         .from("invoice_scans")
-        .update({ status: "failed" })
+        .update(failurePayload as never)
         .eq("id", scanId)
         .eq("status", "processing");
     } catch {}

@@ -84,6 +84,7 @@ describe("POST /api/import/batches", () => {
     allow();
     mockConfirmImportBatch.mockResolvedValue({
       ok: true,
+      alreadyExists: false,
       batchId: "batch-1",
       totalRows: 1,
       summary: { totalRows: 1 },
@@ -96,7 +97,23 @@ describe("POST /api/import/batches", () => {
       "user-a",
       "cellar.csv",
       expect.any(Buffer),
+      { sessionId: undefined, chunkIndex: undefined, chunkTotal: undefined, sourceSha256: undefined },
     );
+  });
+
+  it("P3 §2.2: surfaces a duplicate-content resume pointer as 200, not 201", async () => {
+    allow();
+    mockConfirmImportBatch.mockResolvedValue({
+      ok: true,
+      alreadyExists: true,
+      batchId: "batch-1",
+      status: "applying",
+      counts: { total: 5, applied: 3, excluded: 0, pending: 0, eligibleNotApplied: 2 },
+    });
+    const response = await POST(multipartRequest(new File(["producer,name,quantity\nA,B,1"], "cellar.csv", { type: "text/csv" })));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({ batchId: "batch-1", alreadyExists: true, status: "applying" });
   });
 
   it("surfaces a confirm-level validation error as 422", async () => {

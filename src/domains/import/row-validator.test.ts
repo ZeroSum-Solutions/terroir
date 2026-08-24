@@ -1,10 +1,29 @@
 import { describe, expect, it } from "vitest";
 import { mapHeader, validateRow } from "./row-validator";
+import { MAX_QUANTITY, MAX_UNIT_COST } from "./constants";
 
 const HEADER = ["Producer", "Wine", "Vintage", "Qty", "Unit Cost"];
+const FULL_HEADER = [
+  "Producer",
+  "Wine",
+  "Vintage",
+  "Varietal",
+  "Region",
+  "Country",
+  "Size (ml)",
+  "Format",
+  "Currency",
+  "Qty",
+  "Unit Cost",
+  "Bin",
+  "Section",
+];
 
 function map() {
   return mapHeader(HEADER);
+}
+function fullMap() {
+  return mapHeader(FULL_HEADER);
 }
 
 describe("mapHeader", () => {
@@ -73,6 +92,25 @@ describe("validateRow", () => {
     expect(result.errors.some((e) => e.field === "vintage")).toBe(true);
   });
 
+  // P2 NV fix (docs/plans/2026-08-23-p2-identity-spine.md §5): literal
+  // "NV" is the identity fact "no vintage," not malformed data — it
+  // predates this importer's NV acceptance.
+  it("accepts the literal vintage text 'NV' as a valid row with a null vintage", () => {
+    const result = validateRow(["Domaine A", "Cuvee 1", "NV", "6", "10"], columnToField);
+    expect(result.state).toBe("valid");
+    if (result.state !== "valid") return;
+    expect(result.raw.vintage).toBeNull();
+  });
+
+  it("still rejects vintage text that merely resembles NV-adjacent noise", () => {
+    for (const bad of ["circa 1998", "'98", "202X", "not sure", "19-something", "MCMXCIX"]) {
+      const result = validateRow(["Domaine A", "Cuvee 1", bad, "6", "10"], columnToField);
+      expect(result.state).toBe("error");
+      if (result.state !== "error") continue;
+      expect(result.errors.some((e) => e.field === "vintage")).toBe(true);
+    }
+  });
+
   it("rejects a negative quantity", () => {
     const result = validateRow(["Domaine A", "Cuvee 1", "2020", "-1", "10"], columnToField);
     expect(result.state).toBe("error");
@@ -90,5 +128,72 @@ describe("validateRow", () => {
     expect(result.state).toBe("valid");
     if (result.state !== "valid") return;
     expect(result.raw.unit_cost).toBe("11.00");
+  });
+});
+
+// P3 (db audit 2026-08-23, C18) — Number.parseInt/parseFloat accept a
+// numeric PREFIX and silently ignore trailing garbage. Every case below
+// FAILS (returns a "2020" style coerced value as `valid`, not an error)
+// against the pre-fix validator — comment out the INTEGER_LITERAL/
+// FLOAT_LITERAL .test(...) guards in row-validator.ts (i.e. go back to
+// calling Number.parseInt/parseFloat directly on the raw string with no
+// literal check first) and every one of these turns red. That one-line-
+// per-field change is the exact regression this suite pins against.
+describe("C18: silent numeric-text coercion is rejected outright", () => {
+  const { columnToField } = fullMap();
+  function row(fields: Partial<Record<string, string>>): string[] {
+    const order = [
+      "producer", "name", "vintage", "varietal", "region", "country",
+      "size_ml", "format", "currency", "quantity", "unit_cost", "bin", "section",
+    ];
+    return order.map((f) => fields[f] ?? "");
+  }
+
+  it.each([
+    ["vintage", "2015abc", "vintage"],
+    ["size_ml", "750ml", "size_ml"],
+    ["unit_cost", "12.5.7", "unit_cost"],
+    ["quantity", "3abc", "quantity"],
+  ])("%s with trailing-garbage text %j is a field error, not a silently-coerced value", (field, raw, expectedField) => {
+    const result = validateRow(
+      row({ producer: "P", name: "W", quantity: "1", unit_cost: "10", [field]: raw }),
+      columnToField,
+    );
+    expect(result.state).toBe("error");
+    if (result.state !== "error") return;
+    expect(result.errors.some((e) => e.field === expectedField)).toBe(true);
+  });
+
+  it("rejects a quantity above MAX_QUANTITY", () => {
+    const result = validateRow(row({ producer: "P", name: "W", quantity: String(MAX_QUANTITY + 1), unit_cost: "10" }), columnToField);
+    expect(result.state).toBe("error");
+    if (result.state !== "error") return;
+    expect(result.errors.some((e) => e.field === "quantity")).toBe(true);
+  });
+
+  it("accepts a quantity exactly at MAX_QUANTITY", () => {
+    const result = validateRow(row({ producer: "P", name: "W", quantity: String(MAX_QUANTITY), unit_cost: "10" }), columnToField);
+    expect(result.state).toBe("valid");
+  });
+
+  it("rejects a unit_cost above MAX_UNIT_COST", () => {
+    const result = validateRow(row({ producer: "P", name: "W", quantity: "1", unit_cost: String(MAX_UNIT_COST + 1) }), columnToField);
+    expect(result.state).toBe("error");
+    if (result.state !== "error") return;
+    expect(result.errors.some((e) => e.field === "unit_cost")).toBe(true);
+  });
+
+  it("rejects a currency not on the allowlist", () => {
+    const result = validateRow(row({ producer: "P", name: "W", quantity: "1", unit_cost: "10", currency: "Freedom Bucks" }), columnToField);
+    expect(result.state).toBe("error");
+    if (result.state !== "error") return;
+    expect(result.errors.some((e) => e.field === "currency")).toBe(true);
+  });
+
+  it("accepts and normalizes a lowercase currency on the allowlist", () => {
+    const result = validateRow(row({ producer: "P", name: "W", quantity: "1", unit_cost: "10", currency: "usd" }), columnToField);
+    expect(result.state).toBe("valid");
+    if (result.state !== "valid") return;
+    expect(result.raw.currency).toBe("USD");
   });
 });

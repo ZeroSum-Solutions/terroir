@@ -38,6 +38,7 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+!.env.local.example
 
 # vercel
 .vercel
@@ -49,6 +50,11 @@ next-env.d.ts
 
 # LWIN data (large CSV, not committed)
 scripts/lwin.csv
+
+# P1 — generated bulk fixtures (deterministic, regenerate via
+# scripts/fixtures/generate-partner-cellar.mjs). The small golden sample in
+# fixtures/ (not fixtures/generated/) IS committed.
+/fixtures/generated/
 
 # code-council per-project enablement + cross-session state
 # (per-project plugin opt-in; runtime state mutates between bundles)

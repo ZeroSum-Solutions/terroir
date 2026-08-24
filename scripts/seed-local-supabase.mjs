@@ -11,6 +11,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 
 config({ path: ".env.local" });
 
@@ -18,8 +19,16 @@ const args = new Set(process.argv.slice(2));
 const CONFIRM = args.has("--confirm");
 const TEARDOWN = args.has("--teardown");
 
-const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://127.0.0.1:54321";
+// No hardcoded fallback: this repo's local stack and other local Supabase
+// stacks on this machine use different ports, and a fallback here risked
+// silently seeding/mutating a DIFFERENT project's database.
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+if (!SUPABASE_URL) {
+  console.error(
+    "Refusing to run: NEXT_PUBLIC_SUPABASE_URL is not set (checked env + .env.local).",
+  );
+  process.exit(1);
+}
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 const PROD_URL_PATTERN = process.env.PROD_SUPABASE_URL_PATTERN ?? "";
 const ALLOW_NON_LOCAL =
@@ -171,6 +180,36 @@ function assertWriteAllowed() {
       "Refusing to seed a non-local Supabase URL. Set ALLOW_NON_LOCAL_SUPABASE_SEED=yes only for approved staging.",
     );
   }
+
+  // Hard gate: must match THIS repo's local stack exactly (not just "some"
+  // local port) — other projects' local Supabase stacks on this machine
+  // run on their own ports and must never be reachable from here.
+  execFileSync("bash", ["scripts/local/assert-local-db.sh"], {
+    env: process.env,
+    stdio: "inherit",
+  });
+
+  // Readiness gate, shared with scripts/local/dev-stack.sh (the canonical
+  // bring-up entry point) via scripts/local/wait-for-api-ready.sh rather
+  // than a second, hand-rolled node implementation that could drift from
+  // it. `dev-stack.sh` only seeds after `supabase db reset` because that
+  // reset restarts the auth (GoTrue) container and Kong can keep routing
+  // to its stale Docker IP for a few seconds, returning transient 502s —
+  // see docs/runbooks/local-stack.md "Post-reset readiness". This script
+  // is also a supported, directly-invokable entry point (someone can run
+  // `supabase db reset` themselves and then call this seeder straight
+  // away), so it needs the identical protection: without it, a sequential
+  // writer like ensureUsers()/upsertRows() can fail partway through a run
+  // against a not-yet-ready API instead of refusing cleanly up front.
+  execFileSync(
+    "bash",
+    [
+      "scripts/local/wait-for-api-ready.sh",
+      SUPABASE_URL,
+      SERVICE_ROLE_KEY,
+    ],
+    { env: process.env, stdio: "inherit" },
+  );
 }
 
 function buildRows(userIds = DRY_USER_IDS) {
@@ -412,6 +451,8 @@ function buildRows(userIds = DRY_USER_IDS) {
       const isByGlass = list?.name === "By the Glass";
       listItems.push({
         id: uuid(UUID_PREFIX.item, itemIndex),
+        // 0080 denormalized restaurant_id onto wine_list_items (NOT NULL).
+        restaurant_id: RESTAURANT_ID,
         section_id: section.id,
         wine_id: wine.id,
         position: n,
