@@ -127,10 +127,14 @@ export default async function PublicWineListPage({
   const supabase = createAnonClient();
   if (!supabase) notFound();
 
+  // wines!wine_list_items_wine_id_fkey: 0080 added a second FK between
+  // wine_list_items and wines (the tenant-matching composite FK), so
+  // PostgREST needs the relationship named explicitly or embedding fails
+  // with PGRST201 ("more than one relationship was found").
   const { data: list, error } = await supabase
     .from("wine_lists")
     .select(
-      "name, template, theme, updated_at, restaurant_id, show_bin_codes, restaurants(name, eightysix_strategy, logo_url), wine_list_sections(id, name, position, wine_list_items(id, position, updated_at, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines(id, name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
+      "name, template, theme, updated_at, restaurant_id, show_bin_codes, restaurants(name, eightysix_strategy, logo_url), wine_list_sections(id, name, position, wine_list_items(id, position, updated_at, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines!wine_list_items_wine_id_fkey(id, name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
     )
     .eq("slug", slug)
     .eq("is_published", true)

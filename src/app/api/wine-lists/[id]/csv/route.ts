@@ -32,10 +32,14 @@ export async function GET(
   const { supabase, restaurantId } = auth;
 
   try {
+    // wines!wine_list_items_wine_id_fkey: 0080 added a second FK between
+    // wine_list_items and wines (the tenant-matching composite FK), so
+    // PostgREST needs the relationship named explicitly or embedding fails
+    // with PGRST201 ("more than one relationship was found").
     const { data: list, error } = await supabase
       .from("wine_lists")
       .select(
-        "name, wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, name_override, hidden, wines(producer, name, vintage)))",
+        "name, wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, name_override, hidden, wines!wine_list_items_wine_id_fkey(producer, name, vintage)))",
       )
       .eq("id", id)
       .eq("restaurant_id", restaurantId)

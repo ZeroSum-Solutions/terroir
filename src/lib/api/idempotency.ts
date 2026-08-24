@@ -54,15 +54,26 @@ export type IdempotencyResult<T> = {
 };
 
 /**
- * Validate a client-supplied Idempotency-Key header. We accept any
- * opaque string between 8 and 128 chars so clients can evolve their
- * key generation scheme; UUIDv4 (36 chars) is the recommended form.
+ * Validate a client-supplied Idempotency-Key header.
+ *
+ * C26 (db audit 2026-08-23): scan_idempotency.key is a `uuid` column
+ * (migration 0011). The previous check accepted any opaque
+ * [A-Za-z0-9_-]{8,128} string — a non-UUID key made the claim INSERT fail
+ * with 22P02 (invalid input syntax for type uuid), which `withIdempotency`
+ * treats as "any other error: log and fall through to handler without
+ * caching" (a deliberate availability-over-caching choice for genuinely
+ * unexpected errors). For this specific, entirely predictable shape
+ * mismatch, that meant every retry with a non-UUID key silently ran the
+ * handler again with no error ever surfacing to the client — e.g. two
+ * `inventory_items` rows inserted for what the caller believed was one
+ * save. Every real caller already sends `crypto.randomUUID()` (see
+ * src/app/(app)/scan/scanner.tsx), so requiring UUID shape here matches
+ * both the column type and actual client behavior; it accepts no fewer
+ * real keys than before.
  */
 export function isValidIdempotencyKey(raw: string | null): raw is string {
   if (typeof raw !== "string") return false;
-  if (raw.length < 8 || raw.length > 128) return false;
-  // Allow hex, dashes, and URL-safe base64 characters.
-  return /^[A-Za-z0-9_\-]+$/.test(raw);
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(raw);
 }
 
 // DEBT-015: replaced `type LooseChain = any` with a precise structural

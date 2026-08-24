@@ -58,7 +58,7 @@ export async function generateWineListPdf(
   const { data: list, error: fetchError } = await supabase
     .from("wine_lists")
     .select(
-      "name, template, theme, restaurant_id, restaurants(name), wine_list_sections(name, position, wine_list_items(position, glass_price, bottle_price, tasting_note, name_override, wines(name, producer, vintage, varietal, region, is_eightysixed)))",
+      "name, template, theme, restaurant_id, restaurants(name), wine_list_sections(name, position, wine_list_items(position, glass_price, bottle_price, tasting_note, name_override, wines!wine_list_items_wine_id_fkey(name, producer, vintage, varietal, region, is_eightysixed)))",
     )
     .eq("id", listId)
     .eq("restaurant_id", restaurantId)

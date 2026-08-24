@@ -492,18 +492,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "import_batch_rows_batch_id_fkey"
-            columns: ["batch_id"]
+            foreignKeyName: "import_batch_rows_batch_restaurant_fkey"
+            columns: ["batch_id", "restaurant_id"]
             isOneToOne: false
             referencedRelation: "import_batches"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "import_batch_rows_restaurant_id_fkey"
-            columns: ["restaurant_id"]
-            isOneToOne: false
-            referencedRelation: "restaurants"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "restaurant_id"]
           },
         ]
       }
@@ -681,6 +674,7 @@ export type Database = {
       invoice_scans: {
         Row: {
           accuracy_score: number | null
+          committed_at: string | null
           created_at: string
           created_by: string | null
           distributor_name: string
@@ -696,9 +690,11 @@ export type Database = {
           raw_image_path: string | null
           restaurant_id: string
           status: string
+          updated_at: string
         }
         Insert: {
           accuracy_score?: number | null
+          committed_at?: string | null
           created_at?: string
           created_by?: string | null
           distributor_name: string
@@ -714,9 +710,11 @@ export type Database = {
           raw_image_path?: string | null
           restaurant_id: string
           status?: string
+          updated_at?: string
         }
         Update: {
           accuracy_score?: number | null
+          committed_at?: string | null
           created_at?: string
           created_by?: string | null
           distributor_name?: string
@@ -732,6 +730,7 @@ export type Database = {
           raw_image_path?: string | null
           restaurant_id?: string
           status?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -1282,6 +1281,7 @@ export type Database = {
           name_override: string | null
           position: number
           pour_size_mode: string
+          restaurant_id: string
           section_id: string
           tasting_note: string | null
           updated_at: string
@@ -1299,6 +1299,7 @@ export type Database = {
           name_override?: string | null
           position?: number
           pour_size_mode?: string
+          restaurant_id: string
           section_id: string
           tasting_note?: string | null
           updated_at?: string
@@ -1316,12 +1317,20 @@ export type Database = {
           name_override?: string | null
           position?: number
           pour_size_mode?: string
+          restaurant_id?: string
           section_id?: string
           tasting_note?: string | null
           updated_at?: string
           wine_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "wine_list_items_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "wine_list_items_section_id_fkey"
             columns: ["section_id"]
@@ -1335,6 +1344,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "wines"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wine_list_items_wine_restaurant_fkey"
+            columns: ["wine_id", "restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "wines"
+            referencedColumns: ["id", "restaurant_id"]
           },
         ]
       }
@@ -1661,6 +1677,13 @@ export type Database = {
         Args: { p_days?: number; p_wine_id: string }
         Returns: string
       }
+      enqueue_invoice_extract_job: {
+        Args: { p_restaurant_id: string; p_scan_id: string }
+        Returns: {
+          created: boolean
+          job_id: string
+        }[]
+      }
       enrich_wines_batch: {
         Args: { p_enrichments: Json; p_restaurant_id: string }
         Returns: number
@@ -1760,6 +1783,11 @@ export type Database = {
           score: number
           varietal: string
         }[]
+      }
+      member_restaurant_ids: { Args: never; Returns: string[] }
+      member_restaurant_ids_with_role: {
+        Args: { required: Database["public"]["Enums"]["membership_role"] }
+        Returns: string[]
       }
       merge_wines: {
         Args: { p_source_wine_id: string; p_target_wine_id: string }

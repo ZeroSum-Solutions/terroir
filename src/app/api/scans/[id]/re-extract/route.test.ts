@@ -21,9 +21,12 @@ const { AiExtractError } = await import("@/lib/scanner/ai-extract");
 const SCAN_ID = "11111111-1111-4111-8111-111111111111";
 const RESTAURANT_ID = "22222222-2222-4222-8222-222222222222";
 
+const SCAN_UPDATED_AT = "2026-08-23T00:00:00.000Z";
+
 function makeSupabase(options: {
   fetch?: { data: unknown; error: unknown };
-  update?: { error: unknown };
+  /** C14: rows the fenced UPDATE ... .select("id") returns. Default: one row (fence matched). */
+  update?: { data?: unknown; error: unknown };
   updateThrows?: boolean;
 } = {}) {
   const filters: Array<[string, string]> = [];
@@ -32,8 +35,8 @@ function makeSupabase(options: {
     update: vi.fn(),
     eq: vi.fn(),
     single: vi.fn(),
-    then: (resolve: (value: { error: unknown }) => void) =>
-      Promise.resolve(options.update ?? { error: null }).then(resolve),
+    then: (resolve: (value: { data?: unknown; error: unknown }) => void) =>
+      Promise.resolve(options.update ?? { data: [{ id: SCAN_ID }], error: null }).then(resolve),
   };
   builder.select.mockReturnValue(builder);
   builder.update.mockImplementation(() => {
@@ -52,6 +55,7 @@ function makeSupabase(options: {
           rawText: "1 x Barolo magnum EUR 95",
           tables: [],
         },
+        updated_at: SCAN_UPDATED_AT,
       },
       error: null,
     },
@@ -125,6 +129,7 @@ describe("POST /api/scans/[id]/re-extract", () => {
       ["restaurant_id", RESTAURANT_ID],
       ["id", SCAN_ID],
       ["restaurant_id", RESTAURANT_ID],
+      ["updated_at", SCAN_UPDATED_AT],
     ]);
   });
 
@@ -223,6 +228,32 @@ describe("POST /api/scans/[id]/re-extract", () => {
         code: "rate_limited",
         message: "Extraction provider rate limited.",
       },
+    });
+  });
+
+  describe("C14: concurrency fence on updated_at", () => {
+    it("returns 409 scan_superseded when the fenced update matches zero rows (another re-extract landed first)", async () => {
+      const db = makeSupabase({ update: { data: [], error: null } });
+      authorize(db.supabase);
+
+      const response = await call();
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: {
+          code: "scan_superseded",
+          message: "Scan was updated by another request while this re-extraction was running.",
+        },
+      });
+    });
+
+    it("fences the update on the updated_at value read at fetch time", async () => {
+      const { filters, supabase } = makeSupabase();
+      authorize(supabase);
+
+      await call();
+
+      expect(filters).toContainEqual(["updated_at", SCAN_UPDATED_AT]);
     });
   });
 

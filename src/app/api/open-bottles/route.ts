@@ -89,13 +89,22 @@ async function postOpenBottle(request: NextRequest) {
     );
   }
 
-  // Resolve the active-bottle write path before mutating sealed inventory.
+  // Resolve the write path before mutating sealed inventory. Deliberately
+  // NOT filtered to closed_at IS NULL (C08, db audit 2026-08-23): a
+  // wine+restaurant has at most one open_bottles row ever (UNIQUE
+  // wine_id, restaurant_id — 0016), whether active or closed. Filtering
+  // out a closed row here made the code below treat it as "none exists"
+  // and fall into the plain-INSERT path, which then hit that same unique
+  // constraint and errored AFTER sealed inventory had already been
+  // decremented (a bottle permanently lost, no open bottle created).
+  // Finding any existing row — active or closed — routes to the
+  // update-in-place branch instead, reviving a closed row exactly the
+  // way record_pour's own upsert already does.
   const { data: existingBottle, error: existingError } = await supabase
     .from("open_bottles")
     .select("id, closed_at")
     .eq("wine_id", wine_id)
     .eq("restaurant_id", restaurantId)
-    .is("closed_at", null)
     .maybeSingle();
   if (existingError) throw existingError;
 
@@ -115,7 +124,8 @@ async function postOpenBottle(request: NextRequest) {
   }
 
   if (existingBottle) {
-    // There's already an open bottle — just replace it with the new one
+    // A row already exists for this wine (active, or closed and being
+    // revived) — update it in place rather than inserting a new one.
     const { data: updated, error: updateErr } = await service
       .from("open_bottles")
       .update({

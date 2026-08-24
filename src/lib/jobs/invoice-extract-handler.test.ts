@@ -28,6 +28,10 @@ function supabaseFor(opts: {
   downloadError?: unknown;
   /** Whether the background_jobs claim-check (isStillClaimed) finds this worker still owns the job. Default true. */
   stillClaimed?: boolean;
+  /** C04: error returned by the failed->processing reset UPDATE, if any. */
+  resetError?: unknown;
+  /** C04: records every invoice_scans UPDATE payload issued (the reset write). */
+  resetUpdateCalls?: Array<{ payload: unknown }>;
 }) {
   const {
     scan = null,
@@ -35,6 +39,8 @@ function supabaseFor(opts: {
     downloadData = null,
     downloadError = null,
     stillClaimed = true,
+    resetError = null,
+    resetUpdateCalls = [],
   } = opts;
   return {
     from: vi.fn((table: string) => {
@@ -47,6 +53,14 @@ function supabaseFor(opts: {
               })),
             })),
           })),
+          update: vi.fn((payload: unknown) => {
+            resetUpdateCalls.push({ payload });
+            return {
+              eq: vi.fn(() => ({
+                eq: vi.fn(async () => ({ error: resetError })),
+              })),
+            };
+          }),
         };
       }
       if (table === "background_jobs") {
@@ -248,5 +262,49 @@ describe("runInvoiceExtractJob", () => {
     });
     expect(outcome.kind).toBe("retry");
     expect((outcome as { code: string }).code).toBe("extraction_threw");
+  });
+
+  describe("C04: failed -> processing reset before a retry", () => {
+    it("resets a failed scan back to processing (fenced on status='failed') before calling the extraction service", async () => {
+      mockProcessInvoiceScanOnce.mockResolvedValue({ status: 200, body: { scanId: "scan-1" } });
+      const resetUpdateCalls: Array<{ payload: unknown }> = [];
+      const outcome = await runInvoiceExtractJob({
+        supabase: supabaseFor({
+          scan: { ...validScan, status: "failed" },
+          downloadData: fakeBlob,
+          resetUpdateCalls,
+        }) as never,
+        job: job(),
+      });
+
+      expect(resetUpdateCalls).toEqual([{ payload: { status: "processing" } }]);
+      expect(outcome).toEqual({ kind: "succeeded", skippedExtraction: false });
+      expect(mockProcessInvoiceScanOnce).toHaveBeenCalledTimes(1);
+    });
+
+    it("retries without calling the extraction service when the reset write itself fails", async () => {
+      const outcome = await runInvoiceExtractJob({
+        supabase: supabaseFor({
+          scan: { ...validScan, status: "failed" },
+          downloadData: fakeBlob,
+          resetError: { message: "connection reset" },
+        }) as never,
+        job: job(),
+      });
+
+      expect(outcome.kind).toBe("retry");
+      expect((outcome as { code: string }).code).toBe("failed_reset_failed");
+      expect(mockProcessInvoiceScanOnce).not.toHaveBeenCalled();
+    });
+
+    it("does not attempt a reset when the scan is not 'failed'", async () => {
+      mockProcessInvoiceScanOnce.mockResolvedValue({ status: 200, body: { scanId: "scan-1" } });
+      const resetUpdateCalls: Array<{ payload: unknown }> = [];
+      await runInvoiceExtractJob({
+        supabase: supabaseFor({ scan: validScan, downloadData: fakeBlob, resetUpdateCalls }) as never,
+        job: job(),
+      });
+      expect(resetUpdateCalls).toEqual([]);
+    });
   });
 });

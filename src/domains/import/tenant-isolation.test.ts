@@ -140,13 +140,17 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
     const { data: rowsAsB } = await userBClient.from("import_batch_rows").select("id").eq("batch_id", batchId);
     expect(rowsAsB ?? []).toHaveLength(0);
 
-    // User B calling apply on it processes nothing — RLS filters the
-    // function's own SELECT to zero rows, so the loop body never runs.
-    const applyAsB = await applyImportBatchChunk(userBClient, batchId);
-    expect(applyAsB.processed).toHaveLength(0);
+    // User B calling apply on it now fails loudly instead of silently
+    // processing nothing: C17 (0082) added an explicit re-validation
+    // inside apply_import_batch_chunk that raises P0002 when the batch
+    // itself isn't visible to the caller (RLS on import_batches filters
+    // it out for a non-member of restaurant A), turning what used to be
+    // a silent "processed zero rows" no-op into an actionable error —
+    // the same idiom revert_import_batch already uses (see below).
+    await expect(applyImportBatchChunk(userBClient, batchId)).rejects.toMatchObject({ code: "P0002" });
 
-    // Prove that "processed nothing" really means nothing happened to
-    // tenant A's data: as user A, the row is still not_applied.
+    // Prove that the rejected attempt really did nothing to tenant A's
+    // data: as user A, the row is still not_applied.
     const { data: rowsAsA } = await userAClient.from("import_batch_rows").select("apply_status").eq("batch_id", batchId);
     expect(rowsAsA).toEqual([{ apply_status: "not_applied" }]);
 

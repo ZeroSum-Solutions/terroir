@@ -44,10 +44,14 @@ export default async function WineListPrintPage({
   }
   const { supabase, restaurantId } = auth;
 
+  // wines!wine_list_items_wine_id_fkey: 0080 added a second FK between
+  // wine_list_items and wines (the tenant-matching composite FK), so
+  // PostgREST needs the relationship named explicitly or embedding fails
+  // with PGRST201 ("more than one relationship was found").
   const { data: list, error } = await supabase
     .from("wine_lists")
     .select(
-      "name, slug, restaurant_id, restaurants(name), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, wines(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
+      "name, slug, restaurant_id, restaurants(name), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, wines!wine_list_items_wine_id_fkey(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
     )
     .eq("id", id)
     .eq("restaurant_id", restaurantId)

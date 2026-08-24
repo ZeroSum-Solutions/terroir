@@ -47,10 +47,14 @@ async function postProposals(request: NextRequest) {
         .select("palette")
         .eq("restaurant_id", restaurantId)
         .maybeSingle(),
+      // wines!wine_list_items_wine_id_fkey: 0080 added a second FK between
+      // wine_list_items and wines (the tenant-matching composite FK), so
+      // PostgREST needs the relationship named explicitly or embedding
+      // fails with PGRST201 ("more than one relationship was found").
       supabase
         .from("wine_lists")
         .select(
-          "name, wine_list_sections(name, wine_list_items(wines(producer, name, vintage, varietal, region)))",
+          "name, wine_list_sections(name, wine_list_items(wines!wine_list_items_wine_id_fkey(producer, name, vintage, varietal, region)))",
         )
         .eq("id", parsed.data.listId)
         .eq("restaurant_id", restaurantId)
