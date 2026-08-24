@@ -97,56 +97,66 @@ alter table public.wines
 -- column: a wines row pointing at another tenant's wine_variant becomes a
 -- constraint violation, not a latent cross-tenant bug.
 --
--- P2 ROUND-2 FIX (D1, replaces the round-1 ON DELETE CASCADE — see
--- scratchpad db-audit/verify/P2-critic-r1.md): CASCADE here meant that
--- deleting a single wine_variants row silently destroyed the wines row
--- pointing at it, and from there every one of THAT wine's own
--- CASCADE-tied children (bottle_closeouts, stock_adjustments,
--- pricing_recommendations, cellar_health, availability_events,
--- open_bottles) — a live tenant's entire cellar audit trail gone with no
--- error, no guard, and no identity_merge_log entry, whenever the wine had
--- no RESTRICT-tied row (inventory_items/wine_list_items/pour_events)
--- attached. That inverts this plan's own loudest invariant ("never
--- destroy data") and is a materially worse failure mode than the bug
--- being fixed.
+-- P2 ROUND-3 FIX (D1-residual — scratchpad db-audit/verify/P2-critic-r2.md):
+-- round 1 shipped ON DELETE CASCADE, which let a single wine_variants
+-- delete silently destroy the wines row pointing at it plus every one of
+-- its own CASCADE-tied audit children — CRITICAL, fixed in round 2 by
+-- switching to ON DELETE SET NULL (wine_variant_id), a Postgres 15+
+-- column-scoped composite-FK action. Round 2's own comment then rejected
+-- plain RESTRICT (round 1's original recommendation, and the posture of
+-- the sibling wine_variants_canonical_wine_id_fkey below) on the theory
+-- that a restaurant teardown fires wine_variants.restaurant_id's CASCADE
+-- and wines.restaurant_id's CASCADE in an unguaranteed order, and RESTRICT
+-- would raise a spurious violation if the wine_variants side won that
+-- race.
 --
--- Plain RESTRICT (the critic's first-pass recommendation) is not safe
--- either: it would reintroduce the exact C17 race this FK exists to
--- close. A restaurant teardown fires wine_variants.restaurant_id's own
--- ON DELETE CASCADE and wines.restaurant_id's own ON DELETE CASCADE as
--- two independent actions on the same deleted restaurant row, and
--- Postgres does not guarantee their order. If the wine_variants side
--- fires first, a plain RESTRICT here would raise a spurious FK violation
--- against a wines row that is itself about to be deleted by the same
--- statement.
+-- The round-2 critic tested that specific claim directly rather than
+-- reasoning about it: dropped and recreated wines_restaurant_id_fkey to
+-- give it deliberately LATER trigger OIDs than
+-- wine_variants_restaurant_id_fkey's, added AFTER DELETE diagnostic
+-- triggers logging clock_timestamp() to PROVE the reversed order rather
+-- than infer it, and reran restaurant teardown under plain RESTRICT.
+-- It never fired — 8/8 in natural order, then again under the
+-- diagnostically-proven-reversed order. Independently reproduced here
+-- (same technique — forced trigger-OID reversal, real NOTICE timestamps
+-- confirming wine_variants deleted before wines, plain RESTRICT on the
+-- fixture): teardown still succeeded with zero errors. This is consistent
+-- with how Postgres actually implements NOT DEFERRABLE FK RESTRICT/
+-- NO ACTION checks — as a true end-of-statement check, not a check at the
+-- moment the referenced row disappears — so by the time it runs, every
+-- cascade delete across the whole affected object graph (both siblings,
+-- regardless of which fired first) has already completed, and there is
+-- never a live wines row left pointing at an already-deleted
+-- wine_variants row for the check to trip on.
 --
--- The fix that gives both properties at once: ON DELETE SET NULL,
--- column-scoped to wine_variant_id only (Postgres 15+ supports a column
--- list on SET NULL/SET DEFAULT for composite FKs — verified live against
--- this stack's PG 17.6). Deleting the referenced wine_variants row now
--- always just detaches (wine_variant_id -> null, and canonical_wine_id
--- along with it via wines_derive_canonical_wine_id below, since SET NULL
--- is implemented as an UPDATE and fires that trigger) rather than
--- destroying the wines row, in EITHER scenario:
---   - Standalone wine_variants delete (no restaurant teardown in
---     progress): the wines row and every one of its audit-trail children
---     survive untouched, pointer nulled. No merge_wines call is needed or
---     possible here — nothing was merged, a dangling pointer was cleared.
---   - Restaurant teardown, wine_variants cascade fires first: SET NULL
---     always succeeds (wine_variant_id is nullable, and only that single
---     column is targeted — the composite's OTHER column, restaurant_id,
---     is deliberately left alone, so wines.restaurant_id NOT NULL is
---     never at risk). The wines row is then deleted moments later by its
---     OWN restaurant_id cascade regardless of ordering — no violation
---     either way, and the row was going away anyway.
--- Regression test for both properties (live, real service-role client,
--- full 10-child-table fixture): the two "D1 fix" tests at the end of
--- src/domains/identity/merge.test.ts.
+-- So the justification for SET NULL was wrong, and SET NULL itself
+-- reopened a milder version of the SAME failure class round 1 was
+-- CRITICAL over: a variant delete that silently severs a wine's resolved
+-- identity (wine_variant_id AND canonical_wine_id, both nulled by
+-- wines_derive_canonical_wine_id below) with no error, no
+-- identity_merge_log entry, and no code path that ever re-heals it.
+-- Quieter than destroying the wine, but still an unguarded, unlogged
+-- mutation of identity state — exactly what identity_merge_log and the
+-- merge-completeness testing apparatus exist to prevent everywhere else.
+--
+-- Fixed to plain RESTRICT, now that it is proven safe under both natural
+-- and forced-reversed cascade ordering. This matches the sibling
+-- wine_variants_canonical_wine_id_fkey's posture and the design's own
+-- stated philosophy: force an explicit, guarded, logged path (a real
+-- merge/detach operation, not a bare DELETE) for any identity-table
+-- mutation. Since no current code path deletes a wine_variants row at all
+-- (confirmed in round 1), RESTRICT costs nothing today and simply ensures
+-- that whenever such a delete IS attempted in the future, it fails loudly
+-- instead of silently detaching — forcing whoever writes that future code
+-- to go through (or add) a guarded, logged path instead.
+-- Regression test (live, real service-role client, full 10-child-table
+-- fixture, plus a forced-reversal reproduction): the two "D1 fix" tests
+-- at the end of src/domains/identity/merge.test.ts.
 alter table public.wines
   add constraint wines_variant_tenant_fk
     foreign key (wine_variant_id, restaurant_id)
     references public.wine_variants(id, restaurant_id)
-    on delete set null (wine_variant_id);
+    on delete restrict;
 
 create index wines_wine_variant_id_idx on public.wines (wine_variant_id);
 create index wines_canonical_wine_id_idx on public.wines (canonical_wine_id);

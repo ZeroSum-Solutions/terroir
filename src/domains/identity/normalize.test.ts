@@ -243,3 +243,70 @@ describe("normalizeVintage / isNvVintageText (unit, no P1 dependency)", () => {
 function CURRENT_YEAR_PLUS_TWO(): number {
   return new Date().getFullYear() + 2;
 }
+
+// P2 round-3 (D3-residual — scratchpad db-audit/verify/P2-critic-r2.md):
+// the D3 fix (merging a trailing possessive "'s") was verified correct
+// for its OWN named case, but the golden-vector test above structurally
+// cannot catch drift between P1's frozen normalizeForDedup and P2's
+// normalizeProducerOrCuvee on any input outside P1's 40 SPELLING_SEEDS —
+// and the round-2 critic proved live that they genuinely disagree on a
+// realistic possessive-name corpus absent from that fixture ("O'Brien's
+// Vineyard", "d'Arenberg's Estate", "St. James's Gate", "Kings'
+// Vineyard's Reserve", plus the U+2019 curly-quote variant). This is a
+// SEPARATE, adversarial parity check — not pairs of "these should match
+// each other," but "does P1's live function agree with P2's live
+// function on the SAME raw string" — and it is written to FAIL on any
+// divergence, not to skip or soften one. It is expected to be RED until
+// P1's normalizeForDedup adopts the identical possessive-merging rule
+// P2 uses (see the exact regex documented above
+// normalizeProducerOrCuvee): `.replace(/['’]s(?=\s|$)/g, "s")`,
+// inserted immediately after `.toLowerCase()` and before the general
+// `.replace(/[^a-z0-9]+/g, " ")` collapse — byte-identical placement and
+// pattern to P2's own implementation. This is NOT a live production bug
+// today (P1's function never runs in production; only P2's does), but it
+// is a real, currently-failing contract-integrity gap this test exists
+// to make impossible to miss going forward.
+describe.skipIf(!hasP1Fixture)("adversarial P1/P2 normalization parity (round-3, D3-residual)", () => {
+  // A flat list of realistic single inputs — not matched pairs — checked
+  // for exact output agreement between the two live implementations.
+  // Includes the possessive class that currently diverges (trailing
+  // possessive, curly-quote possessive, internal + trailing possessive
+  // combined, plural-only possessive, multiple possessives in one name)
+  // PLUS a re-check of every previously-safe category (accent-stripped,
+  // NFC/NFD, punctuation/spacing, producer-reorder, ligature) so this one
+  // file is the complete standing parity contract, not just the new gap.
+  const ADVERSARIAL_NORMALIZATION_CORPUS = [
+    // --- possessives: currently DIVERGENT until P1 syncs (D7) ---
+    "O'Brien's Vineyard",
+    "O’Brien’s Vineyard", // curly right-single-quote variant
+    "St. James's Gate",
+    "Kings' Vineyard's Reserve", // multiple possessives in one name
+    "Kings' Vineyard", // plural-only possessive (trailing ' with no following s)
+    "d'Arenberg's Estate", // internal apostrophe + trailing possessive combined
+    "Domaine O'Brien's", // realistic partner-CSV shape per the coordinator's example
+    "The Winemakers' Collective",
+    "Marks & Spencer's Reserve",
+    // --- previously-verified-safe categories: must stay in agreement ---
+    "Château Belair-Vauban",
+    "Chateau Belair-Vauban",
+    "Cœur d'Alsace",
+    "Coeur d'Alsace",
+    "Domaine Jean Grivot",
+    "Jean Grivot Domaine",
+    "Señorío de Valdemoro",
+    "Domaine René Léveillé",
+  ];
+
+  it("P1's live normalizeForDedup and P2's live normalizeProducerOrCuvee agree on every corpus item (must FAIL on any divergence)", async () => {
+    const mod = (await import(p1FixturePath)) as P1Module;
+    const disagreements: string[] = [];
+    for (const raw of ADVERSARIAL_NORMALIZATION_CORPUS) {
+      const p1Result = mod.normalizeForDedup(raw);
+      const p2Result = normalizeProducerOrCuvee(raw);
+      if (p1Result !== p2Result) {
+        disagreements.push(`"${raw}" -> P1: "${p1Result}"  P2: "${p2Result}"`);
+      }
+    }
+    expect(disagreements.join("\n")).toBe("");
+  });
+});

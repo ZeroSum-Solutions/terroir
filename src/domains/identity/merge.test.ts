@@ -372,16 +372,21 @@ describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY l
     expect(sourceAfter).toBeNull();
   });
 
-  // P2 round-2 (D1 — scratchpad db-audit/verify/P2-critic-r1.md):
-  // wines_variant_tenant_fk was ON DELETE CASCADE, so deleting a single
-  // wine_variants row silently destroyed the wines row pointing at it —
-  // and from there every one of ITS OWN cascade-tied children — with no
-  // error, no guard, and no identity_merge_log entry. Fixed to
-  // ON DELETE SET NULL (wine_variant_id) — a composite-FK, column-scoped
-  // null target (Postgres 15+; verified live against this stack's PG
-  // 17.6). These two tests prove both properties the fix must hold
-  // simultaneously.
-  it("D1 fix: deleting a wine_variants row detaches the wines row and its full audit trail, never destroys them", async () => {
+  // P2 round-3 (D1-residual — scratchpad db-audit/verify/P2-critic-r2.md):
+  // round 1 shipped ON DELETE CASCADE (destroyed the wines row + its
+  // audit children on a single wine_variants delete — CRITICAL). Round 2
+  // switched to ON DELETE SET NULL, which stopped the destruction but
+  // still let a variant delete silently sever a wine's resolved identity
+  // with no error and no identity_merge_log entry — a milder recurrence
+  // of the same "silent, unguarded, unlogged" failure class. The round-2
+  // critic proved (via a forced, diagnostically-confirmed reversal of the
+  // cascade firing order) that round 2's stated reason for rejecting
+  // plain RESTRICT does not hold: RESTRICT is safe in both orderings,
+  // because Postgres defers a NOT DEFERRABLE FK's RESTRICT check to true
+  // end-of-statement, after every cascade in the whole affected object
+  // graph has already run. Fixed to plain RESTRICT — the loudest option:
+  // a delete that would sever a wine's identity now simply cannot happen.
+  it("D1 fix: deleting a wine_variants row is blocked outright (RESTRICT) — the wines row, its identity, and its full audit trail are never touched", async () => {
     const { data: canon } = await admin
       .from("canonical_wines")
       .insert({ producer: "P2 FK Safety Cellars", cuvee: "Safety Cuvee", producer_norm: "p2 fk safety cellars", cuvee_norm: "safety cuvee" } as never)
@@ -443,17 +448,25 @@ describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY l
       .select("id")
       .single();
 
-    // The destructive act: delete the wine_variants row directly (no
-    // restaurant teardown, no merge_wines call — a bare, unguarded
-    // single-row delete, exactly as the critic reproduced it).
+    // The act that must now be blocked outright: delete the
+    // wine_variants row directly (no restaurant teardown, no merge_wines
+    // call — a bare, unguarded single-row delete, exactly as the round-1
+    // critic reproduced it). Under RESTRICT this must fail with the FK
+    // violation, not succeed-and-detach.
     const { error: deleteError } = await admin.from("wine_variants").delete().eq("id", variantId);
-    expect(deleteError).toBeNull();
+    expect(deleteError).not.toBeNull();
+    expect(deleteError?.message ?? "").toMatch(/wines_variant_tenant_fk|foreign key/i);
 
-    // The wines row survives, detached rather than destroyed.
+    // The wine_variants row itself survives too — the delete never happened.
+    const { data: variantAfter } = await admin.from("wine_variants").select("id").eq("id", variantId).maybeSingle();
+    expect(variantAfter).not.toBeNull();
+
+    // The wines row is completely untouched — identity intact, not merely
+    // detached.
     const { data: wineAfter } = await admin.from("wines").select("id, wine_variant_id, canonical_wine_id").eq("id", wineId).maybeSingle();
     expect(wineAfter).not.toBeNull();
-    expect((wineAfter as { wine_variant_id: string | null }).wine_variant_id).toBeNull();
-    expect((wineAfter as { canonical_wine_id: string | null }).canonical_wine_id).toBeNull();
+    expect((wineAfter as { wine_variant_id: string | null }).wine_variant_id).toBe(variantId);
+    expect((wineAfter as { canonical_wine_id: string | null }).canonical_wine_id).toBe(canonId);
 
     // Every one of its audit-trail/inventory children survives untouched.
     const survivors = {
@@ -506,12 +519,21 @@ describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY l
     // wine_variants.restaurant_id's own ON DELETE CASCADE and
     // wines.restaurant_id's own ON DELETE CASCADE as two independent
     // actions on the same statement, in an order Postgres does not
-    // guarantee. Before the fix, a plain RESTRICT here would have raised
-    // a spurious FK violation whenever the wine_variants side won that
-    // race; CASCADE (the round-1 choice) avoided that error but did so by
-    // being willing to destroy data on a standalone delete too (D1). The
-    // fix (SET NULL, column-scoped) must make this teardown succeed with
-    // NO error regardless of ordering, without reintroducing that risk.
+    // guarantee from the client's side. Round 2 rejected plain RESTRICT
+    // here on the theory that this could raise a spurious violation if
+    // the wine_variants side won that race. The round-2 critic disproved
+    // that live with a forced, diagnostically-confirmed reversal of the
+    // actual firing order (independently reproduced by hand against this
+    // stack: AFTER DELETE diagnostic triggers with clock_timestamp()
+    // showed wine_variants deleted before wines, and RESTRICT still never
+    // fired) — Postgres defers a NOT DEFERRABLE FK's RESTRICT check to
+    // true end-of-statement, by which point every cascade across the
+    // whole affected graph has already completed regardless of firing
+    // order. This test exercises the ordinary (unforced) case; the forced-
+    // reversal proof itself lives in
+    // supabase/tests/0098_wine_variants_restrict_safety.sql, which
+    // manipulates trigger OIDs directly (something only raw SQL, not this
+    // supabase-js client, can do).
     const { error: teardownError } = await admin.from("restaurants").delete().eq("id", restaurantC);
     expect(teardownError).toBeNull();
 
