@@ -1,0 +1,112 @@
+{
+  "_comment": "FROZEN CONTRACT SNAPSHOT for P1's normalizeForDedup <-> P2's normalizeProducerOrCuvee/normalizeVintage. Do not hand-edit. Regenerate ONLY via `pnpm exec tsx scripts/generate-identity-golden-vectors.ts`, and ONLY as a deliberate, coordinated contract change between both sides — never as a routine refresh to silence a failing test. Consumed unconditionally (no skipIf) by src/domains/identity/normalize.test.ts.",
+  "generatedAt": "2026-08-24T02:07:32.171Z",
+  "p1Seed": 20260823,
+  "producerOrCuveeVectors": [
+    {
+      "input": "O'Brien's Vineyard",
+      "expected": "briens o vineyard"
+    },
+    {
+      "input": "O’Brien’s Vineyard",
+      "expected": "briens o vineyard"
+    },
+    {
+      "input": "St. James's Gate",
+      "expected": "gate jamess st"
+    },
+    {
+      "input": "Kings' Vineyard's Reserve",
+      "expected": "kings reserve vineyards"
+    },
+    {
+      "input": "Kings' Vineyard",
+      "expected": "kings vineyard"
+    },
+    {
+      "input": "d'Arenberg's Estate",
+      "expected": "arenbergs d estate"
+    },
+    {
+      "input": "Domaine O'Brien's",
+      "expected": "briens domaine o"
+    },
+    {
+      "input": "The Winemakers' Collective",
+      "expected": "collective the winemakers"
+    },
+    {
+      "input": "Marks & Spencer's Reserve",
+      "expected": "marks reserve spencers"
+    },
+    {
+      "input": "Château Belair-Vauban",
+      "expected": "belair chateau vauban"
+    },
+    {
+      "input": "Chateau Belair-Vauban",
+      "expected": "belair chateau vauban"
+    },
+    {
+      "input": "Cœur d'Alsace",
+      "expected": "alsace coeur d"
+    },
+    {
+      "input": "Coeur d'Alsace",
+      "expected": "alsace coeur d"
+    },
+    {
+      "input": "Domaine Jean Grivot",
+      "expected": "domaine grivot jean"
+    },
+    {
+      "input": "Jean Grivot Domaine",
+      "expected": "domaine grivot jean"
+    },
+    {
+      "input": "Señorío de Valdemoro",
+      "expected": "de senorio valdemoro"
+    },
+    {
+      "input": "Domaine René Léveillé",
+      "expected": "domaine leveille rene"
+    }
+  ],
+  "vintageTextVectors": [
+    {
+      "input": "NV",
+      "expectedIsNv": true,
+      "outcome": null
+    },
+    {
+      "input": "MCMXCIX",
+      "expectedIsNv": false,
+      "outcome": "throws"
+    },
+    {
+      "input": "circa 1998",
+      "expectedIsNv": false,
+      "outcome": "throws"
+    },
+    {
+      "input": "'98",
+      "expectedIsNv": false,
+      "outcome": "throws"
+    },
+    {
+      "input": "202X",
+      "expectedIsNv": false,
+      "outcome": "throws"
+    },
+    {
+      "input": "not sure",
+      "expectedIsNv": false,
+      "outcome": "throws"
+    },
+    {
+      "input": "19-something",
+      "expectedIsNv": false,
+      "outcome": "throws"
+    }
+  ]
+}

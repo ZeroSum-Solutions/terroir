@@ -5792,2316 +5792,1771 @@ comment on function public.revert_import_batch(uuid) is
 revoke all on function public.revert_import_batch(uuid) from public;
 grant execute on function public.revert_import_batch(uuid) to authenticated;
 
--- === 0077_inventory_fk_perf_indexes.sql ===
--- C12 (db audit 2026-08-23) — missing indexes on FK columns pointing at
--- inventory_items make revert_import_batch (0076) O(n) full-table scans
--- per reverted row, i.e. O(n * table_size) overall.
+-- === 0097_canonical_wines.sql ===
+-- 0097_canonical_wines.sql
+-- P2 — wine identity spine, part 1: the global identity table.
 --
--- revert_import_batch loops once per applied row and issues
---   delete from public.inventory_items where id = ... ;
--- Every such delete makes Postgres check the two tables with an FK
--- pointing at inventory_items for referencing rows, regardless of the
--- ON DELETE action (SET NULL still has to find the rows to null out):
---   import_batch_rows.applied_inventory_item_id  (on delete set null)
---   open_bottles.source_inventory_item_id        (on delete set null)
--- Neither column had an index, so each FK-integrity check was a full
--- sequential scan of the child table — repeated once per deleted row.
+-- canonical_wines is the internal, immutable identity a real-world wine
+-- (producer + cuvée, no vintage/size) gets exactly once, ever, regardless of
+-- how many tenants carry it or how many times its name is misspelled on a
+-- CSV. It is deliberately NOT restaurant-scoped: two restaurants' imports of
+-- "Domaine Jean Grivot, Vosne-Romanée" must resolve to the same row so a
+-- later image/enrichment pass (P4) can serve one cached asset to both,
+-- without either tenant's inventory ever becoming visible to the other
+-- (that boundary lives entirely in wine_variants/wines, not here).
 --
--- Verified (.../scratchpad/db-audit/verify/V4-bottles.md, C12): at a
--- 15,001-row import_batch_rows table, EXPLAIN ANALYZE showed the
--- import_batch_rows FK-check trigger alone drop from 5.339ms to 0.078ms
--- (68x) once this index existed; pg_stat_user_tables showed exactly one
--- extra full sequential scan of import_batch_rows per deleted
--- inventory_items row (5,000 deletes -> 5,000 seq scans, ~50M tuples
--- read); a real 5,000-row revert_import_batch call (through the live
--- PostgREST RPC, as an authenticated tenant) dropped from 4,444ms to
--- 1,220ms (3.6x) with the index present, and the gap widens as
--- import_batch_rows grows, since it is an append-only audit trail that
--- is never deleted (rows are only ever flipped to 'reverted').
---
--- Both columns are nullable and populated in exactly one lifecycle
--- state (applied_inventory_item_id: only while apply_status =
--- 'applied'; source_inventory_item_id: only for a bottle opened from a
--- tracked inventory row), so a partial index — matching the auditors'
--- fix sketch — covers every row either the FK trigger or
--- revert_import_batch ever look up while staying small relative to the
--- full table.
---
--- Other unindexed FK columns exist elsewhere in this schema (e.g. the
--- *_by/*_user_id audit columns pointing at auth.users, and a handful of
--- wine_id FKs — see the fix-lane report for the full catalog query and
--- results). None of them sit behind a bulk per-row delete loop the way
--- inventory_items does under revert_import_batch: auth.users rows are
--- never bulk-deleted by any app write path, and the wines-table deletes
--- in merge_wines (0055) remove exactly one row per call, not N rows in
--- one transaction, so the O(n * table_size) pattern this migration
--- fixes does not apply to them. Left alone — no measurement or
--- reachable write path justifies indexing them right now.
---
--- Lock note: CREATE INDEX CONCURRENTLY cannot run inside a transaction
--- block, and — per the precedent in 0012_wine_list_items_wine_id_idx.sql
--- — this repo's migration runner (local `supabase db reset` and CI)
--- applies every migration inside one. This migration therefore uses the
--- plain (non-concurrent) form, matching that precedent; both tables are
--- a few thousand to ~20k rows in every environment this has been tested
--- against today, so the AccessExclusiveLock window is well under a
--- second. If this is ever applied by hand to a live database where
--- import_batch_rows/open_bottles have grown large enough that an
--- AccessExclusiveLock would be disruptive, an operator should instead
--- run the CONCURRENTLY form below manually, outside the normal
--- migration pipeline, before marking this migration applied:
---
---   CREATE INDEX CONCURRENTLY IF NOT EXISTS
---     import_batch_rows_applied_inventory_item_id_idx
---     ON public.import_batch_rows (applied_inventory_item_id)
---     WHERE applied_inventory_item_id IS NOT NULL;
---   CREATE INDEX CONCURRENTLY IF NOT EXISTS
---     open_bottles_source_inventory_item_id_idx
---     ON public.open_bottles (source_inventory_item_id)
---     WHERE source_inventory_item_id IS NOT NULL;
---
--- DOWN:
---   DROP INDEX IF EXISTS public.import_batch_rows_applied_inventory_item_id_idx;
---   DROP INDEX IF EXISTS public.open_bottles_source_inventory_item_id_idx;
+-- LWIN (lwin7) participates as an alias/anchor, never as the primary key —
+-- see docs/plans/2026-08-23-p2-identity-spine.md §1 for why: a bad fuzzy
+-- LWIN match must never be able to retroactively invalidate this row's
+-- identity (the C24 failure mode). vintage and bottle size are NEVER part
+-- of this table — they are wine_variants' job (0098) and are always exact
+-- keys, never fuzzy-matched (see resolve_wine_variants_bulk, 0099).
 
-create index if not exists import_batch_rows_applied_inventory_item_id_idx
-  on public.import_batch_rows (applied_inventory_item_id)
-  where applied_inventory_item_id is not null;
+-- P2 ROUND-6 FIX (D9-residual #2 — see the identity_normalize_text() and
+-- canonical_wines DDL comments below): the extension + normalization
+-- function are declared BEFORE the table, because the table's identity
+-- key columns are now GENERATED from this function and a generation
+-- expression cannot reference a function that does not exist yet.
+create extension if not exists unaccent;
 
-create index if not exists open_bottles_source_inventory_item_id_idx
-  on public.open_bottles (source_inventory_item_id)
-  where source_inventory_item_id is not null;
-
--- === 0078_match_lwin_trgm_fastpath.sql ===
--- C07 (db audit 2026-08-23) — match_lwin / match_lwin_batch (0007) filter
--- on similarity(lower(col), ...) >= threshold, which the planner cannot
--- push down through lwin_catalog's GIN trigram indexes (those only
--- support the pg_trgm %, <->, and LIKE-family operators, never a bare
--- similarity() call). Every match_lwin call therefore sequential-scans
--- the whole lwin_catalog table and evaluates similarity() per row.
+-- P2 ROUND-5/6 FIX (D9-residual — scratchpad db-audit/verify/P2-critic-r4.md):
+-- shared, deterministic text-normalization helper. Round 4's LWIN
+-- corroboration gate used pg_trgm similarity() with match_lwin's ranking
+-- thresholds (0.3/0.21) — a threshold tuned to be TOLERANT of false
+-- positives because a human reviews match_lwin's suggestions. That is the
+-- wrong tool for a permanent, cross-tenant, unrepairable security
+-- decision: similarity('Chateau Pichon Longueville Baron', 'Chateau
+-- Pichon Longueville Comtesse de Lalande') = 0.55, comfortably above 0.3,
+-- for two REAL, DISTINCT Bordeaux estates that share a long common
+-- prefix — live-verified against this exact pair before writing this
+-- comment. A fuzzy threshold cannot separate them; no threshold reliably
+-- can, because their similarity is a property of shared vocabulary, not
+-- of being the same wine.
 --
--- Verified (.../scratchpad/db-audit/verify/V5-perf-static.md, C07): at a
--- ~130,000-row lwin_catalog, the shipped code's own LWIN_MATCH_BATCH_SIZE
--- (300 rows/RPC call, src/domains/import/constants.ts) took 28.7s per
--- match_lwin_bulk call — against the authenticated role's 8s
--- statement_timeout — and the live PostgREST RPC returned a real HTTP 500
--- (SQLSTATE 57014, "canceling statement due to statement timeout") for
--- every chunk. Reproduced independently in this fix lane against a fresh
--- ~130,000-row synthetic catalog: identical HTTP 500 / 57014 at 8.44s
--- wall clock via the live RPC as an authenticated tenant.
+-- identity_normalize_text() replaces the threshold with a DETERMINISTIC
+-- equality check: unaccent + lowercase + possessive-suffix merge +
+-- collapse non-alnum + token-sort. Baron and Lalande normalize to
+-- different token sets ("baron chateau longueville pichon" vs "chateau
+-- comtesse de lalande longueville pichon") and can never satisfy an
+-- equality check regardless of shared vocabulary, while a genuine
+-- data-entry-error — accents, case, spacing, punctuation — still
+-- normalizes identically on both sides, preserving the legitimate "LWIN
+-- wins over textual FORMATTING differences" behavior
+-- resolve_wine_variants_bulk depends on.
 --
--- Fix: replace the un-indexable similarity()>=threshold producer
--- comparison with an indexed % prefilter (lower(producer) %
--- lower(p_producer)), gated by a TRANSACTION-LOCAL setting of
--- pg_trgm.similarity_threshold — set_config(..., true), deliberately NOT
--- pg_trgm's own set_limit(), which sets a SESSION-scoped GUC via a plain
--- SET and would leak one caller's threshold into a later request that
--- reuses the same pooled connection. is_local = true reverts
--- automatically at the end of the calling transaction (one PostgREST
--- request = one transaction), so concurrent callers can never see each
--- other's threshold.
+-- ROUND 6 — TWO CHANGES, both forced by this function's PROMOTION from
+-- "comparison helper" to "the definition of the identity key" (the
+-- canonical_wines DDL below now GENERATES producer_norm/cuvee_norm from
+-- it). While it only ever fed comparisons, divergence from the
+-- TypeScript src/domains/identity/normalize.ts was cosmetic and its
+-- worst case was a false NEGATIVE. Once it computes the stored identity
+-- key, a divergence becomes a false POSITIVE — two genuinely different
+-- wines sharing one canonical row — which is the single failure the
+-- blueprint cares about most:
 --
--- % is defined as similarity(a,b) >= the GUC value — verified empirically
--- in this lane (similarity(a,b) == GUC still evaluates % to true, i.e.
--- the boundary is >=, matching the original inline comparison exactly,
--- not a stricter >). That makes lower(lc.producer) % lower(p_producer)
--- (with the GUC set to p_threshold) an exact, index-eligible restatement
--- of the producer half of the original predicate — not an approximation.
---
--- Both original similarity() >= comparisons — producer AND name, at
--- their ORIGINAL two different thresholds (p_threshold and
--- p_threshold * 0.7) — are kept verbatim as residual filters after the %
--- prefilter. This is deliberate belt-and-suspenders: the % prefilter can
--- only narrow the candidate set that reaches those exact, unchanged
--- filters, so the returned match set is provably identical to the
--- original function's, regardless of any edge case in the operator's
--- floating-point boundary. Match-set equivalence was verified over 5,505
--- query pairs (exact catalog rows, case/typo/truncation variants, and
--- pure no-match garbage) against a ~130,000-row synthetic catalog,
--- comparing the OLD predicate shape and the NEW one row by row — see the
--- fix-lane report for the exact count and an explicit before/after check
--- of the C24 Pichon Baron / Pichon Lalande case (unchanged by this fix,
--- as required — C24 is a threshold/semantics bug owned by a different
--- fix lane; this migration does not touch match-acceptance semantics).
---
--- A second index on lower(display_name), used as a second % prefilter
--- ANDed via BitmapAnd, was tried and measured SLOWER in this lane's
--- testing: the shared GUC value needed to keep it a safe, no-false-
--- negative prefilter for the *name* comparison (p_threshold * 0.7, the
--- looser of the two thresholds) also loosens the *producer* prefilter,
--- and that lost more selectivity than the second index recovered. It
--- was dropped; only the producer index is added here.
---
--- match_lwin moves from `stable` to (implicitly) `volatile`: it now has
--- one side effect, a transaction-local GUC set, so `stable` would no
--- longer be an accurate declaration. This does not change how many
--- times per-row callers (match_lwin_bulk's LATERAL join, match_lwin_batch's
--- loop) invoke it — both already call it once per row with different
--- arguments every time, regardless of volatility.
---
--- Batch-size note: even with this fix, an adversarial worst case — every
--- row in one chunk sharing a very common producer-name word (e.g.
--- "Domaine", "Chateau") — can still approach the 8s budget at the
--- shipped LWIN_MATCH_BATCH_SIZE of 300 (measured ~12s for an
--- all-common-prefix 300-row batch against the same synthetic catalog;
--- ~4.4s for the same shape at 100 rows). This migration only touches the
--- database — src/domains/import/constants.ts is updated in the same fix
--- commit to reduce LWIN_MATCH_BATCH_SIZE so that worst case stays safely
--- inside the timeout; see the fix-lane report for the full measurements.
---
--- DOWN:
---   Restores the pre-fix match_lwin body (0007) verbatim and drops the
---   new index. See down/0078_match_lwin_trgm_fastpath.down.sql.
-
-create index if not exists lwin_catalog_producer_lower_trgm_idx
-  on public.lwin_catalog using gin (lower(producer) gin_trgm_ops);
-
-create or replace function public.match_lwin(
-  p_producer  text,
-  p_name      text,
-  p_threshold float default 0.3
-)
-returns table (
-  lwin_id      text,
-  display_name text,
-  producer     text,
-  varietal     text,
-  region       text,
-  country      text,
-  colour       text,
-  score        float
-)
-language sql security definer set search_path = public
-as $$
-  select set_config('pg_trgm.similarity_threshold', p_threshold::text, true);
-  select lc.lwin_id, lc.display_name, lc.producer, lc.varietal,
-         lc.region, lc.country, lc.colour,
-         (similarity(lower(p_producer), lower(lc.producer)) * 0.6 +
-          similarity(lower(p_name), lower(lc.display_name)) * 0.4) as score
-  from public.lwin_catalog lc
-  where lower(lc.producer) % lower(p_producer)
-    and similarity(lower(p_producer), lower(lc.producer)) >= p_threshold
-    and similarity(lower(p_name), lower(lc.display_name)) >= p_threshold * 0.7
-  order by score desc
-  limit 1;
-$$;
-
-revoke all on function public.match_lwin(text, text, float) from public;
-grant execute on function public.match_lwin(text, text, float) to authenticated;
-
--- === 0079_wine_rpc_invoker_boundary.sql ===
--- 0079_wine_rpc_invoker_boundary.sql
---
--- C01 (db audit 2026-08-23) — find_or_create_wine, find_or_create_wines_batch,
--- and match_lwin_batch are SECURITY DEFINER and trust a caller-supplied
--- p_restaurant_id / p_wine_ids with zero membership check. PostgREST grants
--- EXECUTE on all three to `authenticated` (not just service_role), and
--- signup is self-service (handle_new_user provisions a fresh restaurant +
--- owner membership for anyone who registers an email) — so "authenticated"
--- here means any signed-up user of any tenant, not a privileged app role.
---
--- Verified (.../scratchpad/db-audit/verify/V1-tenancy.md, C01): a tenant-B
--- session called all three RPCs against tenant A's restaurant_id / wine ids
--- and wrote/mutated tenant A's catalog rows every time — HTTP 200, confirmed
--- as superuser afterward. Anon correctly 401s (no EXECUTE grant to anon),
--- so PostgREST-as-authenticated is the entire reachable surface.
---
--- Fix: convert all three from SECURITY DEFINER to SECURITY INVOKER instead
--- of bolting an explicit is_member() guard onto each. `wines` already has
--- complete, correct RLS (members-only select/insert/update/delete, keyed on
--- is_member(restaurant_id)) — as SECURITY INVOKER, every SELECT/INSERT/
--- UPDATE these functions perform against wines is subject to that RLS for
--- the ACTUAL calling role, so:
---   - a member's own restaurant: identical behavior to before (their own
---     grants + RLS already allow everything these functions do).
---   - a non-member's restaurant_id: the INSERT/UPDATE inside the function
---     hits the WITH CHECK/USING clause and fails with 42501 ("new row
---     violates row-level security policy"), atomically — no partial
---     writes, no silent cross-tenant landing.
---   - match_lwin_batch's driving SELECT ... WHERE id = ANY(p_wine_ids) is
---     itself RLS-filtered, so a foreign wine id is simply invisible to the
---     loop rather than needing a hand-rolled membership join — the same
---     "invisible, not rejected" idiom apply_import_batch_chunk (0076)
---     already uses for exactly this shape of problem.
--- Converting to INVOKER is preferred over an explicit per-function guard:
--- it can't drift out of sync with wines' own policies, and it is enforced
--- on every statement inside the function, not just a single top-of-function
--- check.
---
--- match_lwin (called from inside match_lwin_batch) stays SECURITY DEFINER,
--- unchanged — it reads the global, non-tenant-scoped lwin_catalog reference
--- table, a separate, already-reviewed surface (0007/0078) untouched here.
---
--- DOWN: restores all three functions' pre-fix SECURITY DEFINER bodies
--- verbatim (0002 for find_or_create_wine, 0006 for find_or_create_wines_batch,
--- 0007 for match_lwin_batch — 0078 only replaced match_lwin's body, never
--- match_lwin_batch's). See down/0079_wine_rpc_invoker_boundary.down.sql.
-
-create or replace function public.find_or_create_wine(
-  p_restaurant_id uuid,
-  p_name          text,
-  p_producer      text,
-  p_vintage       int default null,
-  p_varietal      text default null,
-  p_region        text default null,
-  p_country       text default null,
-  p_size_ml       int default 750
-)
-returns uuid
-language plpgsql
-security invoker
+-- 1. POSSESSIVE-SUFFIX RULE ADDED (the D3 regression, live-measured).
+--    normalize.ts merges a trailing possessive "'s" into its host word
+--    BEFORE the general non-alnum collapse, so "O'Brien's" -> "briens"
+--    (one token) rather than "brien"+"s" (two tokens, one a
+--    coincidence-prone stray). Without that rule here, "O'Brien's
+--    Vineyard" and "O.S. Brien Vineyard" BOTH normalized to
+--    "brien o s vineyard" — the exact over-merge round 2's D3 fix
+--    removed from the TypeScript side, silently reintroduced the moment
+--    the identity key moved into SQL. Measured against the frozen
+--    contract in src/domains/identity/__fixtures__/normalization-golden-
+--    vectors.json: 10 of 17 vectors agreed before this rule, 17 of 17
+--    after, and all 7 failures were this one cause. The regexp is the
+--    direct translation of normalize.ts's /['’]s(?=\s|$)/g — PostgreSQL's
+--    ARE engine has no lookahead here, so the following-space is captured
+--    and re-emitted via \1 instead.
+-- 2. search_path PINNED. unaccent(text) is declared STABLE, not
+--    IMMUTABLE, and resolves BOTH the function and its dictionary through
+--    search_path; this function's IMMUTABLE marking was therefore a
+--    promise rather than a guarantee (as its previous comment honestly
+--    disclosed). A promise is survivable for a comparison; it is not
+--    survivable for a STORED GENERATED column, where the value is
+--    computed once and then indexed as a UNIQUE identity key. Pinning
+--    search_path (the same discipline is_member and every other
+--    security-relevant function in this schema already uses, 0001) makes
+--    the resolution deterministic and the immutability marking honest.
+create or replace function public.identity_normalize_text(raw text)
+returns text
+language sql
+immutable
+parallel safe
 set search_path = public
 as $$
-declare
-  wine_id uuid;
-begin
-  -- Try to find existing wine
-  select id into wine_id
-  from public.wines
-  where restaurant_id = p_restaurant_id
-    and lower(producer) = lower(p_producer)
-    and lower(name)     = lower(p_name)
-    and coalesce(vintage, 0) = coalesce(p_vintage, 0)
-    and size_ml = p_size_ml
-  limit 1;
-
-  if wine_id is not null then
-    -- Fill in missing fields if we have better data now
-    update public.wines
-    set varietal = coalesce(wines.varietal, p_varietal),
-        region   = coalesce(wines.region, p_region),
-        country  = coalesce(wines.country, p_country)
-    where id = wine_id
-      and (wines.varietal is null or wines.region is null or wines.country is null);
-    return wine_id;
-  end if;
-
-  -- Insert new wine
-  insert into public.wines (restaurant_id, name, producer, vintage, varietal, region, country, size_ml)
-  values (p_restaurant_id, p_name, p_producer, p_vintage, p_varietal, p_region, p_country, p_size_ml)
-  on conflict (restaurant_id, lower(producer), lower(name), coalesce(vintage, 0), size_ml)
-  do update set
-    varietal = coalesce(excluded.varietal, wines.varietal),
-    region   = coalesce(excluded.region, wines.region),
-    country  = coalesce(excluded.country, wines.country)
-  returning id into wine_id;
-
-  return wine_id;
-end;
+  select nullif(
+    (select string_agg(t, ' ' order by t)
+     from unnest(string_to_array(
+       trim(regexp_replace(
+         regexp_replace(lower(unaccent(raw)), '[''’]s(\s|$)', 's\1', 'g'),
+         '[^a-z0-9]+', ' ', 'g')),
+       ' '
+     )) as t
+     where t <> ''),
+    ''
+  );
 $$;
 
-revoke all on function public.find_or_create_wine(uuid, text, text, int, text, text, text, int) from public;
-grant execute on function public.find_or_create_wine(uuid, text, text, int, text, text, text, int) to authenticated;
+comment on function public.identity_normalize_text(text) is
+  'THE definition of canonical_wines'' identity key: producer_norm and '
+  'cuvee_norm are STORED GENERATED columns computed by this function, so '
+  'no client, RPC, or table-owner migration can supply an identity key '
+  'decoupled from the row''s own producer/cuvee text. Also used for '
+  'deterministic LWIN corroboration — exact equality (producer) or '
+  'token-array subset (cuvee vs display_name, since display_name commonly '
+  'combines producer + wine name) — never as a fuzzy/threshold input. '
+  'Behaviourally equivalent to src/domains/identity/normalize.ts''s '
+  'normalizeProducerOrCuvee; that equivalence is enforced unconditionally '
+  'by src/domains/identity/normalize.test.ts against the frozen golden '
+  'vectors, and it is load-bearing rather than tidy — a divergence here '
+  'is a false POSITIVE (two different wines sharing one canonical row), '
+  'not the false negative it was while this function only fed '
+  'comparisons.';
 
-create or replace function public.find_or_create_wines_batch(
-  p_restaurant_id uuid,
-  p_wines         jsonb
-)
-returns uuid[]
-language plpgsql
-security invoker
-set search_path = public
-as $$
-declare
-  wine_ids uuid[];
-  wine_record jsonb;
-  wine_id uuid;
-  i int;
-begin
-  wine_ids := array[]::uuid[];
+create table public.canonical_wines (
+  id                     uuid        primary key default gen_random_uuid(),
+  producer               text        not null,
+  cuvee                  text        not null,
+  -- P2 ROUND-6 FIX (D9-residual #2 — the second cross-tenant identity-
+  -- hijack instance, live-reproduced end to end before this fix):
+  -- these two columns ARE the identity key (canonical_wines_identity_idx
+  -- below is UNIQUE on them, and resolve_wine_variants_bulk's phase-1
+  -- text match joins on them), and until round 6 they were plain
+  -- caller-supplied text. The LWIN corroboration gate validated
+  -- producer/cuvee — a DIFFERENT pair of caller-supplied fields —
+  -- so the value checked and the value stored were simply not the same
+  -- thing, with nothing anywhere binding one to the other.
+  --
+  -- The attack needed no threshold, no fuzzy matching and no unusual
+  -- privilege: submit raws for a wine you legitimately own whose lwin7
+  -- genuinely corroborates, and norms naming the VICTIM's wine. The gate
+  -- passes on the raws; the row lands on the victim's identity key as
+  -- lwin_verified. Reproduced live against this stack: a row reading
+  -- producer='Attacker Real Estate' (which is what corroborated its
+  -- lwin7) was written with producer_norm='estate real victim', and the
+  -- victim's own subsequent, entirely correct import through the real
+  -- resolve_wine_variants_bulk RPC then bound to it — canonical_match_
+  -- method='exact', canonical_created=false. Permanent and unrepairable
+  -- by the victim: canonical_wines_identity_idx is UNIQUE so they can
+  -- never create their own row, and this table grants authenticated no
+  -- UPDATE or DELETE.
+  --
+  -- GENERATED ALWAYS ... STORED is the fix, chosen over a CHECK
+  -- constraint deliberately. A CHECK would still let the caller supply
+  -- the key and merely police it; generation removes the field from
+  -- every write API outright, so the decoupling is not defended against,
+  -- it is unrepresentable. It reaches paths RLS cannot: 0101's backfill
+  -- runs as the table owner and bypasses RLS entirely, and
+  -- resolve_wine_variants_bulk is SECURITY INVOKER but batches its
+  -- inserts. Attempting to supply either column now fails with SQLSTATE
+  -- 428C9 from any role, including service_role and the table owner.
+  --
+  -- NOT NULL is retained and is load-bearing in the fail-closed
+  -- direction: identity_normalize_text returns NULL when the input
+  -- collapses to nothing (e.g. punctuation-only text), so such a row is
+  -- refused outright rather than inventing a placeholder identity. Both
+  -- 0099 and 0101 already delete those rows before reaching an insert,
+  -- so this changes no supported path — it only closes the direct-insert
+  -- one.
+  producer_norm          text        not null generated always as (public.identity_normalize_text(producer)) stored,
+  cuvee_norm             text        not null generated always as (public.identity_normalize_text(cuvee)) stored,
+  colour                 text,
+  region                 text,
+  country                text,
+  lwin7                  text        check (lwin7 ~ '^[0-9]{7}$'),
+  identity_status        text        not null default 'unverified' check (
+    identity_status in ('lwin_verified', 'operator_confirmed', 'unverified')
+  ),
+  created_by_restaurant_id uuid      references public.restaurants(id) on delete set null,
+  created_by_user_id     uuid        references auth.users(id) on delete set null,
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
+);
 
-  for i in 0 .. jsonb_array_length(p_wines) - 1 loop
-    wine_record := p_wines -> i;
+comment on table public.canonical_wines is
+  'Global (not restaurant-scoped) real-world wine identity: producer + '
+  'cuvée, no vintage/size. created_by_* is audit metadata only, never a '
+  'tenancy boundary — every authenticated tenant can read and (shape-'
+  'restricted) insert into this table by design, since it is a shared '
+  'catalog every import contributes to. See the migration header and '
+  'docs/plans/2026-08-23-p2-identity-spine.md §8 for the anti-pollution '
+  'reasoning: access control cannot lock this table down without also '
+  'blocking legitimate long-tail wine creation, so correctness is '
+  'enforced on WHAT a row may assert (identity_status/lwin7 shape), not '
+  'WHO may write it.';
 
-    -- Try to find existing wine
-    select w.id into wine_id
-    from public.wines w
-    where w.restaurant_id = p_restaurant_id
-      and lower(w.producer) = lower(wine_record ->> 'producer')
-      and lower(w.name)     = lower(wine_record ->> 'name')
-      and coalesce(w.vintage, 0) = coalesce((wine_record ->> 'vintage')::int, 0)
-      and w.size_ml = coalesce((wine_record ->> 'size_ml')::int, 750)
-    limit 1;
+create unique index canonical_wines_identity_idx
+  on public.canonical_wines (producer_norm, cuvee_norm);
 
-    if wine_id is not null then
-      -- Fill in missing fields
-      update public.wines
-      set varietal = coalesce(wines.varietal, wine_record ->> 'varietal'),
-          region   = coalesce(wines.region, wine_record ->> 'region'),
-          country  = coalesce(wines.country, wine_record ->> 'country')
-      where id = wine_id
-        and (wines.varietal is null or wines.region is null or wines.country is null);
-    else
-      -- Insert new wine
-      insert into public.wines (restaurant_id, name, producer, vintage, varietal, region, country, size_ml)
-      values (
-        p_restaurant_id,
-        wine_record ->> 'name',
-        wine_record ->> 'producer',
-        (wine_record ->> 'vintage')::int,
-        wine_record ->> 'varietal',
-        wine_record ->> 'region',
-        wine_record ->> 'country',
-        coalesce((wine_record ->> 'size_ml')::int, 750)
+create unique index canonical_wines_lwin7_idx
+  on public.canonical_wines (lwin7)
+  where lwin7 is not null;
+
+create index canonical_wines_producer_trgm_idx
+  on public.canonical_wines using gin (producer_norm gin_trgm_ops);
+
+create index canonical_wines_cuvee_trgm_idx
+  on public.canonical_wines using gin (cuvee_norm gin_trgm_ops);
+
+create trigger canonical_wines_set_updated_at
+  before update on public.canonical_wines
+  for each row execute function public.set_updated_at();
+
+alter table public.canonical_wines enable row level security;
+
+create policy "anyone authenticated can read canonical_wines"
+  on public.canonical_wines for select to authenticated
+  using (true);
+
+-- Shape-restricted insert, not ownership-restricted (there is no owner to
+-- check on a global table): a raw client/RPC insert may only claim
+-- 'unverified' outright, or 'lwin_verified' when it also supplies a lwin7
+-- that DETERMINISTICALLY corroborates against the real catalog (see
+-- below). 'operator_confirmed' is intentionally NEVER reachable through
+-- this policy — nothing in P2 sets it; it exists in the CHECK constraint
+-- for a future manager-gated promotion RPC, out of scope here
+-- (docs/plans/2026-08-23-p2-identity-spine.md §12).
+--
+-- P2 ROUND-4/5 HISTORY (D9, then D9-residual — scratchpad
+-- db-audit/verify/P2-critic-r3.md and -r4.md): round 1 only checked
+-- lwin7's FORMAT. Round 4 added a corroboration check using pg_trgm
+-- similarity() at match_lwin's own ranking thresholds (0.3/0.21) — WRONG:
+-- that threshold is tuned to be tolerant of false positives because a
+-- human reviews match_lwin's suggestions; this policy makes a permanent,
+-- cross-tenant, unrepairable decision. The round-5 critic proved live
+-- that similarity('Chateau Pichon Longueville Baron', 'Chateau Pichon
+-- Longueville Comtesse de Lalande') = 0.55 — two REAL, DISTINCT estates,
+-- both comfortably above 0.3 — then reproduced the full cross-tenant
+-- hijack through all three enforcement copies using nothing but the
+-- system's OWN real data (no attacker needed): tenant A submits
+-- Lalande's own correct text with Baron's real lwin7; the (then-fuzzy)
+-- gate accepted it as lwin_verified; tenant B later submits Baron's own
+-- correct text with the same lwin7, and because LWIN-exact wins by
+-- design, tenant B bound to tenant A's Lalande-labelled row.
+--
+-- The round-5 critic ALSO found a second, more severe hole: the
+-- 'unverified' branch below placed NO constraint on lwin7 at all, so a
+-- row could squat a real lwin7 as 'unverified' garbage — the
+-- corroboration check never even ran — and 0099's phase-1 lwin_exact
+-- match had no identity_status filter, so EVERY later import carrying
+-- that lwin7, including a fully legitimate one, matched the squatter.
+-- That path needed no fuzzy match, no attacker cleverness, and did not
+-- go through this policy's 'lwin_verified' branch at all.
+--
+-- Round 5 fixes BOTH, structurally rather than by tuning a constant:
+--
+-- 1. NEW CHECK CONSTRAINT canonical_wines_lwin7_requires_verified below:
+--    lwin7 may be non-null ONLY when identity_status = 'lwin_verified'.
+--    This is a table-level CHECK, not an RLS policy clause, so it is
+--    enforced for EVERY insert path universally — the authenticated RLS
+--    policy here, resolve_wine_variants_bulk (SECURITY INVOKER, so RLS
+--    already applied, but defense-in-depth matters), AND 0101's backfill
+--    (which runs as the table owner and bypasses RLS entirely — this
+--    CHECK constraint is the only thing that reaches it). Closes the
+--    unverified-squat path outright: there is no longer any insert shape
+--    that lets lwin7 through without the corroboration check below also
+--    having to pass.
+-- 2. The corroboration check itself is now DETERMINISTIC, not fuzzy:
+--    identity_normalize_text() (defined above) applied to both sides.
+--    PRODUCER is compared for EXACT equality — this is what actually
+--    separates Baron from Lalande (their normalized forms differ), while
+--    still tolerating genuine data-entry-error formatting differences
+--    (accents/case/spacing/punctuation collapse identically on both
+--    sides). CUVEE is compared by TOKEN SUBSET, not exact equality:
+--    lwin_catalog.display_name commonly combines producer + wine name
+--    (verified against this table's own seed data), so an exact-string
+--    check against cuvee alone would reject every legitimate match. A
+--    submitted cuvee whose normalized tokens are ALL present in
+--    display_name's normalized tokens is accepted; a wrong cuvee (e.g.
+--    the real producer's LWIN attached to a fabricated bottling name)
+--    is not. Both comparisons are still deterministic set/string
+--    operations, never a score — which is what makes resolve_wine_
+--    variants_bulk's "LWIN wins over textual FORMATTING differences"
+--    feature still work
+--    for its intended case).
+--
+-- ROUND 6 (D9-residual #2) — WHY THIS POLICY NEEDS NO producer_norm/
+-- cuvee_norm CLAUSE, which is the natural thing to look for here. Round
+-- 5 closed the RPC half of the norm/raw decoupling by deriving the norms
+-- server-side inside resolve_wine_variants_bulk, but this policy was the
+-- other half and was left open: it corroborates the row's own producer/
+-- cuvee (correctly) while placing NO constraint whatsoever on the two
+-- columns that actually ARE the identity key. A direct insert could
+-- therefore pass corroboration on honest raws and still land on any
+-- victim's key. Adding a `producer_norm = identity_normalize_text(
+-- producer)` clause here would have worked, but only for this one path,
+-- and only for as long as the clause and the RPC agreed — the same
+-- "three copies of one gate" shape the round-4 critic already faulted.
+-- Round 6 instead makes the columns GENERATED (see the table DDL above),
+-- so a forged identity key is rejected by the column definition itself
+-- before any policy is consulted, identically for this policy, the RPC,
+-- 0101's table-owner backfill and service_role. That is why the check
+-- below is still expressed against producer/cuvee and needs no
+-- counterpart: producer/cuvee are now provably the sole inputs to the
+-- key, so corroborating them IS corroborating it.
+--
+-- This RLS policy protects DIRECT inserts. It does NOT, by itself,
+-- protect resolve_wine_variants_bulk's own batched insert from aborting
+-- the ENTIRE batch the moment one row's lwin7 fails this check (a WITH
+-- CHECK violation on any one row of a multi-row INSERT fails the whole
+-- statement) — that RPC (0099) carries its own pre-insert corroboration
+-- gate (now also deterministic) for exactly that reason, so a bad LWIN
+-- downgrades just that one row to unverified instead of aborting a
+-- 5,000-row import chunk. 0101's backfill carries its own copy of the
+-- corroboration logic too (reusing identity_normalize_text() directly,
+-- not duplicating the expression) — the CHECK CONSTRAINT is what makes
+-- the OUTCOME safe there even if that logic ever drifted; the RLS
+-- policy and the RPC gate exist to make the CREATE decision correct in
+-- the first place, not merely safe-by-constraint.
+create policy "members can insert canonical_wines"
+  on public.canonical_wines for insert to authenticated
+  with check (
+    identity_status = 'unverified'
+    or (
+      identity_status = 'lwin_verified'
+      and lwin7 is not null
+      and exists (
+        select 1 from public.lwin_catalog lc
+        where lc.lwin_id = lwin7
+          -- `canonical_wines.producer`/`.cuvee` MUST be table-qualified
+          -- here, not bare — lwin_catalog also has its own `producer`
+          -- column, and an unqualified reference inside this subquery
+          -- resolves to lc.producer (the subquery's own scope), not the
+          -- row being inserted, silently turning this into `x = x`
+          -- (always true). Caught live during round-5 verification: the
+          -- unqualified form let Pichon Lalande's own text pass
+          -- corroboration against Pichon Baron's catalog row, because
+          -- the check was accidentally comparing Baron's catalog
+          -- producer to itself. `lwin_catalog` has no `cuvee` or
+          -- `identity_status` column, so those bare references above are
+          -- not at risk — only the two names it happens to share with
+          -- canonical_wines.
+          and public.identity_normalize_text(canonical_wines.producer) = public.identity_normalize_text(lc.producer)
+          and string_to_array(public.identity_normalize_text(canonical_wines.cuvee), ' ') <@ string_to_array(public.identity_normalize_text(lc.display_name), ' ')
       )
-      on conflict (restaurant_id, lower(producer), lower(name), coalesce(vintage, 0), size_ml)
-      do update set
-        varietal = coalesce(excluded.varietal, wines.varietal),
-        region   = coalesce(excluded.region, wines.region),
-        country  = coalesce(excluded.country, wines.country)
-      returning id into wine_id;
-    end if;
+    )
+  );
 
-    wine_ids := wine_ids || wine_id;
-  end loop;
+-- P2 ROUND-5 FIX (D9-residual): closes the unverified-squat path at the
+-- schema level, universally, regardless of insert path or role. See the
+-- policy comment above for the full history.
+alter table public.canonical_wines
+  add constraint canonical_wines_lwin7_requires_verified
+  check (lwin7 is null or identity_status = 'lwin_verified');
 
-  return wine_ids;
-end;
-$$;
+-- No update/delete policy for authenticated or anon: this table is
+-- append-mostly. The only sanctioned mutation paths are
+-- resolve_wine_variants_bulk (0099, insert-only) and merge_canonical_wines
+-- (0100, service-role only, which both updates referrers and deletes the
+-- source row under its own privileges).
+--
+-- P2 ROUND-2 FIX (D4 — scratchpad db-audit/verify/P2-critic-r1.md):
+-- created_by_restaurant_id is audit-only per this table's own design (see
+-- the table comment above), but §8 of
+-- docs/plans/2026-08-23-p2-identity-spine.md only evaluated that column
+-- against a WRITE-corruption threat model and never asked whether a
+-- global, any-authenticated-readable table should expose it for READING.
+-- The critic reproduced live that it does: any signed-in user at any
+-- restaurant can read which OTHER restaurant first stocked a given wine —
+-- a narrow but real competitive-intelligence leak, and — combined with
+-- 0029_public_restaurant_read.sql's public restaurant-name policy — a
+-- restaurant's own name is reachable from it too. Deliberate decision:
+-- restrict, not merely document. No app code anywhere reads
+-- created_by_restaurant_id or created_by_user_id via the authenticated
+-- role (confirmed by grep across src/**), so there is no functional loss,
+-- and RETURNING clauses on this table (resolve_wine_variants_bulk, 0099)
+-- never reference either column, so this cannot break the one write path
+-- that populates them. Column-level GRANT (not a second RLS policy —
+-- Postgres RLS is row-level only) is the standard mechanism for
+-- restricting a subset of columns on an otherwise-readable table; per
+-- has_table_privilege's own semantics (true if the role holds privilege
+-- on ANY column), the existing "authenticated can select ...
+-- canonical_wines" pgTAP assertion in
+-- supabase/tests/0097_identity_spine_grants.sql is unaffected. Both
+-- created_by_* columns get the same treatment since they share the exact
+-- same audit-only justification and the same platform-wide-read shape —
+-- leaving one restricted and its sibling open would be an inconsistency,
+-- not a decision.
+grant select (
+  id, producer, cuvee, producer_norm, cuvee_norm, colour, region, country,
+  lwin7, identity_status, created_at, updated_at
+) on table public.canonical_wines to authenticated;
+grant insert on table public.canonical_wines to authenticated;
 
-revoke all on function public.find_or_create_wines_batch(uuid, jsonb) from public;
-grant execute on function public.find_or_create_wines_batch(uuid, jsonb) to authenticated;
+-- === 0098_wine_variants.sql ===
+-- 0098_wine_variants.sql
+-- P2 — wine identity spine, part 2: the tenant-scoped identity table, plus
+-- the wines/wine_lineages hooks that let existing per-tenant rows point at
+-- it.
+--
+-- wine_variants is one restaurant's claim on one (canonical_wine, vintage,
+-- size) tuple. It is restaurant-scoped (unlike canonical_wines) because
+-- Terroir's inventory model is restaurant-scoped SaaS — a global vintage+
+-- format catalog shared across tenants would recreate exactly the cross-
+-- tenant-write risk C01/C05/C06 already demonstrate elsewhere in this
+-- schema. vintage and size_ml are the identity keys here, and per
+-- docs/plans/2026-08-23-p2-identity-spine.md §6 they are NEVER fuzzy-
+-- matched — only producer/cuvée text (canonical_wines) ever passes through
+-- trigram similarity, and only to suggest.
+--
+-- wines is extended, not replaced: it keeps being the authoritative
+-- per-tenant operational row (inventory, pours, pricing, everything
+-- accumulated across 96 migrations). wine_variant_id is deliberately NOT
+-- unique on wines — two wines rows resolving to the same variant because
+-- of spelling drift is the exact "possible duplicate" signal a review
+-- surface wants, cheaper to detect (GROUP BY HAVING count(*) > 1) than to
+-- prevent by force.
 
-create or replace function public.match_lwin_batch(p_wine_ids uuid[])
-returns table (wine_id uuid, lwin_id text, score float)
-language plpgsql security invoker set search_path = public
-as $$
-declare
-  w record;
-  m record;
-begin
-  for w in
-    select id, producer, name, country, region, varietal
-    from public.wines
-    where id = any(p_wine_ids) and wines.lwin_id is null
-  loop
-    select * into m from public.match_lwin(w.producer, w.name);
-    if m.lwin_id is not null then
-      update public.wines set
-        lwin_id  = m.lwin_id,
-        country  = coalesce(wines.country, m.country),
-        region   = coalesce(wines.region, m.region),
-        varietal = coalesce(wines.varietal, m.varietal)
-      where id = w.id;
+create table public.wine_variants (
+  id                uuid        primary key default gen_random_uuid(),
+  restaurant_id     uuid        not null references public.restaurants(id) on delete cascade,
+  canonical_wine_id uuid        not null references public.canonical_wines(id) on delete restrict,
+  vintage           int         check (vintage is null or vintage between 1900 and extract(year from now())::int + 1),
+  size_ml           int         not null default 750 check (size_ml > 0),
+  lwin11            text        check (lwin11 ~ '^[0-9]{11}$'),
+  lwin16            text        check (lwin16 ~ '^[0-9]{16}$'),
+  gtin              text        check (gtin ~ '^[0-9]{8,14}$'),
+  display_name      text,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
 
-      wine_id := w.id;
-      lwin_id := m.lwin_id;
-      score   := m.score;
-      return next;
-    end if;
-  end loop;
-end;
-$$;
+comment on table public.wine_variants is
+  'One restaurant''s claim on one (canonical_wine_id, vintage, size_ml) '
+  'identity tuple. vintage=null means NV, matching the wines.vintage '
+  'convention. size_ml — never the free-text wines/inventory_items '
+  '"format" column — is the sole identity key for bottle format '
+  '(docs/plans/2026-08-23-p2-identity-spine.md §5): "Magnum" vs "1.5L '
+  'Magnum" vs "1500ml" all describe size_ml=1500 and must never fork the '
+  'identity.';
 
-revoke all on function public.match_lwin_batch(uuid[]) from public;
-grant execute on function public.match_lwin_batch(uuid[]) to authenticated;
+-- Composite-FK target for wines.wine_variant_id below.
+create unique index wine_variants_id_restaurant_idx
+  on public.wine_variants (id, restaurant_id);
 
--- === 0080_wine_list_items_tenant_fk.sql ===
--- 0080_wine_list_items_tenant_fk.sql
---
--- C05 (db audit 2026-08-23) — the wine_list_items INSERT/UPDATE policies
--- validate only the SECTION's tenant (via section_id -> wine_list_sections
--- -> wine_lists.restaurant_id), never the WINE's. wine_id and section_id
--- are two independent foreign keys with no relationship enforced between
--- their tenants.
---
--- Verified (.../scratchpad/db-audit/verify/V1-tenancy.md, C05): cross-
--- tenant insert succeeded in BOTH directions (201 Created, no FK/RLS
--- rejection), and linking tenant A's private (never-published) wine into
--- tenant B's published list made it anonymously readable — proven with a
--- real anon GET before (empty) and after (A's wine, full price fields)
--- publishing B's list. No compromise of A's account required, only
--- knowledge of A's wine UUID — and C01's now-fixed open catalog-write RPCs
--- previously meant an attacker didn't even need a leaked id.
---
--- Fix, two independent layers matching the fix sketch:
---
---  1. Denormalize restaurant_id onto wine_list_items, matching
---     wines.restaurant_id, enforced by a COMPOSITE FK to a new
---     wines(id, restaurant_id) unique constraint. This makes "this item's
---     restaurant_id equals its wine's real restaurant_id" a hard schema
---     invariant — true regardless of RLS, and even for a future
---     SECURITY DEFINER path that bypasses RLS entirely.
---
---  2. wine_list_sections has no restaurant_id column of its own (it is one
---     join further from restaurants than wine_list_items), so "this item's
---     restaurant_id equals its SECTION's real restaurant_id" cannot be
---     expressed as a second composite FK — a composite FK can only pin a
---     column to a value that literally exists in another table's unique
---     key, not to a value derived via a join. That side is enforced by a
---     BEFORE INSERT/UPDATE trigger that resolves the section's restaurant
---     via wine_list_sections -> wine_lists and rejects any mismatch. Same
---     "pure data-integrity check, not a permission gate" shape as
---     derive_wine_lineage (0054) — SECURITY DEFINER so it resolves the
---     section's true restaurant deterministically regardless of the
---     caller's own RLS visibility into wine_list_sections, rather than
---     the "NOT SECURITY DEFINER, needs current_user" shape of the owner-
---     only triggers (0022/0023), which are role checks, not data checks.
---
--- With both layers in place, both attack directions the verifier ran are
--- closed: attaching A's wine into B's section requires restaurant_id to
--- equal A's wine's restaurant (composite FK) AND B's section's restaurant
--- (trigger) simultaneously — impossible unless A and B are the same
--- tenant. The INSERT/UPDATE RLS policies are also updated to check the
--- new column directly (`is_member(restaurant_id)` plus a section-restaurant
--- match), so the common case still fails with a clean RLS 42501 before
--- ever reaching the trigger or the FK.
---
--- Deliberately NOT touched: the SELECT policies (including C06's anon
--- "published list items are public" hidden-column fix, and the read/delete
--- policies' existing section-join shape) — out of this cluster's scope.
--- Once this migration lands, a mismatched wine/section pairing can no
--- longer be CREATED, which is what made C06's hidden-item leak scenario
--- reachable in the first place; C06's own migration fixes the independent
--- hidden-bypass bug on its own terms.
---
--- Lock note: wines and wine_list_items are both expected to be small
--- (hundreds to low thousands of rows per tenant) at this stage — the ALTER
--- TABLE ADD CONSTRAINT / backfill UPDATE here take a plain ACCESS EXCLUSIVE
--- lock for the duration of a full-table scan, acceptable at current scale.
--- If either table is materially larger by the time this runs against a
--- real environment, backfill in batches and add the FK as NOT VALID +
--- VALIDATE CONSTRAINT (a separate, non-blocking step) instead.
---
--- DOWN: drops the trigger, the composite FK, the column, and the wines
--- uniqueness constraint, and restores the pre-fix INSERT/UPDATE policies
--- verbatim. See down/0080_wine_list_items_tenant_fk.down.sql.
+-- The exact-match identity key. coalesce(vintage,0) matches the existing
+-- wines_dedup_idx (0002) convention exactly, so NV variants collide on 0
+-- the same way wines.vintage always has.
+create unique index wine_variants_identity_idx
+  on public.wine_variants (restaurant_id, canonical_wine_id, coalesce(vintage, 0), size_ml);
 
--- ── 1. wines(id, restaurant_id) — composite FK target ──────────────────
--- id alone is already globally unique (primary key), so this adds no new
--- restriction on wines data; it exists purely so wine_list_items can FK
--- against the (id, restaurant_id) pair.
+create unique index wine_variants_gtin_idx
+  on public.wine_variants (restaurant_id, gtin)
+  where gtin is not null;
+
+create index wine_variants_restaurant_id_idx on public.wine_variants (restaurant_id);
+create index wine_variants_canonical_wine_id_idx on public.wine_variants (canonical_wine_id);
+
+create trigger wine_variants_set_updated_at
+  before update on public.wine_variants
+  for each row execute function public.set_updated_at();
+
+alter table public.wine_variants enable row level security;
+
+create policy "members can read wine_variants"
+  on public.wine_variants for select to authenticated
+  using (public.is_member(restaurant_id));
+
+create policy "members can insert wine_variants"
+  on public.wine_variants for insert to authenticated
+  with check (public.is_member(restaurant_id));
+
+create policy "members can update wine_variants"
+  on public.wine_variants for update to authenticated
+  using (public.is_member(restaurant_id))
+  with check (public.is_member(restaurant_id));
+
+-- No delete policy: identity records are permanent audit trail, same
+-- posture as import_batches/stock_adjustments.
+
+grant select, insert, update on table public.wine_variants to authenticated;
+
+-------------------------------------------------------------------------------
+-- wines hooks
+-------------------------------------------------------------------------------
+
 alter table public.wines
-  add constraint wines_id_restaurant_id_key unique (id, restaurant_id);
+  add column wine_variant_id   uuid,
+  add column canonical_wine_id uuid references public.canonical_wines(id) on delete set null;
 
--- ── 2. wine_list_items.restaurant_id — denormalized, backfilled, FK'd ──
-alter table public.wine_list_items
-  add column restaurant_id uuid references public.restaurants(id) on delete cascade;
+-- C17's own fix sketch (composite FK), applied preventively on a brand-new
+-- column: a wines row pointing at another tenant's wine_variant becomes a
+-- constraint violation, not a latent cross-tenant bug.
+--
+-- P2 ROUND-3 FIX (D1-residual — scratchpad db-audit/verify/P2-critic-r2.md):
+-- round 1 shipped ON DELETE CASCADE, which let a single wine_variants
+-- delete silently destroy the wines row pointing at it plus every one of
+-- its own CASCADE-tied audit children — CRITICAL, fixed in round 2 by
+-- switching to ON DELETE SET NULL (wine_variant_id), a Postgres 15+
+-- column-scoped composite-FK action. Round 2's own comment then rejected
+-- plain RESTRICT (round 1's original recommendation, and the posture of
+-- the sibling wine_variants_canonical_wine_id_fkey below) on the theory
+-- that a restaurant teardown fires wine_variants.restaurant_id's CASCADE
+-- and wines.restaurant_id's CASCADE in an unguaranteed order, and RESTRICT
+-- would raise a spurious violation if the wine_variants side won that
+-- race.
+--
+-- The round-2 critic tested that specific claim directly rather than
+-- reasoning about it: dropped and recreated wines_restaurant_id_fkey to
+-- give it deliberately LATER trigger OIDs than
+-- wine_variants_restaurant_id_fkey's, added AFTER DELETE diagnostic
+-- triggers logging clock_timestamp() to PROVE the reversed order rather
+-- than infer it, and reran restaurant teardown under plain RESTRICT.
+-- It never fired — 8/8 in natural order, then again under the
+-- diagnostically-proven-reversed order. Independently reproduced here
+-- (same technique — forced trigger-OID reversal, real NOTICE timestamps
+-- confirming wine_variants deleted before wines, plain RESTRICT on the
+-- fixture): teardown still succeeded with zero errors. This is consistent
+-- with how Postgres actually implements NOT DEFERRABLE FK RESTRICT/
+-- NO ACTION checks — as a true end-of-statement check, not a check at the
+-- moment the referenced row disappears — so by the time it runs, every
+-- cascade delete across the whole affected object graph (both siblings,
+-- regardless of which fired first) has already completed, and there is
+-- never a live wines row left pointing at an already-deleted
+-- wine_variants row for the check to trip on.
+--
+-- So the justification for SET NULL was wrong, and SET NULL itself
+-- reopened a milder version of the SAME failure class round 1 was
+-- CRITICAL over: a variant delete that silently severs a wine's resolved
+-- identity (wine_variant_id AND canonical_wine_id, both nulled by
+-- wines_derive_canonical_wine_id below) with no error, no
+-- identity_merge_log entry, and no code path that ever re-heals it.
+-- Quieter than destroying the wine, but still an unguarded, unlogged
+-- mutation of identity state — exactly what identity_merge_log and the
+-- merge-completeness testing apparatus exist to prevent everywhere else.
+--
+-- Fixed to plain RESTRICT, now that it is proven safe under both natural
+-- and forced-reversed cascade ordering. This matches the sibling
+-- wine_variants_canonical_wine_id_fkey's posture and the design's own
+-- stated philosophy: force an explicit, guarded, logged path (a real
+-- merge/detach operation, not a bare DELETE) for any identity-table
+-- mutation. Since no current code path deletes a wine_variants row at all
+-- (confirmed in round 1), RESTRICT costs nothing today and simply ensures
+-- that whenever such a delete IS attempted in the future, it fails loudly
+-- instead of silently detaching — forcing whoever writes that future code
+-- to go through (or add) a guarded, logged path instead.
+-- Regression test (live, real service-role client, full 10-child-table
+-- fixture, plus a forced-reversal reproduction): the two "D1 fix" tests
+-- at the end of src/domains/identity/merge.test.ts.
+alter table public.wines
+  add constraint wines_variant_tenant_fk
+    foreign key (wine_variant_id, restaurant_id)
+    references public.wine_variants(id, restaurant_id)
+    on delete restrict;
 
-update public.wine_list_items wli
-set restaurant_id = w.restaurant_id
-from public.wines w
-where w.id = wli.wine_id
-  and wli.restaurant_id is null;
+create index wines_wine_variant_id_idx on public.wines (wine_variant_id);
+create index wines_canonical_wine_id_idx on public.wines (canonical_wine_id);
 
-alter table public.wine_list_items
-  alter column restaurant_id set not null;
+comment on column public.wines.wine_variant_id is
+  'Not unique by design — two wines rows sharing a wine_variant_id because '
+  'of pre-normalization spelling drift is the possible-duplicate signal, '
+  'not an error. See merge_wines (0100) for the sanctioned collapse path.';
 
-alter table public.wine_list_items
-  add constraint wine_list_items_wine_restaurant_fkey
-  foreign key (wine_id, restaurant_id) references public.wines (id, restaurant_id)
-  on delete restrict;
+comment on column public.wines.canonical_wine_id is
+  'Denormalized convenience (avoids a join through wine_variants for '
+  'every list/search view). Kept in sync by '
+  'wines_derive_canonical_wine_id below, not by convention — a '
+  'convention-only invariant here would reproduce the drift C17 '
+  'demonstrated for import_batch_rows'' two independently-writable FKs.';
 
-comment on column public.wine_list_items.restaurant_id is
-  'C05 (db audit 2026-08-23): denormalized from wines.restaurant_id, enforced '
-  'by the composite FK wine_list_items_wine_restaurant_fkey — a row can never '
-  'reference a wine belonging to a different restaurant. Combined with the '
-  'wine_list_items_enforce_section_restaurant trigger (which checks the '
-  'section side of the same invariant) and the updated insert/update RLS '
-  'policies below, this closes the cross-tenant wine/section linkage bug.';
-
--- ── 3. Section-side invariant: restaurant_id must match the section's ──
-create or replace function public.wine_list_items_enforce_section_restaurant()
+create or replace function public.wines_derive_canonical_wine_id()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  v_section_restaurant_id uuid;
 begin
-  select wl.restaurant_id into v_section_restaurant_id
-  from public.wine_list_sections s
-  join public.wine_lists wl on wl.id = s.wine_list_id
-  where s.id = new.section_id;
-
-  if v_section_restaurant_id is null then
-    raise exception 'wine_list_items.section_id % does not resolve to a restaurant', new.section_id
-      using errcode = '23503';
+  if new.wine_variant_id is null then
+    new.canonical_wine_id := null;
+  else
+    select canonical_wine_id into new.canonical_wine_id
+    from public.wine_variants
+    where id = new.wine_variant_id;
   end if;
-
-  if v_section_restaurant_id <> new.restaurant_id then
-    raise exception
-      'wine_list_items.restaurant_id (%) does not match its section''s restaurant (%)',
-      new.restaurant_id, v_section_restaurant_id
-      using errcode = '23514';
-  end if;
-
   return new;
 end;
 $$;
 
-comment on function public.wine_list_items_enforce_section_restaurant() is
-  'C05 (db audit 2026-08-23): BEFORE INSERT/UPDATE guard — resolves section_id''s '
-  'real restaurant via wine_list_sections -> wine_lists and rejects any row whose '
-  'restaurant_id disagrees. SECURITY DEFINER so the check is deterministic '
-  'regardless of the caller''s own RLS visibility into wine_list_sections '
-  '(a pure data-integrity check, not a role/permission gate).';
+create trigger wines_derive_canonical_wine_id
+  before insert or update of wine_variant_id
+  on public.wines
+  for each row execute function public.wines_derive_canonical_wine_id();
 
-create trigger wine_list_items_enforce_section_restaurant
-  before insert or update of section_id, restaurant_id on public.wine_list_items
-  for each row execute function public.wine_list_items_enforce_section_restaurant();
+-------------------------------------------------------------------------------
+-- wine_lineages hook — inert light-touch link. No trigger, no backfill,
+-- no consumer in P2; exists so a future piece can join tenant lineages to
+-- global identity without a schema change.
+-------------------------------------------------------------------------------
 
--- ── 4. INSERT/UPDATE RLS policies now check both sides directly ────────
-drop policy "members can insert list items" on public.wine_list_items;
-create policy "members can insert list items"
-  on public.wine_list_items for insert to authenticated
-  with check (
-    public.is_member(restaurant_id)
-    and exists (
-      select 1 from public.wine_list_sections s
-      join public.wine_lists wl on wl.id = s.wine_list_id
-      where s.id = section_id and wl.restaurant_id = restaurant_id
-    )
-  );
+alter table public.wine_lineages
+  add column canonical_wine_id uuid references public.canonical_wines(id) on delete set null;
 
-drop policy "members can update their list items" on public.wine_list_items;
-create policy "members can update their list items"
-  on public.wine_list_items for update to authenticated
-  using (exists (
-    select 1 from public.wine_list_sections s
-    join public.wine_lists wl on wl.id = s.wine_list_id
-    where s.id = section_id and public.is_member(wl.restaurant_id)
-  ))
-  with check (
-    public.is_member(restaurant_id)
-    and exists (
-      select 1 from public.wine_list_sections s
-      join public.wine_lists wl on wl.id = s.wine_list_id
-      where s.id = section_id and wl.restaurant_id = restaurant_id
-    )
-  );
+create index wine_lineages_canonical_wine_id_idx on public.wine_lineages (canonical_wine_id);
 
--- === 0081_anon_column_scoping.sql ===
--- 0081_anon_column_scoping.sql
+-- === 0099_wine_identity_resolution.sql ===
+-- 0099_wine_identity_resolution.sql
+-- P2 — wine identity spine, part 3: the alias ledger and the dedup
+-- service's DB entrypoint.
 --
--- C06 (db audit 2026-08-23) — 0074_public_api_grants.sql gave `anon` full
--- table-level SELECT (all columns, no column-level grant) on restaurants
--- and wines. RLS is row-level only, so a `select=*` request against the
--- raw Data API (not the SSR page's own curated column list) returns every
--- column for any row the row policy allows — including internal
--- pricing-strategy and ops-tuning columns no anon consumer needs.
---
--- Verified (.../scratchpad/db-audit/verify/V1-tenancy.md, C06): anon
--- `select=*` on a published wine returned pricing_target_pour_cost_pct,
--- pricing_target_markup_ratio, pricing_dismissed_until, retail_min/max/
--- median/retailer_count/refreshed_at, manual_overrides, and overpaid_flag;
--- on the restaurant row it returned auto_eightysix_from_inventory,
--- eightysix_ml_threshold, default_target_pour_cost_pct, and
--- default_target_markup_ratio. Separately, a wine_list_items row with
--- hidden = true remained anon-readable with full price fields, because
--- the "published list items are public" policy never checked `hidden`.
---
--- Correction the verifier made to the original claim: actual cost basis
--- (inventory_items.unit_cost) is NOT anon-exposed — inventory_items has no
--- anon grant at all (0074 only lists restaurants/wine_lists/
--- wine_list_sections/wine_list_items/wines). What leaks is pricing
--- *strategy* metadata and hidden items, not raw COGS. This migration does
--- not touch inventory_items.
---
--- Anon read-path audit (required before narrowing anon access — see the
--- fix-lane brief): grepped the whole app for every anon/public Supabase
--- client construction (`createAnonClient` / `getSupabasePublicConfig`,
--- excluding proxy.ts which only refreshes sessions, never queries data).
--- Exactly two consumers of wines/restaurants columns exist:
---   - src/app/list/[slug]/page.tsx        (public menu + its metadata)
---   - src/app/list/[slug]/print/page.tsx  (print view + its metadata)
--- Both select the *same* wines columns (id, name, producer, vintage,
--- varietal, region, serving_temp_min, serving_temp_max,
--- serving_temp_label, is_eightysixed) and the same restaurants columns
--- (name, eightysix_strategy, logo_url) — no other anon path touches these
--- tables. list/[slug]/page.tsx's own bin-code lookup uses the SERVICE ROLE
--- client already (fetchPublicBinCodes), not anon — untouched here.
---
--- eightysix_strategy is deliberately KEPT anon-readable even though the
--- original audit grouped it with "internal ops intelligence": the public
--- page reads it directly to decide whether to hide or mark 86'd items
--- (`eightysixStrategy = restaurant?.eightysix_strategy === "mark" ? ... `)
--- — removing it would break the public menu's own rendering. Only the
--- genuinely internal, anon-unused sibling knobs (eightysix_ml_threshold,
--- auto_eightysix_from_inventory, default_target_pour_cost_pct,
--- default_target_markup_ratio) are excluded.
---
--- Fix: revoke anon's table-level SELECT on wines and restaurants, replace
--- with column-level SELECT grants covering exactly the columns above (plus
--- each table's `id`, required for PostgREST's FK-embed join condition —
--- Postgres column privileges cover columns used in a join's ON/WHERE
--- condition, not only the output list). This is transparent to PostgREST's
--- embedding (same FK graph, same table names — no application code
--- change) and to every existing anon query, which already only names
--- these columns; it only blocks `select=*` / explicit-other-column
--- requests against the raw Data API. wine_lists and wine_list_sections
--- keep their existing full table-level anon grant unchanged — neither has
--- any pricing/ops column, only display config (name, template, slug,
--- is_published, position, etc.).
---
--- wine_list_items keeps its table-level anon grant too (no sensitive
--- columns there — glass_price/bottle_price ARE the customer-facing menu
--- prices) but gets its SELECT policy's predicate fixed to also require
--- hidden = false, closing the second, independent leak. The app's SSR
--- page already filters `!item.hidden` client-side after fetching; this
--- makes that filtering also true at the RLS level, closing the raw-API
--- bypass without changing what the rendered page shows.
---
--- DOWN: restores the original blanket anon table-level SELECT on wines
--- and restaurants, and the pre-fix wine_list_items anon policy (no hidden
--- check). See down/0081_anon_column_scoping.down.sql.
-
-revoke select on table public.wines, public.restaurants from anon;
-
-grant select (
-  id, name, producer, vintage, varietal, region,
-  serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed
-) on public.wines to anon;
-
-grant select (
-  id, name, eightysix_strategy, logo_url
-) on public.restaurants to anon;
-
-drop policy "published list items are public" on public.wine_list_items;
-create policy "published list items are public"
-  on public.wine_list_items for select to anon
-  using (
-    hidden = false
-    and exists (
-      select 1 from public.wine_list_sections s
-      join public.wine_lists wl on wl.id = s.wine_list_id
-      where s.id = section_id and wl.is_published = true
-    )
-  );
-
--- === 0082_import_batch_rows_tenant_fk.sql ===
--- 0082_import_batch_rows_tenant_fk.sql
---
--- C17 (db audit 2026-08-23) — import_batch_rows.batch_id and .restaurant_id
--- are two INDEPENDENT foreign keys (batch_id -> import_batches(id),
--- restaurant_id -> restaurants(id)) with no relationship enforced between
--- them. The INSERT policy validates only the row's own restaurant_id
--- (`is_member_with_role(restaurant_id, 'staff')`), never that batch_id
--- actually belongs to that restaurant.
---
--- Verified (.../scratchpad/db-audit/verify/V1-tenancy.md, C17), practical
--- blast radius corrected from the original claim: this is a DoS on a
--- VICTIM's own bulk-import confirm step, reachable by ANY authenticated
--- user with ZERO membership in the victim tenant — not only a dual-
--- membership scenario. ownerB (no membership in restaurant A) inserted a
--- row into A's real batch tagged with B's OWN restaurant_id at
--- row_number = 1 (201 Created — RLS only checked restaurant_id = B, which
--- passed for B). ownerA's subsequent real CSV-confirm insert (their own
--- rows 1-3) then failed outright: 409 Conflict, 23505 unique violation on
--- `import_batch_rows_batch_id_row_number_key`, because a stranger had
--- already occupied row_number = 1 in A's batch. batch_id is not a secret —
--- it's returned directly on batch creation and visible in any browser
--- network tab during the real confirm flow — so this needs no privileged
--- access, only observing or guessing a UUID. Separately, ownerB could call
--- apply_import_batch_chunk('<A_batch>') and have it process B's own
--- poison row as a "borrowed" container, even though the resulting write
--- still landed correctly under B (apply_import_batch_chunk is SECURITY
--- INVOKER, so RLS still scoped that specific write to B).
---
--- Fix, per the fix sketch:
---   1. UNIQUE (id, restaurant_id) on import_batches (id is already the
---      primary key, so this restricts nothing new — it exists purely to
---      be a composite FK target).
---   2. Replace import_batch_rows' two independent FKs
---      (import_batch_rows_batch_id_fkey, import_batch_rows_restaurant_id_fkey)
---      with ONE composite FK: (batch_id, restaurant_id) REFERENCES
---      import_batches (id, restaurant_id). This makes "this row's
---      restaurant_id equals its batch's real restaurant_id" a hard schema
---      invariant, independent of RLS — the exact poison-row insert the
---      verifier ran (batch_id = A's batch, restaurant_id = B) can no
---      longer succeed: (A_batch_id, B) does not exist as a pair in
---      import_batches, because import_batches' own row for A_batch has
---      restaurant_id = A. restaurant_id's referential integrity (must be
---      a real restaurants.id) is preserved transitively — import_batches
---      itself keeps its own restaurant_id -> restaurants(id) FK, unchanged.
---   3. apply_import_batch_chunk re-validates the batch's own tenant before
---      processing (belt-and-suspenders — with the composite FK in place, a
---      poison row across tenants can no longer exist, so this mainly turns
---      a silent "processed zero rows" no-op for a non-member's batch id
---      into an explicit, actionable error). Uses the exact same "RLS
---      already filtered this to batches I'm a member of — a cross-tenant
---      id is indistinguishable from a nonexistent one" idiom
---      revert_import_batch (0076) already established for this table.
---
--- If any existing row in import_batch_rows already violates the new
--- invariant (its restaurant_id disagrees with its batch's), the ADD
--- CONSTRAINT step below fails loudly — that is the intended behavior: it
--- means a real data-integrity problem exists and must be investigated
--- before the schema can safely lock it down, not something this migration
--- should silently paper over.
---
--- Lock note: import_batches/import_batch_rows are expected to be small
--- (bulk-import metadata, not the 20k-row inventory itself) at this stage —
--- the ADD CONSTRAINT here takes a brief ACCESS EXCLUSIVE lock for a
--- full-table validation scan, acceptable at current scale. If either table
--- grows materially, add the FK as NOT VALID + a separate VALIDATE
--- CONSTRAINT step instead.
---
--- DOWN: drops the composite FK and the import_batches uniqueness
--- constraint, restores the two independent FKs, and restores
--- apply_import_batch_chunk's pre-fix body. See
--- down/0082_import_batch_rows_tenant_fk.down.sql.
-
--- ── 1. import_batches(id, restaurant_id) — composite FK target ─────────
-alter table public.import_batches
-  add constraint import_batches_id_restaurant_id_key unique (id, restaurant_id);
-
--- ── 2. import_batch_rows: one composite FK instead of two independent ──
-alter table public.import_batch_rows
-  drop constraint import_batch_rows_batch_id_fkey,
-  drop constraint import_batch_rows_restaurant_id_fkey,
-  add constraint import_batch_rows_batch_restaurant_fkey
-    foreign key (batch_id, restaurant_id)
-    references public.import_batches (id, restaurant_id)
-    on delete cascade;
-
-comment on constraint import_batch_rows_batch_restaurant_fkey on public.import_batch_rows is
-  'C17 (db audit 2026-08-23): replaces the old independent batch_id/'
-  'restaurant_id FKs. Forces every row''s restaurant_id to match its '
-  'batch''s real restaurant_id — a cross-tenant "poison row" (real batch, '
-  'wrong tenant) can no longer be inserted, regardless of RLS.';
-
--- ── 3. apply_import_batch_chunk: re-validate the batch's own tenant ────
-create or replace function public.apply_import_batch_chunk(p_batch_id uuid, p_limit integer default 50)
-returns table (
-  row_id            uuid,
-  row_number        integer,
-  outcome           text,
-  inventory_item_id uuid,
-  error_message     text
-)
-language plpgsql
-security invoker
-set search_path = public
-as $$
-declare
-  v_row public.import_batch_rows%rowtype;
-  v_unit_cost numeric(10,2);
-  v_wine_id uuid;
-  v_inventory_id uuid;
-begin
-  -- C17: re-validate the batch's own tenant before processing any rows.
-  -- RLS on import_batches already filters this to "batches I'm a member
-  -- of" (the same idiom revert_import_batch, 0076, uses) — a batch id
-  -- belonging to another restaurant is simply invisible here, which reads
-  -- identically to a nonexistent one. With the composite FK added by this
-  -- migration, a row whose restaurant_id disagrees with its batch's can
-  -- no longer exist in the first place, so this is defense in depth: it
-  -- turns what would otherwise be a silent "processed zero rows" no-op
-  -- for a non-member's batch id into an explicit, actionable error.
-  if not exists (select 1 from public.import_batches where id = p_batch_id) then
-    raise exception 'import batch % not found', p_batch_id using errcode = 'P0002';
-  end if;
-
-  for v_row in
-    select r.*
-    from public.import_batch_rows r
-    where r.batch_id = p_batch_id
-      and r.apply_status = 'not_applied'
-      and r.row_state = 'valid'
-      and r.resolution in ('auto', 'include')
-    order by r.row_number
-    limit least(greatest(p_limit, 1), 500)
-    for update skip locked
-  loop
-    begin
-      if v_row.cost_status = 'missing' then
-        if v_row.manual_unit_cost is null then
-          row_id := v_row.id;
-          row_number := v_row.row_number;
-          outcome := 'blocked';
-          inventory_item_id := null;
-          error_message := 'Missing unit cost has no operator-provided value.';
-          return next;
-          continue;
-        end if;
-        v_unit_cost := v_row.manual_unit_cost;
-      else
-        v_unit_cost := nullif(v_row.raw ->> 'unit_cost', '')::numeric(10,2);
-      end if;
-
-      if v_unit_cost is null then
-        row_id := v_row.id;
-        row_number := v_row.row_number;
-        outcome := 'blocked';
-        inventory_item_id := null;
-        error_message := 'Row has no usable unit cost.';
-        return next;
-        continue;
-      end if;
-
-      -- Same dedup key as find_or_create_wines_batch (0006): reuse the
-      -- existing wine if this restaurant already has one, fill in only
-      -- the fields that were previously null, never overwrite.
-      insert into public.wines (
-        restaurant_id, name, producer, vintage, varietal, region, country, size_ml, lwin_id
-      ) values (
-        v_row.restaurant_id,
-        v_row.raw ->> 'name',
-        v_row.raw ->> 'producer',
-        nullif(v_row.raw ->> 'vintage', '')::int,
-        nullif(v_row.raw ->> 'varietal', ''),
-        nullif(v_row.raw ->> 'region', ''),
-        nullif(v_row.raw ->> 'country', ''),
-        coalesce(nullif(v_row.raw ->> 'size_ml', '')::int, 750),
-        v_row.lwin_id
-      )
-      on conflict (restaurant_id, lower(producer), lower(name), coalesce(vintage, 0), size_ml)
-      do update set
-        varietal = coalesce(public.wines.varietal, excluded.varietal),
-        region   = coalesce(public.wines.region, excluded.region),
-        country  = coalesce(public.wines.country, excluded.country),
-        lwin_id  = coalesce(public.wines.lwin_id, excluded.lwin_id)
-      returning id into v_wine_id;
-
-      -- Defensive: an INSERT/ON-CONFLICT-DO-UPDATE...RETURNING that
-      -- somehow yields no row must never silently fall through to
-      -- marking this row applied with a dangling reference — fail this
-      -- row loudly (caught below, retried on the next apply call)
-      -- instead.
-      if v_wine_id is null then
-        raise exception 'wine insert/lookup returned no row for import_batch_row %', v_row.id;
-      end if;
-
-      insert into public.inventory_items (
-        wine_id, restaurant_id, quantity, unit_cost, bin_location, section, format, currency, added_via
-      ) values (
-        v_wine_id,
-        v_row.restaurant_id,
-        coalesce(nullif(v_row.raw ->> 'quantity', '')::int, 0),
-        v_unit_cost,
-        nullif(v_row.raw ->> 'bin', ''),
-        nullif(v_row.raw ->> 'section', ''),
-        nullif(v_row.raw ->> 'format', ''),
-        nullif(v_row.raw ->> 'currency', ''),
-        'manual'
-      )
-      returning id into v_inventory_id;
-
-      if v_inventory_id is null then
-        raise exception 'inventory_items insert returned no row for import_batch_row %', v_row.id;
-      end if;
-
-      update public.import_batch_rows
-      set apply_status = 'applied',
-          applied_inventory_item_id = v_inventory_id,
-          applied_wine_id = v_wine_id,
-          updated_at = now()
-      where id = v_row.id;
-
-      row_id := v_row.id;
-      row_number := v_row.row_number;
-      outcome := 'applied';
-      inventory_item_id := v_inventory_id;
-      error_message := null;
-      return next;
-    exception when others then
-      -- Caught per-row (an implicit savepoint) so one bad row can never
-      -- take the rest of the chunk down with it. The row stays
-      -- 'not_applied' and is retried on the next apply call.
-      row_id := v_row.id;
-      row_number := v_row.row_number;
-      outcome := 'error';
-      inventory_item_id := null;
-      error_message := sqlerrm;
-      return next;
-    end;
-  end loop;
-end;
-$$;
-
-comment on function public.apply_import_batch_chunk(uuid, integer) is
-  'Applies up to p_limit not-yet-applied, eligible rows of one import '
-  'batch. C17 (db audit 2026-08-23): re-validates the batch itself is '
-  'visible (member of its restaurant) before processing any rows. FOR '
-  'UPDATE SKIP LOCKED means concurrent/duplicate calls for the same batch '
-  'never double-apply a row. Each row''s wine-lookup + inventory-insert + '
-  'row-status-update is wrapped in its own exception block, so a single '
-  'row failing never blocks or half-applies the others — call again to '
-  'retry whatever remains not_applied. SECURITY INVOKER: RLS on '
-  'import_batch_rows/wines/inventory_items is the tenant boundary, so a '
-  'batch id from another restaurant is simply invisible to the initial '
-  'SELECT and the loop does nothing.';
-
-revoke all on function public.apply_import_batch_chunk(uuid, integer) from public;
-grant execute on function public.apply_import_batch_chunk(uuid, integer) to authenticated;
-
--- === 0083_background_jobs_enqueue_rpc.sql ===
--- 0083_background_jobs_enqueue_rpc.sql
---
--- C20 (db audit 2026-08-23) — background_jobs' INSERT policy
--- (`is_member_with_role(restaurant_id, 'staff') and created_by = auth.uid()`)
--- applies zero guardrails on anything else in the row: idempotency_key,
--- max_attempts, run_after, and status are all caller-controlled.
---
--- Verified (.../scratchpad/db-audit/verify/V1-tenancy.md, C20), mechanism
--- corrected from the original claim: the DB layer applies zero guardrails
--- (ownership, scheduling, retry caps, idempotency-key integrity) on a
--- direct insert; the worker's own tenant-fetch check in
--- invoice-extract-handler.ts (not RLS, not the DB) is what limits blast
--- radius for a *forged* subject_id, and it does nothing for a *real* one.
--- A freshly created, lowest-privilege `staff` member (the floor of
--- is_member_with_role, not a distinct restriction) inserted a live
--- invoice_extract job with a forged idempotency_key (defeating the
--- database's only double-bill guard, background_jobs_idempotency_key_uniq),
--- max_attempts = 1000 against an app default of 5, and run_after in 1970
--- (immediately runnable) — 201 Created, and claim_invoice_extract_job
--- (simulated as service_role, exactly as the real worker would) picked it
--- up immediately. The reachable exploit is not "forge someone else's
--- data" (invoice-extract-handler.ts's tenant-fetch check does stop that);
--- it's a low-privilege staff member enqueueing their OWN tenant's real,
--- RLS-visible invoice_scans rows directly, bypassing the app's sanctioned
--- enqueue path (src/lib/jobs/enqueue.ts) entirely — multiplying real paid
--- Anthropic/OCR calls per scan past the idempotency guarantee, inflating
--- retries 200x past the designed cap, and (via claim's global,
--- non-tenant-scoped FIFO) monopolizing the shared queue.
---
--- Context: a separate verification lane established this whole subsystem
--- has ZERO live callers in src/app today (enqueueInvoiceExtractJob is
--- called from nowhere yet) — this is real, imminent infrastructure, not
--- yet wired to a route. Fixed properly below; deliberately NOT gold-plated
--- (see the migration's tail comment for what is left for whoever wires it
--- up next).
---
--- Fix, per the fix sketch:
---   1. Deny `authenticated` INSERT/UPDATE/DELETE on background_jobs
---      entirely — drop the old permissive INSERT policy and revoke the
---      table-level grants (0074 gave insert/update/delete blanket to
---      authenticated on all tables; there was never an UPDATE or DELETE
---      policy for this table, so this mainly formalizes what RLS already
---      denied for those two, and closes the one real gap: INSERT).
---   2. Route all enqueueing through `enqueue_invoice_extract_job`, a new
---      SECURITY DEFINER RPC that: verifies the caller is a staff-or-above
---      member of p_restaurant_id; verifies p_scan_id is a real
---      invoice_scans row that actually belongs to p_restaurant_id (subject
---      ownership, same tenant-fetch shape invoice-extract-handler.ts
---      already uses); pins idempotency_key = p_scan_id and created_by =
---      auth.uid() (both now ignore any caller-supplied value — there is no
---      such parameter); forces max_attempts to the constant default
---      (5 — must track DEFAULT_MAX_ATTEMPTS in
---      src/lib/jobs/constants.ts if that ever changes); and ignores
---      caller-supplied run_after/status entirely (always 'queued', always
---      run_after = now()). Preserves the existing revive-a-dead-job
---      behavior enqueue.ts implemented client-side, now atomic and
---      server-side.
---   3. Give claim_invoice_extract_job a per-tenant fairness bound: no more
---      than 3 invoice_extract jobs from the same restaurant may be
---      'processing' at once — a tenant with many queued jobs can no
---      longer occupy every worker slot simultaneously and starve every
---      other tenant's queue. Kept as an in-body constant, not a new
---      parameter: adding a parameter would change the function's
---      signature and `create or replace function` cannot alter an
---      existing function's parameter list in place (it would silently
---      create a SECOND overload alongside the original text-only one,
---      leaving the old, fairness-free version still callable under the
---      same name) — same signature avoids that hazard and needs no
---      change to claim.ts.
---
--- src/lib/jobs/enqueue.ts and its test are updated in this same fix
--- commit to call the new RPC instead of inserting/updating background_jobs
--- directly (that file's raw table access would otherwise silently break
--- the instant this migration's REVOKE lands, for whichever future caller
--- wires it up with a normal per-request authenticated client). Every OTHER
--- consumer of background_jobs is untouched and unaffected by the REVOKE:
---   - pricing_recommendations/cellar_health recompute
---     (src/lib/pricing-recommendations/recompute.ts,
---     src/lib/cellar-health/recompute.ts) already insert/update
---     background_jobs exclusively through a SERVICE-ROLE admin client
---     (src/app/api/pricing-recommendations/recompute/route.ts,
---     src/app/api/cellar-health/recompute/route.ts) — service_role
---     bypasses RLS and table grants entirely, so it is untouched by this
---     REVOKE regardless of job_type.
---   - claim_invoice_extract_job / reclaim_stuck_invoice_extract_jobs are
---     already granted to service_role ONLY (0075) — an authenticated-role
---     client gets permission-denied calling either, so the worker's own
---     claim -> complete/heartbeat chain (src/lib/jobs/claim.ts,
---     complete.ts, heartbeat.ts, reclaim.ts, run-once.ts) can only ever
---     run with a service-role client structurally, before and after this
---     migration — their raw background_jobs UPDATE calls are therefore
---     also unaffected.
---
--- Deliberately left for whoever wires this feature up (not gold-plated
--- here): reclaim_stuck_invoice_extract_jobs' own requeue does not re-apply
--- the fairness cap (a reclaimed job just goes back to 'queued' and
--- competes normally on the next claim); the fairness constant (3) is a
--- starting point, not a tuned value — there is no production traffic yet
--- to tune it against; and no route/UI exists yet to call
--- enqueue_invoice_extract_job at all.
---
--- DOWN: restores the pre-fix INSERT policy and table grants, drops
--- enqueue_invoice_extract_job, and restores claim_invoice_extract_job's
--- pre-fix (no fairness cap) body. See
--- down/0083_background_jobs_enqueue_rpc.down.sql.
-
--- ── 1. Deny authenticated direct writes on background_jobs ─────────────
-drop policy "members can create own background jobs" on public.background_jobs;
-
-revoke insert, update, delete on public.background_jobs from authenticated;
-
--- ── 2. Sanctioned enqueue path ───────────────────────────────────────────
-create or replace function public.enqueue_invoice_extract_job(
-  p_restaurant_id uuid,
-  p_scan_id       uuid
-)
-returns table (job_id uuid, created boolean)
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_user_id uuid := auth.uid();
-  v_job_id  uuid;
-  v_status  text;
-begin
-  if v_user_id is null then
-    raise exception 'authentication required' using errcode = '42501';
-  end if;
-
-  if not public.is_member_with_role(p_restaurant_id, 'staff') then
-    raise exception 'forbidden' using errcode = '42501';
-  end if;
-
-  -- Subject ownership: p_scan_id must be a real invoice_scans row that
-  -- actually belongs to p_restaurant_id — the same tenant-fetch shape
-  -- invoice-extract-handler.ts already applies before any provider call.
-  if not exists (
-    select 1 from public.invoice_scans
-    where id = p_scan_id and restaurant_id = p_restaurant_id
-  ) then
-    raise exception 'invoice scan % not found for restaurant %', p_scan_id, p_restaurant_id
-      using errcode = 'P0002';
-  end if;
-
-  begin
-    insert into public.background_jobs (
-      restaurant_id, created_by, job_type, status,
-      subject_table, subject_id, idempotency_key, max_attempts, run_after
-    ) values (
-      p_restaurant_id, v_user_id, 'invoice_extract', 'queued',
-      'invoice_scans', p_scan_id, p_scan_id::text,
-      5, -- DEFAULT_MAX_ATTEMPTS in src/lib/jobs/constants.ts — keep in sync
-      now()
-    )
-    returning id into v_job_id;
-
-    job_id := v_job_id;
-    created := true;
-    return next;
-    return;
-  exception when unique_violation then
-    -- Idempotent conflict on (job_type, idempotency_key): fetch the
-    -- existing job and, if it's dead (exhausted retries), revive it —
-    -- same semantics enqueue.ts previously implemented client-side across
-    -- three separate round trips; now one atomic server-side path.
-    select bj.id, bj.status into v_job_id, v_status
-    from public.background_jobs bj
-    where bj.job_type = 'invoice_extract' and bj.idempotency_key = p_scan_id::text;
-
-    if v_job_id is null then
-      raise exception 'idempotent enqueue conflict but no existing job found for scan %', p_scan_id;
-    end if;
-
-    if v_status = 'dead' then
-      update public.background_jobs
-      set status = 'queued', attempt_count = 0, error_code = null,
-          error_message = null, claimed_by = null, claimed_at = null,
-          run_after = now()
-      where id = v_job_id and status = 'dead';
-    end if;
-
-    job_id := v_job_id;
-    created := false;
-    return next;
-    return;
-  end;
-end;
-$$;
-
-comment on function public.enqueue_invoice_extract_job(uuid, uuid) is
-  'C20 (db audit 2026-08-23): the only sanctioned way for an authenticated '
-  'session to create/revive an invoice_extract background_jobs row. '
-  'SECURITY DEFINER because authenticated has no table-level INSERT/UPDATE '
-  'on background_jobs at all — verifies staff-or-above membership on '
-  'p_restaurant_id and that p_scan_id actually belongs to it, then pins '
-  'idempotency_key = p_scan_id, created_by = auth.uid(), status = '
-  '''queued'', run_after = now(), and max_attempts to the constant default '
-  '— none of those are caller-controlled inputs.';
-
-revoke all on function public.enqueue_invoice_extract_job(uuid, uuid) from public;
-grant execute on function public.enqueue_invoice_extract_job(uuid, uuid) to authenticated;
-
--- ── 3. Per-tenant fairness on the claim function ────────────────────────
-create or replace function public.claim_invoice_extract_job(p_worker_id text)
-returns setof public.background_jobs
-language sql
-as $$
-  with in_flight as (
-    select restaurant_id, count(*) as n
-    from public.background_jobs
-    where job_type = 'invoice_extract' and status = 'processing'
-    group by restaurant_id
+-- wine_aliases is not given its own numbered migration in
+-- docs/plans/2026-08-23-p2-identity-spine.md — §0 lists it as an in-scope
+-- deliverable and §6-9 describe how it is written and read, but the plan's
+-- own §3 migration set never gives it a CREATE TABLE. It is defined here,
+-- immediately before the one function that writes it, because it is
+-- specifically the dedup service's own spelling corpus (§9 step 6), and
+-- because both the canonical- and variant-scoped shapes it needs
+-- (§8's tenancy table has separate rows for each) only make sense once
+-- both canonical_wines (0097) and wine_variants (0098) exist.
+create table public.wine_aliases (
+  id                uuid        primary key default gen_random_uuid(),
+  canonical_wine_id uuid        references public.canonical_wines(id) on delete cascade,
+  wine_variant_id   uuid        references public.wine_variants(id) on delete cascade,
+  restaurant_id     uuid        references public.restaurants(id) on delete cascade,
+  raw_producer      text,
+  raw_cuvee         text,
+  source            text        not null default 'import' check (source in ('import', 'lwin', 'manual')),
+  match_method      text        not null check (
+    match_method in ('exact', 'lwin_exact', 'fuzzy_suggested', 'fuzzy_confirmed')
   ),
-  claimable as (
-    select b.id
-    from public.background_jobs b
-    left join in_flight f on f.restaurant_id = b.restaurant_id
-    where b.job_type = 'invoice_extract'
-      and b.status = 'queued'
-      and b.run_after <= now()
-      -- C20 fairness cap: no more than 3 invoice_extract jobs from the
-      -- same restaurant may be 'processing' at once, so one tenant's
-      -- staff member cannot push enough queued jobs to occupy every
-      -- worker slot and starve every other tenant's queue. A starting
-      -- value, not a tuned one — there is no production traffic yet.
-      and coalesce(f.n, 0) < 3
-    order by b.run_after
-    for update skip locked
-    limit 1
+  confidence        real,
+  created_at        timestamptz not null default now(),
+  -- Exactly one scope per row: canonical-scoped (global, no restaurant_id)
+  -- XOR variant-scoped (tenant, restaurant_id required). Never both null,
+  -- never both set — a variant-scoped alias without knowing which tenant
+  -- asserted it would be an unscoped write nobody could ever read back
+  -- under RLS.
+  constraint wine_aliases_scope_check check (
+    (canonical_wine_id is not null and wine_variant_id is null and restaurant_id is null)
+    or (wine_variant_id is not null and restaurant_id is not null)
   )
-  update public.background_jobs b
-  set status = 'processing',
-      claimed_at = now(),
-      claimed_by = p_worker_id,
-      started_at = now()
-  from claimable
-  where b.id = claimable.id
-  returning b.*;
-$$;
+);
 
-comment on function public.claim_invoice_extract_job(text) is
-  'Atomically claims the single oldest runnable invoice_extract job via '
-  'FOR UPDATE SKIP LOCKED, excluding any restaurant that already has 3 '
-  'jobs in ''processing'' (C20 db audit 2026-08-23 per-tenant fairness '
-  'cap). Concurrent worker instances never claim the same row. Returns '
-  'zero or one row.';
+comment on table public.wine_aliases is
+  'Append-only spelling/identifier corpus. Canonical-scoped rows '
+  '(canonical_wine_id set, restaurant_id null) are the ONLY shape '
+  'resolve_wine_variants_bulk below writes in P2 — recording every raw '
+  'producer/cuvée string a batch resolved against its canonical_wine_id, '
+  'match_method=''exact''. The variant-scoped shape (wine_variant_id + '
+  'restaurant_id set) is schema-ready for a future GTIN/LWIN11/LWIN16 '
+  'alias writer per docs/plans/2026-08-23-p2-identity-spine.md §8, but no '
+  'P2 code path populates it — see the P2 builder report for why that is '
+  'flagged as this migration''s weakest point for the merge-completeness '
+  'contract test (0100).';
 
-revoke all on function public.claim_invoice_extract_job(text) from public;
-grant execute on function public.claim_invoice_extract_job(text) to service_role;
+-- Idempotency: resolve_wine_variants_bulk re-run on identical input must
+-- add zero new alias rows. Partial (scoped to canonical-only rows) because
+-- that is the only shape this migration's writer produces; a future
+-- variant-scoped writer needs its own uniqueness rule.
+create unique index wine_aliases_canonical_raw_idx
+  on public.wine_aliases (canonical_wine_id, raw_producer, raw_cuvee)
+  where restaurant_id is null;
 
--- === 0084_rls_initplan_wrap.sql ===
--- 0084_rls_initplan_wrap.sql
---
--- C28 (db audit 2026-08-23) — RLS policies calling non-inlineable
--- SECURITY DEFINER membership helpers (`is_member`, `is_member_with_role`,
--- 0001_auth_boundary.sql) do it once PER ROW a scan examines, even when
--- every row shares the same restaurant_id the index condition already
--- matched on. SECURITY DEFINER functions are never planner-inlined
--- (inlining would silently drop the privilege-elevation semantics), so
--- there is no way around the per-call cost except changing how often the
--- planner calls it.
---
--- Verified (.../scratchpad/db-audit/verify/V1-tenancy.md, C28), hard
--- numbers: at 22,216 rows, a tenant-scoped `count(*)` on wines made
--- 22,217 is_member() calls (pg_stat_user_functions delta) and ran 122ms
--- with 44,485 buffer hits, versus 4.8ms / 53 buffer hits with RLS
--- bypassed — ~25x slower, ~840x the buffer hits, purely from the per-row
--- function-call overhead. Confirmed systemic by grep: 19 migration files
--- use the raw `is_member(restaurant_id)` / `is_member_with_role(
--- restaurant_id, ...)` pattern directly inside a USING/WITH CHECK clause,
--- and zero instances anywhere use the standard mitigation.
---
--- *** This fix lane's own fix sketch got the mitigation wrong; corrected
--- here. *** The sketch's first suggestion — wrap the call as
--- `(select public.is_member(restaurant_id))` — was tried first in this
--- migration's development and MEASURED TO NOT WORK: `restaurant_id` is a
--- column of the row being filtered, so `(select is_member(restaurant_id))`
--- is a CORRELATED subquery (its argument varies per row), which Postgres
--- cannot hoist into a once-per-statement InitPlan — it stays a SubPlan
--- re-executed once per row, identical in cost to the unwrapped call, and
--- measured slightly WORSE here (733ms / 40,435 buffers vs. the unfixed
--- baseline's 122ms / 44,485 buffers) from the added subquery overhead.
--- `(select auth.uid())`-style wraps work in Supabase's own performance
--- guidance because `auth.uid()` takes no row-dependent argument at all —
--- that shape does not generalize to a function whose argument is a
--- column of the row it's filtering.
---
--- The fix that actually works — and the one the fix sketch also named as
--- the "better" alternative — restructures the predicate so the ONLY
--- membership lookup has NO row-dependent input: two new helper functions,
--- `member_restaurant_ids()` and `member_restaurant_ids_with_role(role)`,
--- return the CALLER's own set of qualifying restaurant ids (keyed only on
--- auth.uid() and, for the role variant, a literal role argument — neither
--- varies per row). Policies then read `restaurant_id in (select
--- public.member_restaurant_ids())` — an UNCORRELATED subquery the planner
--- hashes/materializes ONCE per statement, then probes per row via a plain
--- hash lookup instead of a function call. Measured after rewriting wines'
--- four policies to this shape (identical 22-ish-thousand-row scale as
--- above): 1 call to member_restaurant_ids() total (not 20,004+), 3.5-4ms
--- execution time, ~185 buffer hits — matching the RLS-bypassed baseline,
--- not merely improving on the broken-RLS baseline.
---
--- member_restaurant_ids()/_with_role() are SECURITY DEFINER (same
--- recursion-avoidance rationale as is_member/is_member_with_role — a
--- policy on `memberships` itself calling a function that reads
--- `memberships` would recurse under RLS if the function weren't DEFINER)
--- and STABLE. is_member/is_member_with_role themselves are UNCHANGED —
--- still used verbatim inside plpgsql function bodies elsewhere in this
--- schema (find_or_create_wine, set_wine_availability, record_pour, etc.),
--- where the once-per-invocation cost was never the problem C28 measured.
---
--- Semantic equivalence, not just speed, verified for every predicate
--- shape used below: for any given user and restaurant, "restaurant_id IN
--- (select member_restaurant_ids())" is true iff "is_member(restaurant_id)"
--- is true (both reduce to "a memberships row exists for this user and
--- this restaurant_id") — verified directly in this fix lane, side by
--- side under a real authenticated session, for is_member and all three
--- is_member_with_role role arguments ('staff'/'manager'/'owner'), for
--- both an owner (qualifies for all three) and a staff-only member
--- (qualifies for 'staff' only) — all six checks matched old vs. new
--- exactly. RLS baseline (tenant B still sees only its own rows) was
--- re-confirmed after applying this migration.
---
--- Done via `ALTER POLICY ... USING (...) WITH CHECK (...)`, not DROP +
--- CREATE: it changes only the qual/check expression of an existing
--- policy in place, so a policy's name, command, and role list all stay
--- exactly as they were in whichever migration originally created it.
--- Omitting USING or WITH CHECK from a given ALTER POLICY statement below
--- leaves that clause untouched (Postgres semantics) — every statement
--- here supplies exactly the clause(s) the source policy actually has.
---
--- Deliberately NOT touched: the EXISTS-subquery policies that call
--- is_member() on a JOINED table's aliased column (e.g. wine_list_sections
--- / wine_list_items' `public.is_member(wl.restaurant_id)`, C05's own new
--- policies) — those weren't part of the specific 19-file/22,217-call
--- pattern the verifier measured (a correlated per-row argument coming
--- from a join, not the same value repeated across every row of an
--- index-matched scan on the policy's own table), so rewriting them is a
--- separate, unverified change out of this cluster's scope. Also not
--- touched: the `restaurants` table's own two policies (`is_member(id)` /
--- `is_member_with_role(id, 'manager')`) — those key off the table's own
--- primary key column, not `restaurant_id`, and were likewise not part of
--- the measured 19-file pattern.
---
--- DOWN: re-runs the same ALTER POLICY statements with the raw (unwrapped)
--- is_member/is_member_with_role expressions, and drops the two new helper
--- functions. Restores the pre-fix per-row-call plan shape exactly. See
--- down/0084_rls_initplan_wrap.down.sql.
+create index wine_aliases_variant_idx
+  on public.wine_aliases (wine_variant_id)
+  where wine_variant_id is not null;
 
--- ── Helper functions: the caller's own qualifying restaurant id sets ───
-create or replace function public.member_restaurant_ids()
-returns setof uuid
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select restaurant_id from public.memberships where user_id = auth.uid();
-$$;
+alter table public.wine_aliases enable row level security;
 
-comment on function public.member_restaurant_ids() is
-  'C28 (db audit 2026-08-23): returns every restaurant_id the calling '
-  'user is a member of. Takes no row-dependent argument (unlike '
-  'is_member(restaurant_id)), so a policy written as '
-  '`restaurant_id in (select public.member_restaurant_ids())` lets the '
-  'planner evaluate this ONCE per statement (an uncorrelated subquery) '
-  'instead of once per row. SECURITY DEFINER for the same reason as '
-  'is_member: avoids RLS recursion when used in a policy on memberships '
-  'itself.';
+-- Canonical-scoped rows (restaurant_id null) are globally readable, same
+-- trust tier as canonical_wines itself; variant-scoped rows are
+-- tenant-gated. is_member(null) is false for every caller (no membership
+-- row has a null restaurant_id), so this single USING clause correctly
+-- implements both halves of docs/plans/2026-08-23-p2-identity-spine.md
+-- §8's two-row tenancy table without a second policy.
+create policy "read canonical-scoped or own-tenant wine_aliases"
+  on public.wine_aliases for select to authenticated
+  using (restaurant_id is null or public.is_member(restaurant_id));
 
-create or replace function public.member_restaurant_ids_with_role(required public.membership_role)
-returns setof uuid
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select restaurant_id from public.memberships
-  where user_id = auth.uid()
-    and (
-      role = required
-      or (required = 'manager' and role = 'owner')
-      or (required = 'staff' and role in ('owner', 'manager'))
-    );
-$$;
-
-comment on function public.member_restaurant_ids_with_role(public.membership_role) is
-  'C28 (db audit 2026-08-23): role-hierarchy counterpart to '
-  'member_restaurant_ids() — returns every restaurant_id where the '
-  'calling user has AT LEAST the given role (same hierarchy as '
-  'is_member_with_role: owner satisfies manager and staff, manager '
-  'satisfies staff). `required` is a literal per call site, not a row '
-  'value, so this is equally safe to use as an uncorrelated `restaurant_id '
-  'in (select ...)` subquery.';
-
-revoke all on function public.member_restaurant_ids() from public;
-grant execute on function public.member_restaurant_ids() to authenticated;
-revoke all on function public.member_restaurant_ids_with_role(public.membership_role) from public;
-grant execute on function public.member_restaurant_ids_with_role(public.membership_role) to authenticated;
-
--- ── 0001_auth_boundary.sql: memberships ─────────────────────────────────
-alter policy "users can read memberships in their restaurants"
-  on public.memberships
-  using (user_id = auth.uid() or restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "owners can manage memberships in their restaurant"
-  on public.memberships
-  using      (restaurant_id in (select public.member_restaurant_ids_with_role('owner')))
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('owner')));
-
--- ── 0002_phase2_schema.sql: wines ────────────────────────────────────────
-alter policy "members can read their wines"
-  on public.wines
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can insert wines"
-  on public.wines
-  with check (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can update their wines"
-  on public.wines
-  using      (restaurant_id in (select public.member_restaurant_ids()))
-  with check (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can delete their wines"
-  on public.wines
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
--- ── 0002_phase2_schema.sql: invoice_scans ────────────────────────────────
-alter policy "members can read their scans"
-  on public.invoice_scans
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can insert scans"
-  on public.invoice_scans
-  with check (restaurant_id in (select public.member_restaurant_ids()));
-
--- ── 0002_phase2_schema.sql: inventory_items ──────────────────────────────
-alter policy "members can read their inventory"
-  on public.inventory_items
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can insert inventory"
-  on public.inventory_items
-  with check (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can update their inventory"
-  on public.inventory_items
-  using      (restaurant_id in (select public.member_restaurant_ids()))
-  with check (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can delete their inventory"
-  on public.inventory_items
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
--- ── 0002_phase2_schema.sql: wine_lists ────────────────────────────────────
-alter policy "members can read their wine lists"
-  on public.wine_lists
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can insert wine lists"
-  on public.wine_lists
-  with check (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can update their wine lists"
-  on public.wine_lists
-  using      (restaurant_id in (select public.member_restaurant_ids()))
-  with check (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can delete their wine lists"
-  on public.wine_lists
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
--- ── 0004_team_invitations.sql: invitations ──────────────────────────────
-alter policy "owners can manage invitations"
-  on public.invitations
-  using      (restaurant_id in (select public.member_restaurant_ids_with_role('owner')))
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('owner')));
-
-alter policy "managers can read invitations"
-  on public.invitations
-  using (restaurant_id in (select public.member_restaurant_ids_with_role('manager')));
-
--- ── 0005_cellar_config.sql: cellar_config ───────────────────────────────
-alter policy "members can read cellar config"
-  on public.cellar_config
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "managers can manage cellar config"
-  on public.cellar_config
-  using      (restaurant_id in (select public.member_restaurant_ids_with_role('manager')))
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('manager')));
-
--- ── 0011_scan_idempotency.sql: scan_idempotency ─────────────────────────
-alter policy "members manage own idempotency keys"
-  on public.scan_idempotency
-  using      (restaurant_id in (select public.member_restaurant_ids()))
-  with check (restaurant_id in (select public.member_restaurant_ids()));
-
--- ── 0015_wine_availability.sql: availability_events ─────────────────────
-alter policy "members can read availability events"
-  on public.availability_events
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
--- ── 0016_pour_tracking.sql: open_bottles, pour_events ───────────────────
-alter policy "members can read open_bottles"
-  on public.open_bottles
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can read pour_events"
-  on public.pour_events
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
--- ── 0052_background_jobs.sql: background_jobs ───────────────────────────
--- (the pre-fix INSERT policy this table also had was dropped by C20's
--- own fix, 0083 — nothing left to wrap there.)
-alter policy "members can read background jobs"
-  on public.background_jobs
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
--- ── 0053_reason_codes.sql: reason_codes ─────────────────────────────────
-alter policy "members can read reason_codes"
-  on public.reason_codes
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "managers can insert reason_codes"
-  on public.reason_codes
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('manager')));
-
-alter policy "managers can update reason_codes"
-  on public.reason_codes
-  using      (restaurant_id in (select public.member_restaurant_ids_with_role('manager')))
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('manager')));
-
--- ── 0054_wine_lineages.sql: wine_lineages ────────────────────────────────
-alter policy "members can read wine_lineages"
-  on public.wine_lineages
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
--- ── 0057_bins.sql: bins ──────────────────────────────────────────────────
-alter policy "members can read bins"
-  on public.bins
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "managers can insert bins"
-  on public.bins
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('manager')));
-
-alter policy "managers can update bins"
-  on public.bins
-  using      (restaurant_id in (select public.member_restaurant_ids_with_role('manager')))
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('manager')));
-
--- ── 0058_cellar_health.sql: cellar_health ────────────────────────────────
-alter policy "members can read cellar_health"
-  on public.cellar_health
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
--- ── 0059_reconcile_queue.sql: reconcile_batches, reconcile_actions ──────
-alter policy "members can read reconcile_batches"
-  on public.reconcile_batches
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can read reconcile_actions"
-  on public.reconcile_actions
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "managers can insert reconcile_batches"
-  on public.reconcile_batches
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('manager')));
-
-alter policy "managers can update reconcile_batches"
-  on public.reconcile_batches
-  using      (restaurant_id in (select public.member_restaurant_ids_with_role('manager')))
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('manager')));
-
-alter policy "managers can insert reconcile_actions"
-  on public.reconcile_actions
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('manager')));
-
--- ── 0060_partial_bottles.sql: bottle_closeouts ──────────────────────────
-alter policy "members can read bottle_closeouts"
-  on public.bottle_closeouts
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can insert bottle_closeouts"
-  on public.bottle_closeouts
-  with check (restaurant_id in (select public.member_restaurant_ids()));
-
--- ── 0063_stock_adjustments.sql: stock_adjustments ───────────────────────
-alter policy "members can read stock_adjustments"
-  on public.stock_adjustments
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members insert own stock_adjustments"
-  on public.stock_adjustments
+-- Shape-restricted, not authenticity-restricted, for the same reason as
+-- canonical_wines: match_method may only claim 'exact' (an objectively
+-- checkable text-equality fact) or 'fuzzy_suggested' (explicitly
+-- non-authoritative). 'lwin_exact'/'fuzzy_confirmed' are reserved for a
+-- future privileged writer; nothing in P2 ever inserts them.
+create policy "insert canonical-scoped or own-tenant wine_aliases"
+  on public.wine_aliases for insert to authenticated
   with check (
-    restaurant_id in (select public.member_restaurant_ids())
-    and acting_user_id = auth.uid()
+    match_method in ('exact', 'fuzzy_suggested')
+    and (restaurant_id is null or public.is_member(restaurant_id))
   );
 
--- ── 0064_brand_kits.sql: brand_kits ──────────────────────────────────────
-alter policy "members can read brand_kits"
-  on public.brand_kits
-  using (restaurant_id in (select public.member_restaurant_ids()));
+-- No update/delete: append-only ledger.
 
-alter policy "managers can insert brand_kits"
-  on public.brand_kits
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('manager')));
+grant select, insert on table public.wine_aliases to authenticated;
 
-alter policy "managers can update brand_kits"
-  on public.brand_kits
-  using      (restaurant_id in (select public.member_restaurant_ids_with_role('manager')))
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('manager')));
-
--- ── 0065_pricing_recommendations.sql: pricing_recommendations ──────────
-alter policy "members can read pricing_recommendations"
-  on public.pricing_recommendations
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
--- ── 0066_invoice_scans_update_policy.sql: invoice_scans ─────────────────
-alter policy "members can update their scans"
-  on public.invoice_scans
-  using      (restaurant_id in (select public.member_restaurant_ids()))
-  with check (restaurant_id in (select public.member_restaurant_ids()));
-
--- ── 0076_csv_import_batches.sql: import_batches, import_batch_rows ─────
-alter policy "members can read import batches"
-  on public.import_batches
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can create own import batches"
-  on public.import_batches
-  with check (
-    restaurant_id in (select public.member_restaurant_ids_with_role('staff'))
-    and created_by = auth.uid()
-  );
-
-alter policy "members can update own import batches"
-  on public.import_batches
-  using      (restaurant_id in (select public.member_restaurant_ids_with_role('staff')))
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('staff')));
-
-alter policy "members can read import batch rows"
-  on public.import_batch_rows
-  using (restaurant_id in (select public.member_restaurant_ids()));
-
-alter policy "members can create import batch rows"
-  on public.import_batch_rows
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('staff')));
-
-alter policy "members can update import batch rows"
-  on public.import_batch_rows
-  using      (restaurant_id in (select public.member_restaurant_ids_with_role('staff')))
-  with check (restaurant_id in (select public.member_restaurant_ids_with_role('staff')));
-
--- === 0085_import_batch_bin_id.sql ===
--- 0085_import_batch_bin_id.sql
+-------------------------------------------------------------------------------
+-- resolve_wine_variants_bulk — the dedup service's DB entrypoint.
 --
--- C11 (db audit 2026-08-23, verified V2-import.md) — apply_import_batch_chunk
--- writes inventory_items.bin_location from the CSV's `bin` cell but never
--- resolves/sets inventory_items.bin_id, even when a `bins` row with that
--- exact code already exists for the restaurant (0057 made bins the
--- physical key; bin_location is legacy free text kept for display/backfill
--- only). Verified reproduction: pre-created a real bins row (code
--- 'R4-S12'), applied a CSV row whose bin cell was exactly 'R4-S12' through
--- the real RPC — the resulting inventory_items row had
--- bin_location='R4-S12', bin_id=NULL.
+-- Called once per batch of UNIQUE variants (a pre-deduplicated set the
+-- caller has already collapsed by (producer_norm, cuvee_norm, vintage,
+-- size_ml)), never once per CSV row — the direct answer to C10 (no
+-- per-row PL/pgSQL loop, no advisory lock anywhere below).
 --
--- Consequence (traced to real consumers, not assumed):
---   - src/app/(app)/bins/page.tsx's "Unplaced" count and
---     src/lib/reconcile-ledger/queue-sources.ts's reconcile queue both key
---     off inventory_items.bin_id IS NULL. A faithful 20k-row import whose
---     CSV bin column matches existing bins would still show 100% of the
---     imported cellar as unplaced and flood the reconcile queue.
+-- SECURITY INVOKER, not definer: this is C01's own fix sketch applied to
+-- new code. RLS on wine_variants (is_member(restaurant_id)) is the ONLY
+-- thing between a caller and writing another tenant's variant, and
+-- invoker mode is what makes that check actually apply. There is
+-- deliberately NO manual is_member() guard in this function body — a
+-- caller targeting a restaurant_id it is not a member of must fail via
+-- the real RLS policy on the wine_variants INSERT below, not a
+-- hand-rolled check that could drift from the policy over time.
 --
--- Fix, scoped to what was verified:
---   1. apply_import_batch_chunk now looks up an existing public.bins row
---      for the row's restaurant using the same case-insensitive,
---      btrim-normalized code comparison 0057's own backfill used
---      (upper(btrim(...)) there; lower() here is equivalent for matching
---      since bins_restaurant_code_idx is itself a lower(code) unique
---      index) and sets inventory_items.bin_id when found.
---   2. A one-time backfill UPDATE closes the gap for rows already applied
---      by the pre-fix function (this repo has been live on 0076 since
---      before this fix; historic imported rows are broken the same way).
---
--- Deliberately NOT done: auto-creating a NEW bins row when no match
--- exists. public.bins' own INSERT policy ("managers can insert bins",
--- 0057) restricts bin creation to managers, but apply_import_batch_chunk
--- is SECURITY INVOKER and callable by any restaurant member (staff+) via
--- requireMembership() with no role gate (src/app/api/import/batches/[id]/
--- apply/route.ts) — auto-creating bins from CSV text here would let staff
--- silently bypass that manager-only rule. The verified bug is specifically
--- "an EXISTING matching bin isn't linked"; a CSV bin code with no existing
--- bins row correctly stays unplaced today (nothing physical to link to
--- yet) and is out of scope for this fix.
---
--- DOWN: restores apply_import_batch_chunk to its pre-fix (0082) body, and
--- re-nulls bin_id for any row whose bin_id currently resolves via the same
--- code match this migration performs (the same criteria, run in reverse —
--- see down/0085_import_batch_bin_id.down.sql for the exact caveat).
-
--- ── 1. Backfill: link already-applied rows to their existing matching bin ──
-update public.inventory_items i
-   set bin_id = b.id
-  from public.bins b
- where i.bin_id is null
-   and i.bin_location is not null
-   and btrim(i.bin_location) <> ''
-   and b.restaurant_id = i.restaurant_id
-   and lower(b.code) = lower(btrim(i.bin_location));
-
--- ── 2. apply_import_batch_chunk: resolve bin_id for future applies ────────
-create or replace function public.apply_import_batch_chunk(p_batch_id uuid, p_limit integer default 50)
+-- Input rows are already normalized by src/domains/identity/normalize.ts
+-- — this function does no Unicode folding. lwin7 SHOULD already have
+-- cleared the caller's confidence gate (P3's contract: only a
+-- lwin_score >= 0.6 match_lwin_bulk result may be forwarded as lwin7;
+-- anything weaker is a separate, non-identity-affecting field) — but
+-- that contract is a client-side convention, not a server-side
+-- guarantee, and this function must not trust it blindly (D9 — scratchpad
+-- db-audit/verify/P2-critic-r3.md): a malicious or buggy caller can put
+-- ANY 7-digit string in lwin7 regardless of what P3's real code does.
+-- The corroboration gate at step 2.5 below is what actually enforces
+-- this, by checking the claim against public.lwin_catalog before ever
+-- letting it create a canonical_wines row.
+create or replace function public.resolve_wine_variants_bulk(
+  p_restaurant_id uuid,
+  p_variants jsonb
+)
 returns table (
-  row_id            uuid,
-  row_number        integer,
-  outcome           text,
-  inventory_item_id uuid,
-  error_message     text
+  idx                    int,
+  canonical_wine_id      uuid,
+  wine_variant_id        uuid,
+  canonical_match_method text,
+  canonical_created      boolean,
+  variant_created        boolean
 )
 language plpgsql
 security invoker
 set search_path = public
 as $$
-declare
-  v_row public.import_batch_rows%rowtype;
-  v_unit_cost numeric(10,2);
-  v_wine_id uuid;
-  v_inventory_id uuid;
-  v_bin_id uuid;
+#variable_conflict use_column
+-- The RETURNS TABLE columns above (canonical_wine_id, wine_variant_id,
+-- idx) collide by name with real columns on _rwvb_input/wine_variants/
+-- wine_aliases. This function never reads or writes those OUT
+-- parameters as PL/pgSQL variables anywhere in its body (only via the
+-- final RETURN QUERY, which is alias-qualified and unambiguous) — every
+-- bare use of those names elsewhere is meant to resolve to the SQL
+-- column, which is what this directive makes happen instead of an
+-- "ambiguous" error at the ON CONFLICT target lists below.
 begin
-  -- C17: re-validate the batch's own tenant before processing any rows.
-  -- RLS on import_batches already filters this to "batches I'm a member
-  -- of" (the same idiom revert_import_batch, 0076, uses) — a batch id
-  -- belonging to another restaurant is simply invisible here, which reads
-  -- identically to a nonexistent one. With the composite FK added by this
-  -- migration, a row whose restaurant_id disagrees with its batch's can
-  -- no longer exist in the first place, so this is defense in depth: it
-  -- turns what would otherwise be a silent "processed zero rows" no-op
-  -- for a non-member's batch id into an explicit, actionable error.
-  if not exists (select 1 from public.import_batches where id = p_batch_id) then
-    raise exception 'import batch % not found', p_batch_id using errcode = 'P0002';
-  end if;
+  -- Scratch table for this call. "if not exists" + truncate (rather than
+  -- a bare CREATE) so a second call within the same transaction — the
+  -- fault-injection tests deliberately do this — reuses it safely.
+  -- "on commit drop" means it never outlives the calling transaction.
+  create temporary table if not exists _rwvb_input (
+    idx                    int primary key,
+    producer_raw           text not null,
+    cuvee_raw              text not null,
+    producer_norm          text not null,
+    cuvee_norm             text not null,
+    vintage                int,
+    size_ml                int not null,
+    lwin7                  text,
+    lwin11                 text,
+    lwin16                 text,
+    gtin                   text,
+    canonical_wine_id      uuid,
+    canonical_match_method text,
+    canonical_created      boolean not null default false,
+    wine_variant_id        uuid,
+    variant_created        boolean not null default false
+  ) on commit drop;
 
-  for v_row in
-    select r.*
-    from public.import_batch_rows r
-    where r.batch_id = p_batch_id
-      and r.apply_status = 'not_applied'
-      and r.row_state = 'valid'
-      and r.resolution in ('auto', 'include')
-    order by r.row_number
-    limit least(greatest(p_limit, 1), 500)
-    for update skip locked
-  loop
-    begin
-      if v_row.cost_status = 'missing' then
-        if v_row.manual_unit_cost is null then
-          row_id := v_row.id;
-          row_number := v_row.row_number;
-          outcome := 'blocked';
-          inventory_item_id := null;
-          error_message := 'Missing unit cost has no operator-provided value.';
-          return next;
-          continue;
-        end if;
-        v_unit_cost := v_row.manual_unit_cost;
-      else
-        v_unit_cost := nullif(v_row.raw ->> 'unit_cost', '')::numeric(10,2);
-      end if;
+  truncate _rwvb_input;
 
-      if v_unit_cost is null then
-        row_id := v_row.id;
-        row_number := v_row.row_number;
-        outcome := 'blocked';
-        inventory_item_id := null;
-        error_message := 'Row has no usable unit cost.';
-        return next;
-        continue;
-      end if;
+  -- 1. Unnest the batch.
+  --
+  -- P2 ROUND-5 FIX (D9-residual #2 — scratchpad db-audit/verify/
+  -- P2-critic-r4.md, the round after the Baron/Lalande fix): this no
+  -- longer reads producer_norm/cuvee_norm from the caller at all.
+  -- Before this fix, the identity KEY (producer_norm, cuvee_norm — the
+  -- columns canonical_wines_identity_idx is UNIQUE on, and what phase 1's
+  -- text-match below joins on) came straight off the caller's JSON,
+  -- completely UNRELATED to the LWIN-corroboration gate at step 2.5
+  -- below, which validates producer_raw/cuvee_raw instead. That let a
+  -- caller send REAL, LEGITIMATELY-CORROBORATING raws for a wine they
+  -- actually hold (passing the gate) while sending an ARBITRARY,
+  -- attacker-chosen producer_norm/cuvee_norm matching a VICTIM's
+  -- existing canonical_wines row — binding straight onto it via phase
+  -- 1's text-exact match, with no LWIN or gate involvement at all. Live-
+  -- reproduced before this fix shipped: an attacker's wine_variant bound
+  -- to a victim's pre-existing canonical row via canonical_match_method
+  -- = 'exact', using the victim's real (forged-in) producer_norm/
+  -- cuvee_norm while submitting the attacker's OWN real, corroborating
+  -- producer_raw/cuvee_raw/lwin7. Same severity as the Baron/Lalande
+  -- fix above: the unique index makes it permanent, and canonical_wines
+  -- has no UPDATE/DELETE policy for authenticated.
+  --
+  -- Fixed: producer_norm/cuvee_norm are now DERIVED here, server-side,
+  -- from producer_raw/cuvee_raw via identity_normalize_text() (0097) —
+  -- never trusted as caller input. jsonb_to_recordset's own type list
+  -- below no longer even names producer_norm/cuvee_norm, so a caller
+  -- that still sends those keys has them silently ignored rather than
+  -- silently trusted. This is a CROSS-PIECE CONTRACT CHANGE: the
+  -- identity key is no longer necessarily byte-identical to
+  -- src/domains/identity/normalize.ts's frozen TS-side
+  -- normalizeProducerOrCuvee output — it is now this function's own
+  -- SQL-side identity_normalize_text() approximation (see that
+  -- function's comment, 0097, for the known unaccent-vs-NFKD divergence
+  -- risk, already accepted elsewhere for 0101's backfill). The risk
+  -- direction stays safe (a divergence creates one extra canonical row a
+  -- later exact match could have reused, never merges two different
+  -- wines) — re-verified against the full 110-check identity matrix
+  -- after this change specifically because the computation moved from
+  -- TS-frozen to SQL-side for every row this function creates.
+  insert into _rwvb_input (
+    idx, producer_raw, cuvee_raw, producer_norm, cuvee_norm,
+    vintage, size_ml, lwin7, lwin11, lwin16, gtin
+  )
+  select x.idx, x.producer_raw, x.cuvee_raw,
+         public.identity_normalize_text(x.producer_raw),
+         public.identity_normalize_text(x.cuvee_raw),
+         x.vintage, x.size_ml, x.lwin7, x.lwin11, x.lwin16, x.gtin
+  from jsonb_to_recordset(p_variants) as x(
+    idx int, producer_raw text, cuvee_raw text,
+    vintage int, size_ml int, lwin7 text, lwin11 text, lwin16 text, gtin text
+  );
 
-      -- Same dedup key as find_or_create_wines_batch (0006): reuse the
-      -- existing wine if this restaurant already has one, fill in only
-      -- the fields that were previously null, never overwrite.
-      insert into public.wines (
-        restaurant_id, name, producer, vintage, varietal, region, country, size_ml, lwin_id
-      ) values (
-        v_row.restaurant_id,
-        v_row.raw ->> 'name',
-        v_row.raw ->> 'producer',
-        nullif(v_row.raw ->> 'vintage', '')::int,
-        nullif(v_row.raw ->> 'varietal', ''),
-        nullif(v_row.raw ->> 'region', ''),
-        nullif(v_row.raw ->> 'country', ''),
-        coalesce(nullif(v_row.raw ->> 'size_ml', '')::int, 750),
-        v_row.lwin_id
-      )
-      on conflict (restaurant_id, lower(producer), lower(name), coalesce(vintage, 0), size_ml)
-      do update set
-        varietal = coalesce(public.wines.varietal, excluded.varietal),
-        region   = coalesce(public.wines.region, excluded.region),
-        country  = coalesce(public.wines.country, excluded.country),
-        lwin_id  = coalesce(public.wines.lwin_id, excluded.lwin_id)
-      returning id into v_wine_id;
+  -- Rows whose producer/cuvee collapse to nothing under normalization
+  -- (e.g. punctuation-only text) can't be identity-resolved — same
+  -- precedent as 0101's backfill, which leaves such rows for manual
+  -- review rather than inventing a placeholder identity. P3's caller
+  -- must treat a missing idx in the return set as "not resolved," not
+  -- assume every submitted idx comes back.
+  delete from _rwvb_input
+  where producer_norm is null or cuvee_norm is null;
 
-      -- Defensive: an INSERT/ON-CONFLICT-DO-UPDATE...RETURNING that
-      -- somehow yields no row must never silently fall through to
-      -- marking this row applied with a dangling reference — fail this
-      -- row loudly (caught below, retried on the next apply call)
-      -- instead.
-      if v_wine_id is null then
-        raise exception 'wine insert/lookup returned no row for import_batch_row %', v_row.id;
-      end if;
+  -- 2. Canonical, phase 1 (exact). Two separate UPDATEs, not one OR'd
+  -- join, so LWIN7 equality deterministically wins even where producer/
+  -- cuvée text differs (a data-entry-error row still lands on the LWIN
+  -- identity, never forks a second canonical row for it — it becomes an
+  -- alias below, not a duplicate).
+  --
+  -- P2 ROUND-5 FIX (D9-residual — scratchpad db-audit/verify/
+  -- P2-critic-r4.md): this match now additionally requires
+  -- cw.identity_status = 'lwin_verified'. Before this fix, a row could
+  -- squat a real lwin7 as identity_status='unverified' — the round-4
+  -- corroboration gate below only ran for the 'lwin_verified' branch of
+  -- canonical_wines' own insert policy, and this match had NO
+  -- identity_status filter, so it matched ANY row carrying that lwin7,
+  -- verified or not. Combined with canonical_wines_lwin7_idx being
+  -- UNIQUE, that meant: squat lwin7 X as unverified garbage (the
+  -- corroboration check was never consulted, because it only gated the
+  -- lwin_verified path) -> nobody else can ever hold X -> every later
+  -- import carrying X, INCLUDING a fully legitimate, fully corroborated
+  -- one, matched the squatter right here, before any gate ran. No
+  -- attacker cleverness or fuzzy-threshold weakness was even needed for
+  -- that path. Fixed at two levels: 0097's new
+  -- canonical_wines_lwin7_requires_verified CHECK CONSTRAINT now makes
+  -- "unverified row with a non-null lwin7" impossible to insert AT ALL,
+  -- from any path, including this function and 0101's backfill; this
+  -- explicit filter is defense-in-depth on top of that invariant, so the
+  -- match's OWN correctness never silently depends on a constraint
+  -- defined elsewhere.
+  update _rwvb_input i
+  set canonical_wine_id = cw.id,
+      canonical_match_method = 'lwin_exact'
+  from public.canonical_wines cw
+  where i.lwin7 is not null
+    and cw.lwin7 = i.lwin7
+    and cw.identity_status = 'lwin_verified';
 
-      -- C11 (db audit 2026-08-23): resolve an existing bins row by the
-      -- same case-insensitive/btrim-normalized code the operator already
-      -- uses (bins_restaurant_code_idx is itself a unique lower(code)
-      -- index, so this can match at most one row). Does NOT create a
-      -- missing bin — see migration header.
-      v_bin_id := null;
-      if nullif(v_row.raw ->> 'bin', '') is not null then
-        select id into v_bin_id
-          from public.bins
-          where restaurant_id = v_row.restaurant_id
-            and lower(code) = lower(btrim(v_row.raw ->> 'bin'))
-          limit 1;
-      end if;
+  update _rwvb_input i
+  set canonical_wine_id = cw.id,
+      canonical_match_method = 'exact'
+  from public.canonical_wines cw
+  where i.canonical_wine_id is null
+    and cw.producer_norm = i.producer_norm
+    and cw.cuvee_norm = i.cuvee_norm;
 
-      insert into public.inventory_items (
-        wine_id, restaurant_id, quantity, unit_cost, bin_location, bin_id, section, format, currency, added_via
-      ) values (
-        v_wine_id,
-        v_row.restaurant_id,
-        coalesce(nullif(v_row.raw ->> 'quantity', '')::int, 0),
-        v_unit_cost,
-        nullif(v_row.raw ->> 'bin', ''),
-        v_bin_id,
-        nullif(v_row.raw ->> 'section', ''),
-        nullif(v_row.raw ->> 'format', ''),
-        nullif(v_row.raw ->> 'currency', ''),
-        'manual'
-      )
-      returning id into v_inventory_id;
+  -- 2.5. LWIN corroboration gate. A row that reaches here has NOT matched
+  -- any existing canonical_wines row (neither by verified LWIN equality
+  -- nor by exact text) and is about to CREATE one in phase 2 below,
+  -- claiming identity_status='lwin_verified' whenever its lwin7 is set.
+  -- lwin7 is caller-supplied, untrusted input — this is the only thing
+  -- standing between an arbitrary claim and a permanent, cross-tenant,
+  -- unrepairable global identity (canonical_wines has no UPDATE/DELETE
+  -- policy; canonical_wines_lwin7_idx is UNIQUE).
+  --
+  -- P2 ROUND-5 FIX (D9-residual — scratchpad db-audit/verify/
+  -- P2-critic-r4.md): round 4 gated this with pg_trgm similarity() at
+  -- match_lwin's own ranking thresholds (0.3 producer / 0.21 name) —
+  -- WRONG TOOL. match_lwin's threshold is deliberately tolerant of false
+  -- positives because a human reviews its suggestions before anything is
+  -- written; this gate makes a PERMANENT, UNSUPERVISED, cross-tenant
+  -- decision. Live-verified before this fix shipped:
+  -- similarity('Chateau Pichon Longueville Baron', 'Chateau Pichon
+  -- Longueville Comtesse de Lalande') = 0.55 — two REAL, DISTINCT
+  -- Bordeaux estates, both comfortably above 0.3, because they share a
+  -- long common prefix. The round-5 critic reproduced the full
+  -- cross-tenant hijack through this exact pair using nothing but the
+  -- system's own real data: tenant A's fully legitimate, correctly-typed
+  -- Lalande submission plus Baron's real lwin7 (a plausible C24-style
+  -- LWIN-matcher confusion, not an adversarial construction) passed this
+  -- gate; tenant B's later, equally legitimate Baron submission with the
+  -- same lwin7 then bound to tenant A's Lalande-labelled row via phase 1
+  -- above, by design. No fuzzy threshold reliably separates two wines
+  -- whose similarity comes from shared vocabulary rather than shared
+  -- identity.
+  --
+  -- Fixed: identity_normalize_text() (0097) applied to both sides.
+  -- PRODUCER is compared for EXACT equality — Baron and Lalande normalize
+  -- to different token sets and can never satisfy equality regardless of
+  -- shared words, while a genuine data-entry-error (accents/case/
+  -- spacing/punctuation) still normalizes identically on both sides. CUVEE
+  -- is compared by TOKEN SUBSET (submitted cuvee's tokens all present in
+  -- display_name's tokens), not exact equality, since lwin_catalog.
+  -- display_name commonly combines producer + wine name — see 0097's
+  -- policy comment for the full reasoning. Both are deterministic
+  -- set/string operations, never a score — preserving the "LWIN wins over
+  -- textual FORMATTING differences" behavior described above for its
+  -- actual intended case.
+  -- A row whose lwin7 fails corroboration is DOWNGRADED (lwin7 stripped,
+  -- so phase 2 below naturally falls to identity_status='unverified'),
+  -- not rejected: a single bad LWIN in a 5,000-row import chunk must not
+  -- abort the whole chunk, and this row still gets a real (unverified)
+  -- canonical identity via its own text. Set-based, no per-row loop, no
+  -- exception raised — the direct C10-consistent answer, same discipline
+  -- as every other step in this function. The phase-1 exact-match above
+  -- is unaffected and remains safe by construction: it only ever matches
+  -- EXISTING, ALREADY-VERIFIED canonical_wines rows (identity_status
+  -- filter, this fix), and every verified row was itself either created
+  -- through this same deterministic gate or through 0101's backfill
+  -- (which reuses identity_normalize_text() directly rather than
+  -- duplicating the expression — see that migration's header for why it
+  -- still needs its own copy of the CALL: it runs as the table owner and
+  -- bypasses RLS entirely, so canonical_wines' own INSERT policy
+  -- corroboration cannot protect it; only the CHECK CONSTRAINT does).
+  -- P2 ROUND-6 FIX (D9-residual #2): this gate now reads i.producer_norm/
+  -- i.cuvee_norm — the very values phase 2 goes on to store — instead of
+  -- recomputing identity_normalize_text(i.producer_raw) inline. The two
+  -- are equal by construction (step 1 derives the norm columns with that
+  -- exact call), so this changes no outcome today; it changes what a
+  -- future edit can break. The whole D9-residual bug class is "the value
+  -- checked and the value stored are different expressions that nobody
+  -- forces to agree," and re-deriving here left one more copy of that
+  -- shape in the file. Reading the stored column makes the gate and the
+  -- identity key the same value rather than two values that happen to
+  -- match.
+  update _rwvb_input i
+  set lwin7 = null
+  where i.canonical_wine_id is null
+    and i.lwin7 is not null
+    and not exists (
+      select 1 from public.lwin_catalog lc
+      where lc.lwin_id = i.lwin7
+        and i.producer_norm = public.identity_normalize_text(lc.producer)
+        and string_to_array(i.cuvee_norm, ' ') <@ string_to_array(public.identity_normalize_text(lc.display_name), ' ')
+    );
 
-      if v_inventory_id is null then
-        raise exception 'inventory_items insert returned no row for import_batch_row %', v_row.id;
-      end if;
+  -- 3. Canonical, phase 2 (create). DISTINCT ON collapses two rows in the
+  -- SAME batch that are the same new wine to one insert attempt — the
+  -- direct answer to the "same-batch duplicate" fault injection.
+  -- ON CONFLICT DO NOTHING handles a genuinely concurrent OTHER call
+  -- committing the same (producer_norm, cuvee_norm) between step 2 and
+  -- here.
+  -- P2 ROUND-6 (D9-residual #2): producer_norm/cuvee_norm are no longer
+  -- named in this insert — canonical_wines GENERATES them from producer/
+  -- cuvee (0097), and naming a generated column raises SQLSTATE 428C9.
+  -- The stored key is therefore identity_normalize_text(i.producer_raw),
+  -- byte-identical to the i.producer_norm this statement still uses for
+  -- DISTINCT ON and for the conflict target, because step 1 derived that
+  -- column with the same call.
+  with new_canon as (
+    insert into public.canonical_wines (
+      producer, cuvee, lwin7,
+      identity_status, created_by_restaurant_id, created_by_user_id
+    )
+    select distinct on (i.producer_norm, i.cuvee_norm)
+      i.producer_raw, i.cuvee_raw, i.lwin7,
+      case when i.lwin7 is not null then 'lwin_verified' else 'unverified' end,
+      p_restaurant_id, auth.uid()
+    from _rwvb_input i
+    where i.canonical_wine_id is null
+    order by i.producer_norm, i.cuvee_norm, i.idx
+    on conflict (producer_norm, cuvee_norm) do nothing
+    returning id, producer_norm, cuvee_norm
+  )
+  update _rwvb_input i
+  set canonical_wine_id = nc.id,
+      canonical_match_method = 'created',
+      canonical_created = true
+  from new_canon nc
+  where i.canonical_wine_id is null
+    and i.producer_norm = nc.producer_norm
+    and i.cuvee_norm = nc.cuvee_norm;
 
-      update public.import_batch_rows
-      set apply_status = 'applied',
-          applied_inventory_item_id = v_inventory_id,
-          applied_wine_id = v_wine_id,
-          updated_at = now()
-      where id = v_row.id;
+  -- 4. Re-join: lost-the-conflict-race read-back. Under READ COMMITTED,
+  -- this SELECT gets a fresh snapshot and will see a concurrent session's
+  -- now-committed insert.
+  update _rwvb_input i
+  set canonical_wine_id = cw.id,
+      canonical_match_method = 'exact',
+      canonical_created = false
+  from public.canonical_wines cw
+  where i.canonical_wine_id is null
+    and cw.producer_norm = i.producer_norm
+    and cw.cuvee_norm = i.cuvee_norm;
 
-      row_id := v_row.id;
-      row_number := v_row.row_number;
-      outcome := 'applied';
-      inventory_item_id := v_inventory_id;
-      error_message := null;
-      return next;
-    exception when others then
-      -- Caught per-row (an implicit savepoint) so one bad row can never
-      -- take the rest of the chunk down with it. The row stays
-      -- 'not_applied' and is retried on the next apply call.
-      row_id := v_row.id;
-      row_number := v_row.row_number;
-      outcome := 'error';
-      inventory_item_id := null;
-      error_message := sqlerrm;
-      return next;
-    end;
-  end loop;
+  -- 5. Variant resolution — identical two-phase pattern keyed on
+  -- (restaurant_id, canonical_wine_id, coalesce(vintage,0), size_ml).
+  -- vintage and size_ml are exact keys here, never fuzzy — see the
+  -- migration header.
+  update _rwvb_input i
+  set wine_variant_id = wv.id
+  from public.wine_variants wv
+  where wv.restaurant_id = p_restaurant_id
+    and wv.canonical_wine_id = i.canonical_wine_id
+    and coalesce(wv.vintage, 0) = coalesce(i.vintage, 0)
+    and wv.size_ml = i.size_ml;
+
+  with new_variants as (
+    insert into public.wine_variants (
+      restaurant_id, canonical_wine_id, vintage, size_ml, lwin11, lwin16, gtin
+    )
+    select distinct on (i.canonical_wine_id, coalesce(i.vintage, 0), i.size_ml)
+      p_restaurant_id, i.canonical_wine_id, i.vintage, i.size_ml, i.lwin11, i.lwin16, i.gtin
+    from _rwvb_input i
+    where i.wine_variant_id is null
+    order by i.canonical_wine_id, coalesce(i.vintage, 0), i.size_ml, i.idx
+    on conflict (restaurant_id, canonical_wine_id, coalesce(vintage, 0), size_ml) do nothing
+    returning id, canonical_wine_id, vintage, size_ml
+  )
+  update _rwvb_input i
+  set wine_variant_id = nv.id,
+      variant_created = true
+  from new_variants nv
+  where i.wine_variant_id is null
+    and i.canonical_wine_id = nv.canonical_wine_id
+    and coalesce(i.vintage, 0) = coalesce(nv.vintage, 0)
+    and i.size_ml = nv.size_ml;
+
+  update _rwvb_input i
+  set wine_variant_id = wv.id
+  from public.wine_variants wv
+  where i.wine_variant_id is null
+    and wv.restaurant_id = p_restaurant_id
+    and wv.canonical_wine_id = i.canonical_wine_id
+    and coalesce(wv.vintage, 0) = coalesce(i.vintage, 0)
+    and wv.size_ml = i.size_ml;
+
+  -- 6. Alias write — the spelling corpus. One batched, deduped insert;
+  -- ON CONFLICT DO NOTHING against wine_aliases_canonical_raw_idx is what
+  -- makes a re-run of identical input add zero new rows here too.
+  insert into public.wine_aliases (canonical_wine_id, raw_producer, raw_cuvee, source, match_method)
+  select distinct on (i.canonical_wine_id, i.producer_raw, i.cuvee_raw)
+    i.canonical_wine_id, i.producer_raw, i.cuvee_raw, 'import', 'exact'
+  from _rwvb_input i
+  where i.canonical_wine_id is not null
+  order by i.canonical_wine_id, i.producer_raw, i.cuvee_raw, i.idx
+  on conflict (canonical_wine_id, raw_producer, raw_cuvee) where restaurant_id is null do nothing;
+
+  -- 7. Return the per-idx result set.
+  return query
+  select i.idx, i.canonical_wine_id, i.wine_variant_id, i.canonical_match_method,
+         i.canonical_created, i.variant_created
+  from _rwvb_input i
+  order by i.idx;
 end;
 $$;
 
-comment on function public.apply_import_batch_chunk(uuid, integer) is
-  'Applies up to p_limit not-yet-applied, eligible rows of one import '
-  'batch. C17 (db audit 2026-08-23): re-validates the batch itself is '
-  'visible (member of its restaurant) before processing any rows. C11 '
-  '(db audit 2026-08-23): resolves inventory_items.bin_id from an '
-  'existing bins row matching the CSV bin code, so imported stock is not '
-  'universally treated as unplaced. FOR UPDATE SKIP LOCKED means '
-  'concurrent/duplicate calls for the same batch never double-apply a '
-  'row. Each row''s wine-lookup + inventory-insert + row-status-update is '
-  'wrapped in its own exception block, so a single row failing never '
-  'blocks or half-applies the others — call again to retry whatever '
-  'remains not_applied. SECURITY INVOKER: RLS on '
-  'import_batch_rows/wines/inventory_items is the tenant boundary, so a '
-  'batch id from another restaurant is simply invisible to the initial '
-  'SELECT and the loop does nothing.';
+comment on function public.resolve_wine_variants_bulk(uuid, jsonb) is
+  'Set-based identity resolution for a pre-deduplicated batch of unique '
+  '(producer, cuvee, vintage, size_ml) variants. SECURITY INVOKER: RLS on '
+  'wine_variants is the tenant boundary, not a check in this function. '
+  'Every phase is a fixed number of set-based statements regardless of '
+  'batch size — no per-row loop, no advisory lock.';
 
-revoke all on function public.apply_import_batch_chunk(uuid, integer) from public;
-grant execute on function public.apply_import_batch_chunk(uuid, integer) to authenticated;
+revoke all on function public.resolve_wine_variants_bulk(uuid, jsonb) from public;
+grant execute on function public.resolve_wine_variants_bulk(uuid, jsonb) to authenticated;
 
--- === 0086_import_batch_rows_delete_guard.sql ===
--- 0086_import_batch_rows_delete_guard.sql
+-- === 0100_wine_identity_merge.sql ===
+-- 0100_wine_identity_merge.sql
+-- P2 — wine identity spine, part 4: merge, closing the confirmed C23 gap.
 --
--- C13 (db audit 2026-08-23, verified V2-import.md) — import_batch_rows'
--- CHECK constraint import_batch_rows_applied_has_inventory_id (0076)
--- requires applied_inventory_item_id IS NOT NULL whenever
--- apply_status = 'applied', but applied_inventory_item_id's FK is
--- ON DELETE SET NULL. Verified reproduction: applied one real row via
--- apply_import_batch_chunk, then deleted the resulting inventory_items
--- row through the NORMAL member-facing delete policy ("members can
--- delete their inventory", 0002 — any restaurant member, not
--- revert_import_batch). The delete failed outright with SQLSTATE 23514
--- (fails safe — no partial state) because the FK's SET NULL action tries
--- to null the column while apply_status is still 'applied', which the
--- CHECK then rejects.
---
--- Blast radius (verified): the only legal way to remove any imported row
--- is revert_import_batch, which reverts the ENTIRE batch — for a
--- 20,000-row import, correcting one bad row means either living with it
--- forever or reverting and re-importing all 20,000.
---
--- Fix: a BEFORE DELETE trigger on inventory_items that flips the
--- referencing import_batch_rows row(s) to apply_status = 'reverted' (and
--- nulls applied_inventory_item_id itself) before the row is removed —
--- exactly the ordering revert_import_batch (0076) already uses for its
--- own bulk deletes ("Order matters here..." comment there), just applied
--- to the ad hoc single-row delete path too. 'reverted' is the correct
--- terminal state (this row's applied inventory genuinely no longer
--- exists), not a new state invented for this fix. BEFORE DELETE (not
--- AFTER) so this update commits before the FK's own SET NULL action
--- fires, satisfying the CHECK by the time it's evaluated.
---
--- RLS note: the trigger function is left SECURITY INVOKER (the default —
--- no `security definer` clause) on purpose. is_member_with_role(rid,
--- 'staff') (required by "members can update import batch rows") and
--- is_member(rid) (required by "members can delete their inventory") are
--- equivalent in this schema's 3-role hierarchy (owner/manager/staff — see
--- is_member_with_role, 0001): every role that can pass the delete policy
--- also passes the update policy. No elevated privilege is needed, and
--- none is granted.
---
--- Does not affect revert_import_batch (0076): it already manually sets
--- apply_status = 'reverted' and applied_inventory_item_id = null BEFORE
--- deleting each inventory_items row, so this trigger's
--- `and apply_status = 'applied'` guard finds nothing left to do on that
--- path — it only fires for a direct delete that skipped that manual step.
---
--- DOWN: drops the trigger and its function; restores the pre-fix
--- fail-closed (opaque 23514) behavior. See
--- down/0086_import_batch_rows_delete_guard.down.sql.
+-- identity_merge_log is an append-only forensic record of every merge.
+-- Merges are hard deletes, not self-service-reversible — this table gives
+-- a human enough (a full snapshot of the deleted row, plus per-child moved
+-- counts) to reconstruct one by hand if it was a mistake. There is no
+-- unmerge_* RPC in P2.
+create table public.identity_merge_log (
+  id              uuid        primary key default gen_random_uuid(),
+  merge_type      text        not null check (merge_type in ('canonical_wine', 'wine')),
+  source_id       uuid        not null,
+  target_id       uuid        not null,
+  restaurant_id   uuid        references public.restaurants(id) on delete set null,
+  source_snapshot jsonb       not null,
+  moved_counts    jsonb       not null,
+  merged_by       uuid        references auth.users(id) on delete set null,
+  merged_at       timestamptz not null default now()
+);
 
-create or replace function public.import_batch_rows_reflect_inventory_delete()
-returns trigger
-language plpgsql
-as $$
-begin
-  update public.import_batch_rows
-    set apply_status = 'reverted',
-        applied_inventory_item_id = null,
-        updated_at = now()
-    where applied_inventory_item_id = OLD.id
-      and apply_status = 'applied';
-  return OLD;
-end;
-$$;
+comment on table public.identity_merge_log is
+  'Append-only. restaurant_id is populated for wine-level merges '
+  '(merge_wines), null for canonical-level merges (merge_canonical_wines), '
+  'since a canonical merge is inherently cross-tenant. Written only by '
+  'those two functions, both SECURITY DEFINER/service-role, never by a '
+  'raw client insert.';
 
-comment on function public.import_batch_rows_reflect_inventory_delete() is
-  'C13 (db audit 2026-08-23): before an inventory_items row is deleted, '
-  'flip any import_batch_rows row that still names it applied to '
-  'reverted (and null its applied_inventory_item_id itself) so the '
-  'import_batch_rows_applied_has_inventory_id CHECK (0076) is already '
-  'satisfied by the time the FK''s ON DELETE SET NULL action runs. '
-  'Without this, deleting an applied import row through the ordinary '
-  'member-delete policy fails outright with SQLSTATE 23514.';
+create index identity_merge_log_restaurant_idx
+  on public.identity_merge_log (restaurant_id, merged_at desc)
+  where restaurant_id is not null;
+create index identity_merge_log_source_idx on public.identity_merge_log (source_id);
+create index identity_merge_log_target_idx on public.identity_merge_log (target_id);
 
-create trigger inventory_items_reflect_import_delete
-  before delete on public.inventory_items
-  for each row execute function public.import_batch_rows_reflect_inventory_delete();
+alter table public.identity_merge_log enable row level security;
 
--- === 0087_record_pour_overage_shortfall.sql ===
--- 0087_record_pour_overage_shortfall.sql
---
--- C21 (db audit 2026-08-23, verified V4-bottles.md) — record_pour's
--- overage branch (0044) charges the FULL requested pour amount against
--- the replacement bottle, on top of already charging the old bottle's
--- remainder via the finish_bottle event. Verified reproduction: 750ml
--- bottle, poured 700ml (50ml remaining), then poured 150ml (overage).
--- Ledger: finish_bottle 50 (bottle 1, correct) + new_bottle -750 (bottle
--- 2) + pour 150 (bottle 2 — the FULL requested amount, charged again).
--- Customer was actually served 700+150=850ml; the ledger's positive-delta
--- events sum to 700+50+150=900ml — a 50ml phantom loss, and bottle 2's
--- remaining_ml lands at 600 instead of the physically correct 650
--- (750 - the 100ml shortfall actually drawn from it).
---
--- Fix: the pour event recorded against the replacement bottle should
--- charge only the shortfall (p_ml - the old bottle's remaining_ml at the
--- moment of overage), not the full p_ml — the old bottle's remainder is
--- already accounted for by the finish_bottle event a few lines above.
--- Captured into v_shortfall before v_current is overwritten by the
--- post-new_bottle re-select, since v_current.remaining_ml no longer holds
--- the OLD bottle's value after that point. No other branch changes.
---
--- DOWN: restores record_pour to its exact pre-fix (0044) body. See
--- down/0087_record_pour_overage_shortfall.down.sql.
+-- is_member(null) is false for every caller, so this single policy
+-- correctly hides every canonical-level (restaurant_id null) row from
+-- authenticated clients — those are readable only by service_role, which
+-- bypasses RLS entirely (confirmed: service_role has BYPASSRLS locally).
+create policy "members can read their restaurant's merge log"
+  on public.identity_merge_log for select to authenticated
+  using (public.is_member(restaurant_id));
 
-create or replace function public.record_pour(
-  p_wine_id uuid,
-  p_ml      int,
-  p_kind    text default 'pour',
-  p_note    text default null
-) returns public.open_bottles
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_restaurant_id  uuid;
-  v_size_ml        int;
-  v_current        public.open_bottles%rowtype;
-  v_open_bottle_id uuid;
-  v_sealed_item    public.inventory_items%rowtype;
-  v_shortfall      int;
-  v_user           uuid := auth.uid();
-begin
-  if p_ml is null or p_ml <= 0 then
-    raise exception 'p_ml must be positive';
-  end if;
-  if p_kind not in ('pour','spill') then
-    raise exception 'p_kind must be pour or spill';
-  end if;
+-- No insert/update/delete policy for authenticated/anon: merge_wines is
+-- SECURITY DEFINER (runs as its owner regardless of grants) and
+-- merge_canonical_wines is service-role-only, so neither needs a client
+-- write grant here.
+grant select on table public.identity_merge_log to authenticated;
 
-  select restaurant_id, size_ml into v_restaurant_id, v_size_ml
-    from public.wines where id = p_wine_id;
-  if v_restaurant_id is null then
-    raise exception 'wine not found';
-  end if;
-
-  if not public.is_member_with_role(v_restaurant_id, 'staff') then
-    raise exception 'forbidden' using errcode = '42501';
-  end if;
-
-  -- Only consider active (non-closed) bottles.
-  select * into v_current
-    from public.open_bottles
-    where wine_id = p_wine_id and restaurant_id = v_restaurant_id
-      and closed_at is null
-    for update;
-
-  if not found then
-    -- No open bottle: need to open one from sealed stock.
-    select * into v_sealed_item
-      from public.inventory_items
-      where wine_id = p_wine_id
-        and restaurant_id = v_restaurant_id
-        and quantity > 0
-      order by added_at asc
-      limit 1
-      for update skip locked;
-
-    if not found then
-      raise exception 'TERROIR_OUT_OF_STOCK' using errcode = 'P0001';
-    end if;
-
-    update public.inventory_items
-      set quantity = quantity - 1
-      where id = v_sealed_item.id;
-
-    insert into public.pour_events
-      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note)
-    values
-      (p_wine_id, v_restaurant_id, -v_size_ml, 'new_bottle', v_user, p_note);
-
-    select * into v_current
-      from public.open_bottles
-      where wine_id = p_wine_id and restaurant_id = v_restaurant_id;
-
-    v_open_bottle_id := v_current.id;
-  else
-    v_open_bottle_id := v_current.id;
-  end if;
-
-  if v_current.remaining_ml >= p_ml then
-    insert into public.pour_events
-      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note, open_bottle_id)
-    values
-      (p_wine_id, v_restaurant_id, p_ml, p_kind, v_user, p_note, v_open_bottle_id);
-  else
-    -- Overage: finish current, open next, pour only the shortfall against
-    -- the replacement (C21 fix — the old bottle's remainder is already
-    -- charged via the finish_bottle event just below; charging the FULL
-    -- p_ml again against the new bottle double-counts that remainder).
-    v_shortfall := p_ml - v_current.remaining_ml;
-
-    insert into public.pour_events
-      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note, open_bottle_id)
-    values
-      (p_wine_id, v_restaurant_id, v_current.remaining_ml, 'finish_bottle', v_user, p_note, v_open_bottle_id);
-
-    select * into v_sealed_item
-      from public.inventory_items
-      where wine_id = p_wine_id
-        and restaurant_id = v_restaurant_id
-        and quantity > 0
-      order by added_at asc
-      limit 1
-      for update skip locked;
-
-    if not found then
-      -- We finished the bottle but have no replacement.
-      raise exception 'TERROIR_OUT_OF_STOCK' using errcode = 'P0001';
-    end if;
-
-    update public.inventory_items
-      set quantity = quantity - 1
-      where id = v_sealed_item.id;
-
-    insert into public.pour_events
-      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note)
-    values
-      (p_wine_id, v_restaurant_id, -v_size_ml, 'new_bottle', v_user, p_note);
-
-    select * into v_current
-      from public.open_bottles
-      where wine_id = p_wine_id and restaurant_id = v_restaurant_id;
-
-    insert into public.pour_events
-      (wine_id, restaurant_id, ml_delta, kind, actor_user_id, note, open_bottle_id)
-    values
-      (p_wine_id, v_restaurant_id, v_shortfall, p_kind, v_user, p_note, v_current.id);
-  end if;
-
-  -- Return the (possibly new) open_bottles row.
-  select * into v_current
-    from public.open_bottles
-    where wine_id = p_wine_id and restaurant_id = v_restaurant_id;
-  return v_current;
-end;
-$$;
-
-grant execute on function public.record_pour(uuid, int, text, text) to authenticated;
-
--- === 0088_undo_last_pour_single_reversal.sql ===
--- 0088_undo_last_pour_single_reversal.sql
---
--- C22 (db audit 2026-08-23, verified V4-bottles.md) — undo_last_pour
--- (0040) manually reverses a pour event's ml_delta onto open_bottles,
--- then deletes the pour_events row; the AFTER DELETE trigger added later
--- (pour_events_reverse_open_bottle, 0050) independently reverses the same
--- delete. Verified reproduction: 750ml bottle, poured 150ml (600ml
--- remaining), undo_last_pour -> remaining_ml = 900 (should be 750).
--- Isolated proof (disabling the trigger for one transaction, then rolling
--- back): with the trigger off, the manual reversal alone correctly
--- produces 750ml — confirming the trigger is the second, redundant
--- reverser, not the manual code.
---
--- Fix (per the fix sketch's first option): remove the manual reversal
--- from undo_last_pour and let the AFTER DELETE trigger (0050) be the
--- sole reversal mechanism. The trigger's own reversal for kind IN
--- ('pour','spill','finish_bottle') is byte-for-byte the same
--- computation the manual branch performed
--- (remaining_ml = remaining_ml + OLD.ml_delta), so removing the
--- duplicate returns to the single, correct reversal — nothing else
--- about undo's behavior changes.
---
--- The rejected alternative (disable/bypass the trigger for undo's own
--- delete via ALTER TABLE ... DISABLE TRIGGER) was measured and rejected:
--- ALTER TABLE ... DISABLE/ENABLE TRIGGER takes a SHARE ROW EXCLUSIVE lock
--- on pour_events, which conflicts with the ROW EXCLUSIVE lock every
--- concurrent pour/spill/reconcile INSERT needs — every undo would
--- serialize against every pour, tenant-wide, on a table that exists
--- specifically to record high-frequency events. Removing the duplicate
--- update carries no such cost.
---
--- Also removes the "else" branch that recreated a deleted open_bottles
--- row: verified dead code in the current schema. open_bottles rows have
--- not been deleted since 0044 (drained bottles get closed_at set
--- instead), and pour_events.wine_id is ON DELETE RESTRICT (0016), so a
--- wine with any pour_events can never be deleted either — the row this
--- branch existed to recreate cannot be missing while a pour/spill event
--- referencing it (with open_bottle_id IS NOT NULL, per undo's own
--- eligibility filter) still exists. Left in place, this branch would
--- silently INSERT a duplicate row into a table with a wine_id+
--- restaurant_id UNIQUE constraint (0016) the moment it ever did execute,
--- which is strictly worse than raising loudly if the "impossible" case
--- is ever hit — this migration raises instead.
---
--- Belt-and-suspenders (per the fix sketch's second half): adds a
--- BEFORE INSERT OR UPDATE invariant trigger on open_bottles rejecting any
--- remaining_ml that would exceed its wine's size_ml. reconcile_open_bottle
--- (0044) already enforces this at the call site; this closes the same gap
--- at the table level so a FUTURE double-reversal-shaped bug fails loudly
--- (an exception) instead of silently producing physically impossible
--- state like the verified 900ml-in-a-750ml-bottle. Skips wines with a
--- null size_ml (nothing to bound against).
---
--- DOWN: restores undo_last_pour to its exact pre-fix (0040) body
--- (reintroducing the double-reversal bug) and drops the invariant
--- trigger. See down/0088_undo_last_pour_single_reversal.down.sql.
-
--- ── 1. undo_last_pour: single reversal, no dead-code recreate branch ────
-
-create or replace function public.undo_last_pour(
-  p_wine_id uuid
-) returns public.open_bottles
+-------------------------------------------------------------------------------
+-- merge_wines — replaced again (the same pattern 0055 used on 0054's
+-- version). Extended per the confirmed C23 finding
+-- (scratchpad db-audit/verify/V4-bottles.md): the shipped function
+-- repointed only 5 of the 10 live FKs to wines(id), and 4 of the other 5
+-- were CASCADE — silently destroyed, not orphaned, under a 200 OK that
+-- never mentioned the loss. All 10 confirmed via a live pg_constraint
+-- query against this exact schema (see the P2 builder report). Existing
+-- lineage/vintage/format-equality guards and the manager-role check are
+-- untouched — this is a mechanical extension, not a rewrite of its
+-- guards.
+-------------------------------------------------------------------------------
+create or replace function public.merge_wines(
+  p_source_wine_id uuid,
+  p_target_wine_id uuid
+)
+returns jsonb
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  v_restaurant_id uuid;
-  v_event         public.pour_events%rowtype;
-  v_current       public.open_bottles%rowtype;
-  v_user          uuid := auth.uid();
+  v_source                    public.wines%rowtype;
+  v_target                    public.wines%rowtype;
+  v_restaurant_id              uuid;
+  v_moved_inventory            int;
+  v_moved_pours                int;
+  v_moved_bottles              int;
+  v_moved_list_items           int;
+  v_deduped_list_items         int;
+  v_moved_avail                int;
+  v_moved_bottle_closeouts     int;
+  v_moved_stock_adjustments    int;
+  v_moved_pricing_recs         int;
+  v_moved_cellar_health        int;
+  v_dropped_cellar_health      int;
+  v_moved_import_batch_rows    int;
 begin
-  -- Auth check: must be a member of this wine's restaurant.
-  select restaurant_id into v_restaurant_id
-    from public.wines where id = p_wine_id;
-  if v_restaurant_id is null then
-    raise exception 'wine not found';
+  if p_source_wine_id = p_target_wine_id then
+    raise exception 'identical_merge: source and target are the same wine';
   end if;
 
-  if not public.is_member_with_role(v_restaurant_id, 'staff') then
-    raise exception 'forbidden' using errcode = '42501';
-  end if;
-
-  -- Find the most recent pour or spill event for this wine
-  -- that has an open_bottle_id (i.e., was recorded against a specific bottle).
-  select * into v_event
-    from public.pour_events
-    where wine_id = p_wine_id
-      and restaurant_id = v_restaurant_id
-      and kind in ('pour', 'spill')
-      and open_bottle_id is not null
-    order by occurred_at desc
-    limit 1
+  -- Deterministic lock order to avoid deadlocks between concurrent merges.
+  perform 1 from public.wines
+    where id in (p_source_wine_id, p_target_wine_id)
+    order by id
     for update;
 
-  if not found then
-    raise exception 'no recent pour to undo';
+  select * into v_source from public.wines where id = p_source_wine_id;
+  select * into v_target from public.wines where id = p_target_wine_id;
+
+  if v_source.id is null or v_target.id is null
+     or v_source.restaurant_id <> v_target.restaurant_id then
+    raise exception 'wine_not_found: both wines must exist in the same restaurant';
   end if;
 
-  -- Lock the current open_bottles row. C22 (db audit 2026-08-23): this
-  -- row is not manually updated any more — the AFTER DELETE trigger
-  -- (pour_events_reverse_open_bottle, 0050) is the sole reversal
-  -- mechanism, fired by the delete below. Locking it here still
-  -- serializes concurrent undo/pour calls on the same bottle.
-  select * into v_current
-    from public.open_bottles
-    where wine_id = p_wine_id and restaurant_id = v_restaurant_id
-    for update;
-
-  if not found then
-    -- Verified unreachable in the current schema (see migration header)
-    -- — fail loudly rather than silently recreate a row the trigger
-    -- below has nothing to reverse against.
-    raise exception 'no open bottle found to restore for wine %', p_wine_id;
+  v_restaurant_id := v_source.restaurant_id;
+  if not public.is_member_with_role(v_restaurant_id, 'manager') then
+    raise exception 'forbidden: manager role required to merge wines';
   end if;
 
-  -- Delete the pour event (the undo action). The AFTER DELETE trigger
-  -- (0050) reverses OLD.ml_delta back onto open_bottles.remaining_ml.
-  delete from public.pour_events
-    where id = v_event.id;
+  if v_source.lineage_id is null or v_target.lineage_id is null
+     or v_source.lineage_id <> v_target.lineage_id then
+    raise exception 'lineage_mismatch_merge: wines are not the same producer-cuvée — merging is only for true duplicates';
+  end if;
 
-  -- Insert an availability event to record the undo.
-  insert into public.availability_events
-    (wine_id, restaurant_id, direction, user_id, note)
-  values
-    (p_wine_id, v_restaurant_id, 'restored', v_user, 'undo pour: ' || v_event.ml_delta || 'ml restored');
+  if coalesce(v_source.vintage, 0) <> coalesce(v_target.vintage, 0) then
+    raise exception 'cross_vintage_merge: % and % are distinct vintages — they are already linked as vintage siblings, not duplicates',
+      coalesce(v_source.vintage::text, 'NV'), coalesce(v_target.vintage::text, 'NV');
+  end if;
 
-  -- Return the updated open_bottles row.
-  select * into v_current
-    from public.open_bottles
-    where wine_id = p_wine_id and restaurant_id = v_restaurant_id;
-  return v_current;
+  if v_source.size_ml <> v_target.size_ml then
+    raise exception 'format_mismatch_merge: % ml and % ml are distinct formats',
+      v_source.size_ml, v_target.size_ml;
+  end if;
+
+  -- P2: wine_variant_id repoint, fail loud rather than silently pick.
+  -- Both set and different means normalization failed to converge two
+  -- spellings onto one identity — the fix is a merge_canonical_wines call
+  -- first, not this function guessing which one is right.
+  if v_source.wine_variant_id is not null and v_target.wine_variant_id is not null
+     and v_source.wine_variant_id <> v_target.wine_variant_id then
+    raise exception 'variant_identity_conflict: source wine_variant_id % and target wine_variant_id % disagree — run merge_canonical_wines to reconcile the underlying identities first',
+      v_source.wine_variant_id, v_target.wine_variant_id;
+  end if;
+
+  if v_target.wine_variant_id is null and v_source.wine_variant_id is not null then
+    update public.wines set wine_variant_id = v_source.wine_variant_id
+     where id = p_target_wine_id;
+  end if;
+
+  -- Repoint every referrer; history rows keep their own timestamps, actors,
+  -- and costs — the audit trail survives the merge (EV-1.2).
+  update public.inventory_items set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_inventory = row_count;
+
+  update public.pour_events set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_pours = row_count;
+
+  update public.open_bottles set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_bottles = row_count;
+
+  -- A section listing BOTH wines would show the target twice after a blind
+  -- repoint (no uniqueness on (section_id, wine_id)). Drop the source's row
+  -- wherever the target is already listed, then repoint the rest.
+  delete from public.wine_list_items s
+   where s.wine_id = p_source_wine_id
+     and exists (
+           select 1 from public.wine_list_items t
+            where t.section_id = s.section_id
+              and t.wine_id = p_target_wine_id
+         );
+  get diagnostics v_deduped_list_items = row_count;
+
+  update public.wine_list_items set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_list_items = row_count;
+
+  update public.availability_events set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_avail = row_count;
+
+  -- P2 (C23 fix): bottle_closeouts, stock_adjustments, pricing_recommendations
+  -- have no uniqueness constraint blocking a blind repoint — real write-offs,
+  -- comps, and pricing history that a pre-P2 merge silently cascade-deleted.
+  update public.bottle_closeouts set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_bottle_closeouts = row_count;
+
+  update public.stock_adjustments set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_stock_adjustments = row_count;
+
+  update public.pricing_recommendations set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_pricing_recs = row_count;
+
+  -- cellar_health has unique(restaurant_id, wine_id); since source and
+  -- target share one restaurant (enforced above), at most one row per
+  -- wine can exist. If the target already has one, the source's is a
+  -- redundant duplicate (recomputed nightly, per its own migration
+  -- comment) — drop it rather than picking one arbitrarily. Otherwise
+  -- repoint it.
+  delete from public.cellar_health s
+   where s.wine_id = p_source_wine_id
+     and exists (
+           select 1 from public.cellar_health t
+            where t.wine_id = p_target_wine_id and t.restaurant_id = s.restaurant_id
+         );
+  get diagnostics v_dropped_cellar_health = row_count;
+
+  update public.cellar_health set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_cellar_health = row_count;
+
+  -- P2 (C23 fix): import_batch_rows.applied_wine_id is ON DELETE SET NULL
+  -- today — the merge silently orphans "which import created this wine".
+  update public.import_batch_rows set applied_wine_id = p_target_wine_id
+   where applied_wine_id = p_source_wine_id;
+  get diagnostics v_moved_import_batch_rows = row_count;
+
+  insert into public.identity_merge_log (
+    merge_type, source_id, target_id, restaurant_id, source_snapshot, moved_counts, merged_by
+  ) values (
+    'wine', p_source_wine_id, p_target_wine_id, v_restaurant_id,
+    to_jsonb(v_source),
+    jsonb_build_object(
+      'moved_inventory_items',      v_moved_inventory,
+      'moved_pour_events',          v_moved_pours,
+      'moved_open_bottles',         v_moved_bottles,
+      'moved_wine_list_items',      v_moved_list_items,
+      'deduped_wine_list_items',    v_deduped_list_items,
+      'moved_availability_events',  v_moved_avail,
+      'moved_bottle_closeouts',     v_moved_bottle_closeouts,
+      'moved_stock_adjustments',    v_moved_stock_adjustments,
+      'moved_pricing_recommendations', v_moved_pricing_recs,
+      'moved_cellar_health',        v_moved_cellar_health,
+      'dropped_cellar_health',      v_dropped_cellar_health,
+      'moved_import_batch_rows',    v_moved_import_batch_rows
+    ),
+    auth.uid()
+  );
+
+  delete from public.wines where id = p_source_wine_id;
+
+  return jsonb_build_object(
+    'target_id',                     p_target_wine_id,
+    'moved_inventory_items',         v_moved_inventory,
+    'moved_pour_events',             v_moved_pours,
+    'moved_open_bottles',            v_moved_bottles,
+    'moved_wine_list_items',         v_moved_list_items,
+    'deduped_wine_list_items',       v_deduped_list_items,
+    'moved_availability_events',     v_moved_avail,
+    'moved_bottle_closeouts',        v_moved_bottle_closeouts,
+    'moved_stock_adjustments',       v_moved_stock_adjustments,
+    'moved_pricing_recommendations', v_moved_pricing_recs,
+    'moved_cellar_health',           v_moved_cellar_health,
+    'dropped_cellar_health',         v_dropped_cellar_health,
+    'moved_import_batch_rows',       v_moved_import_batch_rows
+  );
 end;
 $$;
 
-grant execute on function public.undo_last_pour(uuid) to authenticated;
+comment on function public.merge_wines(uuid, uuid) is
+  'P2 extension (0100) of the 0055 version: now repoints all 10 live FKs '
+  'to wines(id) (previously 5), closing the confirmed C23 data-loss gap, '
+  'plus the new wine_variant_id conflict guard. See '
+  'supabase/tests/0100_merge_completeness.sql for the standing regression '
+  'test that fails the build if a future FK to wines/canonical_wines/'
+  'wine_variants is added without updating this function or '
+  'merge_canonical_wines.';
 
--- ── 2. Capacity invariant: remaining_ml can never exceed the wine's size ─
-
-create or replace function public.open_bottles_enforce_capacity()
-returns trigger
+-------------------------------------------------------------------------------
+-- merge_canonical_wines — operator/service-role only. NOT exposed to
+-- tenants: the orchestrating session narrowed this from the plan's
+-- original "any manager at one stakeholder restaurant" design (the
+-- plan's own §14 flagged that authorization rule as its least-settled
+-- decision) rather than inventing an untested cross-tenant permissions
+-- model. Tenant-level deduplication is fully served by merge_wines above;
+-- this function exists so an operator can fix the shared canonical
+-- catalog itself (e.g. two independently-created rows for the same
+-- real-world wine because two tenants imported it before either had a
+-- matching LWIN).
+--
+-- SECURITY INVOKER, not definer (a deliberate deviation from the plan's
+-- text): the plan called for DEFINER because it originally needed to let
+-- an ordinary authenticated tenant manager cross a tenancy boundary they
+-- couldn't otherwise see. Now that only service_role may call this
+-- function at all (see the grant below), DEFINER's privilege elevation is
+-- not load-bearing — service_role already has BYPASSRLS (confirmed
+-- locally: rolbypassrls=true), so INVOKER reaches every row this function
+-- needs without any elevation, at strictly lower privilege. There is no
+-- manager-role check in this body for the same reason: the grant IS the
+-- authorization.
+-------------------------------------------------------------------------------
+create or replace function public.merge_canonical_wines(
+  p_source_id uuid,
+  p_target_id uuid
+)
+returns jsonb
 language plpgsql
+security invoker
+set search_path = public
 as $$
 declare
-  v_size_ml int;
+  v_source              public.canonical_wines%rowtype;
+  v_target              public.canonical_wines%rowtype;
+  v_conflict_restaurant uuid;
+  v_conflict_vintage    int;
+  v_conflict_size_ml    int;
+  v_moved_variants      int;
+  v_moved_lineages      int;
+  v_moved_wines         int;
+  v_moved_aliases       int;
+  v_deduped_aliases     int;
 begin
-  select size_ml into v_size_ml from public.wines where id = NEW.wine_id;
-  if v_size_ml is not null and NEW.remaining_ml > v_size_ml then
-    raise exception 'open_bottles.remaining_ml (%) would exceed wine % size_ml (%)',
-      NEW.remaining_ml, NEW.wine_id, v_size_ml
-      using errcode = 'P0003';
+  if p_source_id = p_target_id then
+    raise exception 'identical_merge: source and target are the same canonical wine';
   end if;
-  return NEW;
+
+  perform 1 from public.canonical_wines
+    where id in (p_source_id, p_target_id)
+    order by id
+    for update;
+
+  select * into v_source from public.canonical_wines where id = p_source_id;
+  select * into v_target from public.canonical_wines where id = p_target_id;
+
+  if v_source.id is null or v_target.id is null then
+    raise exception 'canonical_wine_not_found: both canonical wines must exist';
+  end if;
+
+  -- variant_conflict: a restaurant holding both source and target as the
+  -- same (vintage, size_ml) is a real tenant-level duplicate this merge
+  -- would otherwise create by repointing both onto one canonical id.
+  -- Fail loud and name the restaurant — resolved via that tenant's own
+  -- merge_wines first, deliberately not auto-resolved here.
+  select a.restaurant_id, a.vintage, a.size_ml
+    into v_conflict_restaurant, v_conflict_vintage, v_conflict_size_ml
+  from public.wine_variants a
+  where a.canonical_wine_id = p_source_id
+    and exists (
+      select 1 from public.wine_variants b
+      where b.canonical_wine_id = p_target_id
+        and b.restaurant_id = a.restaurant_id
+        and coalesce(b.vintage, 0) = coalesce(a.vintage, 0)
+        and b.size_ml = a.size_ml
+    )
+  limit 1;
+
+  if v_conflict_restaurant is not null then
+    raise exception 'variant_conflict: restaurant % already holds both canonical wines as the same vintage (%) and size_ml (%) — resolve via that restaurant''s merge_wines first',
+      v_conflict_restaurant, coalesce(v_conflict_vintage::text, 'NV'), v_conflict_size_ml;
+  end if;
+
+  update public.wine_variants set canonical_wine_id = p_target_id
+   where canonical_wine_id = p_source_id;
+  get diagnostics v_moved_variants = row_count;
+
+  update public.wine_lineages set canonical_wine_id = p_target_id
+   where canonical_wine_id = p_source_id;
+  get diagnostics v_moved_lineages = row_count;
+
+  -- wines.canonical_wine_id is denormalized off wine_variants (see 0098's
+  -- wines_derive_canonical_wine_id trigger) but that trigger only fires on
+  -- wines.wine_variant_id changing — not on the wine_variants row it
+  -- points at being repointed underneath it by this function. Without
+  -- this line the denormalized column would silently go stale the moment
+  -- this function runs, which is exactly the kind of convention-only
+  -- invariant 0098's own comment says C17 already showed is unsafe.
+  update public.wines set canonical_wine_id = p_target_id
+   where canonical_wine_id = p_source_id;
+  get diagnostics v_moved_wines = row_count;
+
+  -- Dedup exact-duplicate aliases before repointing, mirroring 0055's
+  -- wine_list_items dedupe: a raw string already recorded against the
+  -- target keeps only one row.
+  delete from public.wine_aliases s
+   where s.canonical_wine_id = p_source_id
+     and exists (
+       select 1 from public.wine_aliases t
+        where t.canonical_wine_id = p_target_id
+          and t.raw_producer is not distinct from s.raw_producer
+          and t.raw_cuvee is not distinct from s.raw_cuvee
+     );
+  get diagnostics v_deduped_aliases = row_count;
+
+  update public.wine_aliases set canonical_wine_id = p_target_id
+   where canonical_wine_id = p_source_id;
+  get diagnostics v_moved_aliases = row_count;
+
+  insert into public.identity_merge_log (
+    merge_type, source_id, target_id, restaurant_id, source_snapshot, moved_counts, merged_by
+  ) values (
+    'canonical_wine', p_source_id, p_target_id, null,
+    to_jsonb(v_source),
+    jsonb_build_object(
+      'moved_wine_variants', v_moved_variants,
+      'moved_wine_lineages', v_moved_lineages,
+      'moved_wines',         v_moved_wines,
+      'moved_wine_aliases',  v_moved_aliases,
+      'deduped_wine_aliases', v_deduped_aliases
+    ),
+    auth.uid()
+  );
+
+  delete from public.canonical_wines where id = p_source_id;
+
+  return jsonb_build_object(
+    'target_id',            p_target_id,
+    'moved_wine_variants',  v_moved_variants,
+    'moved_wine_lineages',  v_moved_lineages,
+    'moved_wines',          v_moved_wines,
+    'moved_wine_aliases',   v_moved_aliases,
+    'deduped_wine_aliases', v_deduped_aliases
+  );
 end;
 $$;
 
-comment on function public.open_bottles_enforce_capacity() is
-  'C22 (db audit 2026-08-23): defense-in-depth invariant — no write path '
-  'may leave open_bottles.remaining_ml greater than its wine''s size_ml. '
-  'reconcile_open_bottle (0044) already checks this at the call site; '
-  'this closes the same gap at the table level so a future double-'
-  'reversal-shaped bug (like the one this migration fixes) fails loudly '
-  'instead of producing physically impossible state.';
+comment on function public.merge_canonical_wines(uuid, uuid) is
+  'Operator/service-role only — see the comment above this function''s '
+  'definition for why there is no authenticated grant and no in-body '
+  'role check. Every future migration adding an FK to canonical_wines(id)'
+  '/wine_variants(id) MUST extend this function (or merge_wines) AND '
+  'supabase/tests/0100_merge_completeness.sql in the same migration.';
 
-create trigger open_bottles_enforce_capacity_trigger
-  before insert or update on public.open_bottles
-  for each row execute function public.open_bottles_enforce_capacity();
+revoke all on function public.merge_canonical_wines(uuid, uuid) from public;
+grant execute on function public.merge_canonical_wines(uuid, uuid) to service_role;
 
--- === 0089_invoice_scans_updated_at.sql ===
--- 0089_invoice_scans_updated_at.sql
+-- === 0101_wine_identity_backfill.sql ===
+-- 0101_wine_identity_backfill.sql
+-- P2 — wine identity spine, part 5: data migration for pre-existing wines
+-- rows. Idempotent (every pass is scoped to "where wine_variant_id is
+-- null"), following the three-pass structure 0054_wine_lineages.sql
+-- already used for its own backfill.
 --
--- C14 (db audit 2026-08-23): POST /api/scans/[id]/re-extract has zero
--- concurrency control. Its UPDATE is fenced on nothing but id +
--- restaurant_id, so two overlapping re-extract calls on the same scan
--- (two staff members, or one slow retry overlapping a fresh attempt)
--- silently clobber each other — whichever commits last wins, with no
--- error to either caller. Verified live (.../verify/V3-concurrency.md,
--- C14): a fast, high-confidence result was silently overwritten by a
--- slower, lower-confidence one seconds later, after the fast caller had
--- already received HTTP 200 with the correct result.
+-- Normalization here is public.identity_normalize_text() (0097) — the
+-- same function that GENERATES canonical_wines' identity key, so this
+-- pass cannot key a row differently from any other writer even though it
+-- runs as the table owner with RLS bypassed.
 --
--- The auditor's literal claimed mechanism (re-extract racing a
--- background worker's first-pass persist) was REFUTED by verification —
--- the route's own ocr_text-required precondition already blocks that.
--- The underlying absence of any concurrency control on re-extract itself
--- was CONFIRMED and is what this migration fixes.
+-- P2 ROUND-6 CORRECTION, recorded rather than quietly fixed: this header
+-- previously called the SQL normalization a "best-effort approximation"
+-- of src/domains/identity/normalize.ts and argued the divergence was
+-- acceptable because its failure mode is always "creates one extra
+-- canonical/variant row a later exact match could have reused," never
+-- "merges two different wines." That argument was sound only while the
+-- SQL side merely COMPARED. Once round 5 moved identity-key derivation
+-- server-side, the same divergence became capable of merging two
+-- different wines, and it immediately did: the SQL function lacked
+-- normalize.ts's possessive-suffix rule, so "O'Brien's Vineyard" and
+-- "O.S. Brien Vineyard" — the exact D3 pair round 2 separated — both
+-- normalized to "brien o s vineyard" and would have shared one canonical
+-- identity. Measured, not theorised: 10 of 17 frozen golden vectors
+-- agreed before the fix, 17 of 17 after. The two implementations are now
+-- asserted equivalent unconditionally by
+-- src/domains/identity/normalize.test.ts rather than assumed close
+-- enough, and the "never merges two different wines" guarantee is
+-- restored by that test rather than by argument.
 --
--- invoice_scans.status can't serve as the fence value here: the race
--- reproduces between two re-extracts that both start AND end on the same
--- status ('complete' -> 'complete'), so a fence on an unchanged value
--- would let the second write through too. This adds `updated_at` +
--- the existing `set_updated_at()` trigger (already used on 11 other
--- tables, see e.g. 0057_bins.sql) so every UPDATE bumps a value the
--- application can fence on: read updated_at at fetch time, fence the
--- write on that exact value, and treat a 0-row result as "someone else
--- updated this scan first" (409), not "silently proceed."
+-- On a fresh local stack `wines` is empty, so this is a no-op there; it
+-- exists for production-safety discipline, matching this codebase's habit
+-- of never assuming a clean slate.
 --
--- invoice_scans is a per-restaurant, per-scan row table (not the
--- multi-thousand-row import path) — this ALTER TABLE is expected to be
--- fast even under the volatile `now()` default, which forces a full
--- rewrite rather than the metadata-only fast path Postgres uses for a
--- constant default. No CONCURRENTLY-anything needed.
+-- Uses explicit `drop table if exists` cleanup rather than
+-- `on commit drop`: unlike resolve_wine_variants_bulk (0099), which
+-- creates its scratch table inside one plpgsql function call and is
+-- therefore guaranteed to run within a single transaction regardless of
+-- caller behavior, this is a top-level migration file whose transaction
+-- boundaries are the migration runner's to decide — explicit drops make
+-- cleanup correct either way.
+create extension if not exists unaccent;
 
-alter table public.invoice_scans
-  add column updated_at timestamptz not null default now();
+drop table if exists _identity_backfill_norm;
+create temporary table _identity_backfill_norm as
+select
+  w.id as wine_id,
+  w.restaurant_id,
+  w.producer,
+  w.name,
+  w.vintage,
+  w.size_ml,
+  -- P2 ROUND-5 (D9-residual — scratchpad db-audit/verify/P2-critic-r4.md):
+  -- reuses public.identity_normalize_text() (0097) instead of duplicating
+  -- this exact expression inline — it now also backs the LWIN
+  -- corroboration gate below, and one implementation is easier to keep
+  -- correct than several copies that "agree on the same bug because they
+  -- hardcode the same literals" (the round-4 critic's framing of why
+  -- three independent copies of the OLD fuzzy check weren't actually
+  -- independent verification).
+  public.identity_normalize_text(w.producer) as producer_norm,
+  public.identity_normalize_text(w.name) as cuvee_norm,
+  case when w.lwin_id ~ '^[0-9]{7}' then substr(w.lwin_id, 1, 7) else null end as lwin7
+from public.wines w
+where w.wine_variant_id is null;
 
-create trigger invoice_scans_set_updated_at
-  before update on public.invoice_scans
-  for each row execute function public.set_updated_at();
+-- Rows whose producer/name collapse to nothing under normalization (e.g.
+-- punctuation-only text) can't be identity-resolved by this pass — leave
+-- them for manual review rather than inventing a placeholder identity.
+delete from _identity_backfill_norm
+where producer_norm is null or cuvee_norm is null;
 
--- === 0090_invoice_scans_committed_at.sql ===
--- 0090_invoice_scans_committed_at.sql
+-------------------------------------------------------------------------------
+-- Pass B: canonical_wines — two-phase exact-key match/create, same shape
+-- as resolve_wine_variants_bulk (0099): LWIN7 wins over text, DISTINCT ON
+-- collapses same-batch duplicates, ON CONFLICT DO NOTHING handles a
+-- concurrent writer.
+-------------------------------------------------------------------------------
+drop table if exists _identity_backfill_resolved;
+create temporary table _identity_backfill_resolved (
+  wine_id           uuid primary key,
+  canonical_wine_id uuid not null,
+  restaurant_id     uuid not null,
+  vintage           int,
+  size_ml           int not null
+);
+
+-- P2 ROUND-5 FIX (D9-residual): identity_status = 'lwin_verified' added.
+-- Without it, this join would match ANY canonical_wines row carrying
+-- n.lwin7 regardless of whether it was ever corroborated — the same
+-- "unverified-squat" hole closed on the resolve_wine_variants_bulk path
+-- (0099) and now also closed here, plus universally by 0097's
+-- canonical_wines_lwin7_requires_verified CHECK CONSTRAINT (this filter
+-- is defense-in-depth on top of that invariant).
+insert into _identity_backfill_resolved (wine_id, canonical_wine_id, restaurant_id, vintage, size_ml)
+select n.wine_id, cw.id, n.restaurant_id, n.vintage, n.size_ml
+from _identity_backfill_norm n
+join public.canonical_wines cw
+  on n.lwin7 is not null and cw.lwin7 = n.lwin7 and cw.identity_status = 'lwin_verified';
+
+insert into _identity_backfill_resolved (wine_id, canonical_wine_id, restaurant_id, vintage, size_ml)
+select n.wine_id, cw.id, n.restaurant_id, n.vintage, n.size_ml
+from _identity_backfill_norm n
+join public.canonical_wines cw
+  on cw.producer_norm = n.producer_norm and cw.cuvee_norm = n.cuvee_norm
+where n.wine_id not in (select wine_id from _identity_backfill_resolved);
+
+-- P2 ROUND-4/5 HISTORY (D9, then D9-residual — scratchpad
+-- db-audit/verify/P2-critic-r3.md and -r4.md): every row still
+-- unresolved at this point is about to CREATE a canonical_wines row
+-- below, claiming identity_status='lwin_verified' whenever its lwin7 is
+-- set. This migration runs as the table owner and BYPASSES RLS entirely
+-- — 0097's insert-policy corroboration cannot reach it, and (before
+-- round 5) neither could 0097's CHECK CONSTRAINT, since it didn't exist
+-- yet — so this backfill needs its own copy of the corroboration LOGIC
+-- regardless (0097's canonical_wines_lwin7_requires_verified CHECK
+-- CONSTRAINT now backstops the OUTCOME universally, but this UPDATE is
+-- what makes the CREATE decision correct in the first place, not merely
+-- constraint-safe). wines.lwin_id is itself settable by any tenant
+-- member via a plain UPDATE on wines with no catalog validation (the
+-- wines update policy is is_member(restaurant_id) with no column
+-- restriction), so this is the same forgery/mis-binding vector as the
+-- resolve_wine_variants_bulk path, triggered by a one-time migration over
+-- whatever wines rows exist at deploy time rather than a live RPC call.
 --
--- C15 (db audit 2026-08-23): POST /api/scans/[id]/commit has no idempotency
--- guard at all — no idempotency key, no committed flag on invoice_scans, no
--- unique constraint on inventory_items. Verified live
--- (.../verify/V3-concurrency.md, C15) as the real tenant owner via genuine
--- PostgREST requests: committing the same scan twice inserted the full set
--- of inventory_items TWICE (wines correctly deduped via
--- find_or_create_wines_batch's own ON CONFLICT, but inventory quantities
--- doubled) on a plain sequential retry — no timing/race technique needed,
--- just a client reload, timeout-and-retry, or double-click. Re-graded
--- CRITICAL: silently doubling real dollar-valued inventory ahead of a
--- 20,000-row bulk import into this same code-path family.
---
--- `committed_at` is claimed atomically (`UPDATE ... WHERE committed_at IS
--- NULL RETURNING id`) BEFORE the wine/inventory work runs, in the same
--- style already established by invoice_scans' other fenced writes
--- (invoice-scan-service.ts, re-extract/route.ts). A second commit attempt
--- sees 0 rows claimed and returns 409 instead of re-inserting. On any
--- failure after the claim, the route releases it (sets committed_at back
--- to null) so a genuinely failed attempt (network blip, transient RPC
--- error) can still be retried — only a call that actually reached
--- "inventory rows exist" is permanently fenced.
+-- Round 4 gated this with pg_trgm similarity() at match_lwin's own
+-- ranking thresholds (0.3/0.21) — the wrong tool for a permanent,
+-- unsupervised decision: similarity('Chateau Pichon Longueville Baron',
+-- 'Chateau Pichon Longueville Comtesse de Lalande') = 0.55, comfortably
+-- above 0.3, for two REAL, DISTINCT estates. Round 5 replaces it with
+-- identity_normalize_text() (see 0097's definition and the corresponding
+-- fix in 0099 for the full Baron/Lalande write-up): EXACT equality on
+-- producer, TOKEN SUBSET on cuvee (display_name commonly combines
+-- producer + wine name, so exact-string cuvee matching would reject
+-- every legitimate case) — both deterministic, neither a score, so this
+-- separates genuinely different producers while still tolerating
+-- accent/case/spacing/punctuation-only differences. A
+-- row that fails corroboration is downgraded (lwin7 stripped) to
+-- identity_status='unverified' below, not dropped from the backfill
+-- entirely — it still gets a real identity via its own text, matching
+-- this file's own already-documented risk tolerance ("creates one extra
+-- canonical/variant row a later exact match could have reused," never
+-- "merges two different wines").
+-- P2 ROUND-6 FIX (D9-residual #2): reads n.producer_norm/n.cuvee_norm —
+-- the values this pass actually resolves and stores on — rather than
+-- recomputing the normalization inline, for the same reason 0099's gate
+-- does. Equal by construction (both come from identity_normalize_text
+-- over the same source text), so no outcome changes; what changes is
+-- that a later edit can no longer make the checked value and the keyed
+-- value drift apart, which is the entire D9-residual bug class.
+update _identity_backfill_norm n
+set lwin7 = null
+where n.wine_id not in (select wine_id from _identity_backfill_resolved)
+  and n.lwin7 is not null
+  and not exists (
+    select 1 from public.lwin_catalog lc
+    where lc.lwin_id = n.lwin7
+      and n.producer_norm = public.identity_normalize_text(lc.producer)
+      and string_to_array(n.cuvee_norm, ' ') <@ string_to_array(public.identity_normalize_text(lc.display_name), ' ')
+  );
 
-alter table public.invoice_scans
-  add column committed_at timestamptz;
+-- P2 ROUND-6 (D9-residual #2): producer_norm/cuvee_norm are omitted —
+-- canonical_wines GENERATES them (0097). This migration runs as the
+-- table owner and bypasses RLS, so before round 6 it was the one path
+-- that could write ANY identity key with no policy in its way; the
+-- generated columns now bind it to n.producer/n.name exactly like every
+-- other caller. The stored key stays byte-identical to the
+-- n.producer_norm this statement still uses for DISTINCT ON and as the
+-- conflict target, since _identity_backfill_norm derived it with the
+-- same function call.
+with new_canon as (
+  insert into public.canonical_wines (
+    producer, cuvee, lwin7, identity_status,
+    created_by_restaurant_id
+  )
+  select distinct on (n.producer_norm, n.cuvee_norm)
+    n.producer, n.name, n.lwin7,
+    case when n.lwin7 is not null then 'lwin_verified' else 'unverified' end,
+    n.restaurant_id
+  from _identity_backfill_norm n
+  where n.wine_id not in (select wine_id from _identity_backfill_resolved)
+  order by n.producer_norm, n.cuvee_norm, n.wine_id
+  on conflict (producer_norm, cuvee_norm) do nothing
+  returning id, producer_norm, cuvee_norm
+)
+insert into _identity_backfill_resolved (wine_id, canonical_wine_id, restaurant_id, vintage, size_ml)
+select n.wine_id, nc.id, n.restaurant_id, n.vintage, n.size_ml
+from _identity_backfill_norm n
+join new_canon nc on nc.producer_norm = n.producer_norm and nc.cuvee_norm = n.cuvee_norm
+where n.wine_id not in (select wine_id from _identity_backfill_resolved);
+
+-- Lost-the-conflict-race read-back (a concurrent writer, or an earlier
+-- in-batch DISTINCT ON representative that this row's own producer/cuvee
+-- pair matched but which wasn't visible as a "new_canon" row above).
+insert into _identity_backfill_resolved (wine_id, canonical_wine_id, restaurant_id, vintage, size_ml)
+select n.wine_id, cw.id, n.restaurant_id, n.vintage, n.size_ml
+from _identity_backfill_norm n
+join public.canonical_wines cw
+  on cw.producer_norm = n.producer_norm and cw.cuvee_norm = n.cuvee_norm
+where n.wine_id not in (select wine_id from _identity_backfill_resolved);
+
+-------------------------------------------------------------------------------
+-- Pass C: wine_variants — identical two-phase pattern keyed on
+-- (restaurant_id, canonical_wine_id, coalesce(vintage,0), size_ml).
+-------------------------------------------------------------------------------
+drop table if exists _identity_backfill_variant;
+create temporary table _identity_backfill_variant (
+  wine_id         uuid primary key,
+  wine_variant_id uuid not null
+);
+
+insert into _identity_backfill_variant (wine_id, wine_variant_id)
+select r.wine_id, wv.id
+from _identity_backfill_resolved r
+join public.wine_variants wv
+  on wv.restaurant_id = r.restaurant_id
+ and wv.canonical_wine_id = r.canonical_wine_id
+ and coalesce(wv.vintage, 0) = coalesce(r.vintage, 0)
+ and wv.size_ml = r.size_ml;
+
+with new_variants as (
+  insert into public.wine_variants (restaurant_id, canonical_wine_id, vintage, size_ml)
+  select distinct on (r.restaurant_id, r.canonical_wine_id, coalesce(r.vintage, 0), r.size_ml)
+    r.restaurant_id, r.canonical_wine_id, r.vintage, r.size_ml
+  from _identity_backfill_resolved r
+  where r.wine_id not in (select wine_id from _identity_backfill_variant)
+  order by r.restaurant_id, r.canonical_wine_id, coalesce(r.vintage, 0), r.size_ml, r.wine_id
+  on conflict (restaurant_id, canonical_wine_id, coalesce(vintage, 0), size_ml) do nothing
+  returning id, restaurant_id, canonical_wine_id, vintage, size_ml
+)
+insert into _identity_backfill_variant (wine_id, wine_variant_id)
+select r.wine_id, nv.id
+from _identity_backfill_resolved r
+join new_variants nv
+  on nv.restaurant_id = r.restaurant_id
+ and nv.canonical_wine_id = r.canonical_wine_id
+ and coalesce(nv.vintage, 0) = coalesce(r.vintage, 0)
+ and nv.size_ml = r.size_ml
+where r.wine_id not in (select wine_id from _identity_backfill_variant);
+
+insert into _identity_backfill_variant (wine_id, wine_variant_id)
+select r.wine_id, wv.id
+from _identity_backfill_resolved r
+join public.wine_variants wv
+  on wv.restaurant_id = r.restaurant_id
+ and wv.canonical_wine_id = r.canonical_wine_id
+ and coalesce(wv.vintage, 0) = coalesce(r.vintage, 0)
+ and wv.size_ml = r.size_ml
+where r.wine_id not in (select wine_id from _identity_backfill_variant);
+
+-------------------------------------------------------------------------------
+-- Pass D: set wines.wine_variant_id. wines.canonical_wine_id is derived
+-- by the wines_derive_canonical_wine_id trigger (0098) whenever
+-- wine_variant_id changes, including from this bulk UPDATE — no separate
+-- step needed here, and no reason to bypass the trigger: it always
+-- computes the same value this backfill would set by hand, by
+-- construction.
+-------------------------------------------------------------------------------
+update public.wines w
+set wine_variant_id = v.wine_variant_id
+from _identity_backfill_variant v
+where w.id = v.wine_id;
+
+drop table if exists _identity_backfill_variant;
+drop table if exists _identity_backfill_resolved;
+drop table if exists _identity_backfill_norm;

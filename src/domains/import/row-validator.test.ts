@@ -73,6 +73,25 @@ describe("validateRow", () => {
     expect(result.errors.some((e) => e.field === "vintage")).toBe(true);
   });
 
+  // P2 NV fix (docs/plans/2026-08-23-p2-identity-spine.md §5): literal
+  // "NV" is the identity fact "no vintage," not malformed data — it
+  // predates this importer's NV acceptance.
+  it("accepts the literal vintage text 'NV' as a valid row with a null vintage", () => {
+    const result = validateRow(["Domaine A", "Cuvee 1", "NV", "6", "10"], columnToField);
+    expect(result.state).toBe("valid");
+    if (result.state !== "valid") return;
+    expect(result.raw.vintage).toBeNull();
+  });
+
+  it("still rejects vintage text that merely resembles NV-adjacent noise", () => {
+    for (const bad of ["circa 1998", "'98", "202X", "not sure", "19-something", "MCMXCIX"]) {
+      const result = validateRow(["Domaine A", "Cuvee 1", bad, "6", "10"], columnToField);
+      expect(result.state).toBe("error");
+      if (result.state !== "error") continue;
+      expect(result.errors.some((e) => e.field === "vintage")).toBe(true);
+    }
+  });
+
   it("rejects a negative quantity", () => {
     const result = validateRow(["Domaine A", "Cuvee 1", "2020", "-1", "10"], columnToField);
     expect(result.state).toBe("error");

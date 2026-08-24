@@ -3,6 +3,11 @@
 Use this for production-like, sanitized local testing. It does **not** use
 the prod demo dataset from `docs/DEMO-DATA.md`.
 
+For bringing up the local stack itself — ports, safety model, the canonical
+`scripts/local/dev-stack.sh` bring-up command — see
+`docs/runbooks/local-stack.md`; that doc is canonical for the stack. This
+doc is canonical for the richer seed script's contents and usage only.
+
 ## Seed Contents
 
 `pnpm run supabase:seed:local:apply` creates a deterministic restaurant:
@@ -31,7 +36,7 @@ de100000-0000-4000-8000-000000000001
 Set `.env.local` to a local Supabase target with migrations already applied:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:57321
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<local anon key>
 SUPABASE_SERVICE_ROLE_KEY=<local service role key>
 ACTIVE_RESTAURANT_COOKIE_SECRET=<at least 16 random chars>
@@ -39,8 +44,13 @@ DEV_BYPASS_EMAIL=owner+local@terroir.test
 
 # Strongly recommended safety rail. Set this to the prod project ref or
 # another unique substring from the prod Supabase URL.
-PROD_SUPABASE_URL_PATTERN=qcfmwphlaekfkqwkfyth
+PROD_SUPABASE_URL_PATTERN=your-prod-project-ref
 ```
+
+`57321` is this repo's configured local API port (see
+`docs/runbooks/local-stack.md` for the full port table and why it isn't the
+supabase-cli default `54321`) — `scripts/local/assert-local-db.sh` refuses
+any other port.
 
 Use `supabase status` to get the local anon and service-role keys when the
 Supabase CLI is running.
