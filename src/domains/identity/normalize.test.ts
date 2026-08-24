@@ -262,6 +262,12 @@ describe("normalizeVintage / isNvVintageText (unit, no P1 dependency)", () => {
     }
   });
 
+  it("C18: rejects a numeric prefix with trailing garbage instead of silently truncating it", () => {
+    for (const text of ["2015abc", "2015.0", "2015 2016", "+2015", "2,015"]) {
+      expect(() => normalizeVintage(text)).toThrow();
+    }
+  });
+
   it("rejects an out-of-range year", () => {
     expect(() => normalizeVintage("1899")).toThrow();
     expect(() => normalizeVintage(String(CURRENT_YEAR_PLUS_TWO()))).toThrow();

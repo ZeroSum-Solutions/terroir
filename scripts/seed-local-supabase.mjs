@@ -451,6 +451,8 @@ function buildRows(userIds = DRY_USER_IDS) {
       const isByGlass = list?.name === "By the Glass";
       listItems.push({
         id: uuid(UUID_PREFIX.item, itemIndex),
+        // 0080 denormalized restaurant_id onto wine_list_items (NOT NULL).
+        restaurant_id: RESTAURANT_ID,
         section_id: section.id,
         wine_id: wine.id,
         position: n,

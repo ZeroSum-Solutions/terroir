@@ -13,6 +13,7 @@ import type { Database } from "@/types/database";
 import { decodeCsvBuffer, parseCsv } from "./csv-parser";
 import { mapHeader, validateRow, type FieldError, type RawRowFields } from "./row-validator";
 import { matchLwinBulk } from "./lwin-matching";
+import { mergeIntraBatchDuplicates, type IntraBatchDuplicateReason } from "./dedup-key";
 import type { CanonicalHeader } from "./constants";
 
 export type PreviewRow = {
@@ -24,7 +25,18 @@ export type PreviewRow = {
   lwinId: string | null;
   lwinScore: number | null;
   costStatus: "present" | "missing";
-  resolution: "auto" | "pending" | "exclude";
+  resolution: "auto" | "pending" | "include" | "exclude";
+  /** P3 §1.5 tier 1: row numbers of other rows in this same upload that
+   * were auto-merged into this one (same wine + location + cost +
+   * currency, quantity summed). Empty when this row wasn't a merge
+   * survivor. */
+  mergedFromRowNumbers: number[];
+  /** P3 §1.5: populated for tier-1 (intra-batch cost/currency conflict,
+   * computed here) or left null here and populated later by
+   * create_import_batch (0107) for tier-2 (cross-batch/session) —
+   * distinguishes WHY resolution === 'pending' alongside lwinStatus/
+   * costStatus, without inventing a new resolution enum value. */
+  duplicateReason: IntraBatchDuplicateReason | null;
 };
 
 export type PreviewSummary = {
@@ -91,6 +103,8 @@ export async function buildImportPreview(
         lwinScore: null,
         costStatus: "present",
         resolution: "exclude",
+        mergedFromRowNumbers: [],
+        duplicateReason: null,
       };
     }
 
@@ -109,19 +123,30 @@ export async function buildImportPreview(
       lwinScore: match?.score ?? null,
       costStatus,
       resolution: needsResolution ? "pending" : "auto",
+      mergedFromRowNumbers: [],
+      duplicateReason: null,
     };
   });
 
+  // P3 §1.5 tier 1: collapse intra-batch exact duplicates (same wine +
+  // location + cost + currency, within this one upload) into one row with
+  // summed quantity, before this file's row count is ever reported or
+  // persisted. A wine+location match that DISAGREES on cost/currency is
+  // never merged — both rows are surfaced as resolution = 'pending'
+  // instead (§1.5's own reasoning: a merged row would silently overwrite
+  // a real financial fact with no way to reconstruct it later).
+  const mergedRows = mergeIntraBatchDuplicates(rows);
+
   const summary: PreviewSummary = {
-    totalRows: rows.length,
-    validRows: rows.filter((r) => r.rowState === "valid").length,
-    errorRows: rows.filter((r) => r.rowState === "error").length,
-    matchedRows: rows.filter((r) => r.lwinStatus === "matched").length,
-    unmatchedRows: rows.filter((r) => r.rowState === "valid" && r.lwinStatus === "unmatched").length,
-    missingCostRows: rows.filter((r) => r.rowState === "valid" && r.costStatus === "missing").length,
-    readyToApplyRows: rows.filter((r) => r.resolution === "auto").length,
-    pendingResolutionRows: rows.filter((r) => r.resolution === "pending").length,
+    totalRows: mergedRows.length,
+    validRows: mergedRows.filter((r) => r.rowState === "valid").length,
+    errorRows: mergedRows.filter((r) => r.rowState === "error").length,
+    matchedRows: mergedRows.filter((r) => r.lwinStatus === "matched").length,
+    unmatchedRows: mergedRows.filter((r) => r.rowState === "valid" && r.lwinStatus === "unmatched").length,
+    missingCostRows: mergedRows.filter((r) => r.rowState === "valid" && r.costStatus === "missing").length,
+    readyToApplyRows: mergedRows.filter((r) => r.resolution === "auto").length,
+    pendingResolutionRows: mergedRows.filter((r) => r.resolution === "pending").length,
   };
 
-  return { ok: true, rows, summary };
+  return { ok: true, rows: mergedRows, summary };
 }

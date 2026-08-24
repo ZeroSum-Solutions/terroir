@@ -16,7 +16,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import { confirmImportBatch, applyImportBatchChunk, revertImportBatch } from "./batch-service";
+import { confirmImportBatch, applyImportBatchChunk, resolveImportBatchRow, revertImportBatch } from "./batch-service";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -216,7 +216,31 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
 
     const confirmed = await confirmImportBatch(userAClient, restaurantA, userAId, "second-import.csv", csvBuffer());
     expect(confirmed.ok).toBe(true);
-    if (!confirmed.ok) return;
+    if (!confirmed.ok || confirmed.alreadyExists) return;
+
+    // P3 (2026-08-23-p3-chunked-import.md §1.5 tier 2) added real
+    // inventory-level duplicate prevention: this row's wine identity +
+    // normalized (bin, section) now matches the pre-existing manual
+    // inventory row inserted above (same wine, no bin/section on either
+    // side) — create_import_batch correctly flags it resolution='pending'
+    // with duplicate_reason.type='existing_inventory' instead of silently
+    // auto-applying a second, unrelated inventory_items row for the same
+    // wine at the same (empty) location. That's the intended new
+    // behavior this test now exercises: the operator explicitly resolves
+    // it ('include' — a genuine second lot, same as this test always
+    // intended), and only THEN does the row apply.
+    const { data: pendingRow, error: pendingErr } = await userAClient
+      .from("import_batch_rows")
+      .select("id, resolution, duplicate_reason")
+      .eq("batch_id", confirmed.batchId)
+      .single();
+    if (pendingErr || !pendingRow) throw pendingErr ?? new Error("expected exactly one row");
+    const row = pendingRow as { id: string; resolution: string; duplicate_reason: unknown };
+    expect(row.resolution).toBe("pending");
+    expect(row.duplicate_reason).toMatchObject({ type: "existing_inventory" });
+
+    const resolved = await resolveImportBatchRow(userAClient, restaurantA, userAId, row.id, "include");
+    expect(resolved).toEqual({ ok: true });
 
     const applied = await applyImportBatchChunk(userAClient, confirmed.batchId);
     expect(applied.processed).toEqual([expect.objectContaining({ outcome: "applied" })]);

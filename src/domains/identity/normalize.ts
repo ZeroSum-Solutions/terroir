@@ -122,6 +122,13 @@ export function normalizeVintage(raw: string | null): number | null {
   if (trimmed === "") return null;
   if (isNvVintageText(trimmed)) return null;
 
+  // C18 (db audit 2026-08-23), carried into the P2/P3 integration:
+  // Number.parseInt accepts a numeric PREFIX and silently ignores trailing
+  // garbage ("2015abc" -> 2015). The whole string must be an integer
+  // literal before the parse ever runs.
+  if (!/^[0-9]+$/.test(trimmed)) {
+    throw new Error(`invalid vintage text: ${raw}`);
+  }
   const parsed = Number.parseInt(trimmed, 10);
   if (!Number.isInteger(parsed) || parsed < MIN_VINTAGE || parsed > CURRENT_YEAR + 1) {
     throw new Error(`invalid vintage text: ${raw}`);

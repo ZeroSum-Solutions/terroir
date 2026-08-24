@@ -310,9 +310,12 @@ describe("checked-in API contract gate", () => {
 
     expect(result.errors).toEqual([]);
     expect(result.summary).toEqual({
-      discoveredOperationCount: 100,
+      // P3 (2026-08-23-p3-chunked-import.md §3) added three new session
+      // routes (POST /api/import/sessions, GET /api/import/sessions/[id],
+      // POST /api/import/sessions/[id]/revert) — 100 + 3 = 103.
+      discoveredOperationCount: 103,
       plannedOperationCount: 15,
-      classificationCount: 100,
+      classificationCount: 103,
     });
     expect(paths.map((file) => readFileSync(resolve(file), "utf8"))).toEqual(
       before,

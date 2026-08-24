@@ -902,8 +902,20 @@ describe("validate-bulk-import.ts — encoding fidelity matrix (round-5 CRITICAL
   });
 });
 
-describe("validate-bulk-import.ts — silent numeric-text coercion (round-5 CRITICAL fix)", () => {
-  it("reproduces the critic's exact finding: a row full of trailing-garbage numeric text used to validate clean and PASS", () => {
+describe("validate-bulk-import.ts — silent numeric-text coercion (round-5 CRITICAL fix, now fixed at the source by P3's C18 fix)", () => {
+  it("P3 C18 fix confirmed via the independent oracle: trailing-garbage numeric text is now REJECTED outright by the real row-validator, never silently coerced into a 'valid' row", () => {
+    // This test used to pin the PRE-FIX behavior (the coerced, silently-
+    // altered values printing as a VALID distinct variant key and PASSing
+    // — see git history for the exact prior assertions). P3 (db audit
+    // 2026-08-23, C18) fixed the underlying defect directly in
+    // src/domains/import/row-validator.ts: every numeric field is now
+    // tested against a whole-string literal regex BEFORE Number.parseInt/
+    // parseFloat ever runs, so '2015xyz'/'750ml'/'3abc'/'12.34USD' are
+    // field errors, not silently-coerced-and-accepted values. Proof this
+    // is a real fix, not a mocked assertion: this test drives the SHIPPED
+    // oracle CLI as a real subprocess (runValidator), which calls the
+    // REAL production validateRow() — the "Sample invalid-row reasons"
+    // output below is validateRow()'s own error messages, verbatim.
     const d = tmp();
     const csvPath = join(d, "coerced.csv");
     const row = rowFields({
@@ -917,16 +929,17 @@ describe("validate-bulk-import.ts — silent numeric-text coercion (round-5 CRIT
     writeFileSync(csvPath, `${CANONICAL_HEADER}\n${row}\n`);
 
     const result = runValidator(csvPath);
-    // Pre-fix, the shipped CLI printed "Acme|Wine A|2015|750" (the coerced,
-    // silently-altered values) as a VALID distinct variant key and PASSed.
-    expect(result.stdout).toContain("Acme|Wine A|2015|750");
+    // The coerced, silently-altered variant key must NEVER appear now —
+    // if it did, that would mean C18 regressed and the row is once again
+    // being silently accepted with a fabricated value.
+    expect(result.stdout).not.toContain("Acme|Wine A|2015|750");
     expect(result.status).not.toBe(0);
     expect(result.stdout).not.toContain("=== RESULT: PASS ===");
-    expect(result.stdout).toContain("row 1 vintage:");
-    expect(result.stdout).toContain('"2015xyz" -> 2015');
-    expect(result.stdout).toContain('"750ml" -> 750');
-    expect(result.stdout).toContain('"3abc" -> 3');
-    expect(result.stdout).toContain('"12.34USD" -> 12.34');
+    expect(result.stdout).toMatch(/Rows invalid:\s+1/);
+    expect(result.stdout).toContain("vintage: Vintage must be a whole number, with no other characters.");
+    expect(result.stdout).toContain("size_ml: Bottle size (ml) must be a whole number, with no other characters.");
+    expect(result.stdout).toContain("quantity: Quantity must be a whole number, with no other characters.");
+    expect(result.stdout).toContain("unit_cost: Unit cost must be a number, with no other characters.");
   });
 
   it("a row whose coercion ALSO fails its own range check is already caught by the existing tagged/untagged machinery — not double-flagged", () => {
@@ -1841,24 +1854,6 @@ const PRECONDITION_CASES: Record<string, () => PreconditionCase> = {
     return { csvPath, manifestPath, expectedReason: "expected invalid, got valid" };
   },
 
-  no_silent_numeric_coercion: () => {
-    const d = tmp();
-    const csvPath = join(d, "coerced-numbers.csv");
-    // The critic's exact example: every numeric field's trailing garbage is
-    // silently dropped by Number.parseInt/parseFloat, and the coerced value
-    // happens to pass its range check, so the row validates as "valid".
-    const row = rowFields({
-      producer: "Acme",
-      name: "Wine A",
-      vintage: "2015xyz",
-      size_ml: "750ml",
-      quantity: "3abc",
-      unit_cost: "12.34USD",
-    });
-    writeFileSync(csvPath, `${CANONICAL_HEADER}\n${row}\n`);
-    return { csvPath, expectedReason: "Number.parseInt/parseFloat" };
-  },
-
   total_rows_match_manifest: () => {
     // Round-6 fixture-hygiene fix: clean_row_count is bumped to 999
     // alongside total_rows so manifest.clean_row_count + dirty_row_count
@@ -2011,6 +2006,26 @@ const EXEMPT_FROM_ISOLATION_TEST = new Set([
   "chunk_boundaries_preserve_records",
   "chunk_plan_reassembles_byte_identically",
   "chunk_plan_headers_identical",
+  // P3 (db audit 2026-08-23, C18) fixed the underlying defect directly in
+  // src/domains/import/row-validator.ts: every numeric field is now tested
+  // against a whole-string literal regex BEFORE Number.parseInt/parseFloat
+  // ever runs, so a value like '2015xyz' is a field error (row_state =
+  // 'error'), never a silently-coerced 'valid' row. numericCoercionRisks
+  // (this file) is only ever populated for rows the real validateRow()
+  // accepts as valid — see processRow()'s own comment — so after C18, no
+  // CSV fixture can isolate this precondition in FAILING isolation: the
+  // exact input that used to trigger it now trips a different, more
+  // fundamental precondition (the row is invalid, full stop) before this
+  // one's check ever has anything to find. Confirmed directly: the
+  // formerly-failing case (see git history for the removed
+  // `no_silent_numeric_coercion` PRECONDITION_CASES entry) now reports
+  // "Rows invalid: 1" with real field-level reasons, and
+  // numericCoercionRisks stays empty. This is the intended, permanent
+  // effect of the fix, not a regression in either piece — see
+  // "validate-bulk-import.ts — silent numeric-text coercion" below for the
+  // live proof via the real oracle CLI, and row-validator.test.ts for the
+  // unit-level C18 regression tests.
+  "no_silent_numeric_coercion",
 ]);
 
 describe("PASS_PRECONDITIONS — completeness (the round-4 'test that ends this cycle')", () => {
