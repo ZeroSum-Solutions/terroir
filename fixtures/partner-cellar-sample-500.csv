@@ -1,0 +1,501 @@
+producer,name,vintage,varietal,region,country,size_ml,format,currency,quantity,unit_cost,bin,section
+Weingut Wagner,Sonnenlage Riesling,2005,Riesling,Rheingau,Germany,750,Bottle,USD,54,2197.55,C1-1,Whites
+Weingut Steiner,Vina del Alto Gruner Veltliner,1983,Gruner Veltliner,Wachau,Austria,750,Bottle,EUR,25,46.50,D26-8,Whites
+Chateau Bertrand,Alte Reben,2013,Syrah,Rhone Valley,France,750,Bottle,EUR,22,3950.17,R37-10,Reds
+Quinta da Rocha,10 Year Tawny,,Port Blend,Douro,Portugal,750,Bottle,USD,52,288.53,A22-6,Fortified
+Hartley Wines,Single Vineyard Chardonnay,1984,Chardonnay,Napa Valley,United States,750,Bottle,USD,34,865.85,S20-12,Whites
+Ridge Vineyards,Monte Bello,2005,Cabernet Sauvignon,Santa Cruz Mountains,United States,750,Bottle,EUR,60,24.96,D8-6,Reds
+Foggy Bend Ridge Vineyard,Terra Bruna,1981,Garganega,Veneto,Italy,750,Bottle,USD,25,226.08,R5-2,Whites
+Bond,Vecina,2005,Cabernet Sauvignon,Napa Valley,United States,750,Bottle,USD,1,2975.75,B37-9,Reds
+Quinta Nogueira,Clos de la Chapelle,2019,Touriga Nacional,Douro,Portugal,750,Bottle,USD,98,901.26,B1-8,Reds
+Domaine Bonnet,Les Grandes Vignes,2016,Gewurztraminer,Alsace,France,750,Bottle,USD,83,2081.85,R35-9,Whites
+Weingut Wagner,Encosta Dourada,1996,Riesling,Wachau,Austria,750,Bottle,GBP,88,10.40,B25-12,Whites
+Ravenscroft Cellars,Estate Chardonnay,2017,Chardonnay,Napa Valley,United States,750,Bottle,USD,13,23.92,B7-1,Whites
+Cantina Ricci,Terrassenlage Garganega,1984,Garganega,Veneto,Italy,750,Bottle,EUR,26,2951.43,B33-6,Whites
+Podere Villa,Vale do Rio,1997,Sangiovese,Tuscany,Italy,750,Bottle,USD,72,91.60,A29-4,Reds
+Chateau Fontaine,Vina del Alto,2022,Chardonnay,Burgundy,France,750,Bottle,GBP,15,1097.08,A40-10,Whites
+Bodegas Campos,Colline d'Oro,2020,Tempranillo,Rioja,Spain,750,Bottle,USD,66,677.25,S3-11,Reds
+Fattoria Fontana,Les Terrasses,2006,Sangiovese,Tuscany,Italy,750,Bottle,EUR,24,250.56,D23-4,Reds
+Cantina Ricci,La Combe aux Loups,2010,Cabernet Sauvignon,Tuscany,Italy,750,Bottle,USD,23,9.42,C18-3,Reds
+Maison Chapelle,Weinberg Reserve,1980,Chardonnay,Burgundy,France,750,Bottle,USD,4,4406.71,D32-1,Whites
+Clos Fontaine,Les Fournaux,2013,Sauvignon Blanc,Loire Valley,France,750,Bottle,EUR,91,10.36,S11-3,Whites
+Clos Girard,Les Chaumes,1988,Grenache,Rhone Valley,France,750,Bottle,USD,78,4206.93,A11-4,Reds
+Cantina Ricci,Ribera Alta,1996,Cabernet Sauvignon,Tuscany,Italy,750,Bottle,USD,5,2355.37,A20-5,Reds
+Weingut Kellermann,Vina del Alto Riesling,1997,Riesling,Rheingau,Germany,750,Bottle,USD,113,57.07,A23-9,Whites
+Fairweather Vineyards,Pinot Noir Reserve,1996,Pinot Noir,Central Otago,New Zealand,750,Bottle,USD,4,73.87,C11-2,Reds
+Caldwell Estate,Pinot Noir Reserve,1990,Pinot Noir,Central Otago,New Zealand,750,Bottle,EUR,30,456.26,S29-1,Reds
+Sawyer Cellars,Estate Pinot Noir,1976,Pinot Noir,Central Otago,New Zealand,750,Bottle,USD,21,47.38,S14-1,Reds
+Fattoria Fontana,Clos du Moulin,2023,Grillo,Sicily,Italy,750,Bottle,EUR,75,111.53,A30-9,Cellar
+Cantina Colombo,Cuesta del Rio Barbera,2008,Barbera,Piedmont,Italy,750,Bottle,USD,13,179.01,S15-7,Reds
+Weingut Kellermann,Les Terrasses Riesling,1979,Riesling,Wachau,Austria,750,Bottle,USD,42,3418.35,R34-4,Whites
+Bodega Campos,Colline d'Oro Garnacha,1986,Garnacha,Priorat,Spain,750,Bottle,USD,13,3274.11,R15-8,Reds
+Domaine Chapelle,La Combe aux Loups Sauvignon Blanc,1975,Sauvignon Blanc,Loire Valley,France,750,Bottle,USD,41,280.73,S36-4,Whites
+Chateau Moreau,Encosta Dourada,2020,Sauvignon Blanc,Loire Valley,France,750,Bottle,USD,23,37.89,R7-12,Whites
+Chateau d'Yquem,Grand Vin,2018,Semillon-Sauvignon Blend,Sauternes,France,750,Bottle,USD,25,23.90,S14-10,Whites
+Bodegas Navarro,Sonnenlage Garnacha,1986,Garnacha,Rioja,Spain,750,Bottle,USD,38,443.45,A30-5,Reds
+Weingut Hoffmann,Costa Alta Riesling,2019,Riesling,Wachau,Austria,750,Bottle,USD,17,13.14,C15-11,Whites
+Bodega Mendez,La Croix Blanche,1988,Albarino,Rias Baixas,Spain,750,Bottle,USD,74,1637.83,D9-1,Whites
+Prentice Winery,Estate Cabernet Sauvignon,2007,Cabernet Sauvignon,Margaret River,Australia,750,Bottle,USD,30,99.63,S25-9,Reds
+Domaine Bonnet,Terrassenlage,2009,Gewurztraminer,Alsace,France,750,Bottle,EUR,113,153.51,D23-9,Whites
+Domaine Fabre,Blanc de Noirs NV,,Champagne Blend,Champagne,France,750,Bottle,USD,8,654.80,S36-4,Sparkling
+Lantern Bluff Vineyards,Single Vineyard Cabernet Sauvignon,2006,Cabernet Sauvignon,Margaret River,Australia,750,Bottle,USD,64,4927.00,C26-2,Reds
+Clos Moreau,Clos Saint-Martin Chardonnay,2001,Chardonnay,Burgundy,France,750,Bottle,USD,40,73.98,B4-5,Whites
+Bodega Herrera,Clos Saint-Martin,2022,Tempranillo,Ribera del Duero,Spain,750,Bottle,USD,4,1676.44,R33-7,Reds
+Granite Draw Winery,Old Vine Sauvignon Blanc,2005,Sauvignon Blanc,Marlborough,New Zealand,750,Bottle,EUR,51,1751.33,D11-4,Whites
+Chateau Girard,Alte Reben,1982,Cabernet Franc,Bordeaux,France,750,Bottle,USD,1,101.04,A26-4,Reds
+Weathered Hill Winery,Sonnenlage,1977,Pinot Gris,Alsace,France,750,Bottle,USD,102,86.09,A10-4,Whites
+Clos Riviere,Les Fournaux,2023,Pinot Noir,Burgundy,France,750,Bottle,USD,6,341.65,D5-4,Reds
+Fox Hollow Rise Cellars,La Vigna Alta,2018,Dolcetto,Piedmont,Italy,750,Bottle,USD,43,2928.71,C33-2,Reds
+Bodegas Mendez,Terrassenlage,1994,Tempranillo,Ribera del Duero,Spain,750,Bottle,USD,8,4349.49,B18-12,Reds
+Thistledown Meadows Winery,Shiraz,2012,Shiraz,Barossa Valley,Australia,750,Bottle,USD,52,4208.85,S6-11,Reds
+Bodega Delgado,Sauvignon Blanc,1984,Sauvignon Blanc,Casablanca Valley,Chile,750,Bottle,USD,23,1115.40,D10-12,Whites
+Bodega Campos,Colline d'Oro Garnacha,1986,Garnacha,Priorat,Spain,750,Bottle,USD,51,1656.24,S33-8,Reds
+Rusted Crossing Cellars,Single Vineyard Malbec,2008,Malbec,Mendoza,Argentina,750,Bottle,USD,40,8.66,D30-7,Reds
+Maison Aubert,Quinta da Serra,2015,Gewurztraminer,Alsace,France,750,Bottle,USD,21,583.24,B25-1,Whites
+Amber Farms Winery,Le Clos Perdu Rhone Blend,1989,Rhone Blend,Rhone Valley,France,750,Bottle,GBP,51,10.68,C16-2,Reds
+Tenuta Moretti,Clos Saint-Martin,2014,Nero d'Avola,Sicily,Italy,750,Bottle,USD,23,32.38,A14-8,Reds
+Weingut Richter,Encosta Dourada Riesling,2019,Riesling,Wachau,Austria,750,Bottle,USD,4,20.85,R15-6,Whites
+Bodegas Alvarez,Clos Saint-Martin,1985,Garnacha,Rioja,Spain,750,Bottle,USD,15,195.70,A7-2,Reds
+Caldwell Wines,Pinot Noir,2007,Pinot Noir,Sonoma County,United States,750,Bottle,USD,8,96.29,R5-5,Reds
+Fattoria Bianchi,Vale do Rio Garganega,1993,Garganega,Veneto,Italy,750,Bottle,GBP,85,812.33,S10-9,Whites
+Clos Moreau,Les Chaumes Pinot Noir,2005,Pinot Noir,Burgundy,France,750,Bottle,USD,7,636.64,D31-7,Reds
+Tenuta Romano,Sonnenlage,2010,Barbera,Piedmont,Italy,750,Bottle,USD,108,43.65,C5-2,Reds
+Fattoria Conti,Clos des Cerisiers Nero d'Avola,1988,Nero d'Avola,Sicily,Italy,750,Bottle,USD,11,1899.05,B7-5,Reds
+Half Moon Rise Cellars,Cabernet Sauvignon,1994,Cabernet Sauvignon,Napa Valley,United States,750,Bottle,USD,28,12.99,B16-12,Reds
+Harrison Estate,Old Vine Pinot Noir,1984,Pinot Noir,Sonoma County,United States,750,Bottle,USD,19,473.61,D13-8,Reds
+Broken Wheel Crossing Estate,Old Vine Shiraz,1997,Shiraz,Barossa Valley,Australia,750,Bottle,USD,1,480.76,A10-7,Reds
+Granite Hollow Cellars,Old Vine Pinot Noir,2000,Pinot Noir,Central Otago,New Zealand,750,Bottle,GBP,54,9.65,A25-4,Reds
+Bodega Reyes,Les Chaumes Albarino,1998,Albarino,Rias Baixas,Spain,750,Bottle,USD,1,42.60,A12-7,Whites
+Sundown Meadows Vineyard,Sonnenlage Riesling,2000,Riesling,Wachau,Austria,750,Bottle,USD,4,2113.85,A16-7,Whites
+Prentice Winery,Cabernet Sauvignon,2005,Cabernet Sauvignon,Margaret River,Australia,750,Bottle,USD,68,533.01,B32-4,Reds
+Finca Salinas,Vigna del Vento,2016,Carinena,Priorat,Spain,750,Bottle,GBP,31,33.88,S15-4,Reds
+Podere Villa,Terrassenlage Cabernet Sauvignon,2014,Cabernet Sauvignon,Tuscany,Italy,750,Bottle,EUR,18,173.65,D14-10,Reds
+Harrison Wines,Chardonnay,1984,Chardonnay,Margaret River,Australia,750,Bottle,USD,21,43.68,S30-12,Whites
+Bodega Ruiz,Le Clos Perdu Tempranillo,1982,Tempranillo,Rioja,Spain,750,Bottle,USD,14,1188.25,D17-4,Reds
+Foggy Bend Bend Vineyard,Estate Chardonnay,1983,Chardonnay,Sonoma County,United States,750,Bottle,USD,49,136.62,S1-2,Whites
+Hartley Wines,Single Vineyard Chardonnay,1984,Chardonnay,Napa Valley,United States,750,Bottle,USD,46,120.71,S39-7,Whites
+Bodega Navarro,Cuesta del Rio Garnacha,1976,Garnacha,Priorat,Spain,750,Bottle,USD,24,203.36,C22-10,Reds
+Bodega Rivas,Old Vine Malbec,2020,Malbec,Mendoza,Argentina,750,Bottle,USD,13,17.49,D7-1,Reds
+Tenuta Romano,Cuesta del Rio,2010,Grillo,Sicily,Italy,750,Bottle,EUR,66,347.26,B32-2,Cellar
+Winslow Cellars,Shiraz,2006,Shiraz,Barossa Valley,Australia,750,Bottle,USD,78,322.37,D16-5,Reds
+Quinta do Silva,10 Year Tawny,,Port Blend,Douro,Portugal,750,Bottle,USD,44,31.90,C10-4,Fortified
+Domaine Aubert,Ribera Alta Chenin Blanc,2014,Chenin Blanc,Loire Valley,France,750,Bottle,EUR,5,3683.63,B19-6,Whites
+Marais Vineyards,Old Vine Chenin Blanc,2017,Chenin Blanc,Stellenbosch,South Africa,750,Bottle,USD,8,30.04,S32-2,Whites
+Botha Vineyards,Cabernet Sauvignon Reserve,2014,Cabernet Sauvignon,Stellenbosch,South Africa,750,Bottle,USD,1,18.11,B38-6,Reds
+Blackwood Estate,Grenache Reserve,1978,Grenache,Barossa Valley,Australia,750,Bottle,USD,93,8.59,D35-11,Reds
+Bodega Reyes,Les Fournaux Albarino,1977,Albarino,Rias Baixas,Spain,750,Bottle,EUR,3,68.54,S33-1,Whites
+Weingut Richter,Encosta Dourada Riesling,2019,Riesling,Wachau,Austria,750,Bottle,GBP,47,28.34,S35-9,Whites
+Whistling Ridge Winery,Clos du Moulin Pinot Gris,1978,Pinot Gris,Alsace,France,750,Bottle,USD,70,907.22,R16-6,Whites
+Amber Creek Vineyard,Weinberg Reserve,1985,Riesling,Rheingau,Germany,750,Bottle,EUR,5,19.51,R39-3,Whites
+Bodegas Salinas,Steilhang Reserve,2019,Tempranillo,Ribera del Duero,Spain,750,Bottle,USD,44,483.77,R36-9,Reds
+Weingut Kellermann,Encosta Dourada,2021,Riesling,Rheingau,Germany,750,Bottle,USD,96,57.92,R28-1,Whites
+Harrison Vineyards,Pinot Gris,2006,Pinot Gris,Willamette Valley,United States,750,Bottle,USD,46,1815.07,C25-4,Whites
+Cantina Ricci,El Rincon Grillo,1998,Grillo,Sicily,Italy,750,Bottle,GBP,38,215.51,S13-9,Cellar
+Quinta Ferreira,Cuesta del Rio,2011,Touriga Nacional,Douro,Portugal,750,Bottle,USD,3,160.54,C37-2,Reds
+Tenuta Moretti,Vale do Rio Garganega,1987,Garganega,Veneto,Italy,750,Bottle,USD,13,1945.08,B26-7,Whites
+Finca Fernandez,Estate Pinot Noir,2016,Pinot Noir,Casablanca Valley,Chile,750,Bottle,USD,17,18.36,S16-12,Reds
+Domaine Bonnet,Ladera Antigua,1986,Gewurztraminer,Alsace,France,750,Bottle,USD,4,58.25,B9-2,Whites
+Weingut Vogel,Sonnenlage Riesling,2018,Riesling,Mosel,Germany,750,Bottle,USD,4,84.18,D31-3,Whites
+Fattoria Bianchi,Podere del Sole,1990,Barbera,Piedmont,Italy,750,Bottle,EUR,41,16.95,B34-6,Reds
+Weingut Wagner,Quinta da Serra Riesling,2004,Riesling,Rheingau,Germany,750,Bottle,GBP,11,127.15,C33-10,Whites
+du Plessis Cellars,Cabernet Sauvignon,1989,Cabernet Sauvignon,Stellenbosch,South Africa,750,Bottle,EUR,38,30.74,R25-10,Reds
+Casa Ferreira,Fine Ruby Reserve,,Port Blend,Douro,Portugal,750,Bottle,USD,5,443.52,R14-1,Fortified
+Domaine Aubert,Costa Alta Chenin Blanc,1989,Chenin Blanc,Loire Valley,France,750,Bottle,USD,46,397.20,A5-2,Whites
+Raven Orchard Cellars,Costa Alta,2002,Riesling,Mosel,Germany,750,Bottle,USD,25,2836.55,B3-1,Whites
+Weingut Richter,Terra Bruna Riesling,2008,Riesling,Mosel,Germany,750,Bottle,GBP,11,227.34,A27-4,Whites
+Fattoria Bianchi,La Combe aux Loups Garganega,1980,Garganega,Veneto,Italy,750,Bottle,USD,7,115.87,B11-3,Whites
+Thistledown Bend Vineyards,Pinot Noir Reserve,2013,Pinot Noir,Willamette Valley,United States,750,Bottle,USD,14,668.36,R40-5,Reds
+Tenuta Romano,Ribera Alta Nero d'Avola,1989,Nero d'Avola,Sicily,Italy,750,Bottle,USD,13,53.27,D16-11,Reds
+Blackwood Cellars,Estate Chardonnay,2005,Chardonnay,Sonoma County,United States,750,Bottle,EUR,22,34.88,A26-5,Whites
+Bodega Ruiz,Colline d'Oro Garnacha,2018,Garnacha,Rioja,Spain,750,Bottle,USD,11,20.86,D11-6,Reds
+Sundown Hill Winery,Terrassenlage Grenache,1975,Grenache,Rhone Valley,France,750,Bottle,USD,106,731.81,S26-6,Reds
+Weingut Steiner,La Croix Blanche Riesling,1998,Riesling,Wachau,Austria,750,Bottle,USD,108,646.32,D19-1,Whites
+Crooked Draw Wine Co.,Pinot Noir Reserve,1998,Pinot Noir,Willamette Valley,United States,750,Bottle,USD,11,227.39,B11-11,Reds
+Podere Barbieri,La Petite Combe,1983,Corvina,Veneto,Italy,750,Bottle,USD,19,681.15,B18-5,Reds
+Hartley Estate,Estate Cabernet Sauvignon,1984,Cabernet Sauvignon,Margaret River,Australia,3000,Double Magnum,USD,41,174.17,A9-8,Reds
+Whitfield Vineyards,Single Vineyard Pinot Noir,2001,Pinot Noir,Sonoma County,United States,750,Bottle,USD,81,252.95,A32-9,Reds
+Finca Rivas,Single Vineyard Cabernet Sauvignon,2022,Cabernet Sauvignon,Colchagua Valley,Chile,750,Bottle,GBP,54,1156.15,C34-8,Reds
+Domaine Bonnet,Terra Bruna Pinot Gris,2008,Pinot Gris,Alsace,France,750,Bottle,USD,78,39.18,A39-1,Whites
+Weingut Richter,Ladera Antigua,2010,Riesling,Rheingau,Germany,750,Bottle,USD,12,258.43,R38-5,Whites
+Domaine Aubert,Blanc de Noirs NV,,Champagne Blend,Champagne,France,750,Bottle,USD,11,70.50,C17-5,Sparkling
+Ashworth Vineyards,Grenache,1986,Grenache,Barossa Valley,Australia,750,Bottle,USD,14,4355.53,C16-5,Reds
+Sable Meadows Winery,La Croix Blanche,2021,Touriga Nacional,Douro,Portugal,750,Bottle,GBP,1,874.79,D32-9,Reds
+Sawyer Winery,Single Vineyard Pinot Noir,2021,Pinot Noir,Willamette Valley,United States,750,Bottle,USD,23,120.17,B40-9,Reds
+Quinta da Silva,Fine Ruby Reserve,NV,Port Blend,Douro,Portugal,750,Bottle,USD,13,3846.54,D2-10,Fortified
+Half Moon Pass Estate,Single Vineyard Pinot Noir,2021,Pinot Noir,Willamette Valley,United States,750,Bottle,EUR,18,223.87,B40-12,Reds
+Weathered Creek Winery,Cuesta del Rio,2016,Cabernet Franc,Loire Valley,France,750,Bottle,USD,56,13.33,A20-7,Reds
+Hartley Wines,Single Vineyard Chardonnay,1984,Chardonnay,Napa Valley,United States,750,Bottle,USD,2,134.11,S35-8,Whites
+Caldwell Vineyards,Sauvignon Blanc,2008,Sauvignon Blanc,Marlborough,New Zealand,750,Bottle,USD,103,43.70,R27-8,Whites
+Vina Aguirre,Pinot Noir,2000,Pinot Noir,Casablanca Valley,Chile,750,Bottle,USD,3,3424.34,B34-7,Reds
+Cantina Ricci,La Combe aux Loups Nero d'Avola,2014,Nero d'Avola,Sicily,Italy,750,Bottle,USD,30,51.16,C21-5,Reds
+Weingut Steiner,Clos de la Chapelle,2018,Gruner Veltliner,Wachau,Austria,750,Bottle,EUR,23,1194.31,R15-7,Whites
+Weingut Kellermann,El Rincon,1987,Riesling,Rheingau,Germany,750,Bottle,USD,2,2577.54,A30-11,Whites
+Finca Delgado,Ribera Alta Albarino,1983,Albarino,Rias Baixas,Spain,750,Bottle,USD,24,3889.78,A25-5,Whites
+Hartley Estate,Single Vineyard Cabernet Sauvignon,2022,Cabernet Sauvignon,Margaret River,Australia,750,Bottle,USD,86,261.78,A16-9,Reds
+Quinta da Rocha,White Port,,Port Blend,Douro,Portugal,750,Bottle,USD,1,288.37,R5-8,Fortified
+Bodega Ibarra,Old Vine Carmenere,1998,Carmenere,Colchagua Valley,Chile,750,Bottle,USD,57,103.72,B37-6,Reds
+Prentice Cellars,Estate Merlot,1988,Merlot,Napa Valley,United States,750,Bottle,USD,51,604.94,R22-1,Reds
+Domaine Lefevre,Brut Reserve,,Champagne Blend,Champagne,France,750,Bottle,USD,41,17.33,S8-10,Sparkling
+Marais Estate,Estate Cabernet Sauvignon,1979,Cabernet Sauvignon,Stellenbosch,South Africa,750,Bottle,GBP,33,1200.57,S24-5,Reds
+Bodegas Cano,Clos du Moulin Carinena,1983,Carinena,Priorat,Spain,750,Bottle,USD,4,12.32,D29-11,Reds
+Hartley Vineyards,Pinot Noir,1975,Pinot Noir,Central Otago,New Zealand,750,Bottle,USD,49,68.34,B10-4,Reds
+Rusted Bottom Vineyards,La Petite Combe Nero d'Avola,2009,Nero d'Avola,Sicily,Italy,750,Bottle,USD,7,30.59,D31-4,Reds
+Ashworth Vineyards,Single Vineyard Shiraz,1983,Shiraz,Barossa Valley,Australia,750,Bottle,USD,6,1171.55,C3-10,Reds
+Hartley Wines,Merlot Reserve,2006,Merlot,Napa Valley,United States,750,Bottle,USD,62,1630.89,S4-12,Reds
+Domaine Aubert,Podere del Sole,2013,Sauvignon Blanc,Loire Valley,France,750,Bottle,USD,6,1951.57,C26-7,Whites
+Finca Delgado,Old Vine Malbec,1997,Malbec,Mendoza,Argentina,750,Bottle,USD,29,715.45,R15-2,Reds
+Bodega Reyes,Costa Alta Albarino,1982,Albarino,Rias Baixas,Spain,750,Bottle,USD,56,102.21,B18-11,Whites
+Finca Aguirre,Old Vine Malbec,2022,Malbec,Mendoza,Argentina,750,Bottle,GBP,26,323.46,A1-1,Reds
+Clos Riviere,Terra Bruna,1986,Chardonnay,Burgundy,France,750,Bottle,USD,1,80.77,C29-5,Whites
+Maison Chapelle,Costa Alta Pinot Noir,2004,Pinot Noir,Burgundy,France,750,Bottle,EUR,1,30.48,B21-2,Reds
+Domaine Chapelle,La Croix Blanche,1981,Merlot,Bordeaux,France,750,Bottle,USD,18,733.89,C33-10,Reds
+Silent Bend Cellars,Le Clos Perdu,1988,Rhone Blend,Rhone Valley,France,750,Bottle,USD,1,238.37,A32-10,Reds
+Weathered Bluff Wine Co.,Alte Reben Corvina,1999,Corvina,Veneto,Italy,750,Bottle,USD,20,167.67,R10-3,Reds
+Foggy Bend Pass Vineyard,Single Vineyard Malbec,1989,Malbec,Mendoza,Argentina,750,Bottle,USD,6,355.61,S18-2,Reds
+Finca Delgado,Ribera Alta Albarino,1983,Albarino,Rias Baixas,Spain,750,Bottle,USD,6,220.36,S30-3,Whites
+Bodega Cano,Amontillado,,Palomino,Jerez,Spain,750,Bottle,USD,19,29.74,B39-12,Fortified
+Stonebridge Crossing Estate,Old Vine Chenin Blanc,2021,Chenin Blanc,Stellenbosch,South Africa,750,Bottle,USD,19,708.00,D36-7,Whites
+Botha Cellars,Single Vineyard Chenin Blanc,2013,Chenin Blanc,Stellenbosch,South Africa,750,Bottle,USD,24,64.64,A36-5,Whites
+Sawyer Winery,Single Vineyard Pinot Noir,2013,Pinot Noir,Willamette Valley,United States,750,Bottle,USD,93,1279.66,A23-6,Reds
+Bridle Flat Estate,Ladera Antigua Nero d'Avola,2012,Nero d'Avola,Sicily,Italy,750,Bottle,USD,38,1898.53,S35-8,Reds
+Podere Villa,Steilhang Reserve,2022,Nero d'Avola,Sicily,Italy,750,Bottle,USD,15,174.06,S4-8,Reds
+Colgin Cellars,IX Estate,2015,Cabernet Sauvignon,Napa Valley,United States,750,Bottle,USD,57,175.89,A4-2,Reds
+Clos Moreau,Podere del Sole Pinot Noir,2001,Pinot Noir,Burgundy,France,750,Bottle,USD,8,12.97,S15-3,Reds
+Casa Silva,20 Year Tawny,,Port Blend,Douro,Portugal,750,Bottle,USD,64,722.93,R29-6,Fortified
+Clos Moreau,Podere del Sole Pinot Noir,2001,Pinot Noir,Burgundy,France,750,Bottle,USD,97,3960.58,C40-4,Reds
+Sinclair Wines,Single Vineyard Sauvignon Blanc,1987,Sauvignon Blanc,Marlborough,New Zealand,750,Bottle,EUR,7,24.91,A3-2,Whites
+Domaine Perrin,Vina del Alto Gewurztraminer,2015,Gewurztraminer,Alsace,France,750,Bottle,GBP,71,13.64,D33-12,Whites
+Cantina Greco,La Croix Blanche,2021,Grillo,Sicily,Italy,750,Bottle,USD,5,48.72,C7-4,Cellar
+Finca Fernandez,Pinot Noir Reserve,1975,Pinot Noir,Casablanca Valley,Chile,750,Bottle,USD,54,142.89,D26-4,Reds
+Bodega Alvarez,Fino,,Palomino,Jerez,Spain,750,Bottle,USD,97,205.66,C10-12,Fortified
+Finca Delgado,Sonnenlage,1990,Tempranillo,Rioja,Spain,750,Bottle,USD,56,168.36,D5-1,Reds
+Podere Villa,Cuesta del Rio,2001,Sangiovese,Tuscany,Italy,750,Bottle,USD,15,9.50,C29-4,Reds
+Raven Flat Vineyard,Terra Bruna Touriga Nacional,2015,Touriga Nacional,Douro,Portugal,750,Bottle,USD,36,1776.96,S35-4,Reds
+Bodegas Ruiz,Podere del Sole Tempranillo,1978,Tempranillo,Ribera del Duero,Spain,750,Bottle,EUR,20,346.46,S27-3,Reds
+Finca Salinas,Sonnenlage Carinena,1994,Carinena,Priorat,Spain,750,Bottle,EUR,32,2406.89,S13-7,Reds
+Weathered Gulch Cellars,Encosta Dourada,1978,Tempranillo,Ribera del Duero,Spain,750,Bottle,USD,1,272.55,R11-12,Reds
+Hartley Cellars,Estate Pinot Noir,2018,Pinot Noir,Willamette Valley,United States,750,Bottle,USD,76,816.35,A4-12,Reds
+Sutherland Wines,Estate Shiraz,1996,Shiraz,Barossa Valley,Australia,750,Bottle,USD,79,237.09,B15-5,Reds
+Ravenscroft Vineyards,Grenache,1988,Grenache,Barossa Valley,Australia,750,Bottle,USD,48,4554.94,R15-12,Reds
+Bodegas Alvarez,Les Fournaux Albarino,1981,Albarino,Rias Baixas,Spain,750,Bottle,GBP,50,3916.34,R13-3,Whites
+Maison Bonnet,Sonnenlage,2007,Rhone Blend,Rhone Valley,France,750,Bottle,USD,29,3063.93,B37-9,Reds
+Fairweather Estate,Zinfandel,2006,Zinfandel,Sonoma County,United States,750,Bottle,USD,69,30.10,D9-3,Reds
+Chateau Moreau,Les Terrasses,1976,Cabernet Franc,Loire Valley,France,750,Bottle,USD,40,2741.55,D11-1,Reds
+Joubert Wines,Estate Cabernet Sauvignon,2002,Cabernet Sauvignon,Stellenbosch,South Africa,750,Bottle,USD,53,124.70,B16-6,Reds
+Bodegas Cano,Oloroso,,Palomino,Jerez,Spain,750,Bottle,USD,55,2675.91,B12-4,Fortified
+Blackwood Cellars,Chardonnay,2009,Chardonnay,Sonoma County,United States,750,Bottle,EUR,42,3248.75,A29-9,Whites
+Iron Gate Orchard Vineyards,Single Vineyard Cabernet Sauvignon,1989,Cabernet Sauvignon,Colchagua Valley,Chile,750,Bottle,USD,4,354.04,R27-10,Reds
+Quinta Nogueira,Vigna del Vento,2013,Touriga Nacional,Douro,Portugal,750,Bottle,USD,95,275.19,R4-3,Reds
+Chateau Fontaine,Les Chaumes,2006,Pinot Noir,Burgundy,France,750,Bottle,USD,40,404.41,B30-4,Reds
+Blackwood Vineyards,Single Vineyard Merlot,1982,Merlot,Napa Valley,United States,750,Bottle,USD,9,1537.52,R30-11,Reds
+Fattoria Conti,Terra Bruna Dolcetto,1989,Dolcetto,Piedmont,Italy,750,Bottle,USD,71,1118.38,A39-6,Reds
+Botha Vineyards,Cabernet Sauvignon Reserve,2015,Cabernet Sauvignon,Stellenbosch,South Africa,750,Bottle,USD,8,737.21,S10-5,Reds
+Sable Hill Wine Co.,Vale do Rio Pinot Noir,1984,Pinot Noir,Burgundy,France,750,Bottle,USD,21,2157.37,B6-12,Reds
+Domaine Aubert,Vale do Rio,2012,Cabernet Franc,Loire Valley,France,750,Bottle,USD,43,3172.83,S5-8,Reds
+Bodega Fernandez,Single Vineyard Carmenere,1975,Carmenere,Colchagua Valley,Chile,750,Bottle,USD,1,495.88,C37-6,Reds
+Weingut Hoffmann,Vigneto delle Rose Riesling,1994,Riesling,Wachau,Austria,750,Bottle,USD,49,66.16,S14-9,Whites
+Finca Reyes,Terrassenlage,1977,Carinena,Priorat,Spain,750,Bottle,USD,105,388.46,D11-5,Reds
+Domaine Chapelle,Ladera Antigua Bordeaux Blend,1976,Bordeaux Blend,Bordeaux,France,750,Bottle,USD,62,73.24,C30-10,Reds
+Bodega Reyes,Weinberg Reserve,2000,Tempranillo,Rioja,Spain,750,Bottle,USD,59,79.22,A20-7,Reds
+Maison Aubert,Clos de la Chapelle,2020,Riesling,Alsace,France,750,Bottle,USD,36,9.19,S11-12,Whites
+Holloway Vineyards,Single Vineyard Cabernet Sauvignon,2012,Cabernet Sauvignon,Napa Valley,United States,750,Bottle,USD,44,235.08,D40-5,Reds
+Quinta Pereira,Clos de la Chapelle Touriga Nacional,2014,Touriga Nacional,Douro,Portugal,750,Bottle,USD,57,219.11,C9-8,Reds
+Prentice Vineyards,Sauvignon Blanc,1995,Sauvignon Blanc,Marlborough,New Zealand,750,Bottle,USD,55,15.41,C30-10,Whites
+Hollow Pass Winery,Les Grandes Vignes,2014,Touriga Nacional,Douro,Portugal,750,Bottle,USD,49,716.24,C19-8,Reds
+Sutherland Cellars,Pinot Noir,2004,Pinot Noir,Central Otago,New Zealand,750,Bottle,GBP,36,317.69,B21-11,Reds
+Marrow Rise Cellars,Chenin Blanc Reserve,1991,Chenin Blanc,Stellenbosch,South Africa,750,Bottle,USD,67,993.67,B18-10,Whites
+Maison Marchand,Brut Reserve,,Champagne Blend,Champagne,France,750,Bottle,USD,29,480.25,S7-7,Sparkling
+Whitfield Vineyards,Single Vineyard Pinot Noir,2001,Pinot Noir,Sonoma County,United States,750,Bottle,USD,1,81.29,B38-1,Reds
+Maison Lefevre,Vina del Alto Merlot,1987,Merlot,Bordeaux,France,750,Bottle,USD,7,2910.95,A25-1,Reds
+Harrison Cellars,Single Vineyard Sauvignon Blanc,2006,Sauvignon Blanc,Marlborough,New Zealand,750,Bottle,USD,32,72.33,D16-8,Whites
+Bodega Contreras,Estate Malbec,1996,Malbec,Mendoza,Argentina,750,Bottle,USD,107,2370.57,D25-2,Reds
+Podere Ferraro,Vigneto delle Rose,1978,Nebbiolo,Piedmont,Italy,750,Bottle,EUR,103,291.92,A29-12,Reds
+Fattoria Bianchi,Podere del Sole,1990,Barbera,Piedmont,Italy,750,Bottle,EUR,26,3187.83,S35-11,Reds
+Sutherland Cellars,Old Vine Pinot Noir,2014,Pinot Noir,Central Otago,New Zealand,750,Bottle,USD,120,3123.22,C2-8,Reds
+Finca Ibarra,Pinot Noir,2021,Pinot Noir,Casablanca Valley,Chile,750,Bottle,GBP,5,975.74,A39-5,Reds
+Bodega Cano,Clos de la Chapelle Tempranillo,2004,Tempranillo,Ribera del Duero,Spain,750,Bottle,USD,2,41.88,A26-1,Reds
+Raven Gulch Estate,El Rincon,1994,Touriga Nacional,Douro,Portugal,750,Bottle,EUR,32,46.96,A5-5,Reds
+Sutherland Wines,Old Vine Shiraz,2002,Shiraz,Barossa Valley,Australia,750,Bottle,USD,33,29.93,D25-5,Reds
+Caldwell Cellars,Old Vine Grenache,2012,Grenache,Barossa Valley,Australia,750,Bottle,EUR,1,2342.05,A33-5,Reds
+Windward Flat Vineyards,Le Clos Fleuri Bordeaux Blend,1996,Bordeaux Blend,Bordeaux,France,750,Bottle,USD,67,350.66,D17-10,Reds
+Bodega Reyes,Clos de la Chapelle Albarino,1990,Albarino,Rias Baixas,Spain,750,Bottle,USD,1,108.26,R36-7,Whites
+Domaine Perrin,Vina del Alto Gewurztraminer,2015,Gewurztraminer,Alsace,France,750,Bottle,GBP,2,4309.46,R24-7,Whites
+Bodega Ruiz,Sonnenlage Tempranillo,2018,Tempranillo,Rioja,Spain,750,Bottle,EUR,40,459.44,R26-8,Reds
+Maison Perrin,Les Fournaux Rhone Blend,1986,Rhone Blend,Rhone Valley,France,750,Bottle,USD,10,380.73,D7-9,Reds
+Weingut Steiner,Encosta Dourada Riesling,2012,Riesling,Mosel,Germany,750,Bottle,USD,31,14.34,B15-8,Whites
+Bodegas Campos,Colline d'Oro Garnacha,1982,Garnacha,Rioja,Spain,750,Bottle,USD,33,664.35,B10-8,Reds
+Domaine Chapelle,Costa Alta Bordeaux Blend,1985,Bordeaux Blend,Bordeaux,France,750,Bottle,USD,14,54.53,C31-2,Reds
+Finca Salinas,Sonnenlage Carinena,1994,Carinena,Priorat,Spain,750,Bottle,USD,15,881.74,R17-7,Reds
+Weingut Richter,Costa Alta Riesling,2020,Riesling,Wachau,Austria,750,Bottle,USD,40,41.46,S33-10,Whites
+Podere Barbieri,La Petite Combe Cabernet Sauvignon,2009,Cabernet Sauvignon,Tuscany,Italy,750,Bottle,USD,46,1219.69,C32-9,Reds
+Holloway Cellars,Old Vine Chardonnay,1995,Chardonnay,Margaret River,Australia,750,Bottle,USD,2,3420.35,A14-12,Whites
+Stonebridge Creek Winery,Vigna del Vento Chardonnay,1976,Chardonnay,Burgundy,France,750,Bottle,USD,28,18.69,C35-9,Whites
+Chateau Moreau,Le Clos Perdu Cabernet Franc,2006,Cabernet Franc,Bordeaux,France,750,Bottle,USD,26,4665.30,R23-8,Reds
+Quinta Ferreira,Cuesta del Rio,1991,Touriga Nacional,Douro,Portugal,750,Bottle,USD,51,27.72,C33-9,Reds
+Bodega Fernandez,Estate Cabernet Sauvignon,2008,Cabernet Sauvignon,Colchagua Valley,Chile,750,Bottle,EUR,108,534.42,R2-3,Reds
+Ashworth Cellars,Cabernet Sauvignon,2005,Cabernet Sauvignon,Margaret River,Australia,375,Half Bottle,USD,63,27.26,S9-7,Reds
+Finca Salinas,Terra Bruna Garnacha,1993,Garnacha,Priorat,Spain,750,Bottle,USD,92,394.15,S1-5,Reds
+Maison Chapelle,La Petite Combe Pinot Noir,2003,Pinot Noir,Burgundy,France,750,Bottle,USD,45,1583.00,C17-3,Reds
+Chateau Girard,Vale do Rio,1988,Riesling,Alsace,France,750,Bottle,EUR,20,2961.15,R5-2,Whites
+Bodega Fernandez,Estate Cabernet Sauvignon,2008,Cabernet Sauvignon,Colchagua Valley,Chile,750,Bottle,USD,49,1494.68,A24-8,Reds
+Sutherland Wines,Old Vine Grenache,1978,Grenache,Barossa Valley,Australia,3000,Double Magnum,USD,11,464.39,C40-3,Reds
+Sable Gulch Vineyards,Estate Cabernet Sauvignon,1995,Cabernet Sauvignon,Stellenbosch,South Africa,750,Bottle,USD,37,317.83,S21-9,Reds
+Weingut Richter,Sonnenlage Riesling,2002,Riesling,Rheingau,Germany,750,Bottle,USD,5,625.85,R18-3,Whites
+Bodegas Mendez,Les Terrasses,1991,Tempranillo,Ribera del Duero,Spain,750,Bottle,USD,33,1687.70,S14-6,Reds
+Tin Roof Pass Cellars,La Combe aux Loups Corvina,1978,Corvina,Veneto,Italy,750,Bottle,USD,23,3906.38,R28-10,Reds
+Chateau Bertrand,Clos du Moulin,1987,Rhone Blend,Rhone Valley,France,750,Bottle,USD,37,10.94,D19-10,Reds
+Finca Aguirre,Carmenere,1998,Carmenere,Colchagua Valley,Chile,750,Bottle,USD,11,584.13,S12-8,Reds
+Bodegas Ruiz,Oloroso,,Palomino,Jerez,Spain,750,Bottle,USD,7,56.21,S27-1,Fortified
+Cantina Greco,Vigna del Vento Grillo,2013,Grillo,Sicily,Italy,750,Bottle,EUR,46,684.20,A38-2,Cellar
+Quinta Rocha,Podere del Sole,2015,Touriga Nacional,Douro,Portugal,750,Bottle,USD,17,25.18,A15-11,Reds
+Chateau Girard,Vigneto delle Rose,2016,Pinot Gris,Alsace,France,750,Bottle,USD,4,350.32,D20-8,Whites
+Widows Peak Pass Winery,La Vigna Alta Cabernet Franc,1995,Cabernet Franc,Bordeaux,France,750,Bottle,USD,15,286.48,C1-1,Reds
+Holloway Wines,Old Vine Pinot Noir,1998,Pinot Noir,Willamette Valley,United States,750,Bottle,USD,24,246.37,A10-5,Reds
+Fox Hollow Meadows Winery,Ladera Antigua,2017,Gruner Veltliner,Wachau,Austria,750,Bottle,USD,14,4931.89,B16-6,Whites
+Bodega Ruiz,Terra Bruna Albarino,1975,Albarino,Rias Baixas,Spain,750,Bottle,USD,54,88.86,S19-7,Whites
+Whistling Hollow Estate,El Rincon,2013,Touriga Nacional,Douro,Portugal,750,Bottle,GBP,64,705.90,R30-12,Reds
+Vina Delgado,Single Vineyard Carmenere,1999,Carmenere,Colchagua Valley,Chile,750,Bottle,USD,3,449.08,S15-7,Reds
+Prentice Vineyards,Estate Sauvignon Blanc,2005,Sauvignon Blanc,Marlborough,New Zealand,750,Bottle,USD,8,11.02,C33-9,Whites
+Domaine Bonnet,Terrassenlage,2009,Gewurztraminer,Alsace,France,750,Bottle,USD,42,15.25,R2-2,Whites
+Chateau Delacroix,Vale do Rio,2002,Riesling,Alsace,France,750,Bottle,USD,72,355.42,S9-9,Whites
+Quinta Ferreira,Cuesta del Rio,2011,Touriga Nacional,Douro,Portugal,750,Bottle,USD,17,103.06,R40-4,Reds
+Bodega Ibarra,Cabernet Sauvignon,2001,Cabernet Sauvignon,Colchagua Valley,Chile,750,Bottle,USD,4,38.81,S23-9,Reds
+Fox Hollow Pass Vineyard,Les Grandes Vignes,2007,Corvina,Veneto,Italy,750,Bottle,EUR,71,20.00,S11-10,Reds
+Finca Delgado,Single Vineyard Malbec,1985,Malbec,Mendoza,Argentina,750,Bottle,USD,1,190.40,D10-4,Reds
+Podere Villa,Le Clos Fleuri Barbera,1975,Barbera,Piedmont,Italy,750,Bottle,USD,23,761.96,S16-6,Reds
+Bodegas Alvarez,La Combe aux Loups,1995,Tempranillo,Rioja,Spain,750,Bottle,USD,1,86.84,C22-12,Reds
+Maison Aubert,Sonnenlage Riesling,2014,Riesling,Alsace,France,750,Bottle,USD,102,276.90,S1-7,Whites
+Quinta Rocha,Costa Alta Touriga Nacional,2011,Touriga Nacional,Douro,Portugal,750,Bottle,EUR,96,1197.95,B22-2,Reds
+Bodega Contreras,Sauvignon Blanc,2005,Sauvignon Blanc,Casablanca Valley,Chile,750,Bottle,USD,27,13.60,S36-9,Whites
+Bodega Herrera,Clos Saint-Martin,2022,Tempranillo,Ribera del Duero,Spain,750,Bottle,USD,2,123.06,S1-11,Reds
+Weingut Richter,Ladera Antigua,2010,Riesling,Rheingau,Germany,750,Bottle,USD,87,178.36,C30-8,Whites
+Fattoria Conti,Terrassenlage,2014,Dolcetto,Piedmont,Italy,750,Bottle,USD,55,3704.34,C31-4,Reds
+Weathered Gulch Vineyard,Malbec Reserve,2003,Malbec,Mendoza,Argentina,750,Bottle,USD,9,8.01,D33-6,Reds
+Domaine de la Romanee-Conti,Romanee-Conti,2015,Pinot Noir,Burgundy,France,750,Bottle,USD,10,18.98,S5-8,Reds
+Chateau Moreau,Vigna del Vento,2019,Chenin Blanc,Loire Valley,France,750,Bottle,USD,61,1855.71,D17-12,Whites
+Tenuta Marchetti,Costa Alta Garganega,1975,Garganega,Veneto,Italy,750,Bottle,EUR,37,10.43,B32-9,Whites
+Podere Ferraro,Les Fournaux,1979,Dolcetto,Piedmont,Italy,750,Bottle,EUR,36,13.86,B6-4,Reds
+Clos Rousseau,Weinberg Reserve,1999,Cabernet Sauvignon,Bordeaux,France,750,Bottle,USD,17,1322.80,S22-1,Reds
+Podere Villa,La Combe aux Loups Barbera,1998,Barbera,Piedmont,Italy,750,Bottle,USD,3,2588.01,B24-7,Reds
+Cantina Colombo,Clos du Moulin Barbera,2012,Barbera,Piedmont,Italy,750,Bottle,GBP,2,20.08,B8-10,Reds
+Weingut Steiner,La Croix Blanche,2011,Riesling,Mosel,Germany,750,Bottle,USD,56,1121.58,S12-9,Whites
+Quinta Nogueira,La Vigna Alta Touriga Nacional,1975,Touriga Nacional,Douro,Portugal,750,Bottle,USD,106,712.24,A20-3,Reds
+Cantina Colombo,Cuesta del Rio Barbera,2008,Barbera,Piedmont,Italy,750,Bottle,USD,36,501.95,B16-8,Reds
+Holloway Wines,Single Vineyard Pinot Gris,2006,Pinot Gris,Willamette Valley,United States,750,Bottle,USD,28,22.57,D34-6,Whites
+Tenuta Marchetti,Vigna del Vento,2010,Nebbiolo,Piedmont,Italy,750,Bottle,USD,11,2755.45,C6-12,Reds
+Crooked Bluff Wine Co.,Colline d'Oro Sauvignon Blanc,2015,Sauvignon Blanc,Loire Valley,France,750,Bottle,EUR,4,170.18,C23-2,Whites
+Holloway Wines,Estate Pinot Gris,1985,Pinot Gris,Willamette Valley,United States,750,Bottle,USD,40,169.12,A31-12,Whites
+Blackwood Cellars,Pinot Noir Reserve,1992,Pinot Noir,Sonoma County,United States,750,Bottle,USD,7,1232.44,A14-10,Reds
+Fattoria Conti,Clos des Cerisiers Nero d'Avola,1988,Nero d'Avola,Sicily,Italy,750,Bottle,USD,7,1092.74,R9-5,Reds
+Bodegas Mendez,Steilhang Reserve Tempranillo,2016,Tempranillo,Ribera del Duero,Spain,750,Bottle,USD,25,471.70,A11-9,Reds
+Finca Alvarez,Clos des Cerisiers,2014,Tempranillo,Ribera del Duero,Spain,750,Bottle,EUR,25,1699.86,R12-8,Reds
+Whitfield Vineyards,Estate Zinfandel,2002,Zinfandel,Sonoma County,United States,750,Bottle,USD,7,988.28,A26-8,Reds
+Domaine Perrin,Weinberg Reserve Gewurztraminer,2016,Gewurztraminer,Alsace,France,750,Bottle,USD,12,3179.50,C14-12,Whites
+Chateau Rousseau,El Rincon,2018,Rhone Blend,Rhone Valley,France,750,Bottle,USD,49,8.23,R26-5,Reds
+Sinclair Cellars,Old Vine Zinfandel,2018,Zinfandel,Sonoma County,United States,750,Bottle,USD,3,25.68,B17-10,Reds
+Sawyer Winery,Old Vine Pinot Noir,2002,Pinot Noir,Willamette Valley,United States,750,Bottle,USD,7,224.07,C21-10,Reds
+Cantina Colombo,Cuesta del Rio Nebbiolo,1980,Nebbiolo,Piedmont,Italy,750,Bottle,USD,45,3744.04,D21-8,Reds
+Harrison Vineyards,Single Vineyard Pinot Gris,2004,Pinot Gris,Willamette Valley,United States,750,Bottle,USD,15,94.49,D21-4,Whites
+Botha Cellars,Cabernet Sauvignon Reserve,2001,Cabernet Sauvignon,Stellenbosch,South Africa,750,Bottle,USD,1,14.74,C36-3,Reds
+Cantina Ricci,Clos Saint-Martin Grillo,2017,Grillo,Sicily,Italy,750,Bottle,USD,4,11.39,D36-4,Cellar
+Maison Fabre,Les Grandes Vignes Cabernet Franc,2015,Cabernet Franc,Bordeaux,France,750,Bottle,EUR,1,3636.92,A32-4,Reds
+Bodegas Cano,Le Clos Fleuri Carinena,1983,Carinena,Priorat,Spain,750,Bottle,USD,15,9.16,R29-10,Reds
+Sawyer Vineyards,Chardonnay,1981,Chardonnay,Margaret River,Australia,750,Bottle,USD,21,42.18,C18-6,Whites
+Cantina Ricci,Terra Bruna Grillo,2020,Grillo,Sicily,Italy,750,Bottle,USD,5,73.65,B28-5,Cellar
+Quinta Nogueira,Podere del Sole Touriga Nacional,1978,Touriga Nacional,Douro,Portugal,750,Bottle,USD,17,467.10,S6-4,Reds
+Foggy Bend Farms Vineyards,Quinta da Serra Garnacha,1990,Garnacha,Priorat,Spain,750,Bottle,GBP,16,107.22,A17-7,Reds
+Finca Ibarra,Pinot Noir,1996,Pinot Noir,Casablanca Valley,Chile,750,Bottle,USD,31,75.08,C4-6,Reds
+Weingut Hoffmann,Vigneto delle Rose,2011,Riesling,Mosel,Germany,750,Bottle,USD,81,259.94,C39-7,Whites
+Whitfield Estate,Single Vineyard Cabernet Sauvignon,2017,Cabernet Sauvignon,Margaret River,Australia,750,Bottle,USD,53,236.24,S24-8,Reds
+Tenuta Moretti,Ribera Alta Sangiovese,1986,Sangiovese,Tuscany,Italy,750,Bottle,USD,55,65.15,C12-4,Reds
+Joubert Wines,Estate Cabernet Sauvignon,2002,Cabernet Sauvignon,Stellenbosch,South Africa,750,Bottle,GBP,57,3095.43,A29-4,Reds
+Maison Lefevre,Alte Reben Cabernet Franc,1979,Cabernet Franc,Bordeaux,France,750,Bottle,GBP,105,2092.92,R21-1,Reds
+Sutherland Vineyards,Estate Chardonnay,1977,Chardonnay,Sonoma County,United States,750,Bottle,EUR,5,200.33,D15-4,Whites
+Foggy Bend Ridge Estate,Costa Alta,1976,Grenache,Rhone Valley,France,750,Bottle,USD,23,702.21,S26-4,Reds
+Bodega Vidal,Ribera Alta,1992,Garnacha,Priorat,Spain,750,Bottle,GBP,2,432.98,B37-6,Reds
+Bodegas Mendez,Les Terrasses,1991,Tempranillo,Ribera del Duero,Spain,375,Half Bottle,USD,73,188.69,A3-12,Reds
+Bodega Campos,Fino,,Palomino,Jerez,Spain,750,Bottle,USD,4,262.40,D7-6,Fortified
+Finca Alvarez,Clos des Cerisiers,2014,Tempranillo,Ribera del Duero,Spain,750,Bottle,USD,7,366.05,B22-5,Reds
+Weingut Kessler,Le Clos Perdu,1981,Riesling,Mosel,Germany,750,Bottle,GBP,69,2133.79,A22-11,Whites
+Quinta Rocha,La Petite Combe,2009,Touriga Nacional,Douro,Portugal,750,Bottle,USD,54,15.24,R15-10,Reds
+Hollow Farms Cellars,Clos du Moulin Nero d'Avola,2007,Nero d'Avola,Sicily,Italy,375,Half Bottle,USD,2,44.47,A6-1,Reds
+Raven Flat Cellars,El Rincon Gewurztraminer,1995,Gewurztraminer,Alsace,France,750,Bottle,USD,14,23.27,B17-4,Whites
+Hartley Wines,Old Vine Cabernet Sauvignon,1977,Cabernet Sauvignon,Napa Valley,United States,750,Bottle,EUR,115,28.14,D7-8,Reds
+Bodega Contreras,Pinot Noir Reserve,2008,Pinot Noir,Casablanca Valley,Chile,750,Bottle,USD,29,108.81,A17-2,Reds
+Bodega Reyes,Les Terrasses,1977,Albarino,Rias Baixas,Spain,750,Bottle,USD,32,1680.59,B2-7,Whites
+Weingut Richter,Terrassenlage Riesling,2017,Riesling,Rheingau,Germany,750,Bottle,EUR,74,160.44,R19-6,Whites
+Hollow Farms Cellars,Clos du Moulin Nero d'Avola,2007,Nero d'Avola,Sicily,Italy,750,Bottle,EUR,8,1527.50,R3-6,Reds
+Weingut Vogel,Les Grandes Vignes,2014,Riesling,Mosel,Germany,750,Bottle,USD,56,856.02,C14-8,Whites
+Cantina Greco,Le Clos Fleuri,2017,Grillo,Sicily,Italy,750,Bottle,USD,7,105.95,S38-3,Cellar
+Marais Vineyards,Estate Chenin Blanc,1998,Chenin Blanc,Stellenbosch,South Africa,750,Bottle,GBP,49,259.91,A3-12,Whites
+Bodega Contreras,Estate Malbec,2012,Malbec,Mendoza,Argentina,750,Bottle,USD,17,18.15,B20-9,Reds
+Weathered Ridge Estate,Chardonnay Reserve,2011,Chardonnay,Sonoma County,United States,750,Bottle,USD,6,796.44,R16-7,Whites
+Bodega Castillo,La Petite Combe Tempranillo,2004,Tempranillo,Ribera del Duero,Spain,750,Bottle,USD,68,1239.45,B2-2,Reds
+Clos Bertrand,Vigna del Vento Bordeaux Blend,1977,Bordeaux Blend,Bordeaux,France,750,Bottle,USD,29,913.64,B19-5,Reds
+Weingut Wagner,Vina del Alto Gruner Veltliner,1987,Gruner Veltliner,Wachau,Austria,750,Bottle,GBP,19,807.87,D20-2,Whites
+Ridge Vineyards,Monte Bello,2015,Cabernet Sauvignon,Santa Cruz Mountains,United States,750,Bottle,USD,84,15.37,B27-5,Reds
+Ravenscroft Estate,Old Vine Pinot Noir,2021,Pinot Noir,Willamette Valley,United States,750,Bottle,USD,12,1216.83,D13-11,Reds
+Cantina Greco,La Combe aux Loups,2005,Sangiovese,Tuscany,Italy,750,Bottle,USD,41,56.06,C16-5,Reds
+Quinta Nogueira,Clos de la Chapelle Touriga Nacional,2019,Touriga Nacional,Douro,Portugal,750,Bottle,USD,9,1356.40,D9-2,Reds
+Stonebridge Ridge Estate,Colline d'Oro Pinot Gris,1985,Pinot Gris,Alsace,France,750,Bottle,USD,10,235.57,D14-7,Whites
+Bodega Mendez,Clos du Moulin,1984,Garnacha,Rioja,Spain,750,Bottle,USD,19,319.18,C13-1,Reds
+Clos Rousseau,Les Grandes Vignes Riesling,2005,Riesling,Alsace,France,750,Bottle,USD,54,2262.10,D9-12,Whites
+Tenuta Moretti,Sonnenlage Grillo,1980,Grillo,Sicily,Italy,750,Bottle,USD,45,97.05,B19-5,Cellar
+Half Moon Creek Winery,Old Vine Pinot Gris,2004,Pinot Gris,Willamette Valley,United States,750,Bottle,USD,13,1826.65,A11-7,Whites
+Sinclair Estate,Old Vine Grenache,2008,Grenache,Barossa Valley,Australia,750,Bottle,USD,101,3240.08,B36-6,Reds
+Podere Ferraro,Sonnenlage Corvina,2003,Corvina,Veneto,Italy,750,Bottle,EUR,57,564.15,C32-6,Reds
+Weingut Kellermann,Clos des Cerisiers,1989,Gruner Veltliner,Wachau,Austria,750,Bottle,USD,5,573.51,R38-6,Whites
+Ridge Vineyards,Monte Bello,2005,Cabernet Sauvignon,Santa Cruz Mountains,United States,750,Bottle,EUR,2,225.46,R40-4,Reds
+Bodegas Campos,La Petite Combe,1984,Tempranillo,Rioja,Spain,750,Bottle,USD,103,222.30,A5-1,Reds
+Fattoria Conti,Le Clos Fleuri,2022,Dolcetto,Piedmont,Italy,750,Bottle,USD,18,425.35,D3-2,Reds
+Tin Roof Draw Vineyard,Les Chaumes,2015,Touriga Nacional,Douro,Portugal,750,Bottle,USD,16,31.94,R2-3,Reds
+Raven Gulch Winery,Ribera Alta,2022,Riesling,Mosel,Germany,750,Bottle,USD,10,10.38,R15-11,Whites
+Podere Ferraro,Clos du Moulin Corvina,1989,Corvina,Veneto,Italy,750,Bottle,USD,42,1592.94,A26-5,Reds
+Foggy Bend Meadows Wine Co.,Vigneto delle Rose,2005,Garnacha,Rioja,Spain,750,Bottle,USD,22,384.91,S4-12,Reds
+Bridle Crossing Winery,Vale do Rio Touriga Nacional,2020,Touriga Nacional,Douro,Portugal,750,Bottle,EUR,11,26.13,B21-5,Reds
+Marais Vineyards,Single Vineyard Cabernet Sauvignon,1995,Cabernet Sauvignon,Stellenbosch,South Africa,750,Bottle,USD,104,49.90,R13-9,Reds
+Tenuta Moretti,Clos de la Chapelle,1998,Garganega,Veneto,Italy,750,Bottle,USD,85,181.12,C36-4,Whites
+Weingut Kellermann,Le Clos Perdu,2018,Riesling,Rheingau,Germany,750,Bottle,USD,4,211.95,D30-6,Whites
+Weathered Rise Winery,Clos du Moulin Chardonnay,2011,Chardonnay,Burgundy,France,750,Bottle,GBP,44,1036.27,D40-1,Whites
+Ashworth Winery,Single Vineyard Zinfandel,1976,Zinfandel,Sonoma County,United States,750,Bottle,GBP,9,1600.09,R38-12,Reds
+Finca Salinas,Cuesta del Rio Carinena,2008,Carinena,Priorat,Spain,750,Bottle,USD,55,1189.47,A28-2,Reds
+Tenuta Marchetti,Vigna del Vento,2011,Garganega,Veneto,Italy,750,Bottle,USD,106,1297.43,S20-6,Whites
+Blackwood Cellars,Chardonnay,2009,Chardonnay,Sonoma County,United States,750,Bottle,USD,67,3389.77,S40-4,Whites
+Bodega Reyes,Colline d'Oro,2007,Albarino,Rias Baixas,Spain,750,Bottle,USD,87,312.39,A29-3,Whites
+Weingut Steiner,Terra Bruna Riesling,2022,Riesling,Mosel,Germany,750,Bottle,EUR,79,24.68,A13-2,Whites
+Sundown Farms Estate,Single Vineyard Chenin Blanc,1982,Chenin Blanc,Stellenbosch,South Africa,750,Bottle,EUR,17,22.44,R5-7,Whites
+Finca Ibarra,Single Vineyard Malbec,1980,Malbec,Mendoza,Argentina,750,Bottle,USD,34,3458.49,B12-10,Reds
+Fattoria Fontana,Clos de la Chapelle,1976,Garganega,Veneto,Italy,750,Bottle,USD,5,51.57,B32-10,Whites
+Weingut Baumann,Ladera Antigua,1980,Riesling,Mosel,Germany,750,Bottle,USD,37,617.13,D30-10,Whites
+Quinta Silva,Clos des Cerisiers,1983,Touriga Nacional,Douro,Portugal,750,Bottle,USD,93,1009.01,D14-10,Reds
+Sine Qua Non,Estate Cuvee,2018,Rhone Blend,Central Coast,United States,750,Bottle,USD,70,9.01,C28-4,Reds
+Finca Castillo,Colline d'Oro Garnacha,1985,Garnacha,Rioja,Spain,750,Bottle,USD,69,3377.27,R19-12,Reds
+Podere Villa,Costa Alta,1981,Nebbiolo,Piedmont,Italy,750,Bottle,USD,1,11.33,S8-11,Reds
+Maison Fabre,Ladera Antigua,2014,Gewurztraminer,Alsace,France,750,Bottle,USD,33,153.99,B25-9,Whites
+Bodegas Delgado,Clos des Cerisiers Garnacha,2015,Garnacha,Priorat,Spain,750,Bottle,EUR,37,8.61,R14-1,Reds
+Gaja,Barbaresco,2005,Nebbiolo,Piedmont,Italy,750,Bottle,USD,14,2451.35,A31-7,Reds
+Weingut Vogel,La Petite Combe,1997,Gruner Veltliner,Wachau,Austria,750,Bottle,GBP,3,695.64,C15-3,Whites
+Botha Vineyards,Chenin Blanc,2017,Chenin Blanc,Stellenbosch,South Africa,750,Bottle,USD,3,155.41,S4-6,Whites
+Finca Delgado,Old Vine Malbec,1982,Malbec,Mendoza,Argentina,750,Bottle,USD,41,14.32,S12-10,Reds
+Sinclair Cellars,Old Vine Zinfandel,1985,Zinfandel,Sonoma County,United States,750,Bottle,USD,25,237.79,S23-6,Reds
+Maison Lefevre,Vale do Rio Chenin Blanc,1989,Chenin Blanc,Loire Valley,France,750,Bottle,USD,14,55.63,A40-8,Whites
+Sutherland Cellars,Estate Pinot Noir,1988,Pinot Noir,Central Otago,New Zealand,750,Bottle,USD,20,37.93,A23-11,Reds
+Iron Gate Draw Vineyard,Les Grandes Vignes,2011,Rhone Blend,Rhone Valley,France,750,Bottle,USD,16,496.85,C12-11,Reds
+Hacienda Navarro,Oloroso,,Palomino,Jerez,Spain,750,Bottle,USD,23,282.74,R33-9,Fortified
+Maison Fabre,Costa Alta Gewurztraminer,1979,Gewurztraminer,Alsace,France,750,Bottle,USD,14,23.75,C13-2,Whites
+Whitfield Vineyards,Estate Zinfandel,2021,Zinfandel,Sonoma County,United States,750,Bottle,USD,29,31.84,B11-10,Reds
+Finca Aguirre,Malbec Reserve,1991,Malbec,Mendoza,Argentina,750,Bottle,USD,7,265.88,B20-6,Reds
+Half Moon Pass Vineyard,Pinot Noir,1985,Pinot Noir,Sonoma County,United States,750,Bottle,USD,24,303.65,B5-8,Reds
+Iron Gate Farms Vineyards,Le Clos Fleuri,2003,Riesling,Rheingau,Germany,750,Bottle,USD,4,37.18,A32-4,Whites
+Finca Salinas,Vigna del Vento,2014,Carinena,Priorat,Spain,750,Bottle,GBP,105,22.27,C38-5,Reds
+Lantern Ridge Wine Co.,Clos du Moulin Garnacha,2022,Garnacha,Priorat,Spain,750,Bottle,USD,11,9.73,B19-12,Reds
+Bodega Reyes,Steilhang Reserve,2013,Tempranillo,Rioja,Spain,750,Bottle,USD,58,25.82,R20-5,Reds
+Chateau Margaux,Grand Vin,2018,Bordeaux Blend,Margaux,France,750,Bottle,USD,38,991.03,D19-7,Reds
+Iron Gate Hill Vineyards,Single Vineyard Sauvignon Blanc,2018,Sauvignon Blanc,Casablanca Valley,Chile,750,Bottle,GBP,72,1480.42,C13-3,Whites
+Finca Delgado,Old Vine Malbec,1989,Malbec,Mendoza,Argentina,750,Bottle,USD,34,39.09,S1-7,Reds
+Clos Delacroix,Terra Bruna,2019,Syrah,Rhone Valley,France,750,Bottle,EUR,106,39.42,S14-10,Reds
+Winslow Cellars,Grenache,2004,Grenache,Barossa Valley,Australia,750,Bottle,USD,18,83.55,D8-12,Reds
+Caldwell Wines,Pinot Noir Reserve,1994,Pinot Noir,Sonoma County,United States,750,Bottle,EUR,6,2934.41,R36-11,Reds
+Maison Lefevre,La Vigna Alta Merlot,1997,Merlot,Bordeaux,France,750,Bottle,USD,33,148.15,B37-11,Reds
+Clos Riviere,Les Terrasses Chardonnay,2023,Chardonnay,Burgundy,France,375,Half Bottle,USD,71,1897.39,B20-3,Whites
+Fattoria Conti,Weinberg Reserve,2016,Nero d'Avola,Sicily,Italy,750,Bottle,USD,5,1102.22,C36-12,Reds
+Sine Qua Non,Estate Cuvee,2005,Rhone Blend,Central Coast,United States,750,Bottle,USD,40,4458.68,C26-2,Reds
+Cantina Ricci,Clos Saint-Martin Grillo,2017,Grillo,Sicily,Italy,750,Bottle,USD,6,470.31,S4-12,Cellar
+Half Moon Gulch Cellars,Single Vineyard Cabernet Sauvignon,1990,Cabernet Sauvignon,Margaret River,Australia,750,Bottle,GBP,45,9.57,B30-3,Reds
+Tenuta Moretti,Encosta Dourada,2020,Cabernet Sauvignon,Tuscany,Italy,750,Bottle,USD,8,20.87,R17-8,Reds
+Holloway Cellars,Chardonnay Reserve,2023,Chardonnay,Margaret River,Australia,750,Bottle,USD,33,22.15,R19-2,Whites
+Tenuta Romano,Alte Reben,2016,Cabernet Sauvignon,Tuscany,Italy,750,Bottle,USD,18,192.43,D30-12,Reds
+Foggy Bend Hollow Winery,Estate Merlot,1995,Merlot,Napa Valley,United States,750,Bottle,USD,76,487.26,C14-1,Reds
+Bodega Rivas,Single Vineyard Malbec,1984,Malbec,Mendoza,Argentina,750,Bottle,USD,30,1828.24,C4-6,Reds
+Weingut Wagner,El Rincon,2010,Riesling,Rheingau,Germany,750,Bottle,USD,93,372.55,S26-11,Whites
+Fox Hollow Creek Vineyard,Colline d'Oro,2023,Riesling,Rheingau,Germany,750,Bottle,USD,40,329.70,D19-10,Whites
+Chateau Delacroix,Clos des Cerisiers Gewurztraminer,2016,Gewurztraminer,Alsace,France,750,Bottle,USD,28,318.33,A17-3,Whites
+Weingut Wagner,Vina del Alto,1994,Riesling,Rheingau,Germany,750,Bottle,EUR,43,18.43,A15-12,Whites
+Fairweather Estate,Zinfandel,2006,Zinfandel,Sonoma County,United States,750,Bottle,USD,6,68.51,C4-6,Reds
+Sutherland Cellars,Pinot Noir Reserve,1982,Pinot Noir,Central Otago,New Zealand,750,Bottle,USD,114,439.74,R24-4,Reds
+Weingut Falkenstein,La Croix Blanche,1998,Riesling,Rheingau,Germany,750,Bottle,USD,6,8.10,A29-3,Whites
+Bodega Ruiz,Weinberg Reserve,1984,Tempranillo,Rioja,Spain,750,Bottle,USD,62,1136.85,A39-1,Reds
+Clos Girard,Costa Alta Rhone Blend,1991,Rhone Blend,Rhone Valley,France,750,Bottle,USD,87,215.28,S18-11,Reds
+Egon Muller,Scharzhofberger,2018,Riesling,Mosel,Germany,750,Bottle,EUR,6,35.90,S36-5,Whites
+Fox Hollow Bluff Wine Co.,Clos du Moulin Gewurztraminer,1979,Gewurztraminer,Alsace,France,750,Bottle,USD,1,914.59,A21-6,Whites
+Bodega Campos,Fino,,Palomino,Jerez,Spain,750,Bottle,USD,1,80.91,B8-8,Fortified
+Bodega Ruiz,Sonnenlage Garnacha,1987,Garnacha,Rioja,Spain,750,Bottle,USD,38,37.14,D26-12,Reds
+Bodega Mendez,Quinta da Serra Albarino,2023,Albarino,Rias Baixas,Spain,750,Bottle,USD,2,18.16,R30-7,Whites
+Lantern Bend Winery,Encosta Dourada Garnacha,1993,Garnacha,Priorat,Spain,750,Bottle,GBP,30,49.90,B6-9,Reds
+Quinta Rocha,El Rincon,2018,Touriga Nacional,Douro,Portugal,750,Bottle,GBP,87,42.86,D35-5,Reds
+Domaine Aubert,Clos des Cerisiers,1997,Cabernet Franc,Loire Valley,France,750,Bottle,GBP,4,2030.86,B12-11,Reds
+Clos Moreau,Clos de la Chapelle Chardonnay,1999,Chardonnay,Burgundy,France,750,Bottle,USD,18,108.28,D26-7,Whites
+Weingut Vogel,Les Chaumes,1997,Riesling,Mosel,Germany,750,Bottle,USD,34,12.55,B24-6,Whites
+Marais Vineyards,Chenin Blanc,1998,Chenin Blanc,Stellenbosch,South Africa,750,Bottle,USD,120,525.58,R29-10,Whites
+Finca Ibarra,Pinot Noir,1996,Pinot Noir,Casablanca Valley,Chile,750,Bottle,USD,35,141.39,R22-4,Reds
+Chateau Fontaine,La Croix Blanche Chardonnay,1993,Chardonnay,Burgundy,France,750,Bottle,USD,7,64.66,S22-9,Whites
+Sawyer Vineyards,Estate Chardonnay,2017,Chardonnay,Margaret River,Australia,750,Bottle,USD,55,21.19,C31-9,Whites
+Fattoria Conti,Clos des Cerisiers,2018,Barbera,Piedmont,Italy,750,Bottle,USD,16,1882.11,C26-8,Reds
+Amber Crossing Vineyards,Encosta Dourada,1987,Carinena,Priorat,Spain,750,Bottle,USD,50,514.08,B12-10,Reds
+Foggy Bend Ridge Vineyard,Ladera Antigua,1994,Sangiovese,Tuscany,Italy,750,Bottle,USD,108,544.30,C7-11,Reds
+Bodegas Reyes,Palo Cortado,NV,Palomino,Jerez,Spain,750,Bottle,USD,46,588.51,R17-12,Fortified
+Bodega Castillo,Alte Reben Tempranillo,2017,Tempranillo,Ribera del Duero,Spain,750,Bottle,EUR,26,9.86,B40-9,Reds
+Marais Vineyards,Single Vineyard Chenin Blanc,1982,Chenin Blanc,Stellenbosch,South Africa,750,Bottle,USD,98,412.10,S3-10,Whites
+Bodega Reyes,La Petite Combe,1987,Tempranillo,Rioja,Spain,750,Bottle,USD,15,326.14,C7-9,Reds
+Foggy Bend Hollow Winery,Estate Merlot,1995,Merlot,Napa Valley,United States,750,Bottle,EUR,3,251.44,S37-5,Reds
+Fattoria Bianchi,Weinberg Reserve,1990,Barbera,Piedmont,Italy,750,Bottle,GBP,62,2943.78,C2-12,Reds
+Ashworth Estate,Sauvignon Blanc,2009,Sauvignon Blanc,Marlborough,New Zealand,750,Bottle,USD,22,82.92,C18-10,Whites
+Cantina Colombo,Terra Bruna,2013,Corvina,Veneto,Italy,750,Bottle,USD,6,92.63,R20-7,Reds
+Bodega Reyes,Costa Alta Albarino,1990,Albarino,Rias Baixas,Spain,750,Bottle,USD,18,430.45,A14-1,Whites
+Casa Pereira,10 Year Tawny,,Port Blend,Douro,Portugal,750,Bottle,USD,60,127.51,S36-5,Fortified
+Holloway Estate,Sauvignon Blanc,2003,Sauvignon Blanc,Marlborough,New Zealand,750,Bottle,USD,4,116.57,A16-10,Whites
+Iron Gate Rise Cellars,Single Vineyard Cabernet Sauvignon,1979,Cabernet Sauvignon,Stellenbosch,South Africa,750,Bottle,USD,6,14.30,C31-3,Reds
+Stonebridge Ridge Vineyard,Vale do Rio,2009,Merlot,Bordeaux,France,750,Bottle,USD,23,3808.65,C24-4,Reds
+Clos Delacroix,Ladera Antigua,1999,Grenache,Rhone Valley,France,750,Bottle,USD,44,1059.11,D7-1,Reds
+Sutherland Cellars,Pinot Noir,1976,Pinot Noir,Central Otago,New Zealand,750,Bottle,USD,96,4474.18,R28-3,Reds
+Maison Bonnet,Meursault-Perrieres,2017,Chardonnay,Burgundy,France,750,Bottle,USD,15,122.18,R3-8,Whites
+Sable Hill Vineyard,Le Clos Fleuri Sangiovese,2001,Sangiovese,Tuscany,Italy,750,Bottle,GBP,25,235.63,C13-4,Reds
+Bodega Mendez,Vigneto delle Rose Garnacha,2013,Garnacha,Rioja,Spain,750,Bottle,EUR,8,16.79,D23-3,Reds
+Bridle Rise Winery,Old Vine Chenin Blanc,2014,Chenin Blanc,Stellenbosch,South Africa,750,Bottle,EUR,19,9.51,A38-2,Whites
+Finca Delgado,Les Chaumes Albarino,1981,Albarino,Rias Baixas,Spain,750,Bottle,USD,11,1726.91,A29-3,Whites
+Bodega Reyes,El Rincon,2016,Tempranillo,Rioja,Spain,750,Bottle,USD,21,844.99,C27-4,Reds
+Tenuta Marchetti,La Combe aux Loups,2001,Nebbiolo,Piedmont,Italy,750,Bottle,USD,15,257.96,R33-7,Reds
+Podere Ferraro,Les Chaumes Garganega,2021,Garganega,Veneto,Italy,750,Bottle,USD,1,101.76,S15-8,Whites
+Tenuta Romano,Weinberg Reserve Nero d'Avola,1978,Nero d'Avola,Sicily,Italy,750,Bottle,USD,34,108.44,C21-12,Reds
+Domaine Aubert,Costa Alta,2003,Cabernet Franc,Loire Valley,France,750,Bottle,USD,29,22.27,B19-4,Reds
+Holloway Wines,Old Vine Pinot Gris,1988,Pinot Gris,Willamette Valley,United States,750,Bottle,USD,4,2765.27,B33-6,Whites
+Vina Delgado,Carmenere Reserve,1997,Carmenere,Colchagua Valley,Chile,750,Bottle,USD,6,355.57,A19-10,Reds
+Marais Vineyards,Chenin Blanc,2000,Chenin Blanc,Stellenbosch,South Africa,3000,Double Magnum,USD,19,595.65,R21-10,Whites
+Vina Aguirre,Pinot Noir,2005,Pinot Noir,Casablanca Valley,Chile,750,Bottle,USD,55,35.45,A15-2,Reds
+Prentice Winery,Single Vineyard Chardonnay,2019,Chardonnay,Margaret River,Australia,750,Bottle,USD,25,16.20,A31-4,Whites
+Weingut Richter,Vigneto delle Rose,1998,Riesling,Rheingau,Germany,750,Bottle,USD,1,314.73,C39-4,Whites
+Domaine Lefevre,Brut Tradition,,Champagne Blend,Champagne,France,750,Bottle,USD,6,4744.53,B31-7,Sparkling
+Tenuta Romano,Alte Reben,2016,Cabernet Sauvignon,Tuscany,Italy,750,Bottle,EUR,21,21.90,R26-2,Reds
+Chateau Riviere,Cuesta del Rio Cabernet Franc,1978,Cabernet Franc,Loire Valley,France,750,Bottle,USD,43,254.48,S12-4,Reds
+Finca Ibarra,Malbec Reserve,1998,Malbec,Mendoza,Argentina,750,Bottle,USD,17,235.86,D32-9,Reds
+Sawyer Winery,Old Vine Pinot Noir,2002,Pinot Noir,Willamette Valley,United States,750,Bottle,USD,74,113.54,B25-8,Reds
+Domaine Aubert,Ribera Alta Chenin Blanc,2014,Chenin Blanc,Loire Valley,France,750,Bottle,GBP,29,3371.40,R12-8,Whites
+Bodega Rivas,Malbec,1985,Malbec,Mendoza,Argentina,750,Bottle,USD,6,26.17,A9-7,Reds
+Tenuta Marchetti,Podere del Sole Garganega,1976,Garganega,Veneto,Italy,750,Bottle,EUR,93,120.41,R34-8,Whites
+Finca Delgado,Quinta da Serra,1986,Albarino,Rias Baixas,Spain,750,Bottle,EUR,55,1383.39,B28-10,Whites
+Cantina Greco,La Combe aux Loups,2005,Sangiovese,Tuscany,Italy,750,Bottle,USD,3,53.77,B4-7,Reds
+Bodega Reyes,Les Fournaux Albarino,1977,Albarino,Rias Baixas,Spain,750,Bottle,USD,28,223.05,C8-3,Whites
+Granite Bend Cellars,Les Terrasses,1979,Cabernet Sauvignon,Bordeaux,France,750,Bottle,EUR,50,221.96,B30-1,Reds
+Chateau Latour,Grand Vin,2005,Bordeaux Blend,Pauillac,France,750,Bottle,USD,3,53.51,B16-1,Reds
+Weingut Kellermann,Les Terrasses Riesling,1979,Riesling,Wachau,Austria,750,Bottle,USD,67,260.63,C25-5,Whites
+Ashworth Winery,Chardonnay,2008,Chardonnay,Sonoma County,United States,750,Bottle,EUR,14,185.69,B12-6,Whites
+Granite Draw Cellars,Vigneto delle Rose Riesling,1993,Riesling,Rheingau,Germany,750,Bottle,USD,40,4019.48,S29-6,Whites
+Weingut Baumann,Vigneto delle Rose Riesling,2018,Riesling,Mosel,Germany,750,Bottle,USD,3,685.59,A35-11,Whites
+Maison Marchand,Clos de la Chapelle Cabernet Franc,1999,Cabernet Franc,Loire Valley,France,750,Bottle,USD,1,17.32,R27-11,Reds
+Sawyer Estate,Estate Chardonnay,1990,Chardonnay,Napa Valley,United States,750,Bottle,USD,4,23.37,R3-9,Whites
+Caldwell Cellars,Shiraz,2000,Shiraz,Barossa Valley,Australia,750,Bottle,USD,68,419.48,A40-5,Reds
+Clos Riviere,Ladera Antigua,2005,Riesling,Alsace,France,750,Bottle,USD,24,402.02,S17-4,Whites
+Weingut Vogel,La Petite Combe,1986,Riesling,Rheingau,Germany,750,Bottle,EUR,7,2029.25,A21-1,Whites
+Chateau Delacroix,La Vigna Alta,1984,Gewurztraminer,Alsace,France,750,Bottle,USD,117,1590.58,B11-7,Whites
+Finca Aguirre,Old Vine Cabernet Sauvignon,1985,Cabernet Sauvignon,Colchagua Valley,Chile,750,Bottle,USD,15,11.86,A32-3,Reds
+Windward Pass Winery,Cabernet Sauvignon,2015,Cabernet Sauvignon,Colchagua Valley,Chile,750,Bottle,USD,5,4021.15,R14-2,Reds
+Podere Barbieri,Les Chaumes,2008,Corvina,Veneto,Italy,750,Bottle,USD,13,148.76,S9-10,Reds
+Crooked Rise Wine Co.,Estate Shiraz,2016,Shiraz,Barossa Valley,Australia,750,Bottle,USD,3,103.34,A4-1,Reds
+Fattoria Conti,Clos du Moulin Nero d'Avola,2004,Nero d'Avola,Sicily,Italy,750,Bottle,GBP,10,49.55,S13-9,Reds
+Fattoria Bianchi,La Combe aux Loups Garganega,1980,Garganega,Veneto,Italy,750,Bottle,EUR,13,4996.42,B20-5,Whites
+van der Merwe Winery,Single Vineyard Cabernet Sauvignon,2014,Cabernet Sauvignon,Stellenbosch,South Africa,750,Bottle,USD,8,41.80,C7-3,Reds
+Iron Gate Hill Cellars,Vigneto delle Rose Riesling,2002,Riesling,Wachau,Austria,750,Bottle,USD,102,41.45,R3-9,Whites
+Hartley Cellars,Estate Pinot Noir,2018,Pinot Noir,Willamette Valley,United States,750,Bottle,USD,12,1023.46,R3-6,Reds
+Maison Aubert,Clos Saint-Martin Gewurztraminer,1982,Gewurztraminer,Alsace,France,750,Bottle,USD,15,15.43,C1-6,Whites
+Quinta da Costa,10 Year Tawny,,Port Blend,Douro,Portugal,750,Bottle,USD,12,307.40,R30-12,Fortified
+Weingut Wagner,Clos du Moulin,1996,Gruner Veltliner,Wachau,Austria,750,Bottle,GBP,5,328.88,A19-6,Whites
