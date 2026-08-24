@@ -1196,6 +1196,38 @@ describe("evaluateChunkPlan — chunk_plan_within_row_limit's exemption proof (r
   }, 20_000);
 });
 
+describe("evaluateChunkPlan — chunk_boundaries_preserve_records's exemption proof (round-5 amendment)", () => {
+  it("reports boundaryOk: false, with the correct detail, when a malformed record's dangling quote is closed by a later record", () => {
+    // buildChunkPlan() only ever partitions dataRecords produced by
+    // splitLogicalRecords(), whose own quote-tracking guarantees every
+    // record handed to it is already complete (balanced quotes) — see
+    // verifyChunkBoundary()'s comment for why that makes
+    // chunk_boundaries_preserve_records unreachable through the real CLI.
+    // This proves the DETECTION ITSELF is sound by calling the same
+    // exported, parameterized pure functions with a deliberately malformed
+    // record pair that bypasses that guarantee: record0 opens a quote it
+    // never closes; record1's own text closes it. Parsed as the WHOLE
+    // chunk, that dangling quote swallows the boundary between them,
+    // merging record0 with the first part of record1 into one row and
+    // leaving record1's embedded newline to start a second row — but
+    // parsed in ISOLATION, record1's leading `"` is never a quote-opener at
+    // all (it isn't the first character of a field), so it parses as a
+    // completely different row. That divergence is exactly what
+    // chunk_boundaries_preserve_records' check() filters on
+    // (s.chunkPlanChecks.filter((c) => !c.boundaryOk)).
+    const header = CANONICAL_HEADER;
+    const record0 = `"open`;
+    const record1 = `mid"\nZ,W`;
+    const plan = buildChunkPlan([record0, record1], 2); // one chunk, both malformed records together
+    expect(plan).toHaveLength(1);
+    const checks = evaluateChunkPlan(header, plan);
+    expect(checks[0].boundaryOk).toBe(false);
+    expect(checks[0].boundaryDetail).toBe(
+      "record at chunk-local position 1 parses differently as part of the chunk than in isolation — the chunk boundary altered it",
+    );
+  }, 20_000);
+});
+
 describe("buildChunkPlan / evaluateChunkPlan — property proof across randomized inputs (extends the '1:1 record<->row contract' proof to the chunk emitter)", () => {
   // Same generator style as the existing property test above (never emits
   // bare CR or unterminated quotes — those are covered as their own
