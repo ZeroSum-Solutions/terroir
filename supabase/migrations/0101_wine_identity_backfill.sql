@@ -88,6 +88,40 @@ join public.canonical_wines cw
   on cw.producer_norm = n.producer_norm and cw.cuvee_norm = n.cuvee_norm
 where n.wine_id not in (select wine_id from _identity_backfill_resolved);
 
+-- D9 fix (scratchpad db-audit/verify/P2-critic-r3.md): every row still
+-- unresolved at this point is about to CREATE a canonical_wines row
+-- below, claiming identity_status='lwin_verified' whenever its lwin7 is
+-- set. This migration runs as the table owner and BYPASSES RLS entirely
+-- — 0097's insert-policy corroboration fix provides this backfill ZERO
+-- protection, so it needs its own, independent copy of the same gate
+-- (resolve_wine_variants_bulk, 0099, carries the RPC-side copy). Without
+-- it, wines.lwin_id — itself settable by any tenant member via a plain
+-- UPDATE on wines with no catalog validation, since the wines
+-- update policy is is_member(restaurant_id) with no column restriction —
+-- becomes exactly the same forgery/mis-binding vector D9 closes on the
+-- resolve_wine_variants_bulk path, except triggered by a one-time
+-- migration over whatever wines rows already exist at deploy time rather
+-- than a live RPC call. Same thresholds as 0097/0099, reused rather than
+-- reinvented: 0.3 producer / 0.21 name similarity against the real
+-- public.lwin_catalog row (lwin_catalog.lwin_id is that table's primary
+-- key; there is no separate "lwin7" column there). A row that fails
+-- corroboration is downgraded (lwin7 stripped) to identity_status =
+-- 'unverified' below, not dropped from the backfill entirely — it still
+-- gets a real identity via its own text, matching this file's own
+-- already-documented risk tolerance ("creates one extra canonical/
+-- variant row a later exact match could have reused," never "merges two
+-- different wines").
+update _identity_backfill_norm n
+set lwin7 = null
+where n.wine_id not in (select wine_id from _identity_backfill_resolved)
+  and n.lwin7 is not null
+  and not exists (
+    select 1 from public.lwin_catalog lc
+    where lc.lwin_id = n.lwin7
+      and similarity(lower(n.producer), lower(lc.producer)) >= 0.3
+      and similarity(lower(n.name), lower(lc.display_name)) >= 0.21
+  );
+
 with new_canon as (
   insert into public.canonical_wines (
     producer, cuvee, producer_norm, cuvee_norm, lwin7, identity_status,

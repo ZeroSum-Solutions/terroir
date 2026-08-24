@@ -73,18 +73,81 @@ create policy "anyone authenticated can read canonical_wines"
 
 -- Shape-restricted insert, not ownership-restricted (there is no owner to
 -- check on a global table): a raw client/RPC insert may only claim
--- 'unverified' outright, or 'lwin_verified' when it also supplies the
--- lwin7 that makes the claim an objectively checkable fact (format-valid
--- per the CHECK above). 'operator_confirmed' is intentionally NEVER
--- reachable through this policy — nothing in P2 sets it; it exists in the
--- CHECK constraint for a future manager-gated promotion RPC, which is
--- explicitly out of scope here (docs/plans/2026-08-23-p2-identity-spine.md
--- §12).
+-- 'unverified' outright, or 'lwin_verified' when it also supplies a lwin7
+-- that CORROBORATES against the real catalog (see below — round 1 only
+-- checked lwin7's format, not that it named a real, matching wine).
+-- 'operator_confirmed' is intentionally NEVER reachable through this
+-- policy — nothing in P2 sets it; it exists in the CHECK constraint for a
+-- future manager-gated promotion RPC, which is explicitly out of scope
+-- here (docs/plans/2026-08-23-p2-identity-spine.md §12).
+--
+-- P2 ROUND-4 FIX (D9 — scratchpad db-audit/verify/P2-critic-r3.md): the
+-- round-1 policy only checked lwin7's FORMAT (7 digits), never that it
+-- named a real wine, let alone the wine actually being submitted. lwin7
+-- is otherwise attacker-controlled input: any authenticated tenant could
+-- claim identity_status='lwin_verified' with an arbitrary 7-digit string,
+-- and canonical_wines_lwin7_idx being UNIQUE means the first writer owns
+-- that LWIN globally, forever — with no UPDATE/DELETE policy on this
+-- table, the victim (any OTHER tenant who later imports the real wine
+-- correctly, or the identity itself) cannot repair it; only service-role
+-- merge_canonical_wines can. Composed with resolve_wine_variants_bulk's
+-- "LWIN-exact deterministically wins over producer/cuvée text" behavior
+-- (0099, by design, for the legitimate data-entry-error case), an
+-- attacker who submits producer='Garbage', cuvee='X', lwin7=<a real
+-- wine's LWIN> before anyone else creates that canonical row silently
+-- hijacks every later tenant's correctly-submitted import of that same
+-- real wine onto their own garbage-labeled row — cross-tenant identity
+-- corruption on the table every future image/visual-search piece
+-- (P4/P5/P6) will key off.
+--
+-- Fixed: 'lwin_verified' now additionally requires that lwin7 names a
+-- real public.lwin_catalog row (that table's primary key is lwin_id —
+-- there is no separate "lwin7" column there, see
+-- 0003_wine_intelligence.sql) AND that the SUBMITTED producer/cuvee
+-- actually resemble that catalog row's producer/display_name — closing
+-- both forgery (a LWIN that doesn't exist at all) and mis-binding (a
+-- REAL LWIN attached to the wrong wine, which would still squat the
+-- unique index otherwise). Reuses match_lwin's own already-tuned
+-- similarity thresholds (0007_lwin_matching.sql: 0.3 for producer,
+-- 0.3 * 0.7 = 0.21 for name-vs-display_name) rather than inventing new
+-- ones. This is a format-and-content check on the row being inserted, the
+-- same kind of objectively-checkable-fact test the round-1 comment above
+-- already described — it just now actually checks the fact, not merely
+-- its shape.
+--
+-- This RLS policy protects DIRECT inserts (including a raw client
+-- posting straight to this table, or any future code path). It does NOT,
+-- by itself, protect resolve_wine_variants_bulk's own batched insert from
+-- aborting the ENTIRE batch the moment one row's lwin7 fails this check
+-- (a WITH CHECK violation on any one row of a multi-row INSERT fails the
+-- whole statement) — that RPC (0099) carries its OWN, functionally
+-- equivalent pre-insert corroboration gate for exactly that reason, so a
+-- bad LWIN downgrades just that one row to unverified instead of
+-- aborting a 5,000-row import chunk. Nor does it protect 0101's backfill,
+-- which runs as the table owner and bypasses RLS entirely — that
+-- migration carries its own independent copy of this same gate too. All
+-- three enforcement points must be kept in agreement; see D9's write-up
+-- for why a single shared implementation wasn't practical (this is SQL
+-- data-manipulation-language duplicated across a policy expression, a
+-- PL/pgSQL function body, and a plain migration script — three different
+-- execution contexts with no shared-function seam that fires in the
+-- right place for all three without adding a security-definer function
+-- purely for this check, which was judged more machinery than the
+-- problem warrants for now).
 create policy "members can insert canonical_wines"
   on public.canonical_wines for insert to authenticated
   with check (
     identity_status = 'unverified'
-    or (identity_status = 'lwin_verified' and lwin7 is not null)
+    or (
+      identity_status = 'lwin_verified'
+      and lwin7 is not null
+      and exists (
+        select 1 from public.lwin_catalog lc
+        where lc.lwin_id = lwin7
+          and similarity(lower(producer), lower(lc.producer)) >= 0.3
+          and similarity(lower(cuvee), lower(lc.display_name)) >= 0.21
+      )
+    )
   );
 
 -- No update/delete policy for authenticated or anon: this table is

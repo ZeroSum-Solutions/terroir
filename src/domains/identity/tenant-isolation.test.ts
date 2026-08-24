@@ -44,8 +44,10 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
   let restaurantA: string;
   let restaurantB: string;
   let userAClient: SupabaseClient<Database>;
+  let userBClient: SupabaseClient<Database>;
   let userAId: string;
   let userBId: string;
+  const d9LwinId = String(1000000 + (Date.now() % 8999999)).padStart(7, "0").slice(0, 7);
 
   beforeAll(async () => {
     admin = createClient<Database>(supabaseUrl!, serviceRoleKey!, { auth: { persistSession: false } });
@@ -83,6 +85,7 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
     if (memBErr) throw memBErr;
 
     userAClient = await signedInClient(userA.user.email!, password);
+    userBClient = await signedInClient(userB.user.email!, password);
   });
 
   afterAll(async () => {
@@ -92,11 +95,12 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
     const { data: canonRows } = await admin
       .from("canonical_wines")
       .select("id")
-      .or("producer_norm.like.p2 rwvb%,producer_norm.like.p2 concurrent%");
+      .or("producer_norm.like.p2 rwvb%,producer_norm.like.p2 concurrent%,producer_norm.like.p2 d9%");
     await admin.from("restaurants").delete().in("id", [restaurantA, restaurantB]);
     if (canonRows && canonRows.length > 0) {
       await admin.from("canonical_wines").delete().in("id", (canonRows as { id: string }[]).map((r) => r.id));
     }
+    await admin.from("lwin_catalog").delete().eq("lwin_id", d9LwinId);
     if (userAId) await admin.auth.admin.deleteUser(userAId);
     if (userBId) await admin.auth.admin.deleteUser(userBId);
   });
@@ -161,5 +165,96 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
       .eq("restaurant_id", restaurantA)
       .eq("canonical_wine_id", [...canonicalIds][0]);
     expect(variantRows).toHaveLength(1);
+  });
+
+  // P2 round-4 (D9 — scratchpad db-audit/verify/P2-critic-r3.md): the
+  // full cross-tenant LWIN-hijack chain, reproduced end to end through
+  // the real RPC as two real signed-in tenants, then shown to no longer
+  // happen. Before the fix (verified live in a rolled-back transaction,
+  // not asserted here since it requires temporarily swapping in the old
+  // function/policy — see the round-4 report): an attacker at tenant A
+  // submits garbage producer/cuvee text with a REAL wine's lwin7; that
+  // squats canonical_wines_lwin7_idx (UNIQUE) as identity_status=
+  // 'lwin_verified'. A victim at tenant B later imports the SAME real
+  // wine with correct producer/cuvee text and the same lwin7; because
+  // LWIN-exact deterministically wins over producer/cuvée text (by
+  // design, for the legitimate data-entry-error case), the victim's
+  // resolve_wine_variants_bulk call binds their inventory to the
+  // attacker-controlled garbage-labeled canonical row — with no
+  // UPDATE/DELETE policy on canonical_wines, the victim cannot repair
+  // this themselves.
+  it("D9 fix: a tenant cannot squat a real LWIN with garbage text to hijack another tenant's later correct import", async () => {
+    const { error: catalogErr } = await admin.from("lwin_catalog").insert({
+      lwin_id: d9LwinId,
+      display_name: "P2 D9 Real Producer Real Wine",
+      producer: "P2 D9 Real Producer",
+    } as never);
+    expect(catalogErr).toBeNull();
+
+    // ATTACKER (tenant A): garbage producer/cuvee, but the REAL lwin7.
+    const { data: attackerData, error: attackerError } = await userAClient.rpc("resolve_wine_variants_bulk", {
+      p_restaurant_id: restaurantA,
+      p_variants: [
+        {
+          idx: 0,
+          producer_raw: "P2 D9 Garbage Import Co",
+          cuvee_raw: "Junk Label",
+          producer_norm: "p2 d9 garbage import co",
+          cuvee_norm: "junk label",
+          vintage: 2020,
+          size_ml: 750,
+          lwin7: d9LwinId,
+        },
+      ],
+    } as never);
+    expect(attackerError).toBeNull();
+    const attackerCanonicalId = (attackerData as { canonical_wine_id: string }[])[0].canonical_wine_id;
+
+    // The attacker's canonical row must NOT have squatted the LWIN — it
+    // should be downgraded to unverified with lwin7 stripped, per the
+    // fix's own documented "downgrade, don't abort the batch" behavior.
+    const { data: attackerCanonRow } = await admin
+      .from("canonical_wines")
+      .select("identity_status, lwin7")
+      .eq("id", attackerCanonicalId)
+      .single();
+    expect(attackerCanonRow).toMatchObject({ identity_status: "unverified", lwin7: null });
+
+    // VICTIM (tenant B): correct producer/cuvee, the same real lwin7.
+    const { data: victimData, error: victimError } = await userBClient.rpc("resolve_wine_variants_bulk", {
+      p_restaurant_id: restaurantB,
+      p_variants: [
+        {
+          idx: 0,
+          producer_raw: "P2 D9 Real Producer",
+          cuvee_raw: "Real Wine",
+          producer_norm: "p2 d9 real producer",
+          cuvee_norm: "real wine",
+          vintage: 2020,
+          size_ml: 750,
+          lwin7: d9LwinId,
+        },
+      ],
+    } as never);
+    expect(victimError).toBeNull();
+    const victimCanonicalId = (victimData as { canonical_wine_id: string }[])[0].canonical_wine_id;
+
+    // THE HIJACK CHECK: the victim's canonical identity must be a
+    // DIFFERENT row from the attacker's — no binding to attacker-
+    // controlled state.
+    expect(victimCanonicalId).not.toBe(attackerCanonicalId);
+
+    // The victim's row is the legitimately LWIN-verified one, with the
+    // correct producer text and the real lwin7 actually recorded.
+    const { data: victimCanonRow } = await admin
+      .from("canonical_wines")
+      .select("producer, identity_status, lwin7")
+      .eq("id", victimCanonicalId)
+      .single();
+    expect(victimCanonRow).toMatchObject({
+      producer: "P2 D9 Real Producer",
+      identity_status: "lwin_verified",
+      lwin7: d9LwinId,
+    });
   });
 });

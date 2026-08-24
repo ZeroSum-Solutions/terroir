@@ -30,6 +30,18 @@ select user_id, restaurant_id, 'owner' from _t9099_fixture;
 -- fails with permission denied.
 grant select on _t9099_fixture to authenticated;
 
+-- D9 fixture (round 4): a real lwin_catalog row for the LWIN-corroboration
+-- test below (step 5). Producer/display_name are close enough to BOTH of
+-- that test's submissions' text (live-verified similarity: producer
+-- 0.54/0.45, name 0.42/0.39, both comfortably above the 0.3/0.21 gate)
+-- that corroboration passes for either — which is what lets that test
+-- still prove its actual point (LWIN wins over differing TEXT); the text
+-- just can't be TOTALLY unrelated to a real wine anymore. Inserted as
+-- postgres (table owner), before the role switch below: lwin_catalog has
+-- no insert policy for authenticated, only select.
+insert into public.lwin_catalog (lwin_id, display_name, producer) values
+  ('1234567', 'Domaine Test Cuvee One', 'Domaine Test');
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', (select user_id::text from _t9099_fixture), true);
 
@@ -171,6 +183,15 @@ select results_eq(
 -- reuse that row (recording an alias), never create a duplicate.
 -- Captured into a temp table (rather than a JOIN nested inside is()'s
 -- scalar-subquery argument) so a mismatch is easy to diagnose.
+--
+-- D9 fix (round 4 — scratchpad db-audit/verify/P2-critic-r3.md): lwin7
+-- now must corroborate against a real public.lwin_catalog row (see
+-- 0097's insert policy) before resolve_wine_variants_bulk will let it
+-- create a lwin_verified canonical row — a bare 7-digit string with no
+-- catalog backing is downgraded to unverified instead. The catalog
+-- fixture this test's lwin7 needs is seeded up top (as postgres, before
+-- the role switch to authenticated — lwin_catalog has no insert policy
+-- for authenticated, only select).
 create temporary table _t9099_lwin (call int, canonical_wine_id uuid) on commit drop;
 
 insert into _t9099_lwin (call, canonical_wine_id)
