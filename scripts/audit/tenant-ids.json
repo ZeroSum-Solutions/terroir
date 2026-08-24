@@ -1,0 +1,24 @@
+{
+  "userA": "d82e82aa-2643-4cc2-a9fb-d6f182b5ba59",
+  "userB": "eaf12820-40ab-48ef-9c32-c7a5273564b6",
+  "restaurantA": "11536d0f-5469-4553-911e-dd429b83ceef",
+  "restaurantB": "4953afd9-3020-4f5f-8f36-c4b22cf7740f",
+  "wineA_ids": [
+    "5d64be9c-66b3-4a8f-b2d9-14023a78d375",
+    "fd60f299-8d7d-4f07-9267-4022ca9ecd1c",
+    "cf8ad4ff-44b9-44a2-98ac-4aabee960130",
+    "9ca0f3fe-80af-4b04-95f4-0d90ef5ee002"
+  ],
+  "wineA_published_id": "fd60f299-8d7d-4f07-9267-4022ca9ecd1c",
+  "wineA_noLwin_id": "5d64be9c-66b3-4a8f-b2d9-14023a78d375",
+  "wineA_inventory_id": "cf8ad4ff-44b9-44a2-98ac-4aabee960130",
+  "listA_id": "6fddd595-0f3e-42f0-8a8d-6cc237883b85",
+  "sectionA_id": "685778fa-f99f-4ff3-90fc-b62cd8dca814",
+  "itemA_id": "eacd72bf-550c-41ee-b180-b8afc478a4e0",
+  "inventoryA_id": "167ce584-0d10-4e92-960e-e5deac19f683",
+  "openBottleA_id": "5158dd95-b2a8-47ba-85ae-02b04716e9fe",
+  "openBottleA_wine_id": "9ca0f3fe-80af-4b04-95f4-0d90ef5ee002",
+  "wineB_id": "0a1fb2a4-efa7-4610-98e7-fc229bebd5d1",
+  "listB_id": "f6cfc40c-671e-42ee-98cb-afe0641306ca",
+  "sectionB_id": "b4143bfb-b69d-4191-b8e4-d7ced9c951b1"
+}
