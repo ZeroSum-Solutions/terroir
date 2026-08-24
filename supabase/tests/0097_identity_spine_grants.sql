@@ -3,7 +3,7 @@
 -- rolled-back transaction so nothing persists).
 begin;
 
-select plan(12);
+select plan(14);
 
 -- RLS enabled on every new table.
 select ok(
@@ -24,15 +24,38 @@ select ok(
 );
 
 -- canonical_wines: authenticated select+insert, no update/delete.
+--
+-- P2 ROUND-2 FIX (D4): since canonical_wines' SELECT grant is now
+-- column-level (excludes created_by_restaurant_id/created_by_user_id —
+-- see 0097's migration comment), has_table_privilege(..., 'select')
+-- correctly returns false here — table-level and column-level
+-- privileges are NOT interchangeable in Postgres (verified live: a
+-- column-level REVOKE layered on top of a table-level GRANT does NOT
+-- restrict access, so the only way to actually hide a column is to never
+-- grant table-level SELECT at all). Check a representative real column
+-- instead of the table-level privilege.
 select ok(
-  has_table_privilege('authenticated', 'public.canonical_wines', 'select')
+  has_column_privilege('authenticated', 'public.canonical_wines', 'producer_norm', 'select')
     and has_table_privilege('authenticated', 'public.canonical_wines', 'insert'),
-  'authenticated can select and insert canonical_wines'
+  'authenticated can select (non-audit columns) and insert canonical_wines'
 );
 select ok(
   not has_table_privilege('authenticated', 'public.canonical_wines', 'update')
     and not has_table_privilege('authenticated', 'public.canonical_wines', 'delete'),
   'authenticated has no update/delete on canonical_wines — mutation is function-only'
+);
+
+-- D4 (round-2 critic finding): created_by_restaurant_id/created_by_user_id
+-- are audit-only and must not be readable platform-wide by every
+-- authenticated tenant — column-level grant, not a second RLS policy
+-- (RLS is row-level only).
+select ok(
+  not has_column_privilege('authenticated', 'public.canonical_wines', 'created_by_restaurant_id', 'select'),
+  'authenticated cannot read canonical_wines.created_by_restaurant_id (D4 fix)'
+);
+select ok(
+  not has_column_privilege('authenticated', 'public.canonical_wines', 'created_by_user_id', 'select'),
+  'authenticated cannot read canonical_wines.created_by_user_id (D4 fix)'
 );
 
 -- wine_variants: authenticated select+insert+update, no delete.

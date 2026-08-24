@@ -6,7 +6,7 @@
 -- what it claims.
 begin;
 
-select plan(10);
+select plan(11);
 
 -- Fixtures: a real restaurant + membership, created as postgres (table
 -- owner bypasses RLS) since `authenticated` has no insert policy on
@@ -212,6 +212,43 @@ select isnt_empty(
      where canonical_wine_id = (select id from public.canonical_wines where lwin7 = '1234567')
        and raw_producer = 'Domaine Test Misspelled Again'$$,
   'the differing-text row is recorded as an alias against the shared canonical wine, not a duplicate'
+);
+
+-- 11. D3 (round-2 critic finding, scratchpad db-audit/verify/P2-critic-r1.md):
+-- "O'Brien's Vineyard" and "O.S. Brien Vineyard" used to normalize to the
+-- IDENTICAL producer_norm ("brien o s vineyard") before the D3 fix to
+-- src/domains/identity/normalize.ts. producer_norm/cuvee_norm below are
+-- computed by hand using the FIXED normalizeProducerOrCuvee (this RPC
+-- does no normalization itself — the caller always supplies it), same
+-- cuvee ("Reserve") and vintage/size for both, mirroring the critic's own
+-- live reproduction exactly.
+create temporary table _t9099_d3 (label text, canonical_wine_id uuid) on commit drop;
+insert into _t9099_d3 (label, canonical_wine_id)
+select 'possessive_apostrophe', r.canonical_wine_id
+from public.resolve_wine_variants_bulk(
+  (select restaurant_id from _t9099_fixture),
+  jsonb_build_array(jsonb_build_object(
+    'idx', 0, 'producer_raw', 'O''Brien''s Vineyard', 'cuvee_raw', 'Reserve',
+    'producer_norm', 'briens o vineyard', 'cuvee_norm', 'reserve',
+    'vintage', 2019, 'size_ml', 750
+  ))
+) r;
+
+insert into _t9099_d3 (label, canonical_wine_id)
+select 'initials_with_periods', r.canonical_wine_id
+from public.resolve_wine_variants_bulk(
+  (select restaurant_id from _t9099_fixture),
+  jsonb_build_array(jsonb_build_object(
+    'idx', 0, 'producer_raw', 'O.S. Brien Vineyard', 'cuvee_raw', 'Reserve',
+    'producer_norm', 'brien o s vineyard', 'cuvee_norm', 'reserve',
+    'vintage', 2019, 'size_ml', 750
+  ))
+) r;
+
+select isnt(
+  (select canonical_wine_id from _t9099_d3 where label = 'possessive_apostrophe'),
+  (select canonical_wine_id from _t9099_d3 where label = 'initials_with_periods'),
+  'D3 fix: a possessive apostrophe and period-separated initials no longer collide into one canonical wine'
 );
 
 select * from finish();

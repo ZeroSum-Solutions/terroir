@@ -371,4 +371,153 @@ describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY l
     const { data: sourceAfter } = await admin.from("canonical_wines").select("id").eq("id", sourceId).maybeSingle();
     expect(sourceAfter).toBeNull();
   });
+
+  // P2 round-2 (D1 — scratchpad db-audit/verify/P2-critic-r1.md):
+  // wines_variant_tenant_fk was ON DELETE CASCADE, so deleting a single
+  // wine_variants row silently destroyed the wines row pointing at it —
+  // and from there every one of ITS OWN cascade-tied children — with no
+  // error, no guard, and no identity_merge_log entry. Fixed to
+  // ON DELETE SET NULL (wine_variant_id) — a composite-FK, column-scoped
+  // null target (Postgres 15+; verified live against this stack's PG
+  // 17.6). These two tests prove both properties the fix must hold
+  // simultaneously.
+  it("D1 fix: deleting a wine_variants row detaches the wines row and its full audit trail, never destroys them", async () => {
+    const { data: canon } = await admin
+      .from("canonical_wines")
+      .insert({ producer: "P2 FK Safety Cellars", cuvee: "Safety Cuvee", producer_norm: "p2 fk safety cellars", cuvee_norm: "safety cuvee" } as never)
+      .select("id")
+      .single();
+    const canonId = (canon as { id: string }).id;
+    cleanupCanonicalWineIds.push(canonId);
+
+    const { data: variant } = await admin
+      .from("wine_variants")
+      .insert({ restaurant_id: restaurantA, canonical_wine_id: canonId, vintage: 2021, size_ml: 750 } as never)
+      .select("id")
+      .single();
+    const variantId = (variant as { id: string }).id;
+
+    const { data: wine } = await admin
+      .from("wines")
+      .insert({ restaurant_id: restaurantA, name: "P2 FK Safety Wine", producer: "P2 FK Safety Cellars", vintage: 2021, size_ml: 750 } as never)
+      .select("id")
+      .single();
+    const wineId = (wine as { id: string }).id;
+    await admin.from("wines").update({ wine_variant_id: variantId } as never).eq("id", wineId);
+
+    // Plant every confirmed live FK-to-wines(id) child in one row each —
+    // both the RESTRICT-tied ones (inventory_items, wine_list_items,
+    // pour_events) and the CASCADE-tied ones the round-1 bug actually
+    // destroyed — to prove the fix no longer depends on which kind of
+    // child the wine happens to have.
+    const { data: inv } = await admin.from("inventory_items").insert({ wine_id: wineId, restaurant_id: restaurantA, quantity: 1, unit_cost: 10 } as never).select("id").single();
+    const { data: pour } = await admin.from("pour_events").insert({ wine_id: wineId, restaurant_id: restaurantA, ml_delta: -50, kind: "pour" } as never).select("id").single();
+    const { data: list } = await admin.from("wine_lists").insert({ restaurant_id: restaurantA, name: "P2 FK Safety List" } as never).select("id").single();
+    const { data: section } = await admin.from("wine_list_sections").insert({ wine_list_id: (list as { id: string }).id, name: "Reds" } as never).select("id").single();
+    const { data: listItem } = await admin.from("wine_list_items").insert({ section_id: (section as { id: string }).id, wine_id: wineId, position: 1 } as never).select("id").single();
+    const { data: bottle } = await admin.from("open_bottles").insert({ wine_id: wineId, restaurant_id: restaurantA, remaining_ml: 700 } as never).select("id").single();
+    const { data: avail } = await admin.from("availability_events").insert({ wine_id: wineId, restaurant_id: restaurantA, direction: "eightysixed" } as never).select("id").single();
+    const { data: closeout } = await admin
+      .from("bottle_closeouts")
+      .insert({ restaurant_id: restaurantA, wine_id: wineId, preservation_method: "none", theoretical_remaining_ml: 0, actual_remaining_ml: 0 } as never)
+      .select("id")
+      .single();
+    const { data: reasonCode } = await admin
+      .from("reason_codes")
+      .insert({ restaurant_id: restaurantA, code: "P2_FK_SAFETY", label: "P2 FK safety test", category: "comp" } as never)
+      .select("id")
+      .single();
+    const { data: adjustment } = await admin
+      .from("stock_adjustments")
+      .insert({ restaurant_id: restaurantA, wine_id: wineId, kind: "comp", bottles: 1, reason_code_id: (reasonCode as { id: string }).id, acting_user_id: ownerAId } as never)
+      .select("id")
+      .single();
+    const { data: pricingRec } = await admin
+      .from("pricing_recommendations")
+      .insert({ restaurant_id: restaurantA, wine_id: wineId, class: "hold", rationale: "P2 FK safety test" } as never)
+      .select("id")
+      .single();
+    const { data: health } = await admin
+      .from("cellar_health")
+      .insert({ restaurant_id: restaurantA, wine_id: wineId, segment: "healthy", reason: "P2 FK safety test" } as never)
+      .select("id")
+      .single();
+
+    // The destructive act: delete the wine_variants row directly (no
+    // restaurant teardown, no merge_wines call — a bare, unguarded
+    // single-row delete, exactly as the critic reproduced it).
+    const { error: deleteError } = await admin.from("wine_variants").delete().eq("id", variantId);
+    expect(deleteError).toBeNull();
+
+    // The wines row survives, detached rather than destroyed.
+    const { data: wineAfter } = await admin.from("wines").select("id, wine_variant_id, canonical_wine_id").eq("id", wineId).maybeSingle();
+    expect(wineAfter).not.toBeNull();
+    expect((wineAfter as { wine_variant_id: string | null }).wine_variant_id).toBeNull();
+    expect((wineAfter as { canonical_wine_id: string | null }).canonical_wine_id).toBeNull();
+
+    // Every one of its audit-trail/inventory children survives untouched.
+    const survivors = {
+      inv: await admin.from("inventory_items").select("id").eq("id", (inv as { id: string }).id).maybeSingle(),
+      pour: await admin.from("pour_events").select("id").eq("id", (pour as { id: string }).id).maybeSingle(),
+      listItem: await admin.from("wine_list_items").select("id").eq("id", (listItem as { id: string }).id).maybeSingle(),
+      bottle: await admin.from("open_bottles").select("id").eq("id", (bottle as { id: string }).id).maybeSingle(),
+      avail: await admin.from("availability_events").select("id").eq("id", (avail as { id: string }).id).maybeSingle(),
+      closeout: await admin.from("bottle_closeouts").select("id").eq("id", (closeout as { id: string }).id).maybeSingle(),
+      adjustment: await admin.from("stock_adjustments").select("id").eq("id", (adjustment as { id: string }).id).maybeSingle(),
+      pricingRec: await admin.from("pricing_recommendations").select("id").eq("id", (pricingRec as { id: string }).id).maybeSingle(),
+      health: await admin.from("cellar_health").select("id").eq("id", (health as { id: string }).id).maybeSingle(),
+    };
+    for (const [key, res] of Object.entries(survivors)) {
+      expect(res.data, `${key} must survive a standalone wine_variants delete`).not.toBeNull();
+    }
+  });
+
+  it("D1 fix: restaurant teardown with a populated wine_variant_id still completes cleanly (the original C17 race this FK exists to close)", async () => {
+    // A throwaway, self-contained restaurant — created and destroyed
+    // entirely within this test, independent of restaurantA/B's shared
+    // afterAll cleanup.
+    const { data: restC } = await admin.from("restaurants").insert({ name: "P2 FK Safety Teardown" } as never).select("id").single();
+    const restaurantC = (restC as { id: string }).id;
+
+    const { data: canon } = await admin
+      .from("canonical_wines")
+      .insert({ producer: "P2 Teardown Cellars", cuvee: "Teardown Cuvee", producer_norm: "p2 teardown cellars", cuvee_norm: "teardown cuvee" } as never)
+      .select("id")
+      .single();
+    const canonId = (canon as { id: string }).id;
+    cleanupCanonicalWineIds.push(canonId);
+
+    const { data: variant } = await admin
+      .from("wine_variants")
+      .insert({ restaurant_id: restaurantC, canonical_wine_id: canonId, vintage: 2022, size_ml: 750 } as never)
+      .select("id")
+      .single();
+    const variantId = (variant as { id: string }).id;
+
+    const { data: wine } = await admin
+      .from("wines")
+      .insert({ restaurant_id: restaurantC, name: "P2 Teardown Wine", producer: "P2 Teardown Cellars", vintage: 2022, size_ml: 750 } as never)
+      .select("id")
+      .single();
+    const wineId = (wine as { id: string }).id;
+    await admin.from("wines").update({ wine_variant_id: variantId } as never).eq("id", wineId);
+
+    // The full-teardown path: deleting the restaurant fires
+    // wine_variants.restaurant_id's own ON DELETE CASCADE and
+    // wines.restaurant_id's own ON DELETE CASCADE as two independent
+    // actions on the same statement, in an order Postgres does not
+    // guarantee. Before the fix, a plain RESTRICT here would have raised
+    // a spurious FK violation whenever the wine_variants side won that
+    // race; CASCADE (the round-1 choice) avoided that error but did so by
+    // being willing to destroy data on a standalone delete too (D1). The
+    // fix (SET NULL, column-scoped) must make this teardown succeed with
+    // NO error regardless of ordering, without reintroducing that risk.
+    const { error: teardownError } = await admin.from("restaurants").delete().eq("id", restaurantC);
+    expect(teardownError).toBeNull();
+
+    const { data: wineRows } = await admin.from("wines").select("id").eq("restaurant_id", restaurantC);
+    const { data: variantRows } = await admin.from("wine_variants").select("id").eq("restaurant_id", restaurantC);
+    expect(wineRows ?? []).toHaveLength(0);
+    expect(variantRows ?? []).toHaveLength(0);
+  });
 });

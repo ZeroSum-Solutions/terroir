@@ -92,4 +92,36 @@ create policy "members can insert canonical_wines"
 -- resolve_wine_variants_bulk (0099, insert-only) and merge_canonical_wines
 -- (0100, service-role only, which both updates referrers and deletes the
 -- source row under its own privileges).
-grant select, insert on table public.canonical_wines to authenticated;
+--
+-- P2 ROUND-2 FIX (D4 — scratchpad db-audit/verify/P2-critic-r1.md):
+-- created_by_restaurant_id is audit-only per this table's own design (see
+-- the table comment above), but §8 of
+-- docs/plans/2026-08-23-p2-identity-spine.md only evaluated that column
+-- against a WRITE-corruption threat model and never asked whether a
+-- global, any-authenticated-readable table should expose it for READING.
+-- The critic reproduced live that it does: any signed-in user at any
+-- restaurant can read which OTHER restaurant first stocked a given wine —
+-- a narrow but real competitive-intelligence leak, and — combined with
+-- 0029_public_restaurant_read.sql's public restaurant-name policy — a
+-- restaurant's own name is reachable from it too. Deliberate decision:
+-- restrict, not merely document. No app code anywhere reads
+-- created_by_restaurant_id or created_by_user_id via the authenticated
+-- role (confirmed by grep across src/**), so there is no functional loss,
+-- and RETURNING clauses on this table (resolve_wine_variants_bulk, 0099)
+-- never reference either column, so this cannot break the one write path
+-- that populates them. Column-level GRANT (not a second RLS policy —
+-- Postgres RLS is row-level only) is the standard mechanism for
+-- restricting a subset of columns on an otherwise-readable table; per
+-- has_table_privilege's own semantics (true if the role holds privilege
+-- on ANY column), the existing "authenticated can select ...
+-- canonical_wines" pgTAP assertion in
+-- supabase/tests/0097_identity_spine_grants.sql is unaffected. Both
+-- created_by_* columns get the same treatment since they share the exact
+-- same audit-only justification and the same platform-wide-read shape —
+-- leaving one restricted and its sibling open would be an inconsistency,
+-- not a decision.
+grant select (
+  id, producer, cuvee, producer_norm, cuvee_norm, colour, region, country,
+  lwin7, identity_status, created_at, updated_at
+) on table public.canonical_wines to authenticated;
+grant insert on table public.canonical_wines to authenticated;

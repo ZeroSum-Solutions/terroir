@@ -38,6 +38,29 @@ export const CURRENT_YEAR = new Date().getFullYear();
  * (vintage, size_ml) for variant identity, so an accidental collision
  * would require all four to coincide.
  */
+// P2 ROUND-2 FIX (D3 - scratchpad db-audit/verify/P2-critic-r1.md): before
+// this fix, "O'Brien's Vineyard" and "O.S. Brien Vineyard" normalized to
+// the IDENTICAL token multiset {"brien","o","s","vineyard"} - a
+// possessive apostrophe ("Brien's" -> stray "brien"+"s" tokens) and a
+// pair of period-separated initials ("O.S." -> stray "o"+"s" tokens) are,
+// after the general non-alnum-to-space collapse below, indistinguishable
+// single-character tokens, so an over-merge was possible even though the
+// two names are plausibly different real-world producers. The extra
+// .replace() call merges a trailing possessive "'s" into its host word
+// BEFORE that general collapse, so "Brien's" -> "briens" (one token)
+// instead of "brien"+"s" (two tokens, one a coincidence-prone stray).
+// This targets ONLY the possessive-suffix pattern (apostrophe
+// immediately before a word-final "s") and deliberately leaves every
+// other apostrophe position untouched - in particular a name-internal
+// apostrophe like "d'Alsace" (P1's own punctuation_spacing golden
+// vector, "Coeur d'Alsace") still splits exactly as before, which is
+// required to stay byte-for-byte identical to P1's frozen
+// normalizeForDedup (P1's worktree is not editable from here - see the
+// file header). Confirmed via grep against P1's fixture generator that
+// no producer/cuvee/name field in its seed data uses a possessive "'s",
+// so this cannot affect any of P1's 40 golden vectors or the live
+// 110-check matrix - it only changes behavior for inputs the graded
+// fixture never exercises.
 export function normalizeProducerOrCuvee(raw: string): string {
   const folded = raw
     .replace(/œ/gi, "oe")
@@ -45,6 +68,7 @@ export function normalizeProducerOrCuvee(raw: string): string {
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
+    .replace(/['’]s(?=\s|$)/g, "s")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
   return folded.split(" ").filter(Boolean).sort().join(" ");

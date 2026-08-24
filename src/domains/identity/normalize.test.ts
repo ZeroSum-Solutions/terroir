@@ -192,6 +192,21 @@ describe("normalizeProducerOrCuvee (unit, no P1 dependency)", () => {
   it("does NOT treat two genuinely different producers as equal", () => {
     expect(normalizeProducerOrCuvee("Domaine Jean Grivot")).not.toBe(normalizeProducerOrCuvee("Domaine Anne Gros"));
   });
+
+  // D3 (round-2 critic finding): a possessive apostrophe and a pair of
+  // period-separated initials used to both decay to stray single-character
+  // tokens ("brien"+"s" vs "o"+"s"), producing an IDENTICAL sorted token
+  // multiset for two plausibly different producers.
+  it("does NOT collapse a possessive apostrophe and period-separated initials into the same key (D3)", () => {
+    expect(normalizeProducerOrCuvee("O'Brien's Vineyard")).not.toBe(normalizeProducerOrCuvee("O.S. Brien Vineyard"));
+  });
+
+  it("still folds a name-internal apostrophe exactly as before (byte-for-byte parity with P1's frozen normalizeForDedup)", () => {
+    // Cœur d'Alsace / Coeur d'Alsace is P1's own punctuation_spacing golden
+    // vector (generate-partner-cellar.mjs SPELLING_SEEDS). The D3 fix must
+    // NOT touch this apostrophe position — only a trailing possessive "'s".
+    expect(normalizeProducerOrCuvee("Cœur d'Alsace")).toBe(normalizeProducerOrCuvee("Coeur d'Alsace"));
+  });
 });
 
 describe("normalizeVintage / isNvVintageText (unit, no P1 dependency)", () => {

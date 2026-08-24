@@ -97,21 +97,56 @@ alter table public.wines
 -- column: a wines row pointing at another tenant's wine_variant becomes a
 -- constraint violation, not a latent cross-tenant bug.
 --
--- ON DELETE CASCADE (not the default NO ACTION): wine_variants rows are
--- otherwise permanent (no delete policy, no P2 code path removes one) —
--- the only way one disappears today is a full restaurant teardown, via
--- wine_variants' OWN restaurant_id ON DELETE CASCADE. Without an
--- explicit action here, that same restaurant deletion also cascades
--- wines.restaurant_id independently, and Postgres does not guarantee
--- which sibling cascade fires first — NO ACTION can raise a spurious FK
--- violation if the wine_variants row is removed before the wines row
--- that points at it. CASCADE converges correctly either way: the wines
--- row is being deleted by the same restaurant teardown regardless.
+-- P2 ROUND-2 FIX (D1, replaces the round-1 ON DELETE CASCADE — see
+-- scratchpad db-audit/verify/P2-critic-r1.md): CASCADE here meant that
+-- deleting a single wine_variants row silently destroyed the wines row
+-- pointing at it, and from there every one of THAT wine's own
+-- CASCADE-tied children (bottle_closeouts, stock_adjustments,
+-- pricing_recommendations, cellar_health, availability_events,
+-- open_bottles) — a live tenant's entire cellar audit trail gone with no
+-- error, no guard, and no identity_merge_log entry, whenever the wine had
+-- no RESTRICT-tied row (inventory_items/wine_list_items/pour_events)
+-- attached. That inverts this plan's own loudest invariant ("never
+-- destroy data") and is a materially worse failure mode than the bug
+-- being fixed.
+--
+-- Plain RESTRICT (the critic's first-pass recommendation) is not safe
+-- either: it would reintroduce the exact C17 race this FK exists to
+-- close. A restaurant teardown fires wine_variants.restaurant_id's own
+-- ON DELETE CASCADE and wines.restaurant_id's own ON DELETE CASCADE as
+-- two independent actions on the same deleted restaurant row, and
+-- Postgres does not guarantee their order. If the wine_variants side
+-- fires first, a plain RESTRICT here would raise a spurious FK violation
+-- against a wines row that is itself about to be deleted by the same
+-- statement.
+--
+-- The fix that gives both properties at once: ON DELETE SET NULL,
+-- column-scoped to wine_variant_id only (Postgres 15+ supports a column
+-- list on SET NULL/SET DEFAULT for composite FKs — verified live against
+-- this stack's PG 17.6). Deleting the referenced wine_variants row now
+-- always just detaches (wine_variant_id -> null, and canonical_wine_id
+-- along with it via wines_derive_canonical_wine_id below, since SET NULL
+-- is implemented as an UPDATE and fires that trigger) rather than
+-- destroying the wines row, in EITHER scenario:
+--   - Standalone wine_variants delete (no restaurant teardown in
+--     progress): the wines row and every one of its audit-trail children
+--     survive untouched, pointer nulled. No merge_wines call is needed or
+--     possible here — nothing was merged, a dangling pointer was cleared.
+--   - Restaurant teardown, wine_variants cascade fires first: SET NULL
+--     always succeeds (wine_variant_id is nullable, and only that single
+--     column is targeted — the composite's OTHER column, restaurant_id,
+--     is deliberately left alone, so wines.restaurant_id NOT NULL is
+--     never at risk). The wines row is then deleted moments later by its
+--     OWN restaurant_id cascade regardless of ordering — no violation
+--     either way, and the row was going away anyway.
+-- Regression test for both properties (live, real service-role client,
+-- full 10-child-table fixture): the two "D1 fix" tests at the end of
+-- src/domains/identity/merge.test.ts.
 alter table public.wines
   add constraint wines_variant_tenant_fk
     foreign key (wine_variant_id, restaurant_id)
     references public.wine_variants(id, restaurant_id)
-    on delete cascade;
+    on delete set null (wine_variant_id);
 
 create index wines_wine_variant_id_idx on public.wines (wine_variant_id);
 create index wines_canonical_wine_id_idx on public.wines (canonical_wine_id);
