@@ -88,7 +88,53 @@ jobs:
       - name: Lint
         run: pnpm run lint
 
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1 (v1.7.1)
+        with:
+          version: 2.109.1
+
+      - name: Start local Supabase
+        # supabase/config.toml is committed since the 2026-08-24 integration
+        # (573xx ports, terroir-vw-local project id — see
+        # docs/runbooks/local-stack.md); `init` is only a fallback for a
+        # tree without one. `start` applies every file in
+        # supabase/migrations/ into a fresh Postgres + PostgREST + GoTrue
+        # stack that lives only for this job — not a shared database.
+        run: |
+          if [ ! -f supabase/config.toml ]; then
+            supabase init --with-vscode-settings=false --with-intellij-settings=false
+          fi
+          supabase start
+
+      - name: Export local Supabase env for tests and E2E
+        run: |
+          supabase status -o env \
+            --override-name api.url=NEXT_PUBLIC_SUPABASE_URL \
+            --override-name auth.anon_key=NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY \
+            --override-name auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY \
+            2>/dev/null \
+            | grep -E '^(NEXT_PUBLIC_SUPABASE_URL|NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY|SUPABASE_SERVICE_ROLE_KEY)=' \
+            | tr -d '"' >> "$GITHUB_ENV"
+          # Must match Playwright's baseURL (playwright.config.ts) exactly —
+          # the app derives every auth redirect from this origin rather than
+          # trusting the request Host (docs/AUTH-SETUP.md), so a mismatch
+          # against the host tests actually navigate to drops session
+          # cookies across the redirect.
+          echo "NEXT_PUBLIC_APP_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV"
+          echo "ACTIVE_RESTAURANT_COOKIE_SECRET=ci-e2e-cookie-secret-not-sensitive" >> "$GITHUB_ENV"
+          echo "DEV_BYPASS_EMAIL=owner+local@terroir.test" >> "$GITHUB_ENV"
+
+      - name: Seed local Supabase for tests and E2E
+        run: pnpm run supabase:seed:local:apply
+
+
       - name: Test
+        # Runs AFTER the local Supabase stack is up and its env exported
+        # (integration critic finding, 2026-08-24): the MANDATORY live-DB
+        # suites (P2 cross-tenant containment, merge_wines repointing, P3
+        # chunked import) previously skipped silently in CI because this
+        # step had no stack. They now run for real, and each suite throws
+        # outright if the env is missing while CI=true instead of skipping.
         run: pnpm run test
 
       - name: Build
@@ -136,42 +182,6 @@ jobs:
         # Builds sanitized, production-like fixture data and prints counts.
         # No database writes happen without --confirm.
         run: pnpm run supabase:seed:local
-
-      - name: Install Supabase CLI
-        uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1 (v1.7.1)
-        with:
-          version: 2.109.1
-
-      - name: Start local Supabase
-        # No supabase/config.toml is committed (docs/RESTORE-DRILL.md notes
-        # why), so `init` generates one with the CLI's standard local ports
-        # and demo keys, then `start` applies every file in
-        # supabase/migrations/ into a fresh Postgres + PostgREST + GoTrue
-        # stack that lives only for this job — not a shared database.
-        run: |
-          supabase init --with-vscode-settings=false --with-intellij-settings=false
-          supabase start
-
-      - name: Export local Supabase env for E2E
-        run: |
-          supabase status -o env \
-            --override-name api.url=NEXT_PUBLIC_SUPABASE_URL \
-            --override-name auth.anon_key=NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY \
-            --override-name auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY \
-            2>/dev/null \
-            | grep -E '^(NEXT_PUBLIC_SUPABASE_URL|NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY|SUPABASE_SERVICE_ROLE_KEY)=' \
-            | tr -d '"' >> "$GITHUB_ENV"
-          # Must match Playwright's baseURL (playwright.config.ts) exactly —
-          # the app derives every auth redirect from this origin rather than
-          # trusting the request Host (docs/AUTH-SETUP.md), so a mismatch
-          # against the host tests actually navigate to drops session
-          # cookies across the redirect.
-          echo "NEXT_PUBLIC_APP_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV"
-          echo "ACTIVE_RESTAURANT_COOKIE_SECRET=ci-e2e-cookie-secret-not-sensitive" >> "$GITHUB_ENV"
-          echo "DEV_BYPASS_EMAIL=owner+local@terroir.test" >> "$GITHUB_ENV"
-
-      - name: Seed local Supabase for E2E
-        run: pnpm run supabase:seed:local:apply
 
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium

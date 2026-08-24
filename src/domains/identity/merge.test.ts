@@ -21,6 +21,17 @@ const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const hasLiveDb = Boolean(supabaseUrl && publishableKey && serviceRoleKey);
+// Fail LOUD, never skip, when the live stack should be there (integration
+// critic finding): a silent describe.skipIf here once let a full run
+// report green with every MANDATORY live-DB suite unexecuted. CI always
+// brings up the local stack, so a missing env var there is an error, not
+// a reason to skip.
+if (!hasLiveDb && process.env.CI) {
+  throw new Error(
+    "MANDATORY live-DB suite: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY / SUPABASE_SERVICE_ROLE_KEY missing in CI - refusing to skip silently.",
+  );
+}
+
 
 async function signedInClient(email: string, password: string): Promise<SupabaseClient<Database>> {
   const throwaway = createClient<Database>(supabaseUrl!, publishableKey!, { auth: { persistSession: false } });

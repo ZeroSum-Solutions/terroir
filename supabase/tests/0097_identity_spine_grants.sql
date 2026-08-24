@@ -3,7 +3,7 @@
 -- rolled-back transaction so nothing persists).
 begin;
 
-select plan(14);
+select plan(15);
 
 -- RLS enabled on every new table.
 select ok(
@@ -68,6 +68,18 @@ select ok(
 select ok(
   not has_table_privilege('authenticated', 'public.wine_variants', 'delete'),
   'authenticated has no delete on wine_variants — identity records are permanent'
+);
+
+-- wine_aliases: authenticated select+insert, no update/delete (0099's
+-- grant). Pinned here explicitly (integration critic finding): 0074's
+-- blanket CRUD check excludes this table on the strength of this file,
+-- so an accidental GRANT UPDATE/DELETE must fail HERE, not nowhere.
+select ok(
+  has_table_privilege('authenticated', 'public.wine_aliases', 'select')
+    and has_table_privilege('authenticated', 'public.wine_aliases', 'insert')
+    and not has_table_privilege('authenticated', 'public.wine_aliases', 'update')
+    and not has_table_privilege('authenticated', 'public.wine_aliases', 'delete'),
+  'wine_aliases: authenticated has exactly select+insert, never update/delete'
 );
 
 -- identity_merge_log: authenticated select-only.

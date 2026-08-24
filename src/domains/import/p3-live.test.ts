@@ -32,6 +32,17 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const hasLiveDb = Boolean(supabaseUrl && publishableKey && serviceRoleKey);
+// Fail LOUD, never skip, when the live stack should be there (integration
+// critic finding): a silent describe.skipIf here once let a full run
+// report green with every MANDATORY live-DB suite unexecuted. CI always
+// brings up the local stack, so a missing env var there is an error, not
+// a reason to skip.
+if (!hasLiveDb && process.env.CI) {
+  throw new Error(
+    "MANDATORY live-DB suite: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY / SUPABASE_SERVICE_ROLE_KEY missing in CI - refusing to skip silently.",
+  );
+}
+
 
 async function signedInClient(email: string, password: string): Promise<SupabaseClient<Database>> {
   const throwaway = createClient<Database>(supabaseUrl!, publishableKey!, { auth: { persistSession: false } });
@@ -136,8 +147,14 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
       // Apply exactly 1,000 of the 1,500 rows (two 500-row RPC calls —
       // the DB function's own hard clamp — well past PostgREST's 1,000-
       // row default response cap).
-      await userClient.rpc("apply_import_batch_chunk", { p_batch_id: batchId, p_limit: 500 } as never);
-      await userClient.rpc("apply_import_batch_chunk", { p_batch_id: batchId, p_limit: 500 } as never);
+      // Errors checked (integration critic finding): an unchecked failed
+      // apply here under concurrent suite load silently shifted the
+      // applied/eligible split and failed the count assertions below for
+      // the wrong reason.
+      const apply1 = await userClient.rpc("apply_import_batch_chunk", { p_batch_id: batchId, p_limit: 500 } as never);
+      expect(apply1.error).toBeNull();
+      const apply2 = await userClient.rpc("apply_import_batch_chunk", { p_batch_id: batchId, p_limit: 500 } as never);
+      expect(apply2.error).toBeNull();
 
       // THE BUG, demonstrated directly: a raw PostgREST .select() over all
       // 1,500 rows is silently truncated to 1,000 by config's max_rows —

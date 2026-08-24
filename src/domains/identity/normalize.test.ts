@@ -37,6 +37,17 @@ import { normalizeProducerOrCuvee, normalizeVintage, isNvVintageText } from "./n
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const hasLiveDb = Boolean(supabaseUrl && serviceRoleKey);
+// Fail LOUD, never skip, when the live stack should be there (integration
+// critic finding): a silent describe.skipIf here once let a full run
+// report green with every MANDATORY live-DB suite unexecuted. CI always
+// brings up the local stack, so a missing env var there is an error, not
+// a reason to skip.
+if (!hasLiveDb && process.env.CI) {
+  throw new Error(
+    "MANDATORY live-DB suite: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY / SUPABASE_SERVICE_ROLE_KEY missing in CI - refusing to skip silently.",
+  );
+}
+
 
 // At P2/P3 integration the P1 fixture generator lives in THIS repo (it
 // merged in with vw/p1-fixture), so the contract test runs everywhere —

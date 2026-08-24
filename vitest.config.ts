@@ -27,6 +27,13 @@ export default defineConfig({
     environment: "happy-dom",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     setupFiles: ["./vitest.setup.ts"],
+    // Forks, not threads (integration critic finding): vi.stubEnv mutates
+    // process.env, which threads SHARE across concurrently-running files —
+    // proxy.test.ts stubbing NEXT_PUBLIC_SUPABASE_URL to "" could race the
+    // live-DB suites' module-level hasLiveDb read and silently skip the
+    // MANDATORY cross-tenant/merge/chunked-import tests while the run
+    // still reported green. Forked child processes each own their env.
+    pool: "forks",
     // The full suite runs ~8 live-DB files in parallel against one local
     // Supabase stack (P2 identity, P3 chunked import, the G1 containment
     // suites); vitest's 5s default flaked roughly every other full run on
