@@ -1,6 +1,6 @@
 begin;
 
-select plan(7);
+select plan(9);
 
 -- C30 (db audit 2026-08-23): has_table_privilege('role', 'table',
 -- 'select,insert,update,delete') uses Postgres's documented "ANY of the
@@ -82,13 +82,79 @@ select ok(
   'every public table has row-level security enabled'
 );
 
+-- C06 (0081) replaced anon's blanket table-level SELECT on wines and
+-- restaurants with column-level grants (see 0081_anon_column_scoping.sql)
+-- — has_table_privilege('anon', 'public.wines'/'restaurants', 'select')
+-- now correctly returns false, since anon holds no table-level SELECT on
+-- either. Asserting has_table_privilege there (the pre-0081 shape of this
+-- test) would permanently fail against the new, intended model, so this
+-- assertion now pins the table-level graph for the three tables that
+-- genuinely keep a full table-level anon grant, and separately asserts
+-- wines/restaurants have NONE (not just "don't require" — a stray
+-- re-grant of table-level SELECT on either would defeat 0081's whole
+-- point and must fail this test). The two assertions below pin exactly
+-- which columns anon may read on wines and restaurants instead — a
+-- column-level REVOKE layered on a table-level GRANT would not actually
+-- restrict anything (the P2 lane hit this same trap independently), so
+-- the real mechanism to assert against is "no table-level grant exists,
+-- and only these specific columns are grantable."
 select ok(
-  has_table_privilege('anon', 'public.restaurants', 'select')
+  has_table_privilege('anon', 'public.restaurants', 'select') = false
     and has_table_privilege('anon', 'public.wine_lists', 'select')
     and has_table_privilege('anon', 'public.wine_list_sections', 'select')
     and has_table_privilege('anon', 'public.wine_list_items', 'select')
-    and has_table_privilege('anon', 'public.wines', 'select'),
-  'anon can read only the published-menu table graph through RLS'
+    and has_table_privilege('anon', 'public.wines', 'select') = false,
+  'anon reads the published-menu table graph through RLS; wines/restaurants have NO table-level select (column-scoped instead, see next two assertions)'
+);
+
+-- Pins the EXACT column-level SELECT grant on wines from 0081: every
+-- listed column must be readable, and no column outside this list may be
+-- (catches both a narrowed future grant silently breaking the public menu
+-- and a widened one re-exposing pricing-strategy/ops-tuning columns like
+-- pricing_target_pour_cost_pct, retail_min/max, or manual_overrides).
+select ok(
+  (
+    select bool_and(has_column_privilege('anon', 'public.wines', c, 'select'))
+    from unnest(array[
+      'id', 'name', 'producer', 'vintage', 'varietal', 'region',
+      'serving_temp_min', 'serving_temp_max', 'serving_temp_label', 'is_eightysixed'
+    ]) as c
+  )
+  and not exists (
+    select 1
+    from pg_attribute a
+    where a.attrelid = 'public.wines'::regclass
+      and a.attnum > 0
+      and not a.attisdropped
+      and a.attname not in (
+        'id', 'name', 'producer', 'vintage', 'varietal', 'region',
+        'serving_temp_min', 'serving_temp_max', 'serving_temp_label', 'is_eightysixed'
+      )
+      and has_column_privilege('anon', 'public.wines', a.attname, 'select')
+  ),
+  'anon can read exactly the intended wines columns (public menu display fields) and nothing else'
+);
+
+-- Same pin for restaurants: 0081 grants exactly id/name/eightysix_strategy/
+-- logo_url (the public menu needs eightysix_strategy to decide hide-vs-mark
+-- rendering); internal ops knobs (auto_eightysix_from_inventory,
+-- eightysix_ml_threshold, default_target_pour_cost_pct,
+-- default_target_markup_ratio) must stay unreadable.
+select ok(
+  (
+    select bool_and(has_column_privilege('anon', 'public.restaurants', c, 'select'))
+    from unnest(array['id', 'name', 'eightysix_strategy', 'logo_url']) as c
+  )
+  and not exists (
+    select 1
+    from pg_attribute a
+    where a.attrelid = 'public.restaurants'::regclass
+      and a.attnum > 0
+      and not a.attisdropped
+      and a.attname not in ('id', 'name', 'eightysix_strategy', 'logo_url')
+      and has_column_privilege('anon', 'public.restaurants', a.attname, 'select')
+  ),
+  'anon can read exactly the intended restaurants columns (public menu display fields) and nothing else'
 );
 
 select ok(
