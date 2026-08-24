@@ -556,6 +556,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", (
 
     it("tier 2(b) TOCTOU: two sibling chunks of the SAME session, both confirmed, neither applied yet — the LATER-confirmed chunk's row is flagged without requiring the earlier one to be applied first", async () => {
       const session = await createImportSession(userClient, restaurantId, userId, { label: "TOCTOU test" });
+      if (!session.ok) throw new Error(`session create failed: ${session.error.message}`);
 
       const chunk1 = await confirmImportBatch(
         userClient, restaurantId, userId, "toctou-1.csv",
@@ -586,6 +587,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", (
 
     it("session revert: reverts every batch in reverse chunk order, touches only its own inventory, never wines", async () => {
       const session = await createImportSession(userClient, restaurantId, userId, { label: "Revert-as-unit test" });
+      if (!session.ok) throw new Error(`session create failed: ${session.error.message}`);
 
       const c1 = await confirmImportBatch(
         userClient, restaurantId, userId, "rev-1.csv",

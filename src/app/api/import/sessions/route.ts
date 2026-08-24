@@ -5,6 +5,7 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { requireMembership } from "@/lib/api/auth";
+import { apiError } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { parseJson } from "@/lib/api/validation";
 import { CreateSessionBodySchema } from "@/domains/import/request-schemas";
@@ -30,6 +31,10 @@ async function postSessions(request: NextRequest) {
     sourceSha256: parsed.data.sourceSha256,
     declaredChunkTotal: parsed.data.declaredChunkTotal,
   });
+
+  if (!result.ok) {
+    return apiError(422, result.error.code, result.error.message);
+  }
 
   return NextResponse.json({ sessionId: result.sessionId }, { status: 201 });
 }
