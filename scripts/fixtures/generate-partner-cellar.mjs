@@ -592,7 +592,12 @@ function sampleExtras(rng, unitCost) {
   return { barcode, supplier, acquisitionDate, purchasePrice: unitCost.toFixed(2) };
 }
 
-const DIRTY_VINTAGE_TEXTS = ["NV", "MCMXCIX", "circa 1998", "'98", "202X", "not sure", "19-something"];
+// "NV" was removed from this pool at P2/P3 integration: normalizeVintage's
+// closed NV allowlist (P2, docs/plans/2026-08-23-p2-identity-spine.md §5)
+// makes it a VALID row now, so it no longer belongs among genuinely dirty
+// vintage texts. The NV boundary is exercised by the dedicated nv_literal
+// fixture group instead (see the "NV literal-text pool" below).
+const DIRTY_VINTAGE_TEXTS = ["MCMXCIX", "circa 1998", "'98", "202X", "not sure", "19-something"];
 
 function buildVariants(rng, universe) {
   const variants = [];
@@ -677,10 +682,11 @@ function buildVariants(rng, universe) {
   // but tagged separately (nvLiteral) so the manifest and CSV rendering can
   // treat them as their own group: cleanRecordToCells writes the literal
   // text "NV" into the vintage column for these instead of leaving it
-  // blank. The current row-validator (row-validator.ts) rejects non-numeric
-  // vintage text, so every row in this group is a documented, tagged,
-  // expected-invalid case under today's importer — not a blank/missing
-  // vintage like the pool above.
+  // blank. Since P2's NV fix (normalizeVintage's closed allowlist), the
+  // row-validator accepts the literal text "NV" as the identity fact "no
+  // vintage" — so every row in this group is a documented, tagged,
+  // expected-VALID case whose vintage resolves to null, distinct from the
+  // blank-vintage pool above only in how the CSV cell is written.
   for (let i = 0; i < NV_LITERAL_VARIANT_COUNT; i++) {
     const seed = pickUnique(universe, rng, () => {
       const kind = NV_KINDS[i % NV_KINDS.length];

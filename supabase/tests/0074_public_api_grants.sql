@@ -40,6 +40,12 @@ select ok(
 --     RLS-scoped RPC, never a raw client-side delete.
 --   - import_sessions (0102): same pattern — no authenticated DELETE; a
 --     session is never removed, only reverted (revert_import_session, 0110).
+--   - the P2 identity spine (0097): canonical_wines / wine_variants /
+--     wine_aliases / identity_merge_log all have deliberately reduced
+--     grants (e.g. canonical_wines is insert-only for authenticated, with
+--     no direct SELECT). Their exact per-privilege shape is pinned by
+--     0097_identity_spine_grants.sql, so they are only excluded here, not
+--     re-pinned below.
 -- The next assertion pins exactly what these tables DO still have, so a
 -- further regression (e.g. SELECT itself getting revoked) is still caught.
 select ok(
@@ -47,7 +53,8 @@ select ok(
     select 1
     from pg_tables
     where schemaname = 'public'
-      and tablename not in ('background_jobs', 'import_batches', 'import_batch_rows', 'import_sessions')
+      and tablename not in ('background_jobs', 'import_batches', 'import_batch_rows', 'import_sessions',
+                            'canonical_wines', 'wine_variants', 'wine_aliases', 'identity_merge_log')
       and not (
         has_table_privilege('authenticated', format('%I.%I', schemaname, tablename), 'select')
         and has_table_privilege('authenticated', format('%I.%I', schemaname, tablename), 'insert')

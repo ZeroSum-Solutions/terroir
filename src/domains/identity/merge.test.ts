@@ -32,7 +32,10 @@ async function signedInClient(email: string, password: string): Promise<Supabase
   });
 }
 
-describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY live-database tests)", () => {
+// 60s per-test budget: these live-DB tests share one local stack with
+// every other live suite in a full run; the default 5s flakes under that
+// parallel load (same fix as p3-live.test.ts).
+describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY live-database tests)", { timeout: 60_000 }, () => {
   let admin: SupabaseClient<Database>;
   let restaurantA: string;
   let restaurantB: string;
@@ -179,7 +182,8 @@ describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY l
 
     const { data: list } = await admin.from("wine_lists").insert({ restaurant_id: restaurantA, name: "P2 Merge List" } as never).select("id").single();
     const { data: section } = await admin.from("wine_list_sections").insert({ wine_list_id: (list as { id: string }).id, name: "Reds" } as never).select("id").single();
-    const { data: listItem } = await admin.from("wine_list_items").insert({ section_id: (section as { id: string }).id, wine_id: sourceId, position: 1 } as never).select("id").single();
+    // 0080 denormalized restaurant_id onto wine_list_items (NOT NULL, composite FK to wines).
+    const { data: listItem } = await admin.from("wine_list_items").insert({ section_id: (section as { id: string }).id, wine_id: sourceId, restaurant_id: restaurantA, position: 1 } as never).select("id").single();
 
     const { data: avail } = await admin.from("availability_events").insert({ wine_id: sourceId, restaurant_id: restaurantA, direction: "eightysixed" } as never).select("id").single();
 
@@ -419,7 +423,7 @@ describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY l
     const { data: pour } = await admin.from("pour_events").insert({ wine_id: wineId, restaurant_id: restaurantA, ml_delta: -50, kind: "pour" } as never).select("id").single();
     const { data: list } = await admin.from("wine_lists").insert({ restaurant_id: restaurantA, name: "P2 FK Safety List" } as never).select("id").single();
     const { data: section } = await admin.from("wine_list_sections").insert({ wine_list_id: (list as { id: string }).id, name: "Reds" } as never).select("id").single();
-    const { data: listItem } = await admin.from("wine_list_items").insert({ section_id: (section as { id: string }).id, wine_id: wineId, position: 1 } as never).select("id").single();
+    const { data: listItem } = await admin.from("wine_list_items").insert({ section_id: (section as { id: string }).id, wine_id: wineId, restaurant_id: restaurantA, position: 1 } as never).select("id").single();
     const { data: bottle } = await admin.from("open_bottles").insert({ wine_id: wineId, restaurant_id: restaurantA, remaining_ml: 700 } as never).select("id").single();
     const { data: avail } = await admin.from("availability_events").insert({ wine_id: wineId, restaurant_id: restaurantA, direction: "eightysixed" } as never).select("id").single();
     const { data: closeout } = await admin

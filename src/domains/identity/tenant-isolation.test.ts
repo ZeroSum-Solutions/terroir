@@ -43,7 +43,10 @@ function variantPayload(idx: number, producer: string, cuvee: string, vintage: n
   };
 }
 
-describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant containment (MANDATORY)", () => {
+// 60s per-test budget: these live-DB tests share one local stack with
+// every other live suite in a full run; the default 5s flakes under that
+// parallel load (same fix as p3-live.test.ts).
+describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant containment (MANDATORY)", { timeout: 60_000 }, () => {
   let admin: SupabaseClient<Database>;
   let restaurantA: string;
   let restaurantB: string;

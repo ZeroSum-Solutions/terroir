@@ -27,5 +27,13 @@ export default defineConfig({
     environment: "happy-dom",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     setupFiles: ["./vitest.setup.ts"],
+    // The full suite runs ~8 live-DB files in parallel against one local
+    // Supabase stack (P2 identity, P3 chunked import, the G1 containment
+    // suites); vitest's 5s default flaked roughly every other full run on
+    // whichever live test happened to lose the scheduling race. 30s is
+    // headroom, not permission to be slow — individual tests still finish
+    // in well under a second when the stack is idle.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 });

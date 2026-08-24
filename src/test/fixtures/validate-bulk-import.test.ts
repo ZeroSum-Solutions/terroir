@@ -197,17 +197,21 @@ describe("validate-bulk-import.ts — nv_literal group (fix item 3)", () => {
   runGenerator(["--out-dir", d]);
   const manifest = JSON.parse(readFileSync(join(d, "partner-cellar-20k.manifest.json"), "utf8"));
 
-  it("reports the manifest's nv_literal group as its own expected-invalid category, and everything else valid", () => {
+  it("reports the manifest's nv_literal group as its own expected-VALID category (P2's NV allowlist), and everything else valid", () => {
     // This fixture has 20,000 data rows — over MAX_ROWS, so it now uploads
     // as a 5-chunk plan (round-5 amendment) instead of failing outright.
+    // Since P2's NV fix (normalizeVintage's closed allowlist), the literal
+    // vintage text "NV" is a VALID row — the group is still tracked
+    // separately so a regression back to rejection (or to silent numeric
+    // coercion) is caught as a MISMATCH.
     const result = runValidator(join(d, "partner-cellar-20k.csv"), join(d, "partner-cellar-20k.manifest.json"));
     expect(result.status).toBe(0);
     const nvLiteralCount = manifest.nv_literal_rows.length;
     expect(nvLiteralCount).toBeGreaterThan(0);
-    expect(result.stdout).toMatch(new RegExp(`Rows invalid:\\s+${nvLiteralCount}\\b`));
+    expect(result.stdout).toMatch(/Rows invalid:\s+0\b/);
     expect(result.stdout).toMatch(/Rows unparseable:\s+0\b/);
     expect(result.stdout).toContain(
-      `nv_literal: expected=${nvLiteralCount} seen=${nvLiteralCount} matched=${nvLiteralCount} (OK — expected-invalid-under-current-importer)`,
+      `nv_literal: expected=${nvLiteralCount} seen=${nvLiteralCount} matched=${nvLiteralCount} (OK — expected-valid-under-current-importer)`,
     );
     expect(result.stdout).toContain("=== RESULT: PASS ===");
   }, 20_000);
@@ -241,9 +245,17 @@ describe("validate-bulk-import.ts — per-record dirty attribution (fix item 5)"
     // thousands.
     expect(result.stdout).toMatch(new RegExp(`Rows unparseable:\\s+${byCategory.oversized_field}\\b`));
 
+    // Each category's report line names its own expected outcome
+    // (oversized_field fails at the parser, so "unparseable"; the others
+    // fail row-validation, so "invalid").
+    const expectedOutcome: Record<string, string> = {
+      oversized_field: "unparseable",
+      bad_vintage_text: "invalid",
+      negative_quantity: "invalid",
+    };
     for (const [category, count] of Object.entries(byCategory)) {
       expect(result.stdout).toContain(
-        `${category}: expected=${count} seen=${count} matched=${count} (OK — expected-invalid-under-current-importer)`,
+        `${category}: expected=${count} seen=${count} matched=${count} (OK — expected-${expectedOutcome[category]}-under-current-importer)`,
       );
     }
     expect(result.stdout).toContain("=== RESULT: PASS ===");
@@ -589,7 +601,7 @@ describe("run-bulk-import-test.sh — default no-arg flow (fix item 4)", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("fixtures/generated/dirty/partner-cellar-20k.csv");
     expect(result.stdout).toContain(
-      "oversized_field: expected=16 seen=16 matched=16 (OK — expected-invalid-under-current-importer)",
+      "oversized_field: expected=16 seen=16 matched=16 (OK — expected-unparseable-under-current-importer)",
     );
     expect(result.stdout).toContain(
       "bad_vintage_text: expected=17 seen=17 matched=17 (OK — expected-invalid-under-current-importer)",
@@ -936,7 +948,11 @@ describe("validate-bulk-import.ts — silent numeric-text coercion (round-5 CRIT
     expect(result.status).not.toBe(0);
     expect(result.stdout).not.toContain("=== RESULT: PASS ===");
     expect(result.stdout).toMatch(/Rows invalid:\s+1/);
-    expect(result.stdout).toContain("vintage: Vintage must be a whole number, with no other characters.");
+    // Vintage's whole-string guard was folded into normalizeVintage at
+    // P2/P3 integration; row-validator maps any normalizeVintage throw to
+    // its single year-range message. The rejection (not the wording) is
+    // C18's guarantee — the variant-key assertion above is the real check.
+    expect(result.stdout).toContain("vintage: Vintage must be a year between 1900 and");
     expect(result.stdout).toContain("size_ml: Bottle size (ml) must be a whole number, with no other characters.");
     expect(result.stdout).toContain("quantity: Quantity must be a whole number, with no other characters.");
     expect(result.stdout).toContain("unit_cost: Unit cost must be a number, with no other characters.");

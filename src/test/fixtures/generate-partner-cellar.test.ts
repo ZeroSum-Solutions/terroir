@@ -104,7 +104,7 @@ describe("generate-partner-cellar CLI", () => {
 });
 
 describe("row-validator conformance", () => {
-  it("every default row passes the CURRENT row-validator EXCEPT the tagged nv_literal group", () => {
+  it("every default row passes the CURRENT row-validator, including the tagged nv_literal group (valid since P2's NV allowlist)", () => {
     // Each row is rendered + parsed individually with the real toCsvText()
     // / parseCsv() (a single-record file never needs chunking), so this
     // exercises the real product code for all 20,000 rows without
@@ -116,8 +116,8 @@ describe("row-validator conformance", () => {
     expect(expectedNvLiteralRowCount).toBeGreaterThan(0);
 
     let validCount = 0;
-    let invalidNvLiteralCount = 0;
-    let invalidOtherCount = 0;
+    let validNvLiteralCount = 0;
+    let invalidCount = 0;
     for (const record of dataset.records) {
       const rowCsvText = toCsvText([record], [], false);
       const result = parseCsv(rowCsvText);
@@ -127,30 +127,24 @@ describe("row-validator conformance", () => {
       const validated = validateRow(result.rows[0], columnToField);
       if (validated.state === "valid") {
         validCount++;
-      } else if (nvLiteralVariantIds.has(record.variant.id)) {
-        invalidNvLiteralCount++;
-        // The current row-validator has no special case for the literal
-        // text "NV" — it rejects it as a non-numeric vintage, same as any
-        // other unparseable year text. P3 (C18, db audit 2026-08-23) added
-        // a literal-format check ahead of the numeric parse, which changed
-        // the exact wording (now "must be a whole number, with no other
-        // characters" for a non-numeric-literal value like "NV" — the
-        // "must be a year between X and Y" wording is now reserved for a
-        // value that IS a valid integer literal but out of range) — the
-        // underlying behavior (NV is rejected, not silently coerced) is
-        // unchanged, only the message text is more specific now.
-        expect(
-          validated.errors.some(
-            (e) => e.field === "vintage" && (/year/i.test(e.message) || /whole number/i.test(e.message)),
-          ),
-        ).toBe(true);
+        if (nvLiteralVariantIds.has(record.variant.id)) {
+          // P2's NV fix (normalizeVintage's closed allowlist, plan §5):
+          // the literal vintage text "NV" is the identity fact "no
+          // vintage" and resolves to a valid row with vintage null —
+          // not a rejection, and never a silently-coerced number.
+          validNvLiteralCount++;
+          // raw.vintage carries the NORMALIZED vintage (String(year) or
+          // null) — for the literal text "NV", P2's allowlist resolves it
+          // to null, never a silently-coerced number.
+          expect(validated.raw.vintage).toBeNull();
+        }
       } else {
-        invalidOtherCount++;
+        invalidCount++;
       }
     }
-    expect(invalidOtherCount).toBe(0);
-    expect(invalidNvLiteralCount).toBe(expectedNvLiteralRowCount);
-    expect(validCount).toBe(TOTAL_ROWS - expectedNvLiteralRowCount);
+    expect(invalidCount).toBe(0);
+    expect(validNvLiteralCount).toBe(expectedNvLiteralRowCount);
+    expect(validCount).toBe(TOTAL_ROWS);
   });
 
   it("decodes cleanly as UTF-8 with no BOM issues", () => {

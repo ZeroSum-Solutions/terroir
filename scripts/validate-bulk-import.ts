@@ -973,7 +973,9 @@ function buildRunState(csvPath: string, manifestPathArg: string | null): RunStat
   if (state.manifest?.nv_literal_rows !== undefined) {
     if (Array.isArray(state.manifest.nv_literal_rows)) {
       for (const nv of state.manifest.nv_literal_rows) {
-        registerExpected("nv_literal", nv.row_index, { outcome: "invalid", field: "vintage" });
+        // P2's NV fix (normalizeVintage allowlist): the literal vintage
+        // text "NV" is now a VALID row (vintage null), not a rejection.
+        registerExpected("nv_literal", nv.row_index, { outcome: "valid" });
       }
     } else {
       state.manifestFieldTypeErrors.push(
@@ -1743,12 +1745,13 @@ function printReport(state: RunState): void {
 
   if (state.groupStats.size > 0) {
     console.log("");
-    console.log("--- Expected-invalid groups (manifest-tagged) ---");
+    console.log("--- Expected-outcome groups (manifest-tagged) ---");
     for (const [group, stat] of state.groupStats) {
       const ok = stat.seenCount === stat.expectedCount && stat.mismatches.length === 0;
+      const expectedOutcome = state.groupExpectations.get(group)?.outcome ?? "?";
       console.log(
         `  ${group}: expected=${stat.expectedCount} seen=${stat.seenCount} matched=${stat.matchedCount} ${
-          ok ? "(OK — expected-invalid-under-current-importer)" : "(MISMATCH)"
+          ok ? `(OK — expected-${expectedOutcome}-under-current-importer)` : "(MISMATCH)"
         }`,
       );
       for (const m of stat.mismatches.slice(0, 5)) {

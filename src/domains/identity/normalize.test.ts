@@ -38,9 +38,13 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const hasLiveDb = Boolean(supabaseUrl && serviceRoleKey);
 
+// At P2/P3 integration the P1 fixture generator lives in THIS repo (it
+// merged in with vw/p1-fixture), so the contract test runs everywhere —
+// including CI — instead of silently skipping when the sibling worktree
+// is absent.
 const p1FixturePath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../../../terroir-vw-p1/scripts/fixtures/generate-partner-cellar.mjs",
+  "../../../scripts/fixtures/generate-partner-cellar.mjs",
 );
 const hasP1Fixture = existsSync(p1FixturePath);
 
@@ -121,7 +125,7 @@ describe.skipIf(!hasP1Fixture)("golden-vector contract with P1's fixture (terroi
     }
   });
 
-  it("normalizeVintage: exactly one (the literal \"NV\") of P1's 7 DIRTY_VINTAGE_TEXTS now passes; the other six still fail", async () => {
+  it("normalizeVintage: none of P1's dirty vintage texts passes (\"NV\" left the dirty pool at integration — its acceptance is pinned by the nv_literal fixture group)", async () => {
     const mod = (await import(p1FixturePath)) as P1Module;
     const { dirtyRecords } = mod.generateDataset({ seed: mod.SEED, dirty: true });
     const dirtyVintageTexts = [
@@ -133,28 +137,17 @@ describe.skipIf(!hasP1Fixture)("golden-vector contract with P1's fixture (terroi
       ),
     ];
 
-    // Sanity: the fixture really carries 7 distinct dirty vintage texts.
-    expect(dirtyVintageTexts).toHaveLength(7);
-    expect(dirtyVintageTexts).toContain("NV");
+    // Sanity: the fixture carries 6 distinct dirty vintage texts — "NV"
+    // was removed from the dirty pool at P2/P3 integration because
+    // normalizeVintage's allowlist makes it VALID; the accepting side of
+    // the boundary is pinned by the nv_literal fixture group and by the
+    // allowlist unit test below.
+    expect(dirtyVintageTexts).toHaveLength(6);
+    expect(dirtyVintageTexts).not.toContain("NV");
 
-    const passed = dirtyVintageTexts.filter((text) => {
-      try {
-        return normalizeVintage(text) === null;
-      } catch {
-        return false;
-      }
-    });
-    expect(passed).toEqual(["NV"]);
-
-    const failed = dirtyVintageTexts.filter((text) => {
-      try {
-        normalizeVintage(text);
-        return false;
-      } catch {
-        return true;
-      }
-    });
-    expect(failed.sort()).toEqual(dirtyVintageTexts.filter((t) => t !== "NV").sort());
+    for (const text of dirtyVintageTexts) {
+      expect(() => normalizeVintage(text)).toThrow();
+    }
   });
 
   it("negative guarantee: adjacent-vintage family members share one normalized (producer,cuvee) key but keep every vintage distinct", async () => {
@@ -356,7 +349,10 @@ describe("normalization golden vectors (frozen, no sibling dependency — always
 // case, which drives the real RPC and always runs under `supabase test
 // db`. Two independent guards, because a skipped test protects nothing
 // (D8's own lesson).
-describe.skipIf(!hasLiveDb)("SQL identity_normalize_text parity with normalizeProducerOrCuvee (live DB)", () => {
+// 60s per-test budget: these live-DB tests share one local stack with
+// every other live suite in a full run; the default 5s flakes under that
+// parallel load (same fix as p3-live.test.ts).
+describe.skipIf(!hasLiveDb)("SQL identity_normalize_text parity with normalizeProducerOrCuvee (live DB)", { timeout: 60_000 }, () => {
   it("the database function matches the frozen contract for every producer/cuvee vector", async () => {
     const vectors = goldenVectors.producerOrCuveeVectors;
     expect(vectors.length).toBeGreaterThan(0);
