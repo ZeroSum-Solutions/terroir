@@ -130,10 +130,25 @@ export function computeEan13CheckDigit(twelveDigits) {
 }
 
 /** Fold a string toward a dedup-comparable canonical form: strip accents
- * (NFKD + remove combining marks), fold case, and collapse punctuation and
- * whitespace to single spaces. Used by tests to prove the spelling-noise
- * groups this generator injects really do converge under normalization
- * while adjacent-vintage/format-sibling variants do not. */
+ * (NFKD + remove combining marks), fold case, merge a trailing possessive
+ * into its host word, and collapse punctuation and whitespace to single
+ * spaces. Used by tests to prove the spelling-noise groups this generator
+ * injects really do converge under normalization while adjacent-vintage/
+ * format-sibling variants do not.
+ *
+ * CRITICAL CROSS-PIECE CONTRACT (round-6): this function must stay
+ * byte-for-byte behaviorally identical to P2's normalizeProducerOrCuvee in
+ * src/domains/identity/normalize.ts (not editable from here — P2's
+ * worktree, terroir-vw, branch feat/visual-wine-prototype). The possessive
+ * rule below (`['’]s(?=\s|$)`) is copied verbatim, in the same pipeline
+ * position (after case-folding, before the general non-alnum collapse),
+ * from P2's commit c537d84 — see that file's own header comment and its
+ * P2-ROUND-2-FIX note for the full "O'Brien's Vineyard" vs "O.S. Brien
+ * Vineyard" over-merge history this closes. Confirmed (grep) that no
+ * producer/name/altProducer/altName seed string in this file contains a
+ * possessive apostrophe, so this rule does not change any of the 40
+ * SPELLING_SEEDS golden vectors or the 20k fixture's bytes/sha256 — see
+ * the adversarial-corpus agreement test in generate-partner-cellar.test.ts. */
 export function normalizeForDedup(s) {
   const folded = s
     // Unicode NFKD does NOT decompose true ligature letters like œ/æ (they
@@ -144,6 +159,7 @@ export function normalizeForDedup(s) {
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
+    .replace(/['’]s(?=\s|$)/g, "s")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
   // Word-order-invariant: sorting tokens also converges producer-name

@@ -355,3 +355,89 @@ describe("EAN-13 barcodes (--extras)", () => {
     expect(computeEan13CheckDigit("400638133393")).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Round-6: normalizeForDedup <-> P2's normalizeProducerOrCuvee cross-piece
+// agreement. P2's critic ran both live functions side by side and found
+// they disagreed on realistic possessive inputs ("O'Brien's Vineyard",
+// "d'Arenberg's Estate", ...) — they only agreed before this fix by
+// coincidence of the corpus (this file's own seed data happens to contain
+// no possessive apostrophes), not by contract. P2 fixed a genuine
+// over-merge bug ("O'Brien's Vineyard" and "O.S. Brien Vineyard" collapsing
+// to one wine) in src/domains/identity/normalize.ts
+// (terroir-vw, commit c537d84); normalizeForDedup() above now carries the
+// identical rule, in the identical pipeline position, verbatim.
+//
+// normalizeProducerOrCuvee lives in a different repo/worktree (terroir-vw)
+// and cannot be imported directly from here, so this inlines a byte-for-
+// byte copy of P2's function (as read at commit c537d84) purely for
+// independent cross-verification — it is not a second implementation
+// anything else in this file depends on, and any accidental drift between
+// this copy and normalizeForDedup() above would show up as a failure here
+// the next time either side changes.
+// ---------------------------------------------------------------------------
+
+describe("normalizeForDedup <-> P2's normalizeProducerOrCuvee cross-piece agreement (round-6)", () => {
+  function p2NormalizeProducerOrCuvee(raw: string): string {
+    const folded = raw
+      .replace(/œ/gi, "oe")
+      .replace(/æ/gi, "ae")
+      .normalize("NFKD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/['’]s(?=\s|$)/g, "s")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+    return folded.split(" ").filter(Boolean).sort().join(" ");
+  }
+
+  const ADVERSARIAL_CORPUS = [
+    // Trailing possessives — the exact bug class P2 fixed.
+    "O'Brien's Vineyard",
+    "O.S. Brien Vineyard",
+    "d'Arenberg's Estate",
+    "St. James's Gate",
+    "Winemakers' Selection", // plural possessive, apostrophe AFTER the s — the rule does not (and need not) touch this
+    "Kings' Vineyard's Reserve", // several possessives in one name
+    "Producer's Reserve", // ASCII apostrophe
+    "Producer’s Reserve", // Unicode right single quote
+    // Name-internal apostrophes — must NOT be treated as possessives.
+    "Cœur d'Alsace",
+    "Coeur d'Alsace",
+    "Clos-de-Tart",
+    "Clos de Tart",
+    // Existing accent/NFC-NFD/reorder/no-op cases — must still converge or
+    // stay distinct exactly as before.
+    "Château Belair-Vauban",
+    "Chateau Belair-Vauban",
+    "Domaine René Léveillé".normalize("NFC"),
+    "Domaine René Léveillé".normalize("NFD"),
+    "Domaine Jean Grivot",
+    "Jean Grivot Domaine",
+    "Señorío de Valdemoro",
+    "Senorio de Valdemoro",
+    "Chateau 5",
+    "Chateau 6",
+  ];
+
+  it("normalizeForDedup and an inlined copy of P2's normalizeProducerOrCuvee agree on every case in the adversarial corpus", () => {
+    const disagreements = ADVERSARIAL_CORPUS.filter((input) => normalizeForDedup(input) !== p2NormalizeProducerOrCuvee(input));
+    expect(disagreements).toEqual([]);
+  });
+
+  it("closes the over-merge bug: O'Brien's Vineyard and O.S. Brien Vineyard no longer collapse to the same key", () => {
+    expect(normalizeForDedup("O'Brien's Vineyard")).not.toBe(normalizeForDedup("O.S. Brien Vineyard"));
+  });
+
+  it("still converges a name-internal apostrophe (not a trailing possessive) — Coeur d'Alsace", () => {
+    expect(normalizeForDedup("Cœur d'Alsace")).toBe(normalizeForDedup("Coeur d'Alsace"));
+  });
+
+  it("Unicode right-single-quote and ASCII apostrophe possessives normalize identically", () => {
+    expect(normalizeForDedup("Producer’s Reserve")).toBe(normalizeForDedup("Producer's Reserve"));
+  });
+
+  it("Chateau 5 / Chateau 6 stay distinct (unaffected by the possessive rule)", () => {
+    expect(normalizeForDedup("Chateau 5")).not.toBe(normalizeForDedup("Chateau 6"));
+  });
+});
