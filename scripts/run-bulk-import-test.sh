@@ -9,9 +9,9 @@
 #           negative_quantity, oversized_field), and runs the P1 validation
 #           below against all three — this is what exercises the
 #           barcode/EAN-13 path AND the poisoned-chunk isolation path
-#           (a real dirty export's oversized field failing a whole
-#           MAX_ROWS-sized parseCsv() chunk, isolated back down to the one
-#           poisoned record) end to end in the default flow, not just when
+#           (a real dirty export's oversized field failing a whole planned
+#           chunk's parseCsv() call, isolated back down to the one poisoned
+#           record) end to end in the default flow, not just when
 #           --extras/--dirty are passed by hand.
 # With arg: runs the same validation against an arbitrary CSV (the real
 #           partner file, once it arrives). Ground-truth-manifest assertions
@@ -27,16 +27,15 @@
 # matching) extend this SAME entry point rather than adding a new one.
 #
 # validate-bulk-import.ts exits non-zero on any real anomaly (see its module
-# doc). The three 20k-scale fixtures generated below currently ALL exceed
-# the live importer's MAX_ROWS cap (see constants.ts) — a round-5 fix made
-# validate-bulk-import.ts report that honestly (within_importer_row_limit)
-# instead of silently PASSing a file a real upload would reject at row
-# 5,001. That means, until a later piece raises that cap, these three
-# sub-runs are EXPECTED to exit non-zero even on a perfectly well-formed
-# fixture — this script tracks each sub-run's exit status itself (rather
-# than dying at the first one via `set -e`) so all three still run and
-# report in full, and prints an honest final banner reflecting whichever
-# actually happened.
+# doc). The three 20k-scale fixtures generated below all exceed the live
+# importer's MAX_ROWS cap (see constants.ts) — that cap is NOT being raised
+# (product decision), so validate-bulk-import.ts plans, verifies, and emits
+# an N-chunk upload plan for each of them instead (see its CHUNK_TARGET_ROWS
+# and chunk_plan_* preconditions) and PASSes when that plan is sound. This
+# script tracks each sub-run's exit status itself (rather than dying at the
+# first one via `set -e`) so all three still run and report in full even if
+# a REAL defect ever does make one of them fail, and prints an honest final
+# banner reflecting whichever actually happened.
 #
 # No DB, no network, no dev server required.
 

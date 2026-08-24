@@ -14,18 +14,39 @@
  * If manifest-path IS given explicitly, it must exist and must be a
  * genuine partner-cellar manifest — see PASS_PRECONDITIONS below.
  *
- * A note on MAX_ROWS: the current importer's csv-parser rejects any file
- * with more than MAX_ROWS (5000) data rows in a single parseCsv() call —
- * that is the real, live limit a real upload hits today (enforced INSIDE
- * parseCsv itself, not in a separate upload/preview layer — so parseCsv()
- * cannot simply be called once on an oversized file). The 20k fixture this
- * script is usually pointed at deliberately EXCEEDS that limit (it
- * represents future bulk-import work, see constants.ts's G1-6 comment on
- * the not-yet-wired background_jobs runner). To still get row-level
- * parse/validate statistics across the whole file, this script chunks the
- * data into MAX_ROWS-sized groups and calls the real parseCsv() once per
- * chunk — each chunk is parsed and validated exactly as the product would,
- * just MAX_ROWS rows at a time instead of one request.
+ * A note on MAX_ROWS and the CHUNK PLAN (round-5 amendment): the current
+ * importer's csv-parser rejects any file with more than MAX_ROWS (5000)
+ * data rows in a single parseCsv() call — that is the real, live limit a
+ * real upload hits today (enforced INSIDE parseCsv itself, not in a
+ * separate upload/preview layer). Product decision: that cap is NOT being
+ * raised. The supported path for a file over it is N sequential chunks,
+ * each <= MAX_ROWS, each applied through the EXISTING resumable apply path
+ * (APPLY_CHUNK_SIZE rows per apply_import_batch_chunk() call, re-called
+ * until done:true — see docs/runbooks/csv-import.md).
+ *
+ * This script's job for such a file is therefore to PLAN, VERIFY, and EMIT
+ * that exact chunk split — see CHUNK_TARGET_ROWS, buildChunkPlan(), and the
+ * chunk_plan_* entries in PASS_PRECONDITIONS below — not to reject the file
+ * outright. A PASS now means "this file will import successfully and
+ * faithfully AS THIS CHUNK PLAN": every planned chunk fits under MAX_ROWS
+ * and MAX_UPLOAD_BYTES (measured on the real serialized bytes, not
+ * estimated), no chunk boundary ever alters a record, and concatenating the
+ * chunks' data rows reproduces the original file's data section
+ * byte-for-byte. The chunk files themselves are written to
+ * "<csv-without-ext>.chunks/" alongside the input, plus a
+ * "<csv-without-ext>.chunks.manifest.json" recording each chunk's row
+ * range, row count, byte size, and sha256 — see writeChunkPlanToDisk()
+ * below — so the SAME command that validates a real partner file also
+ * produces the exact files an operator uploads, one at a time, in order.
+ *
+ * What a PASS does NOT cover: whether the real importer's duplicate/matching
+ * logic catches a duplicate that straddles two DIFFERENT chunks (the same
+ * wine, uploaded in batch 1 and again, differently spelled, in batch 4).
+ * That is a question about src/domains/import/** internals this script may
+ * not edit this round, so it is never folded into PASS_PRECONDITIONS — see
+ * the "Cross-chunk duplicate risk" report section and printDuplicateRisk()
+ * below, which report it as an explicit, unmissable, UNPROVEN finding
+ * instead of staying silent about it.
  *
  * Chunk boundaries are found by splitLogicalRecords() below — a
  * quote-state-aware scan of the RAW TEXT that tracks RFC-4180 quoting
@@ -85,6 +106,12 @@
  * isValidManifestShape()), and that its csv_sha256 matches the file's
  * actual bytes.
  *
+ * (This prose list predates several rounds of additions — see
+ * PASS_PRECONDITIONS itself for the authoritative, literal, currently
+ * complete set; it is the one thing this file guarantees never drifts from
+ * what it actually checks, since it is also the only thing evaluateVerdict()
+ * reads.)
+ *
  * Deliberately OUT of PASS_PRECONDITIONS: whether this script's own
  * <csv>.failures.json report artifact could be written or cleaned up (see
  * syncFailuresReport()). That is bookkeeping about this tool's own output
@@ -107,11 +134,12 @@
  */
 
 import { createHash } from "node:crypto";
-import { readFileSync, existsSync, writeFileSync, unlinkSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync, unlinkSync, mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodeCsvBuffer, parseCsv } from "../src/domains/import/csv-parser";
 import { mapHeader, validateRow, type ValidatedRow } from "../src/domains/import/row-validator";
-import { MAX_ROWS, HEADER_SYNONYMS, type CanonicalHeader } from "../src/domains/import/constants";
+import { MAX_ROWS, MAX_UPLOAD_BYTES, HEADER_SYNONYMS, type CanonicalHeader } from "../src/domains/import/constants";
 
 type DirtyRowEntry = { row_index: number; category: string; detail?: string };
 type NvLiteralRowEntry = { row_index: number; producer?: string; name?: string };
@@ -122,6 +150,8 @@ type BarcodeManifest = {
   coverage_pct: number;
   all_check_digits_valid: boolean;
 } | null;
+
+export type DuplicateSpellingGroup = { id: string; canonical_row_indexes: number[]; alt_row_indexes: number[] };
 
 type Manifest = {
   expected_unique_variant_count?: number;
@@ -134,6 +164,7 @@ type Manifest = {
   dirty_rows?: DirtyRowEntry[];
   nv_literal_rows?: NvLiteralRowEntry[];
   barcode?: BarcodeManifest;
+  duplicate_spelling_groups?: DuplicateSpellingGroup[];
 };
 
 // ---------------------------------------------------------------------------
@@ -439,6 +470,142 @@ export function detectNumericCoercions(
   return risks;
 }
 
+// ---------------------------------------------------------------------------
+// Chunk plan (round-5 amendment).
+//
+// MAX_ROWS is a hard, live, product-level cap this script may not raise —
+// see the module doc above. The supported path for a file over it is N
+// sequential chunks, each independently uploaded through the existing
+// resumable apply path. This section builds that plan, deterministically,
+// from the SAME dataRecords array splitLogicalRecords() already produced —
+// never by re-splitting raw text — so a chunk boundary can only ever fall
+// between two already-correctly-delimited logical records, never inside
+// one.
+//
+// CHUNK_TARGET_ROWS (4000) is THIS TOOL's own planning choice, not a
+// product constant — it lives here, not in constants.ts, and is
+// deliberately smaller than MAX_ROWS (5000) to leave headroom: a plan built
+// with margin stays valid even if MAX_ROWS is ever tightened, or a
+// particular chunk's rows happen to be unusually wide in bytes. Every chunk
+// is still independently, actually verified against the REAL MAX_ROWS and
+// MAX_UPLOAD_BYTES constants below (see evaluateChunkPlan()) rather than
+// trusted to fit just because it targets a smaller row count.
+// ---------------------------------------------------------------------------
+
+export const CHUNK_TARGET_ROWS = 4000;
+
+export interface ChunkPlanEntry {
+  /** 1-indexed, in upload order. */
+  index: number;
+  /** Raw logical data records (blank lines included), in original file order. */
+  records: string[];
+  /** 1-indexed row number (matches this file's rowIndex numbering — every physical row a human would see in
+   * their spreadsheet, blank lines included) of the first record in this chunk. */
+  startRow: number;
+  /** 1-indexed row number of the last record in this chunk. */
+  endRow: number;
+}
+
+/** Partition dataRecords into chunks of at most chunkTargetRows records
+ * each, by ARRAY SLICING — never by re-joining and re-splitting text. Every
+ * element of dataRecords is already a complete, self-contained logical
+ * record (guaranteed by splitLogicalRecords()'s own quote-tracking), so
+ * slicing this array can never bisect one — the "a chunk boundary must
+ * never cut a record" property holds by construction, not by luck. */
+export function buildChunkPlan(dataRecords: string[], chunkTargetRows: number): ChunkPlanEntry[] {
+  const chunks: ChunkPlanEntry[] = [];
+  for (let offset = 0; offset < dataRecords.length; offset += chunkTargetRows) {
+    const records = dataRecords.slice(offset, offset + chunkTargetRows);
+    chunks.push({ index: chunks.length + 1, records, startRow: offset + 1, endRow: offset + records.length });
+  }
+  return chunks;
+}
+
+/** Exactly the format the real product would see for one uploaded chunk:
+ * the shared header line, then this chunk's records, one per line. */
+export function serializeChunk(headerRecord: string, records: string[]): string {
+  return [headerRecord, ...records].join("\n") + "\n";
+}
+
+export type ChunkPlanCheck = {
+  index: number;
+  rowCount: number;
+  byteSize: number;
+  boundaryOk: boolean;
+  boundaryDetail: string | null;
+  headerOk: boolean;
+};
+
+/** Proves a chunk boundary never altered a record, by comparing the real
+ * parser's output for the WHOLE chunk against parsing each of that chunk's
+ * records completely alone. This is the same "1:1 record<->row contract"
+ * already proven generically (see the property test in
+ * validate-bulk-import.test.ts) and at the OLD MAX_ROWS-sized boundaries —
+ * re-applied here at the ACTUAL planned chunk boundaries this tool now
+ * emits.
+ *
+ * If the whole-chunk parse fails outright (e.g. one record's field exceeds
+ * MAX_FIELD_LENGTH) or its row count doesn't match the non-blank record
+ * count, that is NOT attributed to the chunk boundary: buildChunkPlan()
+ * only ever slices dataRecords between records, so a whole-chunk parse
+ * failure can only be caused by a record's OWN content (independent of
+ * which chunk it landed in) or by the chunk's row count — both already
+ * surfaced elsewhere (per-record unparseable attribution;
+ * chunk_plan_within_row_limit). Double-reporting that here as a "boundary"
+ * defect would misattribute an already-explained finding to the wrong
+ * cause, so this falls back to counting how many records parse in
+ * isolation instead of failing the boundary proof for a reason this
+ * function did not actually observe.
+ */
+function verifyChunkBoundary(
+  headerRecord: string,
+  chunkRecords: string[],
+): { ok: boolean; detail: string | null; rowCount: number } {
+  const nonBlank = chunkRecords.filter((r) => !isBlankRecord(r));
+  const chunkText = serializeChunk(headerRecord, chunkRecords);
+  const whole = parseCsv(chunkText);
+
+  if (!whole.ok || whole.rows.length !== nonBlank.length) {
+    let isolatedRowCount = 0;
+    for (const record of nonBlank) {
+      if (parseCsv(`${headerRecord}\n${record}\n`).ok) isolatedRowCount += 1;
+    }
+    return { ok: true, rowCount: isolatedRowCount, detail: null };
+  }
+
+  for (let i = 0; i < nonBlank.length; i++) {
+    const isolated = parseCsv(`${headerRecord}\n${nonBlank[i]}\n`);
+    if (isolated.ok && JSON.stringify(whole.rows[i]) !== JSON.stringify(isolated.rows[0])) {
+      return {
+        ok: false,
+        rowCount: whole.rows.length,
+        detail: `record at chunk-local position ${i} parses differently as part of the chunk than in isolation — the chunk boundary altered it`,
+      };
+    }
+  }
+  return { ok: true, rowCount: whole.rows.length, detail: null };
+}
+
+/** Runs every per-chunk check the chunk_plan_* preconditions read from,
+ * once, so each precondition is a cheap scan over already-computed results
+ * rather than re-parsing every chunk multiple times. */
+export function evaluateChunkPlan(headerRecord: string, chunkPlan: ChunkPlanEntry[]): ChunkPlanCheck[] {
+  return chunkPlan.map((chunk) => {
+    const chunkText = serializeChunk(headerRecord, chunk.records);
+    const byteSize = Buffer.byteLength(chunkText, "utf8");
+    const boundary = verifyChunkBoundary(headerRecord, chunk.records);
+    const firstLine = chunkText.split("\n", 1)[0];
+    return {
+      index: chunk.index,
+      rowCount: boundary.rowCount,
+      byteSize,
+      boundaryOk: boundary.ok,
+      boundaryDetail: boundary.detail,
+      headerOk: firstLine === headerRecord,
+    };
+  });
+}
+
 type RowOutcome = "valid" | "invalid" | "unparseable";
 
 type GroupExpectation = { outcome: RowOutcome; field?: string };
@@ -520,6 +687,10 @@ interface RunState {
 
   chunkMismatch: { offset: number; expected: number; actual: number } | null;
 
+  chunkPlan: ChunkPlanEntry[];
+  chunkPlanChecks: ChunkPlanCheck[];
+  chunkPlanReassemblyOk: boolean;
+
   manifestPath: string | null;
   manifestExplicitPathMissing: boolean;
   manifestJsonError: string | null;
@@ -568,6 +739,9 @@ function initState(csvPath: string, manifestPathArg: string | null): RunState {
     blankFlags: [],
     nonBlankDataRecordCount: 0,
     chunkMismatch: null,
+    chunkPlan: [],
+    chunkPlanChecks: [],
+    chunkPlanReassemblyOk: true,
     manifestPath: null,
     manifestExplicitPathMissing: false,
     manifestJsonError: null,
@@ -749,6 +923,19 @@ function buildRunState(csvPath: string, manifestPathArg: string | null): RunStat
   state.blankFlags = dataRecords.map(isBlankRecord);
   state.nonBlankDataRecordCount = state.blankFlags.filter((isBlank) => !isBlank).length;
 
+  // The chunk plan drives BOTH the per-row stats loop below AND the
+  // chunk_plan_* preconditions — one plan, so what gets validated is
+  // exactly what would be emitted (see writeChunkPlanToDisk()) and
+  // uploaded. A file well under CHUNK_TARGET_ROWS still gets a one-chunk
+  // plan (itself, whole) so every check below applies uniformly.
+  state.chunkPlan = buildChunkPlan(dataRecords, CHUNK_TARGET_ROWS);
+  state.chunkPlanChecks = evaluateChunkPlan(headerRecord, state.chunkPlan);
+  const reassembledDataSection = state.chunkPlan.flatMap((c) => c.records).join("\n");
+  const originalDataSection = dataRecords.join("\n");
+  state.chunkPlanReassemblyOk = Buffer.from(reassembledDataSection, "utf8").equals(
+    Buffer.from(originalDataSection, "utf8"),
+  );
+
   // --- Manifest-driven "expected invalid" classification ------------------
   const knownBad = new Map<number, { group: string; expectation: GroupExpectation }>();
   function registerExpected(group: string, rowIndex: number, expectation: GroupExpectation) {
@@ -860,8 +1047,9 @@ function buildRunState(csvPath: string, manifestPathArg: string | null): RunStat
     classifyOutcome(rowIndex, "unparseable", reason);
   }
 
-  for (let offset = 0; offset < dataRecords.length; offset += MAX_ROWS) {
-    const chunkRecords = dataRecords.slice(offset, offset + MAX_ROWS);
+  for (const chunk of state.chunkPlan) {
+    const offset = chunk.startRow - 1;
+    const chunkRecords = chunk.records;
     const chunkBlankFlags = state.blankFlags.slice(offset, offset + chunkRecords.length);
     const nonBlankOriginalOffsets: number[] = [];
     chunkBlankFlags.forEach((isBlank, k) => {
@@ -1013,24 +1201,84 @@ export const PASS_PRECONDITIONS: Precondition[] = [
     },
   },
   {
-    id: "within_importer_row_limit",
-    // Round-5 HIGH fix: a "PASS" from this tool must mean "a real upload of
-    // this exact file would import successfully" — it never has meant that
-    // for any file over MAX_ROWS, because a single real upload of such a
-    // file is rejected outright (too_many_rows) before parsing a single
-    // row. This script chunks around that limit ONLY so it can still
-    // report full-file parse/validate statistics; that chunking is a
-    // feature of this VALIDATION tool, not of the product, and must never
-    // be mistaken for evidence that today's importer would accept the file
-    // whole. MAX_ROWS is read from the shared constant so this check stays
-    // correct automatically if/when that cap is raised.
+    id: "chunk_plan_within_row_limit",
+    // Round-5 amendment: MAX_ROWS (5000) is NOT being raised — Devin's
+    // product decision is that the supported path for an oversized file is
+    // N chunks, each independently uploaded. A PASS therefore no longer
+    // means "this file fits in one upload"; it means "every chunk in the
+    // plan below fits." Checked against the REAL parser's row count per
+    // chunk (see evaluateChunkPlan()), not just the target chunk size —
+    // CHUNK_TARGET_ROWS (4000) is comfortably under MAX_ROWS by
+    // construction, but this still verifies it rather than assuming it.
     check: (s) => {
-      if (s.dataRecords.length <= MAX_ROWS) return null;
+      const bad = s.chunkPlanChecks.filter((c) => c.rowCount > MAX_ROWS);
+      if (bad.length === 0) return null;
       return (
-        `File has ${s.dataRecords.length} data rows, exceeding the current importer's MAX_ROWS=${MAX_ROWS}. A ` +
-        "real upload of this exact file would be rejected outright by the live importer (too_many_rows) before " +
-        "a single row is stored — the parse/validate statistics in this report come from chunking the file for " +
-        "this tool's own diagnostic purposes and do not describe what a real upload of this file would do today."
+        `${bad.length} planned chunk(s) exceed the importer's MAX_ROWS=${MAX_ROWS}: ` +
+        bad.map((c) => `chunk ${c.index} has ${c.rowCount} rows`).join("; ") +
+        "."
+      );
+    },
+  },
+  {
+    id: "chunk_plan_within_byte_limit",
+    // The server-side upload cap (MAX_UPLOAD_BYTES) was never checked by
+    // this tool at all before round 5 — a file safely under MAX_ROWS but
+    // with unusually wide cells could still be rejected on size. Measured
+    // on the ACTUAL serialized bytes of each planned chunk (header
+    // included), not estimated from an average row length.
+    check: (s) => {
+      const bad = s.chunkPlanChecks.filter((c) => c.byteSize > MAX_UPLOAD_BYTES);
+      if (bad.length === 0) return null;
+      return (
+        `${bad.length} planned chunk(s) exceed the server's MAX_UPLOAD_BYTES=${MAX_UPLOAD_BYTES} as actually ` +
+        `serialized (header included): ` +
+        bad.map((c) => `chunk ${c.index} is ${c.byteSize} bytes`).join("; ") +
+        "."
+      );
+    },
+  },
+  {
+    id: "chunk_boundaries_preserve_records",
+    // Proves, at the ACTUAL planned chunk boundaries, that concatenating
+    // records with "\n" and re-parsing never altered one of them — the
+    // chunk-emitter twin of the record<->row contract already proven at
+    // arbitrary boundaries by the property test. See verifyChunkBoundary()
+    // for why a whole-chunk parse failure (an oversized field, say) is
+    // deliberately NOT attributed to the boundary itself.
+    check: (s) => {
+      const bad = s.chunkPlanChecks.filter((c) => !c.boundaryOk);
+      if (bad.length === 0) return null;
+      return (
+        `${bad.length} planned chunk(s) failed the boundary-preservation proof — a record's cells differed ` +
+        "between whole-chunk parsing and isolated parsing, meaning the chunk boundary altered it: " +
+        bad.map((c) => `chunk ${c.index}: ${c.boundaryDetail}`).join("; ") +
+        "."
+      );
+    },
+  },
+  {
+    id: "chunk_plan_reassembles_byte_identically",
+    // The chunk-level twin of the byte-to-field fidelity invariant
+    // (encoding_is_faithful): concatenating every planned chunk's data
+    // records must reproduce the original file's data section
+    // byte-for-byte — proof that no row was dropped, duplicated,
+    // reordered, or altered while building the plan.
+    check: (s) =>
+      s.chunkPlanReassemblyOk
+        ? null
+        : "Concatenating the planned chunks' data rows does not reproduce the original file's data section " +
+          "byte-for-byte — a row was dropped, duplicated, reordered, or altered while building the chunk plan.",
+  },
+  {
+    id: "chunk_plan_headers_identical",
+    check: (s) => {
+      const bad = s.chunkPlanChecks.filter((c) => !c.headerOk);
+      if (bad.length === 0) return null;
+      return (
+        `${bad.length} planned chunk(s) do not carry the identical header line: chunks ${bad
+          .map((c) => c.index)
+          .join(", ")}.`
       );
     },
   },
@@ -1241,6 +1489,125 @@ function manifestStatusLine(state: RunState): string {
   return `Manifest: ${state.manifestPath}`;
 }
 
+// ---------------------------------------------------------------------------
+// Cross-chunk duplicate risk (round-5 amendment, REPORT ONLY).
+//
+// Chunking newly puts duplicate detection at risk: the importer's
+// duplicate/matching logic — whatever it does — has, at most, only ever
+// been proven to work WITHIN one batch. The partner's actual duplicates
+// (the same wine, spelled two different ways — see the fixture's
+// duplicate_spelling_groups, which is exactly the "same real-world bottle,
+// different string" ground truth this generator builds for this purpose)
+// will straddle chunks: the same wine in chunk 1 and chunk 4. If chunk 4
+// cannot see what chunk 1 already applied, the cellar silently
+// double-counts.
+//
+// This is NEVER folded into PASS_PRECONDITIONS: whether cross-batch dedup
+// actually works is a question about src/domains/import/** internals this
+// piece may not edit or verify this round — see the module doc's "What a
+// PASS does NOT cover" note. But "I cannot fix it" has never meant "I may
+// stay silent about it" (the whole ruling against round 4), so this prints
+// an explicit, unmissable count instead.
+// ---------------------------------------------------------------------------
+
+export function computeDuplicatePairStraddle(
+  chunkPlan: ChunkPlanEntry[],
+  groups: DuplicateSpellingGroup[],
+): {
+  totalPairs: number;
+  withinChunk: number;
+  straddling: number;
+  straddlingExamples: { groupId: string; canonicalRow: number; altRow: number; canonicalChunk: number; altChunk: number }[];
+} {
+  function chunkIndexForRow(row: number): number | null {
+    return chunkPlan.find((c) => row >= c.startRow && row <= c.endRow)?.index ?? null;
+  }
+  let totalPairs = 0;
+  let withinChunk = 0;
+  let straddling = 0;
+  const straddlingExamples: {
+    groupId: string;
+    canonicalRow: number;
+    altRow: number;
+    canonicalChunk: number;
+    altChunk: number;
+  }[] = [];
+  for (const group of groups) {
+    if (!Array.isArray(group.canonical_row_indexes) || !Array.isArray(group.alt_row_indexes)) continue;
+    for (const canonicalRow of group.canonical_row_indexes) {
+      for (const altRow of group.alt_row_indexes) {
+        totalPairs += 1;
+        const canonicalChunk = chunkIndexForRow(canonicalRow);
+        const altChunk = chunkIndexForRow(altRow);
+        if (canonicalChunk !== null && canonicalChunk === altChunk) {
+          withinChunk += 1;
+        } else {
+          straddling += 1;
+          if (straddlingExamples.length < 5) {
+            straddlingExamples.push({
+              groupId: group.id,
+              canonicalRow,
+              altRow,
+              canonicalChunk: canonicalChunk ?? -1,
+              altChunk: altChunk ?? -1,
+            });
+          }
+        }
+      }
+    }
+  }
+  return { totalPairs, withinChunk, straddling, straddlingExamples };
+}
+
+function printDuplicateRisk(state: RunState): void {
+  console.log("");
+  console.log("--- Cross-chunk duplicate risk (chunk plan) ---");
+  if (state.chunkPlan.length <= 1) {
+    console.log("Only one chunk planned — there is no cross-batch boundary, so this risk does not apply.");
+    return;
+  }
+
+  const groups = state.manifest?.duplicate_spelling_groups;
+  if (!Array.isArray(groups)) {
+    console.log(
+      "Cannot assess: no duplicate_spelling_groups ground truth is available (no manifest was supplied, or the " +
+        "supplied manifest does not carry it — expected and normal for a real partner file, which has no such " +
+        "ground truth).",
+    );
+    console.log(
+      "IMPORTANT: this run's PASS/FAIL verdict covers per-chunk parse/validation faithfulness ONLY. Whether the " +
+        "real importer's duplicate/matching logic catches a duplicate that straddles two different chunks is " +
+        "UNPROVEN and NOT certified by this PASS.",
+    );
+    return;
+  }
+
+  const { totalPairs, withinChunk, straddling, straddlingExamples } = computeDuplicatePairStraddle(
+    state.chunkPlan,
+    groups,
+  );
+  console.log(`Duplicate spelling-variant pairs (from manifest ground truth): ${totalPairs}`);
+  console.log(
+    `  within a single chunk:           ${withinChunk}  (existing importer duplicate/matching logic, if any, has a chance to catch these)`,
+  );
+  console.log(
+    `  STRADDLING two different chunks: ${straddling}  <-- UNPROVEN: cross-batch duplicate detection is not something this tool can verify (src/domains/import/** is out of scope this round)`,
+  );
+  if (straddlingExamples.length > 0) {
+    console.log("  example straddling pairs:");
+    for (const ex of straddlingExamples) {
+      console.log(
+        `    group ${ex.groupId}: row ${ex.canonicalRow} (chunk ${ex.canonicalChunk}) vs row ${ex.altRow} (chunk ${ex.altChunk})`,
+      );
+    }
+  }
+  console.log(
+    "IMPORTANT: this run's PASS/FAIL verdict covers per-chunk parse/validation faithfulness ONLY. It does NOT " +
+      "certify that duplicates spanning two chunks will be caught by the real import pipeline — that is P3's to " +
+      "establish, not this tool's.",
+  );
+}
+
 function printReport(state: RunState): void {
   console.log("=== P1 bulk-import validation runner ===");
   console.log("(This entry point will grow to cover import + enrichment in later pieces.)");
@@ -1292,19 +1659,37 @@ function printReport(state: RunState): void {
   }
 
   // Header parsed successfully — full report from here on.
-  if (state.dataRecords.length > MAX_ROWS) {
+  if (state.chunkPlan.length > 1) {
     console.log("");
-    console.log("=== IMPORT LIMIT: this file exceeds what a real upload accepts today ===");
+    console.log("=== CHUNK PLAN: this file uploads as multiple sequential chunks ===");
     console.log(
-      `File has ${state.dataRecords.length} data rows; the live importer's MAX_ROWS is ${MAX_ROWS}. A single ` +
-        "real upload of this exact file would be rejected outright (too_many_rows) before a single row is " +
-        `stored. The statistics below come from chunking the file into groups of ${MAX_ROWS} logical records ` +
-        "(never raw lines) purely so this TOOL can still report full-file parse/validate numbers — that " +
-        "chunking is not something today's real importer does, and this file cannot PASS as a result (see " +
-        "within_importer_row_limit below).",
+      `File has ${state.dataRecords.length} data rows; the live importer's MAX_ROWS is ${MAX_ROWS}, so this ` +
+        `plan splits it into ${state.chunkPlan.length} chunks of up to ${CHUNK_TARGET_ROWS} rows each (see ` +
+        "chunk_plan_* below for what is verified about this plan). Upload each chunk file in order, one at a " +
+        "time, through the existing resumable apply path — see writeChunkPlanToDisk() output below for the " +
+        "actual files.",
     );
-    console.log("");
   }
+
+  console.log("");
+  console.log("--- Chunk plan ---");
+  console.log(`Target chunk size: ${CHUNK_TARGET_ROWS} rows (MAX_ROWS is ${MAX_ROWS}; MAX_UPLOAD_BYTES is ${MAX_UPLOAD_BYTES}).`);
+  console.log(`Chunks planned:    ${state.chunkPlan.length}`);
+  for (const chunk of state.chunkPlan) {
+    const check = state.chunkPlanChecks.find((c) => c.index === chunk.index);
+    const ok = check && check.rowCount <= MAX_ROWS && check.byteSize <= MAX_UPLOAD_BYTES && check.boundaryOk && check.headerOk;
+    console.log(
+      `  chunk ${chunk.index}: rows ${chunk.startRow}-${chunk.endRow} (${check?.rowCount ?? "?"} parsed rows, ` +
+        `${check?.byteSize ?? "?"} bytes) ${ok ? "OK" : "SEE FAILURE REASONS BELOW"}`,
+    );
+  }
+  console.log(
+    state.chunkPlanReassemblyOk
+      ? "Reassembly check: chunk data rows concatenate back to the original file's data section byte-for-byte. OK"
+      : "Reassembly check: FAILED — see chunk_plan_reassembles_byte_identically below.",
+  );
+
+  printDuplicateRisk(state);
 
   console.log("--- Header mapping ---");
   if (state.missingRequiredHeaders.length > 0) {
@@ -1483,6 +1868,168 @@ function syncFailuresReport(state: RunState): void {
   }
 }
 
+function chunksDirFor(csvPath: string): string {
+  return (csvPath.endsWith(".csv") ? csvPath.slice(0, -4) : csvPath) + ".chunks";
+}
+function chunksManifestPathFor(csvPath: string): string {
+  return (csvPath.endsWith(".csv") ? csvPath.slice(0, -4) : csvPath) + ".chunks.manifest.json";
+}
+function chunkManifestFileName(index: number): string {
+  return `part-${String(index).padStart(4, "0")}.manifest.json`;
+}
+function chunkCsvFileName(index: number): string {
+  return `part-${String(index).padStart(4, "0")}.csv`;
+}
+
+/** The exact per-chunk manifest shape P3's resumable apply path consumes —
+ * pinned by contract, do not rename these fields. `chunk_sha256` and
+ * `source_csv_sha256` are load-bearing (P3 uses source_csv_sha256 to reject
+ * a chunk from the wrong file being mixed into a session, and chunk_sha256
+ * to recognize a re-uploaded chunk as a no-op resume); row_count/byte_size
+ * are informational only. */
+export type PerChunkManifest = {
+  chunk_index: number;
+  chunk_total: number;
+  row_start: number;
+  row_end: number;
+  row_count: number | null;
+  byte_size: number;
+  chunk_sha256: string;
+  source_csv_sha256: string;
+};
+
+/**
+ * Actually emits the chunk plan: one CSV file per chunk (deterministic
+ * names, upload order), a per-chunk sidecar manifest next to each one (the
+ * exact PerChunkManifest shape above — P3's contract), and one combined
+ * "<csv>.chunks.manifest.json" for the human-readable overview — the
+ * "one-command path" that reruns the identical, deterministic split
+ * against a real partner CSV.
+ *
+ * Every hash here is computed over RAW BYTES ON DISK, never over a string
+ * obtained by decoding those bytes first: `source_csv_sha256` is hashed
+ * from state.buffer (a plain readFileSync() of the original file in
+ * buildRunState(), never decoded), and each `chunk_sha256` is hashed from
+ * re-reading the chunk file THIS FUNCTION JUST WROTE, not from the
+ * in-memory buffer that produced it — so it is provably a hash of "this
+ * chunk file's raw bytes on disk," not of a string that merely produced
+ * them. A hash computed over decoded TEXT would agree with a raw-byte hash
+ * only by coincidence on clean UTF-8 files, and could silently diverge on
+ * exactly the malformed-encoding files this whole piece exists to catch —
+ * the same principle as encoding_is_faithful, applied one level up.
+ *
+ * Deliberately OUT of PASS_PRECONDITIONS, same rationale as
+ * syncFailuresReport(): this is bookkeeping about this tool's own output
+ * files, not about whether the CHUNK PLAN ITSELF is correct (that's what
+ * the chunk_plan_* preconditions, computed in-memory, already proved before
+ * this ever runs) — an unwritable directory is an environment problem, not
+ * a fact about the CSV, so it warns after the verdict rather than crashing
+ * or changing the result.
+ */
+/**
+ * Writes one CSV file + one PerChunkManifest sidecar per chunk into
+ * outputDir (which the caller must already have created/cleaned), and
+ * returns the entries written. Pulled out of writeChunkPlanToDisk() as its
+ * own exported, directly-testable function that takes explicit inputs
+ * (never a full RunState) — this is what the P3 interface pin's file-level
+ * test exercises directly, at any chunk size, without needing to drive the
+ * full CLI or fake a RunState.
+ */
+export function writeChunkFiles(
+  outputDir: string,
+  headerRecord: string,
+  chunkPlan: ChunkPlanEntry[],
+  chunkPlanChecks: ChunkPlanCheck[],
+  sourceCsvSha256: string,
+): { chunkEntries: (PerChunkManifest & { file: string })[] } {
+  const chunkTotal = chunkPlan.length;
+  const chunkEntries = chunkPlan.map((chunk) => {
+    const fileName = chunkCsvFileName(chunk.index);
+    const chunkPath = join(outputDir, fileName);
+    const chunkText = serializeChunk(headerRecord, chunk.records);
+    writeFileSync(chunkPath, Buffer.from(chunkText, "utf8"));
+    // Re-read the file just written and hash THOSE bytes — never the
+    // in-memory buffer/string that produced it. See writeChunkPlanToDisk()'s
+    // doc for why: a hash computed over decoded TEXT would agree with a
+    // raw-byte hash only by coincidence on clean UTF-8 files.
+    const chunkBytes = readFileSync(chunkPath);
+    const chunkSha256 = sha256HexOfBuffer(chunkBytes);
+    const rowCount = chunkPlanChecks.find((c) => c.index === chunk.index)?.rowCount ?? null;
+
+    const perChunkManifest: PerChunkManifest = {
+      chunk_index: chunk.index,
+      chunk_total: chunkTotal,
+      row_start: chunk.startRow,
+      row_end: chunk.endRow,
+      row_count: rowCount,
+      byte_size: chunkBytes.length,
+      chunk_sha256: chunkSha256,
+      source_csv_sha256: sourceCsvSha256,
+    };
+    writeFileSync(join(outputDir, chunkManifestFileName(chunk.index)), JSON.stringify(perChunkManifest, null, 2) + "\n");
+
+    return { ...perChunkManifest, file: fileName };
+  });
+  return { chunkEntries };
+}
+
+/**
+ * Actually emits the chunk plan for a real validator run: cleans and
+ * (re)creates "<csv-without-ext>.chunks/", delegates the per-chunk file
+ * writing to writeChunkFiles(), then writes the combined
+ * "<csv-without-ext>.chunks.manifest.json" overview.
+ *
+ * Deliberately OUT of PASS_PRECONDITIONS, same rationale as
+ * syncFailuresReport(): this is bookkeeping about this tool's own output
+ * files, not about whether the CHUNK PLAN ITSELF is correct (that's what
+ * the chunk_plan_* preconditions, computed in-memory, already proved before
+ * this ever runs) — an unwritable directory is an environment problem, not
+ * a fact about the CSV, so it warns after the verdict rather than crashing
+ * or changing the result.
+ */
+function writeChunkPlanToDisk(state: RunState): void {
+  if (!state.csvExists || state.headerRecord === null || state.chunkPlan.length === 0 || !state.buffer) return;
+  const chunksDir = chunksDirFor(state.csvPath);
+  const manifestPath = chunksManifestPathFor(state.csvPath);
+
+  try {
+    // Always start from a clean directory so a rerun against a file that
+    // shrank (fewer chunks now needed) never leaves a stale, orphaned
+    // chunk file behind — mirrors syncFailuresReport()'s stale-cleanup
+    // rationale, applied here at directory granularity.
+    rmSync(chunksDir, { recursive: true, force: true });
+    mkdirSync(chunksDir, { recursive: true });
+
+    // Hashed from the ORIGINAL file's raw bytes as read from disk —
+    // state.buffer is populated by a plain readFileSync() in
+    // buildRunState(), never decoded — so this can never diverge from a
+    // byte-level re-check of the source file.
+    const sourceCsvSha256 = sha256HexOfBuffer(state.buffer);
+    const { chunkEntries } = writeChunkFiles(chunksDir, state.headerRecord, state.chunkPlan, state.chunkPlanChecks, sourceCsvSha256);
+
+    writeFileSync(
+      manifestPath,
+      JSON.stringify(
+        {
+          csv: state.csvPath,
+          chunk_target_rows: CHUNK_TARGET_ROWS,
+          chunk_total: state.chunkPlan.length,
+          source_csv_sha256: sourceCsvSha256,
+          chunks: chunkEntries,
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+    console.log(`Chunk plan written: ${state.chunkPlan.length} file(s) in ${chunksDir}/, manifest at ${manifestPath}`);
+  } catch (err) {
+    console.error(
+      `WARNING: could not write the chunk plan to disk (${chunksDir}/, ${manifestPath}): ${(err as Error).message}. ` +
+        "The validation result above is unaffected — only these on-disk chunk files are missing.",
+    );
+  }
+}
+
 function main() {
   const [, , csvPathArg, manifestPathArg] = process.argv;
   const csvPath = csvPathArg ?? "fixtures/generated/partner-cellar-20k.csv";
@@ -1503,6 +2050,7 @@ function main() {
   console.log("=== done ===");
 
   syncFailuresReport(state);
+  writeChunkPlanToDisk(state);
 
   process.exit(verdict.pass ? 0 : 1);
 }

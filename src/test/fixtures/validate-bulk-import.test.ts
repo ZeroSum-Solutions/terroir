@@ -25,8 +25,15 @@ import {
   detectEncodingIssue,
   detectDuplicateHeaderMappings,
   detectNumericCoercions,
+  buildChunkPlan,
+  serializeChunk,
+  evaluateChunkPlan,
+  computeDuplicatePairStraddle,
+  writeChunkFiles,
+  CHUNK_TARGET_ROWS,
+  type PerChunkManifest,
 } from "../../../scripts/validate-bulk-import";
-import { MAX_ROWS, type CanonicalHeader } from "@/domains/import/constants";
+import { MAX_ROWS, MAX_UPLOAD_BYTES, MAX_FIELD_LENGTH, type CanonicalHeader } from "@/domains/import/constants";
 import { mulberry32 } from "../../../scripts/fixtures/generate-partner-cellar.mjs";
 import { parseCsv } from "@/domains/import/csv-parser";
 
@@ -142,49 +149,47 @@ describe("isBlankRecord (parser-as-oracle blank-line detection)", () => {
   });
 });
 
-describe("validate-bulk-import.ts — multiline-record chunk-boundary regression (fix item 1)", () => {
-  it("parses a record whose embedded newline straddles the old 5,000-line chunk boundary, byte-exact", () => {
-    // Row 5000 (1-indexed data row) carries a quoted "name" field with a
-    // literal embedded newline. With the OLD naive `text.split("\n")`
-    // chunker this would land right at the physical-line-5000 cut: the
-    // chunk would see an unterminated quote (or, worse, silently splice a
-    // stray fragment into a new "row"). All the filler rows share one
-    // producer/name so any corruption of the boundary row would also show
-    // up as a THIRD distinct variant key instead of exactly two.
+describe("validate-bulk-import.ts — multiline-record chunk-boundary regression (fix item 1, extended round-5)", () => {
+  it("parses a record whose embedded newline straddles the CURRENT chunk-plan boundary (row CHUNK_TARGET_ROWS), byte-exact, exit 0", () => {
+    // Row CHUNK_TARGET_ROWS (the LAST row of chunk 1 under the current
+    // chunk plan — see buildChunkPlan()) carries a quoted "name" field with
+    // a literal embedded newline. A naive `text.split("\n")` chunker would
+    // land right at that physical-line cut: the chunk would see an
+    // unterminated quote (or, worse, silently splice a stray fragment into
+    // a new "row"). All the filler rows share one producer/name so any
+    // corruption of the boundary row would also show up as a THIRD
+    // distinct variant key instead of exactly two.
     //
-    // This file has 5010 data rows — one over MAX_ROWS (round-5 HIGH fix:
-    // within_importer_row_limit) — so the overall verdict is now FAIL
-    // (a real single upload of 5010 rows is rejected outright today). That
-    // is orthogonal to what THIS test actually checks: that the chunk
-    // boundary itself did not corrupt the multiline record. All the
-    // byte-exact/count assertions below are computed and reported
-    // regardless of the final verdict.
+    // Total rows (CHUNK_TARGET_ROWS + 10) deliberately spans two chunks —
+    // this is now the round-5 chunk-plan boundary this regression protects,
+    // not the round-4 MAX_ROWS-sized one (that boundary no longer exists:
+    // internal per-row stats are computed over the SAME chunk plan that
+    // gets emitted — see the module doc's "one plan" note).
     const d = tmp();
     const header = "producer,name,vintage,varietal,region,country,size_ml,format,currency,quantity,unit_cost,bin,section";
     const filler = "Bulk Filler,Case Lot,,,,,,,,1,,,";
+    const totalRows = CHUNK_TARGET_ROWS + 10;
     const lines = [header];
-    for (let i = 0; i < 4999; i++) lines.push(filler);
-    lines.push('P5000,"Special Reserve\nSecond Line",,,,,,,,1,,,');
+    for (let i = 0; i < CHUNK_TARGET_ROWS - 1; i++) lines.push(filler);
+    lines.push('SpecialProducer,"Special Reserve\nSecond Line",,,,,,,,1,,,');
     for (let i = 0; i < 10; i++) lines.push(filler);
     const csvText = lines.join("\n") + "\n";
     const csvPath = join(d, "multiline-boundary.csv");
     writeFileSync(csvPath, csvText);
 
     const result = runValidator(csvPath);
-    expect(result.status).not.toBe(0);
-    expect(result.stdout).toMatch(/Rows parsed:\s+5010/);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(new RegExp(`Rows parsed:\\s+${totalRows}`));
     expect(result.stdout).toMatch(/Rows unparseable:\s+0\b/);
-    expect(result.stdout).toMatch(/Rows valid:\s+5010/);
+    expect(result.stdout).toMatch(new RegExp(`Rows valid:\\s+${totalRows}`));
     expect(result.stdout).toMatch(/Rows invalid:\s+0\b/);
     expect(result.stdout).toMatch(/Distinct raw variant keys:\s+2\b/);
     // Byte-exact preservation of the multiline field, straight from the
     // shipped runner's own diagnostic output (not reconstructed by the test).
-    expect(result.stdout).toContain("P5000|Special Reserve\nSecond Line|NV|750");
-    // The ONLY reason this otherwise-clean file fails is the row-count limit.
-    expect(result.stdout).toContain("exceeding the current importer's MAX_ROWS=5000");
-    expect(result.stdout).not.toContain("=== RESULT: PASS ===");
-    expect(result.stdout).toContain("=== RESULT: FAIL ===");
-  });
+    expect(result.stdout).toContain("SpecialProducer|Special Reserve\nSecond Line|NV|750");
+    expect(result.stdout).toContain("Chunks planned:    2");
+    expect(result.stdout).toContain("=== RESULT: PASS ===");
+  }, 15_000);
 });
 
 describe("validate-bulk-import.ts — nv_literal group (fix item 3)", () => {
@@ -193,13 +198,10 @@ describe("validate-bulk-import.ts — nv_literal group (fix item 3)", () => {
   const manifest = JSON.parse(readFileSync(join(d, "partner-cellar-20k.manifest.json"), "utf8"));
 
   it("reports the manifest's nv_literal group as its own expected-invalid category, and everything else valid", () => {
-    // This fixture has 20,000 data rows — well over MAX_ROWS — so it now
-    // fails on within_importer_row_limit (round-5 HIGH fix) regardless of
-    // content. That is a separate, honest fact from the one THIS test
-    // checks: that the nv_literal group is attributed correctly. Both are
-    // computed and reported independently of the other.
+    // This fixture has 20,000 data rows — over MAX_ROWS, so it now uploads
+    // as a 5-chunk plan (round-5 amendment) instead of failing outright.
     const result = runValidator(join(d, "partner-cellar-20k.csv"), join(d, "partner-cellar-20k.manifest.json"));
-    expect(result.status).not.toBe(0);
+    expect(result.status).toBe(0);
     const nvLiteralCount = manifest.nv_literal_rows.length;
     expect(nvLiteralCount).toBeGreaterThan(0);
     expect(result.stdout).toMatch(new RegExp(`Rows invalid:\\s+${nvLiteralCount}\\b`));
@@ -207,8 +209,7 @@ describe("validate-bulk-import.ts — nv_literal group (fix item 3)", () => {
     expect(result.stdout).toContain(
       `nv_literal: expected=${nvLiteralCount} seen=${nvLiteralCount} matched=${nvLiteralCount} (OK — expected-invalid-under-current-importer)`,
     );
-    expect(result.stdout).toContain("exceeding the current importer's MAX_ROWS=5000");
-    expect(result.stdout).not.toContain("=== RESULT: PASS ===");
+    expect(result.stdout).toContain("=== RESULT: PASS ===");
   }, 20_000);
 });
 
@@ -217,13 +218,15 @@ describe("validate-bulk-import.ts — per-record dirty attribution (fix item 5)"
   runGenerator(["--dirty", "--out-dir", d]);
   const manifest = JSON.parse(readFileSync(join(d, "partner-cellar-20k.manifest.json"), "utf8"));
 
-  it("attributes each dirty category its own exact count instead of one oversized field poisoning a whole 5,000-row chunk", () => {
-    // 20,050 data rows — over MAX_ROWS, so within_importer_row_limit
-    // (round-5 HIGH fix) makes the overall verdict FAIL. That is a separate,
-    // honest fact from the one THIS test checks: per-record dirty-category
-    // attribution, which is computed and reported regardless.
+  it("attributes each dirty category its own exact count instead of one oversized field poisoning a whole chunk", () => {
+    // 20,050 data rows — over MAX_ROWS, so this uploads as a 6-chunk plan
+    // (round-5 amendment) instead of failing outright. The 16 oversized
+    // "producer" fields all land in the LAST chunk (dirty rows are appended
+    // after the clean ones) — see the chunk-emitter's verifyChunkBoundary()
+    // note on why that does NOT get misattributed as a chunk-boundary
+    // defect: it is a per-record content defect, independent of chunking.
     const result = runValidator(join(d, "partner-cellar-20k.csv"), join(d, "partner-cellar-20k.manifest.json"));
-    expect(result.status).not.toBe(0);
+    expect(result.status).toBe(0);
 
     const byCategory: Record<string, number> = {};
     for (const dr of manifest.dirty_rows as { category: string }[]) {
@@ -233,7 +236,7 @@ describe("validate-bulk-import.ts — per-record dirty attribution (fix item 5)"
 
     // The bug this regression guards: an oversized field failing the
     // *chunk-level* parseCsv() call used to mark every sibling row in that
-    // 5,000-row chunk unparseable. Correct per-record attribution means
+    // chunk unparseable. Correct per-record attribution means
     // "Rows unparseable" equals exactly the oversized_field count — not
     // thousands.
     expect(result.stdout).toMatch(new RegExp(`Rows unparseable:\\s+${byCategory.oversized_field}\\b`));
@@ -243,8 +246,7 @@ describe("validate-bulk-import.ts — per-record dirty attribution (fix item 5)"
         `${category}: expected=${count} seen=${count} matched=${count} (OK — expected-invalid-under-current-importer)`,
       );
     }
-    expect(result.stdout).toContain("exceeding the current importer's MAX_ROWS=5000");
-    expect(result.stdout).not.toContain("=== RESULT: PASS ===");
+    expect(result.stdout).toContain("=== RESULT: PASS ===");
   }, 20_000);
 });
 
@@ -257,20 +259,17 @@ describe("validate-bulk-import.ts — --extras barcode/EAN-13 path (fix item 4)"
     expect(manifest.barcode.enabled).toBe(true);
     expect(manifest.barcode.rows_with_barcode).toBeGreaterThan(0);
 
-    // 20,000 data rows — over MAX_ROWS, so within_importer_row_limit
-    // (round-5 HIGH fix) makes the overall verdict FAIL. That is a separate,
-    // honest fact from the one THIS test checks: end-to-end EAN-13
-    // verification, which is computed and reported regardless.
+    // 20,000 data rows — over MAX_ROWS, so this uploads as a 5-chunk plan
+    // (round-5 amendment) instead of failing outright.
     const result = runValidator(
       join(d, "partner-cellar-20k-extras.csv"),
       join(d, "partner-cellar-20k-extras.manifest.json"),
     );
-    expect(result.status).not.toBe(0);
+    expect(result.status).toBe(0);
     expect(result.stdout).toMatch(new RegExp(`Rows with barcode:\\s+${manifest.barcode.rows_with_barcode}\\b`));
     expect(result.stdout).toMatch(new RegExp(`Valid check digits:\\s+${manifest.barcode.rows_with_barcode}\\b`));
     expect(result.stdout).not.toContain("Invalid check digits:");
-    expect(result.stdout).toContain("exceeding the current importer's MAX_ROWS=5000");
-    expect(result.stdout).not.toContain("=== RESULT: PASS ===");
+    expect(result.stdout).toContain("=== RESULT: PASS ===");
   }, 20_000);
 });
 
@@ -570,26 +569,24 @@ describe("validate-bulk-import.ts — 1:1 record<->row contract against the real
 });
 
 describe("run-bulk-import-test.sh — default no-arg flow (fix item 4)", () => {
-  // Round-5 HIGH fix (within_importer_row_limit): all three 20k-scale
-  // fixtures this script validates exceed the live importer's MAX_ROWS, so
-  // the honest overall outcome today is non-zero — a bare "PASS" here would
-  // be exactly the lie round 5 exists to close. The script itself still
-  // runs and reports all three sub-validations (see run-bulk-import-test.sh)
-  // rather than dying at the first non-zero exit, so this test can still
-  // assert every sub-run's content is correct.
-  it("generates base + extras + dirty, validates all three, and reports FAIL honestly (they all exceed today's import limit)", () => {
+  // Round-5 amendment: MAX_ROWS is NOT being raised, but the supported path
+  // for these 20k-scale fixtures is now a multi-chunk plan rather than an
+  // outright rejection — see CHUNK_TARGET_ROWS. All three sub-validations
+  // are expected to PASS again. run-bulk-import-test.sh's own per-sub-run
+  // exit-status tracking (added when this WAS expected to fail) is kept —
+  // it is strictly a superset of the original set-e-only behavior and still
+  // prints the original PASS banner when, as here, all three genuinely pass.
+  it("generates base + extras, validates both, and exits 0 with a final PASS line", () => {
     const result = spawnSync("bash", [RUNNER_SH], { encoding: "utf8", cwd: process.cwd() });
-    expect(result.status).not.toBe(0);
+    expect(result.status).toBe(0);
     expect(result.stdout).toContain("nv_literal:");
     expect(result.stdout).toContain("--- Barcode (EAN-13) ---");
-    expect(result.stdout).toMatch(/exceeding the current importer's MAX_ROWS=5000/);
-    expect(result.stdout).not.toContain("=== run-bulk-import-test: PASS (base + extras + dirty) ===");
-    expect(result.stdout).toContain("=== run-bulk-import-test: FAIL (base + extras + dirty) — see failure reasons above ===");
+    expect(result.stdout).toContain("=== run-bulk-import-test: PASS (base + extras + dirty) ===");
   }, 30_000);
 
   it("also generates + validates the --dirty variant, exercising poisoned-chunk isolation end to end (round-3 critic fix item 5, MEDIUM)", () => {
     const result = spawnSync("bash", [RUNNER_SH], { encoding: "utf8", cwd: process.cwd() });
-    expect(result.status).not.toBe(0);
+    expect(result.status).toBe(0);
     expect(result.stdout).toContain("fixtures/generated/dirty/partner-cellar-20k.csv");
     expect(result.stdout).toContain(
       "oversized_field: expected=16 seen=16 matched=16 (OK — expected-invalid-under-current-importer)",
@@ -1074,8 +1071,12 @@ describe("validate-bulk-import.ts — a non-array dirty_rows/nv_literal_rows fai
   });
 });
 
-describe("validate-bulk-import.ts — a file exceeding the importer's row limit never PASSes, even when perfectly well-formed (round-5 HIGH fix)", () => {
-  it("a small, fast, otherwise-flawless file one row over MAX_ROWS fails with a clear, distinct reason", () => {
+describe("validate-bulk-import.ts — a file exceeding MAX_ROWS uploads as a multi-chunk plan and PASSes (round-5 amendment)", () => {
+  // Product decision (round-5 amendment): MAX_ROWS is NOT being raised. A
+  // file over it is no longer an automatic FAIL (that was the round-5 HIGH
+  // fix's first draft, before Devin's product decision) — it PASSes when
+  // its chunk plan is sound, which is exactly what chunk_plan_* proves.
+  it("a small, fast file one row over MAX_ROWS still PASSes, split into 2 chunks", () => {
     const d = tmp();
     const csvPath = join(d, "over-limit.csv");
     const lines = [CANONICAL_HEADER];
@@ -1083,14 +1084,13 @@ describe("validate-bulk-import.ts — a file exceeding the importer's row limit 
     writeFileSync(csvPath, lines.join("\n") + "\n");
 
     const result = runValidator(csvPath);
-    expect(result.status).not.toBe(0);
-    expect(result.stdout).toContain("=== IMPORT LIMIT: this file exceeds what a real upload accepts today ===");
-    expect(result.stdout).toContain(`exceeding the current importer's MAX_ROWS=${MAX_ROWS}`);
-    expect(result.stdout).toContain("too_many_rows");
-    expect(result.stdout).not.toContain("=== RESULT: PASS ===");
-  });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("=== CHUNK PLAN: this file uploads as multiple sequential chunks ===");
+    expect(result.stdout).toContain("Chunks planned:    2");
+    expect(result.stdout).toContain("=== RESULT: PASS ===");
+  }, 15_000);
 
-  it("a file at exactly MAX_ROWS (not over it) still PASSes — the limit is > MAX_ROWS, not >=", () => {
+  it("a file at exactly MAX_ROWS (a single chunk) also PASSes, with no chunk-plan banner", () => {
     const d = tmp();
     const csvPath = join(d, "at-limit.csv");
     const lines = [CANONICAL_HEADER];
@@ -1099,8 +1099,431 @@ describe("validate-bulk-import.ts — a file exceeding the importer's row limit 
 
     const result = runValidator(csvPath);
     expect(result.status).toBe(0);
+    // MAX_ROWS (5000) > CHUNK_TARGET_ROWS (4000), so even a file AT MAX_ROWS
+    // already needs 2 chunks under the chunk plan — the single-chunk,
+    // no-banner case only applies at or below CHUNK_TARGET_ROWS itself.
     expect(result.stdout).toContain("=== RESULT: PASS ===");
   }, 15_000);
+
+  it("a file at exactly CHUNK_TARGET_ROWS is a single chunk and prints no multi-chunk banner", () => {
+    const d = tmp();
+    const csvPath = join(d, "at-chunk-target.csv");
+    const lines = [CANONICAL_HEADER];
+    for (let i = 0; i < CHUNK_TARGET_ROWS; i++) lines.push(validRow("P1", "Wine One"));
+    writeFileSync(csvPath, lines.join("\n") + "\n");
+
+    const result = runValidator(csvPath);
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toContain("=== CHUNK PLAN: this file uploads as multiple sequential chunks ===");
+    expect(result.stdout).toContain("Chunks planned:    1");
+    expect(result.stdout).toContain("=== RESULT: PASS ===");
+  }, 15_000);
+});
+
+describe("buildChunkPlan / serializeChunk — pure chunk-plan functions (round-5 amendment)", () => {
+  it("partitions records into chunks of at most chunkTargetRows, in order, with correct row ranges", () => {
+    const records = Array.from({ length: 10 }, (_, i) => `r${i}`);
+    const plan = buildChunkPlan(records, 3);
+    expect(plan.map((c) => c.records)).toEqual([
+      ["r0", "r1", "r2"],
+      ["r3", "r4", "r5"],
+      ["r6", "r7", "r8"],
+      ["r9"],
+    ]);
+    expect(plan.map((c) => c.index)).toEqual([1, 2, 3, 4]);
+    expect(plan.map((c) => [c.startRow, c.endRow])).toEqual([
+      [1, 3],
+      [4, 6],
+      [7, 9],
+      [10, 10],
+    ]);
+  });
+
+  it("an exact multiple of chunkTargetRows produces no trailing short chunk", () => {
+    const records = Array.from({ length: 9 }, (_, i) => `r${i}`);
+    const plan = buildChunkPlan(records, 3);
+    expect(plan).toHaveLength(3);
+    expect(plan.every((c) => c.records.length === 3)).toBe(true);
+  });
+
+  it("an empty dataRecords array produces an empty chunk plan", () => {
+    expect(buildChunkPlan([], 4000)).toEqual([]);
+  });
+
+  it("a file at or under chunkTargetRows produces exactly one chunk covering the whole file", () => {
+    const plan = buildChunkPlan(["a", "b", "c"], 3);
+    expect(plan).toEqual([{ index: 1, records: ["a", "b", "c"], startRow: 1, endRow: 3 }]);
+  });
+
+  it("serializeChunk joins the header and records with newlines, trailing newline included", () => {
+    expect(serializeChunk("h1,h2", ["a,b", "c,d"])).toBe("h1,h2\na,b\nc,d\n");
+  });
+
+  it("serializeChunk of a chunk with zero records is just the header line", () => {
+    expect(serializeChunk("h1,h2", [])).toBe("h1,h2\n");
+  });
+});
+
+describe("evaluateChunkPlan — chunk_plan_within_row_limit's exemption proof (round-5 amendment)", () => {
+  it("reports rowCount above MAX_ROWS when a chunk is deliberately built larger than the real cap", () => {
+    // buildChunkPlan() is only ever called by the shipped CLI with
+    // chunkTargetRows=CHUNK_TARGET_ROWS (4000) < MAX_ROWS (5000) — see
+    // EXEMPT_FROM_ISOLATION_TEST's comment below for why that makes
+    // chunk_plan_within_row_limit unreachable through the real CLI. This
+    // proves the DETECTION ITSELF is sound by calling the same exported,
+    // parameterized pure functions with a deliberately oversized target —
+    // exactly what chunk_plan_within_row_limit's check() filters on
+    // (s.chunkPlanChecks.filter((c) => c.rowCount > MAX_ROWS)).
+    const header = CANONICAL_HEADER;
+    const records = Array.from({ length: MAX_ROWS + 50 }, () => validRow("P1", "Wine One"));
+    const plan = buildChunkPlan(records, MAX_ROWS + 50); // one giant chunk, deliberately over MAX_ROWS
+    expect(plan).toHaveLength(1);
+    const checks = evaluateChunkPlan(header, plan);
+    expect(checks[0].rowCount).toBeGreaterThan(MAX_ROWS);
+  }, 20_000);
+});
+
+describe("buildChunkPlan / evaluateChunkPlan — property proof across randomized inputs (extends the '1:1 record<->row contract' proof to the chunk emitter)", () => {
+  // Same generator style as the existing property test above (never emits
+  // bare CR or unterminated quotes — those are covered as their own
+  // fail-closed cases elsewhere), applied here to prove chunk-PLAN
+  // properties rather than single-parse properties.
+  const ALPHABET = "abcdefghij ABCDEFGHIJ01234567";
+  function randomWord(rng: () => number): string {
+    const len = 1 + Math.floor(rng() * 6);
+    let s = "";
+    for (let i = 0; i < len; i++) s += ALPHABET[Math.floor(rng() * ALPHABET.length)];
+    return s;
+  }
+  function randomRecord(rng: () => number): string {
+    const kind = Math.floor(rng() * 4);
+    if (kind === 0) return `${randomWord(rng)},${randomWord(rng)}`;
+    if (kind === 1) return `"${randomWord(rng)},${randomWord(rng)}",${randomWord(rng)}`;
+    if (kind === 2) return `"${randomWord(rng)}\n${randomWord(rng)}",${randomWord(rng)}`;
+    return `"He said ""${randomWord(rng)}"" ok",${randomWord(rng)}`;
+  }
+
+  const SEED_BASE = 555000111;
+  const CASES = 60;
+
+  it(`holds (reassembly, row-limit-respecting, header-identical, boundary-preserving) across ${CASES} randomized chunk plans`, () => {
+    for (let caseIndex = 0; caseIndex < CASES; caseIndex++) {
+      const rng = mulberry32(SEED_BASE + caseIndex);
+      const header = "col_a,col_b";
+      const numRecords = 1 + Math.floor(rng() * 40);
+      const records = Array.from({ length: numRecords }, () => randomRecord(rng));
+      const chunkTargetRows = 1 + Math.floor(rng() * 12);
+
+      const plan = buildChunkPlan(records, chunkTargetRows);
+
+      // Reassembly: concatenating every chunk's records reproduces the
+      // original array exactly, in order — the chunk-level twin of the
+      // byte-to-field fidelity invariant.
+      expect(plan.flatMap((c) => c.records)).toEqual(records);
+
+      // Row-limit-respecting: no chunk was built with more raw records
+      // than the target (a stronger, structural guarantee than the real
+      // parser's row count, which can only be <= this).
+      for (const chunk of plan) expect(chunk.records.length).toBeLessThanOrEqual(chunkTargetRows);
+
+      const checks = evaluateChunkPlan(header, plan);
+      for (const check of checks) {
+        expect(check.headerOk).toBe(true);
+        expect(check.boundaryOk).toBe(true);
+      }
+    }
+  });
+});
+
+describe("writeChunkFiles / writeChunkPlanToDisk — actually emits chunk files + per-chunk manifests (round-5 amendment)", () => {
+  it("writes one CSV file and one sidecar manifest per chunk, plus a combined overview manifest, via the shipped CLI", () => {
+    const d = tmp();
+    const csvPath = join(d, "big.csv");
+    const totalRows = CHUNK_TARGET_ROWS + 500;
+    const lines = [CANONICAL_HEADER];
+    for (let i = 0; i < totalRows; i++) lines.push(validRow(`P${i}`, `Wine ${i}`));
+    writeFileSync(csvPath, lines.join("\n") + "\n");
+
+    const result = runValidator(csvPath);
+    expect(result.status).toBe(0);
+
+    const chunksDir = join(d, "big.chunks");
+    const combinedManifestPath = join(d, "big.chunks.manifest.json");
+    expect(existsSync(combinedManifestPath)).toBe(true);
+    const combined = JSON.parse(readFileSync(combinedManifestPath, "utf8"));
+    expect(combined.chunk_total).toBe(2);
+    expect(combined.chunk_target_rows).toBe(CHUNK_TARGET_ROWS);
+    expect(combined.chunks).toHaveLength(2);
+
+    const sourceSha256 = createHash("sha256").update(readFileSync(csvPath)).digest("hex");
+    expect(combined.source_csv_sha256).toBe(sourceSha256);
+
+    const reassembledDataLines: string[] = [];
+    for (const entry of combined.chunks) {
+      const chunkPath = join(chunksDir, entry.file);
+      expect(existsSync(chunkPath)).toBe(true);
+      const chunkBytes = readFileSync(chunkPath);
+      // Independently computed — never trust the manifest's self-report.
+      expect(createHash("sha256").update(chunkBytes).digest("hex")).toBe(entry.chunk_sha256);
+      expect(chunkBytes.length).toBe(entry.byte_size);
+
+      // Quote-aware re-split — never a naive .split("\n") — see the
+      // pinning test below for why that distinction matters.
+      const chunkRecords = splitLogicalRecords(chunkBytes.toString("utf8"));
+      expect(chunkRecords[0]).toBe(CANONICAL_HEADER);
+      reassembledDataLines.push(...chunkRecords.slice(1));
+
+      const perChunkPath = join(chunksDir, entry.file.replace(/\.csv$/, ".manifest.json"));
+      const perChunk: PerChunkManifest = JSON.parse(readFileSync(perChunkPath, "utf8"));
+      expect(perChunk).toEqual({
+        chunk_index: entry.chunk_index,
+        chunk_total: 2,
+        row_start: entry.row_start,
+        row_end: entry.row_end,
+        row_count: entry.row_count,
+        byte_size: entry.byte_size,
+        chunk_sha256: entry.chunk_sha256,
+        source_csv_sha256: sourceSha256,
+      });
+    }
+
+    expect(reassembledDataLines).toEqual(lines.slice(1));
+  }, 20_000);
+
+  it("a rerun against a file that shrank cleans up a stale chunk file from the previous, larger run", () => {
+    const d = tmp();
+    const csvPath = join(d, "shrinking.csv");
+    const bigTotal = CHUNK_TARGET_ROWS * 3;
+    const bigLines = [CANONICAL_HEADER];
+    for (let i = 0; i < bigTotal; i++) bigLines.push(validRow(`P${i}`, `Wine ${i}`));
+    writeFileSync(csvPath, bigLines.join("\n") + "\n");
+    expect(runValidator(csvPath).status).toBe(0);
+
+    const chunksDir = join(d, "shrinking.chunks");
+    expect(existsSync(join(chunksDir, "part-0003.csv"))).toBe(true);
+
+    const smallTotal = CHUNK_TARGET_ROWS + 5;
+    const smallLines = [CANONICAL_HEADER];
+    for (let i = 0; i < smallTotal; i++) smallLines.push(validRow(`Q${i}`, `Wine ${i}`));
+    writeFileSync(csvPath, smallLines.join("\n") + "\n");
+    const result = runValidator(csvPath);
+    expect(result.status).toBe(0);
+
+    expect(existsSync(join(chunksDir, "part-0003.csv"))).toBe(false);
+    expect(existsSync(join(chunksDir, "part-0003.manifest.json"))).toBe(false);
+    expect(existsSync(join(chunksDir, "part-0001.csv"))).toBe(true);
+    expect(existsSync(join(chunksDir, "part-0002.csv"))).toBe(true);
+  }, 20_000);
+
+  it("is fully deterministic: running the same file twice produces a byte-identical combined manifest", () => {
+    const d = tmp();
+    const csvPath = join(d, "deterministic.csv");
+    const totalRows = CHUNK_TARGET_ROWS + 20;
+    const lines = [CANONICAL_HEADER];
+    for (let i = 0; i < totalRows; i++) lines.push(validRow(`P${i}`, `Wine ${i}`));
+    writeFileSync(csvPath, lines.join("\n") + "\n");
+
+    runValidator(csvPath);
+    const manifestPath = join(d, "deterministic.chunks.manifest.json");
+    const first = readFileSync(manifestPath, "utf8");
+
+    runValidator(csvPath);
+    const second = readFileSync(manifestPath, "utf8");
+
+    expect(second).toBe(first);
+  }, 20_000);
+});
+
+// ---------------------------------------------------------------------------
+// P3 interface pin: writeChunkFiles() must hash RAW BYTES ON DISK, never a
+// string obtained by decoding those bytes first — the same principle as
+// encoding_is_faithful, applied one level up. This ships the exact pinning
+// test P3 specified: small, deterministic, fast, NOT the 20k fixture,
+// reading its "low cap" defensively from the live MAX_ROWS export so it
+// stays sensible if that constant ever moves.
+// ---------------------------------------------------------------------------
+
+describe("chunk-splitter file-emission contract pin (P3 interface pin)", () => {
+  const PIN_TEST_CAP = Math.min(8, MAX_ROWS);
+
+  it("a 23-row CSV split at a low cap produces a correct 3-chunk plan with byte-verified, independently-rehashed manifests", () => {
+    const d = tmp();
+    const header = CANONICAL_HEADER;
+    const rows: string[] = [];
+    for (let i = 1; i <= 23; i++) {
+      // The last row of chunk 1 (the exact boundary) carries a quoted
+      // field with an embedded newline — assertion 6's "must never be
+      // split mid-record" case.
+      rows.push(i === PIN_TEST_CAP ? validRow(`P${i}`, '"Multi\nLine"') : validRow(`P${i}`, `Wine ${i}`));
+    }
+    const csvPath = join(d, "pin-test.csv");
+    writeFileSync(csvPath, [header, ...rows].join("\n") + "\n");
+    const independentSourceSha256 = createHash("sha256").update(readFileSync(csvPath)).digest("hex");
+
+    const chunkPlan = buildChunkPlan(rows, PIN_TEST_CAP);
+    const checks = evaluateChunkPlan(header, chunkPlan);
+    const outDir = join(d, "pin-test.chunks");
+    mkdirSync(outDir, { recursive: true });
+    const { chunkEntries } = writeChunkFiles(outDir, header, chunkPlan, checks, independentSourceSha256);
+
+    // 1. chunk_total == ceil(total_data_rows / cap).
+    const expectedChunkTotal = Math.ceil(rows.length / PIN_TEST_CAP);
+    expect(expectedChunkTotal).toBe(3);
+    expect(chunkEntries).toHaveLength(expectedChunkTotal);
+    expect(chunkEntries.every((e) => e.chunk_total === expectedChunkTotal)).toBe(true);
+
+    // 2. Ranges contiguous and non-overlapping, covering the whole file.
+    for (let i = 0; i < chunkEntries.length - 1; i++) {
+      expect(chunkEntries[i].row_end + 1).toBe(chunkEntries[i + 1].row_start);
+    }
+    expect(chunkEntries[0].row_start).toBe(1);
+    expect(chunkEntries[chunkEntries.length - 1].row_end).toBe(rows.length);
+
+    const reassembledDataRows: string[] = [];
+    for (const entry of chunkEntries) {
+      const chunkPath = join(outDir, entry.file);
+      const chunkBytesOnDisk = readFileSync(chunkPath);
+
+      // Quote-aware re-split of the ACTUAL on-disk bytes — a naive
+      // .split("\n") would incorrectly cut the embedded-newline record in
+      // two, which is exactly the class of bug this whole file exists to
+      // catch; splitLogicalRecords() is the already-proven oracle for
+      // "what are the real logical records" here.
+      const chunkRecords = splitLogicalRecords(chunkBytesOnDisk.toString("utf8"));
+      // 3. Every chunk file's first line equals the original header line byte-for-byte.
+      expect(chunkRecords[0]).toBe(header);
+      reassembledDataRows.push(...chunkRecords.slice(1));
+
+      // 5. chunk_sha256 equals a hash computed by RE-READING the chunk
+      // file from disk — never trust the manifest's self-report.
+      const independentChunkSha256 = createHash("sha256").update(chunkBytesOnDisk).digest("hex");
+      expect(entry.chunk_sha256).toBe(independentChunkSha256);
+
+      const perChunkManifest: PerChunkManifest = JSON.parse(
+        readFileSync(join(outDir, entry.file.replace(/\.csv$/, ".manifest.json")), "utf8"),
+      );
+      expect(perChunkManifest.chunk_sha256).toBe(independentChunkSha256);
+      // 4. source_csv_sha256 equal to an independently-computed hash of
+      // the original file's bytes.
+      expect(perChunkManifest.source_csv_sha256).toBe(independentSourceSha256);
+    }
+
+    // 4 (continued): identical across ALL manifests.
+    expect(new Set(chunkEntries.map((e) => e.source_csv_sha256))).toEqual(new Set([independentSourceSha256]));
+
+    // 6. Concatenating all chunks' data rows (header already stripped
+    // above) reproduces the original data rows exactly and in order,
+    // including the embedded-newline record never split mid-record.
+    expect(reassembledDataRows).toEqual(rows);
+  }, 15_000);
+});
+
+describe("computeDuplicatePairStraddle — cross-chunk duplicate risk (round-5 amendment, REPORT ONLY)", () => {
+  it("classifies a pair in the same chunk as within-chunk, and a pair in different chunks as straddling", () => {
+    const plan = buildChunkPlan(
+      Array.from({ length: 10 }, (_, i) => `r${i}`),
+      4,
+    ); // chunks cover rows 1-4, 5-8, 9-10
+    const groups = [
+      { id: "g1", canonical_row_indexes: [2], alt_row_indexes: [3] }, // both row 2 & 3 in chunk 1 -> within
+      { id: "g2", canonical_row_indexes: [2], alt_row_indexes: [9] }, // chunk 1 vs chunk 3 -> straddling
+    ];
+    const result = computeDuplicatePairStraddle(plan, groups);
+    expect(result.totalPairs).toBe(2);
+    expect(result.withinChunk).toBe(1);
+    expect(result.straddling).toBe(1);
+    expect(result.straddlingExamples).toHaveLength(1);
+    expect(result.straddlingExamples[0]).toMatchObject({
+      groupId: "g2",
+      canonicalRow: 2,
+      altRow: 9,
+      canonicalChunk: 1,
+      altChunk: 3,
+    });
+  });
+
+  it("a group with multiple canonical and alt rows counts every cross-product pair", () => {
+    const plan = buildChunkPlan(
+      Array.from({ length: 6 }, (_, i) => `r${i}`),
+      3,
+    ); // chunks cover rows 1-3, 4-6
+    const groups = [{ id: "g1", canonical_row_indexes: [1, 2], alt_row_indexes: [4, 5] }]; // 2x2=4 pairs, all straddling
+    const result = computeDuplicatePairStraddle(plan, groups);
+    expect(result.totalPairs).toBe(4);
+    expect(result.straddling).toBe(4);
+    expect(result.withinChunk).toBe(0);
+  });
+
+  it("no groups means zero pairs", () => {
+    const plan = buildChunkPlan(["a", "b"], 5);
+    expect(computeDuplicatePairStraddle(plan, [])).toEqual({
+      totalPairs: 0,
+      withinChunk: 0,
+      straddling: 0,
+      straddlingExamples: [],
+    });
+  });
+});
+
+describe("validate-bulk-import.ts — cross-chunk duplicate risk reporting (round-5 amendment, REPORT ONLY — never gates PASS)", () => {
+  it("reports within/straddling counts from manifest ground truth and never blocks PASS on a nonzero straddling count", () => {
+    const d = tmp();
+    const totalRows = CHUNK_TARGET_ROWS + 10; // 2 chunks: rows 1-4000, 4001-4010
+    const lines = [CANONICAL_HEADER];
+    for (let i = 0; i < totalRows; i++) lines.push(validRow(`P${i}`, `Wine ${i}`));
+    const csvPath = join(d, "dup-risk.csv");
+    writeFileSync(csvPath, lines.join("\n") + "\n");
+    const buffer = readFileSync(csvPath);
+
+    const manifestPath = join(d, "m.json");
+    const manifest = {
+      generator_seed: 1,
+      generator_version: "test-fixture",
+      total_rows: totalRows,
+      clean_row_count: totalRows,
+      dirty_row_count: 0,
+      csv_sha256: createHash("sha256").update(buffer).digest("hex"),
+      columns: CANONICAL_HEADER.split(","),
+      duplicate_spelling_groups: [
+        { id: "sg-001", canonical_row_indexes: [10], alt_row_indexes: [4005] }, // straddles chunk 1 / chunk 2
+        { id: "sg-002", canonical_row_indexes: [20], alt_row_indexes: [21] }, // within chunk 1
+      ],
+    };
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+
+    const result = runValidator(csvPath, manifestPath);
+    expect(result.status).toBe(0); // straddling duplicates never block PASS — report only
+    expect(result.stdout).toContain("Duplicate spelling-variant pairs (from manifest ground truth): 2");
+    expect(result.stdout).toMatch(/within a single chunk:\s+1\b/);
+    expect(result.stdout).toMatch(/STRADDLING two different chunks: 1\b/);
+    expect(result.stdout).toContain("group sg-001: row 10 (chunk 1) vs row 4005 (chunk 2)");
+    expect(result.stdout).toContain(
+      "IMPORTANT: this run's PASS/FAIL verdict covers per-chunk parse/validation faithfulness ONLY.",
+    );
+    expect(result.stdout).toContain("that is P3's to establish, not this tool's");
+  }, 15_000);
+
+  it("reports 'cannot assess' when there is no manifest but the file still needs multiple chunks", () => {
+    const d = tmp();
+    const totalRows = CHUNK_TARGET_ROWS + 10;
+    const lines = [CANONICAL_HEADER];
+    for (let i = 0; i < totalRows; i++) lines.push(validRow(`P${i}`, `Wine ${i}`));
+    const csvPath = join(d, "no-manifest-dup-risk.csv");
+    writeFileSync(csvPath, lines.join("\n") + "\n");
+
+    const result = runValidator(csvPath);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Cannot assess: no duplicate_spelling_groups ground truth is available");
+    expect(result.stdout).toContain("UNPROVEN and NOT certified by this PASS");
+  }, 15_000);
+
+  it("reports no cross-batch risk when only one chunk is planned", () => {
+    const d = tmp();
+    const { csvPath } = makeCleanCsv(d);
+    const result = runValidator(csvPath);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Only one chunk planned — there is no cross-batch boundary");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1205,13 +1628,24 @@ const PRECONDITION_CASES: Record<string, () => PreconditionCase> = {
     return { csvPath, expectedReason: "all of which are blank" };
   },
 
-  within_importer_row_limit: () => {
+  chunk_plan_within_byte_limit: () => {
+    // CHUNK_TARGET_ROWS rows (one full chunk, no row-limit violation) each
+    // carrying a wide-but-legal cell (safely under MAX_FIELD_LENGTH=2000,
+    // so nothing fails to parse) pushes that one chunk's REAL serialized
+    // byte size over MAX_UPLOAD_BYTES — reachable through the real CLI,
+    // unlike the other chunk_plan_* checks (see EXEMPT_FROM_ISOLATION_TEST).
+    // The per-row width is DERIVED from the live constants (never a bare
+    // magic number) so this stays a genuine violation if either ever moves.
     const d = tmp();
-    const csvPath = join(d, "over-max-rows.csv");
+    const csvPath = join(d, "over-byte-limit.csv");
+    const bytesNeededPerRow = Math.ceil(MAX_UPLOAD_BYTES / CHUNK_TARGET_ROWS) + 200; // margin above the exact threshold
+    const wideField = "X".repeat(Math.min(bytesNeededPerRow, MAX_FIELD_LENGTH - 1));
     const lines = [CANONICAL_HEADER];
-    for (let i = 0; i < MAX_ROWS + 1; i++) lines.push(validRow("P1", "Wine One"));
+    for (let i = 0; i < CHUNK_TARGET_ROWS; i++) {
+      lines.push(rowFields({ producer: "P1", name: "Wine One", quantity: "1", section: wideField }));
+    }
     writeFileSync(csvPath, lines.join("\n") + "\n");
-    return { csvPath, expectedReason: `exceeding the current importer's MAX_ROWS=${MAX_ROWS}` };
+    return { csvPath, expectedReason: "exceed the server's MAX_UPLOAD_BYTES" };
   },
 
   no_unknown_manifest_dirty_categories: () => {
@@ -1397,20 +1831,44 @@ const PRECONDITION_CASES: Record<string, () => PreconditionCase> = {
   },
 };
 
-// Preconditions with no isolated CLI case above, and why. Currently exactly
-// one: the round-3 fail-closed chunk<->record count assertion. Both the
-// round-3 judge and the round-4 harness concluded (a ~12,000-case
-// differential fuzz — see the "1:1 record<->row contract" property test
-// above — plus a manual state-machine argument) that it is UNREACHABLE on
-// any real input: splitLogicalRecords() and parseCsv() share the exact same
-// quote-tracking rule by construction, and isBlankRecord() determines
-// blankness by asking the real parser itself. Simulating a mismatch here
-// would require monkeypatching internals to produce a state that cannot
-// occur through this CLI, which would test nothing real. It stays wired to
-// a hard failure in the source as a drift tripwire (see the comment at the
-// assertion site in validate-bulk-import.ts) in case the two
+// Preconditions with no isolated CLI case above, and why.
+//
+// parser_row_counts_match — the round-3 fail-closed chunk<->record count
+// assertion. Both the round-3 judge and the round-4 harness concluded (a
+// ~12,000-case differential fuzz — see the "1:1 record<->row contract"
+// property test above — plus a manual state-machine argument) that it is
+// UNREACHABLE on any real input: splitLogicalRecords() and parseCsv() share
+// the exact same quote-tracking rule by construction, and isBlankRecord()
+// determines blankness by asking the real parser itself. Simulating a
+// mismatch here would require monkeypatching internals to produce a state
+// that cannot occur through this CLI, which would test nothing real. It
+// stays wired to a hard failure in the source as a drift tripwire (see the
+// comment at the assertion site in validate-bulk-import.ts) in case the two
 // implementations are ever changed to disagree.
-const EXEMPT_FROM_ISOLATION_TEST = new Set(["parser_row_counts_match"]);
+//
+// chunk_plan_within_row_limit, chunk_boundaries_preserve_records,
+// chunk_plan_reassembles_byte_identically, chunk_plan_headers_identical
+// (round-5 amendment) — all four are UNREACHABLE through the shipped CLI
+// today for the SAME reason: buildChunkPlan() only ever partitions
+// dataRecords by array slicing (never by re-splitting text), and
+// CHUNK_TARGET_ROWS (4000) is a compile-time constant strictly less than
+// MAX_ROWS (5000). Given that, a real chunk's row count can never exceed
+// MAX_ROWS, a chunk boundary can never bisect a record (slicing an array of
+// already-complete strings cannot), reassembling a pure array partition
+// always reproduces the original, and every chunk's header line is always
+// the literal same string by construction. Proving these WOULD fire on a
+// genuine violation therefore has to happen at the unit level, against the
+// exported pure functions with a deliberately adversarial parameter (e.g. a
+// chunkTargetRows larger than MAX_ROWS) — see the "chunk plan" describe
+// block below, which is this round's equivalent of the differential fuzz
+// above.
+const EXEMPT_FROM_ISOLATION_TEST = new Set([
+  "parser_row_counts_match",
+  "chunk_plan_within_row_limit",
+  "chunk_boundaries_preserve_records",
+  "chunk_plan_reassembles_byte_identically",
+  "chunk_plan_headers_identical",
+]);
 
 describe("PASS_PRECONDITIONS — completeness (the round-4 'test that ends this cycle')", () => {
   it("every precondition the shipped guard checks has an isolated CLI case here (or a documented exemption) — no drift between source and test", () => {
