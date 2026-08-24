@@ -328,11 +328,6 @@ export type Database = {
           region: string | null
           updated_at: string
         }
-        // producer_norm / cuvee_norm are STORED GENERATED columns (0097)
-        // and are deliberately absent from Insert and Update: supplying
-        // either raises SQLSTATE 428C9 at the database. Keeping them out
-        // of the types makes the forged-identity-key attack a compile
-        // error rather than a runtime one.
         Insert: {
           colour?: string | null
           country?: string | null
@@ -340,10 +335,12 @@ export type Database = {
           created_by_restaurant_id?: string | null
           created_by_user_id?: string | null
           cuvee: string
+          cuvee_norm?: string
           id?: string
           identity_status?: string
           lwin7?: string | null
           producer: string
+          producer_norm?: string
           region?: string | null
           updated_at?: string
         }
@@ -354,10 +351,12 @@ export type Database = {
           created_by_restaurant_id?: string | null
           created_by_user_id?: string | null
           cuvee?: string
+          cuvee_norm?: string
           id?: string
           identity_status?: string
           lwin7?: string | null
           producer?: string
+          producer_norm?: string
           region?: string | null
           updated_at?: string
         }
@@ -1935,6 +1934,7 @@ export type Database = {
         Returns: string[]
       }
       generate_slug: { Args: { input: string }; Returns: string }
+      identity_normalize_text: { Args: { raw: string }; Returns: string }
       is_member: { Args: { r_id: string }; Returns: boolean }
       is_member_with_role: {
         Args: {
@@ -2147,6 +2147,7 @@ export type Database = {
         Args: { p_days?: number; p_wine_id: string }
         Returns: string
       }
+      unaccent: { Args: { "": string }; Returns: string }
       undo_last_pour: {
         Args: { p_wine_id: string }
         Returns: {

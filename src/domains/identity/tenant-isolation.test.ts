@@ -385,9 +385,11 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
   //
   // Both columns are now GENERATED ALWAYS from producer/cuvee, so the
   // attack is not blocked, it is unrepresentable — at the database, for
-  // every role including service_role, and (because they are absent from
-  // the Insert type) at compile time too. `as never` below is what lets
-  // this test still express the forged shape TypeScript now rejects.
+  // every role including service_role. (The generated Insert type still
+  // lists both as optional fields — `supabase gen types` emits generated
+  // columns that way — so the defense is the column definition alone,
+  // never the types.) `as never` below keeps this test independent of
+  // whatever the generated types happen to say.
   it("D9-residual #2 fix: a caller cannot key a canonical row on anything but its own producer/cuvee, even with honest corroborating raws", async () => {
     const victimProducer = "P2 D9r6 Victim Estate";
     const victimCuvee = "Victim Grand Vin";
