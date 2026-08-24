@@ -1418,6 +1418,92 @@ describe("chunk-splitter file-emission contract pin (P3 interface pin)", () => {
   }, 15_000);
 });
 
+// ---------------------------------------------------------------------------
+// Round-6 CRITICAL fix. The round-5 pinning test above drives writeChunkFiles()
+// DIRECTLY with a pre-computed hash parameter — it never exercises
+// writeChunkPlanToDisk()'s OWN sourceCsvSha256 computation at all, and every
+// fixture in the suite (there or elsewhere) was plain, round-trippable ASCII,
+// for which "hash the raw bytes" and "hash the decoded-then-reencoded text"
+// are mathematically identical. A critic reproduced this with a one-line
+// patch (sourceCsvSha256 = hash(decodeCsvBuffer(state.buffer)) instead of
+// hash(state.buffer)): the hash changed for a UTF-8-BOM file, yet all 105
+// tests stayed green. The block below is that pinning test given actual
+// teeth — it drives the REAL CLI end to end (never writeChunkFiles()
+// directly) so writeChunkPlanToDisk()'s own hashing line is what runs, and
+// it verifies against a hash computed independently via readFileSync() +
+// Node's own crypto — never via sha256HexOfBuffer() or any other helper
+// from the file under test.
+// ---------------------------------------------------------------------------
+
+describe("writeChunkPlanToDisk — source_csv_sha256 must hash RAW BYTES, never decoded text (round-6 CRITICAL fix)", () => {
+  it("a UTF-8-BOM file's source_csv_sha256 (combined AND every per-chunk manifest) matches an independently-computed raw-byte hash", () => {
+    const d = tmp();
+    const csvPath = join(d, "bom.csv");
+    const bom = Buffer.from([0xef, 0xbb, 0xbf]);
+    const body = Buffer.from(`${CANONICAL_HEADER}\n${validRow("P1", "Wine One")}\n${validRow("P2", "Wine Two")}\n`, "utf8");
+    writeFileSync(csvPath, Buffer.concat([bom, body]));
+
+    // Sanity: this fixture must actually EXERCISE the divergence, or this
+    // test is exactly as toothless as the one it supplements. Mirrors the
+    // critic's own one-line patch (hash decoded text instead of raw bytes)
+    // but computed independently here, never via decodeCsvBuffer() or
+    // sha256HexOfBuffer() from the file under test.
+    const rawBytesHash = createHash("sha256").update(readFileSync(csvPath)).digest("hex");
+    const decodedText = new TextDecoder("utf-8", { fatal: false }).decode(readFileSync(csvPath));
+    const decodedTextHash = createHash("sha256").update(decodedText, "utf8").digest("hex");
+    expect(decodedTextHash).not.toBe(rawBytesHash);
+
+    const result = runValidator(csvPath);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("=== RESULT: PASS ===");
+
+    const combined = JSON.parse(readFileSync(join(d, "bom.chunks.manifest.json"), "utf8"));
+    expect(combined.source_csv_sha256).toBe(rawBytesHash);
+    expect(combined.source_csv_sha256).not.toBe(decodedTextHash);
+    expect(combined.chunks.length).toBeGreaterThan(0);
+
+    for (const entry of combined.chunks) {
+      const perChunkPath = join(d, "bom.chunks", entry.file.replace(/\.csv$/, ".manifest.json"));
+      const perChunk: PerChunkManifest = JSON.parse(readFileSync(perChunkPath, "utf8"));
+      expect(perChunk.source_csv_sha256).toBe(rawBytesHash);
+      expect(perChunk.source_csv_sha256).not.toBe(decodedTextHash);
+
+      // chunk_sha256 re-verified too, for completeness — the critic
+      // confirmed this one has no analogous gap (write+read of the same
+      // buffer are provably identical regardless of content), but an
+      // independent re-check costs nothing here.
+      const chunkBytes = readFileSync(join(d, "bom.chunks", entry.file));
+      expect(perChunk.chunk_sha256).toBe(createHash("sha256").update(chunkBytes).digest("hex"));
+    }
+  }, 15_000);
+
+  it("UTF-16 (with a BOM) and invalid UTF-8 never reach chunk emission, so they cannot be used to pin this hash (documented scope limit)", () => {
+    // Both fail via encoding_is_faithful BEFORE a chunk plan is ever built
+    // — verified here by asserting no .chunks/ directory is even created —
+    // so there is no source_csv_sha256 to compare for either. A UTF-8 BOM
+    // is the only reachable byte-vs-text divergence in this tool today:
+    // its bytes are themselves valid UTF-8 (EF BB BF decodes to the single
+    // valid codepoint U+FEFF), so it passes encoding_is_faithful and
+    // reaches chunk emission, where decodeCsvBuffer() then strips it from
+    // the TEXT while state.buffer (correctly hashed) still has it.
+    const d = tmp();
+
+    const utf16Path = join(d, "utf16.csv");
+    const text = `${CANONICAL_HEADER}\n${validRow("P1", "Wine One")}\n`;
+    writeFileSync(utf16Path, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, "utf16le")]));
+    expect(runValidator(utf16Path).status).not.toBe(0);
+    expect(existsSync(join(d, "utf16.chunks"))).toBe(false);
+
+    const invalidUtf8Path = join(d, "invalid-utf8.csv");
+    const template = `${CANONICAL_HEADER}\n${rowFields({ producer: "P1", name: "BADBYTE", quantity: "1" })}\n`;
+    const badBytes = Buffer.from(template, "utf8");
+    badBytes[template.indexOf("BADBYTE")] = 0xff;
+    writeFileSync(invalidUtf8Path, badBytes);
+    expect(runValidator(invalidUtf8Path).status).not.toBe(0);
+    expect(existsSync(join(d, "invalid-utf8.chunks"))).toBe(false);
+  });
+});
+
 describe("computeDuplicatePairStraddle — cross-chunk duplicate risk (round-5 amendment, REPORT ONLY)", () => {
   it("classifies a pair in the same chunk as within-chunk, and a pair in different chunks as straddling", () => {
     const plan = buildChunkPlan(
@@ -1649,12 +1735,23 @@ const PRECONDITION_CASES: Record<string, () => PreconditionCase> = {
   },
 
   no_unknown_manifest_dirty_categories: () => {
+    // Round-6 fixture-hygiene fix: dirty_row_count/clean_row_count are set
+    // to match the (unrecognized-category, still length-1) dirty_rows
+    // array so this case does NOT also trip
+    // manifest_dirty_row_count_matches_dirty_rows_array — isolating the
+    // named precondition as the sole reported reason.
     const d = tmp();
     const { csvPath, buffer } = makeCleanCsv(d);
     const manifestPath = join(d, "m.json");
     writeFileSync(
       manifestPath,
-      JSON.stringify(baseCleanManifest(buffer, { dirty_rows: [{ row_index: 2, category: "totally_bogus_category" }] })),
+      JSON.stringify(
+        baseCleanManifest(buffer, {
+          dirty_rows: [{ row_index: 2, category: "totally_bogus_category" }],
+          dirty_row_count: 1,
+          clean_row_count: 2,
+        }),
+      ),
     );
     return { csvPath, manifestPath, expectedReason: "unknown categor" };
   },
@@ -1667,6 +1764,9 @@ const PRECONDITION_CASES: Record<string, () => PreconditionCase> = {
   },
 
   tagged_group_counts_match: () => {
+    // Round-6 fixture-hygiene fix: dirty_row_count/clean_row_count are set
+    // to match the actual (2-entry) dirty_rows array so this case does NOT
+    // also trip manifest_dirty_row_count_matches_dirty_rows_array.
     const d = tmp();
     const { csvPath, buffer } = makeThreeRowCsv(d);
     const manifestPath = join(d, "m.json");
@@ -1678,6 +1778,8 @@ const PRECONDITION_CASES: Record<string, () => PreconditionCase> = {
             { row_index: 2, category: "bad_vintage_text" },
             { row_index: 99, category: "bad_vintage_text" }, // phantom — never seen
           ],
+          dirty_row_count: 2,
+          clean_row_count: 1,
         }),
       ),
     );
@@ -1685,6 +1787,9 @@ const PRECONDITION_CASES: Record<string, () => PreconditionCase> = {
   },
 
   tagged_group_outcomes_match: () => {
+    // Round-6 fixture-hygiene fix: dirty_row_count/clean_row_count are set
+    // to match the actual (2-entry) dirty_rows array so this case does NOT
+    // also trip manifest_dirty_row_count_matches_dirty_rows_array.
     const d = tmp();
     const { csvPath, buffer } = makeThreeRowCsv(d);
     const manifestPath = join(d, "m.json");
@@ -1696,6 +1801,8 @@ const PRECONDITION_CASES: Record<string, () => PreconditionCase> = {
             { row_index: 1, category: "bad_vintage_text" }, // row 1 is actually VALID — mismatch
             { row_index: 2, category: "bad_vintage_text" },
           ],
+          dirty_row_count: 2,
+          clean_row_count: 1,
         }),
       ),
     );
@@ -1721,10 +1828,14 @@ const PRECONDITION_CASES: Record<string, () => PreconditionCase> = {
   },
 
   total_rows_match_manifest: () => {
+    // Round-6 fixture-hygiene fix: clean_row_count is bumped to 999
+    // alongside total_rows so manifest.clean_row_count + dirty_row_count
+    // still sums to manifest.total_rows (a self-consistent but WRONG
+    // manifest) — isolating this from manifest_row_counts_sum_to_total.
     const d = tmp();
     const { csvPath, buffer } = makeCleanCsv(d);
     const manifestPath = join(d, "m.json");
-    writeFileSync(manifestPath, JSON.stringify(baseCleanManifest(buffer, { total_rows: 999 })));
+    writeFileSync(manifestPath, JSON.stringify(baseCleanManifest(buffer, { total_rows: 999, clean_row_count: 999 })));
     return { csvPath, manifestPath, expectedReason: "does not match manifest.total_rows" };
   },
 
