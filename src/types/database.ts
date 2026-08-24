@@ -4,15 +4,6 @@
 // Regeneration: `pnpm run types:gen` (requires SUPABASE_ACCESS_TOKEN +
 // SUPABASE_PROJECT_ID env). CI verifies this file matches the live
 // schema via `pnpm run types:check`.
-//
-// P3 EXCEPTION (2026-08-23): regenerated here via
-// `supabase gen types typescript --db-url postgresql://postgres:postgres@127.0.0.1:58322/postgres`
-// against the LOCAL terroir-audit-local stack, per this run'''s explicit
-// instruction not to run types:gen/types:check (they hit the hosted
-// PRODUCTION Management API and would overwrite this branch'''s types with
-// production'''s older, pre-P3 schema). Content is otherwise identical in
-// shape to what types:gen would produce once P3'''s migrations ship to
-// production.
 
 export type Json =
   | string
@@ -2448,4 +2439,3 @@ export const Constants = {
     },
   },
 } as const
-
