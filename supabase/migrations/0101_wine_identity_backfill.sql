@@ -35,22 +35,16 @@ select
   w.name,
   w.vintage,
   w.size_ml,
-  (
-    select nullif(string_agg(t, ' ' order by t), '')
-    from unnest(string_to_array(
-      trim(regexp_replace(lower(unaccent(w.producer)), '[^a-z0-9]+', ' ', 'g')),
-      ' '
-    )) as t
-    where t <> ''
-  ) as producer_norm,
-  (
-    select nullif(string_agg(t, ' ' order by t), '')
-    from unnest(string_to_array(
-      trim(regexp_replace(lower(unaccent(w.name)), '[^a-z0-9]+', ' ', 'g')),
-      ' '
-    )) as t
-    where t <> ''
-  ) as cuvee_norm,
+  -- P2 ROUND-5 (D9-residual — scratchpad db-audit/verify/P2-critic-r4.md):
+  -- reuses public.identity_normalize_text() (0097) instead of duplicating
+  -- this exact expression inline — it now also backs the LWIN
+  -- corroboration gate below, and one implementation is easier to keep
+  -- correct than several copies that "agree on the same bug because they
+  -- hardcode the same literals" (the round-4 critic's framing of why
+  -- three independent copies of the OLD fuzzy check weren't actually
+  -- independent verification).
+  public.identity_normalize_text(w.producer) as producer_norm,
+  public.identity_normalize_text(w.name) as cuvee_norm,
   case when w.lwin_id ~ '^[0-9]{7}' then substr(w.lwin_id, 1, 7) else null end as lwin7
 from public.wines w
 where w.wine_variant_id is null;
@@ -76,10 +70,18 @@ create temporary table _identity_backfill_resolved (
   size_ml           int not null
 );
 
+-- P2 ROUND-5 FIX (D9-residual): identity_status = 'lwin_verified' added.
+-- Without it, this join would match ANY canonical_wines row carrying
+-- n.lwin7 regardless of whether it was ever corroborated — the same
+-- "unverified-squat" hole closed on the resolve_wine_variants_bulk path
+-- (0099) and now also closed here, plus universally by 0097's
+-- canonical_wines_lwin7_requires_verified CHECK CONSTRAINT (this filter
+-- is defense-in-depth on top of that invariant).
 insert into _identity_backfill_resolved (wine_id, canonical_wine_id, restaurant_id, vintage, size_ml)
 select n.wine_id, cw.id, n.restaurant_id, n.vintage, n.size_ml
 from _identity_backfill_norm n
-join public.canonical_wines cw on n.lwin7 is not null and cw.lwin7 = n.lwin7;
+join public.canonical_wines cw
+  on n.lwin7 is not null and cw.lwin7 = n.lwin7 and cw.identity_status = 'lwin_verified';
 
 insert into _identity_backfill_resolved (wine_id, canonical_wine_id, restaurant_id, vintage, size_ml)
 select n.wine_id, cw.id, n.restaurant_id, n.vintage, n.size_ml
@@ -88,29 +90,42 @@ join public.canonical_wines cw
   on cw.producer_norm = n.producer_norm and cw.cuvee_norm = n.cuvee_norm
 where n.wine_id not in (select wine_id from _identity_backfill_resolved);
 
--- D9 fix (scratchpad db-audit/verify/P2-critic-r3.md): every row still
+-- P2 ROUND-4/5 HISTORY (D9, then D9-residual — scratchpad
+-- db-audit/verify/P2-critic-r3.md and -r4.md): every row still
 -- unresolved at this point is about to CREATE a canonical_wines row
 -- below, claiming identity_status='lwin_verified' whenever its lwin7 is
 -- set. This migration runs as the table owner and BYPASSES RLS entirely
--- — 0097's insert-policy corroboration fix provides this backfill ZERO
--- protection, so it needs its own, independent copy of the same gate
--- (resolve_wine_variants_bulk, 0099, carries the RPC-side copy). Without
--- it, wines.lwin_id — itself settable by any tenant member via a plain
--- UPDATE on wines with no catalog validation, since the wines
--- update policy is is_member(restaurant_id) with no column restriction —
--- becomes exactly the same forgery/mis-binding vector D9 closes on the
--- resolve_wine_variants_bulk path, except triggered by a one-time
--- migration over whatever wines rows already exist at deploy time rather
--- than a live RPC call. Same thresholds as 0097/0099, reused rather than
--- reinvented: 0.3 producer / 0.21 name similarity against the real
--- public.lwin_catalog row (lwin_catalog.lwin_id is that table's primary
--- key; there is no separate "lwin7" column there). A row that fails
--- corroboration is downgraded (lwin7 stripped) to identity_status =
--- 'unverified' below, not dropped from the backfill entirely — it still
--- gets a real identity via its own text, matching this file's own
--- already-documented risk tolerance ("creates one extra canonical/
--- variant row a later exact match could have reused," never "merges two
--- different wines").
+-- — 0097's insert-policy corroboration cannot reach it, and (before
+-- round 5) neither could 0097's CHECK CONSTRAINT, since it didn't exist
+-- yet — so this backfill needs its own copy of the corroboration LOGIC
+-- regardless (0097's canonical_wines_lwin7_requires_verified CHECK
+-- CONSTRAINT now backstops the OUTCOME universally, but this UPDATE is
+-- what makes the CREATE decision correct in the first place, not merely
+-- constraint-safe). wines.lwin_id is itself settable by any tenant
+-- member via a plain UPDATE on wines with no catalog validation (the
+-- wines update policy is is_member(restaurant_id) with no column
+-- restriction), so this is the same forgery/mis-binding vector as the
+-- resolve_wine_variants_bulk path, triggered by a one-time migration over
+-- whatever wines rows exist at deploy time rather than a live RPC call.
+--
+-- Round 4 gated this with pg_trgm similarity() at match_lwin's own
+-- ranking thresholds (0.3/0.21) — the wrong tool for a permanent,
+-- unsupervised decision: similarity('Chateau Pichon Longueville Baron',
+-- 'Chateau Pichon Longueville Comtesse de Lalande') = 0.55, comfortably
+-- above 0.3, for two REAL, DISTINCT estates. Round 5 replaces it with
+-- identity_normalize_text() (see 0097's definition and the corresponding
+-- fix in 0099 for the full Baron/Lalande write-up): EXACT equality on
+-- producer, TOKEN SUBSET on cuvee (display_name commonly combines
+-- producer + wine name, so exact-string cuvee matching would reject
+-- every legitimate case) — both deterministic, neither a score, so this
+-- separates genuinely different producers while still tolerating
+-- accent/case/spacing/punctuation-only differences. A
+-- row that fails corroboration is downgraded (lwin7 stripped) to
+-- identity_status='unverified' below, not dropped from the backfill
+-- entirely — it still gets a real identity via its own text, matching
+-- this file's own already-documented risk tolerance ("creates one extra
+-- canonical/variant row a later exact match could have reused," never
+-- "merges two different wines").
 update _identity_backfill_norm n
 set lwin7 = null
 where n.wine_id not in (select wine_id from _identity_backfill_resolved)
@@ -118,8 +133,8 @@ where n.wine_id not in (select wine_id from _identity_backfill_resolved)
   and not exists (
     select 1 from public.lwin_catalog lc
     where lc.lwin_id = n.lwin7
-      and similarity(lower(n.producer), lower(lc.producer)) >= 0.3
-      and similarity(lower(n.name), lower(lc.display_name)) >= 0.21
+      and public.identity_normalize_text(n.producer) = public.identity_normalize_text(lc.producer)
+      and string_to_array(public.identity_normalize_text(n.name), ' ') <@ string_to_array(public.identity_normalize_text(lc.display_name), ' ')
   );
 
 with new_canon as (

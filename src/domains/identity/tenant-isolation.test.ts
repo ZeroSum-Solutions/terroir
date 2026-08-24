@@ -95,7 +95,7 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
     const { data: canonRows } = await admin
       .from("canonical_wines")
       .select("id")
-      .or("producer_norm.like.p2 rwvb%,producer_norm.like.p2 concurrent%,producer_norm.like.p2 d9%");
+      .or("producer_norm.like.p2 rwvb%,producer_norm.like.p2 concurrent%,producer_norm.like.p2 d9%,producer_norm.like.chateau pichon longueville%");
     await admin.from("restaurants").delete().in("id", [restaurantA, restaurantB]);
     if (canonRows && canonRows.length > 0) {
       await admin.from("canonical_wines").delete().in("id", (canonRows as { id: string }[]).map((r) => r.id));
@@ -256,5 +256,118 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
       identity_status: "lwin_verified",
       lwin7: d9LwinId,
     });
+  });
+
+  // P2 round-5 (D9-residual — scratchpad db-audit/verify/P2-critic-r4.md):
+  // the DECISIVE pair. Round 4's fix used pg_trgm similarity() at
+  // match_lwin's own ranking thresholds (0.3 producer / 0.21 name) — the
+  // wrong tool for a permanent, cross-tenant, unrepairable decision.
+  // Pichon Baron vs Pichon Longueville Comtesse de Lalande — two REAL,
+  // DISTINCT Bordeaux estates that share a long common name prefix —
+  // scored 0.55/0.55 under that check, comfortably above both
+  // thresholds. NO ATTACKER IS INVOLVED in this test: both tenants
+  // submit their OWN correct, legitimately-typed producer/cuvee text.
+  // Tenant A happens to submit Lalande's real wine with (by a plausible
+  // C24-style LWIN-matcher mix-up) Baron's real lwin7; tenant B later
+  // submits Baron's real wine with the same real lwin7. Under the round-4
+  // fuzzy gate this hijacked exactly like the attacker scenario above,
+  // proving the vulnerability needed no adversary at all — just two real
+  // wines whose names overlap.
+  it("D9-residual fix: Pichon Baron and Pichon Longueville Comtesse de Lalande never cross-bind, even with no attacker involved", async () => {
+    const baronLwinId = String(2000000 + (Date.now() % 7999999))
+      .padStart(7, "0")
+      .slice(0, 7);
+    const { error: catalogErr } = await admin.from("lwin_catalog").insert({
+      lwin_id: baronLwinId,
+      display_name: "Chateau Pichon Longueville Baron Grand Vin",
+      producer: "Chateau Pichon Longueville Baron",
+    } as never);
+    expect(catalogErr).toBeNull();
+
+    // Tenant A: Lalande's OWN correct text, with Baron's real lwin7.
+    const { data: lalandeData, error: lalandeError } = await userAClient.rpc("resolve_wine_variants_bulk", {
+      p_restaurant_id: restaurantA,
+      p_variants: [
+        {
+          idx: 0,
+          producer_raw: "Chateau Pichon Longueville Comtesse de Lalande",
+          cuvee_raw: "Grand Vin",
+          producer_norm: "chateau pichon longueville comtesse de lalande",
+          cuvee_norm: "grand vin",
+          vintage: 2018,
+          size_ml: 750,
+          lwin7: baronLwinId,
+        },
+      ],
+    } as never);
+    expect(lalandeError).toBeNull();
+    const lalandeCanonicalId = (lalandeData as { canonical_wine_id: string }[])[0].canonical_wine_id;
+
+    // Must be downgraded — genuinely different producer text than the
+    // catalog row for this lwin7, not "similar enough."
+    const { data: lalandeCanonRow } = await admin
+      .from("canonical_wines")
+      .select("identity_status, lwin7")
+      .eq("id", lalandeCanonicalId)
+      .single();
+    expect(lalandeCanonRow).toMatchObject({ identity_status: "unverified", lwin7: null });
+
+    // Tenant B: Baron's OWN correct text, the SAME real lwin7.
+    const { data: baronData, error: baronError } = await userBClient.rpc("resolve_wine_variants_bulk", {
+      p_restaurant_id: restaurantB,
+      p_variants: [
+        {
+          idx: 0,
+          producer_raw: "Chateau Pichon Longueville Baron",
+          cuvee_raw: "Grand Vin",
+          producer_norm: "chateau pichon longueville baron",
+          cuvee_norm: "grand vin",
+          vintage: 2018,
+          size_ml: 750,
+          lwin7: baronLwinId,
+        },
+      ],
+    } as never);
+    expect(baronError).toBeNull();
+    const baronCanonicalId = (baronData as { canonical_wine_id: string }[])[0].canonical_wine_id;
+
+    // THE DECISIVE CHECK: Baron and Lalande must never share a canonical
+    // identity.
+    expect(baronCanonicalId).not.toBe(lalandeCanonicalId);
+
+    const { data: baronCanonRow } = await admin
+      .from("canonical_wines")
+      .select("producer, identity_status, lwin7")
+      .eq("id", baronCanonicalId)
+      .single();
+    expect(baronCanonRow).toMatchObject({
+      producer: "Chateau Pichon Longueville Baron",
+      identity_status: "lwin_verified",
+      lwin7: baronLwinId,
+    });
+  });
+
+  // P2 round-5 (D9-residual): the unverified-squat path closed
+  // universally. Round 4's corroboration check only ever gated the
+  // 'lwin_verified' insert branch — an 'unverified' row could carry a
+  // real lwin7 with NO corroboration check running at all, and
+  // resolve_wine_variants_bulk's LWIN-exact match had no identity_status
+  // filter, so that squatted lwin7 would still capture every later
+  // legitimate import carrying the same number. The fix
+  // (canonical_wines_lwin7_requires_verified) is a table-level CHECK
+  // CONSTRAINT, not an RLS policy clause — this test proves it is
+  // universal by attempting the squat as service_role, which bypasses
+  // RLS entirely (the same role 0101's backfill runs under).
+  it("D9-residual fix: an unverified row can never carry a claimed lwin7, even via service_role (RLS bypass)", async () => {
+    const { error } = await admin.from("canonical_wines").insert({
+      producer: "P2 D9r5 Squatter",
+      cuvee: "Junk Label",
+      producer_norm: "p2 d9r5 squatter",
+      cuvee_norm: "junk label",
+      identity_status: "unverified",
+      lwin7: d9LwinId,
+    } as never);
+    expect(error).not.toBeNull();
+    expect(error?.message ?? "").toMatch(/canonical_wines_lwin7_requires_verified|check constraint/i);
   });
 });

@@ -30,17 +30,22 @@ select user_id, restaurant_id, 'owner' from _t9099_fixture;
 -- fails with permission denied.
 grant select on _t9099_fixture to authenticated;
 
--- D9 fixture (round 4): a real lwin_catalog row for the LWIN-corroboration
--- test below (step 5). Producer/display_name are close enough to BOTH of
--- that test's submissions' text (live-verified similarity: producer
--- 0.54/0.45, name 0.42/0.39, both comfortably above the 0.3/0.21 gate)
--- that corroboration passes for either — which is what lets that test
--- still prove its actual point (LWIN wins over differing TEXT); the text
--- just can't be TOTALLY unrelated to a real wine anymore. Inserted as
--- postgres (table owner), before the role switch below: lwin_catalog has
--- no insert policy for authenticated, only select.
+-- D9/D9-residual fixture (round 4, corrected round 5): a real
+-- lwin_catalog row for the LWIN-corroboration test below (step 5).
+-- Round 4's fixture used fuzzy-similarity-tolerant text ("Domaine Test
+-- Misspelled") that does NOT survive round 5's deterministic exact-match
+-- fix (an extra whole word is not a formatting difference — see
+-- 0097/0099's Pichon Baron/Lalande write-up for why that distinction
+-- matters). This fixture instead uses a GENUINE data-entry-error class
+-- (accent presence, case, spacing) that the deterministic check is
+-- specifically designed to still tolerate — live-verified: "Chateau Test
+-- Domaine" and "CHATEAU  TEST DOMAINE" both normalize identically to
+-- "Château Test Domaine", and "Cuvee Un"/"cuvee un" are both a token
+-- subset of "Château Test Domaine Cuvée Un". Inserted as postgres (table
+-- owner), before the role switch below: lwin_catalog has no insert
+-- policy for authenticated, only select.
 insert into public.lwin_catalog (lwin_id, display_name, producer) values
-  ('1234567', 'Domaine Test Cuvee One', 'Domaine Test');
+  ('1234567', 'Château Test Domaine Cuvée Un', 'Château Test Domaine');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', (select user_id::text from _t9099_fixture), true);
@@ -184,14 +189,16 @@ select results_eq(
 -- Captured into a temp table (rather than a JOIN nested inside is()'s
 -- scalar-subquery argument) so a mismatch is easy to diagnose.
 --
--- D9 fix (round 4 — scratchpad db-audit/verify/P2-critic-r3.md): lwin7
--- now must corroborate against a real public.lwin_catalog row (see
--- 0097's insert policy) before resolve_wine_variants_bulk will let it
--- create a lwin_verified canonical row — a bare 7-digit string with no
--- catalog backing is downgraded to unverified instead. The catalog
--- fixture this test's lwin7 needs is seeded up top (as postgres, before
--- the role switch to authenticated — lwin_catalog has no insert policy
--- for authenticated, only select).
+-- D9/D9-residual fix (round 4, corrected round 5 — scratchpad
+-- db-audit/verify/P2-critic-r3.md and -r4.md): lwin7 must corroborate
+-- against a real public.lwin_catalog row (see 0097's insert policy)
+-- before resolve_wine_variants_bulk will let it create a lwin_verified
+-- canonical row — a bare 7-digit string with no catalog backing is
+-- downgraded to unverified instead, and (round 5) corroboration is now
+-- DETERMINISTIC (exact-normalized-producer + token-subset-cuvee), not a
+-- similarity score. The catalog fixture this test's lwin7 needs is
+-- seeded up top (as postgres, before the role switch to authenticated —
+-- lwin_catalog has no insert policy for authenticated, only select).
 create temporary table _t9099_lwin (call int, canonical_wine_id uuid) on commit drop;
 
 insert into _t9099_lwin (call, canonical_wine_id)
@@ -199,8 +206,8 @@ select 1, r.canonical_wine_id
 from public.resolve_wine_variants_bulk(
   (select restaurant_id from _t9099_fixture),
   jsonb_build_array(jsonb_build_object(
-    'idx', 0, 'producer_raw', 'Domaine Test Misspelled', 'cuvee_raw', 'Cuvee One Typo',
-    'producer_norm', 'domaine test misspelled', 'cuvee_norm', 'cuvee one typo',
+    'idx', 0, 'producer_raw', 'Chateau Test Domaine', 'cuvee_raw', 'Cuvee Un',
+    'producer_norm', 'chateau test domaine', 'cuvee_norm', 'cuvee un',
     'vintage', 2018, 'size_ml', 750, 'lwin7', '1234567'
   ))
 ) r;
@@ -210,28 +217,28 @@ select 2, r.canonical_wine_id
 from public.resolve_wine_variants_bulk(
   (select restaurant_id from _t9099_fixture),
   jsonb_build_array(jsonb_build_object(
-    'idx', 0, 'producer_raw', 'Domaine Test Misspelled Again', 'cuvee_raw', 'Cuvee One Typo Again',
-    'producer_norm', 'domaine test misspelled again', 'cuvee_norm', 'cuvee one typo again',
+    'idx', 0, 'producer_raw', 'CHATEAU  TEST DOMAINE', 'cuvee_raw', 'cuvee un',
+    'producer_norm', 'chateau  test domaine', 'cuvee_norm', 'cuvee un',
     'vintage', 2018, 'size_ml', 750, 'lwin7', '1234567'
   ))
 ) r;
 
 select is(
-  (select producer_norm from public.canonical_wines where id = (select canonical_wine_id from _t9099_lwin where call = 1)),
-  'domaine test misspelled',
-  'sanity: a brand-new lwin7 anchors a new canonical row under the input''s own text'
+  (select identity_status from public.canonical_wines where id = (select canonical_wine_id from _t9099_lwin where call = 1)),
+  'lwin_verified',
+  'sanity: a brand-new lwin7 that deterministically corroborates anchors a new lwin_verified canonical row'
 );
 
 select is(
   (select canonical_wine_id from _t9099_lwin where call = 2),
   (select canonical_wine_id from _t9099_lwin where call = 1),
-  'a second row with the SAME lwin7 but different text reuses the existing canonical row instead of creating a second one'
+  'a second row with the SAME lwin7 but different CASE/SPACING (a genuine data-entry-error class, not a different producer) reuses the existing canonical row instead of creating a second one'
 );
 
 select isnt_empty(
   $$select 1 from public.wine_aliases
      where canonical_wine_id = (select id from public.canonical_wines where lwin7 = '1234567')
-       and raw_producer = 'Domaine Test Misspelled Again'$$,
+       and raw_producer = 'CHATEAU  TEST DOMAINE'$$,
   'the differing-text row is recorded as an alias against the shared canonical wine, not a duplicate'
 );
 

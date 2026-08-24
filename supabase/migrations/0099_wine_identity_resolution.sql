@@ -168,28 +168,101 @@ begin
   truncate _rwvb_input;
 
   -- 1. Unnest the batch.
+  --
+  -- P2 ROUND-5 FIX (D9-residual #2 — scratchpad db-audit/verify/
+  -- P2-critic-r4.md, the round after the Baron/Lalande fix): this no
+  -- longer reads producer_norm/cuvee_norm from the caller at all.
+  -- Before this fix, the identity KEY (producer_norm, cuvee_norm — the
+  -- columns canonical_wines_identity_idx is UNIQUE on, and what phase 1's
+  -- text-match below joins on) came straight off the caller's JSON,
+  -- completely UNRELATED to the LWIN-corroboration gate at step 2.5
+  -- below, which validates producer_raw/cuvee_raw instead. That let a
+  -- caller send REAL, LEGITIMATELY-CORROBORATING raws for a wine they
+  -- actually hold (passing the gate) while sending an ARBITRARY,
+  -- attacker-chosen producer_norm/cuvee_norm matching a VICTIM's
+  -- existing canonical_wines row — binding straight onto it via phase
+  -- 1's text-exact match, with no LWIN or gate involvement at all. Live-
+  -- reproduced before this fix shipped: an attacker's wine_variant bound
+  -- to a victim's pre-existing canonical row via canonical_match_method
+  -- = 'exact', using the victim's real (forged-in) producer_norm/
+  -- cuvee_norm while submitting the attacker's OWN real, corroborating
+  -- producer_raw/cuvee_raw/lwin7. Same severity as the Baron/Lalande
+  -- fix above: the unique index makes it permanent, and canonical_wines
+  -- has no UPDATE/DELETE policy for authenticated.
+  --
+  -- Fixed: producer_norm/cuvee_norm are now DERIVED here, server-side,
+  -- from producer_raw/cuvee_raw via identity_normalize_text() (0097) —
+  -- never trusted as caller input. jsonb_to_recordset's own type list
+  -- below no longer even names producer_norm/cuvee_norm, so a caller
+  -- that still sends those keys has them silently ignored rather than
+  -- silently trusted. This is a CROSS-PIECE CONTRACT CHANGE: the
+  -- identity key is no longer necessarily byte-identical to
+  -- src/domains/identity/normalize.ts's frozen TS-side
+  -- normalizeProducerOrCuvee output — it is now this function's own
+  -- SQL-side identity_normalize_text() approximation (see that
+  -- function's comment, 0097, for the known unaccent-vs-NFKD divergence
+  -- risk, already accepted elsewhere for 0101's backfill). The risk
+  -- direction stays safe (a divergence creates one extra canonical row a
+  -- later exact match could have reused, never merges two different
+  -- wines) — re-verified against the full 110-check identity matrix
+  -- after this change specifically because the computation moved from
+  -- TS-frozen to SQL-side for every row this function creates.
   insert into _rwvb_input (
     idx, producer_raw, cuvee_raw, producer_norm, cuvee_norm,
     vintage, size_ml, lwin7, lwin11, lwin16, gtin
   )
-  select x.idx, x.producer_raw, x.cuvee_raw, x.producer_norm, x.cuvee_norm,
+  select x.idx, x.producer_raw, x.cuvee_raw,
+         public.identity_normalize_text(x.producer_raw),
+         public.identity_normalize_text(x.cuvee_raw),
          x.vintage, x.size_ml, x.lwin7, x.lwin11, x.lwin16, x.gtin
   from jsonb_to_recordset(p_variants) as x(
-    idx int, producer_raw text, cuvee_raw text, producer_norm text, cuvee_norm text,
+    idx int, producer_raw text, cuvee_raw text,
     vintage int, size_ml int, lwin7 text, lwin11 text, lwin16 text, gtin text
   );
+
+  -- Rows whose producer/cuvee collapse to nothing under normalization
+  -- (e.g. punctuation-only text) can't be identity-resolved — same
+  -- precedent as 0101's backfill, which leaves such rows for manual
+  -- review rather than inventing a placeholder identity. P3's caller
+  -- must treat a missing idx in the return set as "not resolved," not
+  -- assume every submitted idx comes back.
+  delete from _rwvb_input
+  where producer_norm is null or cuvee_norm is null;
 
   -- 2. Canonical, phase 1 (exact). Two separate UPDATEs, not one OR'd
   -- join, so LWIN7 equality deterministically wins even where producer/
   -- cuvée text differs (a data-entry-error row still lands on the LWIN
   -- identity, never forks a second canonical row for it — it becomes an
   -- alias below, not a duplicate).
+  --
+  -- P2 ROUND-5 FIX (D9-residual — scratchpad db-audit/verify/
+  -- P2-critic-r4.md): this match now additionally requires
+  -- cw.identity_status = 'lwin_verified'. Before this fix, a row could
+  -- squat a real lwin7 as identity_status='unverified' — the round-4
+  -- corroboration gate below only ran for the 'lwin_verified' branch of
+  -- canonical_wines' own insert policy, and this match had NO
+  -- identity_status filter, so it matched ANY row carrying that lwin7,
+  -- verified or not. Combined with canonical_wines_lwin7_idx being
+  -- UNIQUE, that meant: squat lwin7 X as unverified garbage (the
+  -- corroboration check was never consulted, because it only gated the
+  -- lwin_verified path) -> nobody else can ever hold X -> every later
+  -- import carrying X, INCLUDING a fully legitimate, fully corroborated
+  -- one, matched the squatter right here, before any gate ran. No
+  -- attacker cleverness or fuzzy-threshold weakness was even needed for
+  -- that path. Fixed at two levels: 0097's new
+  -- canonical_wines_lwin7_requires_verified CHECK CONSTRAINT now makes
+  -- "unverified row with a non-null lwin7" impossible to insert AT ALL,
+  -- from any path, including this function and 0101's backfill; this
+  -- explicit filter is defense-in-depth on top of that invariant, so the
+  -- match's OWN correctness never silently depends on a constraint
+  -- defined elsewhere.
   update _rwvb_input i
   set canonical_wine_id = cw.id,
       canonical_match_method = 'lwin_exact'
   from public.canonical_wines cw
   where i.lwin7 is not null
-    and cw.lwin7 = i.lwin7;
+    and cw.lwin7 = i.lwin7
+    and cw.identity_status = 'lwin_verified';
 
   update _rwvb_input i
   set canonical_wine_id = cw.id,
@@ -199,47 +272,64 @@ begin
     and cw.producer_norm = i.producer_norm
     and cw.cuvee_norm = i.cuvee_norm;
 
-  -- 2.5. LWIN corroboration gate (D9 fix — scratchpad db-audit/verify/
-  -- P2-critic-r3.md): a row that reaches here has NOT matched any
-  -- existing canonical_wines row (neither by LWIN equality nor by exact
-  -- text) and is about to CREATE one in phase 2 below, claiming
-  -- identity_status='lwin_verified' whenever its lwin7 is set. Without
-  -- this gate, this header comment's own claim that "lwin7 must already
-  -- have cleared the caller's confidence gate (P3's contract)" is a
-  -- client-side promise protecting a server-side invariant — i.e. not a
-  -- gate at all, since the caller supplies lwin7 directly in the jsonb
-  -- payload. A tenant could submit producer='Garbage', cuvee='X',
-  -- lwin7=<a real wine's LWIN>; canonical_wines_lwin7_idx is UNIQUE, so
-  -- that forged row would permanently own the real LWIN, and every OTHER
-  -- tenant who later imports the real wine correctly would hit this same
-  -- exact-match phase above and — because LWIN-exact deterministically
-  -- wins over producer/cuvée text, by design, two paragraphs up — bind
-  -- their inventory to the attacker-controlled row. canonical_wines has
-  -- no UPDATE/DELETE policy, so the victim cannot repair this themselves.
+  -- 2.5. LWIN corroboration gate. A row that reaches here has NOT matched
+  -- any existing canonical_wines row (neither by verified LWIN equality
+  -- nor by exact text) and is about to CREATE one in phase 2 below,
+  -- claiming identity_status='lwin_verified' whenever its lwin7 is set.
+  -- lwin7 is caller-supplied, untrusted input — this is the only thing
+  -- standing between an arbitrary claim and a permanent, cross-tenant,
+  -- unrepairable global identity (canonical_wines has no UPDATE/DELETE
+  -- policy; canonical_wines_lwin7_idx is UNIQUE).
   --
-  -- The gate: lwin7 may only be trusted if it names a REAL lwin_catalog
-  -- row (lwin_catalog.lwin_id is that table's primary key — the catalog
-  -- has no separate "lwin7" column, see 0003_wine_intelligence.sql) whose
-  -- producer/display_name actually resemble the SUBMITTED producer_raw/
-  -- cuvee_raw. Reuses match_lwin's own already-tuned similarity
-  -- thresholds (0007_lwin_matching.sql: 0.3 for producer, 0.3 * 0.7 =
-  -- 0.21 for name-vs-display_name) rather than inventing new numbers —
-  -- the same comparison this codebase already trusts elsewhere. A row
-  -- whose lwin7 fails corroboration is DOWNGRADED (lwin7 stripped, so
-  -- phase 2 below naturally falls to identity_status='unverified'), not
-  -- rejected: a single bad LWIN in a 5,000-row import chunk must not
+  -- P2 ROUND-5 FIX (D9-residual — scratchpad db-audit/verify/
+  -- P2-critic-r4.md): round 4 gated this with pg_trgm similarity() at
+  -- match_lwin's own ranking thresholds (0.3 producer / 0.21 name) —
+  -- WRONG TOOL. match_lwin's threshold is deliberately tolerant of false
+  -- positives because a human reviews its suggestions before anything is
+  -- written; this gate makes a PERMANENT, UNSUPERVISED, cross-tenant
+  -- decision. Live-verified before this fix shipped:
+  -- similarity('Chateau Pichon Longueville Baron', 'Chateau Pichon
+  -- Longueville Comtesse de Lalande') = 0.55 — two REAL, DISTINCT
+  -- Bordeaux estates, both comfortably above 0.3, because they share a
+  -- long common prefix. The round-5 critic reproduced the full
+  -- cross-tenant hijack through this exact pair using nothing but the
+  -- system's own real data: tenant A's fully legitimate, correctly-typed
+  -- Lalande submission plus Baron's real lwin7 (a plausible C24-style
+  -- LWIN-matcher confusion, not an adversarial construction) passed this
+  -- gate; tenant B's later, equally legitimate Baron submission with the
+  -- same lwin7 then bound to tenant A's Lalande-labelled row via phase 1
+  -- above, by design. No fuzzy threshold reliably separates two wines
+  -- whose similarity comes from shared vocabulary rather than shared
+  -- identity.
+  --
+  -- Fixed: identity_normalize_text() (0097) applied to both sides.
+  -- PRODUCER is compared for EXACT equality — Baron and Lalande normalize
+  -- to different token sets and can never satisfy equality regardless of
+  -- shared words, while a genuine data-entry-error (accents/case/
+  -- spacing/punctuation) still normalizes identically on both sides. CUVEE
+  -- is compared by TOKEN SUBSET (submitted cuvee's tokens all present in
+  -- display_name's tokens), not exact equality, since lwin_catalog.
+  -- display_name commonly combines producer + wine name — see 0097's
+  -- policy comment for the full reasoning. Both are deterministic
+  -- set/string operations, never a score — preserving the "LWIN wins over
+  -- textual FORMATTING differences" behavior described above for its
+  -- actual intended case.
+  -- A row whose lwin7 fails corroboration is DOWNGRADED (lwin7 stripped,
+  -- so phase 2 below naturally falls to identity_status='unverified'),
+  -- not rejected: a single bad LWIN in a 5,000-row import chunk must not
   -- abort the whole chunk, and this row still gets a real (unverified)
-  -- canonical identity via its own text — the safe, always-available
-  -- fallback. Set-based, no per-row loop, no exception raised — the
-  -- direct C10-consistent answer, same discipline as every other step in
-  -- this function. The exact-match phase above is unaffected and remains
-  -- safe by construction: it only ever matches EXISTING canonical_wines
-  -- rows, and every existing row was itself either created through this
-  -- same corroboration gate or through 0101's backfill (which carries its
-  -- own, independent copy of this same gate — see that migration's
-  -- header — since a migration runs as the table owner and bypasses RLS
-  -- entirely, so canonical_wines' own INSERT policy corroboration cannot
-  -- protect it).
+  -- canonical identity via its own text. Set-based, no per-row loop, no
+  -- exception raised — the direct C10-consistent answer, same discipline
+  -- as every other step in this function. The phase-1 exact-match above
+  -- is unaffected and remains safe by construction: it only ever matches
+  -- EXISTING, ALREADY-VERIFIED canonical_wines rows (identity_status
+  -- filter, this fix), and every verified row was itself either created
+  -- through this same deterministic gate or through 0101's backfill
+  -- (which reuses identity_normalize_text() directly rather than
+  -- duplicating the expression — see that migration's header for why it
+  -- still needs its own copy of the CALL: it runs as the table owner and
+  -- bypasses RLS entirely, so canonical_wines' own INSERT policy
+  -- corroboration cannot protect it; only the CHECK CONSTRAINT does).
   update _rwvb_input i
   set lwin7 = null
   where i.canonical_wine_id is null
@@ -247,8 +337,8 @@ begin
     and not exists (
       select 1 from public.lwin_catalog lc
       where lc.lwin_id = i.lwin7
-        and similarity(lower(i.producer_raw), lower(lc.producer)) >= 0.3
-        and similarity(lower(i.cuvee_raw), lower(lc.display_name)) >= 0.21
+        and public.identity_normalize_text(i.producer_raw) = public.identity_normalize_text(lc.producer)
+        and string_to_array(public.identity_normalize_text(i.cuvee_raw), ' ') <@ string_to_array(public.identity_normalize_text(lc.display_name), ' ')
     );
 
   -- 3. Canonical, phase 2 (create). DISTINCT ON collapses two rows in the
