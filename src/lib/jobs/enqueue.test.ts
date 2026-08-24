@@ -1,28 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 import { enqueueInvoiceExtractJob } from "@/lib/jobs/enqueue";
 
+/**
+ * C20 (db audit 2026-08-23): enqueueInvoiceExtractJob is now a thin wrapper
+ * around the `enqueue_invoice_extract_job` SECURITY DEFINER RPC — the
+ * membership check, subject-ownership check, idempotency-key pinning, and
+ * dead-job revival all moved server-side (see
+ * supabase/migrations/0083_background_jobs_enqueue_rpc.sql). These tests
+ * only cover the TS wrapper's own job: calling the RPC with the right
+ * params and mapping its result/errors.
+ */
 describe("enqueueInvoiceExtractJob", () => {
-  it("inserts a queued job and returns created:true on the first call", async () => {
-    const insertedRow = { id: "job-1" };
-    const supabase = {
-      from: vi.fn(() => ({
-        insert: vi.fn((row: Record<string, unknown>) => {
-          expect(row).toMatchObject({
-            restaurant_id: "restaurant-a",
-            job_type: "invoice_extract",
-            status: "queued",
-            subject_table: "invoice_scans",
-            subject_id: "scan-1",
-            idempotency_key: "scan-1",
-          });
-          return {
-            select: vi.fn(() => ({
-              single: vi.fn(async () => ({ data: insertedRow, error: null })),
-            })),
-          };
-        }),
-      })),
-    };
+  it("calls enqueue_invoice_extract_job with the right params and maps a new job", async () => {
+    const single = vi.fn(async () => ({
+      data: { job_id: "job-1", created: true },
+      error: null,
+    }));
+    const rpc = vi.fn(() => ({ single }));
+    const supabase = { rpc };
 
     const result = await enqueueInvoiceExtractJob({
       supabase: supabase as never,
@@ -30,28 +25,19 @@ describe("enqueueInvoiceExtractJob", () => {
       scanId: "scan-1",
     });
 
+    expect(rpc).toHaveBeenCalledWith("enqueue_invoice_extract_job", {
+      p_restaurant_id: "restaurant-a",
+      p_scan_id: "scan-1",
+    });
     expect(result).toEqual({ jobId: "job-1", created: true });
   });
 
-  it("returns the existing job (created:false) when the idempotency key already exists", async () => {
-    const uniqueViolation = { code: "23505", message: "duplicate key" };
-    const existingRow = { id: "job-existing" };
-    const supabase = {
-      from: vi.fn(() => ({
-        insert: vi.fn(() => ({
-          select: vi.fn(() => ({
-            single: vi.fn(async () => ({ data: null, error: uniqueViolation })),
-          })),
-        })),
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              single: vi.fn(async () => ({ data: existingRow, error: null })),
-            })),
-          })),
-        })),
-      })),
-    };
+  it("maps created:false when the RPC returns an existing or revived job", async () => {
+    const single = vi.fn(async () => ({
+      data: { job_id: "job-existing", created: false },
+      error: null,
+    }));
+    const supabase = { rpc: vi.fn(() => ({ single })) };
 
     const result = await enqueueInvoiceExtractJob({
       supabase: supabase as never,
@@ -62,17 +48,10 @@ describe("enqueueInvoiceExtractJob", () => {
     expect(result).toEqual({ jobId: "job-existing", created: false });
   });
 
-  it("rethrows a non-conflict insert error", async () => {
-    const dbError = { code: "XX000", message: "boom" };
-    const supabase = {
-      from: vi.fn(() => ({
-        insert: vi.fn(() => ({
-          select: vi.fn(() => ({
-            single: vi.fn(async () => ({ data: null, error: dbError })),
-          })),
-        })),
-      })),
-    };
+  it("rethrows an RPC error (e.g. forbidden or subject-not-found)", async () => {
+    const rpcError = { code: "42501", message: "forbidden" };
+    const single = vi.fn(async () => ({ data: null, error: rpcError }));
+    const supabase = { rpc: vi.fn(() => ({ single })) };
 
     await expect(
       enqueueInvoiceExtractJob({
@@ -80,98 +59,6 @@ describe("enqueueInvoiceExtractJob", () => {
         restaurantId: "restaurant-a",
         scanId: "scan-1",
       }),
-    ).rejects.toBe(dbError);
-  });
-
-  /** Builds a supabase stub for the unique-violation + fetch-existing path. */
-  function supabaseForConflict(opts: {
-    existingStatus: string;
-    revive?: { data: Array<{ id: string }> | null; error: unknown };
-  }) {
-    const uniqueViolation = { code: "23505", message: "duplicate key" };
-    const existingRow = { id: "job-existing", status: opts.existingStatus };
-    const updateSpy = vi.fn((patch: Record<string, unknown>) => {
-      capturedPatch = patch;
-      return {
-        eq: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            select: vi.fn(async () => opts.revive ?? { data: [existingRow], error: null }),
-          })),
-        })),
-      };
-    });
-    let capturedPatch: Record<string, unknown> | undefined;
-    const supabase = {
-      from: vi.fn(() => ({
-        insert: vi.fn(() => ({
-          select: vi.fn(() => ({
-            single: vi.fn(async () => ({ data: null, error: uniqueViolation })),
-          })),
-        })),
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              single: vi.fn(async () => ({ data: existingRow, error: null })),
-            })),
-          })),
-        })),
-        update: updateSpy,
-      })),
-    };
-    return { supabase, updateSpy, getPatch: () => capturedPatch };
-  }
-
-  it("revives a dead job back to queued (fields reset) instead of returning it dead", async () => {
-    const { supabase, updateSpy, getPatch } = supabaseForConflict({ existingStatus: "dead" });
-
-    const result = await enqueueInvoiceExtractJob({
-      supabase: supabase as never,
-      restaurantId: "restaurant-a",
-      scanId: "scan-1",
-    });
-
-    expect(result).toEqual({ jobId: "job-existing", created: false });
-    expect(updateSpy).toHaveBeenCalledOnce();
-    expect(getPatch()).toMatchObject({
-      status: "queued",
-      attempt_count: 0,
-      error_code: null,
-      error_message: null,
-      claimed_by: null,
-      claimed_at: null,
-    });
-    expect(typeof getPatch()!.run_after).toBe("string");
-  });
-
-  it.each(["queued", "processing", "succeeded"])(
-    "does not attempt to revive a %s job — just returns it",
-    async (status) => {
-      const { supabase, updateSpy } = supabaseForConflict({ existingStatus: status });
-
-      const result = await enqueueInvoiceExtractJob({
-        supabase: supabase as never,
-        restaurantId: "restaurant-a",
-        scanId: "scan-1",
-      });
-
-      expect(result).toEqual({ jobId: "job-existing", created: false });
-      expect(updateSpy).not.toHaveBeenCalled();
-    },
-  );
-
-  it("returns the existing id, created:false when a dead-row revival races and matches 0 rows", async () => {
-    const { supabase, updateSpy } = supabaseForConflict({
-      existingStatus: "dead",
-      revive: { data: [], error: null },
-    });
-
-    const result = await enqueueInvoiceExtractJob({
-      supabase: supabase as never,
-      restaurantId: "restaurant-a",
-      scanId: "scan-1",
-    });
-
-    expect(result).toEqual({ jobId: "job-existing", created: false });
-    expect(updateSpy).toHaveBeenCalledOnce();
+    ).rejects.toBe(rpcError);
   });
 });

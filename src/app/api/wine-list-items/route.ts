@@ -59,6 +59,11 @@ export async function POST(request: NextRequest) {
     .insert({
       section_id: body.section_id,
       wine_id: body.wine_id,
+      // C05 (db audit 2026-08-23): restaurant_id is now required, FK-
+      // enforced against the wine's own restaurant_id. restaurantId is
+      // already the caller's own tenant (requireRole) and already
+      // verified to own body.section_id (isOwnWineListSection above).
+      restaurant_id: restaurantId,
       position: nextPosition,
       glass_price: body.glass_price ?? null,
       bottle_price: body.bottle_price ?? null,
