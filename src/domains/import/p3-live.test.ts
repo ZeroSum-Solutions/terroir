@@ -51,7 +51,11 @@ function csvOf(rows: Array<{ producer: string; name: string; vintage?: number; q
   return Buffer.from([header, ...lines].join("\n") + "\n");
 }
 
-describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", () => {
+// 60s per-test budget: several tests here push 1,500-row batches through
+// PostgREST and drain them via repeated RPC calls — comfortably under a
+// second alone, but the default 5s flakes when the whole suite runs the
+// other live-DB files against the same local stack in parallel.
+describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", { timeout: 60_000 }, () => {
   let admin: SupabaseClient<Database>;
   let restaurantId: string;
   let userClient: SupabaseClient<Database>;
@@ -84,7 +88,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", (
     if (memError) throw memError;
 
     userClient = await signedInClient(user.user.email!, password);
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await admin.from("restaurants").delete().eq("id", restaurantId);

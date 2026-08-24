@@ -38,14 +38,16 @@ select ok(
 --   - import_batches / import_batch_rows (0076): authenticated has no
 --     direct DELETE — rows are removed only via revert_import_batch, a
 --     RLS-scoped RPC, never a raw client-side delete.
--- The next assertion pins exactly what these three DO still have, so a
+--   - import_sessions (0102): same pattern — no authenticated DELETE; a
+--     session is never removed, only reverted (revert_import_session, 0110).
+-- The next assertion pins exactly what these tables DO still have, so a
 -- further regression (e.g. SELECT itself getting revoked) is still caught.
 select ok(
   not exists (
     select 1
     from pg_tables
     where schemaname = 'public'
-      and tablename not in ('background_jobs', 'import_batches', 'import_batch_rows')
+      and tablename not in ('background_jobs', 'import_batches', 'import_batch_rows', 'import_sessions')
       and not (
         has_table_privilege('authenticated', format('%I.%I', schemaname, tablename), 'select')
         and has_table_privilege('authenticated', format('%I.%I', schemaname, tablename), 'insert')
@@ -68,8 +70,12 @@ select ok(
     and has_table_privilege('authenticated', 'public.import_batch_rows', 'select')
     and has_table_privilege('authenticated', 'public.import_batch_rows', 'insert')
     and has_table_privilege('authenticated', 'public.import_batch_rows', 'update')
-    and not has_table_privilege('authenticated', 'public.import_batch_rows', 'delete'),
-  'the three RPC-gated tables have exactly their intended reduced grants, not more and not less'
+    and not has_table_privilege('authenticated', 'public.import_batch_rows', 'delete')
+    and has_table_privilege('authenticated', 'public.import_sessions', 'select')
+    and has_table_privilege('authenticated', 'public.import_sessions', 'insert')
+    and has_table_privilege('authenticated', 'public.import_sessions', 'update')
+    and not has_table_privilege('authenticated', 'public.import_sessions', 'delete'),
+  'the RPC-gated tables have exactly their intended reduced grants, not more and not less'
 );
 
 select ok(
