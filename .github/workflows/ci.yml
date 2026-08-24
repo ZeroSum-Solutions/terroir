@@ -120,6 +120,11 @@ jobs:
           # trusting the request Host (docs/AUTH-SETUP.md), so a mismatch
           # against the host tests actually navigate to drops session
           # cookies across the redirect.
+          # Mailpit endpoint for the password-recovery E2E — from the same
+          # status call, so it always matches the running stack's port.
+          supabase status -o env 2>/dev/null \
+            | grep -E '^(MAILPIT_URL|INBUCKET_URL)=' | head -1 \
+            | sed 's/^[A-Z_]*=/E2E_MAILBOX_URL=/' | tr -d '"' >> "$GITHUB_ENV"
           echo "NEXT_PUBLIC_APP_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV"
           echo "ACTIVE_RESTAURANT_COOKIE_SECRET=ci-e2e-cookie-secret-not-sensitive" >> "$GITHUB_ENV"
           echo "DEV_BYPASS_EMAIL=owner+local@terroir.test" >> "$GITHUB_ENV"
