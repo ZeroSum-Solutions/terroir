@@ -74,7 +74,7 @@ export async function POST(
 
     const { data: scan, error: fetchError } = await supabase
       .from("invoice_scans")
-      .select("id, ocr_text")
+      .select("id, ocr_text, updated_at")
       .eq("id", id)
       .eq("restaurant_id", restaurantId)
       .single();
@@ -188,7 +188,14 @@ export async function POST(
       quality.reason = "arithmetic_mismatch";
     }
 
-    const { error: updateError } = await supabase
+    // C14 (db audit 2026-08-23): fenced on the updated_at value read at
+    // fetch time (0089_invoice_scans_updated_at.sql) so two overlapping
+    // re-extract calls on the same scan can't silently clobber each
+    // other — status alone can't fence this race, since both calls can
+    // start AND end on the same status value (e.g. complete -> complete).
+    // A 0-row result means someone else's write landed first; the loser
+    // gets an explicit 409, not a false success.
+    const { data: updatedRows, error: updateError } = await supabase
       .from("invoice_scans")
       .update({
         parsed_line_items: JSON.parse(JSON.stringify(parsed.lineItems)),
@@ -198,8 +205,16 @@ export async function POST(
         status: arithmetic.ok ? "complete" : "review",
       })
       .eq("id", id)
-      .eq("restaurant_id", restaurantId);
+      .eq("restaurant_id", restaurantId)
+      .eq("updated_at", scan.updated_at)
+      .select("id");
     if (updateError) throw updateError;
+    if (!updatedRows || updatedRows.length === 0) {
+      return Errors.conflict(
+        "scan_superseded",
+        "Scan was updated by another request while this re-extraction was running.",
+      );
+    }
 
     return NextResponse.json({
       scanId: id,

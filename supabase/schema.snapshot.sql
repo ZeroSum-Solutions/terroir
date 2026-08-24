@@ -8035,3 +8035,73 @@ comment on function public.open_bottles_enforce_capacity() is
 create trigger open_bottles_enforce_capacity_trigger
   before insert or update on public.open_bottles
   for each row execute function public.open_bottles_enforce_capacity();
+
+-- === 0089_invoice_scans_updated_at.sql ===
+-- 0089_invoice_scans_updated_at.sql
+--
+-- C14 (db audit 2026-08-23): POST /api/scans/[id]/re-extract has zero
+-- concurrency control. Its UPDATE is fenced on nothing but id +
+-- restaurant_id, so two overlapping re-extract calls on the same scan
+-- (two staff members, or one slow retry overlapping a fresh attempt)
+-- silently clobber each other — whichever commits last wins, with no
+-- error to either caller. Verified live (.../verify/V3-concurrency.md,
+-- C14): a fast, high-confidence result was silently overwritten by a
+-- slower, lower-confidence one seconds later, after the fast caller had
+-- already received HTTP 200 with the correct result.
+--
+-- The auditor's literal claimed mechanism (re-extract racing a
+-- background worker's first-pass persist) was REFUTED by verification —
+-- the route's own ocr_text-required precondition already blocks that.
+-- The underlying absence of any concurrency control on re-extract itself
+-- was CONFIRMED and is what this migration fixes.
+--
+-- invoice_scans.status can't serve as the fence value here: the race
+-- reproduces between two re-extracts that both start AND end on the same
+-- status ('complete' -> 'complete'), so a fence on an unchanged value
+-- would let the second write through too. This adds `updated_at` +
+-- the existing `set_updated_at()` trigger (already used on 11 other
+-- tables, see e.g. 0057_bins.sql) so every UPDATE bumps a value the
+-- application can fence on: read updated_at at fetch time, fence the
+-- write on that exact value, and treat a 0-row result as "someone else
+-- updated this scan first" (409), not "silently proceed."
+--
+-- invoice_scans is a per-restaurant, per-scan row table (not the
+-- multi-thousand-row import path) — this ALTER TABLE is expected to be
+-- fast even under the volatile `now()` default, which forces a full
+-- rewrite rather than the metadata-only fast path Postgres uses for a
+-- constant default. No CONCURRENTLY-anything needed.
+
+alter table public.invoice_scans
+  add column updated_at timestamptz not null default now();
+
+create trigger invoice_scans_set_updated_at
+  before update on public.invoice_scans
+  for each row execute function public.set_updated_at();
+
+-- === 0090_invoice_scans_committed_at.sql ===
+-- 0090_invoice_scans_committed_at.sql
+--
+-- C15 (db audit 2026-08-23): POST /api/scans/[id]/commit has no idempotency
+-- guard at all — no idempotency key, no committed flag on invoice_scans, no
+-- unique constraint on inventory_items. Verified live
+-- (.../verify/V3-concurrency.md, C15) as the real tenant owner via genuine
+-- PostgREST requests: committing the same scan twice inserted the full set
+-- of inventory_items TWICE (wines correctly deduped via
+-- find_or_create_wines_batch's own ON CONFLICT, but inventory quantities
+-- doubled) on a plain sequential retry — no timing/race technique needed,
+-- just a client reload, timeout-and-retry, or double-click. Re-graded
+-- CRITICAL: silently doubling real dollar-valued inventory ahead of a
+-- 20,000-row bulk import into this same code-path family.
+--
+-- `committed_at` is claimed atomically (`UPDATE ... WHERE committed_at IS
+-- NULL RETURNING id`) BEFORE the wine/inventory work runs, in the same
+-- style already established by invoice_scans' other fenced writes
+-- (invoice-scan-service.ts, re-extract/route.ts). A second commit attempt
+-- sees 0 rows claimed and returns 409 instead of re-inserting. On any
+-- failure after the claim, the route releases it (sets committed_at back
+-- to null) so a genuinely failed attempt (network blip, transient RPC
+-- error) can still be retried — only a call that actually reached
+-- "inventory rows exist" is permanently fenced.
+
+alter table public.invoice_scans
+  add column committed_at timestamptz;

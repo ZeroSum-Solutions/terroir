@@ -120,21 +120,32 @@ describe("isValidIdempotencyKey", () => {
   it("accepts a well-formed UUID string", () => {
     expect(isValidIdempotencyKey(KEY_A)).toBe(true);
   });
-  it("accepts an opaque token with underscores/dashes", () => {
-    expect(isValidIdempotencyKey("abc_DEF-123xyz")).toBe(true);
+  // C26 (db audit 2026-08-23): this used to assert "abc_DEF-123xyz" (a
+  // non-UUID opaque token) was VALID, even though scan_idempotency.key is
+  // a `uuid` column — every non-UUID key silently defeated caching (the
+  // claim INSERT threw 22P02, caught and treated as "fall through to
+  // handler uncached"). Every real caller sends crypto.randomUUID(), so
+  // the contract is now UUID-shaped, matching the column type.
+  it("rejects an opaque token that isn't UUID-shaped, even though it was previously accepted", () => {
+    expect(isValidIdempotencyKey("abc_DEF-123xyz")).toBe(false);
   });
   it("rejects null / undefined / non-strings", () => {
     expect(isValidIdempotencyKey(null)).toBe(false);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(isValidIdempotencyKey(undefined as any)).toBe(false);
   });
-  it("rejects strings that are too short or too long", () => {
+  it("rejects UUID-length strings that aren't UUID-shaped", () => {
     expect(isValidIdempotencyKey("1234567")).toBe(false); // 7 chars
     expect(isValidIdempotencyKey("x".repeat(129))).toBe(false);
+    // 36 chars, UUID-length, but missing the hyphen grouping.
+    expect(isValidIdempotencyKey("aaaaaaaabbbbccccddddeeeeeeeeeeee0000")).toBe(false);
   });
   it("rejects keys with illegal characters", () => {
     expect(isValidIdempotencyKey("hello world!")).toBe(false);
     expect(isValidIdempotencyKey("key/with/slashes")).toBe(false);
+  });
+  it("accepts uppercase-hex UUIDs (case-insensitive)", () => {
+    expect(isValidIdempotencyKey("AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")).toBe(true);
   });
 });
 

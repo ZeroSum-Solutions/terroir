@@ -1,5 +1,17 @@
 -- Down migration for 0048_wines_manual_overrides
 -- Restore enrich_wines_batch to 0047 version (without manual_overrides)
+--
+-- C27 (db audit 2026-08-23): line 60 contained the invalid token AL'TER,
+-- so this file could never run to completion. Under the down/README's own
+-- documented invocation (plain `psql -f`, no --single-transaction), each
+-- statement autocommits individually — the syntax error left a genuinely
+-- corrupted mixed-version schema (add_manual_overrides dropped, the
+-- manual_overrides column and enrich_wines_batch's old body never
+-- restored). Fixed the typo AND wrapped the whole body in its own
+-- transaction, so a future error in this file can never again leave a
+-- partial rollback regardless of how an operator invokes it.
+
+begin;
 
 CREATE OR REPLACE FUNCTION public.enrich_wines_batch(
   p_restaurant_id uuid,
@@ -57,4 +69,6 @@ COMMENT ON FUNCTION public.enrich_wines_batch(uuid, jsonb) IS
   'BND-031/BND-039/BND-070: atomic batch enrichment of wines including decant time.';
 
 DROP FUNCTION IF EXISTS public.add_manual_overrides(uuid, text[]);
-AL'TER TABLE public.wines DROP COLUMN manual_overrides;
+ALTER TABLE public.wines DROP COLUMN manual_overrides;
+
+commit;

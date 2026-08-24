@@ -91,6 +91,75 @@ describe("processInvoiceScanOnce persistence boundary", () => {
   });
 });
 
+describe("processInvoiceScanOnce catch-path recovery data (C04)", () => {
+  function captureUpdateResult() {
+    const node: Record<string, unknown> = {};
+    node.eq = vi.fn(() => node);
+    node.select = vi.fn(() => node);
+    node.then = (resolve: (v: unknown) => void) =>
+      Promise.resolve({ data: null, error: null }).then(resolve);
+    return node;
+  }
+
+  it("persists ocr_text on the fenced failure write when OCR already succeeded but extraction threw", async () => {
+    mockExtractOcr.mockResolvedValue({ rawText: "invoice text", tables: [] });
+    mockExtractFromOcr.mockRejectedValue(new Error("extraction boom"));
+
+    const updatePayloads: Record<string, unknown>[] = [];
+    const supabase = {
+      from: vi.fn(() => ({
+        update: vi.fn((payload: Record<string, unknown>) => {
+          updatePayloads.push(payload);
+          return captureUpdateResult();
+        }),
+      })),
+    };
+
+    await expect(
+      processInvoiceScanOnce({
+        supabase: supabase as never,
+        restaurantId: "restaurant-a",
+        userId: "user-a",
+        fileBuffer: Buffer.from("invoice"),
+        mimeType: "image/jpeg",
+        preCreatedScanId: "scan-a",
+      }),
+    ).rejects.toThrow("extraction boom");
+
+    expect(updatePayloads).toHaveLength(1);
+    expect(updatePayloads[0].status).toBe("failed");
+    expect(updatePayloads[0].ocr_text).toMatchObject({ rawText: "invoice text" });
+  });
+
+  it("does NOT fabricate ocr_text on the fenced failure write when OCR itself failed", async () => {
+    mockExtractOcr.mockRejectedValue(new Error("ocr boom"));
+
+    const updatePayloads: Record<string, unknown>[] = [];
+    const supabase = {
+      from: vi.fn(() => ({
+        update: vi.fn((payload: Record<string, unknown>) => {
+          updatePayloads.push(payload);
+          return captureUpdateResult();
+        }),
+      })),
+    };
+
+    await expect(
+      processInvoiceScanOnce({
+        supabase: supabase as never,
+        restaurantId: "restaurant-a",
+        userId: "user-a",
+        fileBuffer: Buffer.from("invoice"),
+        mimeType: "image/jpeg",
+        preCreatedScanId: "scan-a",
+      }),
+    ).rejects.toThrow("ocr boom");
+
+    expect(updatePayloads).toHaveLength(1);
+    expect(updatePayloads[0]).toEqual({ status: "failed" });
+  });
+});
+
 describe("processInvoiceScanOnce multi-page batching (BND-081 / TER-CF-032)", () => {
   it("OCRs every page and merges them into one extraction call", async () => {
     mockExtractOcr.mockImplementation(async (buffer: Buffer) =>

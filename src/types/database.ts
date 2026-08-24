@@ -674,6 +674,7 @@ export type Database = {
       invoice_scans: {
         Row: {
           accuracy_score: number | null
+          committed_at: string | null
           created_at: string
           created_by: string | null
           distributor_name: string
@@ -689,9 +690,11 @@ export type Database = {
           raw_image_path: string | null
           restaurant_id: string
           status: string
+          updated_at: string
         }
         Insert: {
           accuracy_score?: number | null
+          committed_at?: string | null
           created_at?: string
           created_by?: string | null
           distributor_name: string
@@ -707,9 +710,11 @@ export type Database = {
           raw_image_path?: string | null
           restaurant_id: string
           status?: string
+          updated_at?: string
         }
         Update: {
           accuracy_score?: number | null
+          committed_at?: string | null
           created_at?: string
           created_by?: string | null
           distributor_name?: string
@@ -725,6 +730,7 @@ export type Database = {
           raw_image_path?: string | null
           restaurant_id?: string
           status?: string
+          updated_at?: string
         }
         Relationships: [
           {
