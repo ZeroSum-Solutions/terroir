@@ -130,9 +130,20 @@ describe("row-validator conformance", () => {
       } else if (nvLiteralVariantIds.has(record.variant.id)) {
         invalidNvLiteralCount++;
         // The current row-validator has no special case for the literal
-        // text "NV" (row-validator.ts:86) — it rejects it as a non-numeric
-        // vintage, same as any other unparseable year text.
-        expect(validated.errors.some((e) => e.field === "vintage" && /year/i.test(e.message))).toBe(true);
+        // text "NV" — it rejects it as a non-numeric vintage, same as any
+        // other unparseable year text. P3 (C18, db audit 2026-08-23) added
+        // a literal-format check ahead of the numeric parse, which changed
+        // the exact wording (now "must be a whole number, with no other
+        // characters" for a non-numeric-literal value like "NV" — the
+        // "must be a year between X and Y" wording is now reserved for a
+        // value that IS a valid integer literal but out of range) — the
+        // underlying behavior (NV is rejected, not silently coerced) is
+        // unchanged, only the message text is more specific now.
+        expect(
+          validated.errors.some(
+            (e) => e.field === "vintage" && (/year/i.test(e.message) || /whole number/i.test(e.message)),
+          ),
+        ).toBe(true);
       } else {
         invalidOtherCount++;
       }

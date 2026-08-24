@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 86,
-  "discoveredOperationCount": 100,
+  "routeFileCount": 89,
+  "discoveredOperationCount": 103,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/bins",
@@ -286,6 +286,39 @@
       "path": "/api/import/preview",
       "source": {
         "file": "src/app/api/import/preview/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/import/sessions",
+      "method": "POST",
+      "path": "/api/import/sessions",
+      "source": {
+        "file": "src/app/api/import/sessions/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/import/sessions/{param}",
+      "method": "GET",
+      "path": "/api/import/sessions/[id]",
+      "source": {
+        "file": "src/app/api/import/sessions/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/import/sessions/{param}/revert",
+      "method": "POST",
+      "path": "/api/import/sessions/[id]/revert",
+      "source": {
+        "file": "src/app/api/import/sessions/[id]/revert/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null

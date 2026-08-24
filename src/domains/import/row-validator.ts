@@ -1,8 +1,13 @@
 // G1-4 — per-row schema validation for CSV cellar import.
 
 import {
+  ALLOWED_CURRENCIES,
   CANONICAL_HEADERS,
+  FLOAT_LITERAL,
   HEADER_SYNONYMS,
+  INTEGER_LITERAL,
+  MAX_QUANTITY,
+  MAX_UNIT_COST,
   REQUIRED_HEADERS,
   type CanonicalHeader,
 } from "./constants";
@@ -83,25 +88,38 @@ export function validateRow(
   const name = get("name");
   if (!name) errors.push({ field: "name", message: "Wine name is required." });
 
+  // C18 (db audit 2026-08-23): Number.parseInt/parseFloat accept a numeric
+  // PREFIX and silently ignore trailing garbage ('2015abc' -> 2015,
+  // '750ml' -> 750, '12.5.7' -> 12.50). Every numeric field below is
+  // tested against a whole-string literal regex FIRST — any non-match is
+  // a field error, before the numeric parse ever runs.
   let vintage: number | null = null;
   const vintageRaw = get("vintage");
   if (vintageRaw) {
-    const parsed = Number.parseInt(vintageRaw, 10);
-    if (!Number.isInteger(parsed) || parsed < MIN_VINTAGE || parsed > CURRENT_YEAR + 1) {
-      errors.push({ field: "vintage", message: `Vintage must be a year between ${MIN_VINTAGE} and ${CURRENT_YEAR + 1}.` });
+    if (!INTEGER_LITERAL.test(vintageRaw)) {
+      errors.push({ field: "vintage", message: "Vintage must be a whole number, with no other characters." });
     } else {
-      vintage = parsed;
+      const parsed = Number.parseInt(vintageRaw, 10);
+      if (parsed < MIN_VINTAGE || parsed > CURRENT_YEAR + 1) {
+        errors.push({ field: "vintage", message: `Vintage must be a year between ${MIN_VINTAGE} and ${CURRENT_YEAR + 1}.` });
+      } else {
+        vintage = parsed;
+      }
     }
   }
 
   let sizeMl: number | null = 750;
   const sizeRaw = get("size_ml");
   if (sizeRaw) {
-    const parsed = Number.parseInt(sizeRaw, 10);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      errors.push({ field: "size_ml", message: "Bottle size (ml) must be a positive whole number." });
+    if (!INTEGER_LITERAL.test(sizeRaw)) {
+      errors.push({ field: "size_ml", message: "Bottle size (ml) must be a whole number, with no other characters." });
     } else {
-      sizeMl = parsed;
+      const parsed = Number.parseInt(sizeRaw, 10);
+      if (parsed <= 0) {
+        errors.push({ field: "size_ml", message: "Bottle size (ml) must be a positive whole number." });
+      } else {
+        sizeMl = parsed;
+      }
     }
   }
 
@@ -109,10 +127,14 @@ export function validateRow(
   const quantityRaw = get("quantity");
   if (!quantityRaw) {
     errors.push({ field: "quantity", message: "Quantity is required." });
+  } else if (!INTEGER_LITERAL.test(quantityRaw)) {
+    errors.push({ field: "quantity", message: "Quantity must be a whole number, with no other characters." });
   } else {
     const parsed = Number.parseInt(quantityRaw, 10);
-    if (!Number.isInteger(parsed) || parsed < 0) {
+    if (parsed < 0) {
       errors.push({ field: "quantity", message: "Quantity must be a non-negative whole number." });
+    } else if (parsed > MAX_QUANTITY) {
+      errors.push({ field: "quantity", message: `Quantity cannot exceed ${MAX_QUANTITY}.` });
     } else {
       quantity = parsed;
     }
@@ -127,13 +149,22 @@ export function validateRow(
   const costRaw = get("unit_cost");
   if (!costRaw) {
     costMissing = true;
+  } else if (!FLOAT_LITERAL.test(costRaw)) {
+    errors.push({ field: "unit_cost", message: "Unit cost must be a number, with no other characters." });
   } else {
     const parsed = Number.parseFloat(costRaw);
     if (!Number.isFinite(parsed) || parsed < 0) {
       errors.push({ field: "unit_cost", message: "Unit cost must be a non-negative number." });
+    } else if (parsed > MAX_UNIT_COST) {
+      errors.push({ field: "unit_cost", message: `Unit cost cannot exceed ${MAX_UNIT_COST}.` });
     } else {
       unitCost = Math.round(parsed * 100) / 100;
     }
+  }
+
+  const currencyRaw = get("currency");
+  if (currencyRaw && !ALLOWED_CURRENCIES.has(currencyRaw.toUpperCase())) {
+    errors.push({ field: "currency", message: `Currency must be one of: ${[...ALLOWED_CURRENCIES].join(", ")}.` });
   }
 
   const raw: RawRowFields = Object.fromEntries(
@@ -147,7 +178,7 @@ export function validateRow(
   raw.country = get("country") || null;
   raw.size_ml = sizeMl !== null ? String(sizeMl) : null;
   raw.format = get("format") || null;
-  raw.currency = get("currency") || null;
+  raw.currency = currencyRaw ? currencyRaw.toUpperCase() : null;
   raw.quantity = quantity !== null ? String(quantity) : null;
   raw.unit_cost = unitCost !== null ? unitCost.toFixed(2) : null;
   raw.bin = get("bin") || null;

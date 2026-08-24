@@ -4,6 +4,15 @@
 // Regeneration: `pnpm run types:gen` (requires SUPABASE_ACCESS_TOKEN +
 // SUPABASE_PROJECT_ID env). CI verifies this file matches the live
 // schema via `pnpm run types:check`.
+//
+// P3 EXCEPTION (2026-08-23): regenerated here via
+// `supabase gen types typescript --db-url postgresql://postgres:postgres@127.0.0.1:58322/postgres`
+// against the LOCAL terroir-audit-local stack, per this run'''s explicit
+// instruction not to run types:gen/types:check (they hit the hosted
+// PRODUCTION Management API and would overwrite this branch'''s types with
+// production'''s older, pre-P3 schema). Content is otherwise identical in
+// shape to what types:gen would produce once P3'''s migrations ship to
+// production.
 
 export type Json =
   | string
@@ -14,11 +23,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   public: {
     Tables: {
       availability_events: {
@@ -413,11 +417,14 @@ export type Database = {
         Row: {
           applied_inventory_item_id: string | null
           applied_wine_id: string | null
+          apply_attempts: number
           apply_status: string
           batch_id: string
           cost_status: string
           created_at: string
+          duplicate_reason: Json | null
           id: string
+          last_error_message: string | null
           lwin_id: string | null
           lwin_score: number | null
           lwin_status: string
@@ -435,11 +442,14 @@ export type Database = {
         Insert: {
           applied_inventory_item_id?: string | null
           applied_wine_id?: string | null
+          apply_attempts?: number
           apply_status?: string
           batch_id: string
           cost_status?: string
           created_at?: string
+          duplicate_reason?: Json | null
           id?: string
+          last_error_message?: string | null
           lwin_id?: string | null
           lwin_score?: number | null
           lwin_status?: string
@@ -457,11 +467,14 @@ export type Database = {
         Update: {
           applied_inventory_item_id?: string | null
           applied_wine_id?: string | null
+          apply_attempts?: number
           apply_status?: string
           batch_id?: string
           cost_status?: string
           created_at?: string
+          duplicate_reason?: Json | null
           id?: string
+          last_error_message?: string | null
           lwin_id?: string | null
           lwin_score?: number | null
           lwin_status?: string
@@ -502,6 +515,9 @@ export type Database = {
       }
       import_batches: {
         Row: {
+          chunk_index: number | null
+          chunk_total: number | null
+          content_sha256: string | null
           created_at: string
           created_by: string | null
           filename: string
@@ -509,11 +525,15 @@ export type Database = {
           restaurant_id: string
           reverted_at: string | null
           reverted_by: string | null
+          session_id: string | null
           status: string
           total_rows: number
           updated_at: string
         }
         Insert: {
+          chunk_index?: number | null
+          chunk_total?: number | null
+          content_sha256?: string | null
           created_at?: string
           created_by?: string | null
           filename: string
@@ -521,11 +541,15 @@ export type Database = {
           restaurant_id: string
           reverted_at?: string | null
           reverted_by?: string | null
+          session_id?: string | null
           status?: string
           total_rows: number
           updated_at?: string
         }
         Update: {
+          chunk_index?: number | null
+          chunk_total?: number | null
+          content_sha256?: string | null
           created_at?: string
           created_by?: string | null
           filename?: string
@@ -533,6 +557,7 @@ export type Database = {
           restaurant_id?: string
           reverted_at?: string | null
           reverted_by?: string | null
+          session_id?: string | null
           status?: string
           total_rows?: number
           updated_at?: string
@@ -540,6 +565,57 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "import_batches_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_batches_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "import_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_sessions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          declared_chunk_total: number | null
+          id: string
+          label: string | null
+          restaurant_id: string
+          source_sha256: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          declared_chunk_total?: number | null
+          id?: string
+          label?: string | null
+          restaurant_id: string
+          source_sha256?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          declared_chunk_total?: number | null
+          id?: string
+          label?: string | null
+          restaurant_id?: string
+          source_sha256?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_sessions_restaurant_id_fkey"
             columns: ["restaurant_id"]
             isOneToOne: false
             referencedRelation: "restaurants"
@@ -1460,6 +1536,7 @@ export type Database = {
           last_enriched_at: string | null
           lineage_id: string | null
           lwin_id: string | null
+          lwin_match_score: number | null
           manual_overrides: string[] | null
           name: string
           overpaid_flag: boolean
@@ -1504,6 +1581,7 @@ export type Database = {
           last_enriched_at?: string | null
           lineage_id?: string | null
           lwin_id?: string | null
+          lwin_match_score?: number | null
           manual_overrides?: string[] | null
           name: string
           overpaid_flag?: boolean
@@ -1548,6 +1626,7 @@ export type Database = {
           last_enriched_at?: string | null
           lineage_id?: string | null
           lwin_id?: string | null
+          lwin_match_score?: number | null
           manual_overrides?: string[] | null
           name?: string
           overpaid_flag?: boolean
@@ -1672,6 +1751,31 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      count_import_batch_rows: {
+        Args: { p_batch_id: string }
+        Returns: {
+          applied: number
+          eligible_not_applied: number
+          excluded: number
+          pending: number
+          total: number
+        }[]
+      }
+      create_import_batch: {
+        Args: {
+          p_chunk_index?: number
+          p_chunk_total?: number
+          p_content_sha256?: string
+          p_created_by: string
+          p_filename: string
+          p_restaurant_id: string
+          p_rows: Json
+          p_session_id?: string
+          p_source_sha256?: string
+          p_total_rows: number
+        }
+        Returns: Json
       }
       dismiss_pricing_alert: {
         Args: { p_days?: number; p_wine_id: string }
@@ -1879,6 +1983,7 @@ export type Database = {
         Returns: undefined
       }
       revert_import_batch: { Args: { p_batch_id: string }; Returns: number }
+      revert_import_session: { Args: { p_session_id: string }; Returns: Json }
       seed_reason_codes: {
         Args: { p_restaurant_id: string }
         Returns: undefined
@@ -2070,3 +2175,4 @@ export const Constants = {
     },
   },
 } as const
+

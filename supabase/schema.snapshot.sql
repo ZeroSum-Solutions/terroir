@@ -8105,3 +8105,1175 @@ create trigger invoice_scans_set_updated_at
 
 alter table public.invoice_scans
   add column committed_at timestamptz;
+
+-- === 0102_import_sessions.sql ===
+-- 0102_import_sessions.sql
+--
+-- P3 (2026-08-23-p3-chunked-import.md, §3.1) — a new table grouping N
+-- import_batches rows into one logical multi-chunk onboarding. Devin's
+-- decision this piece is built on: chunked ingest at 4,000-5,000 rows per
+-- chunk (MAX_ROWS stays 5000, src/domains/import/constants.ts) rather than
+-- raising the row cap or deploying the undeployed Railway worker. A
+-- partner's ~20,050-row file ships as 4-5 chunk uploads; import_sessions is
+-- what lets the app treat those as one onboarding for progress, resume, and
+-- revert-as-a-unit, instead of five unrelated batches.
+--
+-- status is a convenience projection recomputed after every child batch's
+-- state change (same posture as import_batches.status, 0076) — not an
+-- independent source of truth.
+--
+-- RLS: identical shape to import_batches (0076) — select/insert/update via
+-- is_member/is_member_with_role(restaurant_id, 'staff'), no delete policy
+-- (permanent audit trail, same posture as import_batches itself).
+--
+-- DOWN: plain DROP TABLE — no destructive row surgery needed, no other
+-- table's data depends on this one existing (import_batches.session_id is
+-- added by 0103, nullable, ON DELETE SET NULL there).
+
+create table public.import_sessions (
+  id                  uuid        primary key default gen_random_uuid(),
+  restaurant_id       uuid        not null references public.restaurants(id) on delete cascade,
+  created_by          uuid        references auth.users(id) on delete set null,
+  label               text,
+  source_sha256       text,
+  declared_chunk_total integer    check (declared_chunk_total is null or declared_chunk_total > 0),
+  status              text        not null default 'in_progress' check (
+    status in ('in_progress', 'completed', 'reverted')
+  ),
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now()
+);
+
+comment on table public.import_sessions is
+  'One row per multi-chunk CSV cellar onboarding (P3, 2026-08-23-p3-chunked-'
+  'import.md §3.1) — groups the N import_batches rows one 4,000-5,000-row '
+  'chunk split produces. status is a convenience projection recomputed '
+  'after every child batch state change, not an independent source of '
+  'truth. source_sha256/declared_chunk_total are nullable: a session can '
+  'exist without them if the operator''s upload tooling does not supply a '
+  'manifest yet, degrading to "no cross-chunk source-consistency check," '
+  'never a hard failure.';
+
+comment on column public.import_sessions.source_sha256 is
+  'sha256 of the pre-split ORIGINAL file''s raw bytes (the same value every '
+  'chunk''s manifest reports as source_csv_sha256) — used to reject a chunk '
+  'from a different source file being mixed into this session. Nullable: '
+  'degrades to no cross-chunk check, never a hard failure.';
+
+comment on column public.import_sessions.declared_chunk_total is
+  'Operator/manifest-supplied expected chunk count — informational for the '
+  'progress UI only, never a hard gate. A 6th corrective chunk must still '
+  'be addable even when this says 5.';
+
+create index import_sessions_restaurant_idx
+  on public.import_sessions (restaurant_id, created_at desc);
+
+create trigger import_sessions_set_updated_at
+  before update on public.import_sessions
+  for each row execute function public.set_updated_at();
+
+alter table public.import_sessions enable row level security;
+
+create policy "members can read import sessions"
+  on public.import_sessions for select
+  using (public.is_member(restaurant_id));
+
+create policy "members can create own import sessions"
+  on public.import_sessions for insert
+  with check (
+    public.is_member_with_role(restaurant_id, 'staff')
+    and created_by = auth.uid()
+  );
+
+-- Needed for the session-status recompute after each child batch's
+-- apply/resolve/revert, and for revert_import_session's own status
+-- transition. No delete policy — a session is never removed, only
+-- reverted (status transition, audit trail preserved) — same posture as
+-- import_batches (0076).
+create policy "members can update own import sessions"
+  on public.import_sessions for update
+  using      (public.is_member_with_role(restaurant_id, 'staff'))
+  with check (public.is_member_with_role(restaurant_id, 'staff'));
+
+-- Same reasoning as 0076's import_batches grant comment: a brand new table
+-- starts with NO base table privilege for `authenticated` at all (RLS
+-- policies alone are not enough; Postgres checks the base GRANT first).
+grant select, insert, update on table public.import_sessions to authenticated;
+revoke delete on table public.import_sessions from authenticated;
+
+-- === 0103_import_batches_session_columns.sql ===
+-- 0103_import_batches_session_columns.sql
+--
+-- P3 §2.2/§3.2 — two independent, additive things on import_batches, both
+-- nullable so a plain, non-chunked, single-file upload (the common case
+-- for a small restaurant's routine CSV) remains completely valid with none
+-- of these set:
+--
+--   1. content_sha256 (§2.2, re-upload idempotency): sha256 of the raw
+--      uploaded Buffer, computed server-side BEFORE decodeCsvBuffer() ever
+--      runs (never over decoded text — see create_import_batch, 0107, and
+--      confirmImportBatch for why: a lossy UTF-8 decode could make two
+--      byte-for-byte-different uploads collide, or the same file hash
+--      differently across two decode passes). The partial unique index
+--      below rejects re-confirming byte-identical content for the same
+--      restaurant while the original batch is still live; a reverted
+--      batch's hash is freed (`status <> 'reverted'`) so a legitimate
+--      re-run after revert is never blocked.
+--
+--   2. session_id/chunk_index/chunk_total (§3.2, multi-batch session
+--      grouping): links a batch to the import_sessions row (0102) it's
+--      one chunk of. session_id is a plain nullable FK, not a composite
+--      tenant-locking FK like import_batch_rows_batch_restaurant_fkey
+--      (0082/C17) — create_import_batch (0107) validates the session's
+--      restaurant_id against the caller's own restaurant_id explicitly
+--      (RLS makes a foreign session simply invisible, the same fail-closed
+--      idiom 0076 established), so a DB-level composite FK isn't needed
+--      for the tenant boundary here, and would be actively wrong: ON
+--      DELETE SET NULL on a composite (session_id, restaurant_id) FK would
+--      try to null restaurant_id too, which is NOT NULL on this table.
+--
+--      The second partial unique index (session_id, chunk_index) enforces
+--      "no two non-reverted batches in one session claim the same chunk
+--      slot" as a hard schema invariant, not just an app-level check —
+--      reverting a batch (C-new-1, 0109) frees its chunk_index for a
+--      genuine corrective re-upload, mirroring content_sha256's own
+--      status <> 'reverted' escape hatch exactly.
+--
+-- DOWN: drops both partial indexes and all four columns. Any batch rows
+-- that carried a session_id lose that association (session_id existing
+-- only as a nullable FK on this table, dropping the column is the correct
+-- and only way to remove it — there is no data to "restore" a prior state
+-- of, this is new columns added, not a body replaced).
+
+alter table public.import_batches
+  add column session_id      uuid references public.import_sessions(id) on delete set null,
+  add column chunk_index     integer check (chunk_index is null or chunk_index > 0),
+  add column chunk_total     integer check (chunk_total is null or chunk_total > 0),
+  add column content_sha256  text;
+
+comment on column public.import_batches.content_sha256 is
+  'sha256 of the raw uploaded file bytes, computed server-side before any '
+  'decode. Backs the partial unique index below (re-upload idempotency, '
+  'P3 §2.2) — nullable because historic pre-P3 rows never computed one.';
+
+comment on column public.import_batches.session_id is
+  'Which multi-chunk onboarding session (import_sessions, 0102) this batch '
+  'is one chunk of. Null for a plain, non-chunked single-file upload.';
+
+-- §2.2: hard-reject re-confirming byte-identical content for the same
+-- restaurant while the original batch is still live. Partial so historic
+-- rows with content_sha256 = null never collide, and a reverted batch's
+-- hash is freed for a legitimate re-run.
+create unique index import_batches_content_sha256_idx
+  on public.import_batches (restaurant_id, content_sha256)
+  where content_sha256 is not null and status <> 'reverted';
+
+-- §3.2: no two live (non-reverted) batches in one session can claim the
+-- same chunk slot. Reverting a batch (0109) frees its chunk_index for a
+-- genuine corrective re-upload of that chunk.
+create unique index import_batches_session_chunk_idx
+  on public.import_batches (session_id, chunk_index)
+  where session_id is not null and chunk_index is not null and status <> 'reverted';
+
+-- Supports create_import_batch's (0107) tier-2(b) cross-batch dedup check
+-- (§1.5/§3.3), which joins import_batches to import_batch_rows by
+-- session_id to find not-yet-applied sibling-batch rows.
+create index import_batches_session_idx
+  on public.import_batches (session_id)
+  where session_id is not null;
+
+-- === 0104_import_batch_rows_apply_tracking.sql ===
+-- 0104_import_batch_rows_apply_tracking.sql
+--
+-- P3 §1.5/§5 (C16, C-new-2) — three additive, nullable-or-defaulted columns
+-- on import_batch_rows:
+--
+--   apply_attempts (C16): incremented by apply_import_batch_chunk_v2
+--   (0108) every time a row's per-row exception handler fires. On the
+--   MAX_ROW_APPLY_ATTEMPTSth failure (3, src/domains/import/constants.ts),
+--   the row's resolution flips to 'pending' so it falls out of the
+--   eligibility WHERE clause automatically — without this, a permanently-
+--   failing row (e.g. a numeric field overflow) is re-selected by every
+--   future apply call forever, starving every eligible row behind it, and
+--   the failure is never persisted anywhere for an operator to see.
+--
+--   last_error_message (C16): the exhausted row's final sqlerrm, read back
+--   through the same pending-row UI/resolveImportBatchRow path §1.5 tier 3
+--   already uses — this is the fourth DISTINCT cause of resolution =
+--   'pending' (alongside lwin_status='unmatched', cost_status='missing',
+--   duplicate_reason is not null), distinguished by which column is
+--   populated, not by a new enum value.
+--
+--   duplicate_reason (§1.5 tier 2): populated by create_import_batch
+--   (0107) when a row's resolved wine identity + normalized location
+--   already has either an applied inventory_items row from a different,
+--   already-confirmed batch, or a not-yet-applied row in a sibling batch
+--   of the same session — surfaced for operator decision (resolution =
+--   'pending'), never silently merged.
+--
+-- DOWN: drops all three columns. No data-shape concern — these are
+-- additive tracking columns, dropping them just stops tracking, it can't
+-- corrupt anything import_batch_rows' own CHECK constraints depend on.
+
+alter table public.import_batch_rows
+  add column apply_attempts     integer not null default 0 check (apply_attempts >= 0),
+  add column last_error_message text,
+  add column duplicate_reason   jsonb;
+
+comment on column public.import_batch_rows.apply_attempts is
+  'C16 (db audit 2026-08-23): times this row''s per-row exception handler '
+  'in apply_import_batch_chunk has fired. At MAX_ROW_APPLY_ATTEMPTS (3), '
+  'resolution flips to pending so the row stops being re-selected forever '
+  'and stops starving eligible rows behind it.';
+
+comment on column public.import_batch_rows.last_error_message is
+  'C16: the sqlerrm from this row''s most recent apply attempt. Populated '
+  'only once the row has exhausted its attempts and moved to '
+  'resolution = pending — a fourth, distinct cause of pending alongside '
+  'lwin_status=unmatched, cost_status=missing, and duplicate_reason is '
+  'not null, distinguished by which column is populated.';
+
+comment on column public.import_batch_rows.duplicate_reason is
+  'P3 §1.5 tier 2: set by create_import_batch (0107) when this row''s '
+  'wine identity + normalized (bin, section) already matches an applied '
+  'inventory_items row from another batch, or a not-yet-applied row in a '
+  'sibling batch of the same session. {type, matchedInventoryItemId | '
+  'matchedRowId, existingQuantity} — never a silent merge, always '
+  'resolution = pending for the operator to decide (include/exclude).';
+
+-- === 0105_wines_lwin_match_score.sql ===
+-- 0105_wines_lwin_match_score.sql
+--
+-- P3 §5 (C24) — apply_import_batch_chunk's wines upsert coalesced lwin_id
+-- as `coalesce(wines.lwin_id, excluded.lwin_id)`: whichever match landed
+-- FIRST won, permanently, even when a much higher-confidence match for the
+-- same wine identity arrived later in the same import (V2-import.md's
+-- proven repro: a 0.31-score wrong match locked in ahead of a 0.95-score
+-- correct one, purely by insertion order). Fixing the coalesce (0108)
+-- requires comparing scores, which requires storing one — wines.lwin_id
+-- alone carries no confidence information today.
+--
+-- Nullable: existing wines rows (and any lwin_id set by a path other than
+-- apply_import_batch_chunk_v2, e.g. match_lwin_batch, 0007) simply have
+-- lwin_match_score = null, which apply_import_batch_chunk_v2's coalesce
+-- treats as "never overwrite" (same as before this migration) rather than
+-- back-filling a synthetic score for data this migration has no way to
+-- verify.
+--
+-- DOWN: drops the column. Any wines row with a real lwin_id keeps it —
+-- this column carries no information the rest of the schema depends on.
+
+alter table public.wines
+  add column lwin_match_score real;
+
+comment on column public.wines.lwin_match_score is
+  'C24 (db audit 2026-08-23): the match_lwin score (0-1) behind '
+  'wines.lwin_id, when it was set by apply_import_batch_chunk_v2 (0108). '
+  'Lets a later, higher-confidence match overwrite an earlier lower-'
+  'confidence one regardless of insertion order — null means "no scored '
+  'match on record," which the upsert''s CASE always treats as '
+  '"never overwrite," identical to the pre-C24 coalesce''s behavior for '
+  'that case.';
+
+-- === 0106_count_import_batch_rows.sql ===
+-- 0106_count_import_batch_rows.sql
+--
+-- P3 §5 (C03) — countBatchRows (src/domains/import/batch-service.ts) did
+-- `.select("apply_status, resolution").eq("batch_id", batchId)` with no
+-- pagination. PostgREST's default max_rows (1000, supabase/config.toml)
+-- silently truncates any response past that — verified reproduction
+-- (V2-import.md): 1,500 rows, apply past the 1,000-row mark, and the
+-- client-side count computed from the truncated 1,000-row response says
+-- "completed" (settled === total, both wrongly computed from the SAME
+-- truncated array) while 500 real rows were never applied. Worse: a later
+-- apply call on that mis-marked-completed batch still succeeds (nothing
+-- in apply_import_batch_chunk checked import_batches.status at all before
+-- this migration's sibling, 0108), writing MORE inventory into a batch a
+-- human believes is done — or, after 0108 ships, into a batch that was
+-- reverted in the meantime.
+--
+-- Fix: an aggregate RPC. `select count(*) filter (...)` always returns
+-- exactly ONE row regardless of how many import_batch_rows exist for the
+-- batch — immune to PostgREST's row cap by construction, not by raising a
+-- limit that could just be hit again at a larger scale.
+--
+-- SECURITY INVOKER, no p_restaurant_id parameter: RLS on import_batch_rows
+-- (is_member(restaurant_id), 0076) already scopes the underlying SELECT to
+-- rows the caller can see. A batch id belonging to another restaurant (or
+-- a nonexistent one) simply contributes zero matching rows to every
+-- filter — the caller distinguishes "batch not found" from "batch has
+-- zero rows" the same way it already does today, via a separate
+-- membership-scoped lookup on import_batches before calling this.
+--
+-- DOWN: drops the function. batch-service.ts's countBatchRows would need
+-- to revert to the old uncapped .select() to keep working after this
+-- down runs — see down/0106's header for the exact caveat.
+
+create or replace function public.count_import_batch_rows(p_batch_id uuid)
+returns table (
+  total                integer,
+  applied              integer,
+  excluded             integer,
+  pending              integer,
+  eligible_not_applied integer
+)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select
+    count(*)::integer as total,
+    count(*) filter (where apply_status = 'applied')::integer as applied,
+    count(*) filter (where resolution = 'exclude')::integer as excluded,
+    count(*) filter (where resolution = 'pending')::integer as pending,
+    count(*) filter (
+      where apply_status = 'not_applied' and resolution in ('auto', 'include')
+    )::integer as eligible_not_applied
+  from public.import_batch_rows
+  where batch_id = p_batch_id;
+$$;
+
+comment on function public.count_import_batch_rows(uuid) is
+  'C03 (db audit 2026-08-23): single-row aggregate replacing '
+  'countBatchRows'' uncapped .select() — immune to PostgREST''s 1,000-row '
+  'max_rows cap by construction, since count(*) filter (...) always '
+  'returns exactly one row. SECURITY INVOKER: RLS on import_batch_rows is '
+  'the tenant boundary, so a batch id from another restaurant (or a '
+  'nonexistent one) contributes zero rows to every filter rather than '
+  'erroring.';
+
+revoke all on function public.count_import_batch_rows(uuid) from public;
+grant execute on function public.count_import_batch_rows(uuid) to authenticated;
+
+-- === 0107_create_import_batch.sql ===
+-- 0107_create_import_batch.sql
+--
+-- P3 §5 (C09) + §1.5 (tier 2 duplicate surfacing) + §2.2/§3.2 (re-upload
+-- idempotency, session grouping).
+--
+-- C09, restated: confirmImportBatch's batch-insert and rows-insert were
+-- two SEPARATE client-side statements. A rows-insert failure (any CHECK/
+-- FK violation across up to 5,000 rows) left an orphaned, empty
+-- import_batches row behind — REVOKEd DELETE (0076) means the app can't
+-- clean it up, and it later self-reports status = 'completed' (a vacuous
+-- truth: 0 of 0 rows "complete", see deriveBatchStatus). Fire the exact
+-- same confirm twice with byte-identical content and, pre-P3, you'd get
+-- TWO such batches, and applying both doubles every quantity on every
+-- wine in the file.
+--
+-- Fix: one SECURITY INVOKER PL/pgSQL function wrapping the batch insert
+-- and the rows insert in its own implicit transaction. If the rows insert
+-- fails (or a duplicate content_sha256/session+chunk_index hits the
+-- partial unique indexes from 0103, raising 23505), Postgres rolls back
+-- the WHOLE function call automatically — there is never a batch row
+-- without its rows, and the REVOKEd DELETE grant becomes irrelevant
+-- (nothing needs deleting). confirmImportBatch (src/domains/import/
+-- batch-service.ts) changes from two separate .insert() calls to one
+-- supabase.rpc('create_import_batch', {...}) call; on a 23505 it looks up
+-- and returns the pre-existing batch's id/status/counts as a resume
+-- pointer instead of a bare rejection (§2.2) — that lookup is a plain
+-- SELECT done in TypeScript, not inside this function, so this function's
+-- only job on conflict is to raise, cleanly, and roll back everything.
+--
+-- Tier 2 duplicate surfacing (§1.5): once rows are inserted, two set-based
+-- UPDATEs (not a per-row loop — see comments inline) flag any row whose
+-- resolved wine identity + normalized (bin, section) already has (a) an
+-- APPLIED inventory_items row from a different, already-confirmed batch
+-- (any session, including pre-existing manual inventory), or (b) when
+-- p_session_id is given, a NOT-YET-APPLIED row in a sibling batch of the
+-- SAME session (closes the TOCTOU gap in §3.3: five chunks may all be
+-- confirmed before any of them is applied, so (a) alone would miss a wine
+-- appearing in both chunk 1 and chunk 4). Flagged rows get
+-- resolution = 'pending' + duplicate_reason populated — never silently
+-- merged, because a merged row would break revert_import_batch's
+-- one-row-per-batch traceability contract (§1.5's own reasoning, restated
+-- in 0104's column comment).
+--
+-- Wine-identity key used by both checks is the SAME fallback four-tuple
+-- wines_dedup_idx uses as its DB conflict key (lower(producer),
+-- lower(name), coalesce(vintage,0), size_ml) — see
+-- src/domains/import/dedup-key.ts for the TypeScript mirror of this exact
+-- key (the P2 seam: when resolve_wine_variants_bulk, 0099, lands on a
+-- merged branch, both this SQL and dedup-key.ts swap to keying on
+-- wine_variant_id instead, in one place each).
+--
+-- Session validation: RLS on import_sessions (0102) already makes a
+-- foreign-tenant session id invisible to a plain SELECT — the same
+-- fail-closed idiom revert_import_batch (0076) established. This function
+-- additionally checks the visible session's restaurant_id against
+-- p_restaurant_id explicitly (not just "found/not found") so a session id
+-- that IS visible (same restaurant, real) but was typo'd/spoofed to a
+-- DIFFERENT-tenant value can never silently succeed against the wrong
+-- tenant's data — defense in depth, same posture as apply_import_batch_
+-- chunk's own C17 tenant re-validation (0082).
+--
+-- DOWN: drops the function. confirmImportBatch's caller would need
+-- reverting to the pre-P3 two-.insert()-calls body to function at all
+-- without this RPC — out of scope for a DB-only down migration (see
+-- 0106's down for the same note).
+
+-- Supports tier 2(b)'s sibling-batch dedup lookup: the exact 6-expression
+-- key (producer/name/vintage/size_ml/bin/section, normalized) the UPDATE
+-- below joins on. import_batch_rows has no functional index on any of
+-- these jsonb-derived expressions otherwise, so without this the planner
+-- has nothing but a sequential scan + hash join to work with once a
+-- session's row count grows across several chunks — measured to matter at
+-- the 4,000-8,000-row-per-session scale a real chunked import produces
+-- (see this migration's own performance note in the P3 hand-off report).
+-- Plain (not `concurrently`) — see 0012's precedent, cited in the design
+-- doc: acceptable at this table's expected scale (bulk-import metadata,
+-- thousands of rows per session, not the inventory itself); if this table
+-- ever grows enough that a brief ACCESS EXCLUSIVE lock is a concern, an
+-- operator should run the `concurrently` form by hand before this
+-- migration runs again.
+create index import_batch_rows_dedup_key_idx on public.import_batch_rows (
+  (lower(btrim(raw ->> 'producer'))),
+  (lower(btrim(raw ->> 'name'))),
+  (coalesce(nullif(raw ->> 'vintage', '')::int, 0)),
+  (coalesce(nullif(raw ->> 'size_ml', '')::int, 750)),
+  (upper(btrim(coalesce(raw ->> 'bin', '')))),
+  (upper(btrim(coalesce(raw ->> 'section', ''))))
+);
+
+create or replace function public.create_import_batch(
+  p_restaurant_id  uuid,
+  p_created_by     uuid,
+  p_filename       text,
+  p_total_rows     integer,
+  p_rows           jsonb,
+  p_session_id     uuid default null,
+  p_chunk_index    integer default null,
+  p_chunk_total    integer default null,
+  p_content_sha256 text default null,
+  p_source_sha256  text default null
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_batch_id uuid;
+  v_session_restaurant_id uuid;
+  v_session_source_sha256 text;
+begin
+  if p_session_id is not null then
+    select restaurant_id, source_sha256
+      into v_session_restaurant_id, v_session_source_sha256
+      from public.import_sessions
+      where id = p_session_id;
+
+    if v_session_restaurant_id is null then
+      raise exception 'import session % not found', p_session_id using errcode = 'P0002';
+    end if;
+
+    if v_session_restaurant_id <> p_restaurant_id then
+      raise exception 'import session % does not belong to this restaurant', p_session_id
+        using errcode = 'P0002';
+    end if;
+
+    if v_session_source_sha256 is not null
+       and p_source_sha256 is not null
+       and v_session_source_sha256 <> p_source_sha256 then
+      raise exception 'chunk source file does not match this session''s source file'
+        using errcode = 'P0006';
+    end if;
+  end if;
+
+  insert into public.import_batches (
+    restaurant_id, created_by, filename, total_rows,
+    session_id, chunk_index, chunk_total, content_sha256
+  ) values (
+    p_restaurant_id, p_created_by, p_filename, p_total_rows,
+    p_session_id, p_chunk_index, p_chunk_total, p_content_sha256
+  )
+  returning id into v_batch_id;
+
+  -- Single multi-row INSERT — atomic on its own (0076's own header makes
+  -- the same point about the original two-statement design), and now
+  -- inside this function's own implicit transaction alongside the batch
+  -- insert above: any row here that fails a CHECK/FK constraint aborts
+  -- the WHOLE function call, rolling back the batch insert too.
+  insert into public.import_batch_rows (
+    batch_id, restaurant_id, row_number, raw, row_state, validation_errors,
+    lwin_status, lwin_id, lwin_score, cost_status, resolution, duplicate_reason
+  )
+  select
+    v_batch_id, p_restaurant_id, x.row_number, x.raw, x.row_state, x.validation_errors,
+    x.lwin_status, x.lwin_id, x.lwin_score, x.cost_status, x.resolution, x.duplicate_reason
+  from jsonb_to_recordset(p_rows) as x(
+    row_number integer, raw jsonb, row_state text, validation_errors jsonb,
+    lwin_status text, lwin_id text, lwin_score real, cost_status text,
+    resolution text, duplicate_reason jsonb
+  );
+
+  -- Tier 2(a) (§1.5): flag rows whose resolved wine identity + normalized
+  -- location already has an APPLIED inventory_items row from any other,
+  -- already-confirmed batch (or pre-existing manual inventory). One
+  -- set-based UPDATE over this batch's rows (bounded to <= MAX_ROWS),
+  -- joined against wines/inventory_items filtered by restaurant — not a
+  -- per-row loop, so this is one query plan regardless of batch size.
+  -- Multiple matching inventory_items rows for one nr row is possible in
+  -- principle (Postgres picks one arbitrarily per UPDATE...FROM
+  -- semantics) but not expected in practice — a well-formed cellar has at
+  -- most one inventory_items row per (wine, bin, section) triple even
+  -- though the schema doesn't enforce it (§1.2's own reasoning for why a
+  -- bare unique(wine_id) would be wrong).
+  --
+  -- Filtered on `resolution <> 'exclude'`, NOT `resolution in ('auto',
+  -- 'include')` — deliberately wider than "currently apply-eligible".
+  -- duplicate_reason is an independent fact from WHY a row is pending: a
+  -- row can be simultaneously LWIN-unmatched (or missing-cost) AND a
+  -- duplicate, and the operator-facing UI needs to see both, not just
+  -- whichever pending-cause happened to be computed first. Excluding only
+  -- 'exclude' rows (error rows, or an operator's explicit "no") is
+  -- correct because those can never be applied regardless — checking them
+  -- for duplicates would be pure waste, never a missed signal.
+  update public.import_batch_rows nr
+  set resolution = 'pending',
+      duplicate_reason = jsonb_build_object(
+        'type', 'existing_inventory',
+        'matchedInventoryItemId', ii.id,
+        'existingQuantity', ii.quantity
+      )
+  from public.wines w
+  join public.inventory_items ii on ii.wine_id = w.id
+  where nr.batch_id = v_batch_id
+    and nr.resolution <> 'exclude'
+    and w.restaurant_id = p_restaurant_id
+    and ii.restaurant_id = p_restaurant_id
+    and lower(btrim(w.producer)) = lower(btrim(nr.raw ->> 'producer'))
+    and lower(btrim(w.name)) = lower(btrim(nr.raw ->> 'name'))
+    and coalesce(w.vintage, 0) = coalesce(nullif(nr.raw ->> 'vintage', '')::int, 0)
+    and w.size_ml = coalesce(nullif(nr.raw ->> 'size_ml', '')::int, 750)
+    and upper(btrim(coalesce(ii.bin_location, ''))) = upper(btrim(coalesce(nr.raw ->> 'bin', '')))
+    and upper(btrim(coalesce(ii.section, ''))) = upper(btrim(coalesce(nr.raw ->> 'section', '')));
+
+  -- Tier 2(b) (§3.3): closes the TOCTOU gap tier 2(a) alone can't —  two
+  -- sibling chunks of the SAME session both confirmed but neither yet
+  -- applied have no applied inventory_items row for (a) to find. Only the
+  -- chunk being confirmed NOW is flagged; an already-confirmed sibling
+  -- row already sitting in the session is left untouched (§3.3's own
+  -- worked example: chunk 4's row is flagged without requiring chunk 1 to
+  -- have been applied first).
+  if p_session_id is not null then
+    update public.import_batch_rows nr
+    set resolution = 'pending',
+        duplicate_reason = jsonb_build_object(
+          'type', 'sibling_batch',
+          'matchedRowId', sib.id,
+          'existingQuantity', coalesce(nullif(sib.raw ->> 'quantity', '')::int, 0)
+        )
+    from public.import_batch_rows sib
+    join public.import_batches sb on sb.id = sib.batch_id
+    where nr.batch_id = v_batch_id
+      and nr.resolution <> 'exclude'
+      and sb.session_id = p_session_id
+      and sib.batch_id <> v_batch_id
+      and sib.apply_status = 'not_applied'
+      and sib.resolution <> 'exclude'
+      and lower(btrim(sib.raw ->> 'producer')) = lower(btrim(nr.raw ->> 'producer'))
+      and lower(btrim(sib.raw ->> 'name')) = lower(btrim(nr.raw ->> 'name'))
+      and coalesce(nullif(sib.raw ->> 'vintage', '')::int, 0) = coalesce(nullif(nr.raw ->> 'vintage', '')::int, 0)
+      and coalesce(nullif(sib.raw ->> 'size_ml', '')::int, 750) = coalesce(nullif(nr.raw ->> 'size_ml', '')::int, 750)
+      and upper(btrim(coalesce(sib.raw ->> 'bin', ''))) = upper(btrim(coalesce(nr.raw ->> 'bin', '')))
+      and upper(btrim(coalesce(sib.raw ->> 'section', ''))) = upper(btrim(coalesce(nr.raw ->> 'section', '')));
+  end if;
+
+  return jsonb_build_object('batchId', v_batch_id);
+end;
+$$;
+
+comment on function public.create_import_batch(uuid, uuid, text, integer, jsonb, uuid, integer, integer, text, text) is
+  'C09 (db audit 2026-08-23): batch insert + rows insert + tier-2 dedup '
+  'flagging in ONE function call''s implicit transaction — a rows-insert '
+  'failure rolls back the batch insert too, so an orphaned empty batch can '
+  'no longer exist. Raises 23505 on a duplicate content_sha256 or '
+  '(session_id, chunk_index) — callers look up and return the pre-existing '
+  'batch as a resume pointer (P3 §2.2) rather than treating it as a bare '
+  'rejection. SECURITY INVOKER: RLS on import_batches/import_batch_rows/ '
+  'import_sessions is the tenant boundary.';
+
+revoke all on function public.create_import_batch(uuid, uuid, text, integer, jsonb, uuid, integer, integer, text, text) from public;
+grant execute on function public.create_import_batch(uuid, uuid, text, integer, jsonb, uuid, integer, integer, text, text) to authenticated;
+
+-- === 0108_apply_import_batch_chunk_v2.sql ===
+-- 0108_apply_import_batch_chunk_v2.sql
+--
+-- P3 §5 — three fixes to apply_import_batch_chunk (0076, C11-fixed in
+-- 0085, C17-fixed in 0082), `create or replace`d in place. The function
+-- KEEPS its original name — not renamed to a distinct "_v2" function —
+-- for the same reason 0082 and 0085 both replaced it in place rather than
+-- introducing a second implementation: exactly one "apply a chunk of this
+-- batch" entry point must exist, or the app's own two-path resumability
+-- story (safe to call again after a timeout/crash) becomes a question of
+-- WHICH version got called, not just whether it was called again. The
+-- design doc's own §4 table literally says "create or replace" for this
+-- migration despite naming the FILE apply_import_batch_chunk_v2.sql — the
+-- "_v2" is a label for this round of changes, not a second function.
+--
+-- Fix 1 (C03, second half): C03's countBatchRows half is fixed by
+-- count_import_batch_rows (0106); the OTHER half of C03 is that this
+-- function itself never checked import_batches.status at all before
+-- processing rows — so a batch flipped to 'reverted' by revert_import_
+-- batch could still be re-applied into, because revert only ever flips
+-- APPLIED rows to apply_status = 'reverted'; a not-yet-applied row in a
+-- reverted batch stays 'not_applied' and still satisfies this function's
+-- eligibility WHERE clause. Fix: lock and check import_batches.status
+-- FIRST; no-op (return zero rows) when status = 'reverted'.
+--
+-- Fix 2 (C16): a permanently-failing row (e.g. numeric field overflow) was
+-- re-selected by every future call forever — same LIMIT window, no state
+-- change on error — starving every eligible row behind it, with the
+-- failure never persisted anywhere. Fix: track apply_attempts/
+-- last_error_message (0104) in the exception handler; on the
+-- MAX_ROW_APPLY_ATTEMPTSth failure (3 — matches src/domains/import/
+-- constants.ts MAX_ROW_APPLY_ATTEMPTS), flip resolution to 'pending'
+-- (existing enum value) so the row falls out of the eligibility WHERE
+-- clause automatically. Deliberately scoped to the exception handler only
+-- (not the pre-existing 'blocked' branch for missing-cost rows) — that
+-- branch is unreachable via the app's own resolveImportBatchRow flow
+-- today (include with cost_status = 'missing' always requires and sets
+-- manual_unit_cost), so it carries no live starvation risk to fix.
+--
+-- Fix 3 (C24): the wines upsert's `coalesce(wines.lwin_id, excluded.
+-- lwin_id)` locked in whichever match arrived FIRST, permanently — even a
+-- 0.95-confidence match landing after a 0.31-confidence one for the same
+-- wine identity in the same import. Fix: (a) only forward a match into
+-- wines.lwin_id/lwin_match_score when it clears LWIN_APPLY_MIN_SCORE
+-- (0.6 — P2's own stated confidence bar, §6 of the P2 design; match_lwin's
+-- own 0.3 threshold stays a preview-time "worth showing as a candidate"
+-- bar, deliberately more permissive); (b) the upsert now prefers whichever
+-- match scored HIGHER, in either arrival order, using the new
+-- wines.lwin_match_score (0105) to compare.
+--
+-- DOWN: restores this function to its exact pre-P3 (0085) body — see
+-- down/0108_apply_import_batch_chunk_v2.down.sql.
+
+create or replace function public.apply_import_batch_chunk(p_batch_id uuid, p_limit integer default 50)
+returns table (
+  row_id            uuid,
+  row_number        integer,
+  outcome           text,
+  inventory_item_id uuid,
+  error_message     text
+)
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_row public.import_batch_rows%rowtype;
+  v_unit_cost numeric(10,2);
+  v_wine_id uuid;
+  v_inventory_id uuid;
+  v_bin_id uuid;
+  v_batch_status text;
+  v_lwin_id text;
+  v_lwin_score real;
+  v_attempts int;
+begin
+  -- C03 (second half): lock the batch row and check its status BEFORE
+  -- touching any import_batch_rows. Replaces 0082/0085's plain
+  -- `if not exists (...)` visibility check with a `for update`-locked
+  -- status read — still gives C17's original re-validation-of-tenant
+  -- guarantee (RLS on import_batches makes a foreign batch id invisible,
+  -- so `not found` fires identically for "doesn't exist" and "not mine"),
+  -- and additionally makes a reverted batch a hard no-op.
+  select status into v_batch_status
+    from public.import_batches
+    where id = p_batch_id
+    for update;
+
+  if not found then
+    raise exception 'import batch % not found', p_batch_id using errcode = 'P0002';
+  end if;
+
+  if v_batch_status = 'reverted' then
+    return; -- no-op: a reverted batch can never be re-applied into.
+  end if;
+
+  for v_row in
+    select r.*
+    from public.import_batch_rows r
+    where r.batch_id = p_batch_id
+      and r.apply_status = 'not_applied'
+      and r.row_state = 'valid'
+      and r.resolution in ('auto', 'include')
+    order by r.row_number
+    limit least(greatest(p_limit, 1), 500)
+    for update skip locked
+  loop
+    begin
+      if v_row.cost_status = 'missing' then
+        if v_row.manual_unit_cost is null then
+          row_id := v_row.id;
+          row_number := v_row.row_number;
+          outcome := 'blocked';
+          inventory_item_id := null;
+          error_message := 'Missing unit cost has no operator-provided value.';
+          return next;
+          continue;
+        end if;
+        v_unit_cost := v_row.manual_unit_cost;
+      else
+        v_unit_cost := nullif(v_row.raw ->> 'unit_cost', '')::numeric(10,2);
+      end if;
+
+      if v_unit_cost is null then
+        row_id := v_row.id;
+        row_number := v_row.row_number;
+        outcome := 'blocked';
+        inventory_item_id := null;
+        error_message := 'Row has no usable unit cost.';
+        return next;
+        continue;
+      end if;
+
+      -- C24: only forward a LWIN match into wines.lwin_id when it clears
+      -- the apply-time confidence bar (0.6) — match_lwin's own 0.3
+      -- threshold exists to surface preview candidates, not to gate a
+      -- persisted, hard-to-undo catalog link. Below the bar this row
+      -- behaves exactly like it had no LWIN match at all.
+      if v_row.lwin_score is not null and v_row.lwin_score >= 0.6 then
+        v_lwin_id := v_row.lwin_id;
+        v_lwin_score := v_row.lwin_score;
+      else
+        v_lwin_id := null;
+        v_lwin_score := null;
+      end if;
+
+      -- Same dedup key as find_or_create_wines_batch (0006): reuse the
+      -- existing wine if this restaurant already has one, fill in only
+      -- the fields that were previously null, never overwrite — except
+      -- lwin_id/lwin_match_score (C24), which now prefer whichever match
+      -- scored higher regardless of insertion order: a later
+      -- higher-confidence match can overwrite an earlier lower-confidence
+      -- one, but a later LOWER-confidence match can never downgrade a
+      -- higher-confidence one already in place. A wine whose lwin_id was
+      -- set by some OTHER path (e.g. match_lwin_batch, 0007) has
+      -- lwin_match_score = null; the `wines.lwin_id is null` branch of
+      -- the CASE is the only way to overwrite that, matching the pre-C24
+      -- coalesce's own behavior for that case exactly (never overwrite a
+      -- non-null lwin_id it can't compare a score against).
+      insert into public.wines (
+        restaurant_id, name, producer, vintage, varietal, region, country, size_ml,
+        lwin_id, lwin_match_score
+      ) values (
+        v_row.restaurant_id,
+        v_row.raw ->> 'name',
+        v_row.raw ->> 'producer',
+        nullif(v_row.raw ->> 'vintage', '')::int,
+        nullif(v_row.raw ->> 'varietal', ''),
+        nullif(v_row.raw ->> 'region', ''),
+        nullif(v_row.raw ->> 'country', ''),
+        coalesce(nullif(v_row.raw ->> 'size_ml', '')::int, 750),
+        v_lwin_id,
+        v_lwin_score
+      )
+      on conflict (restaurant_id, lower(producer), lower(name), coalesce(vintage, 0), size_ml)
+      do update set
+        varietal = coalesce(public.wines.varietal, excluded.varietal),
+        region   = coalesce(public.wines.region, excluded.region),
+        country  = coalesce(public.wines.country, excluded.country),
+        lwin_id = case
+          when excluded.lwin_id is not null
+            and (public.wines.lwin_id is null or excluded.lwin_match_score > public.wines.lwin_match_score)
+          then excluded.lwin_id
+          else public.wines.lwin_id
+        end,
+        lwin_match_score = case
+          when excluded.lwin_id is not null
+            and (public.wines.lwin_id is null or excluded.lwin_match_score > public.wines.lwin_match_score)
+          then excluded.lwin_match_score
+          else public.wines.lwin_match_score
+        end
+      returning id into v_wine_id;
+
+      if v_wine_id is null then
+        raise exception 'wine insert/lookup returned no row for import_batch_row %', v_row.id;
+      end if;
+
+      -- C11 (0085, unchanged): resolve an existing bins row by the same
+      -- case-insensitive/btrim-normalized code the operator already uses.
+      -- Does NOT create a missing bin — see 0085's header.
+      v_bin_id := null;
+      if nullif(v_row.raw ->> 'bin', '') is not null then
+        select id into v_bin_id
+          from public.bins
+          where restaurant_id = v_row.restaurant_id
+            and lower(code) = lower(btrim(v_row.raw ->> 'bin'))
+          limit 1;
+      end if;
+
+      insert into public.inventory_items (
+        wine_id, restaurant_id, quantity, unit_cost, bin_location, bin_id, section, format, currency, added_via
+      ) values (
+        v_wine_id,
+        v_row.restaurant_id,
+        coalesce(nullif(v_row.raw ->> 'quantity', '')::int, 0),
+        v_unit_cost,
+        nullif(v_row.raw ->> 'bin', ''),
+        v_bin_id,
+        nullif(v_row.raw ->> 'section', ''),
+        nullif(v_row.raw ->> 'format', ''),
+        nullif(v_row.raw ->> 'currency', ''),
+        'manual'
+      )
+      returning id into v_inventory_id;
+
+      if v_inventory_id is null then
+        raise exception 'inventory_items insert returned no row for import_batch_row %', v_row.id;
+      end if;
+
+      update public.import_batch_rows
+      set apply_status = 'applied',
+          applied_inventory_item_id = v_inventory_id,
+          applied_wine_id = v_wine_id,
+          updated_at = now()
+      where id = v_row.id;
+
+      row_id := v_row.id;
+      row_number := v_row.row_number;
+      outcome := 'applied';
+      inventory_item_id := v_inventory_id;
+      error_message := null;
+      return next;
+    exception when others then
+      -- C16: track attempts. On the 3rd failure, flip resolution to
+      -- 'pending' so this row falls out of the eligibility WHERE clause
+      -- above automatically (no index change needed — the existing
+      -- eligibility index already filters on resolution) instead of being
+      -- re-selected by every future call forever and starving every
+      -- eligible row behind it. Surfaces through the same pending-row UI/
+      -- resolveImportBatchRow path §1.5 tier 3 already uses, distinguished
+      -- by last_error_message is not null.
+      v_attempts := v_row.apply_attempts + 1;
+      update public.import_batch_rows
+      set apply_attempts = v_attempts,
+          last_error_message = sqlerrm,
+          resolution = case when v_attempts >= 3 then 'pending' else resolution end,
+          updated_at = now()
+      where id = v_row.id;
+
+      row_id := v_row.id;
+      row_number := v_row.row_number;
+      outcome := 'error';
+      inventory_item_id := null;
+      error_message := sqlerrm;
+      return next;
+    end;
+  end loop;
+end;
+$$;
+
+comment on function public.apply_import_batch_chunk(uuid, integer) is
+  'Applies up to p_limit not-yet-applied, eligible rows of one import '
+  'batch. C03 (db audit 2026-08-23): locks and checks import_batches.'
+  'status first — a reverted batch is a hard no-op, it can never be '
+  're-applied into. C16: tracks apply_attempts/last_error_message per row; '
+  'a row failing 3 times moves to resolution = pending instead of '
+  'starving every eligible row behind it forever. C24: only forwards a '
+  'LWIN match into wines.lwin_id at score >= 0.6, and prefers whichever '
+  'match scored higher regardless of arrival order. C11 (0085, unchanged): '
+  'resolves inventory_items.bin_id from an existing bins row matching the '
+  'CSV bin code. FOR UPDATE SKIP LOCKED means concurrent/duplicate calls '
+  'for the same batch never double-apply a row. SECURITY INVOKER: RLS on '
+  'import_batches/import_batch_rows/wines/inventory_items is the tenant '
+  'boundary.';
+
+revoke all on function public.apply_import_batch_chunk(uuid, integer) from public;
+grant execute on function public.apply_import_batch_chunk(uuid, integer) to authenticated;
+
+-- === 0109_revert_import_batch_v2.sql ===
+-- 0109_revert_import_batch_v2.sql
+--
+-- P3 §5 (C-new-1) — same "create or replace in place, no new function
+-- name" reasoning as 0108 (see its header): the design doc's §4 table says
+-- "create or replace" for this file despite the "_v2" filename.
+--
+-- C-new-1 (found while designing §3.4, not in the original audit):
+-- revert_import_batch's guard (`if v_status <> 'completed' then raise...`)
+-- meant a batch that got PARTIALLY applied and then abandoned (a pending
+-- row nobody resolved, an operator who walked away mid-apply) sat at
+-- status = 'applying' forever and could NEVER be reverted — the guard
+-- accepted nothing but 'completed'. With one batch this was a narrow edge
+-- case; with a five-chunk session, it's five independent chances for one
+-- chunk to get stuck, and it directly blocks §3.4's "revert a session as a
+-- unit" requirement the moment any single chunk in that session is stuck
+-- mid-flight.
+--
+-- Fix, and ONE explicit deviation from the design doc's literal
+-- instruction: the doc's §4 table says relax the guard to
+-- `status in ('applying', 'completed')`. This migration instead relaxes it
+-- to `status <> 'reverted'` (i.e. also allows 'created'). Justification:
+-- §2.2/§3.2's OWN new partial unique index (import_batches_session_chunk_
+-- idx, 0103) blocks a second non-reverted batch from claiming the same
+-- (session_id, chunk_index) — including a batch still sitting at
+-- 'created' (confirmed, apply never even started). §2.2's own stated
+-- recovery path for "the operator found a data error and needs to replace
+-- a chunk" is "revert the existing batch first ... which frees the hash
+-- [or chunk slot], and then re-upload" — but a batch at 'created' has zero
+-- applied rows, so under the doc's OWN narrower `in ('applying',
+-- 'completed')` guard, reverting it would still be rejected, leaving no
+-- sanctioned way to free that chunk_index before ever applying anything.
+-- The function body is unconditionally safe on a 'created' batch: its loop
+-- is scoped to `apply_status = 'applied'` (0 rows for a never-applied
+-- batch), so this is a strict widening with zero added risk, and it is
+-- the only guard value that actually satisfies the recovery path the
+-- design doc itself specifies in §2.2.
+--
+-- DOWN: restores the original `<> 'completed'` guard, verbatim function
+-- body otherwise unchanged — see down/0109's header for the observable
+-- proof.
+
+create or replace function public.revert_import_batch(p_batch_id uuid)
+returns integer
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_restaurant_id uuid;
+  v_status text;
+  v_row record;
+  v_count integer := 0;
+begin
+  select restaurant_id, status into v_restaurant_id, v_status
+  from public.import_batches
+  where id = p_batch_id
+  for update;
+
+  if not found then
+    -- RLS already filtered this to "batches I'm a member of" — a
+    -- cross-tenant batch id lands here indistinguishable from a
+    -- nonexistent one, which is the point.
+    raise exception 'import batch % not found', p_batch_id using errcode = 'P0002';
+  end if;
+
+  -- C-new-1: relaxed from "= 'completed'" to "<> 'reverted'" (see this
+  -- migration's header for why this is slightly wider than the design
+  -- doc's literal `in ('applying', 'completed')`, and why that's a
+  -- deliberate, justified deviation rather than a scope-creep). The loop
+  -- below only ever touches apply_status = 'applied' rows regardless of
+  -- the batch's convenience status label — this is a pure guard
+  -- relaxation, not a change to what gets deleted.
+  if v_status = 'reverted' then
+    raise exception 'import batch % is already reverted', p_batch_id
+      using errcode = 'P0001';
+  end if;
+
+  for v_row in
+    select id, applied_inventory_item_id
+    from public.import_batch_rows
+    where batch_id = p_batch_id and apply_status = 'applied'
+    for update
+  loop
+    -- Order matters here. import_batch_rows_applied_has_inventory_id
+    -- (0076) requires applied_inventory_item_id IS NOT NULL whenever
+    -- apply_status = 'applied'. applied_inventory_item_id references
+    -- inventory_items ON DELETE SET NULL, so deleting the inventory row
+    -- FIRST fires that FK action immediately — nulling the column while
+    -- apply_status here is STILL 'applied' — and violates the very
+    -- constraint that's supposed to prevent this state. Flipping
+    -- apply_status to 'reverted' (and nulling the column ourselves)
+    -- first means the constraint's exception is already satisfied
+    -- before the delete's FK action can touch the row at all.
+    update public.import_batch_rows
+    set apply_status = 'reverted',
+        applied_inventory_item_id = null,
+        updated_at = now()
+    where id = v_row.id;
+
+    -- Deletes only the inventory_items row THIS row created — never
+    -- touches any other row, including pre-existing inventory for the
+    -- same wine or same restaurant.
+    delete from public.inventory_items
+    where id = v_row.applied_inventory_item_id
+      and restaurant_id = v_restaurant_id;
+
+    v_count := v_count + 1;
+  end loop;
+
+  update public.import_batches
+  set status = 'reverted', reverted_at = now(), reverted_by = auth.uid()
+  where id = p_batch_id;
+
+  return v_count;
+end;
+$$;
+
+comment on function public.revert_import_batch(uuid) is
+  'Reverts one non-reverted batch (C-new-1, db audit 2026-08-23: '
+  'relaxed from completed-only so a partially-applied, abandoned batch — '
+  'or one that never got past created — can be reverted too): deletes '
+  'exactly the inventory_items rows recorded in applied_inventory_item_id '
+  'for this batch''s applied rows (never wines, never another batch''s or '
+  'another source''s inventory rows), flips those rows to reverted, and '
+  'the batch to reverted. Returns the count of rows reverted. reverted_by '
+  'is auth.uid() — the invoking session''s own identity, never a '
+  'client-supplied value.';
+
+revoke all on function public.revert_import_batch(uuid) from public;
+grant execute on function public.revert_import_batch(uuid) to authenticated;
+
+-- === 0110_revert_import_session.sql ===
+-- 0110_revert_import_session.sql
+--
+-- P3 §3.4 — revert an entire multi-chunk session as a unit: loops the
+-- session's batches in REVERSE chunk order (5, 4, 3, 2, 1) and calls the
+-- existing per-batch revert_import_batch (0109) for each, with per-batch
+-- exception isolation (same philosophy as apply_import_batch_chunk's
+-- per-row exception blocks — one batch's revert failure must never block
+-- the other four). A batch already 'reverted' is skipped and reported,
+-- never treated as an error.
+--
+-- Reverse order is chosen for operator intuition ("last thing in, first
+-- thing out") and so an interrupted revert always leaves the EARLIEST,
+-- most-likely-correct chunks still applied rather than the LATEST,
+-- least-reviewed ones — it is NOT required for correctness:
+-- revert_import_batch only ever deletes the inventory_items rows ITS OWN
+-- applied_inventory_item_id column names, so no batch's revert can touch
+-- another batch's rows regardless of order.
+--
+-- FK-direction note (§3.4): session revert deliberately does NOT attempt
+-- to clean up wines rows, for the same reason single-batch revert_import_
+-- batch doesn't (docs/runbooks/csv-import.md's "Reversibility" section) —
+-- a wine created during this session may legitimately still be referenced
+-- by inventory outside the reverted scope (a sibling chunk not reverted, a
+-- manual entry, or a completely different session), and
+-- inventory_items.wine_id references wines(id) ON DELETE RESTRICT would
+-- correctly fail the moment anything still points at it. This function
+-- attempts no wine deletion of any kind.
+--
+-- DOWN: drops the function. Nothing else depends on it existing.
+
+create or replace function public.revert_import_session(p_session_id uuid)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_batch record;
+  v_results jsonb := '[]'::jsonb;
+  v_reverted_count integer;
+  v_session_exists boolean := false;
+begin
+  select true into v_session_exists from public.import_sessions where id = p_session_id;
+  if not v_session_exists then
+    -- RLS already filtered this to "sessions I'm a member of" — same
+    -- fail-closed idiom revert_import_batch (0076) established.
+    raise exception 'import session % not found', p_session_id using errcode = 'P0002';
+  end if;
+
+  for v_batch in
+    select id, status, chunk_index
+    from public.import_batches
+    where session_id = p_session_id
+    order by coalesce(chunk_index, 0) desc, created_at desc
+  loop
+    if v_batch.status = 'reverted' then
+      v_results := v_results || jsonb_build_object(
+        'batchId', v_batch.id, 'chunkIndex', v_batch.chunk_index,
+        'skipped', true, 'reason', 'already reverted'
+      );
+      continue;
+    end if;
+
+    begin
+      select public.revert_import_batch(v_batch.id) into v_reverted_count;
+      v_results := v_results || jsonb_build_object(
+        'batchId', v_batch.id, 'chunkIndex', v_batch.chunk_index,
+        'skipped', false, 'revertedCount', v_reverted_count
+      );
+    exception when others then
+      -- Per-batch exception isolation: one batch's revert failure must
+      -- never block the other four (same philosophy as
+      -- apply_import_batch_chunk's per-row exception blocks).
+      v_results := v_results || jsonb_build_object(
+        'batchId', v_batch.id, 'chunkIndex', v_batch.chunk_index,
+        'skipped', true, 'reason', sqlerrm
+      );
+    end;
+  end loop;
+
+  update public.import_sessions
+  set status = 'reverted', updated_at = now()
+  where id = p_session_id;
+
+  return jsonb_build_object('sessionId', p_session_id, 'batches', v_results);
+end;
+$$;
+
+comment on function public.revert_import_session(uuid) is
+  'P3 §3.4: reverts every non-reverted batch in a session, in reverse '
+  'chunk order, with per-batch exception isolation — one stuck/failing '
+  'batch is skipped and reported, never blocks the rest. Never deletes '
+  'wines rows (see migration header for the FK-direction reasoning). '
+  'SECURITY INVOKER: RLS on import_sessions/import_batches/'
+  'import_batch_rows is the tenant boundary.';
+
+revoke all on function public.revert_import_session(uuid) from public;
+grant execute on function public.revert_import_session(uuid) to authenticated;
+
+-- === 0111_inventory_items_bounds_and_currency_checks.sql ===
+-- 0111_inventory_items_bounds_and_currency_checks.sql
+--
+-- P3 §5 (C18) — vintage and size_ml already have working range guards in
+-- row-validator.ts (MIN_VINTAGE..CURRENT_YEAR+1; size_ml > 0), so this
+-- migration deliberately does NOT touch either. What's actually unbounded
+-- is quantity and unit_cost (no upper bound at either layer — the app
+-- validator only checked non-negativity, and inventory_items' own CHECKs,
+-- 0002, only ever asserted `>= 0`), and currency (free text, no allowlist
+-- anywhere). This migration is the DB-layer half of C18's fix; the
+-- app-layer half (literal-vs-coerced string validation catching
+-- '2015abc' -> 2015, '750ml' -> 750, '12.5.7' -> 12.50, plus the matching
+-- MAX_QUANTITY/MAX_UNIT_COST/currency-allowlist checks) is entirely
+-- TypeScript (row-validator.ts, constants.ts) — no migration needed for
+-- that half, per the design doc's own §4 note.
+--
+-- Bounds chosen to match src/domains/import/constants.ts exactly
+-- (MAX_QUANTITY = 100,000; MAX_UNIT_COST = 1,000,000) so the two layers
+-- can never disagree about what's in-bounds, the same "TS and DB compute
+-- the same key" discipline as wines_dedup_idx / dedup-key.ts.
+--
+-- Currency allowlist is a small closed set (ISO-4217 codes actually
+-- relevant to a wine cellar) — not a full ISO-4217 library (YAGNI, per
+-- the design doc explicitly). `currency is null` stays valid: a CSV row
+-- with no currency column value is still a legitimate import (defaults
+-- flow through unchanged elsewhere in this domain).
+--
+-- These CHECKs apply to EVERY insert/update on inventory_items, not just
+-- ones from apply_import_batch_chunk — the manual add-inventory UI path
+-- gets the same bound/allowlist protection for free, which is correct:
+-- C18's actual defect (silent coercion, no upper bound, free-text
+-- currency) was never specific to the CSV importer, the importer was just
+-- the reproduction vector the audit used.
+--
+-- DOWN: drops all three CHECK constraints. No data to reconcile — these
+-- are pure guards on future writes, dropping them doesn't touch any
+-- existing row.
+
+alter table public.inventory_items
+  add constraint inventory_items_quantity_upper_bound
+    check (quantity <= 100000),
+  add constraint inventory_items_unit_cost_upper_bound
+    check (unit_cost <= 1000000),
+  add constraint inventory_items_currency_allowlist
+    check (currency is null or currency in ('USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'JPY'));
+
+comment on constraint inventory_items_quantity_upper_bound on public.inventory_items is
+  'C18 (db audit 2026-08-23): matches MAX_QUANTITY in '
+  'src/domains/import/constants.ts exactly — the two layers can never '
+  'disagree about what quantity is in-bounds.';
+
+comment on constraint inventory_items_unit_cost_upper_bound on public.inventory_items is
+  'C18: matches MAX_UNIT_COST in src/domains/import/constants.ts exactly.';
+
+comment on constraint inventory_items_currency_allowlist on public.inventory_items is
+  'C18: a small closed set of ISO-4217 codes actually relevant to a wine '
+  'cellar, matching the app-side allowlist in '
+  'src/domains/import/constants.ts exactly — not a full ISO-4217 library '
+  '(YAGNI).';

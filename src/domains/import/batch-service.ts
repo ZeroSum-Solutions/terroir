@@ -3,15 +3,17 @@
 // supabase client and always filters by restaurantId explicitly, in
 // addition to (never instead of) the RLS policies added in 0076 — the
 // same belt-and-suspenders pattern src/lib/reconcile-ledger uses.
+//
+// P3 (2026-08-23-p3-chunked-import.md) additions: content-hash re-upload
+// idempotency (§2.2, C09), optional session/chunk context (§3.2), and the
+// count_import_batch_rows/create_import_batch RPCs (§5, C03/C09) replacing
+// the two uncapped/non-atomic client-side calls this file used to make.
 
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/types/database";
 import { buildImportPreview, type PreviewRow } from "./preview-service";
 import { APPLY_CHUNK_SIZE } from "./constants";
-
-export type ConfirmBatchResult =
-  | { ok: true; batchId: string; totalRows: number; summary: ReturnType<typeof summarize> }
-  | { ok: false; error: { code: string; message: string; missingHeaders?: string[] } };
 
 function summarize(rows: PreviewRow[]) {
   return {
@@ -26,12 +28,56 @@ function summarize(rows: PreviewRow[]) {
   };
 }
 
+export type ConfirmBatchOptions = {
+  /** P3 §3.2: this chunk belongs to a multi-batch onboarding session. */
+  sessionId?: string;
+  chunkIndex?: number;
+  chunkTotal?: number;
+  /** P3 §2.3: sha256 of the pre-split ORIGINAL file, from the chunk's own
+   * manifest (scripts/validate-bulk-import.ts's PerChunkManifest.
+   * source_csv_sha256) — checked against the session's own source_sha256
+   * to reject a chunk from the wrong file being mixed in. Never confused
+   * with content_sha256 (this SPECIFIC chunk's own bytes), which is
+   * always computed server-side below, never client-supplied. */
+  sourceSha256?: string;
+};
+
+export type ConfirmBatchResult =
+  | { ok: true; alreadyExists: false; batchId: string; totalRows: number; summary: ReturnType<typeof summarize> }
+  /** P3 §2.2 (C09): the exact bytes (or the same session+chunk_index)
+   * were already confirmed as a live (non-reverted) batch — a resume
+   * pointer, not a bare rejection. Re-applying is already idempotent
+   * (§2.1), so the client's correct move is "call /apply on batchId
+   * again," never "upload again." */
+  | { ok: true; alreadyExists: true; batchId: string; status: string; counts: BatchCounts }
+  | { ok: false; error: { code: string; message: string; missingHeaders?: string[] } };
+
+type RowPayload = {
+  row_number: number;
+  raw: Json;
+  row_state: string;
+  validation_errors: Json;
+  lwin_status: string;
+  lwin_id: string | null;
+  lwin_score: number | null;
+  cost_status: string;
+  resolution: string;
+  duplicate_reason: Json | null;
+};
+
 /**
  * Confirm an import: re-derives the full preview from the uploaded file
- * (never trusts a client-supplied preview) and persists it as one batch
- * + N rows. The batch insert and the bulk row insert are each a single
- * atomic statement; if the row insert fails, the batch row is deleted so
- * a failed confirm never leaves an empty, orphaned batch behind.
+ * (never trusts a client-supplied preview) and persists it as one batch +
+ * N rows via the create_import_batch RPC (0107) — a single function call
+ * whose implicit transaction wraps the batch insert, the rows insert, and
+ * tier-2 duplicate flagging together. A rows-insert failure rolls back the
+ * batch insert too (C09): a failed confirm can never leave an orphaned,
+ * empty batch behind.
+ *
+ * content_sha256 is computed here, over the RAW fileBuffer, BEFORE
+ * buildImportPreview's internal decodeCsvBuffer() call ever runs — hashing
+ * post-decode text could let two byte-for-byte-different uploads collide,
+ * or the same file hash differently across two decode passes (§2.2).
  */
 export async function confirmImportBatch(
   supabase: SupabaseClient<Database>,
@@ -39,6 +85,7 @@ export async function confirmImportBatch(
   userId: string,
   filename: string,
   fileBuffer: Buffer,
+  options: ConfirmBatchOptions = {},
 ): Promise<ConfirmBatchResult> {
   const preview = await buildImportPreview(supabase, fileBuffer);
   if (!preview.ok) {
@@ -48,25 +95,9 @@ export async function confirmImportBatch(
     return { ok: false, error: { code: "empty_file", message: "CSV has no data rows." } };
   }
 
-  const { data: batch, error: batchError } = await supabase
-    .from("import_batches")
-    .insert({
-      restaurant_id: restaurantId,
-      created_by: userId,
-      filename,
-      total_rows: preview.rows.length,
-    } as never)
-    .select("id")
-    .single();
+  const contentSha256 = createHash("sha256").update(fileBuffer).digest("hex");
 
-  if (batchError || !batch) {
-    throw batchError ?? new Error("import_batches insert returned no row and no error.");
-  }
-  const batchId = (batch as { id: string }).id;
-
-  const rowRecords = preview.rows.map((row) => ({
-    batch_id: batchId,
-    restaurant_id: restaurantId,
+  const rowsPayload: RowPayload[] = preview.rows.map((row) => ({
     row_number: row.rowNumber,
     raw: row.raw as unknown as Json,
     row_state: row.rowState,
@@ -76,23 +107,87 @@ export async function confirmImportBatch(
     lwin_score: row.lwinScore,
     cost_status: row.costStatus,
     resolution: row.resolution,
+    duplicate_reason: row.duplicateReason as unknown as Json | null,
   }));
 
-  const { error: rowsError } = await supabase
-    .from("import_batch_rows")
-    .insert(rowRecords as never);
+  const { data, error } = await supabase.rpc("create_import_batch", {
+    p_restaurant_id: restaurantId,
+    p_created_by: userId,
+    p_filename: filename,
+    p_total_rows: preview.rows.length,
+    p_rows: rowsPayload,
+    p_session_id: options.sessionId ?? null,
+    p_chunk_index: options.chunkIndex ?? null,
+    p_chunk_total: options.chunkTotal ?? null,
+    p_content_sha256: contentSha256,
+    p_source_sha256: options.sourceSha256 ?? null,
+  } as never);
 
-  if (rowsError) {
-    await supabase.from("import_batches").delete().eq("id", batchId);
-    throw rowsError;
+  if (error) {
+    const pgError = error as { code?: string; message?: string };
+
+    if (pgError.code === "23505") {
+      const existing = await findDuplicateBatch(supabase, restaurantId, contentSha256, options);
+      if (existing) return existing;
+      // A 23505 means SOME row already satisfies the unique index — if we
+      // can't find it, fail loudly rather than silently reporting success.
+      throw error;
+    }
+    if (pgError.code === "P0002") {
+      return { ok: false, error: { code: "session_not_found", message: pgError.message ?? "Import session not found." } };
+    }
+    if (pgError.code === "P0006") {
+      return { ok: false, error: { code: "session_source_mismatch", message: pgError.message ?? "Chunk source file does not match this session." } };
+    }
+    throw error;
   }
 
+  const batchId = (data as { batchId: string }).batchId;
   return {
     ok: true,
+    alreadyExists: false,
     batchId,
     totalRows: preview.rows.length,
     summary: summarize(preview.rows),
   };
+}
+
+/** Looks up the pre-existing live batch a 23505 from create_import_batch
+ * must be referring to — either a content_sha256 match (works with or
+ * without a session) or, failing that, a (session_id, chunk_index) match.
+ * Returns null only if neither lookup finds anything, which the caller
+ * treats as "fail loudly" rather than silently swallowing the conflict. */
+async function findDuplicateBatch(
+  supabase: SupabaseClient<Database>,
+  restaurantId: string,
+  contentSha256: string,
+  options: ConfirmBatchOptions,
+): Promise<ConfirmBatchResult | null> {
+  const { data: byHash } = await supabase
+    .from("import_batches")
+    .select("id, status")
+    .eq("restaurant_id", restaurantId)
+    .eq("content_sha256", contentSha256)
+    .neq("status", "reverted")
+    .maybeSingle();
+
+  let match = byHash as { id: string; status: string } | null;
+
+  if (!match && options.sessionId && options.chunkIndex !== undefined) {
+    const { data: byChunk } = await supabase
+      .from("import_batches")
+      .select("id, status")
+      .eq("session_id", options.sessionId)
+      .eq("chunk_index", options.chunkIndex)
+      .neq("status", "reverted")
+      .maybeSingle();
+    match = byChunk as { id: string; status: string } | null;
+  }
+
+  if (!match) return null;
+
+  const counts = await countBatchRows(supabase, match.id);
+  return { ok: true, alreadyExists: true, batchId: match.id, status: match.status, counts };
 }
 
 export type BatchCounts = {
@@ -103,25 +198,30 @@ export type BatchCounts = {
   eligibleNotApplied: number;
 };
 
+/** C03 (db audit 2026-08-23): replaces the old uncapped
+ * `.select("apply_status, resolution").eq("batch_id", batchId)` (silently
+ * truncated by PostgREST's 1,000-row max_rows past 1,000 rows, causing a
+ * false status='completed') with the count_import_batch_rows RPC (0106) —
+ * a single-row aggregate, immune to the row cap by construction. */
 async function countBatchRows(
   supabase: SupabaseClient<Database>,
   batchId: string,
 ): Promise<BatchCounts> {
-  const { data, error } = await supabase
-    .from("import_batch_rows")
-    .select("apply_status, resolution")
-    .eq("batch_id", batchId);
+  const { data, error } = await supabase.rpc("count_import_batch_rows", {
+    p_batch_id: batchId,
+  } as never);
   if (error) throw error;
 
-  const list = (data ?? []) as Array<{ apply_status: string; resolution: string }>;
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { total: number; applied: number; excluded: number; pending: number; eligible_not_applied: number }
+    | undefined;
+
   return {
-    total: list.length,
-    applied: list.filter((r) => r.apply_status === "applied").length,
-    excluded: list.filter((r) => r.resolution === "exclude").length,
-    pending: list.filter((r) => r.resolution === "pending").length,
-    eligibleNotApplied: list.filter(
-      (r) => r.apply_status === "not_applied" && (r.resolution === "auto" || r.resolution === "include"),
-    ).length,
+    total: row?.total ?? 0,
+    applied: row?.applied ?? 0,
+    excluded: row?.excluded ?? 0,
+    pending: row?.pending ?? 0,
+    eligibleNotApplied: row?.eligible_not_applied ?? 0,
   };
 }
 
@@ -170,6 +270,9 @@ export type ApplyChunkResult = {
  * processed stays `not_applied` and is picked up by the next call; an
  * already-applied row is never revisited (FOR UPDATE SKIP LOCKED at the
  * DB layer also makes two concurrent calls for the same batch safe).
+ * C03 (db audit 2026-08-23): apply_import_batch_chunk_v2 (0108) now also
+ * no-ops on a REVERTED batch — calling this after a revert can never
+ * recreate the inventory the operator just undid.
  */
 export async function applyImportBatchChunk(
   supabase: SupabaseClient<Database>,
@@ -207,10 +310,10 @@ export type ResolveRowResult =
   | { ok: false; error: { code: string; message: string } };
 
 /**
- * Operator resolution for a row sitting in the unmatched-LWIN and/or
- * missing-cost bucket. `include` on a missing-cost row requires an
- * explicit, positive manualUnitCost — there is no path that lets a row
- * apply with a silently-defaulted cost.
+ * Operator resolution for a row sitting in the pending bucket — unmatched
+ * LWIN, missing cost, or (P3 §1.5) a flagged duplicate. `include` on a
+ * missing-cost row requires an explicit, positive manualUnitCost — there
+ * is no path that lets a row apply with a silently-defaulted cost.
  */
 export async function resolveImportBatchRow(
   supabase: SupabaseClient<Database>,
@@ -266,8 +369,12 @@ export type RevertBatchResult =
   | { ok: true; revertedCount: number }
   | { ok: false; error: { code: string; message: string } };
 
-/** Revert a completed batch. See revert_import_batch (0076) for the
- * exact deletion scope guarantee. */
+/** Revert a batch. C-new-1 (db audit 2026-08-23): revert_import_batch_v2
+ * (0109) relaxed the guard from "status = completed" to "status <>
+ * reverted" — a partially-applied, abandoned batch (or one that never got
+ * past 'created') can now be reverted too, not only a fully-completed
+ * one. See revert_import_batch (0109) for the exact deletion scope
+ * guarantee, unchanged by this relaxation. */
 export async function revertImportBatch(
   supabase: SupabaseClient<Database>,
   batchId: string,
@@ -282,7 +389,7 @@ export async function revertImportBatch(
       return { ok: false, error: { code: "not_found", message: "Import batch not found." } };
     }
     if (pgError.code === "P0001") {
-      return { ok: false, error: { code: "not_completed", message: "Only a completed batch can be reverted." } };
+      return { ok: false, error: { code: "not_completed", message: "Import batch is already reverted." } };
     }
     throw error;
   }

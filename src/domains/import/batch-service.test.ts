@@ -40,27 +40,87 @@ describe("deriveBatchStatus", () => {
   });
 });
 
+/** Dispatches supabase.rpc(name, args) calls to per-name handlers — every
+ * P3-era test needs this because confirmImportBatch/applyImportBatchChunk
+ * now call TWO different RPCs in one invocation (match_lwin_bulk +
+ * create_import_batch, or apply_import_batch_chunk + count_import_batch_
+ * rows), so a single canned mockResolvedValue would answer the wrong call
+ * with the wrong shape. */
+function makeRpc(handlers: Record<string, (args: unknown) => { data: unknown; error: unknown }>) {
+  return vi.fn((name: string, args: unknown) => {
+    const handler = handlers[name];
+    if (!handler) throw new Error(`unexpected rpc ${name}`);
+    return Promise.resolve(handler(args));
+  });
+}
+
 describe("confirmImportBatch", () => {
-  it("persists the batch and one row per CSV data row (re-deriving from the file, not trusting a client payload)", async () => {
-    const insertedRows: unknown[] = [];
+  it("persists the batch via ONE create_import_batch RPC call (C09: batch+rows insert is now one atomic function call, not two client statements)", async () => {
+    let createArgs: { p_rows: unknown[]; p_content_sha256: string } | undefined;
     const supabase = {
-      rpc: vi.fn().mockResolvedValue({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+        create_import_batch: (args) => {
+          createArgs = args as typeof createArgs;
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+      }),
+    };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+    );
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: false, batchId: BATCH_ID, totalRows: 1 });
+    expect(createArgs?.p_rows).toHaveLength(1);
+    expect(createArgs?.p_rows[0]).toMatchObject({ row_number: 1, row_state: "valid" });
+    // §2.2: hashed over the raw bytes, server-side — a real sha256 hex
+    // digest, not empty/undefined.
+    expect(createArgs?.p_content_sha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("propagates a create_import_batch failure as-is (C09: the function's own implicit transaction is the only rollback needed — no separate client-side cleanup step exists anymore)", async () => {
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: () => ({ data: null, error: { code: "23514", message: "check violation" } }),
+      }),
+    };
+
+    await expect(
+      confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", csv("Domaine A,Cuvee 1,2020,6,24.50\n")),
+    ).rejects.toThrow();
+  });
+
+  it("looks up and returns the pre-existing batch as a resume pointer on a 23505 content_sha256 conflict (P3 §2.2)", async () => {
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: () => ({
+          data: null,
+          error: { code: "23505", message: 'duplicate key value violates unique constraint "import_batches_content_sha256_idx"' },
+        }),
+        count_import_batch_rows: () => ({
+          data: [{ total: 5, applied: 5, excluded: 0, pending: 0, eligible_not_applied: 0 }],
+          error: null,
+        }),
+      }),
       from: vi.fn((table: string) => {
         if (table === "import_batches") {
           return {
-            insert: () => ({
-              select: () => ({
-                single: async () => ({ data: { id: BATCH_ID }, error: null }),
+            select: () => ({
+              eq: () => ({
+                eq: () => ({
+                  neq: () => ({
+                    maybeSingle: async () => ({ data: { id: BATCH_ID, status: "completed" }, error: null }),
+                  }),
+                }),
               }),
             }),
-          };
-        }
-        if (table === "import_batch_rows") {
-          return {
-            insert: async (rows: unknown[]) => {
-              insertedRows.push(...rows);
-              return { error: null };
-            },
           };
         }
         throw new Error(`unexpected table ${table}`);
@@ -75,76 +135,33 @@ describe("confirmImportBatch", () => {
       csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
     );
 
-    expect(result).toMatchObject({ ok: true, batchId: BATCH_ID, totalRows: 1 });
-    expect(insertedRows).toHaveLength(1);
-    expect(insertedRows[0]).toMatchObject({
-      batch_id: BATCH_ID,
-      restaurant_id: RESTAURANT_ID,
-      row_number: 1,
-      row_state: "valid",
-    });
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: BATCH_ID, status: "completed" });
   });
 
-  it("deletes the orphaned batch when the row insert fails (no half-written batch)", async () => {
-    let batchDeleted = false;
-    const supabase = {
-      rpc: vi.fn().mockResolvedValue({ data: [], error: null }),
-      from: vi.fn((table: string) => {
-        if (table === "import_batches") {
-          return {
-            insert: () => ({
-              select: () => ({
-                single: async () => ({ data: { id: BATCH_ID }, error: null }),
-              }),
-            }),
-            delete: () => ({
-              eq: async (_col: string, id: string) => {
-                if (id === BATCH_ID) batchDeleted = true;
-                return { error: null };
-              },
-            }),
-          };
-        }
-        if (table === "import_batch_rows") {
-          return { insert: async () => ({ error: { message: "boom" } }) };
-        }
-        throw new Error(`unexpected table ${table}`);
-      }),
-    };
-
-    await expect(
-      confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", csv("Domaine A,Cuvee 1,2020,6,24.50\n")),
-    ).rejects.toThrow();
-    expect(batchDeleted).toBe(true);
-  });
-
-  it("rejects an empty CSV without creating a batch", async () => {
-    const from = vi.fn();
-    const supabase = { rpc: vi.fn(), from };
+  it("rejects an empty CSV without ever calling create_import_batch", async () => {
+    const rpc = vi.fn();
+    const supabase = { rpc, from: vi.fn() };
     const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "empty.csv", csv(""));
     expect(result).toMatchObject({ ok: false, error: { code: "empty_file" } });
-    expect(from).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
   });
 });
 
 describe("applyImportBatchChunk", () => {
-  it("calls the chunk RPC and recomputes batch status from row counts", async () => {
+  it("calls the chunk RPC and recomputes batch status via count_import_batch_rows (C03: replaces the old uncapped .select())", async () => {
     const statusUpdates: string[] = [];
     const supabase = {
-      rpc: vi.fn().mockResolvedValue({
-        data: [
-          { row_id: "r1", row_number: 1, outcome: "applied", inventory_item_id: "inv1", error_message: null },
-        ],
-        error: null,
+      rpc: makeRpc({
+        apply_import_batch_chunk: () => ({
+          data: [{ row_id: "r1", row_number: 1, outcome: "applied", inventory_item_id: "inv1", error_message: null }],
+          error: null,
+        }),
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 1, excluded: 0, pending: 0, eligible_not_applied: 0 }],
+          error: null,
+        }),
       }),
       from: vi.fn((table: string) => {
-        if (table === "import_batch_rows") {
-          return {
-            select: () => ({
-              eq: async () => ({ data: [{ apply_status: "applied", resolution: "auto" }], error: null }),
-            }),
-          };
-        }
         if (table === "import_batches") {
           return {
             update: (patch: { status: string }) => {
@@ -159,6 +176,7 @@ describe("applyImportBatchChunk", () => {
 
     const result = await applyImportBatchChunk(supabase as never, BATCH_ID);
     expect(supabase.rpc).toHaveBeenCalledWith("apply_import_batch_chunk", expect.objectContaining({ p_batch_id: BATCH_ID }));
+    expect(supabase.rpc).toHaveBeenCalledWith("count_import_batch_rows", { p_batch_id: BATCH_ID });
     expect(result.processed).toEqual([
       { rowId: "r1", rowNumber: 1, outcome: "applied", inventoryItemId: "inv1", errorMessage: null },
     ]);
