@@ -4,18 +4,33 @@
 -- null"), following the three-pass structure 0054_wine_lineages.sql
 -- already used for its own backfill.
 --
--- This is a best-effort SQL-side approximation of
--- src/domains/identity/normalize.ts, explicitly NOT a perfect mirror of
--- it: Postgres unaccent()'s dictionary and JS NFKD-plus-manual-œ/æ-folding
--- will not agree on every input. Stated, not hidden — per
--- docs/plans/2026-08-23-p2-identity-spine.md §3: the failure mode this
--- divergence can cause is always "creates one extra canonical/variant row
--- a later exact match could have reused," never "merges two different
--- wines," because this backfill still only ever matches/creates via the
--- same exact-key uniqueness constraints resolve_wine_variants_bulk uses —
--- it never fuzzy-matches. On a fresh local stack `wines` is empty, so this
--- is a no-op there; it exists for production-safety discipline, matching
--- this codebase's habit of never assuming a clean slate.
+-- Normalization here is public.identity_normalize_text() (0097) — the
+-- same function that GENERATES canonical_wines' identity key, so this
+-- pass cannot key a row differently from any other writer even though it
+-- runs as the table owner with RLS bypassed.
+--
+-- P2 ROUND-6 CORRECTION, recorded rather than quietly fixed: this header
+-- previously called the SQL normalization a "best-effort approximation"
+-- of src/domains/identity/normalize.ts and argued the divergence was
+-- acceptable because its failure mode is always "creates one extra
+-- canonical/variant row a later exact match could have reused," never
+-- "merges two different wines." That argument was sound only while the
+-- SQL side merely COMPARED. Once round 5 moved identity-key derivation
+-- server-side, the same divergence became capable of merging two
+-- different wines, and it immediately did: the SQL function lacked
+-- normalize.ts's possessive-suffix rule, so "O'Brien's Vineyard" and
+-- "O.S. Brien Vineyard" — the exact D3 pair round 2 separated — both
+-- normalized to "brien o s vineyard" and would have shared one canonical
+-- identity. Measured, not theorised: 10 of 17 frozen golden vectors
+-- agreed before the fix, 17 of 17 after. The two implementations are now
+-- asserted equivalent unconditionally by
+-- src/domains/identity/normalize.test.ts rather than assumed close
+-- enough, and the "never merges two different wines" guarantee is
+-- restored by that test rather than by argument.
+--
+-- On a fresh local stack `wines` is empty, so this is a no-op there; it
+-- exists for production-safety discipline, matching this codebase's habit
+-- of never assuming a clean slate.
 --
 -- Uses explicit `drop table if exists` cleanup rather than
 -- `on commit drop`: unlike resolve_wine_variants_bulk (0099), which
@@ -126,6 +141,13 @@ where n.wine_id not in (select wine_id from _identity_backfill_resolved);
 -- this file's own already-documented risk tolerance ("creates one extra
 -- canonical/variant row a later exact match could have reused," never
 -- "merges two different wines").
+-- P2 ROUND-6 FIX (D9-residual #2): reads n.producer_norm/n.cuvee_norm —
+-- the values this pass actually resolves and stores on — rather than
+-- recomputing the normalization inline, for the same reason 0099's gate
+-- does. Equal by construction (both come from identity_normalize_text
+-- over the same source text), so no outcome changes; what changes is
+-- that a later edit can no longer make the checked value and the keyed
+-- value drift apart, which is the entire D9-residual bug class.
 update _identity_backfill_norm n
 set lwin7 = null
 where n.wine_id not in (select wine_id from _identity_backfill_resolved)
@@ -133,17 +155,26 @@ where n.wine_id not in (select wine_id from _identity_backfill_resolved)
   and not exists (
     select 1 from public.lwin_catalog lc
     where lc.lwin_id = n.lwin7
-      and public.identity_normalize_text(n.producer) = public.identity_normalize_text(lc.producer)
-      and string_to_array(public.identity_normalize_text(n.name), ' ') <@ string_to_array(public.identity_normalize_text(lc.display_name), ' ')
+      and n.producer_norm = public.identity_normalize_text(lc.producer)
+      and string_to_array(n.cuvee_norm, ' ') <@ string_to_array(public.identity_normalize_text(lc.display_name), ' ')
   );
 
+-- P2 ROUND-6 (D9-residual #2): producer_norm/cuvee_norm are omitted —
+-- canonical_wines GENERATES them (0097). This migration runs as the
+-- table owner and bypasses RLS, so before round 6 it was the one path
+-- that could write ANY identity key with no policy in its way; the
+-- generated columns now bind it to n.producer/n.name exactly like every
+-- other caller. The stored key stays byte-identical to the
+-- n.producer_norm this statement still uses for DISTINCT ON and as the
+-- conflict target, since _identity_backfill_norm derived it with the
+-- same function call.
 with new_canon as (
   insert into public.canonical_wines (
-    producer, cuvee, producer_norm, cuvee_norm, lwin7, identity_status,
+    producer, cuvee, lwin7, identity_status,
     created_by_restaurant_id
   )
   select distinct on (n.producer_norm, n.cuvee_norm)
-    n.producer, n.name, n.producer_norm, n.cuvee_norm, n.lwin7,
+    n.producer, n.name, n.lwin7,
     case when n.lwin7 is not null then 'lwin_verified' else 'unverified' end,
     n.restaurant_id
   from _identity_backfill_norm n

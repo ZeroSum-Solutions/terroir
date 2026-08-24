@@ -24,7 +24,7 @@
 -- to insert from any path whatsoever.
 begin;
 
-select plan(9);
+select plan(13);
 
 -- Two real catalog entries: the exact Baron/Lalande pair that broke
 -- round 4, plus the original corroboration-check catalog row.
@@ -54,8 +54,8 @@ select set_config('request.jwt.claim.sub', (select user_id::text from _t0097_lwi
 -- all is rejected outright.
 select throws_ok(
   $$
-    insert into public.canonical_wines (producer, cuvee, producer_norm, cuvee_norm, identity_status, lwin7)
-    values ('Nonexistent Producer', 'Nonexistent Wine', 'nonexistent producer', 'nonexistent wine', 'lwin_verified', '9999999')
+    insert into public.canonical_wines (producer, cuvee, identity_status, lwin7)
+    values ('Nonexistent Producer', 'Nonexistent Wine', 'lwin_verified', '9999999')
   $$,
   '42501',
   null,
@@ -70,8 +70,8 @@ select throws_ok(
 -- correct one.
 select throws_ok(
   $$
-    insert into public.canonical_wines (producer, cuvee, producer_norm, cuvee_norm, identity_status, lwin7)
-    values ('Totally Different Producer', 'Totally Different Wine', 'totally different producer', 'totally different wine', 'lwin_verified', '1112223')
+    insert into public.canonical_wines (producer, cuvee, identity_status, lwin7)
+    values ('Totally Different Producer', 'Totally Different Wine', 'lwin_verified', '1112223')
   $$,
   '42501',
   null,
@@ -86,8 +86,8 @@ select throws_ok(
 -- different producer that happens to share a long common prefix.
 select throws_ok(
   $$
-    insert into public.canonical_wines (producer, cuvee, producer_norm, cuvee_norm, identity_status, lwin7)
-    values ('Chateau Pichon Longueville Comtesse de Lalande', 'Grand Vin', 'chateau pichon longueville comtesse de lalande', 'grand vin', 'lwin_verified', '7654321')
+    insert into public.canonical_wines (producer, cuvee, identity_status, lwin7)
+    values ('Chateau Pichon Longueville Comtesse de Lalande', 'Grand Vin', 'lwin_verified', '7654321')
   $$,
   '42501',
   null,
@@ -98,8 +98,8 @@ select throws_ok(
 -- proving the gate is precise, not merely maximally strict.
 select lives_ok(
   $$
-    insert into public.canonical_wines (producer, cuvee, producer_norm, cuvee_norm, identity_status, lwin7)
-    values ('Chateau Pichon Longueville Baron', 'Grand Vin', 'chateau pichon longueville baron', 'grand vin', 'lwin_verified', '7654321')
+    insert into public.canonical_wines (producer, cuvee, identity_status, lwin7)
+    values ('Chateau Pichon Longueville Baron', 'Grand Vin', 'lwin_verified', '7654321')
   $$,
   'Pichon Baron''s own correct text against its own real lwin7 is accepted'
 );
@@ -117,8 +117,8 @@ select is(
 -- reject this (and every other) legitimate match.
 select lives_ok(
   $$
-    insert into public.canonical_wines (producer, cuvee, producer_norm, cuvee_norm, identity_status, lwin7)
-    values ('Chateau Corroboration', 'Grand Vin', 'chateau corroboration', 'grand vin', 'lwin_verified', '1112223')
+    insert into public.canonical_wines (producer, cuvee, identity_status, lwin7)
+    values ('Chateau Corroboration', 'Grand Vin', 'lwin_verified', '1112223')
   $$,
   'a real lwin7 with corroborating producer/cuvee text is accepted (token-subset cuvee check)'
 );
@@ -140,8 +140,8 @@ select isnt_empty(
 -- have passed or failed for this specific row.
 select throws_ok(
   $$
-    insert into public.canonical_wines (producer, cuvee, producer_norm, cuvee_norm, identity_status, lwin7)
-    values ('Squatter Import Co', 'Junk Label', 'squatter import co', 'junk label', 'unverified', '1112223')
+    insert into public.canonical_wines (producer, cuvee, identity_status, lwin7)
+    values ('Squatter Import Co', 'Junk Label', 'unverified', '1112223')
   $$,
   '23514',
   null,
@@ -153,10 +153,78 @@ select throws_ok(
 -- common path.
 select lives_ok(
   $$
-    insert into public.canonical_wines (producer, cuvee, producer_norm, cuvee_norm, identity_status)
-    values ('Ordinary Producer', 'Ordinary Wine', 'ordinary producer', 'ordinary wine', 'unverified')
+    insert into public.canonical_wines (producer, cuvee, identity_status)
+    values ('Ordinary Producer', 'Ordinary Wine', 'unverified')
   $$,
   'an ordinary unverified insert (no lwin7 claim) is unaffected'
+);
+
+-- 8. ROUND 6 — D9-residual #2, THE ATTACK THIS ROUND EXISTS TO CLOSE.
+-- Until round 6 the corroboration gate above validated producer/cuvee
+-- while the row was KEYED on producer_norm/cuvee_norm, a different pair
+-- of caller-supplied fields that nothing bound to the first. So an
+-- attacker did not have to defeat the gate at all: submit raws for a
+-- wine you legitimately own, whose lwin7 genuinely corroborates (rows 4
+-- and 6 above prove those are accepted), together with norms naming the
+-- VICTIM's wine. The gate passes on the raws and the row lands on the
+-- victim's identity key — permanently, since canonical_wines_identity_idx
+-- is UNIQUE and this table grants authenticated no UPDATE or DELETE.
+--
+-- Live-reproduced against this stack before the fix: a row reading
+-- producer='Attacker Real Estate' was written with producer_norm=
+-- 'estate real victim', and the victim's own correct import through
+-- resolve_wine_variants_bulk then bound to it (canonical_match_method=
+-- 'exact', canonical_created=false).
+--
+-- The columns are now GENERATED ALWAYS from producer/cuvee (0097), so
+-- the attack is not rejected by a check — it is unrepresentable. Note
+-- the SQLSTATE: 428C9 is raised by the column definition itself, BEFORE
+-- any RLS policy is consulted, which is why it also holds for
+-- service_role, the table owner and 0101's backfill. Both columns are
+-- asserted separately so that regenerating only one of them still fails
+-- this suite.
+select throws_ok(
+  $$
+    insert into public.canonical_wines (producer, cuvee, producer_norm, identity_status, lwin7)
+    values ('Chateau Pichon Longueville Baron', 'Grand Vin', 'estate real victim', 'lwin_verified', '7654321')
+  $$,
+  '428C9',
+  null,
+  'THE ATTACK: honest raws that genuinely corroborate, plus a forged producer_norm naming a victim''s identity, is refused by the generated column'
+);
+
+select throws_ok(
+  $$
+    insert into public.canonical_wines (producer, cuvee, cuvee_norm, identity_status, lwin7)
+    values ('Chateau Pichon Longueville Baron', 'Grand Vin', 'forged cuvee key', 'lwin_verified', '7654321')
+  $$,
+  '428C9',
+  null,
+  'the same attack via cuvee_norm is refused independently — regenerating only one column would not silently pass'
+);
+
+-- 9. The generated key is not merely unforgeable, it is the RIGHT value:
+-- exactly identity_normalize_text(producer), token-sorted. Without this
+-- the two assertions above would still pass if the columns were
+-- generated from some other expression entirely.
+select is(
+  (select producer_norm || ' | ' || cuvee_norm from public.canonical_wines where lwin7 = '7654321'),
+  'baron chateau longueville pichon | grand vin',
+  'the generated identity key is exactly identity_normalize_text() of the row''s own producer/cuvee, token-sorted'
+);
+
+-- 10. Fail-closed on an identity that collapses to nothing: punctuation-
+-- only producer text generates NULL, which the column's NOT NULL refuses
+-- rather than inventing a placeholder identity. 0099 and 0101 both delete
+-- such rows before inserting, so this closes the direct-insert path only.
+select throws_ok(
+  $$
+    insert into public.canonical_wines (producer, cuvee, identity_status)
+    values ('---', 'Ordinary Wine', 'unverified')
+  $$,
+  '23502',
+  null,
+  'a producer that normalizes to nothing is refused (NOT NULL on the generated key), never given a placeholder identity'
 );
 
 select * from finish();

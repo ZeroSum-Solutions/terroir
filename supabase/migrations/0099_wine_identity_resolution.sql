@@ -330,6 +330,17 @@ begin
   -- still needs its own copy of the CALL: it runs as the table owner and
   -- bypasses RLS entirely, so canonical_wines' own INSERT policy
   -- corroboration cannot protect it; only the CHECK CONSTRAINT does).
+  -- P2 ROUND-6 FIX (D9-residual #2): this gate now reads i.producer_norm/
+  -- i.cuvee_norm — the very values phase 2 goes on to store — instead of
+  -- recomputing identity_normalize_text(i.producer_raw) inline. The two
+  -- are equal by construction (step 1 derives the norm columns with that
+  -- exact call), so this changes no outcome today; it changes what a
+  -- future edit can break. The whole D9-residual bug class is "the value
+  -- checked and the value stored are different expressions that nobody
+  -- forces to agree," and re-deriving here left one more copy of that
+  -- shape in the file. Reading the stored column makes the gate and the
+  -- identity key the same value rather than two values that happen to
+  -- match.
   update _rwvb_input i
   set lwin7 = null
   where i.canonical_wine_id is null
@@ -337,8 +348,8 @@ begin
     and not exists (
       select 1 from public.lwin_catalog lc
       where lc.lwin_id = i.lwin7
-        and public.identity_normalize_text(i.producer_raw) = public.identity_normalize_text(lc.producer)
-        and string_to_array(public.identity_normalize_text(i.cuvee_raw), ' ') <@ string_to_array(public.identity_normalize_text(lc.display_name), ' ')
+        and i.producer_norm = public.identity_normalize_text(lc.producer)
+        and string_to_array(i.cuvee_norm, ' ') <@ string_to_array(public.identity_normalize_text(lc.display_name), ' ')
     );
 
   -- 3. Canonical, phase 2 (create). DISTINCT ON collapses two rows in the
@@ -347,13 +358,20 @@ begin
   -- ON CONFLICT DO NOTHING handles a genuinely concurrent OTHER call
   -- committing the same (producer_norm, cuvee_norm) between step 2 and
   -- here.
+  -- P2 ROUND-6 (D9-residual #2): producer_norm/cuvee_norm are no longer
+  -- named in this insert — canonical_wines GENERATES them from producer/
+  -- cuvee (0097), and naming a generated column raises SQLSTATE 428C9.
+  -- The stored key is therefore identity_normalize_text(i.producer_raw),
+  -- byte-identical to the i.producer_norm this statement still uses for
+  -- DISTINCT ON and for the conflict target, because step 1 derived that
+  -- column with the same call.
   with new_canon as (
     insert into public.canonical_wines (
-      producer, cuvee, producer_norm, cuvee_norm, lwin7,
+      producer, cuvee, lwin7,
       identity_status, created_by_restaurant_id, created_by_user_id
     )
     select distinct on (i.producer_norm, i.cuvee_norm)
-      i.producer_raw, i.cuvee_raw, i.producer_norm, i.cuvee_norm, i.lwin7,
+      i.producer_raw, i.cuvee_raw, i.lwin7,
       case when i.lwin7 is not null then 'lwin_verified' else 'unverified' end,
       p_restaurant_id, auth.uid()
     from _rwvb_input i

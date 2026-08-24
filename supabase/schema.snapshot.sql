@@ -5791,3 +5791,1772 @@ comment on function public.revert_import_batch(uuid) is
 
 revoke all on function public.revert_import_batch(uuid) from public;
 grant execute on function public.revert_import_batch(uuid) to authenticated;
+
+-- === 0097_canonical_wines.sql ===
+-- 0097_canonical_wines.sql
+-- P2 — wine identity spine, part 1: the global identity table.
+--
+-- canonical_wines is the internal, immutable identity a real-world wine
+-- (producer + cuvée, no vintage/size) gets exactly once, ever, regardless of
+-- how many tenants carry it or how many times its name is misspelled on a
+-- CSV. It is deliberately NOT restaurant-scoped: two restaurants' imports of
+-- "Domaine Jean Grivot, Vosne-Romanée" must resolve to the same row so a
+-- later image/enrichment pass (P4) can serve one cached asset to both,
+-- without either tenant's inventory ever becoming visible to the other
+-- (that boundary lives entirely in wine_variants/wines, not here).
+--
+-- LWIN (lwin7) participates as an alias/anchor, never as the primary key —
+-- see docs/plans/2026-08-23-p2-identity-spine.md §1 for why: a bad fuzzy
+-- LWIN match must never be able to retroactively invalidate this row's
+-- identity (the C24 failure mode). vintage and bottle size are NEVER part
+-- of this table — they are wine_variants' job (0098) and are always exact
+-- keys, never fuzzy-matched (see resolve_wine_variants_bulk, 0099).
+
+-- P2 ROUND-6 FIX (D9-residual #2 — see the identity_normalize_text() and
+-- canonical_wines DDL comments below): the extension + normalization
+-- function are declared BEFORE the table, because the table's identity
+-- key columns are now GENERATED from this function and a generation
+-- expression cannot reference a function that does not exist yet.
+create extension if not exists unaccent;
+
+-- P2 ROUND-5/6 FIX (D9-residual — scratchpad db-audit/verify/P2-critic-r4.md):
+-- shared, deterministic text-normalization helper. Round 4's LWIN
+-- corroboration gate used pg_trgm similarity() with match_lwin's ranking
+-- thresholds (0.3/0.21) — a threshold tuned to be TOLERANT of false
+-- positives because a human reviews match_lwin's suggestions. That is the
+-- wrong tool for a permanent, cross-tenant, unrepairable security
+-- decision: similarity('Chateau Pichon Longueville Baron', 'Chateau
+-- Pichon Longueville Comtesse de Lalande') = 0.55, comfortably above 0.3,
+-- for two REAL, DISTINCT Bordeaux estates that share a long common
+-- prefix — live-verified against this exact pair before writing this
+-- comment. A fuzzy threshold cannot separate them; no threshold reliably
+-- can, because their similarity is a property of shared vocabulary, not
+-- of being the same wine.
+--
+-- identity_normalize_text() replaces the threshold with a DETERMINISTIC
+-- equality check: unaccent + lowercase + possessive-suffix merge +
+-- collapse non-alnum + token-sort. Baron and Lalande normalize to
+-- different token sets ("baron chateau longueville pichon" vs "chateau
+-- comtesse de lalande longueville pichon") and can never satisfy an
+-- equality check regardless of shared vocabulary, while a genuine
+-- data-entry-error — accents, case, spacing, punctuation — still
+-- normalizes identically on both sides, preserving the legitimate "LWIN
+-- wins over textual FORMATTING differences" behavior
+-- resolve_wine_variants_bulk depends on.
+--
+-- ROUND 6 — TWO CHANGES, both forced by this function's PROMOTION from
+-- "comparison helper" to "the definition of the identity key" (the
+-- canonical_wines DDL below now GENERATES producer_norm/cuvee_norm from
+-- it). While it only ever fed comparisons, divergence from the
+-- TypeScript src/domains/identity/normalize.ts was cosmetic and its
+-- worst case was a false NEGATIVE. Once it computes the stored identity
+-- key, a divergence becomes a false POSITIVE — two genuinely different
+-- wines sharing one canonical row — which is the single failure the
+-- blueprint cares about most:
+--
+-- 1. POSSESSIVE-SUFFIX RULE ADDED (the D3 regression, live-measured).
+--    normalize.ts merges a trailing possessive "'s" into its host word
+--    BEFORE the general non-alnum collapse, so "O'Brien's" -> "briens"
+--    (one token) rather than "brien"+"s" (two tokens, one a
+--    coincidence-prone stray). Without that rule here, "O'Brien's
+--    Vineyard" and "O.S. Brien Vineyard" BOTH normalized to
+--    "brien o s vineyard" — the exact over-merge round 2's D3 fix
+--    removed from the TypeScript side, silently reintroduced the moment
+--    the identity key moved into SQL. Measured against the frozen
+--    contract in src/domains/identity/__fixtures__/normalization-golden-
+--    vectors.json: 10 of 17 vectors agreed before this rule, 17 of 17
+--    after, and all 7 failures were this one cause. The regexp is the
+--    direct translation of normalize.ts's /['’]s(?=\s|$)/g — PostgreSQL's
+--    ARE engine has no lookahead here, so the following-space is captured
+--    and re-emitted via \1 instead.
+-- 2. search_path PINNED. unaccent(text) is declared STABLE, not
+--    IMMUTABLE, and resolves BOTH the function and its dictionary through
+--    search_path; this function's IMMUTABLE marking was therefore a
+--    promise rather than a guarantee (as its previous comment honestly
+--    disclosed). A promise is survivable for a comparison; it is not
+--    survivable for a STORED GENERATED column, where the value is
+--    computed once and then indexed as a UNIQUE identity key. Pinning
+--    search_path (the same discipline is_member and every other
+--    security-relevant function in this schema already uses, 0001) makes
+--    the resolution deterministic and the immutability marking honest.
+create or replace function public.identity_normalize_text(raw text)
+returns text
+language sql
+immutable
+parallel safe
+set search_path = public
+as $$
+  select nullif(
+    (select string_agg(t, ' ' order by t)
+     from unnest(string_to_array(
+       trim(regexp_replace(
+         regexp_replace(lower(unaccent(raw)), '[''’]s(\s|$)', 's\1', 'g'),
+         '[^a-z0-9]+', ' ', 'g')),
+       ' '
+     )) as t
+     where t <> ''),
+    ''
+  );
+$$;
+
+comment on function public.identity_normalize_text(text) is
+  'THE definition of canonical_wines'' identity key: producer_norm and '
+  'cuvee_norm are STORED GENERATED columns computed by this function, so '
+  'no client, RPC, or table-owner migration can supply an identity key '
+  'decoupled from the row''s own producer/cuvee text. Also used for '
+  'deterministic LWIN corroboration — exact equality (producer) or '
+  'token-array subset (cuvee vs display_name, since display_name commonly '
+  'combines producer + wine name) — never as a fuzzy/threshold input. '
+  'Behaviourally equivalent to src/domains/identity/normalize.ts''s '
+  'normalizeProducerOrCuvee; that equivalence is enforced unconditionally '
+  'by src/domains/identity/normalize.test.ts against the frozen golden '
+  'vectors, and it is load-bearing rather than tidy — a divergence here '
+  'is a false POSITIVE (two different wines sharing one canonical row), '
+  'not the false negative it was while this function only fed '
+  'comparisons.';
+
+create table public.canonical_wines (
+  id                     uuid        primary key default gen_random_uuid(),
+  producer               text        not null,
+  cuvee                  text        not null,
+  -- P2 ROUND-6 FIX (D9-residual #2 — the second cross-tenant identity-
+  -- hijack instance, live-reproduced end to end before this fix):
+  -- these two columns ARE the identity key (canonical_wines_identity_idx
+  -- below is UNIQUE on them, and resolve_wine_variants_bulk's phase-1
+  -- text match joins on them), and until round 6 they were plain
+  -- caller-supplied text. The LWIN corroboration gate validated
+  -- producer/cuvee — a DIFFERENT pair of caller-supplied fields —
+  -- so the value checked and the value stored were simply not the same
+  -- thing, with nothing anywhere binding one to the other.
+  --
+  -- The attack needed no threshold, no fuzzy matching and no unusual
+  -- privilege: submit raws for a wine you legitimately own whose lwin7
+  -- genuinely corroborates, and norms naming the VICTIM's wine. The gate
+  -- passes on the raws; the row lands on the victim's identity key as
+  -- lwin_verified. Reproduced live against this stack: a row reading
+  -- producer='Attacker Real Estate' (which is what corroborated its
+  -- lwin7) was written with producer_norm='estate real victim', and the
+  -- victim's own subsequent, entirely correct import through the real
+  -- resolve_wine_variants_bulk RPC then bound to it — canonical_match_
+  -- method='exact', canonical_created=false. Permanent and unrepairable
+  -- by the victim: canonical_wines_identity_idx is UNIQUE so they can
+  -- never create their own row, and this table grants authenticated no
+  -- UPDATE or DELETE.
+  --
+  -- GENERATED ALWAYS ... STORED is the fix, chosen over a CHECK
+  -- constraint deliberately. A CHECK would still let the caller supply
+  -- the key and merely police it; generation removes the field from
+  -- every write API outright, so the decoupling is not defended against,
+  -- it is unrepresentable. It reaches paths RLS cannot: 0101's backfill
+  -- runs as the table owner and bypasses RLS entirely, and
+  -- resolve_wine_variants_bulk is SECURITY INVOKER but batches its
+  -- inserts. Attempting to supply either column now fails with SQLSTATE
+  -- 428C9 from any role, including service_role and the table owner.
+  --
+  -- NOT NULL is retained and is load-bearing in the fail-closed
+  -- direction: identity_normalize_text returns NULL when the input
+  -- collapses to nothing (e.g. punctuation-only text), so such a row is
+  -- refused outright rather than inventing a placeholder identity. Both
+  -- 0099 and 0101 already delete those rows before reaching an insert,
+  -- so this changes no supported path — it only closes the direct-insert
+  -- one.
+  producer_norm          text        not null generated always as (public.identity_normalize_text(producer)) stored,
+  cuvee_norm             text        not null generated always as (public.identity_normalize_text(cuvee)) stored,
+  colour                 text,
+  region                 text,
+  country                text,
+  lwin7                  text        check (lwin7 ~ '^[0-9]{7}$'),
+  identity_status        text        not null default 'unverified' check (
+    identity_status in ('lwin_verified', 'operator_confirmed', 'unverified')
+  ),
+  created_by_restaurant_id uuid      references public.restaurants(id) on delete set null,
+  created_by_user_id     uuid        references auth.users(id) on delete set null,
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
+);
+
+comment on table public.canonical_wines is
+  'Global (not restaurant-scoped) real-world wine identity: producer + '
+  'cuvée, no vintage/size. created_by_* is audit metadata only, never a '
+  'tenancy boundary — every authenticated tenant can read and (shape-'
+  'restricted) insert into this table by design, since it is a shared '
+  'catalog every import contributes to. See the migration header and '
+  'docs/plans/2026-08-23-p2-identity-spine.md §8 for the anti-pollution '
+  'reasoning: access control cannot lock this table down without also '
+  'blocking legitimate long-tail wine creation, so correctness is '
+  'enforced on WHAT a row may assert (identity_status/lwin7 shape), not '
+  'WHO may write it.';
+
+create unique index canonical_wines_identity_idx
+  on public.canonical_wines (producer_norm, cuvee_norm);
+
+create unique index canonical_wines_lwin7_idx
+  on public.canonical_wines (lwin7)
+  where lwin7 is not null;
+
+create index canonical_wines_producer_trgm_idx
+  on public.canonical_wines using gin (producer_norm gin_trgm_ops);
+
+create index canonical_wines_cuvee_trgm_idx
+  on public.canonical_wines using gin (cuvee_norm gin_trgm_ops);
+
+create trigger canonical_wines_set_updated_at
+  before update on public.canonical_wines
+  for each row execute function public.set_updated_at();
+
+alter table public.canonical_wines enable row level security;
+
+create policy "anyone authenticated can read canonical_wines"
+  on public.canonical_wines for select to authenticated
+  using (true);
+
+-- Shape-restricted insert, not ownership-restricted (there is no owner to
+-- check on a global table): a raw client/RPC insert may only claim
+-- 'unverified' outright, or 'lwin_verified' when it also supplies a lwin7
+-- that DETERMINISTICALLY corroborates against the real catalog (see
+-- below). 'operator_confirmed' is intentionally NEVER reachable through
+-- this policy — nothing in P2 sets it; it exists in the CHECK constraint
+-- for a future manager-gated promotion RPC, out of scope here
+-- (docs/plans/2026-08-23-p2-identity-spine.md §12).
+--
+-- P2 ROUND-4/5 HISTORY (D9, then D9-residual — scratchpad
+-- db-audit/verify/P2-critic-r3.md and -r4.md): round 1 only checked
+-- lwin7's FORMAT. Round 4 added a corroboration check using pg_trgm
+-- similarity() at match_lwin's own ranking thresholds (0.3/0.21) — WRONG:
+-- that threshold is tuned to be tolerant of false positives because a
+-- human reviews match_lwin's suggestions; this policy makes a permanent,
+-- cross-tenant, unrepairable decision. The round-5 critic proved live
+-- that similarity('Chateau Pichon Longueville Baron', 'Chateau Pichon
+-- Longueville Comtesse de Lalande') = 0.55 — two REAL, DISTINCT estates,
+-- both comfortably above 0.3 — then reproduced the full cross-tenant
+-- hijack through all three enforcement copies using nothing but the
+-- system's OWN real data (no attacker needed): tenant A submits
+-- Lalande's own correct text with Baron's real lwin7; the (then-fuzzy)
+-- gate accepted it as lwin_verified; tenant B later submits Baron's own
+-- correct text with the same lwin7, and because LWIN-exact wins by
+-- design, tenant B bound to tenant A's Lalande-labelled row.
+--
+-- The round-5 critic ALSO found a second, more severe hole: the
+-- 'unverified' branch below placed NO constraint on lwin7 at all, so a
+-- row could squat a real lwin7 as 'unverified' garbage — the
+-- corroboration check never even ran — and 0099's phase-1 lwin_exact
+-- match had no identity_status filter, so EVERY later import carrying
+-- that lwin7, including a fully legitimate one, matched the squatter.
+-- That path needed no fuzzy match, no attacker cleverness, and did not
+-- go through this policy's 'lwin_verified' branch at all.
+--
+-- Round 5 fixes BOTH, structurally rather than by tuning a constant:
+--
+-- 1. NEW CHECK CONSTRAINT canonical_wines_lwin7_requires_verified below:
+--    lwin7 may be non-null ONLY when identity_status = 'lwin_verified'.
+--    This is a table-level CHECK, not an RLS policy clause, so it is
+--    enforced for EVERY insert path universally — the authenticated RLS
+--    policy here, resolve_wine_variants_bulk (SECURITY INVOKER, so RLS
+--    already applied, but defense-in-depth matters), AND 0101's backfill
+--    (which runs as the table owner and bypasses RLS entirely — this
+--    CHECK constraint is the only thing that reaches it). Closes the
+--    unverified-squat path outright: there is no longer any insert shape
+--    that lets lwin7 through without the corroboration check below also
+--    having to pass.
+-- 2. The corroboration check itself is now DETERMINISTIC, not fuzzy:
+--    identity_normalize_text() (defined above) applied to both sides.
+--    PRODUCER is compared for EXACT equality — this is what actually
+--    separates Baron from Lalande (their normalized forms differ), while
+--    still tolerating genuine data-entry-error formatting differences
+--    (accents/case/spacing/punctuation collapse identically on both
+--    sides). CUVEE is compared by TOKEN SUBSET, not exact equality:
+--    lwin_catalog.display_name commonly combines producer + wine name
+--    (verified against this table's own seed data), so an exact-string
+--    check against cuvee alone would reject every legitimate match. A
+--    submitted cuvee whose normalized tokens are ALL present in
+--    display_name's normalized tokens is accepted; a wrong cuvee (e.g.
+--    the real producer's LWIN attached to a fabricated bottling name)
+--    is not. Both comparisons are still deterministic set/string
+--    operations, never a score — which is what makes resolve_wine_
+--    variants_bulk's "LWIN wins over textual FORMATTING differences"
+--    feature still work
+--    for its intended case).
+--
+-- ROUND 6 (D9-residual #2) — WHY THIS POLICY NEEDS NO producer_norm/
+-- cuvee_norm CLAUSE, which is the natural thing to look for here. Round
+-- 5 closed the RPC half of the norm/raw decoupling by deriving the norms
+-- server-side inside resolve_wine_variants_bulk, but this policy was the
+-- other half and was left open: it corroborates the row's own producer/
+-- cuvee (correctly) while placing NO constraint whatsoever on the two
+-- columns that actually ARE the identity key. A direct insert could
+-- therefore pass corroboration on honest raws and still land on any
+-- victim's key. Adding a `producer_norm = identity_normalize_text(
+-- producer)` clause here would have worked, but only for this one path,
+-- and only for as long as the clause and the RPC agreed — the same
+-- "three copies of one gate" shape the round-4 critic already faulted.
+-- Round 6 instead makes the columns GENERATED (see the table DDL above),
+-- so a forged identity key is rejected by the column definition itself
+-- before any policy is consulted, identically for this policy, the RPC,
+-- 0101's table-owner backfill and service_role. That is why the check
+-- below is still expressed against producer/cuvee and needs no
+-- counterpart: producer/cuvee are now provably the sole inputs to the
+-- key, so corroborating them IS corroborating it.
+--
+-- This RLS policy protects DIRECT inserts. It does NOT, by itself,
+-- protect resolve_wine_variants_bulk's own batched insert from aborting
+-- the ENTIRE batch the moment one row's lwin7 fails this check (a WITH
+-- CHECK violation on any one row of a multi-row INSERT fails the whole
+-- statement) — that RPC (0099) carries its own pre-insert corroboration
+-- gate (now also deterministic) for exactly that reason, so a bad LWIN
+-- downgrades just that one row to unverified instead of aborting a
+-- 5,000-row import chunk. 0101's backfill carries its own copy of the
+-- corroboration logic too (reusing identity_normalize_text() directly,
+-- not duplicating the expression) — the CHECK CONSTRAINT is what makes
+-- the OUTCOME safe there even if that logic ever drifted; the RLS
+-- policy and the RPC gate exist to make the CREATE decision correct in
+-- the first place, not merely safe-by-constraint.
+create policy "members can insert canonical_wines"
+  on public.canonical_wines for insert to authenticated
+  with check (
+    identity_status = 'unverified'
+    or (
+      identity_status = 'lwin_verified'
+      and lwin7 is not null
+      and exists (
+        select 1 from public.lwin_catalog lc
+        where lc.lwin_id = lwin7
+          -- `canonical_wines.producer`/`.cuvee` MUST be table-qualified
+          -- here, not bare — lwin_catalog also has its own `producer`
+          -- column, and an unqualified reference inside this subquery
+          -- resolves to lc.producer (the subquery's own scope), not the
+          -- row being inserted, silently turning this into `x = x`
+          -- (always true). Caught live during round-5 verification: the
+          -- unqualified form let Pichon Lalande's own text pass
+          -- corroboration against Pichon Baron's catalog row, because
+          -- the check was accidentally comparing Baron's catalog
+          -- producer to itself. `lwin_catalog` has no `cuvee` or
+          -- `identity_status` column, so those bare references above are
+          -- not at risk — only the two names it happens to share with
+          -- canonical_wines.
+          and public.identity_normalize_text(canonical_wines.producer) = public.identity_normalize_text(lc.producer)
+          and string_to_array(public.identity_normalize_text(canonical_wines.cuvee), ' ') <@ string_to_array(public.identity_normalize_text(lc.display_name), ' ')
+      )
+    )
+  );
+
+-- P2 ROUND-5 FIX (D9-residual): closes the unverified-squat path at the
+-- schema level, universally, regardless of insert path or role. See the
+-- policy comment above for the full history.
+alter table public.canonical_wines
+  add constraint canonical_wines_lwin7_requires_verified
+  check (lwin7 is null or identity_status = 'lwin_verified');
+
+-- No update/delete policy for authenticated or anon: this table is
+-- append-mostly. The only sanctioned mutation paths are
+-- resolve_wine_variants_bulk (0099, insert-only) and merge_canonical_wines
+-- (0100, service-role only, which both updates referrers and deletes the
+-- source row under its own privileges).
+--
+-- P2 ROUND-2 FIX (D4 — scratchpad db-audit/verify/P2-critic-r1.md):
+-- created_by_restaurant_id is audit-only per this table's own design (see
+-- the table comment above), but §8 of
+-- docs/plans/2026-08-23-p2-identity-spine.md only evaluated that column
+-- against a WRITE-corruption threat model and never asked whether a
+-- global, any-authenticated-readable table should expose it for READING.
+-- The critic reproduced live that it does: any signed-in user at any
+-- restaurant can read which OTHER restaurant first stocked a given wine —
+-- a narrow but real competitive-intelligence leak, and — combined with
+-- 0029_public_restaurant_read.sql's public restaurant-name policy — a
+-- restaurant's own name is reachable from it too. Deliberate decision:
+-- restrict, not merely document. No app code anywhere reads
+-- created_by_restaurant_id or created_by_user_id via the authenticated
+-- role (confirmed by grep across src/**), so there is no functional loss,
+-- and RETURNING clauses on this table (resolve_wine_variants_bulk, 0099)
+-- never reference either column, so this cannot break the one write path
+-- that populates them. Column-level GRANT (not a second RLS policy —
+-- Postgres RLS is row-level only) is the standard mechanism for
+-- restricting a subset of columns on an otherwise-readable table; per
+-- has_table_privilege's own semantics (true if the role holds privilege
+-- on ANY column), the existing "authenticated can select ...
+-- canonical_wines" pgTAP assertion in
+-- supabase/tests/0097_identity_spine_grants.sql is unaffected. Both
+-- created_by_* columns get the same treatment since they share the exact
+-- same audit-only justification and the same platform-wide-read shape —
+-- leaving one restricted and its sibling open would be an inconsistency,
+-- not a decision.
+grant select (
+  id, producer, cuvee, producer_norm, cuvee_norm, colour, region, country,
+  lwin7, identity_status, created_at, updated_at
+) on table public.canonical_wines to authenticated;
+grant insert on table public.canonical_wines to authenticated;
+
+-- === 0098_wine_variants.sql ===
+-- 0098_wine_variants.sql
+-- P2 — wine identity spine, part 2: the tenant-scoped identity table, plus
+-- the wines/wine_lineages hooks that let existing per-tenant rows point at
+-- it.
+--
+-- wine_variants is one restaurant's claim on one (canonical_wine, vintage,
+-- size) tuple. It is restaurant-scoped (unlike canonical_wines) because
+-- Terroir's inventory model is restaurant-scoped SaaS — a global vintage+
+-- format catalog shared across tenants would recreate exactly the cross-
+-- tenant-write risk C01/C05/C06 already demonstrate elsewhere in this
+-- schema. vintage and size_ml are the identity keys here, and per
+-- docs/plans/2026-08-23-p2-identity-spine.md §6 they are NEVER fuzzy-
+-- matched — only producer/cuvée text (canonical_wines) ever passes through
+-- trigram similarity, and only to suggest.
+--
+-- wines is extended, not replaced: it keeps being the authoritative
+-- per-tenant operational row (inventory, pours, pricing, everything
+-- accumulated across 96 migrations). wine_variant_id is deliberately NOT
+-- unique on wines — two wines rows resolving to the same variant because
+-- of spelling drift is the exact "possible duplicate" signal a review
+-- surface wants, cheaper to detect (GROUP BY HAVING count(*) > 1) than to
+-- prevent by force.
+
+create table public.wine_variants (
+  id                uuid        primary key default gen_random_uuid(),
+  restaurant_id     uuid        not null references public.restaurants(id) on delete cascade,
+  canonical_wine_id uuid        not null references public.canonical_wines(id) on delete restrict,
+  vintage           int         check (vintage is null or vintage between 1900 and extract(year from now())::int + 1),
+  size_ml           int         not null default 750 check (size_ml > 0),
+  lwin11            text        check (lwin11 ~ '^[0-9]{11}$'),
+  lwin16            text        check (lwin16 ~ '^[0-9]{16}$'),
+  gtin              text        check (gtin ~ '^[0-9]{8,14}$'),
+  display_name      text,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+
+comment on table public.wine_variants is
+  'One restaurant''s claim on one (canonical_wine_id, vintage, size_ml) '
+  'identity tuple. vintage=null means NV, matching the wines.vintage '
+  'convention. size_ml — never the free-text wines/inventory_items '
+  '"format" column — is the sole identity key for bottle format '
+  '(docs/plans/2026-08-23-p2-identity-spine.md §5): "Magnum" vs "1.5L '
+  'Magnum" vs "1500ml" all describe size_ml=1500 and must never fork the '
+  'identity.';
+
+-- Composite-FK target for wines.wine_variant_id below.
+create unique index wine_variants_id_restaurant_idx
+  on public.wine_variants (id, restaurant_id);
+
+-- The exact-match identity key. coalesce(vintage,0) matches the existing
+-- wines_dedup_idx (0002) convention exactly, so NV variants collide on 0
+-- the same way wines.vintage always has.
+create unique index wine_variants_identity_idx
+  on public.wine_variants (restaurant_id, canonical_wine_id, coalesce(vintage, 0), size_ml);
+
+create unique index wine_variants_gtin_idx
+  on public.wine_variants (restaurant_id, gtin)
+  where gtin is not null;
+
+create index wine_variants_restaurant_id_idx on public.wine_variants (restaurant_id);
+create index wine_variants_canonical_wine_id_idx on public.wine_variants (canonical_wine_id);
+
+create trigger wine_variants_set_updated_at
+  before update on public.wine_variants
+  for each row execute function public.set_updated_at();
+
+alter table public.wine_variants enable row level security;
+
+create policy "members can read wine_variants"
+  on public.wine_variants for select to authenticated
+  using (public.is_member(restaurant_id));
+
+create policy "members can insert wine_variants"
+  on public.wine_variants for insert to authenticated
+  with check (public.is_member(restaurant_id));
+
+create policy "members can update wine_variants"
+  on public.wine_variants for update to authenticated
+  using (public.is_member(restaurant_id))
+  with check (public.is_member(restaurant_id));
+
+-- No delete policy: identity records are permanent audit trail, same
+-- posture as import_batches/stock_adjustments.
+
+grant select, insert, update on table public.wine_variants to authenticated;
+
+-------------------------------------------------------------------------------
+-- wines hooks
+-------------------------------------------------------------------------------
+
+alter table public.wines
+  add column wine_variant_id   uuid,
+  add column canonical_wine_id uuid references public.canonical_wines(id) on delete set null;
+
+-- C17's own fix sketch (composite FK), applied preventively on a brand-new
+-- column: a wines row pointing at another tenant's wine_variant becomes a
+-- constraint violation, not a latent cross-tenant bug.
+--
+-- P2 ROUND-3 FIX (D1-residual — scratchpad db-audit/verify/P2-critic-r2.md):
+-- round 1 shipped ON DELETE CASCADE, which let a single wine_variants
+-- delete silently destroy the wines row pointing at it plus every one of
+-- its own CASCADE-tied audit children — CRITICAL, fixed in round 2 by
+-- switching to ON DELETE SET NULL (wine_variant_id), a Postgres 15+
+-- column-scoped composite-FK action. Round 2's own comment then rejected
+-- plain RESTRICT (round 1's original recommendation, and the posture of
+-- the sibling wine_variants_canonical_wine_id_fkey below) on the theory
+-- that a restaurant teardown fires wine_variants.restaurant_id's CASCADE
+-- and wines.restaurant_id's CASCADE in an unguaranteed order, and RESTRICT
+-- would raise a spurious violation if the wine_variants side won that
+-- race.
+--
+-- The round-2 critic tested that specific claim directly rather than
+-- reasoning about it: dropped and recreated wines_restaurant_id_fkey to
+-- give it deliberately LATER trigger OIDs than
+-- wine_variants_restaurant_id_fkey's, added AFTER DELETE diagnostic
+-- triggers logging clock_timestamp() to PROVE the reversed order rather
+-- than infer it, and reran restaurant teardown under plain RESTRICT.
+-- It never fired — 8/8 in natural order, then again under the
+-- diagnostically-proven-reversed order. Independently reproduced here
+-- (same technique — forced trigger-OID reversal, real NOTICE timestamps
+-- confirming wine_variants deleted before wines, plain RESTRICT on the
+-- fixture): teardown still succeeded with zero errors. This is consistent
+-- with how Postgres actually implements NOT DEFERRABLE FK RESTRICT/
+-- NO ACTION checks — as a true end-of-statement check, not a check at the
+-- moment the referenced row disappears — so by the time it runs, every
+-- cascade delete across the whole affected object graph (both siblings,
+-- regardless of which fired first) has already completed, and there is
+-- never a live wines row left pointing at an already-deleted
+-- wine_variants row for the check to trip on.
+--
+-- So the justification for SET NULL was wrong, and SET NULL itself
+-- reopened a milder version of the SAME failure class round 1 was
+-- CRITICAL over: a variant delete that silently severs a wine's resolved
+-- identity (wine_variant_id AND canonical_wine_id, both nulled by
+-- wines_derive_canonical_wine_id below) with no error, no
+-- identity_merge_log entry, and no code path that ever re-heals it.
+-- Quieter than destroying the wine, but still an unguarded, unlogged
+-- mutation of identity state — exactly what identity_merge_log and the
+-- merge-completeness testing apparatus exist to prevent everywhere else.
+--
+-- Fixed to plain RESTRICT, now that it is proven safe under both natural
+-- and forced-reversed cascade ordering. This matches the sibling
+-- wine_variants_canonical_wine_id_fkey's posture and the design's own
+-- stated philosophy: force an explicit, guarded, logged path (a real
+-- merge/detach operation, not a bare DELETE) for any identity-table
+-- mutation. Since no current code path deletes a wine_variants row at all
+-- (confirmed in round 1), RESTRICT costs nothing today and simply ensures
+-- that whenever such a delete IS attempted in the future, it fails loudly
+-- instead of silently detaching — forcing whoever writes that future code
+-- to go through (or add) a guarded, logged path instead.
+-- Regression test (live, real service-role client, full 10-child-table
+-- fixture, plus a forced-reversal reproduction): the two "D1 fix" tests
+-- at the end of src/domains/identity/merge.test.ts.
+alter table public.wines
+  add constraint wines_variant_tenant_fk
+    foreign key (wine_variant_id, restaurant_id)
+    references public.wine_variants(id, restaurant_id)
+    on delete restrict;
+
+create index wines_wine_variant_id_idx on public.wines (wine_variant_id);
+create index wines_canonical_wine_id_idx on public.wines (canonical_wine_id);
+
+comment on column public.wines.wine_variant_id is
+  'Not unique by design — two wines rows sharing a wine_variant_id because '
+  'of pre-normalization spelling drift is the possible-duplicate signal, '
+  'not an error. See merge_wines (0100) for the sanctioned collapse path.';
+
+comment on column public.wines.canonical_wine_id is
+  'Denormalized convenience (avoids a join through wine_variants for '
+  'every list/search view). Kept in sync by '
+  'wines_derive_canonical_wine_id below, not by convention — a '
+  'convention-only invariant here would reproduce the drift C17 '
+  'demonstrated for import_batch_rows'' two independently-writable FKs.';
+
+create or replace function public.wines_derive_canonical_wine_id()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.wine_variant_id is null then
+    new.canonical_wine_id := null;
+  else
+    select canonical_wine_id into new.canonical_wine_id
+    from public.wine_variants
+    where id = new.wine_variant_id;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger wines_derive_canonical_wine_id
+  before insert or update of wine_variant_id
+  on public.wines
+  for each row execute function public.wines_derive_canonical_wine_id();
+
+-------------------------------------------------------------------------------
+-- wine_lineages hook — inert light-touch link. No trigger, no backfill,
+-- no consumer in P2; exists so a future piece can join tenant lineages to
+-- global identity without a schema change.
+-------------------------------------------------------------------------------
+
+alter table public.wine_lineages
+  add column canonical_wine_id uuid references public.canonical_wines(id) on delete set null;
+
+create index wine_lineages_canonical_wine_id_idx on public.wine_lineages (canonical_wine_id);
+
+-- === 0099_wine_identity_resolution.sql ===
+-- 0099_wine_identity_resolution.sql
+-- P2 — wine identity spine, part 3: the alias ledger and the dedup
+-- service's DB entrypoint.
+--
+-- wine_aliases is not given its own numbered migration in
+-- docs/plans/2026-08-23-p2-identity-spine.md — §0 lists it as an in-scope
+-- deliverable and §6-9 describe how it is written and read, but the plan's
+-- own §3 migration set never gives it a CREATE TABLE. It is defined here,
+-- immediately before the one function that writes it, because it is
+-- specifically the dedup service's own spelling corpus (§9 step 6), and
+-- because both the canonical- and variant-scoped shapes it needs
+-- (§8's tenancy table has separate rows for each) only make sense once
+-- both canonical_wines (0097) and wine_variants (0098) exist.
+create table public.wine_aliases (
+  id                uuid        primary key default gen_random_uuid(),
+  canonical_wine_id uuid        references public.canonical_wines(id) on delete cascade,
+  wine_variant_id   uuid        references public.wine_variants(id) on delete cascade,
+  restaurant_id     uuid        references public.restaurants(id) on delete cascade,
+  raw_producer      text,
+  raw_cuvee         text,
+  source            text        not null default 'import' check (source in ('import', 'lwin', 'manual')),
+  match_method      text        not null check (
+    match_method in ('exact', 'lwin_exact', 'fuzzy_suggested', 'fuzzy_confirmed')
+  ),
+  confidence        real,
+  created_at        timestamptz not null default now(),
+  -- Exactly one scope per row: canonical-scoped (global, no restaurant_id)
+  -- XOR variant-scoped (tenant, restaurant_id required). Never both null,
+  -- never both set — a variant-scoped alias without knowing which tenant
+  -- asserted it would be an unscoped write nobody could ever read back
+  -- under RLS.
+  constraint wine_aliases_scope_check check (
+    (canonical_wine_id is not null and wine_variant_id is null and restaurant_id is null)
+    or (wine_variant_id is not null and restaurant_id is not null)
+  )
+);
+
+comment on table public.wine_aliases is
+  'Append-only spelling/identifier corpus. Canonical-scoped rows '
+  '(canonical_wine_id set, restaurant_id null) are the ONLY shape '
+  'resolve_wine_variants_bulk below writes in P2 — recording every raw '
+  'producer/cuvée string a batch resolved against its canonical_wine_id, '
+  'match_method=''exact''. The variant-scoped shape (wine_variant_id + '
+  'restaurant_id set) is schema-ready for a future GTIN/LWIN11/LWIN16 '
+  'alias writer per docs/plans/2026-08-23-p2-identity-spine.md §8, but no '
+  'P2 code path populates it — see the P2 builder report for why that is '
+  'flagged as this migration''s weakest point for the merge-completeness '
+  'contract test (0100).';
+
+-- Idempotency: resolve_wine_variants_bulk re-run on identical input must
+-- add zero new alias rows. Partial (scoped to canonical-only rows) because
+-- that is the only shape this migration's writer produces; a future
+-- variant-scoped writer needs its own uniqueness rule.
+create unique index wine_aliases_canonical_raw_idx
+  on public.wine_aliases (canonical_wine_id, raw_producer, raw_cuvee)
+  where restaurant_id is null;
+
+create index wine_aliases_variant_idx
+  on public.wine_aliases (wine_variant_id)
+  where wine_variant_id is not null;
+
+alter table public.wine_aliases enable row level security;
+
+-- Canonical-scoped rows (restaurant_id null) are globally readable, same
+-- trust tier as canonical_wines itself; variant-scoped rows are
+-- tenant-gated. is_member(null) is false for every caller (no membership
+-- row has a null restaurant_id), so this single USING clause correctly
+-- implements both halves of docs/plans/2026-08-23-p2-identity-spine.md
+-- §8's two-row tenancy table without a second policy.
+create policy "read canonical-scoped or own-tenant wine_aliases"
+  on public.wine_aliases for select to authenticated
+  using (restaurant_id is null or public.is_member(restaurant_id));
+
+-- Shape-restricted, not authenticity-restricted, for the same reason as
+-- canonical_wines: match_method may only claim 'exact' (an objectively
+-- checkable text-equality fact) or 'fuzzy_suggested' (explicitly
+-- non-authoritative). 'lwin_exact'/'fuzzy_confirmed' are reserved for a
+-- future privileged writer; nothing in P2 ever inserts them.
+create policy "insert canonical-scoped or own-tenant wine_aliases"
+  on public.wine_aliases for insert to authenticated
+  with check (
+    match_method in ('exact', 'fuzzy_suggested')
+    and (restaurant_id is null or public.is_member(restaurant_id))
+  );
+
+-- No update/delete: append-only ledger.
+
+grant select, insert on table public.wine_aliases to authenticated;
+
+-------------------------------------------------------------------------------
+-- resolve_wine_variants_bulk — the dedup service's DB entrypoint.
+--
+-- Called once per batch of UNIQUE variants (a pre-deduplicated set the
+-- caller has already collapsed by (producer_norm, cuvee_norm, vintage,
+-- size_ml)), never once per CSV row — the direct answer to C10 (no
+-- per-row PL/pgSQL loop, no advisory lock anywhere below).
+--
+-- SECURITY INVOKER, not definer: this is C01's own fix sketch applied to
+-- new code. RLS on wine_variants (is_member(restaurant_id)) is the ONLY
+-- thing between a caller and writing another tenant's variant, and
+-- invoker mode is what makes that check actually apply. There is
+-- deliberately NO manual is_member() guard in this function body — a
+-- caller targeting a restaurant_id it is not a member of must fail via
+-- the real RLS policy on the wine_variants INSERT below, not a
+-- hand-rolled check that could drift from the policy over time.
+--
+-- Input rows are already normalized by src/domains/identity/normalize.ts
+-- — this function does no Unicode folding. lwin7 SHOULD already have
+-- cleared the caller's confidence gate (P3's contract: only a
+-- lwin_score >= 0.6 match_lwin_bulk result may be forwarded as lwin7;
+-- anything weaker is a separate, non-identity-affecting field) — but
+-- that contract is a client-side convention, not a server-side
+-- guarantee, and this function must not trust it blindly (D9 — scratchpad
+-- db-audit/verify/P2-critic-r3.md): a malicious or buggy caller can put
+-- ANY 7-digit string in lwin7 regardless of what P3's real code does.
+-- The corroboration gate at step 2.5 below is what actually enforces
+-- this, by checking the claim against public.lwin_catalog before ever
+-- letting it create a canonical_wines row.
+create or replace function public.resolve_wine_variants_bulk(
+  p_restaurant_id uuid,
+  p_variants jsonb
+)
+returns table (
+  idx                    int,
+  canonical_wine_id      uuid,
+  wine_variant_id        uuid,
+  canonical_match_method text,
+  canonical_created      boolean,
+  variant_created        boolean
+)
+language plpgsql
+security invoker
+set search_path = public
+as $$
+#variable_conflict use_column
+-- The RETURNS TABLE columns above (canonical_wine_id, wine_variant_id,
+-- idx) collide by name with real columns on _rwvb_input/wine_variants/
+-- wine_aliases. This function never reads or writes those OUT
+-- parameters as PL/pgSQL variables anywhere in its body (only via the
+-- final RETURN QUERY, which is alias-qualified and unambiguous) — every
+-- bare use of those names elsewhere is meant to resolve to the SQL
+-- column, which is what this directive makes happen instead of an
+-- "ambiguous" error at the ON CONFLICT target lists below.
+begin
+  -- Scratch table for this call. "if not exists" + truncate (rather than
+  -- a bare CREATE) so a second call within the same transaction — the
+  -- fault-injection tests deliberately do this — reuses it safely.
+  -- "on commit drop" means it never outlives the calling transaction.
+  create temporary table if not exists _rwvb_input (
+    idx                    int primary key,
+    producer_raw           text not null,
+    cuvee_raw              text not null,
+    producer_norm          text not null,
+    cuvee_norm             text not null,
+    vintage                int,
+    size_ml                int not null,
+    lwin7                  text,
+    lwin11                 text,
+    lwin16                 text,
+    gtin                   text,
+    canonical_wine_id      uuid,
+    canonical_match_method text,
+    canonical_created      boolean not null default false,
+    wine_variant_id        uuid,
+    variant_created        boolean not null default false
+  ) on commit drop;
+
+  truncate _rwvb_input;
+
+  -- 1. Unnest the batch.
+  --
+  -- P2 ROUND-5 FIX (D9-residual #2 — scratchpad db-audit/verify/
+  -- P2-critic-r4.md, the round after the Baron/Lalande fix): this no
+  -- longer reads producer_norm/cuvee_norm from the caller at all.
+  -- Before this fix, the identity KEY (producer_norm, cuvee_norm — the
+  -- columns canonical_wines_identity_idx is UNIQUE on, and what phase 1's
+  -- text-match below joins on) came straight off the caller's JSON,
+  -- completely UNRELATED to the LWIN-corroboration gate at step 2.5
+  -- below, which validates producer_raw/cuvee_raw instead. That let a
+  -- caller send REAL, LEGITIMATELY-CORROBORATING raws for a wine they
+  -- actually hold (passing the gate) while sending an ARBITRARY,
+  -- attacker-chosen producer_norm/cuvee_norm matching a VICTIM's
+  -- existing canonical_wines row — binding straight onto it via phase
+  -- 1's text-exact match, with no LWIN or gate involvement at all. Live-
+  -- reproduced before this fix shipped: an attacker's wine_variant bound
+  -- to a victim's pre-existing canonical row via canonical_match_method
+  -- = 'exact', using the victim's real (forged-in) producer_norm/
+  -- cuvee_norm while submitting the attacker's OWN real, corroborating
+  -- producer_raw/cuvee_raw/lwin7. Same severity as the Baron/Lalande
+  -- fix above: the unique index makes it permanent, and canonical_wines
+  -- has no UPDATE/DELETE policy for authenticated.
+  --
+  -- Fixed: producer_norm/cuvee_norm are now DERIVED here, server-side,
+  -- from producer_raw/cuvee_raw via identity_normalize_text() (0097) —
+  -- never trusted as caller input. jsonb_to_recordset's own type list
+  -- below no longer even names producer_norm/cuvee_norm, so a caller
+  -- that still sends those keys has them silently ignored rather than
+  -- silently trusted. This is a CROSS-PIECE CONTRACT CHANGE: the
+  -- identity key is no longer necessarily byte-identical to
+  -- src/domains/identity/normalize.ts's frozen TS-side
+  -- normalizeProducerOrCuvee output — it is now this function's own
+  -- SQL-side identity_normalize_text() approximation (see that
+  -- function's comment, 0097, for the known unaccent-vs-NFKD divergence
+  -- risk, already accepted elsewhere for 0101's backfill). The risk
+  -- direction stays safe (a divergence creates one extra canonical row a
+  -- later exact match could have reused, never merges two different
+  -- wines) — re-verified against the full 110-check identity matrix
+  -- after this change specifically because the computation moved from
+  -- TS-frozen to SQL-side for every row this function creates.
+  insert into _rwvb_input (
+    idx, producer_raw, cuvee_raw, producer_norm, cuvee_norm,
+    vintage, size_ml, lwin7, lwin11, lwin16, gtin
+  )
+  select x.idx, x.producer_raw, x.cuvee_raw,
+         public.identity_normalize_text(x.producer_raw),
+         public.identity_normalize_text(x.cuvee_raw),
+         x.vintage, x.size_ml, x.lwin7, x.lwin11, x.lwin16, x.gtin
+  from jsonb_to_recordset(p_variants) as x(
+    idx int, producer_raw text, cuvee_raw text,
+    vintage int, size_ml int, lwin7 text, lwin11 text, lwin16 text, gtin text
+  );
+
+  -- Rows whose producer/cuvee collapse to nothing under normalization
+  -- (e.g. punctuation-only text) can't be identity-resolved — same
+  -- precedent as 0101's backfill, which leaves such rows for manual
+  -- review rather than inventing a placeholder identity. P3's caller
+  -- must treat a missing idx in the return set as "not resolved," not
+  -- assume every submitted idx comes back.
+  delete from _rwvb_input
+  where producer_norm is null or cuvee_norm is null;
+
+  -- 2. Canonical, phase 1 (exact). Two separate UPDATEs, not one OR'd
+  -- join, so LWIN7 equality deterministically wins even where producer/
+  -- cuvée text differs (a data-entry-error row still lands on the LWIN
+  -- identity, never forks a second canonical row for it — it becomes an
+  -- alias below, not a duplicate).
+  --
+  -- P2 ROUND-5 FIX (D9-residual — scratchpad db-audit/verify/
+  -- P2-critic-r4.md): this match now additionally requires
+  -- cw.identity_status = 'lwin_verified'. Before this fix, a row could
+  -- squat a real lwin7 as identity_status='unverified' — the round-4
+  -- corroboration gate below only ran for the 'lwin_verified' branch of
+  -- canonical_wines' own insert policy, and this match had NO
+  -- identity_status filter, so it matched ANY row carrying that lwin7,
+  -- verified or not. Combined with canonical_wines_lwin7_idx being
+  -- UNIQUE, that meant: squat lwin7 X as unverified garbage (the
+  -- corroboration check was never consulted, because it only gated the
+  -- lwin_verified path) -> nobody else can ever hold X -> every later
+  -- import carrying X, INCLUDING a fully legitimate, fully corroborated
+  -- one, matched the squatter right here, before any gate ran. No
+  -- attacker cleverness or fuzzy-threshold weakness was even needed for
+  -- that path. Fixed at two levels: 0097's new
+  -- canonical_wines_lwin7_requires_verified CHECK CONSTRAINT now makes
+  -- "unverified row with a non-null lwin7" impossible to insert AT ALL,
+  -- from any path, including this function and 0101's backfill; this
+  -- explicit filter is defense-in-depth on top of that invariant, so the
+  -- match's OWN correctness never silently depends on a constraint
+  -- defined elsewhere.
+  update _rwvb_input i
+  set canonical_wine_id = cw.id,
+      canonical_match_method = 'lwin_exact'
+  from public.canonical_wines cw
+  where i.lwin7 is not null
+    and cw.lwin7 = i.lwin7
+    and cw.identity_status = 'lwin_verified';
+
+  update _rwvb_input i
+  set canonical_wine_id = cw.id,
+      canonical_match_method = 'exact'
+  from public.canonical_wines cw
+  where i.canonical_wine_id is null
+    and cw.producer_norm = i.producer_norm
+    and cw.cuvee_norm = i.cuvee_norm;
+
+  -- 2.5. LWIN corroboration gate. A row that reaches here has NOT matched
+  -- any existing canonical_wines row (neither by verified LWIN equality
+  -- nor by exact text) and is about to CREATE one in phase 2 below,
+  -- claiming identity_status='lwin_verified' whenever its lwin7 is set.
+  -- lwin7 is caller-supplied, untrusted input — this is the only thing
+  -- standing between an arbitrary claim and a permanent, cross-tenant,
+  -- unrepairable global identity (canonical_wines has no UPDATE/DELETE
+  -- policy; canonical_wines_lwin7_idx is UNIQUE).
+  --
+  -- P2 ROUND-5 FIX (D9-residual — scratchpad db-audit/verify/
+  -- P2-critic-r4.md): round 4 gated this with pg_trgm similarity() at
+  -- match_lwin's own ranking thresholds (0.3 producer / 0.21 name) —
+  -- WRONG TOOL. match_lwin's threshold is deliberately tolerant of false
+  -- positives because a human reviews its suggestions before anything is
+  -- written; this gate makes a PERMANENT, UNSUPERVISED, cross-tenant
+  -- decision. Live-verified before this fix shipped:
+  -- similarity('Chateau Pichon Longueville Baron', 'Chateau Pichon
+  -- Longueville Comtesse de Lalande') = 0.55 — two REAL, DISTINCT
+  -- Bordeaux estates, both comfortably above 0.3, because they share a
+  -- long common prefix. The round-5 critic reproduced the full
+  -- cross-tenant hijack through this exact pair using nothing but the
+  -- system's own real data: tenant A's fully legitimate, correctly-typed
+  -- Lalande submission plus Baron's real lwin7 (a plausible C24-style
+  -- LWIN-matcher confusion, not an adversarial construction) passed this
+  -- gate; tenant B's later, equally legitimate Baron submission with the
+  -- same lwin7 then bound to tenant A's Lalande-labelled row via phase 1
+  -- above, by design. No fuzzy threshold reliably separates two wines
+  -- whose similarity comes from shared vocabulary rather than shared
+  -- identity.
+  --
+  -- Fixed: identity_normalize_text() (0097) applied to both sides.
+  -- PRODUCER is compared for EXACT equality — Baron and Lalande normalize
+  -- to different token sets and can never satisfy equality regardless of
+  -- shared words, while a genuine data-entry-error (accents/case/
+  -- spacing/punctuation) still normalizes identically on both sides. CUVEE
+  -- is compared by TOKEN SUBSET (submitted cuvee's tokens all present in
+  -- display_name's tokens), not exact equality, since lwin_catalog.
+  -- display_name commonly combines producer + wine name — see 0097's
+  -- policy comment for the full reasoning. Both are deterministic
+  -- set/string operations, never a score — preserving the "LWIN wins over
+  -- textual FORMATTING differences" behavior described above for its
+  -- actual intended case.
+  -- A row whose lwin7 fails corroboration is DOWNGRADED (lwin7 stripped,
+  -- so phase 2 below naturally falls to identity_status='unverified'),
+  -- not rejected: a single bad LWIN in a 5,000-row import chunk must not
+  -- abort the whole chunk, and this row still gets a real (unverified)
+  -- canonical identity via its own text. Set-based, no per-row loop, no
+  -- exception raised — the direct C10-consistent answer, same discipline
+  -- as every other step in this function. The phase-1 exact-match above
+  -- is unaffected and remains safe by construction: it only ever matches
+  -- EXISTING, ALREADY-VERIFIED canonical_wines rows (identity_status
+  -- filter, this fix), and every verified row was itself either created
+  -- through this same deterministic gate or through 0101's backfill
+  -- (which reuses identity_normalize_text() directly rather than
+  -- duplicating the expression — see that migration's header for why it
+  -- still needs its own copy of the CALL: it runs as the table owner and
+  -- bypasses RLS entirely, so canonical_wines' own INSERT policy
+  -- corroboration cannot protect it; only the CHECK CONSTRAINT does).
+  -- P2 ROUND-6 FIX (D9-residual #2): this gate now reads i.producer_norm/
+  -- i.cuvee_norm — the very values phase 2 goes on to store — instead of
+  -- recomputing identity_normalize_text(i.producer_raw) inline. The two
+  -- are equal by construction (step 1 derives the norm columns with that
+  -- exact call), so this changes no outcome today; it changes what a
+  -- future edit can break. The whole D9-residual bug class is "the value
+  -- checked and the value stored are different expressions that nobody
+  -- forces to agree," and re-deriving here left one more copy of that
+  -- shape in the file. Reading the stored column makes the gate and the
+  -- identity key the same value rather than two values that happen to
+  -- match.
+  update _rwvb_input i
+  set lwin7 = null
+  where i.canonical_wine_id is null
+    and i.lwin7 is not null
+    and not exists (
+      select 1 from public.lwin_catalog lc
+      where lc.lwin_id = i.lwin7
+        and i.producer_norm = public.identity_normalize_text(lc.producer)
+        and string_to_array(i.cuvee_norm, ' ') <@ string_to_array(public.identity_normalize_text(lc.display_name), ' ')
+    );
+
+  -- 3. Canonical, phase 2 (create). DISTINCT ON collapses two rows in the
+  -- SAME batch that are the same new wine to one insert attempt — the
+  -- direct answer to the "same-batch duplicate" fault injection.
+  -- ON CONFLICT DO NOTHING handles a genuinely concurrent OTHER call
+  -- committing the same (producer_norm, cuvee_norm) between step 2 and
+  -- here.
+  -- P2 ROUND-6 (D9-residual #2): producer_norm/cuvee_norm are no longer
+  -- named in this insert — canonical_wines GENERATES them from producer/
+  -- cuvee (0097), and naming a generated column raises SQLSTATE 428C9.
+  -- The stored key is therefore identity_normalize_text(i.producer_raw),
+  -- byte-identical to the i.producer_norm this statement still uses for
+  -- DISTINCT ON and for the conflict target, because step 1 derived that
+  -- column with the same call.
+  with new_canon as (
+    insert into public.canonical_wines (
+      producer, cuvee, lwin7,
+      identity_status, created_by_restaurant_id, created_by_user_id
+    )
+    select distinct on (i.producer_norm, i.cuvee_norm)
+      i.producer_raw, i.cuvee_raw, i.lwin7,
+      case when i.lwin7 is not null then 'lwin_verified' else 'unverified' end,
+      p_restaurant_id, auth.uid()
+    from _rwvb_input i
+    where i.canonical_wine_id is null
+    order by i.producer_norm, i.cuvee_norm, i.idx
+    on conflict (producer_norm, cuvee_norm) do nothing
+    returning id, producer_norm, cuvee_norm
+  )
+  update _rwvb_input i
+  set canonical_wine_id = nc.id,
+      canonical_match_method = 'created',
+      canonical_created = true
+  from new_canon nc
+  where i.canonical_wine_id is null
+    and i.producer_norm = nc.producer_norm
+    and i.cuvee_norm = nc.cuvee_norm;
+
+  -- 4. Re-join: lost-the-conflict-race read-back. Under READ COMMITTED,
+  -- this SELECT gets a fresh snapshot and will see a concurrent session's
+  -- now-committed insert.
+  update _rwvb_input i
+  set canonical_wine_id = cw.id,
+      canonical_match_method = 'exact',
+      canonical_created = false
+  from public.canonical_wines cw
+  where i.canonical_wine_id is null
+    and cw.producer_norm = i.producer_norm
+    and cw.cuvee_norm = i.cuvee_norm;
+
+  -- 5. Variant resolution — identical two-phase pattern keyed on
+  -- (restaurant_id, canonical_wine_id, coalesce(vintage,0), size_ml).
+  -- vintage and size_ml are exact keys here, never fuzzy — see the
+  -- migration header.
+  update _rwvb_input i
+  set wine_variant_id = wv.id
+  from public.wine_variants wv
+  where wv.restaurant_id = p_restaurant_id
+    and wv.canonical_wine_id = i.canonical_wine_id
+    and coalesce(wv.vintage, 0) = coalesce(i.vintage, 0)
+    and wv.size_ml = i.size_ml;
+
+  with new_variants as (
+    insert into public.wine_variants (
+      restaurant_id, canonical_wine_id, vintage, size_ml, lwin11, lwin16, gtin
+    )
+    select distinct on (i.canonical_wine_id, coalesce(i.vintage, 0), i.size_ml)
+      p_restaurant_id, i.canonical_wine_id, i.vintage, i.size_ml, i.lwin11, i.lwin16, i.gtin
+    from _rwvb_input i
+    where i.wine_variant_id is null
+    order by i.canonical_wine_id, coalesce(i.vintage, 0), i.size_ml, i.idx
+    on conflict (restaurant_id, canonical_wine_id, coalesce(vintage, 0), size_ml) do nothing
+    returning id, canonical_wine_id, vintage, size_ml
+  )
+  update _rwvb_input i
+  set wine_variant_id = nv.id,
+      variant_created = true
+  from new_variants nv
+  where i.wine_variant_id is null
+    and i.canonical_wine_id = nv.canonical_wine_id
+    and coalesce(i.vintage, 0) = coalesce(nv.vintage, 0)
+    and i.size_ml = nv.size_ml;
+
+  update _rwvb_input i
+  set wine_variant_id = wv.id
+  from public.wine_variants wv
+  where i.wine_variant_id is null
+    and wv.restaurant_id = p_restaurant_id
+    and wv.canonical_wine_id = i.canonical_wine_id
+    and coalesce(wv.vintage, 0) = coalesce(i.vintage, 0)
+    and wv.size_ml = i.size_ml;
+
+  -- 6. Alias write — the spelling corpus. One batched, deduped insert;
+  -- ON CONFLICT DO NOTHING against wine_aliases_canonical_raw_idx is what
+  -- makes a re-run of identical input add zero new rows here too.
+  insert into public.wine_aliases (canonical_wine_id, raw_producer, raw_cuvee, source, match_method)
+  select distinct on (i.canonical_wine_id, i.producer_raw, i.cuvee_raw)
+    i.canonical_wine_id, i.producer_raw, i.cuvee_raw, 'import', 'exact'
+  from _rwvb_input i
+  where i.canonical_wine_id is not null
+  order by i.canonical_wine_id, i.producer_raw, i.cuvee_raw, i.idx
+  on conflict (canonical_wine_id, raw_producer, raw_cuvee) where restaurant_id is null do nothing;
+
+  -- 7. Return the per-idx result set.
+  return query
+  select i.idx, i.canonical_wine_id, i.wine_variant_id, i.canonical_match_method,
+         i.canonical_created, i.variant_created
+  from _rwvb_input i
+  order by i.idx;
+end;
+$$;
+
+comment on function public.resolve_wine_variants_bulk(uuid, jsonb) is
+  'Set-based identity resolution for a pre-deduplicated batch of unique '
+  '(producer, cuvee, vintage, size_ml) variants. SECURITY INVOKER: RLS on '
+  'wine_variants is the tenant boundary, not a check in this function. '
+  'Every phase is a fixed number of set-based statements regardless of '
+  'batch size — no per-row loop, no advisory lock.';
+
+revoke all on function public.resolve_wine_variants_bulk(uuid, jsonb) from public;
+grant execute on function public.resolve_wine_variants_bulk(uuid, jsonb) to authenticated;
+
+-- === 0100_wine_identity_merge.sql ===
+-- 0100_wine_identity_merge.sql
+-- P2 — wine identity spine, part 4: merge, closing the confirmed C23 gap.
+--
+-- identity_merge_log is an append-only forensic record of every merge.
+-- Merges are hard deletes, not self-service-reversible — this table gives
+-- a human enough (a full snapshot of the deleted row, plus per-child moved
+-- counts) to reconstruct one by hand if it was a mistake. There is no
+-- unmerge_* RPC in P2.
+create table public.identity_merge_log (
+  id              uuid        primary key default gen_random_uuid(),
+  merge_type      text        not null check (merge_type in ('canonical_wine', 'wine')),
+  source_id       uuid        not null,
+  target_id       uuid        not null,
+  restaurant_id   uuid        references public.restaurants(id) on delete set null,
+  source_snapshot jsonb       not null,
+  moved_counts    jsonb       not null,
+  merged_by       uuid        references auth.users(id) on delete set null,
+  merged_at       timestamptz not null default now()
+);
+
+comment on table public.identity_merge_log is
+  'Append-only. restaurant_id is populated for wine-level merges '
+  '(merge_wines), null for canonical-level merges (merge_canonical_wines), '
+  'since a canonical merge is inherently cross-tenant. Written only by '
+  'those two functions, both SECURITY DEFINER/service-role, never by a '
+  'raw client insert.';
+
+create index identity_merge_log_restaurant_idx
+  on public.identity_merge_log (restaurant_id, merged_at desc)
+  where restaurant_id is not null;
+create index identity_merge_log_source_idx on public.identity_merge_log (source_id);
+create index identity_merge_log_target_idx on public.identity_merge_log (target_id);
+
+alter table public.identity_merge_log enable row level security;
+
+-- is_member(null) is false for every caller, so this single policy
+-- correctly hides every canonical-level (restaurant_id null) row from
+-- authenticated clients — those are readable only by service_role, which
+-- bypasses RLS entirely (confirmed: service_role has BYPASSRLS locally).
+create policy "members can read their restaurant's merge log"
+  on public.identity_merge_log for select to authenticated
+  using (public.is_member(restaurant_id));
+
+-- No insert/update/delete policy for authenticated/anon: merge_wines is
+-- SECURITY DEFINER (runs as its owner regardless of grants) and
+-- merge_canonical_wines is service-role-only, so neither needs a client
+-- write grant here.
+grant select on table public.identity_merge_log to authenticated;
+
+-------------------------------------------------------------------------------
+-- merge_wines — replaced again (the same pattern 0055 used on 0054's
+-- version). Extended per the confirmed C23 finding
+-- (scratchpad db-audit/verify/V4-bottles.md): the shipped function
+-- repointed only 5 of the 10 live FKs to wines(id), and 4 of the other 5
+-- were CASCADE — silently destroyed, not orphaned, under a 200 OK that
+-- never mentioned the loss. All 10 confirmed via a live pg_constraint
+-- query against this exact schema (see the P2 builder report). Existing
+-- lineage/vintage/format-equality guards and the manager-role check are
+-- untouched — this is a mechanical extension, not a rewrite of its
+-- guards.
+-------------------------------------------------------------------------------
+create or replace function public.merge_wines(
+  p_source_wine_id uuid,
+  p_target_wine_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_source                    public.wines%rowtype;
+  v_target                    public.wines%rowtype;
+  v_restaurant_id              uuid;
+  v_moved_inventory            int;
+  v_moved_pours                int;
+  v_moved_bottles              int;
+  v_moved_list_items           int;
+  v_deduped_list_items         int;
+  v_moved_avail                int;
+  v_moved_bottle_closeouts     int;
+  v_moved_stock_adjustments    int;
+  v_moved_pricing_recs         int;
+  v_moved_cellar_health        int;
+  v_dropped_cellar_health      int;
+  v_moved_import_batch_rows    int;
+begin
+  if p_source_wine_id = p_target_wine_id then
+    raise exception 'identical_merge: source and target are the same wine';
+  end if;
+
+  -- Deterministic lock order to avoid deadlocks between concurrent merges.
+  perform 1 from public.wines
+    where id in (p_source_wine_id, p_target_wine_id)
+    order by id
+    for update;
+
+  select * into v_source from public.wines where id = p_source_wine_id;
+  select * into v_target from public.wines where id = p_target_wine_id;
+
+  if v_source.id is null or v_target.id is null
+     or v_source.restaurant_id <> v_target.restaurant_id then
+    raise exception 'wine_not_found: both wines must exist in the same restaurant';
+  end if;
+
+  v_restaurant_id := v_source.restaurant_id;
+  if not public.is_member_with_role(v_restaurant_id, 'manager') then
+    raise exception 'forbidden: manager role required to merge wines';
+  end if;
+
+  if v_source.lineage_id is null or v_target.lineage_id is null
+     or v_source.lineage_id <> v_target.lineage_id then
+    raise exception 'lineage_mismatch_merge: wines are not the same producer-cuvée — merging is only for true duplicates';
+  end if;
+
+  if coalesce(v_source.vintage, 0) <> coalesce(v_target.vintage, 0) then
+    raise exception 'cross_vintage_merge: % and % are distinct vintages — they are already linked as vintage siblings, not duplicates',
+      coalesce(v_source.vintage::text, 'NV'), coalesce(v_target.vintage::text, 'NV');
+  end if;
+
+  if v_source.size_ml <> v_target.size_ml then
+    raise exception 'format_mismatch_merge: % ml and % ml are distinct formats',
+      v_source.size_ml, v_target.size_ml;
+  end if;
+
+  -- P2: wine_variant_id repoint, fail loud rather than silently pick.
+  -- Both set and different means normalization failed to converge two
+  -- spellings onto one identity — the fix is a merge_canonical_wines call
+  -- first, not this function guessing which one is right.
+  if v_source.wine_variant_id is not null and v_target.wine_variant_id is not null
+     and v_source.wine_variant_id <> v_target.wine_variant_id then
+    raise exception 'variant_identity_conflict: source wine_variant_id % and target wine_variant_id % disagree — run merge_canonical_wines to reconcile the underlying identities first',
+      v_source.wine_variant_id, v_target.wine_variant_id;
+  end if;
+
+  if v_target.wine_variant_id is null and v_source.wine_variant_id is not null then
+    update public.wines set wine_variant_id = v_source.wine_variant_id
+     where id = p_target_wine_id;
+  end if;
+
+  -- Repoint every referrer; history rows keep their own timestamps, actors,
+  -- and costs — the audit trail survives the merge (EV-1.2).
+  update public.inventory_items set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_inventory = row_count;
+
+  update public.pour_events set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_pours = row_count;
+
+  update public.open_bottles set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_bottles = row_count;
+
+  -- A section listing BOTH wines would show the target twice after a blind
+  -- repoint (no uniqueness on (section_id, wine_id)). Drop the source's row
+  -- wherever the target is already listed, then repoint the rest.
+  delete from public.wine_list_items s
+   where s.wine_id = p_source_wine_id
+     and exists (
+           select 1 from public.wine_list_items t
+            where t.section_id = s.section_id
+              and t.wine_id = p_target_wine_id
+         );
+  get diagnostics v_deduped_list_items = row_count;
+
+  update public.wine_list_items set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_list_items = row_count;
+
+  update public.availability_events set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_avail = row_count;
+
+  -- P2 (C23 fix): bottle_closeouts, stock_adjustments, pricing_recommendations
+  -- have no uniqueness constraint blocking a blind repoint — real write-offs,
+  -- comps, and pricing history that a pre-P2 merge silently cascade-deleted.
+  update public.bottle_closeouts set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_bottle_closeouts = row_count;
+
+  update public.stock_adjustments set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_stock_adjustments = row_count;
+
+  update public.pricing_recommendations set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_pricing_recs = row_count;
+
+  -- cellar_health has unique(restaurant_id, wine_id); since source and
+  -- target share one restaurant (enforced above), at most one row per
+  -- wine can exist. If the target already has one, the source's is a
+  -- redundant duplicate (recomputed nightly, per its own migration
+  -- comment) — drop it rather than picking one arbitrarily. Otherwise
+  -- repoint it.
+  delete from public.cellar_health s
+   where s.wine_id = p_source_wine_id
+     and exists (
+           select 1 from public.cellar_health t
+            where t.wine_id = p_target_wine_id and t.restaurant_id = s.restaurant_id
+         );
+  get diagnostics v_dropped_cellar_health = row_count;
+
+  update public.cellar_health set wine_id = p_target_wine_id
+   where wine_id = p_source_wine_id;
+  get diagnostics v_moved_cellar_health = row_count;
+
+  -- P2 (C23 fix): import_batch_rows.applied_wine_id is ON DELETE SET NULL
+  -- today — the merge silently orphans "which import created this wine".
+  update public.import_batch_rows set applied_wine_id = p_target_wine_id
+   where applied_wine_id = p_source_wine_id;
+  get diagnostics v_moved_import_batch_rows = row_count;
+
+  insert into public.identity_merge_log (
+    merge_type, source_id, target_id, restaurant_id, source_snapshot, moved_counts, merged_by
+  ) values (
+    'wine', p_source_wine_id, p_target_wine_id, v_restaurant_id,
+    to_jsonb(v_source),
+    jsonb_build_object(
+      'moved_inventory_items',      v_moved_inventory,
+      'moved_pour_events',          v_moved_pours,
+      'moved_open_bottles',         v_moved_bottles,
+      'moved_wine_list_items',      v_moved_list_items,
+      'deduped_wine_list_items',    v_deduped_list_items,
+      'moved_availability_events',  v_moved_avail,
+      'moved_bottle_closeouts',     v_moved_bottle_closeouts,
+      'moved_stock_adjustments',    v_moved_stock_adjustments,
+      'moved_pricing_recommendations', v_moved_pricing_recs,
+      'moved_cellar_health',        v_moved_cellar_health,
+      'dropped_cellar_health',      v_dropped_cellar_health,
+      'moved_import_batch_rows',    v_moved_import_batch_rows
+    ),
+    auth.uid()
+  );
+
+  delete from public.wines where id = p_source_wine_id;
+
+  return jsonb_build_object(
+    'target_id',                     p_target_wine_id,
+    'moved_inventory_items',         v_moved_inventory,
+    'moved_pour_events',             v_moved_pours,
+    'moved_open_bottles',            v_moved_bottles,
+    'moved_wine_list_items',         v_moved_list_items,
+    'deduped_wine_list_items',       v_deduped_list_items,
+    'moved_availability_events',     v_moved_avail,
+    'moved_bottle_closeouts',        v_moved_bottle_closeouts,
+    'moved_stock_adjustments',       v_moved_stock_adjustments,
+    'moved_pricing_recommendations', v_moved_pricing_recs,
+    'moved_cellar_health',           v_moved_cellar_health,
+    'dropped_cellar_health',         v_dropped_cellar_health,
+    'moved_import_batch_rows',       v_moved_import_batch_rows
+  );
+end;
+$$;
+
+comment on function public.merge_wines(uuid, uuid) is
+  'P2 extension (0100) of the 0055 version: now repoints all 10 live FKs '
+  'to wines(id) (previously 5), closing the confirmed C23 data-loss gap, '
+  'plus the new wine_variant_id conflict guard. See '
+  'supabase/tests/0100_merge_completeness.sql for the standing regression '
+  'test that fails the build if a future FK to wines/canonical_wines/'
+  'wine_variants is added without updating this function or '
+  'merge_canonical_wines.';
+
+-------------------------------------------------------------------------------
+-- merge_canonical_wines — operator/service-role only. NOT exposed to
+-- tenants: the orchestrating session narrowed this from the plan's
+-- original "any manager at one stakeholder restaurant" design (the
+-- plan's own §14 flagged that authorization rule as its least-settled
+-- decision) rather than inventing an untested cross-tenant permissions
+-- model. Tenant-level deduplication is fully served by merge_wines above;
+-- this function exists so an operator can fix the shared canonical
+-- catalog itself (e.g. two independently-created rows for the same
+-- real-world wine because two tenants imported it before either had a
+-- matching LWIN).
+--
+-- SECURITY INVOKER, not definer (a deliberate deviation from the plan's
+-- text): the plan called for DEFINER because it originally needed to let
+-- an ordinary authenticated tenant manager cross a tenancy boundary they
+-- couldn't otherwise see. Now that only service_role may call this
+-- function at all (see the grant below), DEFINER's privilege elevation is
+-- not load-bearing — service_role already has BYPASSRLS (confirmed
+-- locally: rolbypassrls=true), so INVOKER reaches every row this function
+-- needs without any elevation, at strictly lower privilege. There is no
+-- manager-role check in this body for the same reason: the grant IS the
+-- authorization.
+-------------------------------------------------------------------------------
+create or replace function public.merge_canonical_wines(
+  p_source_id uuid,
+  p_target_id uuid
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_source              public.canonical_wines%rowtype;
+  v_target              public.canonical_wines%rowtype;
+  v_conflict_restaurant uuid;
+  v_conflict_vintage    int;
+  v_conflict_size_ml    int;
+  v_moved_variants      int;
+  v_moved_lineages      int;
+  v_moved_wines         int;
+  v_moved_aliases       int;
+  v_deduped_aliases     int;
+begin
+  if p_source_id = p_target_id then
+    raise exception 'identical_merge: source and target are the same canonical wine';
+  end if;
+
+  perform 1 from public.canonical_wines
+    where id in (p_source_id, p_target_id)
+    order by id
+    for update;
+
+  select * into v_source from public.canonical_wines where id = p_source_id;
+  select * into v_target from public.canonical_wines where id = p_target_id;
+
+  if v_source.id is null or v_target.id is null then
+    raise exception 'canonical_wine_not_found: both canonical wines must exist';
+  end if;
+
+  -- variant_conflict: a restaurant holding both source and target as the
+  -- same (vintage, size_ml) is a real tenant-level duplicate this merge
+  -- would otherwise create by repointing both onto one canonical id.
+  -- Fail loud and name the restaurant — resolved via that tenant's own
+  -- merge_wines first, deliberately not auto-resolved here.
+  select a.restaurant_id, a.vintage, a.size_ml
+    into v_conflict_restaurant, v_conflict_vintage, v_conflict_size_ml
+  from public.wine_variants a
+  where a.canonical_wine_id = p_source_id
+    and exists (
+      select 1 from public.wine_variants b
+      where b.canonical_wine_id = p_target_id
+        and b.restaurant_id = a.restaurant_id
+        and coalesce(b.vintage, 0) = coalesce(a.vintage, 0)
+        and b.size_ml = a.size_ml
+    )
+  limit 1;
+
+  if v_conflict_restaurant is not null then
+    raise exception 'variant_conflict: restaurant % already holds both canonical wines as the same vintage (%) and size_ml (%) — resolve via that restaurant''s merge_wines first',
+      v_conflict_restaurant, coalesce(v_conflict_vintage::text, 'NV'), v_conflict_size_ml;
+  end if;
+
+  update public.wine_variants set canonical_wine_id = p_target_id
+   where canonical_wine_id = p_source_id;
+  get diagnostics v_moved_variants = row_count;
+
+  update public.wine_lineages set canonical_wine_id = p_target_id
+   where canonical_wine_id = p_source_id;
+  get diagnostics v_moved_lineages = row_count;
+
+  -- wines.canonical_wine_id is denormalized off wine_variants (see 0098's
+  -- wines_derive_canonical_wine_id trigger) but that trigger only fires on
+  -- wines.wine_variant_id changing — not on the wine_variants row it
+  -- points at being repointed underneath it by this function. Without
+  -- this line the denormalized column would silently go stale the moment
+  -- this function runs, which is exactly the kind of convention-only
+  -- invariant 0098's own comment says C17 already showed is unsafe.
+  update public.wines set canonical_wine_id = p_target_id
+   where canonical_wine_id = p_source_id;
+  get diagnostics v_moved_wines = row_count;
+
+  -- Dedup exact-duplicate aliases before repointing, mirroring 0055's
+  -- wine_list_items dedupe: a raw string already recorded against the
+  -- target keeps only one row.
+  delete from public.wine_aliases s
+   where s.canonical_wine_id = p_source_id
+     and exists (
+       select 1 from public.wine_aliases t
+        where t.canonical_wine_id = p_target_id
+          and t.raw_producer is not distinct from s.raw_producer
+          and t.raw_cuvee is not distinct from s.raw_cuvee
+     );
+  get diagnostics v_deduped_aliases = row_count;
+
+  update public.wine_aliases set canonical_wine_id = p_target_id
+   where canonical_wine_id = p_source_id;
+  get diagnostics v_moved_aliases = row_count;
+
+  insert into public.identity_merge_log (
+    merge_type, source_id, target_id, restaurant_id, source_snapshot, moved_counts, merged_by
+  ) values (
+    'canonical_wine', p_source_id, p_target_id, null,
+    to_jsonb(v_source),
+    jsonb_build_object(
+      'moved_wine_variants', v_moved_variants,
+      'moved_wine_lineages', v_moved_lineages,
+      'moved_wines',         v_moved_wines,
+      'moved_wine_aliases',  v_moved_aliases,
+      'deduped_wine_aliases', v_deduped_aliases
+    ),
+    auth.uid()
+  );
+
+  delete from public.canonical_wines where id = p_source_id;
+
+  return jsonb_build_object(
+    'target_id',            p_target_id,
+    'moved_wine_variants',  v_moved_variants,
+    'moved_wine_lineages',  v_moved_lineages,
+    'moved_wines',          v_moved_wines,
+    'moved_wine_aliases',   v_moved_aliases,
+    'deduped_wine_aliases', v_deduped_aliases
+  );
+end;
+$$;
+
+comment on function public.merge_canonical_wines(uuid, uuid) is
+  'Operator/service-role only — see the comment above this function''s '
+  'definition for why there is no authenticated grant and no in-body '
+  'role check. Every future migration adding an FK to canonical_wines(id)'
+  '/wine_variants(id) MUST extend this function (or merge_wines) AND '
+  'supabase/tests/0100_merge_completeness.sql in the same migration.';
+
+revoke all on function public.merge_canonical_wines(uuid, uuid) from public;
+grant execute on function public.merge_canonical_wines(uuid, uuid) to service_role;
+
+-- === 0101_wine_identity_backfill.sql ===
+-- 0101_wine_identity_backfill.sql
+-- P2 — wine identity spine, part 5: data migration for pre-existing wines
+-- rows. Idempotent (every pass is scoped to "where wine_variant_id is
+-- null"), following the three-pass structure 0054_wine_lineages.sql
+-- already used for its own backfill.
+--
+-- Normalization here is public.identity_normalize_text() (0097) — the
+-- same function that GENERATES canonical_wines' identity key, so this
+-- pass cannot key a row differently from any other writer even though it
+-- runs as the table owner with RLS bypassed.
+--
+-- P2 ROUND-6 CORRECTION, recorded rather than quietly fixed: this header
+-- previously called the SQL normalization a "best-effort approximation"
+-- of src/domains/identity/normalize.ts and argued the divergence was
+-- acceptable because its failure mode is always "creates one extra
+-- canonical/variant row a later exact match could have reused," never
+-- "merges two different wines." That argument was sound only while the
+-- SQL side merely COMPARED. Once round 5 moved identity-key derivation
+-- server-side, the same divergence became capable of merging two
+-- different wines, and it immediately did: the SQL function lacked
+-- normalize.ts's possessive-suffix rule, so "O'Brien's Vineyard" and
+-- "O.S. Brien Vineyard" — the exact D3 pair round 2 separated — both
+-- normalized to "brien o s vineyard" and would have shared one canonical
+-- identity. Measured, not theorised: 10 of 17 frozen golden vectors
+-- agreed before the fix, 17 of 17 after. The two implementations are now
+-- asserted equivalent unconditionally by
+-- src/domains/identity/normalize.test.ts rather than assumed close
+-- enough, and the "never merges two different wines" guarantee is
+-- restored by that test rather than by argument.
+--
+-- On a fresh local stack `wines` is empty, so this is a no-op there; it
+-- exists for production-safety discipline, matching this codebase's habit
+-- of never assuming a clean slate.
+--
+-- Uses explicit `drop table if exists` cleanup rather than
+-- `on commit drop`: unlike resolve_wine_variants_bulk (0099), which
+-- creates its scratch table inside one plpgsql function call and is
+-- therefore guaranteed to run within a single transaction regardless of
+-- caller behavior, this is a top-level migration file whose transaction
+-- boundaries are the migration runner's to decide — explicit drops make
+-- cleanup correct either way.
+create extension if not exists unaccent;
+
+drop table if exists _identity_backfill_norm;
+create temporary table _identity_backfill_norm as
+select
+  w.id as wine_id,
+  w.restaurant_id,
+  w.producer,
+  w.name,
+  w.vintage,
+  w.size_ml,
+  -- P2 ROUND-5 (D9-residual — scratchpad db-audit/verify/P2-critic-r4.md):
+  -- reuses public.identity_normalize_text() (0097) instead of duplicating
+  -- this exact expression inline — it now also backs the LWIN
+  -- corroboration gate below, and one implementation is easier to keep
+  -- correct than several copies that "agree on the same bug because they
+  -- hardcode the same literals" (the round-4 critic's framing of why
+  -- three independent copies of the OLD fuzzy check weren't actually
+  -- independent verification).
+  public.identity_normalize_text(w.producer) as producer_norm,
+  public.identity_normalize_text(w.name) as cuvee_norm,
+  case when w.lwin_id ~ '^[0-9]{7}' then substr(w.lwin_id, 1, 7) else null end as lwin7
+from public.wines w
+where w.wine_variant_id is null;
+
+-- Rows whose producer/name collapse to nothing under normalization (e.g.
+-- punctuation-only text) can't be identity-resolved by this pass — leave
+-- them for manual review rather than inventing a placeholder identity.
+delete from _identity_backfill_norm
+where producer_norm is null or cuvee_norm is null;
+
+-------------------------------------------------------------------------------
+-- Pass B: canonical_wines — two-phase exact-key match/create, same shape
+-- as resolve_wine_variants_bulk (0099): LWIN7 wins over text, DISTINCT ON
+-- collapses same-batch duplicates, ON CONFLICT DO NOTHING handles a
+-- concurrent writer.
+-------------------------------------------------------------------------------
+drop table if exists _identity_backfill_resolved;
+create temporary table _identity_backfill_resolved (
+  wine_id           uuid primary key,
+  canonical_wine_id uuid not null,
+  restaurant_id     uuid not null,
+  vintage           int,
+  size_ml           int not null
+);
+
+-- P2 ROUND-5 FIX (D9-residual): identity_status = 'lwin_verified' added.
+-- Without it, this join would match ANY canonical_wines row carrying
+-- n.lwin7 regardless of whether it was ever corroborated — the same
+-- "unverified-squat" hole closed on the resolve_wine_variants_bulk path
+-- (0099) and now also closed here, plus universally by 0097's
+-- canonical_wines_lwin7_requires_verified CHECK CONSTRAINT (this filter
+-- is defense-in-depth on top of that invariant).
+insert into _identity_backfill_resolved (wine_id, canonical_wine_id, restaurant_id, vintage, size_ml)
+select n.wine_id, cw.id, n.restaurant_id, n.vintage, n.size_ml
+from _identity_backfill_norm n
+join public.canonical_wines cw
+  on n.lwin7 is not null and cw.lwin7 = n.lwin7 and cw.identity_status = 'lwin_verified';
+
+insert into _identity_backfill_resolved (wine_id, canonical_wine_id, restaurant_id, vintage, size_ml)
+select n.wine_id, cw.id, n.restaurant_id, n.vintage, n.size_ml
+from _identity_backfill_norm n
+join public.canonical_wines cw
+  on cw.producer_norm = n.producer_norm and cw.cuvee_norm = n.cuvee_norm
+where n.wine_id not in (select wine_id from _identity_backfill_resolved);
+
+-- P2 ROUND-4/5 HISTORY (D9, then D9-residual — scratchpad
+-- db-audit/verify/P2-critic-r3.md and -r4.md): every row still
+-- unresolved at this point is about to CREATE a canonical_wines row
+-- below, claiming identity_status='lwin_verified' whenever its lwin7 is
+-- set. This migration runs as the table owner and BYPASSES RLS entirely
+-- — 0097's insert-policy corroboration cannot reach it, and (before
+-- round 5) neither could 0097's CHECK CONSTRAINT, since it didn't exist
+-- yet — so this backfill needs its own copy of the corroboration LOGIC
+-- regardless (0097's canonical_wines_lwin7_requires_verified CHECK
+-- CONSTRAINT now backstops the OUTCOME universally, but this UPDATE is
+-- what makes the CREATE decision correct in the first place, not merely
+-- constraint-safe). wines.lwin_id is itself settable by any tenant
+-- member via a plain UPDATE on wines with no catalog validation (the
+-- wines update policy is is_member(restaurant_id) with no column
+-- restriction), so this is the same forgery/mis-binding vector as the
+-- resolve_wine_variants_bulk path, triggered by a one-time migration over
+-- whatever wines rows exist at deploy time rather than a live RPC call.
+--
+-- Round 4 gated this with pg_trgm similarity() at match_lwin's own
+-- ranking thresholds (0.3/0.21) — the wrong tool for a permanent,
+-- unsupervised decision: similarity('Chateau Pichon Longueville Baron',
+-- 'Chateau Pichon Longueville Comtesse de Lalande') = 0.55, comfortably
+-- above 0.3, for two REAL, DISTINCT estates. Round 5 replaces it with
+-- identity_normalize_text() (see 0097's definition and the corresponding
+-- fix in 0099 for the full Baron/Lalande write-up): EXACT equality on
+-- producer, TOKEN SUBSET on cuvee (display_name commonly combines
+-- producer + wine name, so exact-string cuvee matching would reject
+-- every legitimate case) — both deterministic, neither a score, so this
+-- separates genuinely different producers while still tolerating
+-- accent/case/spacing/punctuation-only differences. A
+-- row that fails corroboration is downgraded (lwin7 stripped) to
+-- identity_status='unverified' below, not dropped from the backfill
+-- entirely — it still gets a real identity via its own text, matching
+-- this file's own already-documented risk tolerance ("creates one extra
+-- canonical/variant row a later exact match could have reused," never
+-- "merges two different wines").
+-- P2 ROUND-6 FIX (D9-residual #2): reads n.producer_norm/n.cuvee_norm —
+-- the values this pass actually resolves and stores on — rather than
+-- recomputing the normalization inline, for the same reason 0099's gate
+-- does. Equal by construction (both come from identity_normalize_text
+-- over the same source text), so no outcome changes; what changes is
+-- that a later edit can no longer make the checked value and the keyed
+-- value drift apart, which is the entire D9-residual bug class.
+update _identity_backfill_norm n
+set lwin7 = null
+where n.wine_id not in (select wine_id from _identity_backfill_resolved)
+  and n.lwin7 is not null
+  and not exists (
+    select 1 from public.lwin_catalog lc
+    where lc.lwin_id = n.lwin7
+      and n.producer_norm = public.identity_normalize_text(lc.producer)
+      and string_to_array(n.cuvee_norm, ' ') <@ string_to_array(public.identity_normalize_text(lc.display_name), ' ')
+  );
+
+-- P2 ROUND-6 (D9-residual #2): producer_norm/cuvee_norm are omitted —
+-- canonical_wines GENERATES them (0097). This migration runs as the
+-- table owner and bypasses RLS, so before round 6 it was the one path
+-- that could write ANY identity key with no policy in its way; the
+-- generated columns now bind it to n.producer/n.name exactly like every
+-- other caller. The stored key stays byte-identical to the
+-- n.producer_norm this statement still uses for DISTINCT ON and as the
+-- conflict target, since _identity_backfill_norm derived it with the
+-- same function call.
+with new_canon as (
+  insert into public.canonical_wines (
+    producer, cuvee, lwin7, identity_status,
+    created_by_restaurant_id
+  )
+  select distinct on (n.producer_norm, n.cuvee_norm)
+    n.producer, n.name, n.lwin7,
+    case when n.lwin7 is not null then 'lwin_verified' else 'unverified' end,
+    n.restaurant_id
+  from _identity_backfill_norm n
+  where n.wine_id not in (select wine_id from _identity_backfill_resolved)
+  order by n.producer_norm, n.cuvee_norm, n.wine_id
+  on conflict (producer_norm, cuvee_norm) do nothing
+  returning id, producer_norm, cuvee_norm
+)
+insert into _identity_backfill_resolved (wine_id, canonical_wine_id, restaurant_id, vintage, size_ml)
+select n.wine_id, nc.id, n.restaurant_id, n.vintage, n.size_ml
+from _identity_backfill_norm n
+join new_canon nc on nc.producer_norm = n.producer_norm and nc.cuvee_norm = n.cuvee_norm
+where n.wine_id not in (select wine_id from _identity_backfill_resolved);
+
+-- Lost-the-conflict-race read-back (a concurrent writer, or an earlier
+-- in-batch DISTINCT ON representative that this row's own producer/cuvee
+-- pair matched but which wasn't visible as a "new_canon" row above).
+insert into _identity_backfill_resolved (wine_id, canonical_wine_id, restaurant_id, vintage, size_ml)
+select n.wine_id, cw.id, n.restaurant_id, n.vintage, n.size_ml
+from _identity_backfill_norm n
+join public.canonical_wines cw
+  on cw.producer_norm = n.producer_norm and cw.cuvee_norm = n.cuvee_norm
+where n.wine_id not in (select wine_id from _identity_backfill_resolved);
+
+-------------------------------------------------------------------------------
+-- Pass C: wine_variants — identical two-phase pattern keyed on
+-- (restaurant_id, canonical_wine_id, coalesce(vintage,0), size_ml).
+-------------------------------------------------------------------------------
+drop table if exists _identity_backfill_variant;
+create temporary table _identity_backfill_variant (
+  wine_id         uuid primary key,
+  wine_variant_id uuid not null
+);
+
+insert into _identity_backfill_variant (wine_id, wine_variant_id)
+select r.wine_id, wv.id
+from _identity_backfill_resolved r
+join public.wine_variants wv
+  on wv.restaurant_id = r.restaurant_id
+ and wv.canonical_wine_id = r.canonical_wine_id
+ and coalesce(wv.vintage, 0) = coalesce(r.vintage, 0)
+ and wv.size_ml = r.size_ml;
+
+with new_variants as (
+  insert into public.wine_variants (restaurant_id, canonical_wine_id, vintage, size_ml)
+  select distinct on (r.restaurant_id, r.canonical_wine_id, coalesce(r.vintage, 0), r.size_ml)
+    r.restaurant_id, r.canonical_wine_id, r.vintage, r.size_ml
+  from _identity_backfill_resolved r
+  where r.wine_id not in (select wine_id from _identity_backfill_variant)
+  order by r.restaurant_id, r.canonical_wine_id, coalesce(r.vintage, 0), r.size_ml, r.wine_id
+  on conflict (restaurant_id, canonical_wine_id, coalesce(vintage, 0), size_ml) do nothing
+  returning id, restaurant_id, canonical_wine_id, vintage, size_ml
+)
+insert into _identity_backfill_variant (wine_id, wine_variant_id)
+select r.wine_id, nv.id
+from _identity_backfill_resolved r
+join new_variants nv
+  on nv.restaurant_id = r.restaurant_id
+ and nv.canonical_wine_id = r.canonical_wine_id
+ and coalesce(nv.vintage, 0) = coalesce(r.vintage, 0)
+ and nv.size_ml = r.size_ml
+where r.wine_id not in (select wine_id from _identity_backfill_variant);
+
+insert into _identity_backfill_variant (wine_id, wine_variant_id)
+select r.wine_id, wv.id
+from _identity_backfill_resolved r
+join public.wine_variants wv
+  on wv.restaurant_id = r.restaurant_id
+ and wv.canonical_wine_id = r.canonical_wine_id
+ and coalesce(wv.vintage, 0) = coalesce(r.vintage, 0)
+ and wv.size_ml = r.size_ml
+where r.wine_id not in (select wine_id from _identity_backfill_variant);
+
+-------------------------------------------------------------------------------
+-- Pass D: set wines.wine_variant_id. wines.canonical_wine_id is derived
+-- by the wines_derive_canonical_wine_id trigger (0098) whenever
+-- wine_variant_id changes, including from this bulk UPDATE — no separate
+-- step needed here, and no reason to bypass the trigger: it always
+-- computes the same value this backfill would set by hand, by
+-- construction.
+-------------------------------------------------------------------------------
+update public.wines w
+set wine_variant_id = v.wine_variant_id
+from _identity_backfill_variant v
+where w.id = v.wine_id;
+
+drop table if exists _identity_backfill_variant;
+drop table if exists _identity_backfill_resolved;
+drop table if exists _identity_backfill_norm;

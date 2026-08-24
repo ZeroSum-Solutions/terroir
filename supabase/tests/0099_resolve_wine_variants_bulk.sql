@@ -58,7 +58,6 @@ select ok(
       (select restaurant_id from _t9099_fixture),
       jsonb_build_array(jsonb_build_object(
         'idx', 0, 'producer_raw', 'Domaine Test', 'cuvee_raw', 'Cuvee One',
-        'producer_norm', 'domaine test', 'cuvee_norm', 'cuvee one',
         'vintage', 2018, 'size_ml', 750
       ))
     )
@@ -67,7 +66,7 @@ select ok(
 );
 
 -- 2. Idempotency: re-run the SAME input — zero new rows anywhere.
-select isnt_empty($$select 1 from public.canonical_wines where producer_norm = 'domaine test' and cuvee_norm = 'cuvee one'$$, 'sanity: the canonical row from step 1 exists');
+select isnt_empty($$select 1 from public.canonical_wines where producer_norm = public.identity_normalize_text('Domaine Test') and cuvee_norm = public.identity_normalize_text('Cuvee One')$$, 'sanity: the canonical row from step 1 exists');
 
 select results_eq(
   $$
@@ -82,7 +81,6 @@ select results_eq(
         (select restaurant_id from _t9099_fixture),
         jsonb_build_array(jsonb_build_object(
           'idx', 0, 'producer_raw', 'Domaine Test', 'cuvee_raw', 'Cuvee One',
-          'producer_norm', 'domaine test', 'cuvee_norm', 'cuvee one',
           'vintage', 2018, 'size_ml', 750
         ))
       )
@@ -107,7 +105,6 @@ select results_eq(
       (select restaurant_id from _t9099_fixture),
       jsonb_build_array(jsonb_build_object(
         'idx', 0, 'producer_raw', 'Domaine Test', 'cuvee_raw', 'Cuvee One',
-        'producer_norm', 'domaine test', 'cuvee_norm', 'cuvee one',
         'vintage', 2018, 'size_ml', 750
       ))
     )
@@ -127,12 +124,10 @@ select results_eq(
         jsonb_build_array(
           jsonb_build_object(
             'idx', 0, 'producer_raw', 'Domaine Batch', 'cuvee_raw', 'Batch Cuvee',
-            'producer_norm', 'domaine batch', 'cuvee_norm', 'batch cuvee',
             'vintage', 2019, 'size_ml', 750
           ),
           jsonb_build_object(
             'idx', 1, 'producer_raw', 'Domaine Batch', 'cuvee_raw', 'Batch Cuvee',
-            'producer_norm', 'domaine batch', 'cuvee_norm', 'batch cuvee',
             'vintage', 2020, 'size_ml', 750
           )
         )
@@ -145,7 +140,7 @@ select results_eq(
 );
 
 select is(
-  (select count(*)::int from public.canonical_wines where producer_norm = 'domaine batch' and cuvee_norm = 'batch cuvee'),
+  (select count(*)::int from public.canonical_wines where producer_norm = public.identity_normalize_text('Domaine Batch') and cuvee_norm = public.identity_normalize_text('Batch Cuvee')),
   1,
   'exactly one canonical_wines row exists for the same-batch duplicate producer/cuvee'
 );
@@ -161,17 +156,14 @@ select results_eq(
         jsonb_build_array(
           jsonb_build_object(
             'idx', 0, 'producer_raw', 'Domaine Vintage', 'cuvee_raw', 'Vintage Cuvee',
-            'producer_norm', 'domaine vintage', 'cuvee_norm', 'vintage cuvee',
             'vintage', 2015, 'size_ml', 750
           ),
           jsonb_build_object(
             'idx', 1, 'producer_raw', 'Domaine Vintage', 'cuvee_raw', 'Vintage Cuvee',
-            'producer_norm', 'domaine vintage', 'cuvee_norm', 'vintage cuvee',
             'vintage', 2016, 'size_ml', 750
           ),
           jsonb_build_object(
             'idx', 2, 'producer_raw', 'Domaine Vintage', 'cuvee_raw', 'Vintage Cuvee',
-            'producer_norm', 'domaine vintage', 'cuvee_norm', 'vintage cuvee',
             'vintage', 2016, 'size_ml', 1500
           )
         )
@@ -207,7 +199,6 @@ from public.resolve_wine_variants_bulk(
   (select restaurant_id from _t9099_fixture),
   jsonb_build_array(jsonb_build_object(
     'idx', 0, 'producer_raw', 'Chateau Test Domaine', 'cuvee_raw', 'Cuvee Un',
-    'producer_norm', 'chateau test domaine', 'cuvee_norm', 'cuvee un',
     'vintage', 2018, 'size_ml', 750, 'lwin7', '1234567'
   ))
 ) r;
@@ -218,7 +209,6 @@ from public.resolve_wine_variants_bulk(
   (select restaurant_id from _t9099_fixture),
   jsonb_build_array(jsonb_build_object(
     'idx', 0, 'producer_raw', 'CHATEAU  TEST DOMAINE', 'cuvee_raw', 'cuvee un',
-    'producer_norm', 'chateau  test domaine', 'cuvee_norm', 'cuvee un',
     'vintage', 2018, 'size_ml', 750, 'lwin7', '1234567'
   ))
 ) r;
@@ -244,12 +234,23 @@ select isnt_empty(
 
 -- 11. D3 (round-2 critic finding, scratchpad db-audit/verify/P2-critic-r1.md):
 -- "O'Brien's Vineyard" and "O.S. Brien Vineyard" used to normalize to the
--- IDENTICAL producer_norm ("brien o s vineyard") before the D3 fix to
--- src/domains/identity/normalize.ts. producer_norm/cuvee_norm below are
--- computed by hand using the FIXED normalizeProducerOrCuvee (this RPC
--- does no normalization itself — the caller always supplies it), same
--- cuvee ("Reserve") and vintage/size for both, mirroring the critic's own
--- live reproduction exactly.
+-- IDENTICAL producer_norm ("brien o s vineyard"), collapsing two
+-- plausibly-different real producers into one canonical identity.
+--
+-- P2 ROUND-6: this test got sharper rather than weaker. It used to hand
+-- the RPC pre-computed norms, so it only ever proved that the CALLER's
+-- TypeScript normalizer had been fixed — the server would have accepted
+-- any two strings the caller chose to distinguish. Now the caller sends
+-- only raw text and the server derives the identity key itself, so this
+-- exercises the real thing: public.identity_normalize_text() must make
+-- the same distinction normalize.ts does.
+--
+-- It caught exactly that. Round 5 moved key derivation server-side but
+-- the SQL function had no possessive-suffix rule, so both names again
+-- normalized to "brien o s vineyard" — D3 reintroduced, this time as a
+-- genuine cross-wine over-merge rather than a caller-side bug. The rule
+-- was ported into identity_normalize_text() in round 6; this test is
+-- what fails if it is ever dropped again.
 create temporary table _t9099_d3 (label text, canonical_wine_id uuid) on commit drop;
 insert into _t9099_d3 (label, canonical_wine_id)
 select 'possessive_apostrophe', r.canonical_wine_id
@@ -257,7 +258,6 @@ from public.resolve_wine_variants_bulk(
   (select restaurant_id from _t9099_fixture),
   jsonb_build_array(jsonb_build_object(
     'idx', 0, 'producer_raw', 'O''Brien''s Vineyard', 'cuvee_raw', 'Reserve',
-    'producer_norm', 'briens o vineyard', 'cuvee_norm', 'reserve',
     'vintage', 2019, 'size_ml', 750
   ))
 ) r;
@@ -268,7 +268,6 @@ from public.resolve_wine_variants_bulk(
   (select restaurant_id from _t9099_fixture),
   jsonb_build_array(jsonb_build_object(
     'idx', 0, 'producer_raw', 'O.S. Brien Vineyard', 'cuvee_raw', 'Reserve',
-    'producer_norm', 'brien o s vineyard', 'cuvee_norm', 'reserve',
     'vintage', 2019, 'size_ml', 750
   ))
 ) r;

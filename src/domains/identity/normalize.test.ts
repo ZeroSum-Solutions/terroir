@@ -30,7 +30,13 @@ import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { existsSync, readFileSync } from "node:fs";
+import { createClient } from "@supabase/supabase-js";
 import { normalizeProducerOrCuvee, normalizeVintage, isNvVintageText } from "./normalize";
+
+// Round-6 SQL-parity block below; see its own comment for why it exists.
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const hasLiveDb = Boolean(supabaseUrl && serviceRoleKey);
 
 const p1FixturePath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -310,6 +316,59 @@ describe("normalization golden vectors (frozen, no sibling dependency — always
         if (actual !== outcome) {
           mismatches.push(`normalizeVintage("${input}") -> expected ${JSON.stringify(outcome)}, got ${JSON.stringify(actual)}`);
         }
+      }
+    }
+    expect(mismatches.join("\n")).toBe("");
+  });
+});
+
+// P2 ROUND-6 (D9-residual #2): THE THIRD PARTY TO THIS CONTRACT.
+//
+// Until round 5 the SQL side only ever COMPARED, so its divergence from
+// this file was cosmetic and its worst case was a false negative — 0101's
+// header said exactly that, and was right at the time. Round 5 moved
+// identity-key derivation server-side and round 6 made
+// canonical_wines.producer_norm/cuvee_norm STORED GENERATED columns
+// computed by public.identity_normalize_text(). The SQL function is now
+// the definition of the identity key, so a divergence between it and
+// normalizeProducerOrCuvee is a false POSITIVE — two genuinely different
+// wines sharing one canonical row, the single failure the blueprint cares
+// about most.
+//
+// That is not hypothetical. When the derivation moved, the SQL function
+// had no counterpart to this file's possessive-suffix rule, so
+// "O'Brien's Vineyard" and "O.S. Brien Vineyard" — the exact D3 pair
+// round 2 separated — both normalized to "brien o s vineyard". Measured
+// against the frozen vectors: 10 of 17 agreed before the rule was ported
+// into SQL, 17 of 17 after, and every one of the 7 failures was that one
+// cause.
+//
+// This block runs the SAME frozen vectors through the LIVE database
+// function. It needs a live stack, so unlike the frozen block above it
+// cannot be unconditional — which is precisely why the possessive rule is
+// ALSO pinned by supabase/tests/0099_resolve_wine_variants_bulk.sql's D3
+// case, which drives the real RPC and always runs under `supabase test
+// db`. Two independent guards, because a skipped test protects nothing
+// (D8's own lesson).
+describe.skipIf(!hasLiveDb)("SQL identity_normalize_text parity with normalizeProducerOrCuvee (live DB)", () => {
+  it("the database function matches the frozen contract for every producer/cuvee vector", async () => {
+    const vectors = goldenVectors.producerOrCuveeVectors;
+    expect(vectors.length).toBeGreaterThan(0);
+
+    const admin = createClient(supabaseUrl!, serviceRoleKey!, { auth: { persistSession: false } });
+    const mismatches: string[] = [];
+    for (const { input, expected } of vectors) {
+      const { data, error } = await admin.rpc("identity_normalize_text", { raw: input } as never);
+      if (error) throw new Error(`identity_normalize_text("${input}") failed: ${error.message}`);
+      if (data !== expected) {
+        mismatches.push(`SQL identity_normalize_text("${input}") -> expected "${expected}", got "${String(data)}"`);
+      }
+      // Belt and braces: the TS side must agree with the same frozen
+      // value, so this test fails loudly if the two implementations drift
+      // in EITHER direction rather than only when SQL moves.
+      const ts = normalizeProducerOrCuvee(input);
+      if (ts !== data) {
+        mismatches.push(`TS/SQL disagree on "${input}": TS "${ts}" vs SQL "${String(data)}"`);
       }
     }
     expect(mismatches.join("\n")).toBe("");

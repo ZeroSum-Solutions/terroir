@@ -17,12 +17,156 @@
 -- of this table — they are wine_variants' job (0098) and are always exact
 -- keys, never fuzzy-matched (see resolve_wine_variants_bulk, 0099).
 
+-- P2 ROUND-6 FIX (D9-residual #2 — see the identity_normalize_text() and
+-- canonical_wines DDL comments below): the extension + normalization
+-- function are declared BEFORE the table, because the table's identity
+-- key columns are now GENERATED from this function and a generation
+-- expression cannot reference a function that does not exist yet.
+create extension if not exists unaccent;
+
+-- P2 ROUND-5/6 FIX (D9-residual — scratchpad db-audit/verify/P2-critic-r4.md):
+-- shared, deterministic text-normalization helper. Round 4's LWIN
+-- corroboration gate used pg_trgm similarity() with match_lwin's ranking
+-- thresholds (0.3/0.21) — a threshold tuned to be TOLERANT of false
+-- positives because a human reviews match_lwin's suggestions. That is the
+-- wrong tool for a permanent, cross-tenant, unrepairable security
+-- decision: similarity('Chateau Pichon Longueville Baron', 'Chateau
+-- Pichon Longueville Comtesse de Lalande') = 0.55, comfortably above 0.3,
+-- for two REAL, DISTINCT Bordeaux estates that share a long common
+-- prefix — live-verified against this exact pair before writing this
+-- comment. A fuzzy threshold cannot separate them; no threshold reliably
+-- can, because their similarity is a property of shared vocabulary, not
+-- of being the same wine.
+--
+-- identity_normalize_text() replaces the threshold with a DETERMINISTIC
+-- equality check: unaccent + lowercase + possessive-suffix merge +
+-- collapse non-alnum + token-sort. Baron and Lalande normalize to
+-- different token sets ("baron chateau longueville pichon" vs "chateau
+-- comtesse de lalande longueville pichon") and can never satisfy an
+-- equality check regardless of shared vocabulary, while a genuine
+-- data-entry-error — accents, case, spacing, punctuation — still
+-- normalizes identically on both sides, preserving the legitimate "LWIN
+-- wins over textual FORMATTING differences" behavior
+-- resolve_wine_variants_bulk depends on.
+--
+-- ROUND 6 — TWO CHANGES, both forced by this function's PROMOTION from
+-- "comparison helper" to "the definition of the identity key" (the
+-- canonical_wines DDL below now GENERATES producer_norm/cuvee_norm from
+-- it). While it only ever fed comparisons, divergence from the
+-- TypeScript src/domains/identity/normalize.ts was cosmetic and its
+-- worst case was a false NEGATIVE. Once it computes the stored identity
+-- key, a divergence becomes a false POSITIVE — two genuinely different
+-- wines sharing one canonical row — which is the single failure the
+-- blueprint cares about most:
+--
+-- 1. POSSESSIVE-SUFFIX RULE ADDED (the D3 regression, live-measured).
+--    normalize.ts merges a trailing possessive "'s" into its host word
+--    BEFORE the general non-alnum collapse, so "O'Brien's" -> "briens"
+--    (one token) rather than "brien"+"s" (two tokens, one a
+--    coincidence-prone stray). Without that rule here, "O'Brien's
+--    Vineyard" and "O.S. Brien Vineyard" BOTH normalized to
+--    "brien o s vineyard" — the exact over-merge round 2's D3 fix
+--    removed from the TypeScript side, silently reintroduced the moment
+--    the identity key moved into SQL. Measured against the frozen
+--    contract in src/domains/identity/__fixtures__/normalization-golden-
+--    vectors.json: 10 of 17 vectors agreed before this rule, 17 of 17
+--    after, and all 7 failures were this one cause. The regexp is the
+--    direct translation of normalize.ts's /['’]s(?=\s|$)/g — PostgreSQL's
+--    ARE engine has no lookahead here, so the following-space is captured
+--    and re-emitted via \1 instead.
+-- 2. search_path PINNED. unaccent(text) is declared STABLE, not
+--    IMMUTABLE, and resolves BOTH the function and its dictionary through
+--    search_path; this function's IMMUTABLE marking was therefore a
+--    promise rather than a guarantee (as its previous comment honestly
+--    disclosed). A promise is survivable for a comparison; it is not
+--    survivable for a STORED GENERATED column, where the value is
+--    computed once and then indexed as a UNIQUE identity key. Pinning
+--    search_path (the same discipline is_member and every other
+--    security-relevant function in this schema already uses, 0001) makes
+--    the resolution deterministic and the immutability marking honest.
+create or replace function public.identity_normalize_text(raw text)
+returns text
+language sql
+immutable
+parallel safe
+set search_path = public
+as $$
+  select nullif(
+    (select string_agg(t, ' ' order by t)
+     from unnest(string_to_array(
+       trim(regexp_replace(
+         regexp_replace(lower(unaccent(raw)), '[''’]s(\s|$)', 's\1', 'g'),
+         '[^a-z0-9]+', ' ', 'g')),
+       ' '
+     )) as t
+     where t <> ''),
+    ''
+  );
+$$;
+
+comment on function public.identity_normalize_text(text) is
+  'THE definition of canonical_wines'' identity key: producer_norm and '
+  'cuvee_norm are STORED GENERATED columns computed by this function, so '
+  'no client, RPC, or table-owner migration can supply an identity key '
+  'decoupled from the row''s own producer/cuvee text. Also used for '
+  'deterministic LWIN corroboration — exact equality (producer) or '
+  'token-array subset (cuvee vs display_name, since display_name commonly '
+  'combines producer + wine name) — never as a fuzzy/threshold input. '
+  'Behaviourally equivalent to src/domains/identity/normalize.ts''s '
+  'normalizeProducerOrCuvee; that equivalence is enforced unconditionally '
+  'by src/domains/identity/normalize.test.ts against the frozen golden '
+  'vectors, and it is load-bearing rather than tidy — a divergence here '
+  'is a false POSITIVE (two different wines sharing one canonical row), '
+  'not the false negative it was while this function only fed '
+  'comparisons.';
+
 create table public.canonical_wines (
   id                     uuid        primary key default gen_random_uuid(),
   producer               text        not null,
   cuvee                  text        not null,
-  producer_norm          text        not null,
-  cuvee_norm             text        not null,
+  -- P2 ROUND-6 FIX (D9-residual #2 — the second cross-tenant identity-
+  -- hijack instance, live-reproduced end to end before this fix):
+  -- these two columns ARE the identity key (canonical_wines_identity_idx
+  -- below is UNIQUE on them, and resolve_wine_variants_bulk's phase-1
+  -- text match joins on them), and until round 6 they were plain
+  -- caller-supplied text. The LWIN corroboration gate validated
+  -- producer/cuvee — a DIFFERENT pair of caller-supplied fields —
+  -- so the value checked and the value stored were simply not the same
+  -- thing, with nothing anywhere binding one to the other.
+  --
+  -- The attack needed no threshold, no fuzzy matching and no unusual
+  -- privilege: submit raws for a wine you legitimately own whose lwin7
+  -- genuinely corroborates, and norms naming the VICTIM's wine. The gate
+  -- passes on the raws; the row lands on the victim's identity key as
+  -- lwin_verified. Reproduced live against this stack: a row reading
+  -- producer='Attacker Real Estate' (which is what corroborated its
+  -- lwin7) was written with producer_norm='estate real victim', and the
+  -- victim's own subsequent, entirely correct import through the real
+  -- resolve_wine_variants_bulk RPC then bound to it — canonical_match_
+  -- method='exact', canonical_created=false. Permanent and unrepairable
+  -- by the victim: canonical_wines_identity_idx is UNIQUE so they can
+  -- never create their own row, and this table grants authenticated no
+  -- UPDATE or DELETE.
+  --
+  -- GENERATED ALWAYS ... STORED is the fix, chosen over a CHECK
+  -- constraint deliberately. A CHECK would still let the caller supply
+  -- the key and merely police it; generation removes the field from
+  -- every write API outright, so the decoupling is not defended against,
+  -- it is unrepresentable. It reaches paths RLS cannot: 0101's backfill
+  -- runs as the table owner and bypasses RLS entirely, and
+  -- resolve_wine_variants_bulk is SECURITY INVOKER but batches its
+  -- inserts. Attempting to supply either column now fails with SQLSTATE
+  -- 428C9 from any role, including service_role and the table owner.
+  --
+  -- NOT NULL is retained and is load-bearing in the fail-closed
+  -- direction: identity_normalize_text returns NULL when the input
+  -- collapses to nothing (e.g. punctuation-only text), so such a row is
+  -- refused outright rather than inventing a placeholder identity. Both
+  -- 0099 and 0101 already delete those rows before reaching an insert,
+  -- so this changes no supported path — it only closes the direct-insert
+  -- one.
+  producer_norm          text        not null generated always as (public.identity_normalize_text(producer)) stored,
+  cuvee_norm             text        not null generated always as (public.identity_normalize_text(cuvee)) stored,
   colour                 text,
   region                 text,
   country                text,
@@ -47,74 +191,6 @@ comment on table public.canonical_wines is
   'blocking legitimate long-tail wine creation, so correctness is '
   'enforced on WHAT a row may assert (identity_status/lwin7 shape), not '
   'WHO may write it.';
-
--- P2 ROUND-5 FIX (D9-residual — scratchpad db-audit/verify/P2-critic-r4.md):
--- shared, deterministic text-normalization helper. Round 4's LWIN
--- corroboration gate used pg_trgm similarity() with match_lwin's ranking
--- thresholds (0.3/0.21) — a threshold tuned to be TOLERANT of false
--- positives because a human reviews match_lwin's suggestions. That is the
--- wrong tool for a permanent, cross-tenant, unrepairable security
--- decision: similarity('Chateau Pichon Longueville Baron', 'Chateau
--- Pichon Longueville Comtesse de Lalande') = 0.55, comfortably above 0.3,
--- for two REAL, DISTINCT Bordeaux estates that share a long common
--- prefix — live-verified against this exact pair before writing this
--- comment. A fuzzy threshold cannot separate them; no threshold reliably
--- can, because their similarity is a property of shared vocabulary, not
--- of being the same wine.
---
--- identity_normalize_text() replaces the threshold with a DETERMINISTIC
--- equality check: the same normalize-and-token-sort technique
--- 0101_wine_identity_backfill.sql already uses for its own best-effort
--- SQL-side approximation of src/domains/identity/normalize.ts (unaccent
--- + lowercase + collapse non-alnum + token-sort) — extracted here into
--- one shared function so there is exactly one implementation instead of
--- duplicated inline copies, and reused by 0101 below for both its
--- existing wines-normalization pass AND the new corroboration check.
--- Baron and Lalande normalize to different token sets ("baron chateau
--- longueville pichon" vs "chateau comtesse de lalande longueville
--- pichon") and can never satisfy an equality check regardless of shared
--- vocabulary, while a genuine data-entry-error — accents, case, spacing,
--- punctuation — still normalizes identically on both sides, preserving
--- the legitimate "LWIN wins over textual FORMATTING differences"
--- behavior resolve_wine_variants_bulk depends on. This is the same
--- SQL-vs-TS-normalization approximation risk 0101 already discloses and
--- accepts (Postgres unaccent()'s dictionary vs JS NFKD-plus-manual-œ/æ-
--- folding will not agree on every input) — the risk direction stays
--- "creates one extra row a later match could have reused," never
--- "verifies the wrong wine," because a normalization MISMATCH here can
--- only cause a false NEGATIVE (reject/downgrade a legitimate match), not
--- a false positive.
-create extension if not exists unaccent;
-
-create or replace function public.identity_normalize_text(raw text)
-returns text
-language sql
-immutable
-parallel safe
-as $$
-  select nullif(
-    (select string_agg(t, ' ' order by t)
-     from unnest(string_to_array(
-       trim(regexp_replace(lower(unaccent(raw)), '[^a-z0-9]+', ' ', 'g')),
-       ' '
-     )) as t
-     where t <> ''),
-    ''
-  );
-$$;
-
-comment on function public.identity_normalize_text(text) is
-  'Deterministic SQL-side approximation of '
-  'src/domains/identity/normalize.ts''s normalizeProducerOrCuvee (unaccent '
-  'instead of NFKD+manual folding — a known, accepted divergence risk, '
-  'see 0101''s header). Used ONLY for deterministic comparisons — exact '
-  'equality (producer) or token-array subset (cuvee vs display_name, '
-  'since display_name commonly combines producer + wine name) — never '
-  'as a fuzzy/threshold input. '
-  'Round-5 fix for D9-residual: replaces the round-4 pg_trgm similarity() '
-  'threshold, which could not distinguish real, differently-named wines '
-  'that share vocabulary (Chateau Pichon Longueville Baron vs ...Comtesse '
-  'de Lalande, similarity 0.55).';
 
 create unique index canonical_wines_identity_idx
   on public.canonical_wines (producer_norm, cuvee_norm);
@@ -205,6 +281,26 @@ create policy "anyone authenticated can read canonical_wines"
 --    variants_bulk's "LWIN wins over textual FORMATTING differences"
 --    feature still work
 --    for its intended case).
+--
+-- ROUND 6 (D9-residual #2) — WHY THIS POLICY NEEDS NO producer_norm/
+-- cuvee_norm CLAUSE, which is the natural thing to look for here. Round
+-- 5 closed the RPC half of the norm/raw decoupling by deriving the norms
+-- server-side inside resolve_wine_variants_bulk, but this policy was the
+-- other half and was left open: it corroborates the row's own producer/
+-- cuvee (correctly) while placing NO constraint whatsoever on the two
+-- columns that actually ARE the identity key. A direct insert could
+-- therefore pass corroboration on honest raws and still land on any
+-- victim's key. Adding a `producer_norm = identity_normalize_text(
+-- producer)` clause here would have worked, but only for this one path,
+-- and only for as long as the clause and the RPC agreed — the same
+-- "three copies of one gate" shape the round-4 critic already faulted.
+-- Round 6 instead makes the columns GENERATED (see the table DDL above),
+-- so a forged identity key is rejected by the column definition itself
+-- before any policy is consulted, identically for this policy, the RPC,
+-- 0101's table-owner backfill and service_role. That is why the check
+-- below is still expressed against producer/cuvee and needs no
+-- counterpart: producer/cuvee are now provably the sole inputs to the
+-- key, so corroborating them IS corroborating it.
 --
 -- This RLS policy protects DIRECT inserts. It does NOT, by itself,
 -- protect resolve_wine_variants_bulk's own batched insert from aborting

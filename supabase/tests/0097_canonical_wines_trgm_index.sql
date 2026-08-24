@@ -70,12 +70,14 @@ with templates as (
     ]) as cuvee,
     generate_series(0, 29) as idx
 )
-insert into public.canonical_wines (producer, cuvee, producer_norm, cuvee_norm)
+-- P2 ROUND-6: producer_norm/cuvee_norm are GENERATED from producer/cuvee
+-- (0097) and can no longer be supplied. The generated form is token-
+-- SORTED, so the probe strings below are the sorted normalization of the
+-- template names, not their literal word order.
+insert into public.canonical_wines (producer, cuvee)
 select
   t.producer || ' ' || g,
-  t.cuvee || ' ' || g,
-  lower(t.producer) || ' ' || g,
-  lower(t.cuvee) || ' ' || g
+  t.cuvee || ' ' || g
 from generate_series(1, 300000) g
 join templates t on t.idx = g % 30;
 

@@ -21,8 +21,8 @@ select plan(4);
 -- a RESTRICT-vs-destroy distinction would be visible either way.
 insert into public.restaurants (id, name) values
   ('10000000-0000-0000-0000-000000000001', 'D1 RESTRICT Safety Test');
-insert into public.canonical_wines (id, producer, cuvee, producer_norm, cuvee_norm) values
-  ('10000000-0000-0000-0000-000000000002', 'Restrict Safety Producer', 'Restrict Safety Cuvee', 'restrict safety producer', 'restrict safety cuvee');
+insert into public.canonical_wines (id, producer, cuvee) values
+  ('10000000-0000-0000-0000-000000000002', 'Restrict Safety Producer', 'Restrict Safety Cuvee');
 insert into public.wine_variants (id, restaurant_id, canonical_wine_id, vintage, size_ml) values
   ('10000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', 2020, 750);
 insert into public.wines (id, restaurant_id, name, producer, vintage, size_ml, wine_variant_id) values
@@ -70,8 +70,8 @@ create trigger _t0098_diag_variants after delete on public.wine_variants
 
 insert into public.restaurants (id, name) values
   ('10000000-0000-0000-0000-000000000005', 'D1 RESTRICT Forced-Reversal Test');
-insert into public.canonical_wines (id, producer, cuvee, producer_norm, cuvee_norm) values
-  ('10000000-0000-0000-0000-000000000006', 'Forced Reversal Producer', 'Forced Reversal Cuvee', 'forced reversal producer', 'forced reversal cuvee');
+insert into public.canonical_wines (id, producer, cuvee) values
+  ('10000000-0000-0000-0000-000000000006', 'Forced Reversal Producer', 'Forced Reversal Cuvee');
 insert into public.wine_variants (id, restaurant_id, canonical_wine_id, vintage, size_ml) values
   ('10000000-0000-0000-0000-000000000007', '10000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000006', 2021, 750);
 insert into public.wines (id, restaurant_id, name, producer, vintage, size_ml, wine_variant_id) values

@@ -234,7 +234,7 @@ describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY l
     // null, to prove the "adopt" branch of the new conflict guard.
     const { data: canon } = await admin
       .from("canonical_wines")
-      .insert({ producer: "P2 Merge Cellars", cuvee: "P2 Merge", producer_norm: "p2 merge cellars", cuvee_norm: "p2 merge" } as never)
+      .insert({ producer: "P2 Merge Cellars", cuvee: "P2 Merge" } as never)
       .select("id")
       .single();
     cleanupCanonicalWineIds.push((canon as { id: string }).id);
@@ -335,8 +335,8 @@ describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY l
     const w1Id = (w1 as { id: string }).id;
     const w2Id = (w2 as { id: string }).id;
 
-    const { data: canon1 } = await admin.from("canonical_wines").insert({ producer: "P2 Conflict One", cuvee: "One", producer_norm: "p2 conflict one distinct1", cuvee_norm: "one" } as never).select("id").single();
-    const { data: canon2 } = await admin.from("canonical_wines").insert({ producer: "P2 Conflict Two", cuvee: "Two", producer_norm: "p2 conflict two distinct2", cuvee_norm: "two" } as never).select("id").single();
+    const { data: canon1 } = await admin.from("canonical_wines").insert({ producer: "P2 Conflict One", cuvee: "One" } as never).select("id").single();
+    const { data: canon2 } = await admin.from("canonical_wines").insert({ producer: "P2 Conflict Two", cuvee: "Two" } as never).select("id").single();
     cleanupCanonicalWineIds.push((canon1 as { id: string }).id, (canon2 as { id: string }).id);
     const { data: v1 } = await admin.from("wine_variants").insert({ restaurant_id: restaurantA, canonical_wine_id: (canon1 as { id: string }).id, vintage: 2021, size_ml: 750 } as never).select("id").single();
     const { data: v2 } = await admin.from("wine_variants").insert({ restaurant_id: restaurantA, canonical_wine_id: (canon2 as { id: string }).id, vintage: 2021, size_ml: 750 } as never).select("id").single();
@@ -350,8 +350,8 @@ describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY l
   });
 
   it("merge_canonical_wines is unreachable by an authenticated session, and succeeds via service_role", async () => {
-    const { data: source } = await admin.from("canonical_wines").insert({ producer: "P2 MCW Source", cuvee: "Cuvee", producer_norm: "p2 mcw source", cuvee_norm: "cuvee" } as never).select("id").single();
-    const { data: target } = await admin.from("canonical_wines").insert({ producer: "P2 MCW Target", cuvee: "Cuvee", producer_norm: "p2 mcw target", cuvee_norm: "cuvee" } as never).select("id").single();
+    const { data: source } = await admin.from("canonical_wines").insert({ producer: "P2 MCW Source", cuvee: "Cuvee" } as never).select("id").single();
+    const { data: target } = await admin.from("canonical_wines").insert({ producer: "P2 MCW Target", cuvee: "Cuvee" } as never).select("id").single();
     const sourceId = (source as { id: string }).id;
     const targetId = (target as { id: string }).id;
     cleanupCanonicalWineIds.push(sourceId, targetId);
@@ -389,7 +389,7 @@ describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY l
   it("D1 fix: deleting a wine_variants row is blocked outright (RESTRICT) — the wines row, its identity, and its full audit trail are never touched", async () => {
     const { data: canon } = await admin
       .from("canonical_wines")
-      .insert({ producer: "P2 FK Safety Cellars", cuvee: "Safety Cuvee", producer_norm: "p2 fk safety cellars", cuvee_norm: "safety cuvee" } as never)
+      .insert({ producer: "P2 FK Safety Cellars", cuvee: "Safety Cuvee" } as never)
       .select("id")
       .single();
     const canonId = (canon as { id: string }).id;
@@ -494,7 +494,7 @@ describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY l
 
     const { data: canon } = await admin
       .from("canonical_wines")
-      .insert({ producer: "P2 Teardown Cellars", cuvee: "Teardown Cuvee", producer_norm: "p2 teardown cellars", cuvee_norm: "teardown cuvee" } as never)
+      .insert({ producer: "P2 Teardown Cellars", cuvee: "Teardown Cuvee" } as never)
       .select("id")
       .single();
     const canonId = (canon as { id: string }).id;

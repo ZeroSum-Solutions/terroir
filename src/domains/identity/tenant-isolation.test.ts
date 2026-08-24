@@ -27,13 +27,17 @@ async function signedInClient(email: string, password: string): Promise<Supabase
   });
 }
 
+// P2 ROUND-6 (D9-residual #2): payloads carry RAW text only. The RPC
+// derives producer_norm/cuvee_norm itself and canonical_wines GENERATES
+// them from producer/cuvee, so there is no longer any caller-supplied
+// identity key to send — which is the point of the fix. jsonb_to_recordset
+// in 0099 no longer names those keys either, so a payload that still sent
+// them would be silently ignored rather than silently trusted.
 function variantPayload(idx: number, producer: string, cuvee: string, vintage: number | null, sizeMl = 750) {
   return {
     idx,
     producer_raw: producer,
     cuvee_raw: cuvee,
-    producer_norm: producer.toLowerCase(),
-    cuvee_norm: cuvee.toLowerCase(),
     vintage,
     size_ml: sizeMl,
   };
@@ -95,7 +99,7 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
     const { data: canonRows } = await admin
       .from("canonical_wines")
       .select("id")
-      .or("producer_norm.like.p2 rwvb%,producer_norm.like.p2 concurrent%,producer_norm.like.p2 d9%,producer_norm.like.chateau pichon longueville%");
+      .or("producer.like.P2 RWVB%,producer.like.P2 Concurrent%,producer.like.P2 D9%,producer.like.Chateau Pichon Longueville%");
     await admin.from("restaurants").delete().in("id", [restaurantA, restaurantB]);
     if (canonRows && canonRows.length > 0) {
       await admin.from("canonical_wines").delete().in("id", (canonRows as { id: string }[]).map((r) => r.id));
@@ -155,8 +159,8 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
     const { data: canonicalRows } = await admin
       .from("canonical_wines")
       .select("id")
-      .eq("producer_norm", producer.toLowerCase())
-      .eq("cuvee_norm", cuvee.toLowerCase());
+      .eq("producer", producer)
+      .eq("cuvee", cuvee);
     expect(canonicalRows).toHaveLength(1);
 
     const { data: variantRows } = await admin
@@ -199,8 +203,6 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
           idx: 0,
           producer_raw: "P2 D9 Garbage Import Co",
           cuvee_raw: "Junk Label",
-          producer_norm: "p2 d9 garbage import co",
-          cuvee_norm: "junk label",
           vintage: 2020,
           size_ml: 750,
           lwin7: d9LwinId,
@@ -228,8 +230,6 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
           idx: 0,
           producer_raw: "P2 D9 Real Producer",
           cuvee_raw: "Real Wine",
-          producer_norm: "p2 d9 real producer",
-          cuvee_norm: "real wine",
           vintage: 2020,
           size_ml: 750,
           lwin7: d9LwinId,
@@ -292,8 +292,6 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
           idx: 0,
           producer_raw: "Chateau Pichon Longueville Comtesse de Lalande",
           cuvee_raw: "Grand Vin",
-          producer_norm: "chateau pichon longueville comtesse de lalande",
-          cuvee_norm: "grand vin",
           vintage: 2018,
           size_ml: 750,
           lwin7: baronLwinId,
@@ -320,8 +318,6 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
           idx: 0,
           producer_raw: "Chateau Pichon Longueville Baron",
           cuvee_raw: "Grand Vin",
-          producer_norm: "chateau pichon longueville baron",
-          cuvee_norm: "grand vin",
           vintage: 2018,
           size_ml: 750,
           lwin7: baronLwinId,
@@ -362,12 +358,92 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
     const { error } = await admin.from("canonical_wines").insert({
       producer: "P2 D9r5 Squatter",
       cuvee: "Junk Label",
-      producer_norm: "p2 d9r5 squatter",
-      cuvee_norm: "junk label",
       identity_status: "unverified",
       lwin7: d9LwinId,
     } as never);
     expect(error).not.toBeNull();
     expect(error?.message ?? "").toMatch(/canonical_wines_lwin7_requires_verified|check constraint/i);
+  });
+
+  // P2 round-6 (D9-residual #2) — THE SECOND, DISTINCT HIJACK INSTANCE,
+  // and the one this round exists to close. Rounds 4 and 5 both attacked
+  // the CORROBORATION GATE (first its fuzzy threshold, then the
+  // unverified-squat bypass). This vulnerability needed neither: the gate
+  // corroborated producer/cuvee while the row was KEYED on producer_norm/
+  // cuvee_norm — a different pair of caller-supplied fields that nothing
+  // bound to the first.
+  //
+  // So the attacker never has to beat the gate. They submit raws for a
+  // wine they legitimately own, whose lwin7 genuinely corroborates, plus
+  // norms naming the victim's wine. The gate passes on the raws; the row
+  // lands on the victim's identity key. Live-reproduced end to end before
+  // the fix: a row reading producer='Attacker Real Estate' was stored with
+  // producer_norm='estate real victim', and the victim's own correct
+  // import then bound to it (canonical_match_method='exact',
+  // canonical_created=false) — permanently, since the identity index is
+  // UNIQUE and this table grants authenticated no UPDATE or DELETE.
+  //
+  // Both columns are now GENERATED ALWAYS from producer/cuvee, so the
+  // attack is not blocked, it is unrepresentable — at the database, for
+  // every role including service_role, and (because they are absent from
+  // the Insert type) at compile time too. `as never` below is what lets
+  // this test still express the forged shape TypeScript now rejects.
+  it("D9-residual #2 fix: a caller cannot key a canonical row on anything but its own producer/cuvee, even with honest corroborating raws", async () => {
+    const victimProducer = "P2 D9r6 Victim Estate";
+    const victimCuvee = "Victim Grand Vin";
+
+    // The victim's legitimate row, created the normal way.
+    const { data: victimData, error: victimError } = await userBClient.rpc("resolve_wine_variants_bulk", {
+      p_restaurant_id: restaurantB,
+      p_variants: [variantPayload(0, victimProducer, victimCuvee, 2019)],
+    } as never);
+    expect(victimError).toBeNull();
+    const victimCanonicalId = (victimData as { canonical_wine_id: string }[])[0].canonical_wine_id;
+
+    const { data: victimRow } = await admin
+      .from("canonical_wines")
+      .select("producer_norm, cuvee_norm")
+      .eq("id", victimCanonicalId)
+      .single();
+    const victimKey = victimRow as { producer_norm: string; cuvee_norm: string };
+
+    // THE ATTACK: attacker's own honest raws, victim's identity key.
+    const { error: attackError } = await admin.from("canonical_wines").insert({
+      producer: "P2 D9r6 Attacker Estate",
+      cuvee: "Attacker Grand Vin",
+      producer_norm: victimKey.producer_norm,
+      cuvee_norm: victimKey.cuvee_norm,
+      identity_status: "unverified",
+    } as never);
+    expect(attackError).not.toBeNull();
+    // 428C9 = "cannot insert a non-DEFAULT value into a generated column".
+    // Asserted by code, not message text, so a Postgres wording change
+    // cannot quietly turn this into a pass.
+    expect((attackError as { code?: string } | null)?.code).toBe("428C9");
+
+    // The victim's row is untouched and still theirs.
+    const { data: afterRow } = await admin
+      .from("canonical_wines")
+      .select("id, producer")
+      .eq("producer_norm", victimKey.producer_norm)
+      .eq("cuvee_norm", victimKey.cuvee_norm);
+    expect(afterRow).toHaveLength(1);
+    expect((afterRow as { id: string; producer: string }[])[0]).toMatchObject({
+      id: victimCanonicalId,
+      producer: victimProducer,
+    });
+
+    // POSITIVE CONTROL: the attacker's own wine still resolves normally
+    // under its OWN key. A fix that simply refused these inserts would
+    // pass every assertion above and still be broken.
+    const { data: attackerData, error: attackerOk } = await userAClient.rpc("resolve_wine_variants_bulk", {
+      p_restaurant_id: restaurantA,
+      p_variants: [variantPayload(0, "P2 D9r6 Attacker Estate", "Attacker Grand Vin", 2019)],
+    } as never);
+    expect(attackerOk).toBeNull();
+    const attackerCanonicalId = (attackerData as { canonical_wine_id: string }[])[0].canonical_wine_id;
+    expect(attackerCanonicalId).not.toBe(victimCanonicalId);
+
+    await admin.from("canonical_wines").delete().in("id", [victimCanonicalId, attackerCanonicalId]);
   });
 });
