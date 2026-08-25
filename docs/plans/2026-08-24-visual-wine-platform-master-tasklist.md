@@ -6,8 +6,9 @@ as new unchecked items rather than losing them.
 
 **Prototype posture (owner-stated, 2026-08-24):** licensing is NOT a blocker for this phase.
 The prototype exists to demonstrate and raise money; it will not ship to production as-is.
-Bias toward the biggest, richest corpus we can get. Proper licensing happens before real
-production.
+Bias toward the biggest, richest corpus we can get — *scoped by synthesis v3 (audit round 2):
+the biggest-corpus bias applies to post-Gate-0 breadth layers; the investor-demo scan index is
+frozen to the partner cellar's own editions.* Proper licensing happens before real production.
 
 ## Phase 0 — Digest & alignment
 
@@ -24,9 +25,12 @@ production.
       report (InVintory / Wine Labs / grapeminds / WineEngine / pricing vendors), and the 64K
       current-state assessment (search options, pricing model, phased roadmap). Deep-dive run
       artifacts (claims, verification) at `~/.local/share/deep-dive/run/terroir-csv-visual-cellar/`.
-- [ ] Note: the Codex research predates P2/P3 landing and the "licensing is not a blocker"
+- [x] Note: the Codex research predates P2/P3 landing and the "licensing is not a blocker"
       posture — its rights-conservative verdicts (e.g. "do not ship Wine Images 126K photos")
-      are production guidance, not prototype constraints. Re-weight during synthesis.
+      are production guidance, not prototype constraints. Re-weighted during synthesis
+      (2026-08-24): WineSensed re-scoped to eval/hard-negatives (synthesis D2); P4's
+      conservative license flags don't block prototype rendering (its default is "the image
+      must always render"), so no flag relaxation needed.
 
 ## Phase 1 — Research (Claude + GPT-5.6 in parallel, then cross-audit)
 
@@ -67,11 +71,13 @@ production.
 
 ### 1d. 3D support (Codex builds the renderer; we build the substrate)
 - [ ] Define asset requirements the DB must serve: high-res label crops, bottle-shape class,
-      capsule/foil color, eventually GLB/glTF renders — confirm P4 schema holds these (its §11
-      claims yes) and extend the design if not
+      capsule/foil color, eventually GLB/glTF renders — confirm P4 schema holds these (its §12
+      claims yes; §11 is scale — ref fixed 2026-08-24) and extend the design if not
 - [x] Storage-space capture → 3D — RESEARCHED 2026-08-24 (see brief): two-track
       recommendation — Track 1 (ships): parametric rack/fridge reconstruction from photos
-      (vision infers grid → template geometry → slots map to bins); Track 2 (wow overlay):
+      (vision infers grid → template geometry → slots map to bins) — *SUPERSEDED by synthesis
+      v2/v3 D7 (audit round 1 finding 8): Track 1 ships as ASSISTED manual setup (corner
+      calibration + per-slot edit); auto grid inference is a separate spike*; Track 2 (wow overlay):
       gaussian splat of the real space via Polycam (20-200 photos or mp4) rendered with
       GaussianSplats3D (.ply/.splat/.ksplat) — mobile perf is a flagged risk to spike;
       @lumaai/luma-web is DEPRECATED (not a path); nerfstudio Splatfacto = self-host option
@@ -106,7 +112,16 @@ production.
       (intake + retrieval, owner override of audit rec — slots dependency pulled ahead);
       budget approved (Brave + AssemblyAI free tier + GPU box); wine_editions migration
       green-lit before P4; ratings shown separate with honest "aggregated critic" label.
-      PHASE 2 COMPLETE → Phase 3 (PRD, specs, tickets, evals + the 8 validation spikes).
+      PHASE 2 COMPLETE → Phase 3 (PRD, specs, tickets, evals + the validation spikes).
+- [x] Audit round 2 (owner-requested, 2026-08-24): 4 lanes — GPT-5.6 re-audit (UNSOUND on v2),
+      Grok 4.6 re-audit (SOUND-WITH-REVISIONS), repo-grounding agent (18/18 claims verified,
+      4 surprises), cross-document consistency agent (13 findings). All 23 distinct round-2
+      findings accepted → synthesis v3: editions redesigned (vintage-grain, 0=NV, P2-grade
+      write posture, migration 0112 with P4 shifting to 0113–0120), P4 images re-key
+      WITHDRAWN, placement-grain inventory model (bins migrate once), barcode short-circuit +
+      fusion contract, Gate-0 go/no-go thresholds, frozen demo index, voice-retrieval eval
+      added, STT named sole live demo dependency, 3 new spikes (9-11), legacy
+      wines.rating/wine_lineages reconciliation items. v3 awaiting owner approval.
 
 ## Phase 3 — PRD & specs
 
