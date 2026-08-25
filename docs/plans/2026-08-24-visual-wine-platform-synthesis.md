@@ -120,15 +120,20 @@ score pending" state beats a wrong number; **no unofficial Vivino calls in a fun
 room**. X-Wines pre-aggregated to edition rollups offline (21M raw rows are never queried
 live).
 
-## D6. Voice — first cut is scripted INTAKE only
+## D6. Voice — FULL first cut: intake AND retrieval (owner decision 2026-08-24)
 
-- **Intake** (ships first): push-to-talk batch STT → LLM slot-filling → the same
+*The audit recommended intake-only; the owner chose both. The risk is managed, not ignored:*
+
+- **Intake**: push-to-talk batch STT → LLM slot-filling → the same
   `resolve_wine_variants_bulk` identity path as CSV → confirmation UI. Keyterm prompting from
   the tenant's own producer/cuvée vocabulary. Needs nothing from ratings or 3D.
-- **Retrieval** (slips until `containers`/`slots` exist): constrained function-calling tool
-  over tenant Postgres; names resolved to IDs via trigram BEFORE filters (text filters are the
-  benchmark's known weak spot); no free-form SQL. Demo lines constrained to tools that
-  actually work — unscripted investor Q&A over voice is not a first-cut promise.
+- **Retrieval**: constrained function-calling tool over tenant Postgres; names resolved to IDs
+  via trigram BEFORE filters (text filters are the benchmark's known weak spot); no free-form
+  SQL. Hard dependency: `containers`/`slots` must land before location queries work — D8
+  sequences the 3D data model ahead of/alongside the voice slice.
+- **Failure envelope (demo-critical):** an unresolvable wine/location gets an explicit
+  "couldn't find that" response — never a guess; the Phase 3 voice eval includes unscripted
+  out-of-domain questions so the envelope is measured before an investor probes it.
 - Vendor: AssemblyAI first (free tier 185h/333h covers the demo; keyterms built into realtime),
   Deepgram priced alternate; decision AFTER the 50-utterance wine-vocab eval.
 
@@ -161,9 +166,12 @@ live).
    benchmark + latency report. *This is the fundable proof and everything else waits on it.*
 2. **P4 image enrichment at scale** (0112+ with the two amendments), full partner cellar.
 3. **Ratings + notes** (three stores + read model; demo-cellar critic prefetch; WS bug fix).
-4. **Voice intake slice** (retrieval later, after slots).
-5. **3D substrate/APIs** (containers/slots, inventory-keyed bottle-detail endpoint, texture
-   exports) in parallel with Codex's renderer; splat overlay only if the spike passes.
+4. **3D substrate data model + APIs** (containers/slots, inventory-keyed bottle-detail
+   endpoint, texture exports) — pulled ahead of voice because voice retrieval depends on
+   slots (owner chose full voice); renderer work by Codex proceeds in parallel; splat overlay
+   only if the spike passes (desktop demo only, per owner decision).
+5. **Voice slice — intake AND retrieval** (full first cut per owner decision; retrieval demo
+   lines exercised against the landed containers/slots).
 
 Plus a cross-cutting deliverable before any investor demo: **demo mode** — prewarmed models,
 preflight health checks, cached golden-path assets and external responses (critic scores,
@@ -202,17 +210,24 @@ bulk ratings backbone.
    raw + derived artifacts, rebuildable indexes, deletion lineage; production replacement is
    planned as a *revalidation project*.
 
-## Open questions for owner (Devin)
+## Owner decisions (Devin, 2026-08-24) — questions CLOSED
 
-1. Demo target device for 3D: desktop-first (splat overlay possible) or phone-in-investor's-hand
-   (parametric only until the FPS spike passes)?
-2. Voice first cut = scripted intake only (audit-recommended) — OK to slip retrieval?
-3. Budget OK: Brave ~$100 worst-case, AssemblyAI free tier, one GPU inference box for the demo
-   (cloud rental, priced in Phase 3)?
-4. `wine_editions` migration: green-light adding the global entity now (it touches P4's design
-   before 0112 lands)?
-5. Critic display: confirmed separate-not-blended, shown as "aggregated critic score" (not
-   "Vinous") until a direct deal exists?
+1. **3D demo target: desktop-first.** Splat overlay allowed in the desktop demo; phone version
+   follows only after the mobile FPS spike passes.
+2. **Voice first cut: FULL voice — intake AND retrieval.** *Owner override of the audit
+   recommendation (intake-only).* Consequences absorbed into the plan: `containers`/`slots`
+   must land BEFORE the voice retrieval demo (3D substrate data model moves ahead of/alongside
+   the voice slice in D8); the text-filter weakness is hardened, not dodged — every name in an
+   utterance resolves to IDs via trigram identity search before filtering, unresolvable
+   references get an explicit "couldn't find that wine/location" response (never a guess), and
+   the voice-retrieval eval in Phase 3 must include unscripted out-of-domain questions so we
+   know the failure envelope before an investor finds it.
+3. **Budget approved:** Brave (~$100 worst-case), AssemblyAI free tier, one rented GPU
+   inference box for the scan service (price it in Phase 3).
+4. **`wine_editions` now.** Global editions entity migrates before P4 0112 lands; P4 carries
+   both amendments.
+5. **Ratings display: separate + honest label.** "Aggregated critic score" + community stars;
+   "Vinous" appears only after a direct deal.
 
 ---
 

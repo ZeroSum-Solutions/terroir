@@ -102,7 +102,11 @@ production.
       global `wine_editions` entity, partner-cellar-first sequencing (Gate-0 vertical slice),
       parallel 3-arm retrieval, inventory-keyed bottle-detail API, assisted (not auto) grid
       setup, 3-store ratings schema, demo mode, abstain-over-misidentify investor build.
-- [ ] Owner review + decisions on 5 open questions (listed at end of synthesis doc)
+- [x] Owner review + decisions — 2026-08-24, all 5 closed: desktop-first 3D; FULL voice
+      (intake + retrieval, owner override of audit rec — slots dependency pulled ahead);
+      budget approved (Brave + AssemblyAI free tier + GPU box); wine_editions migration
+      green-lit before P4; ratings shown separate with honest "aggregated critic" label.
+      PHASE 2 COMPLETE → Phase 3 (PRD, specs, tickets, evals + the 8 validation spikes).
 
 ## Phase 3 — PRD & specs
 
