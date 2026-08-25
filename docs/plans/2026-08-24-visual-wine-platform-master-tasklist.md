@@ -133,7 +133,12 @@ frozen to the partner cellar's own editions.* Proper licensing happens before re
 
 ## Phase 3 — PRD & specs
 
-- [ ] Write the PRD (supersedes/extends camera-first PRD where scope reopened)
+- [x] Write the PRD — 2026-08-24: `docs/plans/2026-08-24-visual-wine-platform-prd.md`
+      (34 functional requirements VWP-FR-001..034 from synthesis v4; camera-first PRD
+      formally reconciled — D-005 CLOSED by the containers/slots/placements model, 3D
+      renderer REOPENED, multi-bottle vision still OUT, D-001/D-007/D-008 untouched;
+      7 open decisions VWP-D-01..07 named, none blocking approval; phased delivery A–E
+      mapping D8; 13 verifiable acceptance criteria). Awaiting owner approval.
 - [ ] Spec list per feature slice
 - [ ] Tickets (small, judgeable, with acceptance criteria)
 - [ ] Evals per slice (identification accuracy, latency, voice-retrieval correctness) so "done"
