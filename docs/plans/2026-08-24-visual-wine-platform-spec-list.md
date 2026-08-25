@@ -160,8 +160,8 @@ doc (marked ★); the rest cite their source and go straight to tickets once gat
 |---|---|---|---|
 | 1 | STT 50-utterance wine-vocab eval (FR/IT/ES producers) | SPEC-19/22 | VWP-D-02 vendor |
 | 2 | Splat FPS (desktop + mobile) | SPEC-14 | VWP-D-06 |
-| 3 | Wine-Searcher trial + GWS coverage on ~50 LWIN'd wines + written quotes | SPEC-16 | paid-tier viability |
-| 4 | X-Wines/WineSensed join rates + X-Wines image manifest count | SPEC-04/16 | corpus expectations |
+| 3 | Wine-Searcher trial + ~~GWS~~ coverage on ~50 LWIN'd wines + written quotes — *GWS dropped 2026-08-25: domain parked/for-sale, no live API surface (evidence in `2026-08-25-spike-resources-status.md`); critic layer = WS aggregate + X-Wines community* | SPEC-16 | paid-tier viability |
+| 4 | X-Wines/WineSensed join rates + X-Wines image manifest count — *datasets downloaded + MD5-verified 2026-08-25 (`~/projects/terroir-data/`); manifest half ANSWERED: X-Wines Full publishes NO label images (author on-demand only; Slim = 1,007); WineSensed 996,808 image refs in a 35 GB undownloaded archive. Join-rate half runnable now* | SPEC-04/16 | corpus expectations |
 | 5 | DDGS 500-query soak | SPEC-04 | cascade reliability |
 | 6 | e2e scan latency on demo hardware (cold/warm/concurrent p50/p95) | SPEC-05 | topology; VWP-D-03 box spec |
 | 7 | Phone-photo vs. packshot LightGlue survival | SPEC-03/05 | rerank viability |

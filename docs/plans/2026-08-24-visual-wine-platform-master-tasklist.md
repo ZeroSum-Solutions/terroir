@@ -147,6 +147,15 @@ frozen to the partner cellar's own editions.* Proper licensing happens before re
 - [ ] Run spikes 1–10; record verdicts against VWP-D-02/06/07 and fold into specs
       (these need external resources: STT accounts, Polycam, WS trial, demo hardware,
       the partner CSV)
+- [x] Spike resource setup — 2026-08-25: `docs/plans/2026-08-25-spike-resources-status.md`.
+      Ready: Brave key (plan check pending), RunPod key + live GPU pricing (RTX 4090
+      $0.74/hr; balance $0 → needs top-up), X-Wines full (MD5-verified, CC0) +
+      WineSensed metadata downloaded to `~/projects/terroir-data/`. Findings:
+      GlobalWineScore domain parked → GWS DROPPED from spike 3; X-Wines Full ships no
+      label images (author on-demand); WineSensed license BY-NC vs BY-NC-ND ambiguity;
+      vault Gmail app password STALE (blocks autonomous AssemblyAI signup — recon:
+      magic-link, no CAPTCHA). Devin click-list in the status doc (app password,
+      Deepgram signup, WS trade form, Brave plan, RunPod top-up, Polycam, partner CSV).
 - [x] Spike 11 CLOSED 2026-08-24 — `wine_lineages` is LIVE tenant-scoped UI grouping
       (not cross-tenant identity, not deprecated): VWP-D-05 = KEEP-READ, 0112 not
       blocked; backfill must not treat lineage LWIN7s as canonical truth; the
