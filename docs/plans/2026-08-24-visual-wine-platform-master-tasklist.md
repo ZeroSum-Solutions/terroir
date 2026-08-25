@@ -139,10 +139,17 @@ frozen to the partner cellar's own editions.* Proper licensing happens before re
       renderer REOPENED, multi-bottle vision still OUT, D-001/D-007/D-008 untouched;
       7 open decisions VWP-D-01..07 named, none blocking approval; phased delivery A–E
       mapping D8; 13 verifiable acceptance criteria). Awaiting owner approval.
-- [ ] Spec list per feature slice
-- [ ] Tickets (small, judgeable, with acceptance criteria)
+- [x] Spec list per feature slice — 2026-08-24:
+      `docs/plans/2026-08-24-visual-wine-platform-spec-list.md` (24 spec slices; the
+      normative migration manifest 0112–0126 + 0127-reserved published per VWP-FR-005 —
+      P4 renamed 0113–0120, containers/slots/placements 0121–0123, ratings 0124–0126;
+      spike register 1–11 mapped to the specs/decisions each gates). Pending PRD approval.
+- [ ] Run spikes 1–11; record verdicts against VWP-D-02/05/06/07 and fold into specs
+- [ ] Tickets (small, judgeable, with acceptance criteria) — cut only after PRD approval,
+      spike verdicts, and owner threshold confirmation (spec list §4)
 - [ ] Evals per slice (identification accuracy, latency, voice-retrieval correctness) so "done"
-      is measurable
+      is measurable — EV-VWP-* YAML authored from the ★ specs' acceptance criteria at
+      ticket-cut time (repo given/then, failing-test-first protocol)
 
 ## Phase 4 — Testing suite
 
