@@ -128,7 +128,8 @@ and leaving 3D bottles textureless):
 - Size precedence for a requesting variant: exact vintage + exact size → exact vintage + any
   size → any vintage + exact size → base fallback. The identification index may admit all
   sizes; bottle-detail textures prefer the variant's `size_ml` via that fallback chain.
-  On both axes: `0` = explicit NV, `NULL` = wildcard.
+  `0` = explicit NV on the VINTAGE axis only; `size_ml` is a positive exact size or `NULL`
+  for any size — zero is rejected (a bottle cannot hold 0 ml).
 
 **P4 amendment #2 (kept): cylinder unwarp** as a best-effort derivative (raw crop always
 retained). **Sequencing fix (round 2):** the unwarp implementation lands as a shared library
@@ -160,8 +161,12 @@ Fusion contract (round-2 + round-3 fixes; all constants are tunable hypotheses, 
   resolves to `(canonical_wine_id, size_ml, vintage?)` via a small pilot barcode-map table
   (or `wine_edition_formats` when it lands) — barcode is identity authority ONLY for a
   verified one-to-one GTIN→edition mapping. Vintage-ambiguous GTIN + a disagreeing
-  high-confidence OCR vintage → **ABSTAIN** (never a pick, never a demotion fight);
-  low/no OCR vintage → accept the GTIN's wine without inventing a vintage. Barcode arm stays
+  high-confidence OCR vintage → **ABSTAIN** (never a pick, never a demotion fight).
+  Vintage-ambiguous GTIN with low/no OCR vintage: the barcode arm contributes its
+  `(canonical_wine_id, size_ml)` resolution as a high-weight CANDIDATE constraint into
+  normal fusion — the service's result type stays edition-only, so no edition is asserted
+  until one resolves; if fusion cannot resolve one, the scan ABSTAINS with the canonical
+  wine surfaced in correction search. Barcode arm stays
   OPTIONAL for Gate 0 (the CSV may carry no GTINs; Open Food Facts arrives post-demo); spike
   10 reports GTIN vintage-uniqueness, not just coverage.
 - **Per-arm retention before union** (proposed: OCR top-20, visual top-20, barcode as above),
@@ -460,3 +465,21 @@ The two finding sets converge; 15 distinct findings, all accepted into this v4.
 Residual: GPT-5.6's round-3 verdict conditions SOUND-WITH-REVISIONS/SOUND on exactly these
 fixes plus re-review; findings below the synthesis's altitude (constraint DDL, eval harness
 mechanics) are Phase-3 spec/ticket content by design.
+
+## Audit round 4 (2026-08-24, GPT-5.6 confirmation on v4) — CONVERGED
+
+**GPT-5.6: SOUND-WITH-REVISIONS** — all three v3 blockers RESOLVED; 8 of 9 prior findings
+resolved; verdict states v4 "becomes SOUND once" two bounded contract corrections land. Both
+were applied verbatim in this document immediately after the verdict:
+
+1. Barcode: a vintage-ambiguous GTIN with low/no OCR vintage no longer "accepts the wine" —
+   it contributes a `(canonical_wine_id, size_ml)` candidate constraint into fusion; the
+   result type stays edition-only, abstaining (with correction search) if no edition
+   resolves (D4).
+2. The `0 = NV` sentinel is confined to the vintage axis; `size_ml` is positive-or-NULL,
+   zero rejected (D3).
+
+Combined final standing: **Grok 4.6 SOUND-WITH-REVISIONS (round 3, revisions since applied)
+· GPT-5.6 SOUND-WITH-REVISIONS → SOUND-conditional (round 4, both conditions applied).**
+The audit loop is closed; remaining depth (DDL, eval-harness mechanics, API schemas) is
+Phase-3 spec/ticket content by design.
