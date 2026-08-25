@@ -144,7 +144,14 @@ frozen to the partner cellar's own editions.* Proper licensing happens before re
       normative migration manifest 0112–0126 + 0127-reserved published per VWP-FR-005 —
       P4 renamed 0113–0120, containers/slots/placements 0121–0123, ratings 0124–0126;
       spike register 1–11 mapped to the specs/decisions each gates). Pending PRD approval.
-- [ ] Run spikes 1–11; record verdicts against VWP-D-02/05/06/07 and fold into specs
+- [ ] Run spikes 1–10; record verdicts against VWP-D-02/06/07 and fold into specs
+      (these need external resources: STT accounts, Polycam, WS trial, demo hardware,
+      the partner CSV)
+- [x] Spike 11 CLOSED 2026-08-24 — `wine_lineages` is LIVE tenant-scoped UI grouping
+      (not cross-tenant identity, not deprecated): VWP-D-05 = KEEP-READ, 0112 not
+      blocked; backfill must not treat lineage LWIN7s as canonical truth; the
+      `wines` ↔ `wine_variants` UI bridge flagged for SPEC-05/11 tickets
+      (verdict + evidence in the spec list §3)
 - [ ] Tickets (small, judgeable, with acceptance criteria) — cut only after PRD approval,
       spike verdicts, and owner threshold confirmation (spec list §4)
 - [ ] Evals per slice (identification accuracy, latency, voice-retrieval correctness) so "done"

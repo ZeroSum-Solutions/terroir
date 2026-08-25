@@ -170,6 +170,25 @@ doc (marked ★); the rest cite their source and go straight to tickets once gat
 | 10 | Partner-CSV GTIN coverage + vintage-uniqueness | SPEC-05 | VWP-D-07 barcode arm |
 | 11 | `wine_lineages` status (deprecated vs. still-read; note eval F-2) | SPEC-01/24 | VWP-D-05 |
 
+**Spike 11 — CLOSED 2026-08-24 (repo evidence).** `wine_lineages` is LIVE, not
+deprecated: tenant-scoped (`restaurant_id NOT NULL`, per-restaurant LWIN7/name-norm
+unique keys — it is NOT a cross-tenant identity layer), created by a security-definer
+BEFORE trigger on every wine-creation path, and read by real product surface
+(cellar grouping, reconcile-queue, `merge_wines` — which rejects cross-vintage merges,
+consistent with edition-grain doctrine). Meanwhile `canonical_wines`/`wine_variants` are
+read only by the import path, `src/domains/identity/*`, and tests — the live UI still
+runs on `wines` + `wine_lineages`. **Verdict (VWP-D-05, evidence-forced): KEEP-READ.**
+Lineages are a tenant-side display grouping at canonical grain over the legacy `wines`
+table; they do not collide with `wine_editions` (which attaches to the P2 spine), so
+0112 is NOT blocked. Constraints recorded into SPEC-01: the editions backfill must not
+treat lineage rows as canonical truth (their LWIN7 derivation is trigger-heuristic, with
+ambiguous rows deliberately left unlinked — that pattern is precedent for the quarantine
+queue, not a resolution source). Follow-up (backlog, not this phase): derive UI grouping
+from variant→canonical linkage and retire the parallel lineage trigger. Exposed by this
+spike: the `wines` ↔ `wine_variants` bridge (which table the demo UI's inventory rows
+live on) must be stated in SPEC-05/11's ticket specs, since scan output and bottle detail
+bind to the P2 spine while today's UI reads `wines`.
+
 ---
 
 ## 4. What tickets wait on
