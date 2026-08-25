@@ -1,15 +1,19 @@
 # Visual Wine Platform — Phase 2 Synthesis (architecture recommendation)
 
-Date: 2026-08-24 · **v3 — post round-2 audit.** Status: owner questions closed (decisions
-recorded below); awaiting owner approval of the v3 revisions.
+Date: 2026-08-24 · **v4 — post round-3 verdict pass.** Status: owner questions closed
+(decisions recorded below); awaiting owner approval.
 
 Audit history:
 - **Round 1** (on v1): GPT-5.6 UNSOUND (4 blocking) · Grok 4.6 SOUND-WITH-REVISIONS (2
   blocking). All 16 findings dispositioned into v2 (§Audit round 1).
 - **Round 2** (on v2, plus repo-grounding + cross-document consistency agents): GPT-5.6 still
   UNSOUND (2 blocking) · Grok 4.6 SOUND-WITH-REVISIONS (1 blocking) · repo sweep: 18/18 claims
-  true, 4 surprises · consistency agent: 3 blocking, 8 major. All dispositioned into this v3
+  true, 4 surprises · consistency agent: 3 blocking, 8 major. All dispositioned into v3
   (§Audit round 2).
+- **Round 3** (final verdict pass on v3): Grok 4.6 **SOUND-WITH-REVISIONS — all six round-2
+  blockers confirmed closed**; 6 majors on v3's new surface. GPT-5.6 UNSOUND — credits the
+  grain/re-key/disposition fixes, 3 blockers on authorization/integrity/eval contracts. The
+  two sets converge; all 15 distinct findings applied in this v4 (§Audit round 3).
 
 Inputs: 2026-08-23 Codex research corpus · 2026-08-24 Phase 1 deep-dive brief
 (`~/Inbox/notes/research-terroir-visual-platform-phase1-2026-08-24.md`). Raw audit outputs in
@@ -35,11 +39,12 @@ P2 (`canonical_wines` global / `wine_variants` tenant-scoped / `wine_aliases`, L
 and P3 chunked import are landed (0097–0111). P2 is **amended** (not unchanged): variants gain
 a nullable `edition_id`, and one new global table is added.
 
-**`wine_editions` (v3 design — round-2 blocking findings resolved):**
+**`wine_editions` (v3/v4 design — round-2 and round-3 findings resolved):**
 
 - **Grain: one row = one vintage-level release.** Columns: `id`, `canonical_wine_id` (FK,
-  NOT NULL), `vintage smallint NOT NULL` with **`0` = NV** (matching the repo's existing
-  `coalesce(vintage, 0)` convention in 0098), `lwin11 text` nullable with a UNIQUE partial
+  NOT NULL), `vintage smallint NOT NULL` with **`0` = NV** as an explicit sentinel (the
+  repo's `coalesce(vintage, 0)` index plumbing is mechanically compatible but is NOT the
+  semantic basis — see the backfill spec below), `lwin11 text` nullable with a UNIQUE partial
   index. Unique key: `(canonical_wine_id, vintage)` — no nullable key columns, so Postgres
   NULLs-are-distinct cannot admit duplicates.
 - **No size in the entity.** Critic scores, community rollups, and LWIN11 are vintage-grain;
@@ -51,15 +56,32 @@ a nullable `edition_id`, and one new global table is added.
   `edition_id`; the pilot report counts them.
 - **Write posture inherits P2 §8's apparatus** (the six-round-audited pattern from
   `canonical_wines`): global read; client roles cannot insert/update; rows are created only by
-  the server-side identity-resolution path; `lwin11` is set only via the same corroboration
-  gate that governs `lwin7` on canonical wines — never from a client-supplied value.
-- **Backfill with a completion gate:** editions are derived from existing variants
-  (canonical_wine_id + vintage); the backfill report lists variants that could not resolve
-  (missing canonical, ambiguous vintage) and Gate 0 cannot start until the pilot's 500
-  variants are 100% resolved or explicitly quarantined.
-- **Migration numbering:** `wine_editions` takes **0112**; P4's files shift +1 to
-  **0113–0120** (absorbed by P4's unclaimed 0120–0125 reserve). P4's doc header carries an
-  amendment note; its internal `0112`–`0119` file references read +1 until its tickets are cut.
+  the server-side identity-resolution path. `lwin11` gets a partial unique index
+  (`WHERE lwin11 IS NOT NULL`) and is set only via a corroboration gate that validates BOTH
+  the canonical identity (as `lwin7` does today) AND that the LWIN11's vintage digits agree
+  with the edition's vintage — never from a client-supplied value. A `CHECK` bounds vintage to
+  valid years or 0.
+- **`edition_id` linking is server-only too (round 3):** the editions table being protected is
+  not enough — a tenant client that can update its own variant row could attach it to an
+  arbitrary edition and poison identification, ratings, and placement resolution. Client
+  writes to `wine_variants.edition_id` are revoked (column guard/trigger); linking happens
+  only through a server-side resolution function that records match method + provenance on
+  the variant's alias row.
+- **Backfill spec (NV is never inferred from NULL):** `vintage IS NOT NULL AND vintage <> 0`
+  → dated edition. `vintage = 0` is written only where an explicit NV flag/source attests it.
+  Legacy `NULL` vintages are an unknown mix of true-NV and unresolved — they go to a
+  quarantine queue with a named NV-classification pass (rule + human review), NOT an
+  automatic conversion. (The repo's `coalesce(vintage, 0)` convention is mechanical index
+  plumbing, not NV semantics — it is not precedent for the backfill.) The backfill report
+  counts known-NV / dated / quarantined separately, and Gate 0 cannot start until the pilot's
+  500 variants are 100% resolved or explicitly quarantined.
+- **Migration manifest (one numbering scheme, executable):** `wine_editions` = **0112**, and
+  P4's files are RENAMED to **0113–0120 in the same commit that lands 0112** — no standing
+  "read +1" rule; the P4 doc's inline references are updated when its tickets are cut from
+  the manifest, and a CI uniqueness/order check guards the range. Containers/slots/placements
+  (D7) are assigned **0121+** now so the 0112 collision cannot repeat. The manifest
+  (0112–0121+, with dependencies) is published in the Phase 3 spec list before any migration
+  file is created.
 
 Global attachments (imported ratings, critic scores, LWIN11) key to `wine_edition_id` or
 `canonical_wine_id`. Tenant state (inventory, purchases, placements, user ratings/notes) keys
@@ -94,15 +116,26 @@ P4 already keys images to `canonical_wine_id` + the `(vintage, size_ml)` value t
 honoring P2 §10's explicit "zero schema change" forward-compatibility commitment, and its
 scope CHECK/unique indexes and merge/serving tests are built on that shape. Images never had
 the tenant-scoping defect (that was ratings/LWIN11). Editions join to images at READ time via
-the tuple (`canonical_wine_id` + `vintage`); `wine_images.vintage = NULL` keeps P4's meaning
-("applies to any vintage" / base_wine scope), which is distinct from an edition's `vintage = 0`
-(NV) — the read-time join maps NV editions to tuple `vintage IS NULL OR vintage = 0` per P4's
-`identity_scope`.
+a **deterministic scope resolver** (round-3 fix — the naive `(canonical, vintage)` join would
+have dropped any-vintage packshots from dated editions, emptying the LightGlue admission set
+and leaving 3D bottles textureless):
+
+- Dated edition (vintage = Y): `canonical_wine_id` match AND (`images.vintage = Y` OR
+  `images.vintage IS NULL`) — NULL keeps P4's "any vintage" meaning and DOES attach to dated
+  editions as base-wine fallback.
+- NV edition (vintage = 0): `images.vintage IS NULL OR images.vintage = 0`.
+- An explicit-NV image (`vintage = 0`) never attaches to a dated edition.
+- Size precedence for a requesting variant: exact vintage + exact size → exact vintage + any
+  size → any vintage + exact size → base fallback. The identification index may admit all
+  sizes; bottle-detail textures prefer the variant's `size_ml` via that fallback chain.
+  On both axes: `0` = explicit NV, `NULL` = wildcard.
 
 **P4 amendment #2 (kept): cylinder unwarp** as a best-effort derivative (raw crop always
 retained). **Sequencing fix (round 2):** the unwarp implementation lands as a shared library
 inside the Gate-0 scan service (which needs it first, before P4-at-scale); P4's pipeline
-reuses it to store derivatives at scale.
+reuses it to store derivatives at scale. **Round-3 addition:** unwarp derivatives are produced
+for Gate-0 REFERENCE images too, not just query preprocessing — otherwise spike 7 measures a
+self-inflicted domain gap.
 
 P4's §12 `render_3d`/`terroir_render` reserved extension point is **kept reserved but unused
 by D7** (template geometry + 2D textures needs no per-wine model rows); it remains available
@@ -115,27 +148,33 @@ verifier; explicit vintage/size conflict = hard reject; cache-don't-hotlink.
 
 ```
 photo → preprocess (orient/resize; unwarp best-effort)
-      ├─ ZXing barcode ── exact GTIN→edition hit? ──→ SHORT-CIRCUIT (identity authority)
+      ├─ ZXing barcode ── verified 1:1 GTIN map? ──→ SHORT-CIRCUIT (see contract)
       ├─ PaddleOCR → trigram/BM25 (top-k text candidates, calibrated text score)
       └─ DINOv2 → FAISS exact (top-k visual candidates)
       → UNION → LightGlue rerank (ONLY candidates that have reference images)
       → fusion: geometric + text + visual scores, calibrated → top-3 or ABSTAIN
 ```
 
-Fusion contract (round-2 fixes; all constants are tunable hypotheses, not evidence):
-- **Barcode short-circuits.** An exact GTIN→edition match is accepted directly (with a
-  wrong-vintage guard when the GTIN maps to a different vintage than OCR sees); it is never
-  demoted by image reranking. **Gate-0 caveat:** the barcode arm is OPTIONAL until barcode
-  data exists for the partner's wines (the CSV may carry none; Open Food Facts arrives
-  post-demo) — declare its coverage in the pilot report rather than assuming it.
-- **Per-arm retention before union** (proposed: OCR top-20, visual top-20, barcode exact
-  only), cross-arm score normalization defined in the eval harness, rerank admission = has a
+Fusion contract (round-2 + round-3 fixes; all constants are tunable hypotheses, not evidence):
+- **Barcode contract (round-3 rewrite — GTINs are size-grain and vintage-reusable):** a GTIN
+  resolves to `(canonical_wine_id, size_ml, vintage?)` via a small pilot barcode-map table
+  (or `wine_edition_formats` when it lands) — barcode is identity authority ONLY for a
+  verified one-to-one GTIN→edition mapping. Vintage-ambiguous GTIN + a disagreeing
+  high-confidence OCR vintage → **ABSTAIN** (never a pick, never a demotion fight);
+  low/no OCR vintage → accept the GTIN's wine without inventing a vintage. Barcode arm stays
+  OPTIONAL for Gate 0 (the CSV may carry no GTINs; Open Food Facts arrives post-demo); spike
+  10 reports GTIN vintage-uniqueness, not just coverage.
+- **Per-arm retention before union** (proposed: OCR top-20, visual top-20, barcode as above),
+  cross-arm score normalization defined in the eval harness, rerank admission = has a
   reference image; OCR-only candidates (no image) survive on calibrated text score and can
   reach the top-3 as "text match" candidates rather than being silently dropped.
-- **Output contract binds to tenant inventory:** the service returns ranked
-  `wine_edition_id`s; a mandatory tenant-resolution step maps edition → the requesting
-  tenant's variants → placements (D7), so a correct match always opens the partner's actual
-  bottle. Variants with NULL `edition_id` are not indexed (D1).
+- **Output contract binds to tenant inventory — and the edition→bottle map is 1:N, never a
+  silent pick (round 3):** the service returns ranked `wine_edition_id`s PLUS the resolved
+  set of the requesting tenant's `bottle_placement_id`s per edition. Zero placements → an
+  "in catalog, not placed" variant card; exactly one → direct-open; more than one → highlight
+  all / picker (format disambiguation order: GTIN size > OCR size > all same-edition
+  placements). Label recognition identifies the edition, not a physical unit — the UI never
+  pretends otherwise. Variants with NULL `edition_id` are not indexed (D1).
 - **Demo build: abstain > misidentify.** VLM fallback default-OFF on the investor path
   (abstain + correction search); VLM remains a parser/tie-breaker in the normal product path,
   never identity authority. `wineberto-ner` stays out of the hot path.
@@ -159,10 +198,13 @@ measurement.
   source + provenance; **each event has exactly one subject grain** (`wine_edition_id`
   preferred; `canonical_wine_id` only when the source truly has no vintage). Batch-loaded,
   never written interactively.
-- `rating_aggregates` — computed rollups **only from `external_rating_events`**, per edition
-  (community avg/count; critic score + source), with lineage. Dedupe rule: when a source has
-  both edition-grain and canonical-grain events for the same wine, edition-grain wins and the
-  canonical-grain event is excluded from that edition's rollup (no double counting).
+- `rating_aggregates` — computed rollups **only from `external_rating_events`**, with
+  lineage, kept at BOTH grains separately (round-3 fix): edition-grain aggregates are built
+  only from edition-grain events; canonical-grain aggregates only from canonical-grain events.
+  **Canonical events are never materialized/fanned out into edition rollups** — a non-vintage
+  score must not masquerade as vintage-specific. The read model shows the edition aggregate
+  when one exists, else the canonical aggregate explicitly labeled as a base-wine score.
+  Dedupe rule within a grain: one source counts once per subject.
 - **Repo reconciliation (round 2):** `wines.rating`/`rating_source`/`review_excerpt`
   (migration 0025 — sources incl. `vinous`, `parker`, `aggregate`) is a live legacy critic
   path. The new stores use distinct names (no column collision); Phase 3 includes a ticket to
@@ -212,12 +254,23 @@ disposition, not "accepted"). The override's risk controls are now hard requirem
 - `wine_variants` — the tenant SKU (edition projection; D1).
 - `inventory_items` (EXISTS today) — stock/acquisition rows: quantity, unit cost,
   acquired_at, currency (0111 constraints). A lot of 12 bottles is one row with qty 12.
-- `containers` (typed geometry: rack_grid | fridge_shelves | case | wall) + `slots`
-  (coordinates) + **`bottle_placements`** — one row per physical bottle placed:
+- `containers` (typed geometry: rack_grid | fridge_shelves | case | wall | **zone** — the
+  generic type added round-3 so all 40 live bins can migrate even where no geometry is known)
+  + `slots` (coordinates) + **`bottle_placements`** — one row per physical bottle placed:
   (`slot_id`, `inventory_item_id`). Placement is the single location truth.
-- **`bins` migrates ONCE into containers/slots** (a bin becomes a container or zone; its
-  40 live production rows and the bins e2e suite migrate with it). The v2 "1:1 projection
-  with sync rule" option is DELETED — no parallel location trees, no dual-write.
+- **Integrity + tenancy contract (round-3 blocking fix — these are schema invariants, not
+  ticket details):** `restaurant_id` on the whole hierarchy with standard RLS; composite
+  same-tenant FKs so a placement can never join a slot and an inventory item from different
+  tenants; `UNIQUE (slot_id)` over ACTIVE placements (one bottle per slot); one active
+  placement per physical bottle; a transactional guard enforcing
+  `count(active placements of item) ≤ inventory_items.quantity`; a place-from-lot operation
+  that creates one placement row per bottle (no qty-on-slot shortcut). These invariants ship
+  IN the migration + regression suite, not as follow-ups.
+- **`bins` migrates ONCE into containers/slots** — implemented as a location FK move off
+  `inventory_items`/`bins` onto placements (single location truth), not a table rename; the
+  40 live production rows and the bins e2e suite migrate with it. Migration numbers **0121+**
+  (assigned now; P4 consumes through 0120). The v2 "1:1 projection with sync rule" option is
+  DELETED — no parallel location trees, no dual-write.
 - **Bottle-detail API is keyed to `bottle_placement_id`** (one physical bottle → one
   position, one cost lineage via its inventory item, one identity via variant → edition).
   Unplaced stock falls back to a variant-level card without a position. Response embeds:
@@ -244,15 +297,29 @@ Splatfacto self-host fallback.
 1. **Gate 0 — thin vertical slice with GO/NO-GO thresholds:** editions (0112) + 500-variant
    pilot enrichment → verified reference images → parallel-retrieval scan service on the
    inference box → frozen partner phone-photo benchmark + latency report.
+   **Eval contract (round-3 rewrite — the gate must be ungameable):** metrics use query-level
+   denominators; **an abstention on an in-corpus query counts as a top-1/top-3 failure**
+   (accuracy cannot be bought by abstaining); a minimum acceptance-coverage floor accompanies
+   the false-accept ceiling; in-corpus and out-of-corpus false-accepts are reported
+   separately; a minimum reference-image-coverage floor is reported. Two evaluation sets:
+   a working frozen set that the failure tree may inspect, and a **sealed holdout that never
+   informs remediation** — a failed run that triggers fixes requires a NEWLY SAMPLED holdout
+   for the retest.
    **Proposed pass thresholds (tunable hypotheses, set finally with the owner before the
-   run):** top-1 ≥ 70% and top-3 ≥ 90% on the frozen set · false-accept ≤ 5% at the
-   calibrated abstain point · verified-image precision ≥ 98% · warm server-side p95 ≤ 2.5s ·
-   100% of pilot variants edition-resolved or quarantined.
-   **Failure tree:** miss accuracy → improve references/arms and re-run (do NOT proceed to
-   scale); miss latency → topology fix before feature work; miss coverage → widen enrichment
-   sources for the pilot only. "Frozen scan proof" = these numbers, published.
+   run):** top-1 ≥ 70% and top-3 ≥ 90% (abstentions counted as misses) · false-accept ≤ 5%
+   with acceptance coverage ≥ 80% · verified-image precision ≥ 98% with reference coverage
+   reported · warm server-side p95 ≤ 2.5s · 100% of pilot variants edition-resolved or
+   quarantined.
+   **Failure tree:** miss accuracy → improve references/arms, re-run on a fresh holdout (do
+   NOT proceed to scale); miss latency → topology fix before feature work; miss coverage →
+   widen enrichment sources for the pilot only. "Frozen scan proof" = these numbers,
+   published.
 2. **Import scale-up + P4 at scale** (0113+ with the unwarp amendment): durable staging or
    MAX_ROWS raise for the 20k CSV; full partner cellar enrichment.
+   **Gate 0-R (round-3 addition):** growing the index 500 → full partner cellar is itself a
+   neighborhood change that invalidates Gate-0 calibration. Before any investor rehearsal,
+   rebuild the frozen eval on the FINAL partner-edition index (with the room's bottles in the
+   eval set), same metric family and thresholds. No silent 500→full cutover.
 3. **Ratings + notes** (three stores + read model; 0025 legacy migration; WS median fix;
    demo-cellar prefetch).
 4. **3D substrate data model + APIs** (containers/slots/placements, bins one-time migration,
@@ -262,8 +329,10 @@ Splatfacto self-host fallback.
    landed placements; retrieval eval passed first.
 
 Cross-cutting before any investor demo: **demo mode** — prewarmed models, preflight health
-checks (incl. STT), cached golden-path assets/responses, explicit timeouts, degraded states;
-STT is the sole named live dependency (D6).
+checks (incl. STT AND the inference box), cached golden-path assets/responses, explicit
+timeouts, degraded states. STT is the sole live **third-party API** on stage (D6); the GPU
+inference box is a live first-party dependency and gets the same preflight + degrade
+treatment (cached golden-path scan results as last resort).
 
 ## D9. Validation spikes (Phase 3, before tickets freeze)
 
@@ -362,3 +431,32 @@ verified; 4 surprises) · cross-document consistency agent (3 blocking, 8 major,
 | 21 | Synthesis never names the PRD exclusions it reopens; PRD D-005 gate unaddressed (Consistency-10,11) | **Accepted** | Scope note added; D-005 closed via D7 pending Phase-3 PRD reconciliation (preamble) |
 | 22 | P4 §12 render_3d extension point orphaned by template approach (Consistency-7) | **Accepted** | Explicit disposition: reserved, unused by D7, available for cached template exports (D3) |
 | 23 | Stale v1 sentences: header status, "P2 unchanged", posture banner, task-list §11 ref & superseded 1d entry (Grok-9m, GPT-10, Consistency-6,8,9,13) | **Accepted** | Header/status fixed; "P2 amended"; posture scoped to post-Gate-0; task list annotated + §12 ref fixed + re-weight item closed |
+
+## Audit round 3 (2026-08-24, final verdict pass on v3) — disposition
+
+Verdicts: **Grok 4.6: SOUND-WITH-REVISIONS — all six round-2 blockers confirmed closed**
+("one-spec-pass repairs, not a third redesign of the spine") · GPT-5.6: UNSOUND — credits the
+grain/re-key/disposition fixes, holds 3 blockers on authorization/integrity/eval contracts.
+The two finding sets converge; 15 distinct findings, all accepted into this v4.
+
+| # | Finding (lane) | v4 change |
+|---|---|---|
+| 1 | Gate-0 eval gameable: abstentions uncounted, no acceptance floor, frozen set doubles as tuning set (GPT-B1) | Eval contract rewritten: abstain = miss in-corpus, acceptance-coverage floor, split false-accept reporting, sealed holdout + fresh holdout on retest (D8.1) |
+| 2 | `wine_variants.edition_id` client-writable → edition poisoning; LWIN11 vintage unvalidated (GPT-B2) | Server-only linking function with provenance; client writes revoked; LWIN11 gate validates canonical + vintage agreement (D1) |
+| 3 | Containers/slots/placements lack tenancy + integrity invariants (GPT-B3, Grok-6) | RLS + composite same-tenant FKs, unique active slot, placement-count ≤ lot qty, place-from-lot op — shipped in the migration + regression suite (D7) |
+| 4 | Edition→bottle map is 1:N; silent pick = live demo failure (GPT-4, Grok-2) | Scan returns editions + resolved placement sets; 0/1/N placement UX defined; recognition claims edition, not physical unit (D4) |
+| 5 | Image join drops any-vintage packshots from dated editions (Grok-1, GPT-5) | Deterministic scope resolver: NULL wildcard attaches to dated editions; vintage=0 never does; size precedence chain (D3) |
+| 6 | Barcode authority contradicts deferred formats; GTINs size-grain/vintage-reused (GPT-6, Grok-5) | Barcode contract rewritten: pilot GTIN map, authority only for verified 1:1, ambiguity → ABSTAIN; spike 10 reports vintage-uniqueness (D4) |
+| 7 | NV backfill cannot be derived from NULL vintages; coalesce is not NV semantics (GPT-7, Grok-4) | Backfill spec: explicit-NV evidence required for 0; NULLs quarantined with named classification pass; counts reported (D1) |
+| 8 | "Read +1" P4 numbering is not executable (GPT-8, Grok-7b) | P4 files renamed 0113–0120 in the same commit as 0112; published manifest 0112–0121+ with CI order check (D1); P4 doc note updated |
+| 9 | Canonical-grain scores must not fan out into edition rollups (GPT-9) | Two-grain aggregates, no materialized fan-out, labeled base-wine fallback in read model (D5) |
+| 10 | 500→full-cellar index growth silently invalidates calibration (Grok-3) | Gate 0-R: pre-demo re-eval on the final partner index, room bottles in eval set (D8.2) |
+| 11 | GPU box is also a live demo dependency (Grok-7a) | STT = sole live third-party API; box gets same preflight/degrade + cached golden path (D8) |
+| 12 | Four container types can't hold all 40 live bins (Grok-7d) | Generic `zone` type added (D7) |
+| 13 | Unwarp only on queries = self-inflicted domain gap in spike 7 (Grok-7e) | Unwarp derivatives produced for Gate-0 references too (D3) |
+| 14 | `lwin11` partial-index predicate unstated (Grok-7c) | `WHERE lwin11 IS NOT NULL` stated (D1) |
+| 15 | Bins migration is an FK move, not a rename (Grok-6) | Stated explicitly; migration numbers 0121+ assigned (D7) |
+
+Residual: GPT-5.6's round-3 verdict conditions SOUND-WITH-REVISIONS/SOUND on exactly these
+fixes plus re-review; findings below the synthesis's altitude (constraint DDL, eval harness
+mechanics) are Phase-3 spec/ticket content by design.

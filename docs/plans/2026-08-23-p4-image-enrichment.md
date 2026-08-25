@@ -5,9 +5,10 @@ Status: design only. No code, no migrations applied, no Supabase stack touched b
 > **Amendments (2026-08-24, from `2026-08-24-visual-wine-platform-synthesis.md` v3, audit
 > round 2):**
 > 1. **Migration renumbering:** the new global `wine_editions` table (synthesis D1) takes
->    `0112`; P4's files shift +1 to **`0113`–`0120`** (absorbed by the unclaimed
->    `0120`–`0125` reserve). Every inline `0112`–`0119` file reference in this document reads
->    +1 until P4's tickets are cut.
+>    `0112`; P4's files are **renamed to `0113`–`0120` in the same commit that lands `0112`**
+>    (round-3 correction: no standing "read +1" rule — one numbering scheme only). This
+>    document's inline `0112`–`0119` references are updated when P4's tickets are cut from
+>    the published migration manifest (0112–0121+; containers/slots/placements take 0121+).
 > 2. **Cylinder unwarp** joins the derivative pipeline as a best-effort derivative (raw crop
 >    always retained); the implementation lands first as a shared library in the Gate-0 scan
 >    service and P4 reuses it at scale (synthesis D3).
