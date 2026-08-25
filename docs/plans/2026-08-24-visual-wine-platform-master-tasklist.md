@@ -121,7 +121,15 @@ frozen to the partner cellar's own editions.* Proper licensing happens before re
       WITHDRAWN, placement-grain inventory model (bins migrate once), barcode short-circuit +
       fusion contract, Gate-0 go/no-go thresholds, frozen demo index, voice-retrieval eval
       added, STT named sole live demo dependency, 3 new spikes (9-11), legacy
-      wines.rating/wine_lineages reconciliation items. v3 awaiting owner approval.
+      wines.rating/wine_lineages reconciliation items.
+- [x] Audit rounds 3-4 (verdict passes, 2026-08-24): round 3 on v3 — Grok 4.6
+      SOUND-WITH-REVISIONS (all six round-2 blockers confirmed closed; 6 majors on new
+      surface), GPT-5.6 UNSOUND (3 blockers on auth/integrity/eval contracts); all 15
+      round-3 findings applied → v4. Round 4 — GPT-5.6 confirmation on v4:
+      SOUND-WITH-REVISIONS, all 3 blockers RESOLVED, 8/9 findings resolved, "becomes SOUND
+      once" 2 bounded corrections land — both applied verbatim (barcode edition-only result
+      type; NV sentinel vintage-axis only). **AUDIT CONVERGED** — both auditors at
+      sound-with-revisions-applied. Synthesis v4 final, awaiting owner approval → Phase 3.
 
 ## Phase 3 — PRD & specs
 
