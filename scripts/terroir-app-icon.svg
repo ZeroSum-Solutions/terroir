@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect data-background width="1024" height="1024" rx="216" fill="#722f37" />
+  <g id="glyph" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="44">
+    <path d="M326 246h372c0 154-77 244-186 244s-186-90-186-244Z" />
+    <path d="M512 490v220M412 756h200" />
+  </g>
+</svg>
