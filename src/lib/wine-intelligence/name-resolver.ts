@@ -3,53 +3,65 @@
 // bounded candidate list (a venue inventory / catalog slice) and returns
 // resolved / ambiguous / abstain — never a bare-threshold accept.
 //
-// Every rule here is forced by a measured spike finding
-// (docs/plans/2026-08-25-spike-01-stt-vendor-eval.md, -spike-09-), and the
-// design iterations that produced the final rule are logged in the
-// terroir-overnight goal run (2026-08-25):
+// DESIGN PROVENANCE (honest split — see the terroir-overnight run log and the
+// GPT-5.6 Sol audit of 2026-08-25 that reshaped this rule):
 //
-//   1. ACCENT FOLDING both sides: live pg_trgm scores
-//      similarity('côte-rôtie','cote rotie') = 0.294 — BELOW match_lwin's 0.3
-//      threshold — and the catalog is 99.75% ASCII while AssemblyAI emits
-//      accented transcripts.
-//   2. PRODUCER CORROBORATION, word-level + document-frequency-filtered.
-//      Bare similarity thresholds misidentify across producers at 31–50% on
-//      the open catalog (shared appellation vocabulary dominates the trigram
-//      mass). Span-trigram corroboration at 0.30 accepts near-namesakes
-//      (measured: 'santi' corroborates 'Fanti' at 0.333), so corroboration is
-//      word-to-word at >= 0.5 against the producer's INFORMATIVE words:
-//      generic winery words are excluded, and so is any producer word common
-//      across the candidate list (df cap) — without the df filter, DRC's
-//      producer word 'romanee' corroborates ANY "Vosne-Romanée …" query at
-//      1.0, the exact confident-wrong failure the abstain-over-misidentify
-//      NFR forbids. The df-cap device follows spike-1's resolver replay
-//      (DF_CAP: high-frequency tokens don't nominate candidates).
-//   3. UNCORROBORATED ("margin") ARM = residue veto. A top candidate whose
-//      producer is never spoken may still be accepted (the guest named only
-//      the cuvée: "the Musigny Grand Cru") — but ONLY when the transcript
-//      contains no unexplained name-like residue: a word of length >= 4,
-//      not a carrier/function word, not a number, matching NO word of the
-//      winning row at >= 0.3. Measured motivation: the out-of-inventory
-//      false accepts ("Brunello di Montalcino from Biondi-Santi" -> Fanti's
-//      Brunello at 0.59, "Trockenbeerenauslese from Dönnhoff" -> J.J. Prüm's
-//      TBA) all carry exactly such residue ('biondi', 'donnhoff'), while the
-//      legitimate cuvée-only accepts have every wine word explained by the
-//      winning row. STT-garbled residue also vetoes — that converts
-//      would-be-resolutions into abstentions, never into wrong wines, which
-//      is the NFR's stated preference. Measured on the spike-9 replay
-//      (shipping STT config): 85.4% resolve, 100% out-of-inventory
-//      abstention, 0 wrong-wine resolutions, 0 garbage accepts.
+// Grounded in independent measurement (spikes 1 + 9, docs/plans/2026-08-25-*):
+//   - accept threshold 0.30 = match_lwin's production threshold (0078);
+//   - accent folding both sides: live pg_trgm scores
+//     similarity('côte-rôtie','cote rotie') = 0.294 < 0.30, catalog 99.75% ASCII;
+//   - producer corroboration as a concept: naive thresholds misidentify
+//     cross-producer at 31–50% on the open catalog; corroboration cuts it to
+//     6–8% (spike-1 full-catalog replay);
+//   - same-producer multi-bottling ambiguity as a product state (spike 1: ~8%
+//     wrong-cuvée class; SPEC-20's disambiguation-list contract).
+// Fitted on the spike-9 TUNING fixture (134 cases — NOT sealed acceptance
+// evidence; SPEC-21's untouched partner-weighted holdout is the acceptance
+// gate): word-similarity bars 0.5/0.3, margin floor 0.02, producer-df cap 3,
+// the carrier/style word lists, and the attribution window. Treat these as
+// engineering defaults to re-derive at SPEC-21 time, not measured constants.
 //
-// similarity()/bestSpanSimilarity() are numerically pinned to the spike-1
-// Python implementation — itself validated byte-exact (max |delta| 0.000000,
-// 203 pairs) against live Postgres 16 pg_trgm, the operator match_lwin (0078)
-// uses — via fixtures/trgm-parity-vectors.json golden vectors. Do not "fix"
-// their behavior without regenerating the vectors against live pg_trgm.
+// THE RULE (v5, post-audit):
+//   1. Score candidates by best span-trigram similarity (accent-folded,
+//      pg_trgm-parity — see below). Below 0.30 → abstain.
+//   2. ATTRIBUTION CONTRADICTION: "from/by <name>" whose name-words match no
+//      winner-row word at >= 0.5 means the guest attributed a producer we do
+//      not stock as the winner → abstain. (Kills "Brunello … from
+//      Biondi-Santi" → Fanti at 0.59, and "… from Santi" → Fanti 0.333.)
+//   3. PRODUCER CORROBORATION, word-level: a transcript word must match one
+//      of the winner-producer's INFORMATIVE words at >= 0.5. Informative
+//      excludes generic winery/style vocabulary, carrier words, and any word
+//      whose producer-level document frequency (count of DISTINCT producers
+//      whose rows contain it) reaches 3 — an ABSOLUTE cap, so growing the
+//      inventory can only remove corroborating power, never add it (audit:
+//      the proportional cap was non-monotone; and 'romanee' must never
+//      corroborate DRC on a "Vosne-Romanée" query).
+//   4. SAME-PRODUCER SUBSET AMBIGUITY: if the runner-up shares the winner's
+//      producer, scores above threshold, and the winner's row words are a
+//      subset of the runner's, the utterance cannot have distinguished the
+//      bottlings ("Roumier Musigny" vs "Roumier Musigny Vieilles Vignes") →
+//      ambiguous, surfacing both for SPEC-20's disambiguation list.
+//   5. UNCORROBORATED ARM (cuvée-only requests): accept only when (a) no
+//      unexplained name-like residue remains (length >= 4, non-carrier,
+//      non-numeric, matching no winner-row word at >= 0.3), (b) at least one
+//      spoken word matches a DISTINCTIVE winner-row word (producer-df < 3) at
+//      >= 0.5 — a bare high-frequency grape word ("cabernet") resolves
+//      nothing — and (c) the margin over the runner-up is >= 0.02.
+//   Every error path is an abstention or a truth-preserving disambiguation;
+//   on the tuning fixture: 25/48 resolved + 16/48 disambiguated (truth always
+//   in the list) + 7 abstained, 16/16 out-of-inventory pure abstentions,
+//   6/6 garbage, ZERO wrong-wine on both STT configs.
+//
+// PARITY: similarity()/bestSpanSimilarity() are numerically pinned via
+// fixtures/trgm-parity-vectors.json to the spike-1 Python implementation,
+// which was validated byte-exact (max |delta| 0.000000, 203 pairs) against
+// live Postgres 16 pg_trgm on accent-folded/ASCII material. The œ/æ pre-fold
+// is an app-side folding extension consistent with the identity normalizer,
+// NOT part of the pg validation. fixtures/generate.py is the committed
+// generator; regenerate vectors through it if norm/trigram behavior changes.
 //
 // This module is deliberately unwired: no route imports it yet. It becomes
-// the resolution core of SPEC-20's constrained retrieval tool at ticket time;
-// thresholds are revisited under SPEC-21's full eval before any demo line is
-// rehearsed.
+// the resolution core of SPEC-20's constrained retrieval tool at ticket time.
 
 export interface WineCandidate {
   itemId: string;
@@ -62,7 +74,7 @@ export interface ScoredCandidate {
   candidate: WineCandidate;
   /** best span-trigram similarity of "producer displayName" vs the transcript */
   score: number;
-  /** word-level producer corroboration score (see producerCorroboration) */
+  /** word-level producer corroboration score (rule 3) */
   producerScore: number;
 }
 
@@ -71,21 +83,21 @@ export type ResolveOutcome =
   | { kind: "ambiguous"; candidates: ScoredCandidate[] }
   | {
       kind: "abstain";
-      reason: "empty_transcript" | "below_threshold" | "no_corroboration";
+      reason: "empty_transcript" | "below_threshold" | "contradicted" | "no_corroboration";
       /** the losing best candidate, surfaced for UX correction-search */
       best?: ScoredCandidate;
     };
 
 export interface ResolveOptions {
-  /** primary accept threshold — match_lwin's 0.30 (0078) */
+  /** primary accept threshold — match_lwin's 0.30 (0078); (0, 1] */
   acceptThreshold?: number;
-  /** word-level producer corroboration threshold */
+  /** word-level bar for producer corroboration and attribution names; (0, 1] */
   producerWordThreshold?: number;
-  /** minimum top1–top2 margin for the uncorroborated (residue-vetoed) arm */
+  /** minimum top1–top2 margin for the uncorroborated arm; [0, 1) */
   marginFloor?: number;
-  /** a transcript word explains itself by matching a row word at this sim */
+  /** a transcript word explains itself by matching a row word at this sim; (0, 1] */
   residueMatchThreshold?: number;
-  /** margin at/below which two corroborated candidates are indistinguishable */
+  /** margin at/below which two corroborated candidates are indistinguishable; [0, 1) */
   ambiguityMargin?: number;
 }
 
@@ -97,18 +109,44 @@ const DEFAULTS: Required<ResolveOptions> = {
   ambiguityMargin: 0.01,
 };
 
-/** NFKD-decompose and strip combining marks. Exported because SPEC-19/21 make
- * accent folding a precondition of ANY trigram comparison against the
- * catalog. */
-export function foldAccents(s: string): string {
-  return s.normalize("NFKD").replace(/\p{M}+/gu, "");
+// Voice utterances are short; the scoring cost is quadratic-ish in transcript
+// length, so a runaway transcript (STT glitch, abuse) is truncated rather
+// than scored unbounded (audit: 5,000 words took seconds AND still resolved).
+const MAX_TRANSCRIPT_WORDS = 120;
+// Producer-level document frequency at/above which a word stops being
+// producer identity (absolute — monotone under inventory growth).
+const PRODUCER_DF_CAP = 3;
+
+function validateOptions(opts: Required<ResolveOptions>): void {
+  const inUnitOpen = (v: number) => Number.isFinite(v) && v > 0 && v <= 1;
+  const inUnitClosed = (v: number) => Number.isFinite(v) && v >= 0 && v < 1;
+  if (!inUnitOpen(opts.acceptThreshold)) throw new RangeError(`acceptThreshold must be in (0,1]: ${opts.acceptThreshold}`);
+  if (!inUnitOpen(opts.producerWordThreshold)) throw new RangeError(`producerWordThreshold must be in (0,1]: ${opts.producerWordThreshold}`);
+  if (!inUnitOpen(opts.residueMatchThreshold)) throw new RangeError(`residueMatchThreshold must be in (0,1]: ${opts.residueMatchThreshold}`);
+  if (!inUnitClosed(opts.marginFloor)) throw new RangeError(`marginFloor must be in [0,1): ${opts.marginFloor}`);
+  if (!inUnitClosed(opts.ambiguityMargin)) throw new RangeError(`ambiguityMargin must be in [0,1): ${opts.ambiguityMargin}`);
 }
 
-// Mirror of the spike-1 Python norm(): fold, lower, apostrophe/hyphen to
-// space, non-alphanumeric to space, collapse. NOT the same contract as
-// normalizeProducerOrCuvee in src/domains/identity/normalize.ts — that one
-// builds an order-insensitive dedup key (words sorted), which destroys the
-// spans trigram matching depends on. Keep them separate.
+/** Fold to the ASCII domain the catalog lives in: ligature expansion (œ/æ,
+ * matching src/domains/identity/normalize.ts), then NFKD-decompose and strip
+ * combining marks. SPEC-19/21 make this a precondition of ANY trigram
+ * comparison against the catalog. */
+export function foldAccents(s: string): string {
+  return s
+    .replace(/œ/g, "oe")
+    .replace(/Œ/g, "Oe")
+    .replace(/æ/g, "ae")
+    .replace(/Æ/g, "Ae")
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "");
+}
+
+// Mirror of the spike-1 Python norm() (composed with the œ/æ pre-fold): fold,
+// lower, apostrophe/hyphen to space, non-alphanumeric to space, collapse.
+// NOT the same contract as normalizeProducerOrCuvee in
+// src/domains/identity/normalize.ts — that one builds an order-insensitive
+// dedup key (words sorted), which destroys the spans trigram matching
+// depends on. Keep them separate.
 function norm(s: string): string {
   return foldAccents(s)
     .toLowerCase()
@@ -147,7 +185,7 @@ interface SpanIndex {
 }
 
 function buildSpans(transcript: string, maxWidth: number): SpanIndex {
-  const words = norm(transcript).split(" ").filter(Boolean);
+  const words = norm(transcript).split(" ").filter(Boolean).slice(0, MAX_TRANSCRIPT_WORDS);
   const bySpan = new Map<string, Set<string>>();
   const cap = Math.min(maxWidth, words.length);
   for (let width = 1; width <= cap; width++) {
@@ -179,20 +217,24 @@ export function bestSpanSimilarity(target: string, transcript: string): number {
   return bestSpanAgainst(index, trigramSet(target), targetWords);
 }
 
-// Producer words that carry no identity on their own; corroboration from
-// these alone would let any "Domaine …" transcript corroborate any
-// "Domaine …" producer.
+// Winery-form and wine-style words that carry no producer identity on their
+// own; corroboration from these alone would let any "Domaine …" transcript
+// corroborate any "Domaine …" producer, and a "… Reserve" cuvée word must
+// never act as producer evidence (audit counterexample).
 const GENERIC_PRODUCER_WORDS = new Set([
   "domaine", "chateau", "bodega", "bodegas", "weingut", "cantina", "tenuta",
   "azienda", "agricola", "maison", "winery", "cellars", "estate", "vineyard",
   "vineyards", "wines", "les", "des", "dei", "della", "delle",
+  "reserve", "reserva", "riserva", "gran", "grand", "premier", "cru",
+  "vieilles", "vignes", "cuvee", "blanc", "rouge", "rosso", "bianco", "tinto",
+  "brut", "sec", "demi", "vintage", "old", "vine",
 ]);
 
 // Carrier/function words a spoken request wraps around a wine name. A residue
 // check must not treat "how many … are left" as an unexplained name. English
 // carrier vocabulary only — non-English junk deliberately stays name-like
-// (vetoing it converts errors into abstentions, the NFR direction). Revisited
-// under SPEC-21's full eval.
+// (vetoing it converts errors into abstentions, the NFR direction). Fitted on
+// the tuning fixture; revisited under SPEC-21's sealed eval.
 const CARRIER_WORDS = new Set(
   (
     "the a an of from for to in on at by with and or is are was were be been being " +
@@ -206,26 +248,41 @@ const CARRIER_WORDS = new Set(
   ).split(" "),
 );
 
-/** Max word-to-word trigram similarity between the producer's informative
- * words and the transcript's words. Informative = length >= 3, not a generic
- * winery word, and rarer than the df cap across the candidate list (a
- * producer word shared by many rows is appellation vocabulary, not identity —
- * 'romanee' must never corroborate DRC on a "Vosne-Romanée" query). Producers
- * with no informative word simply cannot corroborate (their wines resolve via
- * the residue-vetoed arm). */
-function producerCorroboration(index: SpanIndex, producer: string, df: Map<string, number>, dfCap: number): number {
-  const words = norm(producer)
-    .split(" ")
-    .filter((w) => w.length >= 3 && !GENERIC_PRODUCER_WORDS.has(w) && (df.get(w) ?? 0) <= dfCap);
-  let best = 0;
-  for (const pw of words) {
-    const pt = trigramSet(pw);
-    for (const wt of index.wordTris) {
-      const s = jaccard(pt, wt);
-      if (s > best) best = s;
+// English producer-attribution markers: "the X from <producer>", "by <producer>".
+const ATTRIBUTION_WORDS = new Set(["from", "by"]);
+
+/** words per producer-row, normalized once */
+function rowWordsOf(c: WineCandidate): string[] {
+  return norm(`${c.producer} ${c.displayName}`).split(" ").filter(Boolean);
+}
+
+/** Producer-level document frequency: for each word, the number of DISTINCT
+ * producers whose row text contains it. */
+function producerDf(candidates: readonly WineCandidate[]): Map<string, number> {
+  const byWord = new Map<string, Set<string>>();
+  for (const c of candidates) {
+    const pkey = norm(c.producer);
+    for (const w of new Set(rowWordsOf(c))) {
+      let s = byWord.get(w);
+      if (!s) byWord.set(w, (s = new Set()));
+      s.add(pkey);
     }
   }
-  return best;
+  const df = new Map<string, number>();
+  for (const [w, s] of byWord) df.set(w, s.size);
+  return df;
+}
+
+function informativeProducerWords(producer: string, df: Map<string, number>): string[] {
+  return norm(producer)
+    .split(" ")
+    .filter(
+      (w) =>
+        w.length >= 3 &&
+        !GENERIC_PRODUCER_WORDS.has(w) &&
+        !CARRIER_WORDS.has(w) &&
+        (df.get(w) ?? 0) < PRODUCER_DF_CAP,
+    );
 }
 
 export function resolveWineName(
@@ -234,26 +291,30 @@ export function resolveWineName(
   options?: ResolveOptions,
 ): ResolveOutcome {
   const opts = { ...DEFAULTS, ...options };
+  validateOptions(opts);
 
-  const rowTexts = candidates.map((c) => norm(`${c.producer} ${c.displayName}`));
-  const df = new Map<string, number>();
-  for (const rt of rowTexts) {
-    for (const w of new Set(rt.split(" ").filter(Boolean))) df.set(w, (df.get(w) ?? 0) + 1);
-  }
-  const dfCap = Math.max(2, Math.ceil(0.02 * candidates.length));
-
-  const maxCandidateWords = rowTexts.reduce((m, rt) => Math.max(m, rt.split(" ").filter(Boolean).length), 0);
+  const df = producerDf(candidates);
+  const rowWords = candidates.map(rowWordsOf);
+  const maxCandidateWords = rowWords.reduce((m, ws) => Math.max(m, ws.length), 0);
   const index = buildSpans(transcript, maxCandidateWords + 2);
   if (index.words.length === 0) {
     return { kind: "abstain", reason: "empty_transcript" };
   }
 
   const scored: ScoredCandidate[] = candidates.map((candidate, i) => {
-    const rowWords = rowTexts[i].split(" ").filter(Boolean).length;
+    const rowText = rowWords[i].join(" ");
+    let producerScore = 0;
+    for (const pw of informativeProducerWords(candidate.producer, df)) {
+      const pt = trigramSet(pw);
+      for (const wt of index.wordTris) {
+        const s = jaccard(pt, wt);
+        if (s > producerScore) producerScore = s;
+      }
+    }
     return {
       candidate,
-      score: bestSpanAgainst(index, trigramSet(rowTexts[i]), rowWords),
-      producerScore: producerCorroboration(index, candidate.producer, df, dfCap),
+      score: bestSpanAgainst(index, trigramSet(rowText), rowWords[i].length),
+      producerScore,
     };
   });
   scored.sort((a, b) => b.score - a.score);
@@ -264,8 +325,39 @@ export function resolveWineName(
   }
   const runnerUp = scored[1];
   const margin = top.score - (runnerUp?.score ?? 0);
+  const topRowWords = rowWordsOf(top.candidate);
+  const topRowTris = topRowWords.map((w) => trigramSet(w));
 
-  if (top.producerScore >= opts.producerWordThreshold) {
+  const explainedAt = (wordTris: Set<string>, bar: number): boolean =>
+    topRowTris.some((rt) => jaccard(wordTris, rt) >= bar);
+
+  // Rule 2 — attribution contradiction: "from/by <name>" whose name-words
+  // (first 2 content words in the following window) all fail the strict bar
+  // against the winner's row.
+  let contradicted = false;
+  for (let i = 0; i < index.words.length && !contradicted; i++) {
+    if (!ATTRIBUTION_WORDS.has(index.words[i])) continue;
+    const followers: number[] = [];
+    for (let j = i + 1; j < Math.min(i + 4, index.words.length) && followers.length < 2; j++) {
+      const w = index.words[j];
+      if (w.length >= 3 && !CARRIER_WORDS.has(w) && !/^\d+$/.test(w)) followers.push(j);
+    }
+    if (followers.length > 0 && !followers.some((j) => explainedAt(index.wordTris[j], opts.producerWordThreshold))) {
+      contradicted = true;
+    }
+  }
+
+  // Rule 4 — same-producer subset ambiguity: the utterance cannot have
+  // distinguished a bottling whose row words are contained in its sibling's.
+  const subsetAmbiguous = (): boolean => {
+    if (!runnerUp || runnerUp.score < opts.acceptThreshold) return false;
+    if (norm(top.candidate.producer) !== norm(runnerUp.candidate.producer)) return false;
+    const r2 = new Set(rowWordsOf(runnerUp.candidate));
+    return topRowWords.every((w) => r2.has(w));
+  };
+
+  if (top.producerScore >= opts.producerWordThreshold && !contradicted) {
+    if (subsetAmbiguous()) return { kind: "ambiguous", candidates: [top, runnerUp!] };
     if (
       runnerUp &&
       runnerUp.score >= opts.acceptThreshold &&
@@ -276,18 +368,23 @@ export function resolveWineName(
     }
     return { kind: "resolved", match: top, margin, runnerUp };
   }
+  if (contradicted) {
+    return { kind: "abstain", reason: "contradicted", best: top };
+  }
 
-  // Uncorroborated arm: accept only a residue-free transcript with a real lead.
-  const rowWordSet = norm(`${top.candidate.producer} ${top.candidate.displayName}`)
-    .split(" ")
-    .filter(Boolean)
-    .map((w) => trigramSet(w));
+  // Rule 5 — uncorroborated arm: residue-free + distinctive evidence + margin.
   const hasResidue = index.words.some((w, i) => {
     if (w.length < 4 || CARRIER_WORDS.has(w) || /^\d+$/.test(w)) return false;
-    const wt = index.wordTris[i];
-    return !rowWordSet.some((rw) => jaccard(wt, rw) >= opts.residueMatchThreshold);
+    return !explainedAt(index.wordTris[i], opts.residueMatchThreshold);
   });
-  if (!hasResidue && margin >= opts.marginFloor) {
+  const hasDistinctiveEvidence = topRowWords.some((rw) => {
+    if (rw.length < 3 || GENERIC_PRODUCER_WORDS.has(rw) || CARRIER_WORDS.has(rw)) return false;
+    if ((df.get(rw) ?? 0) >= PRODUCER_DF_CAP) return false;
+    const rt = trigramSet(rw);
+    return index.wordTris.some((wt) => jaccard(wt, rt) >= opts.producerWordThreshold);
+  });
+  if (!hasResidue && hasDistinctiveEvidence && margin >= opts.marginFloor) {
+    if (subsetAmbiguous()) return { kind: "ambiguous", candidates: [top, runnerUp!] };
     return { kind: "resolved", match: top, margin, runnerUp };
   }
   return { kind: "abstain", reason: "no_corroboration", best: top };

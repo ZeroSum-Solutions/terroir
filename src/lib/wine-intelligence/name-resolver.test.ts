@@ -10,11 +10,12 @@ import parity from "./fixtures/trgm-parity-vectors.json";
 import inventory from "./fixtures/voice-eval-inventory.json";
 
 // Contract: similarity/bestSpanSimilarity must be numerically identical to the
-// spike-1 Python implementation, which was itself validated byte-exact
-// (max |delta| = 0.000000 over 203 pairs) against live Postgres 16 pg_trgm —
-// the same operator match_lwin (0078) uses. The vectors were COMPUTED by that
-// Python implementation; this is a golden-vector contract test, not an
-// eyeball port.
+// spike-1 Python implementation (composed with the œ/æ pre-fold — see
+// fixtures/generate.py, the committed generator). The Python implementation
+// was validated byte-exact (max |delta| = 0.000000 over 203 pairs) against
+// live Postgres 16 pg_trgm — the operator match_lwin (0078) uses — on
+// accent-folded/ASCII material. Golden-vector contract test, not an eyeball
+// port.
 
 describe("pg_trgm parity (golden vectors from the Postgres-validated impl)", () => {
   it(`matches all ${parity.sim.length} similarity vectors`, () => {
@@ -41,9 +42,11 @@ describe("accent folding (spike-1 measured hard requirement)", () => {
     expect(similarity("côte-rôtie", "cote rotie")).toBe(1);
   });
 
-  it("foldAccents strips diacritics without dropping letters", () => {
+  it("foldAccents strips diacritics and expands ligatures without dropping letters", () => {
     expect(foldAccents("Bâtard-Montrachet")).toBe("Batard-Montrachet");
     expect(foldAccents("Peñafiel Grüner")).toBe("Penafiel Gruner");
+    expect(foldAccents("Clos de la Cœur")).toBe("Clos de la Coeur");
+    expect(similarity("cœur", "coeur")).toBe(1);
   });
 });
 
@@ -58,10 +61,9 @@ describe("resolveWineName decision rule", () => {
 
   it("abstains on the spike-9 shared-vocabulary failure: out-of-inventory Biondi-Santi Brunello", () => {
     // A perfect transcript for a wine NOT in inventory. The naive baseline
-    // resolves this to Fanti's Brunello at 0.53 (appellation vocabulary
+    // resolves this to Fanti's Brunello at 0.59 (appellation vocabulary
     // dominates the trigram mass) — the exact confident-wrong-answer the
-    // abstain-over-misidentify NFR forbids. Producer corroboration must
-    // refuse it: no span of this transcript corroborates "Fanti".
+    // abstain-over-misidentify NFR forbids.
     const r = resolveWineName("Brunello di Montalcino from Biondi-Santi, 2016", inv);
     expect(r.kind).toBe("abstain");
   });
@@ -87,8 +89,6 @@ describe("resolveWineName decision rule", () => {
       { itemId: "A", displayName: "Musigny Grand Cru", producer: "Leroy" },
       { itemId: "B", displayName: "Cabernet Sauvignon Reserve", producer: "Caymus" },
     ];
-    // Producer never spoken, but every non-carrier word of the request is
-    // explained by the winning row — the residue-vetoed arm accepts.
     const r = resolveWineName("a glass of the Musigny Grand Cru", tiny);
     expect(r.kind).toBe("resolved");
     if (r.kind === "resolved") expect(r.match.candidate.itemId).toBe("A");
@@ -99,9 +99,87 @@ describe("resolveWineName decision rule", () => {
       { itemId: "A", displayName: "Musigny Grand Cru", producer: "Leroy" },
       { itemId: "B", displayName: "Cabernet Sauvignon Reserve", producer: "Caymus" },
     ];
-    // Same request naming a producer we don't stock: 'roumier' matches no
-    // word of the winning row -> abstain, not a confident wrong answer.
     const r = resolveWineName("a glass of the Musigny Grand Cru from Roumier", tiny);
     expect(r.kind).toBe("abstain");
+  });
+});
+
+describe("audit counterexamples (2026-08-25 GPT-5.6 Sol) — each was a wrong resolution under v3", () => {
+  it("a cuvée/style word never acts as producer evidence, and an unstocked attributed producer abstains", () => {
+    // producer literally "Reserve": the transcript word "reserve" must not
+    // corroborate it, and "from Caymus" with no Caymus row is a contradiction.
+    const r = resolveWineName("Cabernet Sauvignon Reserve from Caymus", [
+      { itemId: "A", displayName: "Cabernet Sauvignon", producer: "Reserve" },
+    ]);
+    expect(r.kind).toBe("abstain");
+  });
+
+  it("a carrier word never corroborates a producer that happens to spell one", () => {
+    const r = resolveWineName("a glass of the Musigny Grand Cru from Roumier", [
+      { itemId: "A", displayName: "Musigny Grand Cru", producer: "Glass" },
+    ]);
+    expect(r.kind).toBe("abstain");
+  });
+
+  it("near-namesake attribution abstains even against a single candidate (santi vs Fanti at 0.333)", () => {
+    const r = resolveWineName("Brunello di Montalcino from Santi", [
+      { itemId: "A", displayName: "Brunello di Montalcino, Vallocchio", producer: "Fanti" },
+    ]);
+    expect(r.kind).toBe("abstain");
+  });
+
+  it("same-producer subset bottlings return a disambiguation list, not the shorter row", () => {
+    const r = resolveWineName("Domaine Roumier Musigny", [
+      { itemId: "A", displayName: "Musigny", producer: "Domaine Roumier" },
+      { itemId: "B", displayName: "Musigny Vieilles Vignes", producer: "Domaine Roumier" },
+    ]);
+    expect(r.kind).toBe("ambiguous");
+    if (r.kind === "ambiguous") {
+      expect(r.candidates.map((c) => c.candidate.itemId).sort()).toEqual(["A", "B"]);
+    }
+  });
+
+  it("a bare high-frequency grape word resolves nothing against a real inventory", () => {
+    expect(resolveWineName("cabernet", inv).kind).toBe("abstain");
+  });
+
+  it("safety is monotone under inventory growth (the df filter cannot re-arm a word)", () => {
+    const base: WineCandidate[] = [{ itemId: "A", displayName: "Cabernet Sauvignon", producer: "Reserve" }];
+    const grown = base.concat(
+      Array.from({ length: 98 }, (_, i) => ({
+        itemId: `X${i}`,
+        displayName: `Zinfandel Lot ${i}`,
+        producer: `Prod${i}`,
+      })),
+    );
+    expect(resolveWineName("Cabernet Sauvignon Reserve from Caymus", base).kind).toBe("abstain");
+    expect(resolveWineName("Cabernet Sauvignon Reserve from Caymus", grown).kind).toBe("abstain");
+  });
+
+  it("a very long transcript is truncated, not scored unbounded", () => {
+    const noise = Array.from({ length: 5000 }, (_, i) => `word${i}`).join(" ");
+    const t0 = Date.now();
+    const r = resolveWineName(`${noise} Musigny`, [
+      { itemId: "A", displayName: "Musigny Grand Cru", producer: "Leroy" },
+    ]);
+    expect(Date.now() - t0).toBeLessThan(2000);
+    // the wine name sits beyond the truncation window — the resolver must
+    // abstain rather than hallucinate from noise
+    expect(r.kind).toBe("abstain");
+  });
+
+  it("rejects option values that would disable the safety gates", () => {
+    const tiny: WineCandidate[] = [{ itemId: "A", displayName: "Musigny", producer: "Leroy" }];
+    expect(() => resolveWineName("musigny", tiny, { producerWordThreshold: 0 })).toThrow(RangeError);
+    expect(() => resolveWineName("musigny", tiny, { acceptThreshold: Number.NaN })).toThrow(RangeError);
+    expect(() => resolveWineName("musigny", tiny, { marginFloor: -1 })).toThrow(RangeError);
+    expect(() => resolveWineName("musigny", tiny, { ambiguityMargin: 1 })).toThrow(RangeError);
+    expect(() => resolveWineName("musigny", tiny, { residueMatchThreshold: 2 })).toThrow(RangeError);
+  });
+
+  it("candidate list of one and empty candidate list both behave", () => {
+    expect(resolveWineName("the Musigny", []).kind).toBe("abstain");
+    const r = resolveWineName("the Leroy Musigny", [{ itemId: "A", displayName: "Musigny", producer: "Leroy" }]);
+    expect(r.kind).toBe("resolved");
   });
 });

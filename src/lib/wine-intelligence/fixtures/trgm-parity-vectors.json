@@ -1,5 +1,17 @@
 {
-"note": "computed by spike-1 score.py, itself validated byte-exact (max |delta| 0.000000, 203 pairs) against live Postgres 16 pg_trgm on 2026-08-25",
+"provenance": {
+"generator": "src/lib/wine-intelligence/fixtures/generate.py",
+"seed": 20260826,
+"sources": {
+"projects/terroir-data/spike09-voice-retrieval/fixture_inventory.json": "0f61514d86de8f3278b6c5bb9520a03f1bc085eac5d31b50b9a80012992d10f1",
+"projects/terroir-data/spike09-voice-retrieval/cases.jsonl": "2ae33a3e25586bb0860dd800f975a75c55cb8cd3483b8c2cdd218a7228240ce8",
+"projects/terroir-data/spike01-stt/score.py": "b9763a4c0d79ffc1409a2fb85cf75de2929fac80ed37c07983344836db105c85",
+"projects/terroir-data/spike01-stt/utterances.json": "0c9073a12f28a434d18b05db78e8d6b18ba143a6ea67940fe2cd810f062e806a",
+"projects/terroir-data/spike01-stt/results.jsonl": "c9961befec57470ec4a63a4147bcc550c6edd424c64925dc29811832c832337e"
+},
+"pg_validation": "score.py validated byte-exact vs live Postgres 16 pg_trgm (203 pairs, max |delta| 0.000000, 2026-08-25); oe/ae pre-fold is an app-side extension outside that validation",
+"status": "TUNING fixture — SPEC-21 sealed holdout is the acceptance set"
+},
 "sim": [
 {
 "a": "Aglianico del Vulture",
@@ -999,6 +1011,26 @@
 {
 "a": "l'Église-Clinet",
 "b": "l eglise clinet",
+"sim": 1.0
+},
+{
+"a": "cœur",
+"b": "coeur",
+"sim": 1.0
+},
+{
+"a": "Clos de la Cœur",
+"b": "clos de la coeur",
+"sim": 1.0
+},
+{
+"a": "Æther Ævum",
+"b": "aether aevum",
+"sim": 1.0
+},
+{
+"a": "œ",
+"b": "oe",
 "sim": 1.0
 }
 ],
