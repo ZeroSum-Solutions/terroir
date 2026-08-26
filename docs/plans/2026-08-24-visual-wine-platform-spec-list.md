@@ -172,7 +172,7 @@ doc (marked ★); the rest cite their source and go straight to tickets once gat
 | 6 | e2e scan latency on demo hardware (cold/warm/concurrent p50/p95) | SPEC-05 | topology; VWP-D-03 box spec |
 | 7 | Phone-photo vs. packshot LightGlue survival | SPEC-03/05 | rerank viability |
 | 8 | Assisted-grid UX flow (+ separate auto-grid feasibility) | SPEC-12 | v1 contract fit |
-| 9 | Voice-retrieval eval construction | SPEC-21 | eval viability |
+| 9 | Voice-retrieval eval construction — **CLOSED 2026-08-25, eval constructed + baselined** (`2026-08-25-spike-09-voice-retrieval-eval.md`) | SPEC-21 | **viable; forces producer-corroboration/margin rule into the resolver** |
 | 10 | Partner-CSV GTIN coverage + vintage-uniqueness | SPEC-05 | VWP-D-07 barcode arm |
 | 11 | `wine_lineages` status (deprecated vs. still-read; note eval F-2) | SPEC-01/24 | VWP-D-05 |
 
@@ -191,6 +191,18 @@ belongs in SPEC-21's voice eval. Caveat recorded on the verdict: the eval is TTS
 free, and oracle-primed, so every number is an upper bound; survival also measures
 retrievability by `match_lwin`, not end-to-end resolution. The abstain path stays
 mandatory — the best config still misses ~3 % under laboratory-clean audio.
+
+**Spike 9 — CLOSED 2026-08-25 (constructed + baselined).** 206 cases / 250-item fixture
+from the production LWIN catalog; queries are spike 1's REAL AssemblyAI transcripts, so
+degradation is measured, not synthetic. Naive trigram baseline separates STT configs
+(98 % vs 81 % resolution) — the eval measures the pipeline end-to-end. Binding finding:
+with a *perfect* transcript of an out-of-inventory wine ("Brunello di Montalcino from
+Biondi-Santi"), the resolver false-accepts another producer's Brunello at 0.53 —
+appellation vocabulary swamps producer signal, the same shared-vocabulary failure the
+P2 round-5 critic proved at the identity gate (Pichon Baron/Lalande, 0.55). SPEC-21's
+resolver therefore requires producer-token corroboration or a top-1/top-2 margin rule,
+never a bare similarity threshold; out-of-inventory false-accept rate and
+empty-transcript rate become gated metrics in the eval YAML.
 
 **Spike 11 — CLOSED 2026-08-24 (repo evidence).** `wine_lineages` is LIVE, not
 deprecated: tenant-scoped (`restaurant_id NOT NULL`, per-restaurant LWIN7/name-norm
