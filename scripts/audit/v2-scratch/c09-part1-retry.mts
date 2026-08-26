@@ -4,7 +4,7 @@ import { confirmImportBatch, applyImportBatchChunk } from "../../../src/domains/
 const restaurantId = tenantIds.restaurantA;
 const userId = tenantIds.userA;
 
-function csvExactMatch(nRows: number, tag: string) {
+function csvExactMatch(nRows: number, _tag: string) {
   // Exact producer + display_name from the seeded lwin_catalog -> guaranteed
   // similarity=1.0 match, resolution='auto' (no operator step required).
   const header = "producer,name,vintage,quantity,unit_cost";

@@ -19,7 +19,6 @@ import {
   normalizeForDedup,
   variantKey,
   TOTAL_ROWS,
-  SAMPLE_ROWS,
   FORMAT_LABEL,
   NV_LITERAL_VARIANT_COUNT,
 } from "../../../scripts/fixtures/generate-partner-cellar.mjs";

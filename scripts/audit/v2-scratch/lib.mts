@@ -45,6 +45,5 @@ export async function tenantClient(email: string): Promise<SupabaseClient> {
 }
 
 export function log(...args: unknown[]) {
-  // eslint-disable-next-line no-console
   console.log(...args);
 }

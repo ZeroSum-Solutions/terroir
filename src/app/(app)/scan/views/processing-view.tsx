@@ -49,6 +49,7 @@ export function ProcessingView({ progress, stage, mode, onCancel, previewUrl }: 
     <section className="flex min-h-[60vh] items-center justify-center">
       <div className="w-full max-w-[420px] rounded-card border border-hairline bg-white p-xl text-center">
         {previewUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- Browser-local blob preview must render directly without image optimization or generated attributes.
           <img
             src={previewUrl}
             alt="Captured photo"
