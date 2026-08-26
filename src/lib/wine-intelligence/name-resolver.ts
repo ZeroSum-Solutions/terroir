@@ -83,7 +83,7 @@ export type ResolveOutcome =
   | { kind: "ambiguous"; candidates: ScoredCandidate[] }
   | {
       kind: "abstain";
-      reason: "empty_transcript" | "below_threshold" | "contradicted" | "no_corroboration";
+      reason: "empty_transcript" | "transcript_too_long" | "below_threshold" | "contradicted" | "no_corroboration";
       /** the losing best candidate, surfaced for UX correction-search */
       best?: ScoredCandidate;
     };
@@ -110,9 +110,16 @@ const DEFAULTS: Required<ResolveOptions> = {
 };
 
 // Voice utterances are short; the scoring cost is quadratic-ish in transcript
-// length, so a runaway transcript (STT glitch, abuse) is truncated rather
-// than scored unbounded (audit: 5,000 words took seconds AND still resolved).
+// length, so a runaway transcript (STT glitch, abuse) FAILS CLOSED — abstain,
+// never truncate-and-score: the re-verification audit proved a silent
+// truncation can discard a trailing "from <producer>" contradiction and
+// resolve a wrong wine.
 const MAX_TRANSCRIPT_WORDS = 120;
+// A venue list is at most a few thousand rows; beyond this is a caller bug.
+const MAX_CANDIDATES = 5000;
+// Real catalog rows are <= ~12 words; longer is data noise, and span width
+// derives from it. Rows are scored on their first 32 words.
+const MAX_ROW_WORDS = 32;
 // Producer-level document frequency at/above which a word stops being
 // producer identity (absolute — monotone under inventory growth).
 const PRODUCER_DF_CAP = 3;
@@ -185,7 +192,7 @@ interface SpanIndex {
 }
 
 function buildSpans(transcript: string, maxWidth: number): SpanIndex {
-  const words = norm(transcript).split(" ").filter(Boolean).slice(0, MAX_TRANSCRIPT_WORDS);
+  const words = norm(transcript).split(" ").filter(Boolean);
   const bySpan = new Map<string, Set<string>>();
   const cap = Math.min(maxWidth, words.length);
   for (let width = 1; width <= cap; width++) {
@@ -251,9 +258,9 @@ const CARRIER_WORDS = new Set(
 // English producer-attribution markers: "the X from <producer>", "by <producer>".
 const ATTRIBUTION_WORDS = new Set(["from", "by"]);
 
-/** words per producer-row, normalized once */
+/** words per producer-row, normalized once, bounded (see MAX_ROW_WORDS) */
 function rowWordsOf(c: WineCandidate): string[] {
-  return norm(`${c.producer} ${c.displayName}`).split(" ").filter(Boolean);
+  return norm(`${c.producer} ${c.displayName}`).split(" ").filter(Boolean).slice(0, MAX_ROW_WORDS);
 }
 
 /** Producer-level document frequency: for each word, the number of DISTINCT
@@ -292,14 +299,25 @@ export function resolveWineName(
 ): ResolveOutcome {
   const opts = { ...DEFAULTS, ...options };
   validateOptions(opts);
+  if (candidates.length > MAX_CANDIDATES) {
+    throw new RangeError(`candidate list exceeds ${MAX_CANDIDATES} rows (${candidates.length}) — resolve against a venue slice, not a raw catalog`);
+  }
+
+  const transcriptWordCount = norm(transcript).split(" ").filter(Boolean).length;
+  if (transcriptWordCount === 0) {
+    return { kind: "abstain", reason: "empty_transcript" };
+  }
+  if (transcriptWordCount > MAX_TRANSCRIPT_WORDS) {
+    // Fail closed BEFORE span construction: scoring a truncated transcript can
+    // silently drop a trailing producer attribution and resolve a wrong wine
+    // (proved by audit probe), and unbounded spans are quadratic work.
+    return { kind: "abstain", reason: "transcript_too_long" };
+  }
 
   const df = producerDf(candidates);
   const rowWords = candidates.map(rowWordsOf);
   const maxCandidateWords = rowWords.reduce((m, ws) => Math.max(m, ws.length), 0);
   const index = buildSpans(transcript, maxCandidateWords + 2);
-  if (index.words.length === 0) {
-    return { kind: "abstain", reason: "empty_transcript" };
-  }
 
   const scored: ScoredCandidate[] = candidates.map((candidate, i) => {
     const rowText = rowWords[i].join(" ");

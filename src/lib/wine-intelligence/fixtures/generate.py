@@ -26,12 +26,18 @@ EVIDENTIARY STATUS: cases + inventory are the resolver rule's TUNING fixture
 acceptance set. See name-resolver.eval.test.ts.
 
 Usage:  python3 generate.py          (any python3; stdlib only)
+        python3 generate.py --pg     (additionally regenerate pg-oracle.json
+                                      against a live Postgres+pg_trgm reached
+                                      via psql at $PG_ORACLE_SOCKET:$PG_ORACLE_PORT,
+                                      defaults /tmp/zs-pgsock:54329)
 """
 import hashlib
 import json
+import os
 import pathlib
 import random
 import re
+import subprocess
 import sys
 import unicodedata
 
@@ -156,6 +162,47 @@ def main() -> None:
         indent=0, ensure_ascii=False))
     print(f"inventory {len(inv_out)} · cases {len(cases_out)} · "
           f"sim vectors {len(sim_vectors)} · span vectors {len(span_vectors)}")
+
+    if "--pg" in sys.argv:
+        generate_pg_oracle(sim_vectors)
+
+
+def generate_pg_oracle(sim_vectors) -> None:
+    """Regenerate pg-oracle.json: live pg_trgm similarity() over the NORMALIZED
+    form of every sim vector pair. Committed so the Postgres side of the parity
+    claim is a reproducible artifact, not a session anecdote. The generator
+    asserts |python - pg| < 1e-6 per pair (pg similarity returns float4) and
+    refuses to write on any violation."""
+    sock = os.environ.get("PG_ORACLE_SOCKET", "/tmp/zs-pgsock")
+    port = os.environ.get("PG_ORACLE_PORT", "54329")
+    pairs = []
+    for v in sim_vectors:
+        a, b = norm(v["a"]), norm(v["b"])
+        pairs.append((a, b, v["sim"]))
+    values = ",".join(f"('{a}','{b}')" for a, b, _ in pairs)  # norm'd strings are ['a-z0-9 ']-safe
+    sql = f"SELECT similarity(a,b)::float8 FROM (VALUES {values}) AS t(a,b);"
+    out = subprocess.run(
+        ["psql", "-h", sock, "-p", port, "-d", "postgres", "-At", "-c", sql],
+        capture_output=True, text=True, check=True).stdout.split()
+    assert len(out) == len(pairs), f"pg returned {len(out)} rows for {len(pairs)} pairs"
+    version = subprocess.run(
+        ["psql", "-h", sock, "-p", port, "-d", "postgres", "-At",
+         "-c", "select current_setting('server_version')"],
+        capture_output=True, text=True, check=True).stdout.strip()
+    rows = []
+    worst = 0.0
+    for (a, b, py), pg_s in zip(pairs, out):
+        pg_val = float(pg_s)
+        worst = max(worst, abs(py - pg_val))
+        assert abs(py - pg_val) < 1e-6, f"python/pg divergence on ({a!r},{b!r}): {py} vs {pg_val}"
+        rows.append({"a": a, "b": b, "pg": pg_val})
+    (HERE / "pg-oracle.json").write_text(json.dumps(
+        {"provenance": {"postgres_version": version, "extension": "pg_trgm",
+                        "query": "similarity(a,b)::float8 over the norm()-folded pair",
+                        "tolerance_vs_python": "1e-6 (pg similarity is float4)",
+                        "generator": "generate.py --pg"},
+         "pairs": rows}, indent=0, ensure_ascii=False))
+    print(f"pg-oracle: {len(rows)} pairs vs Postgres {version}, worst |delta| {worst:.2e}")
 
 
 if __name__ == "__main__":

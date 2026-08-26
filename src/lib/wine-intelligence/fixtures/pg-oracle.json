@@ -1,0 +1,1031 @@
+{
+"provenance": {
+"postgres_version": "16.14 (Homebrew)",
+"extension": "pg_trgm",
+"query": "similarity(a,b)::float8 over the norm()-folded pair",
+"tolerance_vs_python": "1e-6 (pg similarity is float4)",
+"generator": "generate.py --pg"
+},
+"pairs": [
+{
+"a": "aglianico del vulture",
+"b": "aglianico del vulture",
+"pg": 1.0
+},
+{
+"a": "aglianico del vulture",
+"b": "muscadet sevre et maine",
+"pg": 0.023255813866853714
+},
+{
+"a": "alain graillot",
+"b": "alain graillot",
+"pg": 1.0
+},
+{
+"a": "alain graillot",
+"b": "puligny montrachet",
+"pg": 0.0
+},
+{
+"a": "albarino",
+"b": "albarino",
+"pg": 1.0
+},
+{
+"a": "albarino",
+"b": "saten",
+"pg": 0.0
+},
+{
+"a": "amarone della valpolicella",
+"b": "amarone della valpolicella",
+"pg": 1.0
+},
+{
+"a": "amarone della valpolicella",
+"b": "auslese",
+"pg": 0.032258063554763794
+},
+{
+"a": "asili",
+"b": "asili",
+"pg": 1.0
+},
+{
+"a": "asili",
+"b": "bierzo",
+"pg": 0.0
+},
+{
+"a": "auslese",
+"b": "auslese",
+"pg": 1.0
+},
+{
+"a": "auslese",
+"b": "tenuta san guido",
+"pg": 0.0
+},
+{
+"a": "bandol",
+"b": "bandol",
+"pg": 1.0
+},
+{
+"a": "bandol",
+"b": "ghemme",
+"pg": 0.0
+},
+{
+"a": "barbaresco",
+"b": "barbaresco",
+"pg": 1.0
+},
+{
+"a": "barbaresco",
+"b": "condrieu",
+"pg": 0.0
+},
+{
+"a": "barolo monfortino",
+"b": "barolo monfortino",
+"pg": 1.0
+},
+{
+"a": "barolo monfortino",
+"b": "pouilly fuisse",
+"pg": 0.0
+},
+{
+"a": "bierzo",
+"b": "bierzo",
+"pg": 1.0
+},
+{
+"a": "bierzo",
+"b": "domaine tempier",
+"pg": 0.04545454680919647
+},
+{
+"a": "biondi santi",
+"b": "biondi santi",
+"pg": 1.0
+},
+{
+"a": "biondi santi",
+"b": "chateau margaux",
+"pg": 0.0
+},
+{
+"a": "bodegas muga",
+"b": "bodegas muga",
+"pg": 1.0
+},
+{
+"a": "bodegas muga",
+"b": "cahors",
+"pg": 0.0
+},
+{
+"a": "brunello di montalcino",
+"b": "brunello di montalcino",
+"pg": 1.0
+},
+{
+"a": "brunello di montalcino",
+"b": "la tache",
+"pg": 0.0
+},
+{
+"a": "batard montrachet",
+"b": "batard montrachet",
+"pg": 1.0
+},
+{
+"a": "batard montrachet",
+"b": "bierzo",
+"pg": 0.0416666679084301
+},
+{
+"a": "cahors",
+"b": "cahors",
+"pg": 1.0
+},
+{
+"a": "cahors",
+"b": "descendientes de jose palacios",
+"pg": 0.0
+},
+{
+"a": "chassagne montrachet",
+"b": "chassagne montrachet",
+"pg": 1.0
+},
+{
+"a": "chassagne montrachet",
+"b": "batard montrachet",
+"pg": 0.3928571343421936
+},
+{
+"a": "chateau margaux",
+"b": "chateau margaux",
+"pg": 1.0
+},
+{
+"a": "chateau margaux",
+"b": "sassicaia",
+"pg": 0.0
+},
+{
+"a": "chateauneuf du pape",
+"b": "chateauneuf du pape",
+"pg": 1.0
+},
+{
+"a": "chateauneuf du pape",
+"b": "auslese",
+"pg": 0.0
+},
+{
+"a": "coche dury",
+"b": "coche dury",
+"pg": 1.0
+},
+{
+"a": "coche dury",
+"b": "domaine de la romanee conti",
+"pg": 0.0882352963089943
+},
+{
+"a": "condrieu",
+"b": "condrieu",
+"pg": 1.0
+},
+{
+"a": "condrieu",
+"b": "chassagne montrachet",
+"pg": 0.03448275849223137
+},
+{
+"a": "crozes hermitage",
+"b": "crozes hermitage",
+"pg": 1.0
+},
+{
+"a": "crozes hermitage",
+"b": "bodegas muga",
+"pg": 0.0
+},
+{
+"a": "cote rotie",
+"b": "cote rotie",
+"pg": 1.0
+},
+{
+"a": "cote rotie",
+"b": "coche dury",
+"pg": 0.10000000149011612
+},
+{
+"a": "descendientes de jose palacios",
+"b": "descendientes de jose palacios",
+"pg": 1.0
+},
+{
+"a": "descendientes de jose palacios",
+"b": "asili",
+"pg": 0.0
+},
+{
+"a": "domaine fourrier",
+"b": "domaine fourrier",
+"pg": 1.0
+},
+{
+"a": "domaine fourrier",
+"b": "rias baixas",
+"pg": 0.0
+},
+{
+"a": "domaine leflaive",
+"b": "domaine leflaive",
+"pg": 1.0
+},
+{
+"a": "domaine leflaive",
+"b": "les combettes",
+"pg": 0.0714285746216774
+},
+{
+"a": "domaine santa duc",
+"b": "domaine santa duc",
+"pg": 1.0
+},
+{
+"a": "domaine santa duc",
+"b": "numanthia",
+"pg": 0.03846153989434242
+},
+{
+"a": "domaine tempier",
+"b": "domaine tempier",
+"pg": 1.0
+},
+{
+"a": "domaine tempier",
+"b": "donnhoff",
+"pg": 0.08695652335882187
+},
+{
+"a": "domaine de la romanee conti",
+"b": "domaine de la romanee conti",
+"pg": 1.0
+},
+{
+"a": "domaine de la romanee conti",
+"b": "chassagne montrachet",
+"pg": 0.06818182021379471
+},
+{
+"a": "dominio de pingus",
+"b": "dominio de pingus",
+"pg": 1.0
+},
+{
+"a": "dominio de pingus",
+"b": "txakoli",
+"pg": 0.0
+},
+{
+"a": "donnhoff",
+"b": "donnhoff",
+"pg": 1.0
+},
+{
+"a": "donnhoff",
+"b": "puligny montrachet",
+"pg": 0.0
+},
+{
+"a": "egon muller",
+"b": "egon muller",
+"pg": 1.0
+},
+{
+"a": "egon muller",
+"b": "meursault",
+"pg": 0.0476190485060215
+},
+{
+"a": "elena fucci",
+"b": "elena fucci",
+"pg": 1.0
+},
+{
+"a": "elena fucci",
+"b": "passopisciaro",
+"pg": 0.0
+},
+{
+"a": "etna rosso",
+"b": "etna rosso",
+"pg": 1.0
+},
+{
+"a": "etna rosso",
+"b": "vino nobile di montepulciano",
+"pg": 0.0
+},
+{
+"a": "franciacorta",
+"b": "franciacorta",
+"pg": 1.0
+},
+{
+"a": "franciacorta",
+"b": "chassagne montrachet",
+"pg": 0.0
+},
+{
+"a": "g max",
+"b": "g max",
+"pg": 1.0
+},
+{
+"a": "g max",
+"b": "scharzhofberger",
+"pg": 0.0
+},
+{
+"a": "gaja",
+"b": "gaja",
+"pg": 1.0
+},
+{
+"a": "gaja",
+"b": "g max",
+"pg": 0.10000000149011612
+},
+{
+"a": "gattinara",
+"b": "gattinara",
+"pg": 1.0
+},
+{
+"a": "gattinara",
+"b": "quintarelli",
+"pg": 0.0
+},
+{
+"a": "georges vernay",
+"b": "georges vernay",
+"pg": 1.0
+},
+{
+"a": "georges vernay",
+"b": "barbaresco",
+"pg": 0.0
+},
+{
+"a": "gevrey chambertin",
+"b": "gevrey chambertin",
+"pg": 1.0
+},
+{
+"a": "gevrey chambertin",
+"b": "toro",
+"pg": 0.0
+},
+{
+"a": "ghemme",
+"b": "ghemme",
+"pg": 1.0
+},
+{
+"a": "ghemme",
+"b": "egon muller",
+"pg": 0.0
+},
+{
+"a": "giacomo conterno",
+"b": "giacomo conterno",
+"pg": 1.0
+},
+{
+"a": "giacomo conterno",
+"b": "vouvray",
+"pg": 0.0
+},
+{
+"a": "gigondas",
+"b": "gigondas",
+"pg": 1.0
+},
+{
+"a": "gigondas",
+"b": "sancerre",
+"pg": 0.0
+},
+{
+"a": "godello",
+"b": "godello",
+"pg": 1.0
+},
+{
+"a": "godello",
+"b": "priorat",
+"pg": 0.0
+},
+{
+"a": "grande cuvee",
+"b": "grande cuvee",
+"pg": 1.0
+},
+{
+"a": "grande cuvee",
+"b": "etna rosso",
+"pg": 0.0
+},
+{
+"a": "guigal",
+"b": "guigal",
+"pg": 1.0
+},
+{
+"a": "guigal",
+"b": "txakoli",
+"pg": 0.0
+},
+{
+"a": "huet",
+"b": "huet",
+"pg": 1.0
+},
+{
+"a": "huet",
+"b": "batard montrachet",
+"pg": 0.04545454680919647
+},
+{
+"a": "jumilla",
+"b": "jumilla",
+"pg": 1.0
+},
+{
+"a": "jumilla",
+"b": "puligny montrachet",
+"pg": 0.0
+},
+{
+"a": "krug",
+"b": "krug",
+"pg": 1.0
+},
+{
+"a": "krug",
+"b": "gattinara",
+"pg": 0.0
+},
+{
+"a": "l ermita",
+"b": "l ermita",
+"pg": 1.0
+},
+{
+"a": "l ermita",
+"b": "cahors",
+"pg": 0.0
+},
+{
+"a": "la mouline",
+"b": "la mouline",
+"pg": 1.0
+},
+{
+"a": "la mouline",
+"b": "puligny montrachet",
+"pg": 0.1111111119389534
+},
+{
+"a": "la tache",
+"b": "la tache",
+"pg": 1.0
+},
+{
+"a": "la tache",
+"b": "coche dury",
+"pg": 0.1111111119389534
+},
+{
+"a": "les combettes",
+"b": "les combettes",
+"pg": 1.0
+},
+{
+"a": "les combettes",
+"b": "georges vernay",
+"pg": 0.03703703731298447
+},
+{
+"a": "les monts damnes",
+"b": "les monts damnes",
+"pg": 1.0
+},
+{
+"a": "les monts damnes",
+"b": "guigal",
+"pg": 0.0
+},
+{
+"a": "les suchots",
+"b": "les suchots",
+"pg": 1.0
+},
+{
+"a": "les suchots",
+"b": "priorat",
+"pg": 0.0
+},
+{
+"a": "lopez de heredia",
+"b": "lopez de heredia",
+"pg": 1.0
+},
+{
+"a": "lopez de heredia",
+"b": "passopisciaro",
+"pg": 0.0
+},
+{
+"a": "manzanilla",
+"b": "manzanilla",
+"pg": 1.0
+},
+{
+"a": "manzanilla",
+"b": "monastrell",
+"pg": 0.0476190485060215
+},
+{
+"a": "mastroberardino",
+"b": "mastroberardino",
+"pg": 1.0
+},
+{
+"a": "mastroberardino",
+"b": "krug",
+"pg": 0.0
+},
+{
+"a": "mencia",
+"b": "mencia",
+"pg": 1.0
+},
+{
+"a": "mencia",
+"b": "descendientes de jose palacios",
+"pg": 0.0
+},
+{
+"a": "meursault",
+"b": "meursault",
+"pg": 1.0
+},
+{
+"a": "meursault",
+"b": "franciacorta",
+"pg": 0.0
+},
+{
+"a": "monastrell",
+"b": "monastrell",
+"pg": 1.0
+},
+{
+"a": "monastrell",
+"b": "cote rotie",
+"pg": 0.0
+},
+{
+"a": "muscadet sevre et maine",
+"b": "muscadet sevre et maine",
+"pg": 1.0
+},
+{
+"a": "muscadet sevre et maine",
+"b": "lopez de heredia",
+"pg": 0.0
+},
+{
+"a": "nebbiolo d alba",
+"b": "nebbiolo d alba",
+"pg": 1.0
+},
+{
+"a": "nebbiolo d alba",
+"b": "cote rotie",
+"pg": 0.0
+},
+{
+"a": "numanthia",
+"b": "numanthia",
+"pg": 1.0
+},
+{
+"a": "numanthia",
+"b": "vosne romanee",
+"pg": 0.043478261679410934
+},
+{
+"a": "passopisciaro",
+"b": "passopisciaro",
+"pg": 1.0
+},
+{
+"a": "passopisciaro",
+"b": "elena fucci",
+"pg": 0.0
+},
+{
+"a": "perrieres",
+"b": "perrieres",
+"pg": 1.0
+},
+{
+"a": "perrieres",
+"b": "mencia",
+"pg": 0.0
+},
+{
+"a": "pouilly fuisse",
+"b": "pouilly fuisse",
+"pg": 1.0
+},
+{
+"a": "pouilly fuisse",
+"b": "les monts damnes",
+"pg": 0.0
+},
+{
+"a": "prado enea",
+"b": "prado enea",
+"pg": 1.0
+},
+{
+"a": "prado enea",
+"b": "huet",
+"pg": 0.0
+},
+{
+"a": "priorat",
+"b": "priorat",
+"pg": 1.0
+},
+{
+"a": "priorat",
+"b": "nebbiolo d alba",
+"pg": 0.0
+},
+{
+"a": "puligny montrachet",
+"b": "puligny montrachet",
+"pg": 1.0
+},
+{
+"a": "puligny montrachet",
+"b": "meursault",
+"pg": 0.0357142873108387
+},
+{
+"a": "quintarelli",
+"b": "quintarelli",
+"pg": 1.0
+},
+{
+"a": "quintarelli",
+"b": "cahors",
+"pg": 0.0
+},
+{
+"a": "ribera del duero",
+"b": "ribera del duero",
+"pg": 1.0
+},
+{
+"a": "ribera del duero",
+"b": "alvaro palacios",
+"pg": 0.032258063554763794
+},
+{
+"a": "rioja gran reserva",
+"b": "rioja gran reserva",
+"pg": 1.0
+},
+{
+"a": "rioja gran reserva",
+"b": "la tache",
+"pg": 0.0
+},
+{
+"a": "rias baixas",
+"b": "rias baixas",
+"pg": 1.0
+},
+{
+"a": "rias baixas",
+"b": "sagrantino di montefalco",
+"pg": 0.0
+},
+{
+"a": "sagrantino di montefalco",
+"b": "sagrantino di montefalco",
+"pg": 1.0
+},
+{
+"a": "sagrantino di montefalco",
+"b": "toro",
+"pg": 0.0
+},
+{
+"a": "sancerre",
+"b": "sancerre",
+"pg": 1.0
+},
+{
+"a": "sancerre",
+"b": "biondi santi",
+"pg": 0.15789473056793213
+},
+{
+"a": "sanlucar de barrameda",
+"b": "sanlucar de barrameda",
+"pg": 1.0
+},
+{
+"a": "sanlucar de barrameda",
+"b": "trockenbeerenauslese",
+"pg": 0.0
+},
+{
+"a": "sassicaia",
+"b": "sassicaia",
+"pg": 1.0
+},
+{
+"a": "sassicaia",
+"b": "chateau margaux",
+"pg": 0.0
+},
+{
+"a": "saten",
+"b": "saten",
+"pg": 1.0
+},
+{
+"a": "saten",
+"b": "jumilla",
+"pg": 0.0
+},
+{
+"a": "scharzhofberger",
+"b": "scharzhofberger",
+"pg": 1.0
+},
+{
+"a": "scharzhofberger",
+"b": "vina tondonia",
+"pg": 0.0
+},
+{
+"a": "taurasi",
+"b": "taurasi",
+"pg": 1.0
+},
+{
+"a": "taurasi",
+"b": "lopez de heredia",
+"pg": 0.0
+},
+{
+"a": "tenuta san guido",
+"b": "tenuta san guido",
+"pg": 1.0
+},
+{
+"a": "tenuta san guido",
+"b": "donnhoff",
+"pg": 0.0
+},
+{
+"a": "toro",
+"b": "toro",
+"pg": 1.0
+},
+{
+"a": "toro",
+"b": "alvaro palacios",
+"pg": 0.05000000074505806
+},
+{
+"a": "trockenbeerenauslese",
+"b": "trockenbeerenauslese",
+"pg": 1.0
+},
+{
+"a": "trockenbeerenauslese",
+"b": "weingut keller",
+"pg": 0.0
+},
+{
+"a": "txakoli",
+"b": "txakoli",
+"pg": 1.0
+},
+{
+"a": "txakoli",
+"b": "nebbiolo d alba",
+"pg": 0.0
+},
+{
+"a": "valdeorras",
+"b": "valdeorras",
+"pg": 1.0
+},
+{
+"a": "valdeorras",
+"b": "prado enea",
+"pg": 0.0
+},
+{
+"a": "vega sicilia unico",
+"b": "vega sicilia unico",
+"pg": 1.0
+},
+{
+"a": "vega sicilia unico",
+"b": "albarino",
+"pg": 0.0
+},
+{
+"a": "verdicchio dei castelli di jesi",
+"b": "verdicchio dei castelli di jesi",
+"pg": 1.0
+},
+{
+"a": "verdicchio dei castelli di jesi",
+"b": "les monts damnes",
+"pg": 0.021739130839705467
+},
+{
+"a": "vino nobile di montepulciano",
+"b": "vino nobile di montepulciano",
+"pg": 1.0
+},
+{
+"a": "vino nobile di montepulciano",
+"b": "perrieres",
+"pg": 0.0
+},
+{
+"a": "vina tondonia",
+"b": "vina tondonia",
+"pg": 1.0
+},
+{
+"a": "vina tondonia",
+"b": "muscadet sevre et maine",
+"pg": 0.0
+},
+{
+"a": "vosne romanee",
+"b": "vosne romanee",
+"pg": 1.0
+},
+{
+"a": "vosne romanee",
+"b": "gevrey chambertin",
+"pg": 0.0
+},
+{
+"a": "vouvray",
+"b": "vouvray",
+"pg": 1.0
+},
+{
+"a": "vouvray",
+"b": "scharzhofberger",
+"pg": 0.0
+},
+{
+"a": "weingut keller",
+"b": "weingut keller",
+"pg": 1.0
+},
+{
+"a": "weingut keller",
+"b": "aglianico del vulture",
+"pg": 0.0
+},
+{
+"a": "alvaro palacios",
+"b": "alvaro palacios",
+"pg": 1.0
+},
+{
+"a": "alvaro palacios",
+"b": "cote rotie",
+"pg": 0.0
+},
+{
+"a": "cote rotie",
+"b": "cote rotie",
+"pg": 1.0
+},
+{
+"a": "chateau rayas",
+"b": "chateau rayas",
+"pg": 1.0
+},
+{
+"a": "batard montrachet",
+"b": "batard montrachet",
+"pg": 1.0
+},
+{
+"a": "ridge monte bello",
+"b": "ridge monte bello",
+"pg": 1.0
+},
+{
+"a": "penafiel",
+"b": "penafiel",
+"pg": 1.0
+},
+{
+"a": "gruner veltliner",
+"b": "gruner veltliner",
+"pg": 1.0
+},
+{
+"a": "d yquem",
+"b": "dyquem",
+"pg": 0.5
+},
+{
+"a": "d yquem",
+"b": "d yquem",
+"pg": 1.0
+},
+{
+"a": "",
+"b": "anything",
+"pg": 0.0
+},
+{
+"a": "romanee conti",
+"b": "romanee conti 2016",
+"pg": 0.7368420958518982
+},
+{
+"a": "lafite",
+"b": "lafite",
+"pg": 1.0
+},
+{
+"a": "drc la tache",
+"b": "la tache",
+"pg": 0.692307710647583
+},
+{
+"a": "weird char",
+"b": "weird char",
+"pg": 1.0
+},
+{
+"a": "l eglise clinet",
+"b": "l eglise clinet",
+"pg": 1.0
+},
+{
+"a": "coeur",
+"b": "coeur",
+"pg": 1.0
+},
+{
+"a": "clos de la coeur",
+"b": "clos de la coeur",
+"pg": 1.0
+},
+{
+"a": "aether aevum",
+"b": "aether aevum",
+"pg": 1.0
+},
+{
+"a": "oe",
+"b": "oe",
+"pg": 1.0
+}
+]
+}

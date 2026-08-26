@@ -81,7 +81,45 @@ function run(config: string) {
   return { resolvedCorrect, disambiguatedWithTruth, abstained, wrongWine, ooiAbstain, nResolve: resolve.length, nAbstain: abstain.length };
 }
 
+// Frozen map of every ambiguous outcome on the tuning fixture: caseId ->
+// sorted candidate itemIds. Regenerate consciously (scratch script in the run
+// log) whenever the rule changes; a drifted pair set must be reviewed, not
+// re-recorded blindly.
+const FROZEN_AMBIGUOUS_PAIRS: Record<string, string> = {
+  U09_en_aai_plain: "I006+I037", U09_en_aai_keyterm_full: "I006+I037",
+  U09_nat_aai_plain: "I006+I037", U09_nat_aai_keyterm_full: "I006+I037",
+  U12_en_aai_keyterm_full: "I007+I039", U12_nat_aai_keyterm_full: "I007+I039",
+  U14_en_aai_plain: "I009+I043", U14_en_aai_keyterm_full: "I009+I043",
+  U14_nat_aai_plain: "I009+I043", U14_nat_aai_keyterm_full: "I009+I043",
+  U30_en_aai_plain: "I016+I057", U30_en_aai_keyterm_full: "I016+I057",
+  U30_nat_aai_plain: "I016+I057", U30_nat_aai_keyterm_full: "I016+I057",
+  U33_en_aai_keyterm_full: "I018+I060", U33_nat_aai_keyterm_full: "I018+I060",
+  U36_en_aai_plain: "I020+I065", U36_en_aai_keyterm_full: "I020+I065",
+  U36_nat_aai_plain: "I020+I065", U36_nat_aai_keyterm_full: "I020+I065",
+  U42_en_aai_plain: "I022+I069", U42_en_aai_keyterm_full: "I022+I069",
+  U42_nat_aai_plain: "I022+I069", U42_nat_aai_keyterm_full: "I022+I069",
+  U45_en_aai_plain: "I023+I070", U45_en_aai_keyterm_full: "I023+I070",
+  U45_nat_aai_plain: "I023+I070", U45_nat_aai_keyterm_full: "I023+I070",
+};
+
 describe("spike-9 eval replay (tuning-fixture snapshot gates)", () => {
+  it("every ambiguous outcome is exactly the frozen same-producer pair containing the truth", () => {
+    const seen: Record<string, string> = {};
+    for (const c of all.filter((x) => x.expected.kind === "resolve")) {
+      const r = resolveWineName(c.transcript, inv);
+      if (r.kind !== "ambiguous") continue;
+      expect(r.candidates.length, `${c.caseId} candidate count`).toBe(2);
+      const [a, b] = r.candidates;
+      expect(a.candidate.producer, `${c.caseId} same producer`).toBe(b.candidate.producer);
+      expect(
+        r.candidates.some((s) => s.candidate.itemId === c.expected.itemId),
+        `${c.caseId} truth in list`,
+      ).toBe(true);
+      seen[c.caseId] = r.candidates.map((s) => s.candidate.itemId).sort().join("+");
+    }
+    expect(seen).toEqual(FROZEN_AMBIGUOUS_PAIRS);
+  });
+
   it("fixture shape is the frozen one", () => {
     expect(all.length).toBe(134);
     expect(inv.length).toBe(250);

@@ -238,8 +238,9 @@ slices:
         then: >-
           every external source used by the prototype — the pilot enrichment cascade's
           local-join/barcode/DDGS/Brave tiers AND the ratings pipeline's external
-          sources (Wine-Searcher/GWS fetches, the X-Wines offline pre-aggregation
-          feeding rating_aggregates) — tags its raw AND derived artifacts (candidate
+          sources (Wine-Searcher fetches, the X-Wines offline pre-aggregation
+          feeding rating_aggregates; GWS is dropped per the spike-3 register
+          correction and must NOT appear as a source) — tags its raw AND derived artifacts (candidate
           rows, embeddings, index shards, calibration data, pre-aggregated rating rows)
           with a per-source deletion-lineage key, asserted structurally across every
           source; removing one enrichment source's rows (e.g. Brave) from the pilot
@@ -785,6 +786,21 @@ slices:
           (spike 1's measured ceiling); 93 phrases / 156 words observed accepted for an
           AssemblyAI-configured run (documented cap 1,000 words, not probed to
           failure) — never a full-catalog list (spike 1 keyterm capacity findings)
+      - id: EV-VWP-21.7
+        then: >-
+          the eval report states uncertainty at the utterance-cluster level — repeated
+          renditions/configs of one utterance are never treated as independent samples;
+          the per-metric interval or permutation p-value is computed over utterance
+          clusters, matching the spike-1 statistics discipline that the audit made
+          binding (spike 1 §Statistics: utterance-clustered permutation)
+      - id: EV-VWP-21.8
+        then: >-
+          the eval exercises the hot-list selection contract end-to-end: the keyterm
+          list used by a scored run is produced by the SPEC-19 selection source and
+          refresh cadence under test (by-the-glass/recent-scan/velocity per the
+          configured policy), and the report names which selection policy produced it —
+          a hand-curated list voids the run (spike 1 consequence 1; SPEC-19 hot-list
+          contract)
 
   # non-starred slice: minimal acceptance contract (added on audit — criteria coverage)
   # source: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 "SPEC-22 STT
@@ -943,7 +959,8 @@ slices:
 #     by source removal + index rebuild
 #     -> EV-VWP-04.7 (amended to state the isolation property across EVERY external
 #        source, including the ratings pipeline's X-Wines pre-aggregation and
-#        Wine-Searcher/GWS fetches, not only the pilot-cascade sources). PARTIAL: the
+#        Wine-Searcher fetches — GWS dropped per spike 3 — not only the pilot-cascade
+#        sources). PARTIAL: the
 #        concrete removal/rebuild rehearsal PRD criterion 12 asks for is executed on
 #        one pilot source (Brave), matching the criterion's own scope ("removing ONE
 #        source in a rehearsal"); the isolation property is asserted structurally, not
