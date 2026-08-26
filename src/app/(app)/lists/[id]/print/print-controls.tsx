@@ -16,7 +16,7 @@ export function PrintControls({ listId }: { listId: string }) {
       <button
         type="button"
         onClick={() => window.print()}
-        className="inline-flex h-[36px] items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
+        className="inline-flex h-[36px] items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
       >
         <Printer className="h-3.5 w-3.5" strokeWidth={2} />
         Print

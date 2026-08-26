@@ -63,9 +63,9 @@ export function ReconcileModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby={headingId}
-      className="fixed inset-0 z-50 flex flex-col bg-canvas md:items-center md:justify-center md:bg-ink/40 md:p-lg"
+      className="fixed inset-0 z-50 flex flex-col bg-canvas md:items-center md:justify-center md:bg-scrim md:p-lg"
     >
-      <div className="flex h-full w-full flex-col overflow-hidden bg-canvas md:h-[min(720px,90vh)] md:max-w-[640px] md:rounded-card md:border md:border-hairline">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-surface md:h-[min(720px,90vh)] md:max-w-[640px] md:rounded-card md:border md:border-hairline">
         <header
           className="flex items-center justify-between border-b border-hairline px-md py-md md:px-lg"
           style={{ paddingTop: "calc(env(safe-area-inset-top) + 1rem)" }}

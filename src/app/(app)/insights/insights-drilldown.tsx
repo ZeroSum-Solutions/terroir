@@ -73,7 +73,7 @@ export function TodayStrip({ exceptions }: { exceptions: TodayException[] }) {
                 </span>
               </span>
               <ArrowUpRight
-                className="mt-0.5 h-4 w-4 shrink-0 text-grey transition-colors group-hover:text-primary"
+                className="mt-0.5 h-4 w-4 shrink-0 text-grey transition-colors group-hover:text-accent"
                 strokeWidth={1.75}
                 aria-hidden
               />
@@ -123,7 +123,7 @@ export function OwnerMetricGrid({ metrics }: { metrics: OwnerMetrics }) {
             // it always wins over Tailwind's layered ring-* utilities on the
             // same element — never combine it with one of those. Focus goes
             // through `outline`, which glass never touches.
-            className="glass group block rounded-lg p-md transition-transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="glass group block rounded-lg p-md transition-transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <span className="flex items-center gap-xs text-caption font-medium uppercase text-grey">
               {item.label}
@@ -159,7 +159,7 @@ function exceptionBadgeClass(kind: TodayException["kind"]): string {
     case "drink-window":
       return "bg-powder-wash text-powder-ink";
     case "past-window":
-      return "bg-blush-wash text-primary";
+      return "bg-blush-wash text-accent";
     case "pricing":
       return "bg-amber-wash text-amber";
   }

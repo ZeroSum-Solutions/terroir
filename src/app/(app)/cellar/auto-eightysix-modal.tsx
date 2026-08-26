@@ -66,12 +66,12 @@ export function AutoEightysixModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby={headingId}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 md:items-center md:p-lg"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim md:items-center md:p-lg"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-lg border-t border-x border-hairline bg-canvas md:max-h-[80vh] md:max-w-[560px] md:rounded-card md:border">
+      <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-lg border-t border-x border-hairline bg-surface md:max-h-[80vh] md:max-w-[560px] md:rounded-card md:border">
         <header className="flex shrink-0 items-center justify-between border-b border-hairline px-md py-md md:px-lg">
           <h2 id={headingId} className="font-serif text-[18px] font-medium text-ink">
             Cellar settings
@@ -104,7 +104,7 @@ export function AutoEightysixModal({
           <Link
             href="/cellar/config"
             onClick={onClose}
-            className="flex items-center justify-center gap-xs rounded-pill border border-ink/25 bg-white py-sm text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface"
+            className="flex items-center justify-center gap-xs rounded-pill border border-ink/25 bg-surface py-sm text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface"
           >
             <Layers className="h-4 w-4" strokeWidth={2} aria-hidden />
             Manage cellar sections

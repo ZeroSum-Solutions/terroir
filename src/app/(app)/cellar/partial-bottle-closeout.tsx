@@ -32,7 +32,7 @@ export function PartialBottleCloseout({
   const form = useCloseout(bottle, onComplete);
 
   return (
-    <section aria-label="Partial bottle close-out" className="mt-md rounded-lg border border-hairline bg-white p-md">
+    <section aria-label="Partial bottle close-out" className="mt-md rounded-lg card-surface p-md">
       <BottleSummary bottle={bottle} />
       <CloseoutFields reasons={reasons} form={form} />
     </section>
@@ -130,13 +130,13 @@ function CloseoutFields({ reasons, form }: { reasons: Reason[]; form: CloseoutFo
       </div>
       <label className="mt-sm block text-[12px] text-grey">
         Reason
-        <select value={form.reason} onChange={(event) => form.setReason(event.target.value)} className="mt-xs h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[13px] text-ink">
+        <select value={form.reason} onChange={(event) => form.setReason(event.target.value)} className="mt-xs h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[13px] text-ink">
           <option value="">{form.writtenOffMl > 0 ? "Select a reason" : "No reason"}</option>
           {reasons.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
         </select>
       </label>
-      {form.error && <p role="alert" className="mt-sm text-[12px] text-primary">{form.error}</p>}
-      <button type="button" disabled={form.busy || form.invalid} onClick={form.closeBottle} className="mt-sm h-11 w-full rounded-pill border border-ink/25 bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50">
+      {form.error && <p role="alert" className="mt-sm text-[12px] text-accent">{form.error}</p>}
+      <button type="button" disabled={form.busy || form.invalid} onClick={form.closeBottle} className="mt-sm h-11 w-full rounded-pill border border-ink/25 bg-surface text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50">
         {form.busy ? "Closing…" : "Close bottle"}
       </button>
     </>
@@ -147,7 +147,7 @@ function Field({ name, label, value, onChange }: { name: string; label: string; 
   return (
     <label className="text-[12px] text-grey">
       {label}
-      <input name={name} type="number" min="0" step="1" value={value} onChange={(event) => onChange(event.target.value)} className="mt-xs h-11 w-full rounded-pill border border-hairline bg-white px-sm font-mono text-[13px] text-ink" />
+      <input name={name} type="number" min="0" step="1" value={value} onChange={(event) => onChange(event.target.value)} className="mt-xs h-11 w-full rounded-pill border border-hairline bg-surface px-sm font-mono text-[13px] text-ink" />
     </label>
   );
 }

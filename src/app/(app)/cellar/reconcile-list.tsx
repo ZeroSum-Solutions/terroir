@@ -23,14 +23,14 @@ const FRACTIONS: Array<{ label: string; value: number }> = [
 
 const badgeToneClasses = {
   positive: "bg-sage-wash text-sage-ink",
-  negative: "bg-blush-wash text-primary",
+  negative: "bg-blush-wash text-accent",
   neutral: "bg-bridge-surface text-grey",
 } as const;
 
 const flaggedCardClasses = {
   positive: "border-sage-ink/30 bg-sage-wash",
-  negative: "border-primary/40 bg-blush-wash",
-  neutral: "border-hairline bg-white",
+  negative: "border-accent/40 bg-blush-wash",
+  neutral: "border-hairline bg-surface",
 } as const;
 
 type PendingChange = { newRemainingMl: number; note?: string };
@@ -82,7 +82,7 @@ export function ReconcileList({
 
   if (initialItems.length === 0) {
     return (
-      <div className="rounded-card border border-hairline bg-white px-md py-lg text-center text-[13px] text-grey">
+      <div className="rounded-card card-surface px-md py-lg text-center text-[13px] text-grey">
         No open bottles to reconcile. Open one by pouring a glass.
       </div>
     );
@@ -93,7 +93,7 @@ export function ReconcileList({
       {error && (
         <div
           role="alert"
-          className="mb-md rounded-md border border-primary/30 bg-blush-wash px-md py-sm text-[13px] text-primary"
+          className="mb-md rounded-md border border-accent/30 bg-blush-wash px-md py-sm text-[13px] text-accent"
         >
           {error}
         </div>
@@ -113,7 +113,7 @@ export function ReconcileList({
         ))}
       </ul>
 
-      <div className="fixed bottom-[72px] left-0 right-0 z-30 border-t border-hairline bg-white px-lg py-sm md:static md:mt-lg md:border-0 md:px-0 md:py-0">
+      <div className="fixed bottom-[72px] left-0 right-0 z-30 border-t border-hairline bg-surface px-lg py-sm md:static md:mt-lg md:border-0 md:px-0 md:py-0">
         <button
           type="button"
           onClick={onSaveAll}
@@ -164,10 +164,10 @@ function ReconcileRow({
 
   return (
     <li
-      className={`rounded-card border p-md ${
+      className={`rounded-card p-md ${
         isVarianceFlagged
-          ? flaggedCardClasses[tone]
-          : "border-hairline bg-white"
+          ? `border ${flaggedCardClasses[tone]}`
+          : "card-surface"
       }`}
     >
       <div className="mb-sm">
@@ -235,7 +235,7 @@ function ReconcileRow({
                   note: pending?.note,
                 });
               }}
-              className="h-11 w-[96px] rounded-pill border border-hairline bg-white px-sm text-[14px] font-mono tabular-nums outline-none focus:border-primary focus:ring-2 focus:ring-blush-wash"
+              className="h-11 w-[96px] rounded-pill border border-hairline bg-surface px-sm text-[14px] font-mono tabular-nums outline-none focus:border-accent focus:ring-2 focus:ring-blush-wash"
               aria-label="Actual remaining volume in ml"
             />
           </label>
@@ -269,8 +269,8 @@ function ReconcileRow({
               className={cn(
                 "h-[44px] rounded-pill border text-[12px] font-medium transition-colors",
                 isActive
-                  ? "border-primary bg-primary text-white"
-                  : "border-hairline bg-white text-ink hover:bg-bridge-surface",
+                  ? "border-accent bg-primary text-white"
+                  : "border-hairline bg-surface text-ink hover:bg-bridge-surface",
               )}
             >
               {f.label}
@@ -295,7 +295,7 @@ function ReconcileRow({
               })
             }
             placeholder="spill, miscount, etc."
-            className="h-11 flex-1 rounded-pill border border-hairline bg-white px-sm text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-blush-wash"
+            className="h-11 flex-1 rounded-pill border border-hairline bg-surface px-sm text-[13px] outline-none focus:border-accent focus:ring-2 focus:ring-blush-wash"
           />
         </label>
       </div>

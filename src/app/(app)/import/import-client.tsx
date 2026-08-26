@@ -192,10 +192,10 @@ function UploadStep({
   error: string | null;
 }) {
   return (
-    <div className="rounded-card border border-hairline bg-white p-lg">
+    <div className="rounded-card card-surface p-lg">
       <label
         htmlFor="import-file"
-        className="flex min-h-11 cursor-pointer flex-col items-center justify-center gap-sm rounded-card border-2 border-dashed border-beige-deep bg-bridge-surface px-lg py-xl text-center transition-colors hover:border-primary hover:bg-blush-wash/40 focus-within:outline-none focus-within:ring-2 focus-within:ring-primary/25"
+        className="flex min-h-11 cursor-pointer flex-col items-center justify-center gap-sm rounded-card border-2 border-dashed border-beige-deep bg-bridge-surface px-lg py-xl text-center transition-colors hover:border-accent hover:bg-blush-wash/40 focus-within:outline-none focus-within:ring-2 focus-within:ring-accent/25"
       >
         <input
           ref={fileInputRef}
@@ -215,7 +215,7 @@ function UploadStep({
       </label>
 
       {error && (
-        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-primary">
+        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-accent">
           <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
           {error}
         </p>
@@ -225,7 +225,7 @@ function UploadStep({
         type="button"
         disabled={!file || previewing}
         onClick={onPreview}
-        className="mt-lg flex min-h-11 w-full items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-lg flex min-h-11 w-full items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {previewing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
         {previewing ? "Reading file…" : "Preview import"}
@@ -234,7 +234,7 @@ function UploadStep({
       <a
         href={`data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE_CSV)}`}
         download="cellar-import-template.csv"
-        className="mt-md flex min-h-11 items-center justify-center text-[13px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+        className="mt-md flex min-h-11 items-center justify-center text-[13px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
       >
         Download CSV template
       </a>
@@ -262,7 +262,7 @@ function PreviewStep({
   const canConfirm = summary.validRows > 0;
 
   return (
-    <div className="rounded-card border border-hairline bg-white p-lg">
+    <div className="rounded-card card-surface p-lg">
       <h2 className="font-serif text-[20px] text-ink">Preview: {filename}</h2>
       <dl className="mt-md grid grid-cols-2 gap-sm text-[13px]">
         <SummaryStat label="Total rows" value={summary.totalRows} />
@@ -294,7 +294,7 @@ function PreviewStep({
       )}
 
       {error && (
-        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-primary">
+        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-accent">
           <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
           {error}
         </p>
@@ -304,7 +304,7 @@ function PreviewStep({
         <button
           type="button"
           onClick={onBack}
-          className="min-h-11 flex-1 rounded-pill border border-ink/25 bg-white px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+          className="min-h-11 flex-1 rounded-pill border border-ink/25 bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
         >
           Choose a different file
         </button>
@@ -312,7 +312,7 @@ function PreviewStep({
           type="button"
           disabled={!canConfirm || confirming}
           onClick={onConfirm}
-          className="flex min-h-11 flex-1 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex min-h-11 flex-1 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {confirming ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
           {confirming ? "Creating import…" : "Confirm import"}
@@ -425,7 +425,7 @@ function BatchStep({
   }, [batch.batch.id, onDone]);
 
   return (
-    <div className="rounded-card border border-hairline bg-white p-lg">
+    <div className="rounded-card card-surface p-lg">
       <div className="flex items-center justify-between">
         <h2 className="font-serif text-[20px] text-ink">{batch.batch.filename}</h2>
         <StatusBadge status={batch.batch.status} />
@@ -439,7 +439,7 @@ function BatchStep({
       </dl>
 
       {actionError && (
-        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-primary">
+        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-accent">
           <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
           {actionError}
         </p>
@@ -452,7 +452,7 @@ function BatchStep({
           </h3>
           <ul className="mt-xs space-y-sm">
             {pending.map((row) => (
-              <li key={row.id} className="rounded-lg border border-hairline bg-white p-sm">
+              <li key={row.id} className="rounded-lg card-surface p-sm">
                 <p className="text-[14px] text-ink">
                   Row {row.row_number}: {row.raw.producer} — {row.raw.name}
                 </p>
@@ -469,7 +469,7 @@ function BatchStep({
                       placeholder="Unit cost"
                       value={manualCostDrafts[row.id] ?? ""}
                       onChange={(e) => setManualCostDrafts((prev) => ({ ...prev, [row.id]: e.target.value }))}
-                      className="min-h-11 w-28 rounded-pill border border-hairline bg-white px-sm text-[14px] focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
+                      className="min-h-11 w-28 rounded-pill border border-hairline bg-surface px-sm text-[14px] focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
                     />
                   )}
                   <button
@@ -480,14 +480,14 @@ function BatchStep({
                       void resolveRow(row.id, "include", manualUnitCost);
                     }}
                     disabled={row.cost_status === "missing" && !manualCostDrafts[row.id]}
-                    className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Include anyway
                   </button>
                   <button
                     type="button"
                     onClick={() => void resolveRow(row.id, "exclude")}
-                    className="min-h-11 rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                    className="min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                   >
                     Exclude
                   </button>
@@ -504,7 +504,7 @@ function BatchStep({
             type="button"
             disabled={applying}
             onClick={applyAll}
-            className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {applying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {applying ? `Applying… (${appliedCount} of ${batch.batch.total_rows})` : `Apply ${eligibleNotApplied.length} row(s)`}
@@ -515,7 +515,7 @@ function BatchStep({
           <button
             type="button"
             onClick={() => setRevertDialogOpen(true)}
-            className="flex min-h-11 items-center justify-center gap-xs rounded-pill border border-ink/25 bg-white px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+            className="flex min-h-11 items-center justify-center gap-xs rounded-pill border border-ink/25 bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
           >
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
             Revert this import
@@ -525,7 +525,7 @@ function BatchStep({
         <button
           type="button"
           onClick={onDone}
-          className="min-h-11 rounded-pill px-lg text-[14px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+          className="min-h-11 rounded-pill px-lg text-[14px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
         >
           Start a new import
         </button>
@@ -577,7 +577,7 @@ function RecentImports({
               type="button"
               onClick={() => onOpen(b.id)}
               className={cn(
-                "flex min-h-11 w-full items-center justify-between rounded-lg border border-hairline bg-white px-sm text-left text-[13px] text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
+                "flex min-h-11 w-full items-center justify-between rounded-lg card-surface px-sm text-left text-[13px] text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25",
               )}
             >
               <span className="truncate">{b.filename}</span>

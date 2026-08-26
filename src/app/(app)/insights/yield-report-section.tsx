@@ -67,7 +67,7 @@ export function YieldReportSection({
 function Metric({ name, href, value }: { name: string; href: string; value: string }) {
   return (
     <span data-metric={`yield-${name}`}>
-      <Link href={href} className="block rounded-sm tabular text-grey hover:bg-beige hover:text-primary">
+      <Link href={href} className="block rounded-sm tabular text-grey hover:bg-beige hover:text-accent">
         {value}
       </Link>
     </span>

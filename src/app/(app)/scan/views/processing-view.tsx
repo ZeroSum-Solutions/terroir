@@ -47,7 +47,7 @@ export function ProcessingView({ progress, stage, mode, onCancel, previewUrl }: 
   const activeIndex = steps.indexOf(activeStep);
   return (
     <section className="flex min-h-[60vh] items-center justify-center">
-      <div className="w-full max-w-[420px] rounded-card border border-hairline bg-white p-xl text-center">
+      <div className="w-full max-w-[420px] rounded-card card-surface p-xl text-center">
         {previewUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- Browser-local blob preview must render directly without image optimization or generated attributes.
           <img
@@ -56,7 +56,7 @@ export function ProcessingView({ progress, stage, mode, onCancel, previewUrl }: 
             className="mx-auto mb-md h-20 w-20 rounded-lg border border-hairline object-cover"
           />
         ) : (
-          <div className="mx-auto mb-md flex h-16 w-16 items-center justify-center rounded-full bg-blush-wash text-primary">
+          <div className="mx-auto mb-md flex h-16 w-16 items-center justify-center rounded-full bg-blush-wash text-accent">
             <Sparkles className="h-7 w-7" strokeWidth={1.5} aria-hidden="true" />
           </div>
         )}
@@ -107,7 +107,7 @@ export function ProcessingView({ progress, stage, mode, onCancel, previewUrl }: 
                 className={cn(
                   "flex items-center gap-sm text-[14px]",
                   done && "text-ink",
-                  active && "text-primary",
+                  active && "text-accent",
                   !done && !active && "text-grey",
                 )}
               >
@@ -126,7 +126,7 @@ export function ProcessingView({ progress, stage, mode, onCancel, previewUrl }: 
         <button
           type="button"
           onClick={onCancel}
-          className="mt-lg h-11 rounded-pill border border-ink/25 bg-white px-lg text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className="mt-lg h-11 rounded-pill border border-ink/25 bg-surface px-lg text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           Cancel scan
         </button>

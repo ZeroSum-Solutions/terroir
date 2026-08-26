@@ -159,7 +159,7 @@ export function EditMetadataModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="edit-metadata-heading"
-      className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[85dvh] flex-col rounded-t-lg bg-canvas md:inset-0 md:m-auto md:h-fit md:max-h-[90dvh] md:w-[480px] md:rounded-card md:border md:border-hairline"
+      className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[85dvh] flex-col rounded-t-lg bg-surface md:inset-0 md:m-auto md:h-fit md:max-h-[90dvh] md:w-[480px] md:rounded-card md:border md:border-hairline"
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-hairline px-md py-sm shrink-0">
@@ -189,7 +189,7 @@ export function EditMetadataModal({
             type="text"
             value={producer}
             onChange={(e) => setProducer(e.target.value)}
-            className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+            className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -200,7 +200,7 @@ export function EditMetadataModal({
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+            className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -214,7 +214,7 @@ export function EditMetadataModal({
             value={vintage}
             onChange={(e) => setVintage(e.target.value)}
             placeholder="e.g. 2020"
-            className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+            className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -226,7 +226,7 @@ export function EditMetadataModal({
             value={varietal}
             onChange={(e) => setVarietal(e.target.value)}
             placeholder="e.g. Cabernet Sauvignon"
-            className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+            className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -238,7 +238,7 @@ export function EditMetadataModal({
             value={region}
             onChange={(e) => setRegion(e.target.value)}
             placeholder="e.g. Napa Valley"
-            className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+            className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-blush-wash"
           />
         </Field>
 
@@ -250,7 +250,7 @@ export function EditMetadataModal({
             onChange={(e) => setTastingNotes(e.target.value)}
             placeholder="Enter free-form tasting notes..."
             rows={4}
-            className="w-full rounded-md border border-hairline bg-white px-sm py-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash resize-y"
+            className="w-full rounded-md border border-hairline bg-surface px-sm py-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-blush-wash resize-y"
           />
         </Field>
 
@@ -273,7 +273,7 @@ export function EditMetadataModal({
                 value={dwStart}
                 onChange={(e) => setDwStart(e.target.value)}
                 placeholder="e.g. 2025"
-                className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+                className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-blush-wash"
               />
             </Field>
             <Field label="Peak year" htmlFor="edit-dw-peak">
@@ -285,7 +285,7 @@ export function EditMetadataModal({
                 value={dwPeak}
                 onChange={(e) => setDwPeak(e.target.value)}
                 placeholder="e.g. 2030"
-                className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+                className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-blush-wash"
               />
             </Field>
             <Field label="End year" htmlFor="edit-dw-end">
@@ -297,7 +297,7 @@ export function EditMetadataModal({
                 value={dwEnd}
                 onChange={(e) => setDwEnd(e.target.value)}
                 placeholder="e.g. 2035"
-                className="h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+                className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-blush-wash"
               />
             </Field>
           </div>
@@ -306,7 +306,7 @@ export function EditMetadataModal({
         {errorMsg && (
           <div
             role="alert"
-            className="rounded-md border border-primary/30 bg-blush-wash px-md py-sm text-[13px] text-primary"
+            className="rounded-md border border-accent/30 bg-blush-wash px-md py-sm text-[13px] text-accent"
           >
             {errorMsg}
           </div>
@@ -319,7 +319,7 @@ export function EditMetadataModal({
           type="button"
           onClick={onClose}
           disabled={busy}
-          className="flex h-11 items-center rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
+          className="flex h-11 items-center rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
         >
           Cancel
         </button>

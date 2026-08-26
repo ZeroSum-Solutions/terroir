@@ -206,7 +206,7 @@ export function CellarShell({
           {restaurantName} · Cellar
         </p>
         <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink max-[359px]:mt-2xs max-[359px]:text-[22px] md:text-heading">
-          A cellar beyond the <em className="italic font-normal text-primary">ordinary</em>
+          A cellar beyond the <em className="italic font-normal text-accent">ordinary</em>
         </h1>
 
         {/* Counters-as-navigation — one compact row is both the hero's KPI
@@ -225,7 +225,7 @@ export function CellarShell({
         <div className="flex w-full flex-wrap items-center gap-xs md:ml-auto md:w-auto md:flex-nowrap">
           <Link
             href="/cellar/open"
-            className="inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill border border-ink/25 px-md text-[12.5px] font-medium text-ink hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+            className="inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill border border-ink/25 px-md text-[12.5px] font-medium text-ink hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
           >
             Open bottles {alerts.openCount}
           </Link>
@@ -242,7 +242,7 @@ export function CellarShell({
             type="button"
             onClick={() => setSearchOpen(true)}
             aria-label="Search wines"
-            className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-soft hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 md:hidden"
+            className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-soft hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 md:hidden"
           >
             <Search className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
@@ -276,7 +276,7 @@ export function CellarShell({
               type="button"
               onClick={() => setSettingsOpen(true)}
               aria-label="Cellar settings"
-              className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-soft hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+              className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-soft hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
             >
               <Settings className="h-5 w-5" strokeWidth={2} aria-hidden />
             </button>
@@ -286,7 +286,7 @@ export function CellarShell({
             <button
               type="button"
               onClick={() => setReconcileOpen(true)}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill bg-primary px-md text-[12.5px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill bg-primary px-md text-[12.5px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
             >
               Reconcile {reconcileItems.length} open bottle
               {reconcileItems.length === 1 ? "" : "s"} →
@@ -307,7 +307,7 @@ export function CellarShell({
           <button
             type="button"
             onClick={() => replaceUrlState({ filter: "low" })}
-            className="inline-flex min-h-11 items-center rounded-pill border border-amber/30 px-sm text-[11.5px] font-medium text-amber hover:bg-white/50"
+            className="inline-flex min-h-11 items-center rounded-pill border border-amber/30 px-sm text-[11.5px] font-medium text-amber hover:bg-surface/60"
           >
             Show
           </button>
@@ -371,7 +371,7 @@ export function CellarShell({
             <button
               type="button"
               onClick={() => setSearchOpen(false)}
-              className="min-h-11 rounded-pill px-sm text-[13px] font-medium text-ink-soft hover:bg-white/50"
+              className="min-h-11 rounded-pill px-sm text-[13px] font-medium text-ink-soft hover:bg-surface/60"
             >
               Done
             </button>
@@ -458,7 +458,7 @@ function SearchInput({
         }}
         placeholder="Search name, producer, region…"
         autoFocus={autoFocus}
-        className="h-11 w-full rounded-pill border border-ink/20 bg-white/70 pl-[32px] pr-[36px] text-[13px] text-ink outline-none placeholder:text-grey focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15"
+        className="h-11 w-full rounded-pill border border-ink/20 bg-surface/70 pl-[32px] pr-[36px] text-[13px] text-ink outline-none placeholder:text-grey focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/15"
       />
       {value ? (
         <button
@@ -468,7 +468,7 @@ function SearchInput({
             onChange("");
             inputRef.current?.focus();
           }}
-          className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-pill text-grey hover:bg-white/60 hover:text-ink-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-primary/20"
+          className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-pill text-grey hover:bg-surface/60 hover:text-ink-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent/20"
         >
           <X className="h-4 w-4" strokeWidth={2} aria-hidden />
         </button>
@@ -476,7 +476,7 @@ function SearchInput({
         showHint && (
           <kbd
             aria-hidden
-            className="pointer-events-none absolute right-sm top-1/2 hidden h-[20px] -translate-y-1/2 items-center rounded-md border border-hairline bg-white/60 px-2xs font-sans text-[11px] text-grey md:inline-flex"
+            className="pointer-events-none absolute right-sm top-1/2 hidden h-[20px] -translate-y-1/2 items-center rounded-md border border-hairline bg-surface/60 px-2xs font-sans text-[11px] text-grey md:inline-flex"
           >
             /
           </kbd>
@@ -506,7 +506,7 @@ function ViewToggleButton({
       className={cn(
         "flex h-11 w-11 items-center justify-center text-ink-soft transition-colors",
         active && "bg-ink text-beige",
-        !active && "hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
+        !active && "hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25",
       )}
     >
       <Icon className="h-4 w-4" strokeWidth={2} aria-hidden />

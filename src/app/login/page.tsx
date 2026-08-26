@@ -35,11 +35,11 @@ function loginHref(mode: LoginMode, next: string): string {
 }
 
 const inputClassName =
-  "min-h-11 rounded-pill border border-hairline bg-white px-md text-[16px] text-ink outline-none transition-colors focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/25";
+  "min-h-11 rounded-pill border border-hairline bg-surface px-md text-[16px] text-ink outline-none transition-colors focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/25";
 const choiceClassName =
-  "inline-flex min-h-11 flex-1 items-center justify-center rounded-pill px-sm text-center text-[13px] font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-primary/25";
+  "inline-flex min-h-11 flex-1 items-center justify-center rounded-pill px-sm text-center text-[13px] font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/25";
 const textLinkClassName =
-  "inline-flex min-h-11 items-center justify-center rounded-pill px-sm text-center text-[13px] text-grey outline-none transition-colors hover:text-ink focus-visible:ring-[3px] focus-visible:ring-primary/25";
+  "inline-flex min-h-11 items-center justify-center rounded-pill px-sm text-center text-[13px] text-grey outline-none transition-colors hover:text-ink focus-visible:ring-[3px] focus-visible:ring-accent/25";
 
 function EmailField({ error }: { error?: string }) {
   return (
@@ -159,7 +159,7 @@ export default async function LoginPage({
       <div className="glass w-full max-w-[420px] rounded-card p-lg sm:p-xl">
         <div className="mb-lg text-center">
           <div className="mb-sm font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink">
-            TERR<span className="text-primary">OIR</span>
+            TERR<span className="text-accent">OIR</span>
           </div>
           <h1 className="font-serif text-heading-sm leading-tight text-ink">
             {title}
@@ -190,7 +190,7 @@ export default async function LoginPage({
                   className={`${choiceClassName} ${
                     loginMode === value
                       ? "bg-primary text-white"
-                      : "text-grey hover:bg-white hover:text-ink"
+                      : "text-grey hover:bg-surface hover:text-ink"
                   }`}
                 >
                   {label}
@@ -291,7 +291,7 @@ export default async function LoginPage({
               </p>
               <a
                 href="/api/dev-login"
-                className="flex min-h-11 items-center justify-center rounded-pill border border-beige-deep bg-white px-md text-center text-[13px] font-medium text-ink outline-none hover:bg-bridge-surface focus-visible:ring-[3px] focus-visible:ring-primary/25"
+                className="flex min-h-11 items-center justify-center rounded-pill border border-beige-deep bg-surface px-md text-center text-[13px] font-medium text-ink outline-none hover:bg-bridge-surface focus-visible:ring-[3px] focus-visible:ring-accent/25"
               >
                 Sign in as {devBypassEmail}
               </a>
@@ -311,7 +311,7 @@ function ErrorMessage({ error }: { error?: string }) {
       id="login-error"
       role="alert"
       aria-live="assertive"
-      className="rounded-md border border-primary/30 bg-blush-wash p-md text-[13px] text-primary"
+      className="rounded-md border border-accent/30 bg-blush-wash p-md text-[13px] text-accent"
     >
       {error}
     </div>

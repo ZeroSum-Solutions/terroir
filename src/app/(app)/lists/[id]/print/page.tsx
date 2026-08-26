@@ -70,7 +70,7 @@ export default async function WineListPrintPage({
   })).filter((s) => s.items.length > 0);
 
   return (
-    <main className="mx-auto min-h-screen max-w-[720px] bg-white px-lg py-2xl print:px-0 print:py-md">
+    <main className="mx-auto min-h-screen max-w-[720px] bg-surface px-lg py-2xl print:px-0 print:py-md">
       <PrintControls listId={id} />
 
       <header className="mb-2xl border-b border-ink/20 pb-lg print:mb-xl print:pb-md">

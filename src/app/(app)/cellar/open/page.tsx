@@ -80,7 +80,7 @@ export default async function OpenBottlesPage() {
       )}
 
       {openBottles.length > 0 && (
-        <div className="rounded-card border border-hairline bg-white overflow-hidden">
+        <div className="rounded-card card-surface overflow-hidden">
           <div className="hidden md:grid md:grid-cols-[1fr_120px_160px_120px_100px] gap-md px-lg py-sm border-b border-hairline bg-bridge-surface">
             <span className="text-caption font-medium text-grey uppercase">Wine</span>
             <span className="text-caption font-medium text-grey uppercase">Format</span>

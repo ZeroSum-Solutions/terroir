@@ -166,7 +166,7 @@ export function ScanReview({
       <header className="mb-lg">
         <Link
           href="/scan"
-          className="mb-md inline-flex min-h-11 items-center gap-xs text-[13px] text-grey hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+          className="mb-md inline-flex min-h-11 items-center gap-xs text-[13px] text-grey hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
         >
           <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
           Back to scanner
@@ -179,7 +179,7 @@ export function ScanReview({
             <button
               type="button"
               onClick={handleExportCsv}
-              className="flex h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+              className="flex h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
               title="Download line items as CSV"
             >
               <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -191,7 +191,7 @@ export function ScanReview({
       </header>
       <div className="grid gap-md md:grid-cols-2">
         {/* Metadata card */}
-        <div className="rounded-card border border-hairline bg-white p-md md:col-span-2">
+        <div className="rounded-card card-surface p-md md:col-span-2">
           <div className="grid grid-cols-2 gap-sm md:grid-cols-4 md:gap-md">
             <div>
               <div className="text-caption font-medium uppercase tracking-[0.18em] text-grey">Distributor</div>
@@ -221,7 +221,7 @@ export function ScanReview({
             {lowC > 0 && (
               <>
                 <span aria-hidden className="text-grey">·</span>
-                <span className="inline-flex items-center gap-xs rounded-pill bg-blush-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-primary">
+                <span className="inline-flex items-center gap-xs rounded-pill bg-blush-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-accent">
                   <AlertTriangle className="h-3 w-3" strokeWidth={2.5} aria-hidden="true" />
                   {lowC} to review
                 </span>
@@ -231,11 +231,11 @@ export function ScanReview({
         </div>
         {/* Invoice image */}
         {hasImage && (
-          <div className="rounded-card border border-hairline bg-white p-md md:sticky md:top-[72px] md:self-start">
+          <div className="rounded-card card-surface p-md md:sticky md:top-[72px] md:self-start">
             <div className="mb-sm text-caption font-medium uppercase tracking-[0.18em] text-grey">Original invoice</div>
             {imageLoading ? (
               <div className="flex h-[200px] items-center justify-center rounded-lg bg-bridge-surface">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
               </div>
             ) : imageUrl ? (
               <>
@@ -244,7 +244,7 @@ export function ScanReview({
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Open full-resolution invoice from ${distributor} in a new tab`}
-                  className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                  className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                 >
                   <Image
                     src={imageUrl}
@@ -259,7 +259,7 @@ export function ScanReview({
                   href={imageUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-sm inline-flex items-center gap-xs text-[12px] text-grey hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                  className="mt-sm inline-flex items-center gap-xs text-[12px] text-grey hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                 >
                   <ExternalLink className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                   Open full size
@@ -307,7 +307,7 @@ export function ScanReview({
                       <td className="p-sm"><div className="flex justify-center"><QtyStepper value={it.qty} onChange={(v) => updateField(it.id, "qty", v)} /></div></td>
                       <td className="p-sm"><MoneyInput value={it.unitCost} low={isLow(it, "unitCost")} edited={isEdited(it, "unitCost")} onCommit={(v) => updateField(it.id, "unitCost", v)} /></td>
                       <td className="p-sm text-center">
-                        <IconButton label={`Remove ${it.name}`} onClick={() => removeItem(it.id)} className="rounded-pill text-grey hover:bg-white hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25">
+                        <IconButton label={`Remove ${it.name}`} onClick={() => removeItem(it.id)} className="rounded-pill text-grey hover:bg-surface hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25">
                           <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                         </IconButton>
                       </td>
@@ -332,7 +332,7 @@ export function ScanReview({
           </div>
 
           {/* Action bar */}
-          <div className="sticky bottom-[64px] z-10 mt-md flex flex-col gap-sm rounded-card border border-hairline bg-white p-md md:static md:bottom-auto md:mt-lg md:flex-row md:items-center md:justify-between" style={{ marginBottom: "calc(env(safe-area-inset-bottom) + 8px)" }}>
+          <div className="sticky bottom-[64px] z-10 mt-md flex flex-col gap-sm rounded-card card-surface p-md md:static md:bottom-auto md:mt-lg md:flex-row md:items-center md:justify-between" style={{ marginBottom: "calc(env(safe-area-inset-bottom) + 8px)" }}>
             <div className="text-[13px] text-grey md:text-[14px]">
               <span className="font-medium text-ink">{items.length} wines</span>
               <span className="mx-xs text-grey">·</span>
@@ -343,7 +343,7 @@ export function ScanReview({
                 type="button"
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
+                className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
               >
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" /> : <Save className="h-4 w-4" strokeWidth={2} aria-hidden="true" />}
                 <span>{isSaving ? "Saving..." : "Save Edits"}</span>
@@ -352,7 +352,7 @@ export function ScanReview({
                 type="button"
                 onClick={handleCommit}
                 disabled={isCommitting || commitOk}
-                className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
+                className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
               >
                 {isCommitting ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" /> : null}
                 <span>{isCommitting ? "Committing..." : commitOk ? "Committed ✓" : "Commit to Inventory"}</span>

@@ -34,7 +34,7 @@ const LOW_CONFIDENCE_THRESHOLD = 0.75;
 function confidenceBadgeClass(confidence: number) {
   if (confidence >= 0.9) return "bg-sage-wash text-sage-ink";
   if (confidence >= LOW_CONFIDENCE_THRESHOLD) return "bg-powder-wash text-powder-ink";
-  return "bg-blush-wash text-primary";
+  return "bg-blush-wash text-accent";
 }
 
 /**
@@ -62,7 +62,7 @@ function InfoRow({
           {label}
         </span>
         {low && (
-          <span className="inline-flex items-center gap-[3px] rounded-pill bg-blush-wash px-xs py-[1px] text-[10px] font-medium uppercase tracking-wide text-primary">
+          <span className="inline-flex items-center gap-[3px] rounded-pill bg-blush-wash px-xs py-[1px] text-[10px] font-medium uppercase tracking-wide text-accent">
             <AlertTriangle className="h-3 w-3" strokeWidth={2.25} aria-hidden="true" />
             Needs review
           </span>
@@ -165,8 +165,8 @@ export function BottleResultsView({
       </header>
 
       {lowConfidence && (
-        <div className="mb-md flex items-start gap-sm rounded-card border border-primary/20 bg-blush-wash/60 px-md py-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-primary" strokeWidth={2} />
+        <div className="mb-md flex items-start gap-sm rounded-card border border-accent/20 bg-blush-wash/60 px-md py-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-accent" strokeWidth={2} />
           <div className="text-[13px] text-ink">
             <span className="font-medium">
               Low AI match confidence ({Math.round(active.confidence * 100)}%).
@@ -177,7 +177,7 @@ export function BottleResultsView({
         </div>
       )}
 
-      <div className="rounded-card border border-hairline bg-white p-md md:p-lg">
+      <div className="rounded-card card-surface p-md md:p-lg">
         {/* Confidence badge — the model's self-assessment, never a measured accuracy. */}
         <div className="mb-md flex items-center justify-between">
           <span className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
@@ -201,10 +201,10 @@ export function BottleResultsView({
                   aria-pressed={i === activeIndex}
                   onClick={() => setActiveIndex(i)}
                   className={cn(
-                    "flex min-h-11 items-center gap-xs rounded-pill border px-sm py-xs text-[13px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+                    "flex min-h-11 items-center gap-xs rounded-pill border px-sm py-xs text-[13px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
                     i === activeIndex
                       ? "border-ink bg-ink text-beige"
-                      : "border-hairline bg-white text-ink hover:bg-bridge-surface",
+                      : "border-hairline bg-surface text-ink hover:bg-bridge-surface",
                   )}
                 >
                   <span className="max-w-[160px] truncate">{candidate.name || "Unnamed match"}</span>
@@ -243,7 +243,7 @@ export function BottleResultsView({
             <button
               type="button"
               onClick={handleCorrect}
-              className="flex h-11 items-center justify-center gap-xs self-start rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="flex h-11 items-center justify-center gap-xs self-start rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <Pencil className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
               Something&rsquo;s off — correct details
@@ -335,7 +335,7 @@ export function BottleResultsView({
         <button
           type="button"
           onClick={onScanAnother}
-          className="flex h-12 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary md:h-[38px]"
+          className="flex h-12 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:h-[38px]"
         >
           <RotateCcw className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           Scan another
@@ -344,7 +344,7 @@ export function BottleResultsView({
           type="button"
           onClick={stage === "review" ? handleConfirm : handleSaveCorrected}
           disabled={isSaving || !canCommit}
-          className="flex h-12 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 md:h-[38px]"
+          className="flex h-12 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50 md:h-[38px]"
         >
           {isSaving ? (
             <>Saving...</>

@@ -17,7 +17,7 @@ export default function TeamLoading() {
           {Array.from({ length: 3 }, (_, i) => (
             <div
               key={i}
-              className="grid gap-md rounded-card border border-hairline bg-canvas p-md sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              className="grid gap-md rounded-card card-surface p-md sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
             >
               <div className="space-y-xs">
                 <Skeleton className="h-[14px] w-32" />

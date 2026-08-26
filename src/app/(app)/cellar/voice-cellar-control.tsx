@@ -193,16 +193,16 @@ export function VoiceCellarControl({
         aria-pressed={recording}
         disabled={busy}
         onClick={recording ? stopRecording : startRecording}
-        className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-pill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 md:hidden ${
+        className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-pill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 md:hidden ${
           recording
             ? "bg-primary text-white"
-            : "text-ink-soft hover:bg-white/50 disabled:opacity-50"
+            : "text-ink-soft hover:bg-surface/60 disabled:opacity-50"
         }`}
       >
         <Mic className="h-5 w-5" strokeWidth={2} aria-hidden />
         {recording && (
           <span
-            className="absolute inset-0 animate-ping rounded-pill border border-primary/35"
+            className="absolute inset-0 animate-ping rounded-pill border border-accent/35"
             aria-hidden
           />
         )}
@@ -251,7 +251,7 @@ function VoiceDisambiguationSheet({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/30 md:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim md:items-center"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -261,7 +261,7 @@ function VoiceDisambiguationSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={headingId}
-        className="w-full rounded-t-card bg-canvas md:max-w-[440px] md:rounded-card md:border md:border-hairline"
+        className="w-full rounded-t-card bg-surface md:max-w-[440px] md:rounded-card md:border md:border-hairline"
       >
         <header className="flex items-start justify-between gap-sm border-b border-hairline px-md py-sm">
           <div>
@@ -274,7 +274,7 @@ function VoiceDisambiguationSheet({
             type="button"
             onClick={onClose}
             aria-label="Close wine choices"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
@@ -285,7 +285,7 @@ function VoiceDisambiguationSheet({
               key={candidate.itemId}
               type="button"
               onClick={() => onChoose(candidate)}
-              className="min-h-11 rounded-card border border-hairline bg-white px-md py-sm text-left hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="min-h-11 rounded-card card-surface px-md py-sm text-left hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <span className="block text-[14px] font-medium text-ink">
                 {candidate.producer} · {candidate.name}

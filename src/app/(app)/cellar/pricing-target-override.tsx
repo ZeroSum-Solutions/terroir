@@ -195,7 +195,7 @@ export function PricingTargetOverride({
                       (e.target as HTMLInputElement).blur();
                   }}
                   aria-label="Per-wine pour cost target"
-                  className="h-[30px] w-full rounded-pill border border-hairline bg-white px-xs text-right font-mono text-[13px]"
+                  className="h-[30px] w-full rounded-pill border border-hairline bg-surface px-xs text-right font-mono text-[13px]"
                 />
                 <span className="text-[11px] text-grey">%</span>
               </div>
@@ -224,7 +224,7 @@ export function PricingTargetOverride({
                       (e.target as HTMLInputElement).blur();
                   }}
                   aria-label="Per-wine markup ratio target"
-                  className="h-[30px] w-full rounded-pill border border-hairline bg-white px-xs text-right font-mono text-[13px]"
+                  className="h-[30px] w-full rounded-pill border border-hairline bg-surface px-xs text-right font-mono text-[13px]"
                 />
                 <span className="text-[11px] text-grey">×</span>
               </div>
@@ -249,7 +249,7 @@ export function PricingTargetOverride({
           {error && (
             <p
               role="alert"
-              className="mt-xs text-[11px] text-primary"
+              className="mt-xs text-[11px] text-accent"
             >
               {error}
             </p>

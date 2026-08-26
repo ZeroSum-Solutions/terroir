@@ -42,6 +42,8 @@ export function ThemeToggle() {
   const [choice, setChoice] = useState<ThemeChoice>("system");
   // The stored choice is only knowable on the client; render the neutral
   // default first so server and client markup agree.
+  // The post-hydration correction is intentional and covered by the mount test.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setChoice(readStoredChoice()), []);
 
   return (
@@ -61,7 +63,7 @@ export function ThemeToggle() {
             setChoice(value);
             applyChoice(value);
           }}
-          className={`flex h-8 w-8 items-center justify-center rounded-pill transition-colors focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+          className={`flex h-8 w-8 items-center justify-center rounded-pill transition-colors focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
             choice === value
               ? "bg-surface-inverse text-on-inverse"
               : "text-grey hover:bg-bridge-surface hover:text-ink"

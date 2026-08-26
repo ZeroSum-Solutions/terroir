@@ -58,11 +58,11 @@ describe("Fab", () => {
       ...document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
     ];
 
-    expect(trigger.className).toContain("focus-visible:outline-primary");
+    expect(trigger.className).toContain("focus-visible:outline-accent");
     expect(trigger.className).toContain("focus-visible:outline-offset-2");
     expect(trigger.className).not.toMatch(/focus:ring/);
     for (const action of actions) {
-      expect(action.className).toContain("focus-visible:outline-primary");
+      expect(action.className).toContain("focus-visible:outline-accent");
       expect(action.className).not.toMatch(/focus:ring/);
     }
   });

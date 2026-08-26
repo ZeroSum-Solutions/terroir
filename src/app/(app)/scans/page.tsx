@@ -152,10 +152,10 @@ export default async function ScansPage({
             role="radio"
             aria-checked={active}
             aria-label={`${f.label} (${countForChip})`}
-            className={`inline-flex min-h-11 items-center gap-xs rounded-pill border px-md text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${
+            className={`inline-flex min-h-11 items-center gap-xs rounded-pill border px-md text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 ${
               active
                 ? "border-ink bg-ink text-beige"
-                : "border-ink/25 bg-white text-grey hover:bg-bridge-surface"
+                : "border-ink/25 bg-surface text-grey hover:bg-bridge-surface"
             }`}
           >
             <span>{f.label}</span>
@@ -177,7 +177,7 @@ export default async function ScansPage({
     <header className="mb-lg">
       <Link
         href="/scan"
-        className="mb-md inline-flex min-h-11 items-center gap-xs text-[13px] text-grey hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+        className="mb-md inline-flex min-h-11 items-center gap-xs text-[13px] text-grey hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
       >
         <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
         Back to scanner
@@ -229,7 +229,7 @@ export default async function ScansPage({
           action={
             <Link
               href="/scan"
-              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
+              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
             >
               Scan an invoice
             </Link>
@@ -279,7 +279,7 @@ export default async function ScansPage({
                 <td className="px-md py-sm">
                   <Link
                     href={`/scan/${s.id}`}
-                    className="block text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                    className="block text-ink hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                   >
                     <span className="font-mono text-[13px] tabular">
                       {s.invoice_date ?? s.created_at.slice(0, 10)}
@@ -289,7 +289,7 @@ export default async function ScansPage({
                 <td className="px-md py-sm">
                   <Link
                     href={`/scan/${s.id}`}
-                    className="block font-medium text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                    className="block font-medium text-ink hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                   >
                     {s.distributor_name}
                   </Link>
@@ -297,7 +297,7 @@ export default async function ScansPage({
                 <td className="px-md py-sm">
                   <Link
                     href={`/scan/${s.id}`}
-                    className="block font-mono text-[13px] text-grey focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                    className="block font-mono text-[13px] text-grey focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                   >
                     {s.invoice_number ?? "—"}
                   </Link>
@@ -305,13 +305,13 @@ export default async function ScansPage({
                 <td className="px-md py-sm text-center">
                   <Link
                     href={`/scan/${s.id}`}
-                    className="block font-mono tabular text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                    className="block font-mono tabular text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                   >
                     {s.item_count}
                   </Link>
                 </td>
                 <td className="px-md py-sm text-center">
-                  <Link href={`/scan/${s.id}`} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25">
+                  <Link href={`/scan/${s.id}`} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25">
                     <span
                       className={`inline-block rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide ${statusBadge(s.status)}`}
                     >
@@ -320,7 +320,7 @@ export default async function ScansPage({
                   </Link>
                 </td>
                 <td className="px-md py-sm text-center">
-                  <Link href={`/scan/${s.id}`} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25">
+                  <Link href={`/scan/${s.id}`} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25">
                     <span className="font-mono text-[13px] text-grey tabular">
                       {s.accuracy_score != null
                         ? `${Math.round(s.accuracy_score * 100)}%`
@@ -340,7 +340,7 @@ export default async function ScansPage({
           <Link
             key={s.id}
             href={`/scan/${s.id}`}
-            className="flex items-center gap-md rounded-lg border border-hairline bg-white p-md hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+            className="flex items-center gap-md rounded-lg card-surface p-md hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
           >
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-bridge-surface">
               <FileText className="h-5 w-5 text-grey" strokeWidth={1.5} />
@@ -383,13 +383,13 @@ export default async function ScansPage({
         {page > 1 ? (
           <Link
             href={`/scans${buildQuery({ page: page - 1, status })}`}
-            className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+            className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={2} />
             Previous
           </Link>
         ) : (
-          <span className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-white px-md text-[13px] font-medium text-grey opacity-50">
+          <span className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-surface px-md text-[13px] font-medium text-grey opacity-50">
             <ChevronLeft className="h-4 w-4" strokeWidth={2} />
             Previous
           </span>
@@ -400,13 +400,13 @@ export default async function ScansPage({
         {hasMore ? (
           <Link
             href={`/scans${buildQuery({ page: page + 1, status })}`}
-            className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+            className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
           >
             Next
             <ChevronRight className="h-4 w-4" strokeWidth={2} />
           </Link>
         ) : (
-          <span className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-white px-md text-[13px] font-medium text-grey opacity-50">
+          <span className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-surface px-md text-[13px] font-medium text-grey opacity-50">
             Next
             <ChevronRight className="h-4 w-4" strokeWidth={2} />
           </span>

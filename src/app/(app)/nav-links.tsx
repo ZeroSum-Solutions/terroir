@@ -53,8 +53,8 @@ export function DesktopNavLinks({ role }: { role: Role }) {
             className={cn(
               "inline-flex min-h-11 min-w-11 items-center justify-center py-sm text-[13px] font-normal underline-offset-4 transition-colors",
               active
-                ? "text-primary underline decoration-1"
-                : "text-ink-soft no-underline hover:text-primary",
+                ? "text-accent underline decoration-1"
+                : "text-ink-soft no-underline hover:text-accent",
             )}
           >
             {label}
@@ -86,12 +86,12 @@ export function MobileNavLinks({ role }: { role: Role }) {
             className={cn(
               "flex min-h-[64px] flex-1 flex-col items-center justify-center gap-xs px-2xs py-sm text-[11px] font-medium transition-colors",
               active
-                ? "border-t-2 border-primary text-primary"
+                ? "border-t-2 border-accent text-accent"
                 : "border-t-2 border-transparent text-grey active:bg-bridge-surface",
             )}
           >
             <Icon
-              className={cn("h-5 w-5", active && "text-primary")}
+              className={cn("h-5 w-5", active && "text-accent")}
               strokeWidth={active ? 2 : 1.75}
               aria-hidden
             />

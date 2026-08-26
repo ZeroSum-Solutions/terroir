@@ -59,7 +59,7 @@ describe("ReconcileList variance presentation", () => {
       actual: 130,
       copy: varianceCopy(20, "over expected"),
       badgeTone: "bg-sage-wash",
-      cardClasses: ["border-hairline", "bg-white"],
+      cardClasses: ["card-surface"],
     },
     {
       name: "subthreshold under",
@@ -67,7 +67,7 @@ describe("ReconcileList variance presentation", () => {
       actual: 90,
       copy: varianceCopy(-20, "under expected"),
       badgeTone: "bg-blush-wash",
-      cardClasses: ["border-hairline", "bg-white"],
+      cardClasses: ["card-surface"],
     },
     {
       name: "exact",
@@ -75,7 +75,7 @@ describe("ReconcileList variance presentation", () => {
       actual: 110,
       copy: varianceCopy(0, "exact"),
       badgeTone: "bg-bridge-surface",
-      cardClasses: ["border-hairline", "bg-white"],
+      cardClasses: ["card-surface"],
     },
     {
       name: "zero expected without a flagged card",
@@ -83,7 +83,7 @@ describe("ReconcileList variance presentation", () => {
       actual: 20,
       copy: varianceCopy(20, "over expected"),
       badgeTone: "bg-sage-wash",
-      cardClasses: ["border-hairline", "bg-white"],
+      cardClasses: ["card-surface"],
     },
     {
       name: "flagged over",
@@ -99,7 +99,7 @@ describe("ReconcileList variance presentation", () => {
       actual: 50,
       copy: varianceCopy(-60, "under expected"),
       badgeTone: "bg-blush-wash",
-      cardClasses: ["border-primary/40", "bg-blush-wash"],
+      cardClasses: ["border-accent/40", "bg-blush-wash"],
     },
   ])("renders $name truthfully", async ({ expected, actual, copy, badgeTone, cardClasses }) => {
     const fixture = { ...item, open_remaining_ml: expected };

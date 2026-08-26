@@ -135,7 +135,7 @@ export function PriceBand({
           className="absolute left-1/2 -top-[6px] block h-[12px] w-[12px] -translate-x-1/2 rounded-full"
           style={{
             background: "var(--color-primary)",
-            boxShadow: "0 0 0 3px var(--color-canvas, #ffffff)",
+            boxShadow: "0 0 0 3px var(--color-canvas)",
           }}
         />
       </div>

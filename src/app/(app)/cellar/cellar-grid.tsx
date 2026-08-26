@@ -48,7 +48,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
   };
 
   return (
-    <div className="mx-auto w-full max-w-[420px] rounded-card border border-hairline bg-white p-lg">
+    <div className="mx-auto w-full max-w-[420px] rounded-card card-surface p-lg">
       <div className="mb-lg text-center">
         <Grid2x2
           className="mx-auto mb-md h-10 w-10 text-grey"
@@ -76,7 +76,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
             onChange={(e) =>
               setSetupRows(Math.max(1, Math.min(26, +e.target.value)))
             }
-            className="tabular mt-xs w-full rounded-pill border border-ink/20 bg-white px-md py-sm text-center text-[16px] text-ink"
+            className="tabular mt-xs w-full rounded-pill border border-ink/20 bg-surface px-md py-sm text-center text-[16px] text-ink"
           />
         </div>
         <div>
@@ -91,7 +91,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
             onChange={(e) =>
               setSetupCols(Math.max(1, Math.min(30, +e.target.value)))
             }
-            className="tabular mt-xs w-full rounded-pill border border-ink/20 bg-white px-md py-sm text-center text-[16px] text-ink"
+            className="tabular mt-xs w-full rounded-pill border border-ink/20 bg-surface px-md py-sm text-center text-[16px] text-ink"
           />
         </div>
       </div>
@@ -112,8 +112,8 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
             }}
             className={`flex-1 rounded-pill border px-sm py-xs text-[13px] font-medium transition-colors ${
               setupRows === preset.r && setupCols === preset.c
-                ? "border-primary bg-blush-wash text-primary"
-                : "border-ink/20 bg-white text-grey hover:border-beige-deep"
+                ? "border-accent bg-blush-wash text-accent"
+                : "border-ink/20 bg-surface text-grey hover:border-beige-deep"
             }`}
           >
             {preset.label}
@@ -153,7 +153,7 @@ export function CellarGridView({
     <>
       <div className="flex flex-col gap-lg md:flex-row">
         {/* SVG Grid */}
-        <div className="flex-1 overflow-x-auto rounded-card border border-hairline bg-white p-md">
+        <div className="flex-1 overflow-x-auto rounded-card card-surface p-md">
           <svg
             width={svgWidth}
             height={svgHeight}
@@ -262,7 +262,7 @@ export function CellarGridView({
 
         {/* Bin detail drawer */}
         {selectedBin && (
-          <div className="w-full shrink-0 rounded-card border border-hairline bg-white p-lg md:w-[280px]">
+          <div className="w-full shrink-0 rounded-card card-surface p-lg md:w-[280px]">
             <div className="mb-md flex items-center justify-between">
               <h3 className="tabular text-[18px] font-medium text-ink">
                 Bin {selectedBin}

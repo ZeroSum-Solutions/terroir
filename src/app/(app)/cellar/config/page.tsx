@@ -182,7 +182,7 @@ export default function CellarConfigPage() {
   if (!loaded) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
       </div>
     );
   }
@@ -194,7 +194,7 @@ export default function CellarConfigPage() {
           type="button"
           onClick={() => router.back()}
           aria-label="Back to cellar"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           <ArrowLeft className="h-5 w-5" strokeWidth={2} aria-hidden />
         </button>
@@ -210,7 +210,7 @@ export default function CellarConfigPage() {
       {error && (
         <div
           role="alert"
-          className="mb-md rounded-md border border-primary/30 bg-blush-wash px-md py-sm text-[13px] text-primary"
+          className="mb-md rounded-md border border-accent/30 bg-blush-wash px-md py-sm text-[13px] text-accent"
         >
           {error}
         </div>
@@ -226,7 +226,7 @@ export default function CellarConfigPage() {
             items={sections.map((s) => s.id)}
             strategy={verticalListSortingStrategy}
           >
-            <ul className="mb-lg divide-y divide-hairline rounded-card border border-hairline bg-white">
+            <ul className="mb-lg divide-y divide-hairline rounded-card card-surface">
               {sections.map((section) => (
                 <SortableSectionItem
                   key={section.id}
@@ -259,7 +259,7 @@ export default function CellarConfigPage() {
             if (e.key === "Enter") addSection();
           }}
           placeholder="New section name (e.g. Reds by Region)"
-          className="min-w-0 flex-1 rounded-pill border border-hairline px-sm py-sm text-[14px] text-ink placeholder:text-grey focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className="min-w-0 flex-1 rounded-pill border border-hairline px-sm py-sm text-[14px] text-ink placeholder:text-grey focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           disabled={busy}
         />
         <button
@@ -268,7 +268,7 @@ export default function CellarConfigPage() {
           disabled={busy || !newName.trim()}
           className={cn(
             "flex h-[44px] shrink-0 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors",
-            "hover:bg-primary-hover disabled:opacity-60 focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+            "hover:bg-primary-hover disabled:opacity-60 focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
           )}
         >
           <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -278,14 +278,14 @@ export default function CellarConfigPage() {
 
       {deleteTarget && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim"
           onClick={() => setDeleteTarget(null)}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="delete-section-heading"
-            className="mx-md w-full max-w-[420px] rounded-card border border-hairline bg-white p-lg"
+            className="mx-md w-full max-w-[420px] rounded-card card-surface p-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <h3
@@ -302,7 +302,7 @@ export default function CellarConfigPage() {
                 type="button"
                 onClick={() => setDeleteTarget(null)}
                 disabled={busy}
-                className="min-h-11 flex-1 rounded-pill border border-ink/25 px-md py-sm text-[14px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                className="min-h-11 flex-1 rounded-pill border border-ink/25 px-md py-sm text-[14px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 Cancel
               </button>
@@ -310,7 +310,7 @@ export default function CellarConfigPage() {
                 type="button"
                 onClick={confirmDelete}
                 disabled={busy}
-                className="min-h-11 flex-1 rounded-pill bg-primary px-md py-sm text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                className="min-h-11 flex-1 rounded-pill bg-primary px-md py-sm text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 Delete
               </button>
@@ -379,7 +379,7 @@ function SortableSectionItem({
               if (e.key === "Enter") onCommitEdit(section.id);
               if (e.key === "Escape") onCancelEdit();
             }}
-            className="min-h-11 min-w-0 flex-1 rounded-pill border border-hairline px-sm py-sm text-[14px] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="min-h-11 min-w-0 flex-1 rounded-pill border border-hairline px-sm py-sm text-[14px] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             autoFocus
           />
           <button
@@ -387,7 +387,7 @@ function SortableSectionItem({
             onClick={() => onCommitEdit(section.id)}
             disabled={!editName.trim()}
             aria-label="Save rename"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-sage-ink hover:bg-sage-wash disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-sage-ink hover:bg-sage-wash disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <Check className="h-4 w-4" strokeWidth={2} aria-hidden />
           </button>
@@ -395,7 +395,7 @@ function SortableSectionItem({
             type="button"
             onClick={onCancelEdit}
             aria-label="Cancel rename"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <X className="h-4 w-4" strokeWidth={2} aria-hidden />
           </button>
@@ -408,7 +408,7 @@ function SortableSectionItem({
               {...attributes}
               {...listeners}
               aria-label={`Drag to reorder ${section.name}`}
-              className="flex h-11 w-11 shrink-0 touch-none items-center justify-center cursor-grab active:cursor-grabbing text-grey hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="flex h-11 w-11 shrink-0 touch-none items-center justify-center cursor-grab active:cursor-grabbing text-grey hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
@@ -423,7 +423,7 @@ function SortableSectionItem({
               onClick={() => onStartEdit(section)}
               disabled={busy}
               aria-label={`Rename ${section.name}`}
-              className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <Pencil className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
@@ -432,7 +432,7 @@ function SortableSectionItem({
               onClick={() => onDelete(section)}
               disabled={busy}
               aria-label={`Delete ${section.name}`}
-              className="flex h-11 w-11 items-center justify-center rounded-pill text-primary/70 hover:bg-blush-wash hover:text-primary disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="flex h-11 w-11 items-center justify-center rounded-pill text-accent/70 hover:bg-blush-wash hover:text-accent disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>

@@ -69,9 +69,9 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
       aria-modal="true"
       aria-labelledby={headingId}
       ref={dialogRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-lg"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim px-lg"
     >
-      <div className="w-full max-w-[420px] rounded-card border border-hairline bg-white p-lg">
+      <div className="w-full max-w-[420px] rounded-card card-surface p-lg">
         <h2 id={headingId} className="font-serif text-[18px] font-medium text-ink">
           {item.producer} {item.name}
         </h2>
@@ -87,8 +87,8 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
                 type="button"
                 onClick={() => handleConfirm(ml)}
                 className={isDefault
-                  ? "min-h-11 rounded-pill border-2 border-primary bg-blush-wash text-[14px] font-semibold text-primary hover:bg-blush-wash/70"
-                  : "min-h-11 rounded-pill border border-hairline bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface"
+                  ? "min-h-11 rounded-pill border-2 border-accent bg-blush-wash text-[14px] font-semibold text-accent hover:bg-blush-wash/70"
+                  : "min-h-11 rounded-pill border border-hairline bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface"
                 }
               >
                 {oz} oz
@@ -128,7 +128,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
                   }
                 }}
                 placeholder="5.0"
-                className="min-h-11 w-[80px] rounded-pill border border-hairline bg-white px-sm text-[14px] outline-none focus:border-primary focus:ring-2 focus:ring-blush-wash"
+                className="min-h-11 w-[80px] rounded-pill border border-hairline bg-surface px-sm text-[14px] outline-none focus:border-accent focus:ring-2 focus:ring-blush-wash"
               />
             )}
           </Field>
@@ -157,7 +157,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
               maxLength={500}
               rows={2}
               placeholder="e.g., comp for VIP"
-              className="mt-xs min-h-11 w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+              className="mt-xs min-h-11 w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-blush-wash"
             />
           )}
         </Field>
@@ -166,7 +166,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
           <button
             type="button"
             onClick={handleCancel}
-            className="min-h-11 rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface"
+            className="min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface"
           >
             Cancel
           </button>

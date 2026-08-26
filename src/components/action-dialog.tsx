@@ -84,7 +84,7 @@ export function ActionDialog({
   return (
     <div
       data-action-dialog-backdrop="true"
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-ink/40 p-md sm:items-center"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-scrim p-md sm:items-center"
       onMouseDown={handleBackdrop}
     >
       <div
@@ -94,7 +94,7 @@ export function ActionDialog({
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         aria-busy={busy || undefined}
-        className="w-full rounded-t-card border border-hairline bg-canvas p-lg sm:max-w-[420px] sm:rounded-card"
+        className="w-full rounded-t-card card-surface p-lg sm:max-w-[420px] sm:rounded-card"
       >
         <h2 id={titleId} className="font-serif text-[24px] font-normal leading-tight text-ink">
           {title}
@@ -114,7 +114,7 @@ export function ActionDialog({
             type="button"
             aria-disabled={busy || undefined}
             onClick={closeWhenIdle}
-            className="min-h-11 rounded-pill border border-hairline bg-white px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
+            className="min-h-11 rounded-pill border border-hairline bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
           >
             {cancelLabel}
           </button>
@@ -123,7 +123,7 @@ export function ActionDialog({
             disabled={busy}
             onClick={onConfirm}
             className={cn(
-              "min-h-11 rounded-pill px-lg text-[14px] font-medium text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60",
+              "min-h-11 rounded-pill px-lg text-[14px] font-medium text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60",
               tone === "danger"
                 ? "bg-primary hover:bg-primary-hover"
                 : "bg-ink hover:bg-ink-soft",

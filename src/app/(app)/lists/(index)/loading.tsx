@@ -11,7 +11,7 @@ export default function ListsLoading() {
         </header>
         <div className="grid gap-md md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
           {Array.from({ length: 6 }, (_, i) => (
-            <div key={i} className="rounded-card border border-hairline bg-canvas p-md">
+            <div key={i} className="rounded-card card-surface p-md">
               <div className="flex items-start justify-between gap-sm">
                 <Skeleton className="h-[18px] w-40" />
                 <Skeleton className="h-[20px] w-16 rounded-full" />

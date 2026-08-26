@@ -104,7 +104,7 @@ export function RefreshRetailButton() {
         onClick={onClick}
         disabled={busy}
         className={cn(
-          "inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:opacity-60",
+          "inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:opacity-60",
           busy && "cursor-wait",
         )}
       >
@@ -133,7 +133,7 @@ export function RefreshRetailButton() {
       )}
 
       {errorMsg && (
-        <p role="alert" className="text-[12px] text-primary">
+        <p role="alert" className="text-[12px] text-accent">
           {errorMsg}
         </p>
       )}

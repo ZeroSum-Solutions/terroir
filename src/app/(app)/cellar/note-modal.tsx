@@ -57,14 +57,14 @@ export function NoteModal({
               maxLength={500}
               rows={3}
               placeholder="e.g., last bottle just poured"
-              className="mt-xs min-h-11 w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+              className="mt-xs min-h-11 w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-blush-wash"
             />
           )}
         </Field>
         {error && (
           <p
             role="alert"
-            className="mt-sm rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"
+            className="mt-sm rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[13px] text-accent"
           >
             {error}
           </p>

@@ -58,7 +58,7 @@ export default function ScansLoading() {
           return (
             <div
               key={i}
-              className="flex items-center gap-md rounded-lg border border-hairline bg-white p-md"
+              className="flex items-center gap-md rounded-lg card-surface p-md"
             >
               <Skeleton className="h-11 w-11 shrink-0 rounded-pill" />
               <div className="min-w-0 flex-1">

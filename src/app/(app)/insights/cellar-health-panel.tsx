@@ -21,7 +21,7 @@ const SEGMENT_BG: Record<CellarHealthSegment, string> = {
   hold: "bg-sage-wash",
   dead_stock: "bg-amber-wash",
   cash_trap: "bg-blush-wash",
-  healthy: "bg-white",
+  healthy: "bg-surface",
 };
 
 export function CellarHealthPanel({
@@ -47,7 +47,7 @@ export function CellarHealthPanel({
         </div>
         {canRecompute && <RecomputeCellarHealthButton />}
       </div>
-      <div className="grid gap-xs rounded-card border border-hairline bg-white p-md md:grid-cols-5">
+      <div className="grid gap-xs rounded-card card-surface p-md md:grid-cols-5">
         {summary.map((item) => {
           const href = `/cellar?health=${item.segment}`;
           return (
