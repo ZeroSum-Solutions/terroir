@@ -38,23 +38,28 @@ global_gates:
 
 foundations:
   - id: F-VWP-1
-    name: migration manifest 0112-0121+ published and CI-checked, no numbering collisions
+    name: migration manifest 0112-0126 published and CI-checked, P4 renamed in the 0112 commit, no numbering collisions
     # source: PRD criterion 1 ("Migration manifest 0112-0121+ published and CI-checked;
     # P4 files renamed in the 0112 commit; no numbering collisions"); VWP-FR-005;
     # spec-list §1 manifest header: "The CI uniqueness/order check ships with 0112. No
     # migration file in this range may be created except from this manifest." This spans
-    # SPEC-01 (0112), SPEC-02 (0113-0120, P4 renumber — not drafted as its own eval slice
-    # here), and SPEC-09/10/15 (0121-0125) — a repo-wide gate, not one slice's property,
-    # so it is not folded into any single SPEC-*'s evals below.
+    # SPEC-01 (0112), SPEC-02 (0113-0120, P4 renumber — drafted as its own minimal eval
+    # slice below), and SPEC-09/10/15/24 (0121-0126) — a repo-wide gate, not one slice's
+    # property, so it is not folded into any single SPEC-*'s evals below.
     evals:
       - id: EV-VWP-F1.1
         then: >-
           the CI uniqueness/order check that ships with migration 0112 rejects any
-          migration file numbered 0112-0125 that is absent from the published manifest,
+          migration file numbered 0112-0126 that is absent from the published manifest,
           and rejects a duplicate or out-of-order migration number within that range —
-          the manifest itself lists 0112 (editions), 0113-0120 (P4, renamed in the same
-          commit that lands 0112), and 0121-0125 (containers/slots/placements, bins move,
-          ratings stores) with zero collisions
+          the manifest itself lists 0112 (editions), 0113-0120 (P4), 0121-0123
+          (containers/slots/placements, bins move), 0124-0125 (ratings stores), and 0126
+          (legacy ratings migration) with zero collisions; separately, a git-history
+          check on the commit that creates 0112 confirms the eight P4 files
+          (image_licenses.sql through resolve_wine_images_bulk.sql per the manifest)
+          were renamed to 0113-0120 IN THAT SAME COMMIT — the check fails if the rename
+          lands in a different commit than the one creating 0112 (spec-list §1 manifest;
+          PRD criterion 1's "P4 files renamed in the 0112 commit" clause)
   - id: F-VWP-2
     name: existing restaurant critical journeys stay green across every phase
     # source: PRD criterion 13 ("Existing restaurant critical journeys pass before and
@@ -65,10 +70,15 @@ foundations:
     evals:
       - id: EV-VWP-F2.1
         then: >-
-          the existing restaurant critical-journey e2e suite (npm run test:e2e, the
-          repo's @opp-* tagged suite per docs/evals/top10-evals.yaml) passes, unmodified
-          in scope, both before and after every phase of this build lands — a phase does
-          not merge with that suite red
+          for every phase boundary in this build's phased delivery (Phase A/B/C/D/E per
+          the PRD), the existing restaurant critical-journey e2e suite (npm run
+          test:e2e, the repo's @opp-* tagged suite per docs/evals/top10-evals.yaml,
+          unmodified in scope) runs green against BOTH a recorded pre-phase base-SHA
+          artifact (captured before that phase's first commit lands) AND the phase's
+          head commit — a current green run alone does not satisfy this eval; a
+          per-phase evidence file (base SHA, head SHA, pass/fail, timestamp) is retained
+          under docs/evals/ or CI artifacts, and a phase does not merge without both runs
+          recorded green in that file
 
 slices:
   # source: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 SPEC-01 (0112);
@@ -111,6 +121,35 @@ slices:
           auto-resolved to an edition from that grouping alone — the backfill classifier
           routes it to quarantine instead
 
+  # non-starred slice: minimal acceptance contract (added on audit — criteria coverage)
+  # source: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §1 manifest rows
+  #   0113-0120 + §2 "SPEC-02 P4 land + renumber (0113-0120)" (VWP-FR-009); PRD criterion 1
+  #   ("P4 files renamed in the 0112 commit"); synthesis D1 migration-manifest paragraph.
+  - id: SPEC-02
+    name: P4 image enrichment land + renumber (0113-0120)
+    branch: feat/vwp-02-p4-renumber
+    e2e_tag: "@vwp-02"
+    depends_on: [SPEC-01]
+    # depends_on rationale: the P4 files are renamed to 0113-0120 IN THE SAME COMMIT that
+    #   lands 0112 (SPEC-01) — spec-list §1 manifest row 0113: "P4 as designed (was
+    #   P4-0112)"; PRD criterion 1.
+    evals:
+      - id: EV-VWP-02.1
+        then: >-
+          the commit that creates migration 0112 also renames the eight P4 migration
+          files (image_licenses.sql, image_sources.sql, wine_images.sql,
+          wine_images_storage.sql, enrichment_source_attempts.sql,
+          wine_image_enrichment_jobs.sql, merge_canonical_wines_images.sql,
+          resolve_wine_images_bulk.sql) to 0113-0120 per the manifest — a git-history
+          check finds zero commits between the 0112-creating commit and the P4 rename
+          (VWP-FR-005/009; spec-list §1)
+      - id: EV-VWP-02.2
+        then: >-
+          after the renumber, wine_images retains its canonical_wine_id + (vintage,
+          size_ml) tuple key with NO edition_id foreign key added — a schema test
+          confirms P4 amendment #1 (edition re-key) stays withdrawn, honoring P2 §10's
+          zero-schema-change commitment (synthesis D3; spec-list §1 row 0115)
+
   # source: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 SPEC-03;
   #   synthesis D3 (unwarp amendment #2, sequencing fix, round-3 addition); PRD VWP-FR-009, VWP-FR-031
   - id: SPEC-03
@@ -140,9 +179,11 @@ slices:
           function — no second, divergent unwarp implementation exists in either path
       - id: EV-VWP-03.5
         then: >-
-          an unwarp failure on a fixture image completes the calling enrichment/scan job
-          with a recorded degraded/no-unwarp status rather than raising an unhandled
-          exception that aborts the job
+          an unwarp failure on a fixture image never raises an unhandled exception that
+          aborts the calling enrichment/scan job — the job completes using the retained
+          raw crop as the guaranteed no-unwarp fallback texture, per SPEC-03's
+          best-effort derivative contract (raw crop always retained; no-unwarp fallback
+          texture guaranteed)
     # depends_on: none — spec list gates SPEC-03 on spike 7 only, not another SPEC id
 
   # source: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 SPEC-04;
@@ -175,12 +216,12 @@ slices:
           spike 5's measured retry requirement, rather than being abandoned after one attempt
       - id: EV-VWP-04.4
         then: >-
-          a Tier-2 (DDGS/Brave) candidate with an explicit vintage conflict, an explicit
-          size conflict, or producer_similarity below 0.3 while some producer text was
-          extracted is hard-rejected (state='rejected', rejected_reason set to
-          vintage_conflict/size_conflict/producer_mismatch) even when it scores highest; a
-          candidate with no vintage/size text found and low similarity is retained as
-          'unverified', never rejected on low score alone
+          a Tier-2 (DDGS/Brave) candidate carrying an explicit vintage conflict or an
+          explicit size conflict against the target edition is hard-rejected by the
+          multi-channel verifier even when it scores highest; a candidate with neither
+          conflict detected is never rejected on low similarity score alone (synthesis
+          D3: "explicit vintage/size conflict = hard reject"; cascade order local joins
+          -> barcode -> DDGS -> Brave unchanged)
       - id: EV-VWP-04.5
         then: >-
           no wine_images row in the pilot's accepted reference set has X-Wines or
@@ -195,12 +236,53 @@ slices:
           VWP-D-01 values, per VWP-FR-016
       - id: EV-VWP-04.7
         then: >-
-          removing one enrichment source's rows (e.g. Brave) from the pilot corpus and
-          rebuilding the reference index deletes only that source's raw AND derived
-          artifacts (candidate rows, embeddings, index shards, calibration data) for every
-          variant it touched, leaves every other source's raw+derived artifacts intact and
-          unorphaned, and the rebuilt index is queryable afterward (PRD criterion 12; NFR-5
-          per-source isolation with deletion lineage)
+          every external source used by the prototype — the pilot enrichment cascade's
+          local-join/barcode/DDGS/Brave tiers AND the ratings pipeline's external
+          sources (Wine-Searcher/GWS fetches, the X-Wines offline pre-aggregation
+          feeding rating_aggregates) — tags its raw AND derived artifacts (candidate
+          rows, embeddings, index shards, calibration data, pre-aggregated rating rows)
+          with a per-source deletion-lineage key, asserted structurally across every
+          source; removing one enrichment source's rows (e.g. Brave) from the pilot
+          corpus and rebuilding the reference index — the concrete removal/rebuild
+          rehearsal PRD criterion 12 requires — deletes only that source's raw+derived
+          artifacts for every variant it touched, leaves every other source's
+          raw+derived artifacts (including the ratings-derived ones) intact and
+          unorphaned, and the rebuilt index is queryable afterward (PRD criterion 12;
+          NFR-5 per-source isolation with deletion lineage)
+      - id: EV-VWP-04.8
+        then: >-
+          attempting to append rows from a bulk layer (Wine Images 126K, X-Wines, Open
+          Food Facts, or additional DDGS/Brave candidates beyond the pilot's approved
+          500-variant set) directly into the frozen pilot/demo identification index,
+          without running a NEW frozen eval first, is rejected by the index-build
+          tooling — no code path silently appends to the frozen index outside that gate
+          (VWP-FR-007: "The investor-demo identification index is FROZEN to the partner
+          cellar's edition set. Appending any bulk layer requires a NEW frozen eval; no
+          silent appends.")
+
+  # non-starred slice: minimal acceptance contract (added on audit — criteria coverage)
+  # source: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 "SPEC-07 Import
+  #   scale-up (20k CSV)" (VWP-FR-008); PRD VWP-D-04 open decision; synthesis D2 item 2.
+  - id: SPEC-07
+    name: import scale-up (20k partner CSV)
+    branch: feat/vwp-07-import-scale-up
+    e2e_tag: "@vwp-07"
+    # depends_on: none — spec-list gates SPEC-07 on VWP-D-04 (owner decision: durable
+    #   staging vs. MAX_ROWS raise), not another SPEC id.
+    evals:
+      - id: EV-VWP-07.1
+        then: >-
+          under the owner-selected VWP-D-04 path (durable staging OR a MAX_ROWS raise
+          from the current 5,000-row cap), the full ~20k-row partner CSV ingests
+          end-to-end without truncation or silent row drops, and P3's chunked-apply
+          semantics (100-row apply-chunking) remain intact for every chunk of the run
+          (VWP-FR-008; spec-list SPEC-07)
+      - id: EV-VWP-07.2
+        then: >-
+          the import e2e suite passes green against the full 20k-row CSV under
+          whichever VWP-D-04 path is selected — the test asserts row-count parity (CSV
+          rows minus documented rejects equals imported rows) and re-running import on
+          the same CSV is idempotent (no duplicate rows created)
 
   # EV-VWP fragment — SPEC-05 (scan service) + SPEC-06 (Gate 0 eval harness).
   # Parent: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 SPEC-05/SPEC-06 entries.
@@ -215,8 +297,7 @@ slices:
     # source: spec-list §2 "SPEC-05 ★ Scan service" (VWP-FR-012..015, D4; PRD criteria 5-6);
     #   synthesis D4 fusion contract; spec-list SPEC-03 line ("consumed by the Gate-0 scan
     #   service") and SPEC-04 line (reference images the rerank arm needs) justify depends_on
-    #   — inferred from cross-reference prose, not a literal spec-list "Gated by:" line;
-    #   editor-confirmed intentional (check f).
+    #   — inferred from cross-reference prose, not a literal spec-list "Gated by:" line.
     evals:
       - id: EV-VWP-05.1
         then: >-
@@ -260,6 +341,15 @@ slices:
           highlight-all/picker list, and format-disambiguation across candidate placements
           follows the precedence GTIN size > OCR size > all (VWP-FR-014; PRD criterion 6, the
           three placement states each demonstrated)
+      - id: EV-VWP-05.7
+        then: >-
+          no LLM appears anywhere in the identification hot path (a contract test
+          enumerates every call site in the scan service's request path and asserts
+          none invokes an LLM); the VLM fallback/parser defaults to OFF in the
+          investor-demo configuration — enabling it requires an explicit config
+          override, never the default state, and no scan response is returned as an
+          accept using only VLM-sourced signal on that default-OFF path (VWP-FR-012:
+          "No LLM in the hot path; VLM fallback default-OFF on the investor path")
 
   - id: SPEC-06
     name: gate 0 eval harness + benchmark
@@ -271,8 +361,7 @@ slices:
     #   thin vertical slice" eval-contract paragraph; PRD criterion 4-5; VWP-FR-011 (superseded
     #   per the spike-4 correction re: WineSensed). depends_on: SPEC-06 evaluates the landed
     #   editions (SPEC-01), reference-image corpus (SPEC-04), and scan service (SPEC-05) —
-    #   inferred from that evaluation relationship, not a literal spec-list "Gated by:" line;
-    #   editor-confirmed intentional (check f).
+    #   inferred from that evaluation relationship, not a literal spec-list "Gated by:" line.
     evals:
       - id: EV-VWP-06.1
         then: >-
@@ -321,6 +410,16 @@ slices:
           original run, and a rehearsal-readiness check fails if no Gate 0-R report exists for
           the current index generation (VWP-FR-017; synthesis D8 "No silent 500→full cutover";
           PRD criterion 4)
+      - id: EV-VWP-06.7
+        then: >-
+          investor exposure is blocked unless a current Gate 0 report file exists
+          (produced by this harness against the frozen working set) whose verdict reads
+          GO under the owner-confirmed VWP-D-01 threshold configuration — a NO-GO
+          report, a stale report superseded by a newer index/model build, or no report
+          at all blocks exposure; the same holds for the Gate 0-R report (EV-VWP-06.6):
+          it must exist for the current index generation AND read GO — this asserts
+          report existence plus a GO verdict, not merely that the verdict computation is
+          correct (PRD criterion 4 "thresholds met"; VWP-FR-016/017)
 
   # source: spec-list §2 SPEC-09 (migrations 0121-0122) + PRD VWP-FR-028/029 + PRD criterion 7 (first half) + synthesis D7 round-3 invariants
   - id: SPEC-09
@@ -353,6 +452,17 @@ slices:
           the place-from-lot operation placing N bottles from one inventory_items lot
           creates exactly N bottle_placement rows, one per bottle, never a single row
           with a quantity column (VWP-FR-029 place-from-lot clause)
+      - id: EV-VWP-09.6
+        then: >-
+          moving a placed bottle to a different slot is implemented as marking its
+          existing active bottle_placement row removed AND creating the new active
+          placement in the same transaction; a code/transaction path that would leave
+          one physical bottle with two simultaneously active placement rows (e.g.
+          inserting a new active placement for a bottle before its prior active
+          placement is marked removed) is rejected even when the target slot is
+          otherwise free — distinct from EV-VWP-09.2's per-slot uniqueness, this is the
+          "one active placement per bottle" invariant read directly off the bottle side
+          (VWP-FR-029; synthesis D7: "one active placement per physical bottle")
 
   # source: spec-list §2 SPEC-10 (migration 0123, manifest Depends-on 0121-0122) + PRD VWP-FR-030 + PRD criterion 7 (second half)
   - id: SPEC-10
@@ -365,8 +475,9 @@ slices:
         then: >-
           running the one-time bins migration converts every live bin into exactly one
           zone container carrying its code/zone/capacity, with the container count
-          after migration equal to the live bin count before (~40) and no bin dropped
-          or duplicated
+          after migration equal to the captured pre-migration live-bin count (observed
+          count recorded as report metadata only, not a hardcoded test constant) and no
+          bin dropped or duplicated
       - id: EV-VWP-10.2
         then: >-
           each lot's binned quantity converts into N bottle_placement rows (one per
@@ -397,7 +508,7 @@ slices:
     # depends_on rationale: SPEC-11's response contract is keyed to bottle_placement_id
     #   (spec-list SPEC-11: "Keyed to bottle_placement_id"), a row type SPEC-09's DDL
     #   creates — inferred from that keying relationship, not a literal spec-list
-    #   "Gated by:" line; editor-confirmed intentional (check f).
+    #   "Gated by:" line.
     evals:
       - id: EV-VWP-11.1
         then: >-
@@ -408,9 +519,13 @@ slices:
           every VWP-FR-031 field present
       - id: EV-VWP-11.2
         then: >-
-          a bottle-detail request for an inventory_item with no active placement
-          returns a variant-level fallback card (identity + market rate + scores, no
-          position/coordinates fields), never a 404 or a placement-shaped payload
+          the bottle-detail API accepts only a bottle_placement_id — it exposes no
+          inventory_item-keyed or variant-id-keyed request path; for a wine_variant with
+          no active placement, the API instead serves that variant's catalog fallback
+          card (identity + market rate + scores, no position/coordinates fields) through
+          its own variant-level lookup endpoint, never a 404 and never a
+          placement-shaped payload (VWP-FR-031: "Keyed to bottle_placement_id (unplaced
+          stock -> variant-level card)")
       - id: EV-VWP-11.3
         then: >-
           a bottle-detail request for a bottle_placement_id belonging to a different
@@ -423,12 +538,15 @@ slices:
           explicitly labeled as a base-wine score
 
   # source: PRD VWP-FR-019/020/022 + criterion 9; synthesis D5 (ratings stores/read model);
-  # spec-list SPEC-15 (migrations 0124-0125) + SPEC-17 (WS median fix precondition)
+  # spec-list SPEC-15 (migrations 0124-0125). EV-VWP-15.6 references SPEC-17's WS
+  # median fix as parallel content (see the SPEC-17 section below), NOT a landing
+  # precondition for this slice — SPEC-17 gates display (SPEC-18), not the ratings
+  # stores/read model SPEC-15 builds (spec-list SPEC-17: "before ANY display ships").
   - id: SPEC-15
     name: ratings stores + read model
     branch: feat/vwp-15-ratings-stores
     e2e_tag: "@vwp-15"
-    depends_on: [SPEC-01, SPEC-17]
+    depends_on: [SPEC-01]
     evals:
       - id: EV-VWP-15.1
         then: >-
@@ -458,15 +576,126 @@ slices:
         then: >-
           grep gate: the string "Vinous" appears nowhere in the read model's returned
           labels, fixtures, or source — a read-model-scoped partial proof of PRD
-          criterion 9's UI-wide "nowhere in the UI" requirement; full closure additionally
-          needs a second grep gate over SPEC-18's UI source/templates once that
-          not-yet-drafted slice lands
+          criterion 9's UI-wide "nowhere in the UI" requirement; full closure is the
+          second, UI-wide grep gate in SPEC-18 (EV-VWP-18.2)
       - id: EV-VWP-15.6
         then: >-
           a Wine-Searcher-sourced rating_aggregates row is excluded from, or labeled
           "avg-based" in, the read model's output until SPEC-17's true-median fix has
           landed at wine-searcher.ts:196-201 — the read model never surfaces an
           unlabeled median field from that source
+
+  # non-starred slice: minimal acceptance contract (added on audit — criteria coverage)
+  # source: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 "SPEC-17 WS median
+  #   fix" (VWP-FR-022); synthesis D5 ("replace with true median or label the band
+  #   'avg-based' BEFORE any price/score display in the demo").
+  - id: SPEC-17
+    name: Wine-Searcher median fix
+    branch: feat/vwp-17-ws-median-fix
+    e2e_tag: "@vwp-17"
+    # depends_on: none — spec-list SPEC-17 has no upstream migration/DDL prerequisite;
+    #   its ordering constraint is downstream (SPEC-18 depends on it), not upstream.
+    evals:
+      - id: EV-VWP-17.1
+        then: >-
+          the Wine-Searcher price/score field at
+          src/lib/wine-intelligence/wine-searcher.ts:196-201 either computes a true
+          statistical median from the underlying price/score observations, OR every
+          value it emits is explicitly labeled "avg-based" at the point of emission —
+          no code path returns an unlabeled average masquerading as a median
+          (VWP-FR-022; spec-list SPEC-17)
+      - id: EV-VWP-17.2
+        then: >-
+          this fix lands and is tested BEFORE any code path introduced by
+          SPEC-15/SPEC-18 displays a Wine-Searcher-sourced price or score — a
+          regression test asserts no display surface reads the pre-fix
+          wine-searcher.ts function (spec-list SPEC-17: "before ANY display ships")
+
+  # non-starred slice: minimal acceptance contract (added on audit — criteria coverage)
+  # source: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 "SPEC-18 Ratings
+  #   display UI" (VWP-FR-020/022); PRD criterion 9 (PRD:282-284); synthesis D5 critic
+  #   honesty paragraph.
+  - id: SPEC-18
+    name: ratings display UI
+    branch: feat/vwp-18-ratings-display-ui
+    e2e_tag: "@vwp-18"
+    depends_on: [SPEC-15, SPEC-17]
+    # depends_on rationale: SPEC-18 renders the SPEC-15 read model with critic labeling
+    #   that must satisfy SPEC-17's median-fix precondition per PRD criterion 9 ("no
+    #   critic display anywhere the WS median fix/label is missing", PRD:284) and
+    #   spec-list SPEC-18 ("VWP-FR-020/022", spec-list §2).
+    evals:
+      - id: EV-VWP-18.1
+        then: >-
+          every UI surface displaying an aggregated critic score renders the exact
+          label "aggregated critic score" beside the number (a rendered-UI
+          grep+snapshot test, not a read-model-only check) — no critic number renders
+          unlabeled anywhere in the UI (VWP-FR-022; PRD criterion 9)
+      - id: EV-VWP-18.2
+        then: >-
+          a grep gate over the full UI source/templates/build output confirms the
+          string "Vinous" appears NOWHERE — the UI-wide closure of EV-VWP-15.5's
+          read-model-scoped partial proof (PRD criterion 9; VWP-FR-022 "no Vinous
+          attribution anywhere in the UI... until a direct deal")
+      - id: EV-VWP-18.3
+        then: >-
+          no UI surface displays a critic score for a source whose SPEC-17 median
+          fix/label has not landed for that value — a wine's critic display is either
+          the true-median value, the explicitly "avg-based"-labeled value, or "critic
+          score pending"; never an unlabeled pre-fix number (PRD criterion 9;
+          VWP-FR-022)
+      - id: EV-VWP-18.4
+        then: >-
+          for an edition with community stars but no critic events, and separately for
+          one with critic events but no community stars, the UI renders exactly the
+          fields the SPEC-15 read model returns (edition-grain aggregate OR labeled
+          base-wine score OR "critic score pending") and never fabricates a value the
+          read model did not supply (PRD criterion 9 "no fabricated or misattributed
+          number"; VWP-FR-020)
+
+  # non-starred slice: minimal acceptance contract (added on audit — criteria coverage)
+  # source: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 "SPEC-19 Voice
+  #   intake" (VWP-FR-023); docs/plans/2026-08-25-spike-01-stt-vendor-eval.md
+  #   ("Consequences for the specs" §, items 1 and 5).
+  - id: SPEC-19
+    name: voice intake
+    branch: feat/vwp-19-voice-intake
+    e2e_tag: "@vwp-19"
+    depends_on: [SPEC-01]
+    # depends_on rationale: SPEC-19 routes every resolved wine through the same
+    #   identity-resolution path SPEC-01 establishes (resolve_wine_variants_bulk /
+    #   editions) — VWP-FR-023.
+    evals:
+      - id: EV-VWP-19.1
+        then: >-
+          push-to-talk batch STT output is folded to ASCII (accent folding) before it
+          reaches resolve_wine_variants_bulk or any trigram/similarity resolution step
+          — a fixture case for an accented producer name (e.g. "côte-rôtie") clears
+          the 0.3 match_lwin similarity threshold post-fold, where the unfolded
+          transcript (measured 0.294 in spike 1) would not (VWP-FR-023; spike 1 accent
+          finding)
+      - id: EV-VWP-19.2
+        then: >-
+          the tenant keyterm hot-list fed to STT priming is built from a specified,
+          tested selection source (e.g. by-the-glass list, recent scans, or velocity)
+          with a specified refresh cadence — a test asserts the hot-list changes when
+          the selection source's underlying data changes and regenerates on the
+          specified cadence, never a static or full-catalog list (spike 1 consequence
+          1: "hot-list selection is a design requirement... selection source and
+          refresh cadence must be specified")
+      - id: EV-VWP-19.3
+        then: >-
+          the intake hot-list fixture stays within vendor-observed capacity — 93
+          phrases / 156 words observed accepted for AssemblyAI (documented cap 1,000
+          words, not probed to failure); at most 75 phrases / 124 words if Deepgram is
+          ever wired as fallback (measured ceiling) — never a full 20k-bottle catalog
+          list (spike 1 keyterm capacity table)
+      - id: EV-VWP-19.4
+        then: >-
+          voice-intake slot-filling routes every resolved wine through the SAME
+          resolve_wine_variants_bulk identity path CSV import uses — no separate or
+          divergent resolution function exists for voice-sourced variants
+          (VWP-FR-023)
 
   # source: PRD VWP-FR-024/025 + criterion 10; synthesis D6 (voice retrieval); spec-list
   # SPEC-20 ("ONE constrained tool ... hard-gated on populated placements")
@@ -478,8 +707,7 @@ slices:
     # depends_on rationale: spec-list SPEC-20 is "hard-gated on populated placements" —
     #   SPEC-09 supplies the placements DDL/tenancy invariants and SPEC-10 is how this
     #   phase's placements get populated from production bin data; inferred from that
-    #   gating clause, not a literal spec-list "Gated by:" line; editor-confirmed
-    #   intentional (check f).
+    #   gating clause, not a literal spec-list "Gated by:" line.
     evals:
       - id: EV-VWP-20.1
         then: >-
@@ -516,8 +744,7 @@ slices:
     depends_on: [SPEC-20]
     # depends_on rationale: SPEC-21 scores the tool SPEC-20 builds (spec-list SPEC-21:
     #   "Scored utterance set -> expected tool calls + result sets") — inferred from that
-    #   evaluation relationship, not a literal spec-list "Gated by:" line; editor-confirmed
-    #   intentional (check f).
+    #   evaluation relationship, not a literal spec-list "Gated by:" line.
     evals:
       - id: EV-VWP-21.1
         then: >-
@@ -539,9 +766,13 @@ slices:
       - id: EV-VWP-21.4
         then: >-
           the scored case set exercises wine resolution, location resolution,
-          ambiguity, out-of-domain/unanswerable questions, and abstention, each
-          passing its own pre-registered threshold before any retrieval demo line is
-          rehearsed
+          ambiguity, out-of-domain/unanswerable questions, and abstention, each passing
+          its own pre-registered threshold; separately, demo-rehearsal mode's readiness
+          guard refuses to enable unless (a) a current voice-retrieval eval report file
+          exists, (b) its timestamp is newer than the retrieval resolver's last
+          build/deploy, and (c) every gated metric in that report reads GO — rehearsing
+          a retrieval demo line while any of (a)-(c) fails is blocked (VWP-FR-026; PRD
+          criterion 10)
       - id: EV-VWP-21.5
         then: >-
           an accented query (e.g. "côte-rôtie") is folded to ASCII before resolution;
@@ -550,8 +781,45 @@ slices:
       - id: EV-VWP-21.6
         then: >-
           the eval's tenant keyterm hot-list fixture stays within vendor-observed
-          capacity — at most 75 phrases when exercising a Deepgram-configured run, up
-          to 93 phrases for an AssemblyAI-configured run — never a full-catalog list
+          capacity — at most 75 phrases / 124 words for a Deepgram-configured run
+          (spike 1's measured ceiling); 93 phrases / 156 words observed accepted for an
+          AssemblyAI-configured run (documented cap 1,000 words, not probed to
+          failure) — never a full-catalog list (spike 1 keyterm capacity findings)
+
+  # non-starred slice: minimal acceptance contract (added on audit — criteria coverage)
+  # source: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 "SPEC-22 STT
+  #   integration" (VWP-FR-027); PRD VWP-FR-027 (PRD:166); spike 1 verdict (VWP-D-02 =
+  #   AssemblyAI, demo-committed).
+  - id: SPEC-22
+    name: STT integration (preflight, retry, fallback, keyterms)
+    branch: feat/vwp-22-stt-integration
+    e2e_tag: "@vwp-22"
+    # depends_on: none — spec-list gates SPEC-22 on spike 1 (VWP-D-02 vendor decision),
+    #   not another SPEC id.
+    evals:
+      - id: EV-VWP-22.1
+        then: >-
+          a preflight health check against the configured STT vendor (AssemblyAI per
+          VWP-D-02, demo-committed) blocks demo start with an explicit error when it
+          does not succeed — the STT-integration-layer test underlying EV-VWP-23.1's
+          demo-mode preflight gate (VWP-FR-027)
+      - id: EV-VWP-22.2
+        then: >-
+          a failed STT request during a live demo is retried per a rehearsed retry
+          policy (bounded attempt count, defined backoff) BEFORE the typed-query
+          fallback engages — one fixture forces a single transient STT failure and
+          asserts the retry fires and succeeds without surfacing the fallback; a
+          second fixture forces exhaustion of the retry budget and asserts the
+          typed-query fallback then engages (VWP-FR-027: "preflight health check,
+          rehearsed retry, and a typed-query fallback UI")
+      - id: EV-VWP-22.3
+        then: >-
+          the tenant keyterm hot-list is wired through BOTH vendors' priming
+          mechanism (AssemblyAI keyterms_prompt AND Deepgram keyterm) — a contract
+          test asserts the same hot-list source feeds both integrations, so a future
+          change to VWP-D-02's production vendor choice does not require rebuilding
+          the priming pipeline (spec-list SPEC-22: "keyterms wired both vendors' way
+          until decided")
 
   # source: PRD VWP-FR-034/027 + criterion 11; synthesis D8 (cross-cutting demo mode);
   # spec-list SPEC-23
@@ -563,7 +831,7 @@ slices:
     # depends_on rationale: spec-list SPEC-23 is "Preflight (STT + inference box), prewarm
     #   [...]" — prewarm targets the scan service's identification models (SPEC-05) and
     #   preflight covers STT (SPEC-22); inferred from that preflight/prewarm clause, not a
-    #   literal spec-list "Gated by:" line; editor-confirmed intentional (check f).
+    #   literal spec-list "Gated by:" line.
     evals:
       - id: EV-VWP-23.1
         then: >-
@@ -575,8 +843,14 @@ slices:
           error, when the GPU inference-box health check does not succeed
       - id: EV-VWP-23.3
         then: >-
-          entering demo mode prewarms the identification models to resident state
-          before the first scan is attempted, verified by a warm-vs-cold latency probe
+          entering demo mode blocks on a preflight readiness endpoint that reports
+          models_loaded=true for every identification arm AND the reference-feature
+          cache present (spec-list §3 spike 6: cached reference SuperPoint features as
+          an index artifact) before allowing the first scan; once that resident-state
+          oracle reads ready, the first scan after prewarm completes within the
+          spike-6 measured warm budget (server-side p95 <= 2.5s per VWP-FR-016), never
+          the ~35s cold-start path — the oracle plus the bounded post-prewarm budget is
+          the pass condition, not a bare warm-vs-cold timing comparison
       - id: EV-VWP-23.4
         then: >-
           with the live inference box forced unreachable, a demo-mode scan returns
@@ -588,43 +862,97 @@ slices:
           mid-demo and completes a retrieval request without the voice path
       - id: EV-VWP-23.6
         then: >-
-          a request that exceeds its stage's explicit timeout enters its designed
-          degraded state rather than hanging indefinitely
+          each demo-mode stage enforces its own explicit timeout, keyed by a symbolic
+          config name, and enters its own pre-declared degraded state when exceeded,
+          never hanging indefinitely: STT preflight (TIMEOUT_STT_PREFLIGHT) -> blocks
+          demo start with an explicit error (EV-VWP-23.1); GPU inference-box preflight
+          (TIMEOUT_BOX_PREFLIGHT) -> blocks demo start with an explicit error
+          (EV-VWP-23.2); prewarm (TIMEOUT_PREWARM) -> demo start stays blocked until
+          the resident-state oracle (EV-VWP-23.3) reads ready; a live scan request
+          mid-demo (TIMEOUT_SCAN_REQUEST) -> falls back to the cached golden-path scan
+          result (EV-VWP-23.4); a live STT request mid-demo (TIMEOUT_STT_REQUEST) ->
+          falls back to the typed-query fallback UI (EV-VWP-23.5) — a fixture test
+          exercises each symbolic timeout key independently and asserts its named
+          degraded state (VWP-FR-034 stage list; PRD:183)
+      - id: EV-VWP-23.7
+        then: >-
+          the demo-day plan/checklist has an explicit venue-topology field stating
+          whether the GPU inference box is local at the venue (preferred) or reached
+          via a verified wired uplink; demo-mode preflight fails loudly if that field
+          is unset, and when "remote/wired-uplink" is selected, the wired-uplink
+          verification check must pass before demo start (VWP-FR-034: "The demo-day
+          plan states whether the box is local at the venue (preferred) or on a
+          verified wired uplink.")
 
-# PRD criteria map — every one of the PRD's 13 independently verifiable acceptance
-# criteria (docs/plans/2026-08-24-visual-wine-platform-prd.md, "Independently verifiable
-# acceptance criteria") mapped to its EV id(s) or foundation below. No criterion unmapped.
+# PRD criteria map — the PRD's 13 independently verifiable acceptance criteria
+# (docs/plans/2026-08-24-visual-wine-platform-prd.md, "Independently verifiable
+# acceptance criteria") mapped to their EV id(s)/foundation below. This map states, per
+# criterion, what closes it and flags anything that remains partial rather than
+# claiming uniform closure.
 #
-#  1. Migration manifest 0112-0121+ published/CI-checked, no numbering collisions
-#     -> foundation F-VWP-1 / EV-VWP-F1.1
+#  1. Migration manifest 0112-0126 published/CI-checked; P4 renamed in the 0112 commit;
+#     no numbering collisions.
+#     -> foundation F-VWP-1 / EV-VWP-F1.1 (extended through 0126; asserts the P4 rename
+#        lands in the SAME commit as 0112, via git history, not just manifest listing).
+#        CLOSED.
 #  2. Editions invariants (dup rejected, RLS reject, lwin11 corroboration)
-#     -> EV-VWP-01.1, EV-VWP-01.2, EV-VWP-01.3
+#     -> EV-VWP-01.1, EV-VWP-01.2, EV-VWP-01.3. CLOSED.
 #  3. Backfill report counts + pilot 100% resolved-or-quarantined
-#     -> EV-VWP-01.4, EV-VWP-01.5 (EV-VWP-01.6 supporting)
+#     -> EV-VWP-01.4, EV-VWP-01.5 (EV-VWP-01.6 supporting). CLOSED.
 #  4. Gate 0 numbers (abstain-as-miss, sealed holdout untouched, thresholds at
 #     owner-confirmed values, Gate 0-R repeated)
-#     -> EV-VWP-06.1, EV-VWP-06.2, EV-VWP-06.5, EV-VWP-06.6
+#     -> EV-VWP-06.1, EV-VWP-06.2, EV-VWP-06.5, EV-VWP-06.6, EV-VWP-06.7. CLOSED —
+#        06.7 closes the prior gap (verdict-computation-only coverage) by requiring
+#        the current Gate 0 report AND the Gate 0-R report to both EXIST and read GO,
+#        not merely that the computation is correct.
 #  5. Out-of-corpus + non-wine image -> ABSTAIN + correction search
-#     -> EV-VWP-05.2 (EV-VWP-06.3 supporting via separated false-accept reporting)
+#     -> EV-VWP-05.2 (EV-VWP-06.3 supporting via separated false-accept reporting).
+#        CLOSED.
 #  6. Scan of placed bottle / two-placement picker / unplaced catalog card
-#     -> EV-VWP-05.6
-#  7. Placement integrity (composite FK, second-active-placement, over-placement) +
-#     bins e2e green with ~40 rows
-#     -> EV-VWP-09.1, EV-VWP-09.2, EV-VWP-09.3 (first half);
-#        EV-VWP-10.1, EV-VWP-10.5 (second half)
+#     -> EV-VWP-05.6. CLOSED.
+#  7. Placement integrity (composite FK, second-active-placement, over-placement,
+#     one-active-placement-per-bottle) + bins e2e green with the captured
+#     pre-migration row count
+#     -> EV-VWP-09.1, EV-VWP-09.2, EV-VWP-09.3, EV-VWP-09.6 (first half); EV-VWP-10.1,
+#        EV-VWP-10.5 (second half). CLOSED — EV-VWP-09.6 adds the per-bottle invariant
+#        the prior map omitted; note it is tested via the move-transaction path, since
+#        the schema encodes bottle identity implicitly (one placement row = one
+#        bottle) rather than via a separate physical-bottle-id column.
 #  8. Bottle-detail response fields + tenant isolation
-#     -> EV-VWP-11.1, EV-VWP-11.3
-#  9. Ratings display (edition/labeled-canonical, WS-median gate, no "Vinous")
-#     -> EV-VWP-15.4, EV-VWP-15.6, EV-VWP-15.5 (EV-VWP-15.5 is read-model-scoped only —
-#        see its own eval text; full "nowhere in the UI" closure needs SPEC-18, not yet
-#        drafted here)
+#     -> EV-VWP-11.1, EV-VWP-11.3 (EV-VWP-11.2 supporting, now corrected to the
+#        bottle_placement_id-only keying contract). CLOSED.
+#  9. Ratings display (edition/labeled-canonical, WS-median gate, no "Vinous",
+#     UI-wide)
+#     -> EV-VWP-15.4, EV-VWP-15.6 (read-model grain/gating) + EV-VWP-18.1, EV-VWP-18.2,
+#        EV-VWP-18.3, EV-VWP-18.4 (UI-wide, new SPEC-18 slice). CLOSED —
+#        EV-VWP-15.5's read-model-scoped grep is now closed by EV-VWP-18.2's UI-wide
+#        grep; EV-VWP-18.1/18.3 close the "aggregated critic score" labeling and "no
+#        display where the WS fix/label is missing" clauses this map previously
+#        admitted were absent.
 # 10. Voice-retrieval eval passes thresholds pre-rehearsal; retrieval blocked while
 #     bottle_placements empty
-#     -> EV-VWP-21.4, EV-VWP-20.5
-# 11. Demo-mode preflight (STT/inference-box) + typed-query fallback + cached golden path
-#     -> EV-VWP-23.1, EV-VWP-23.2, EV-VWP-23.4, EV-VWP-23.5
+#     -> EV-VWP-21.4 (rewritten with an executable readiness guard), EV-VWP-20.5.
+#        CLOSED — 21.4 previously had no test oracle for "before any demo line is
+#        rehearsed"; it now requires a current, fresh, all-GO eval report as a
+#        precondition.
+# 11. Demo-mode preflight (STT/inference-box) + typed-query fallback + cached golden
+#     path
+#     -> EV-VWP-23.1, EV-VWP-23.2, EV-VWP-23.4, EV-VWP-23.5 (EV-VWP-22.1/22.2
+#        supporting at the STT-integration layer). CLOSED.
 # 12. Per-source raw+derived artifact isolation with deletion lineage (NFR-5), verified
 #     by source removal + index rebuild
-#     -> EV-VWP-04.7
-# 13. Existing restaurant critical journeys pass before/after each phase (repo e2e gates)
-#     -> foundation F-VWP-2 / EV-VWP-F2.1
+#     -> EV-VWP-04.7 (amended to state the isolation property across EVERY external
+#        source, including the ratings pipeline's X-Wines pre-aggregation and
+#        Wine-Searcher/GWS fetches, not only the pilot-cascade sources). PARTIAL: the
+#        concrete removal/rebuild rehearsal PRD criterion 12 asks for is executed on
+#        one pilot source (Brave), matching the criterion's own scope ("removing ONE
+#        source in a rehearsal"); the isolation property is asserted structurally, not
+#        rehearsed, for the ratings-derived sources, since SPEC-16 (external ratings
+#        ingestion) remains undrafted — it was not one of the six non-starred slices
+#        this audit pass added.
+# 13. Existing restaurant critical journeys pass before and after each phase (repo e2e
+#     gates)
+#     -> foundation F-VWP-2 / EV-VWP-F2.1 (rewritten with a base-SHA/head-SHA +
+#        retained evidence-file mechanism). CLOSED as a spec — the eval now names a
+#        concrete, checkable oracle; the CI wiring to capture per-phase base-SHA
+#        artifacts is new infrastructure this eval requires but does not itself build.
