@@ -164,7 +164,7 @@ doc (marked ★); the rest cite their source and go straight to tickets once gat
 
 | # | Spike | Feeds | Decides |
 |---|---|---|---|
-| 1 | STT 50-utterance wine-vocab eval (FR/IT/ES producers) | SPEC-19/22 | VWP-D-02 vendor |
+| 1 | STT 50-utterance wine-vocab eval (FR/IT/ES producers) — **CLOSED 2026-08-25, 700 live transcriptions** (`2026-08-25-spike-01-stt-vendor-eval.md`) | SPEC-19/22 | **VWP-D-02 = AssemblyAI** |
 | 2 | Splat FPS (desktop + mobile) | SPEC-14 | VWP-D-06 |
 | 3 | Wine-Searcher trial + ~~GWS~~ coverage on ~50 LWIN'd wines + written quotes — *GWS dropped 2026-08-25: domain parked/for-sale, no live API surface (evidence in `2026-08-25-spike-resources-status.md`); critic layer = WS aggregate + X-Wines community* | SPEC-16 | paid-tier viability |
 | 4 | X-Wines/WineSensed join rates + X-Wines image manifest count — *datasets downloaded + MD5-verified 2026-08-25 (`~/projects/terroir-data/`); manifest half ANSWERED: X-Wines Full publishes NO label images (author on-demand only; Slim = 1,007); WineSensed 996,808 image refs in a 35 GB undownloaded archive. Join-rate half runnable now* | SPEC-04/16 | corpus expectations |
@@ -175,6 +175,22 @@ doc (marked ★); the rest cite their source and go straight to tickets once gat
 | 9 | Voice-retrieval eval construction | SPEC-21 | eval viability |
 | 10 | Partner-CSV GTIN coverage + vintage-uniqueness | SPEC-05 | VWP-D-07 barcode arm |
 | 11 | `wine_lineages` status (deprecated vs. still-read; note eval F-2) | SPEC-01/24 | VWP-D-05 |
+
+**Spike 1 — CLOSED 2026-08-25 (700 live transcriptions).** **VWP-D-02 = AssemblyAI
+(Universal-3.5 Pro)**: 96.8 % entity survival at full priming vs Deepgram Nova-3's best
+90.4 %, and it wins at every matched configuration. Two findings bind the specs beyond
+the vendor pick. (a) **Neither vendor can prime a 20k list.** AssemblyAI allows 1,000
+words; Deepgram's cap is 500 *tokens*, and wine vocabulary tokenises at ~3.9 tokens/word
+— measured live, Deepgram accepts only **75 phrases / 124 words**. Keyterm priming is
+therefore a per-venue *hot-list selection* problem in SPEC-19/21, not an optimisation.
+(b) **Silent empty transcripts are the dangerous failure mode**: Nova-3 defaults to
+`language=en` and returned *nothing at all* on 42 % of natively-pronounced clips — which
+reads as "no speech" rather than "low confidence" and would silently drop a bottle from
+intake. `language=multi` fixes it (42 % → 0 % empty), and empty-transcript rate now
+belongs in SPEC-21's voice eval. Caveat recorded on the verdict: the eval is TTS, noise-
+free, and oracle-primed, so every number is an upper bound; survival also measures
+retrievability by `match_lwin`, not end-to-end resolution. The abstain path stays
+mandatory — the best config still misses ~3 % under laboratory-clean audio.
 
 **Spike 11 — CLOSED 2026-08-24 (repo evidence).** `wine_lineages` is LIVE, not
 deprecated: tenant-scoped (`restaurant_id NOT NULL`, per-restaurant LWIN7/name-norm

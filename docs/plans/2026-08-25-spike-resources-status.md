@@ -7,7 +7,9 @@ register). Everything below was live-verified on this date — no claims from me
 
 | Resource | Spike | Status |
 |---|---|---|
-| **Brave Search API** | 5 | Key in vault (`brave_api_key`), verified HTTP 200. ⚠️ Quota headers show `0` monthly allocation (resets ~Aug 31) — check the Brave dashboard plan before the 500-query soak relies on it as the DDGS fallback tier. |
+| **Brave Search API** | 5 | Key in vault (`brave_api_key`), HTTP 200. ⚠️ **Confirmed unavailable for monthly workloads:** live headers `x-ratelimit-limit: 2, 0` / `x-ratelimit-policy: 2;w=1, 0;w=2678400` — 2 req/s but a **zero monthly allocation**. The dashboard plan name was not readable (login-walled). Spike 5 must treat Brave as absent and lean on DDGS unless the plan is upgraded. |
+| **AssemblyAI** | 1 | ✅ Account live, key in vault (`assemblyai_api_key` / `ASSEMBLYAI_API_KEY`), HTTP 200 re-verified 2026-08-25. **Selected as the VWP-D-02 vendor** — see `2026-08-25-spike-01-stt-vendor-eval.md`. Free tier covers the whole demo phase. |
+| **Deepgram** | 1 | ✅ Account live (`devszerosum@gmail.com`), key in vault (`deepgram_api_key` / `DEEPGRAM_API_KEY`), HTTP 200. $200 signup credit; ~$0.09 spent by spike 1. Key lacks `billing:read` scope, so remaining credit can't be read via API (console only). Not selected; retained as fallback — **`language=multi` is mandatory if ever wired in.** |
 | **RunPod** (GPU box) | 6 | API key valid (`runpod_api_key`, account wiggdevin@gmail.com). Live pricing 2026-08-25: **RTX 4090 24GB secure $0.74/hr** (recommended: 3-hr spike ≈ $2.25, demo-prep week ≈ $40) · RTX A5000 24GB secure $0.27/hr (dev alt). **Balance $0.00** — needs ~$25 top-up before provisioning (VWP-D-03 evidence gathered; vendor decided: RunPod for spike/dev; demo-day local-box question stays open per synthesis D8). |
 | **X-Wines dataset** | 4 | Downloaded to `/Users/zero/projects/terroir-data/xwines/`, all 6 CSVs MD5-verified vs. author hashes: Full 100,646 wines + 21,013,536 ratings (1.12 GB), Slim, Test. License CC0-1.0. |
 | **WineSensed metadata** | 4 | `/Users/zero/projects/terroir-data/winesensed/` — metadata.zip MD5-verified from DTU Figshare (DOI 10.11583/DTU.23376560.v1): 1,014,630 review rows, 996,808 unique image refs, 421,672 vintage_ids (larger than the paper's cut). Images = 10 chunk zips ≈ 35 GB, NOT downloaded (eval-time decision). |
@@ -34,14 +36,33 @@ register). Everything below was live-verified on this date — no claims from me
    index, no fine-tuning — synthesis D2.4) both are workable under the prototype posture;
    resolve before production per risk R6.
 
-## Blocked on Devin (short click-list)
+## Cleared 2026-08-25 (Codex drove the browser; handoff
+`~/Inbox/notes/handoffs/2026-08-25-terroir-spike-accounts-handoff.md`)
 
-1. **Regenerate the Gmail app password** — the vault's `gmail_app_password`
-   (Devin@zerosumsolutions.com) is rejected by Google (verified via IMAP 2026-08-25).
-   myaccount.google.com/apppasswords → new password → `zsvault edit gmail_app_password`.
-   *Unblocks: fully autonomous AssemblyAI signup (recon confirmed: passwordless
-   magic-link, no CAPTCHA, no card — I POST the email, read the link from the inbox,
-   finish, store the key), plus the optional GWS probe email.*
+1. ✅ **Gmail app password** regenerated (2FA enabled on devin@zerosumsolutions.com, app
+   password `terroir-spikes`) → `gmail_app_password`. IMAP re-verified: 539 messages.
+2. ✅ **AssemblyAI** account + key → `assemblyai_api_key`. HTTP 200.
+3. ✅ **Deepgram** account (via Google, `devszerosum@gmail.com`) + key `terroir-spikes`
+   → `deepgram_api_key`. HTTP 200, $200 credit confirmed in console.
+4. ✅ **Brave** plan checked — zero monthly allocation (see table); nothing to store.
+5. ⏳ **Wine-Searcher** trial application submitted (Devin Wiggins /
+   `devszerosum@gmail.com`; use case: product matching, market pricing, critic scores,
+   vintage coverage). Confirmation shown; they quote ~48 h. **No key yet.** On arrival:
+   `printf '%s' "$KEY" | zsvault add wine_searcher_api_key --type api_key --env-name WINE_SEARCHER_API_KEY --yes --value-stdin`
+
+**Account-routing preference (standing, set 2026-08-25):** new services →
+`devszerosum@gmail.com` first, then GitHub auth. Use `devin@zerosumsolutions.com` only
+when the Workspace mailbox or an existing business integration requires it.
+
+## Still blocked on Devin
+
+1. **RunPod top-up** — ~$25 at runpod.io (account wiggdevin@gmail.com). Gates spikes 6–7.
+2. **Polycam** on your phone (free account) — spike 2 needs 20–200 photos or an mp4 sweep
+   of the partner cellar space; capture is a physical task.
+3. **Partner CSV** — spike 10 (GTIN coverage/vintage-uniqueness) and Phase B ingestion
+   need the real ~20k-row export from the partner. Highest-value missing input.
+
+<details><summary>Historical: why the app password could not be automated (2026-08-25)</summary>
 
    **Attempted autonomously 2026-08-25 (asked to; could not complete) — findings:**
    the account is **Chrome "Profile 1"** (devin@zerosumsolutions.com), not Default
@@ -59,37 +80,33 @@ register). Everything below was live-verified on this date — no claims from me
    click, or a stored TOTP secret / backup codes added to the vault to make it
    automatable in future. The profile clone (which included a copy of his saved-password
    DB) was deleted afterward; his running Chrome was never touched.
-2. **Deepgram signup** (~2 min, browser) — console.deepgram.com/signup has reCAPTCHA, so
-   it needs a human once. $200 free credit, no card. Then
-   `printf '%s' "<key>" | zsvault add deepgram_api_key --type api_key --env-name DEEPGRAM_API_KEY --yes --value-stdin`.
-3. **Wine-Searcher trial application** (browser) — `wine-searcher.com/trade/ws-api` is
-   PerimeterX-walled (blocks all scripted access, verified). Open in a normal browser,
-   submit the trial/contact form. Terms per cached sources: 100 free calls/day, midnight-UK
-   reset (unconfirmed live).
-4. **Brave dashboard** — confirm the plan/monthly quota (see table).
-5. **RunPod top-up** — ~$25 at runpod.io (account wiggdevin@gmail.com).
-6. **Polycam** on your phone (free account) — spike 2 needs 20–200 photos or an mp4 sweep
-   of the partner cellar space; capture is a physical task.
-7. **Partner CSV** — spike 10 (GTIN coverage/vintage-uniqueness) and Phase B ingestion
-   need the real ~20k-row export from the partner.
 
-## STT vendor facts (recon 2026-08-25, feeds VWP-D-02)
+</details>
+
+## STT vendor facts (recon 2026-08-25, fed VWP-D-02 — now DECIDED, see
+`2026-08-25-spike-01-stt-vendor-eval.md`)
 
 - **AssemblyAI:** free tier 185 h batch + 333 h streaming (5 new connections/min cap), no
-  card. Keyterms: current models are Universal-3.5 Pro (async, up to 1,000 terms,
-  $0.05/hr add-on) and Universal-3.5 Pro Realtime / Universal-Streaming (up to 100 terms,
-  included). "Slam-1" branding no longer on the pricing page — the research brief's model
-  names are stale; free tier still covers the whole demo phase.
-- **Deepgram:** $200 signup credit, no card. Nova-3 keyterm prompting $0.0013/min
-  (streaming and pre-recorded), usable against the credit.
+  card. Keyterms: `keyterms_prompt` on Universal-3.5 Pro (async) takes up to **1,000
+  words** (≤6 words/phrase; $0.05/hr add-on); Realtime/Universal-Streaming up to 100
+  terms, included. API note: `speech_model` is deprecated — use
+  `speech_models: ["universal-3-5-pro", ...]`.
+- **Deepgram:** $200 signup credit, no card. Nova-3 `keyterm` $0.0013/min, capped at
+  **500 tokens total** — measured live at 75 phrases / 124 words of wine vocabulary
+  (~3.9 tokens/word). Defaults to `language=en`, which returned empty transcripts on 42 %
+  of natively-pronounced clips; `language=multi` is mandatory for wine audio.
 
 ## Autonomous next steps (armed, in order)
 
-1. On app-password fix → create the AssemblyAI account end-to-end, store key as
-   `assemblyai_api_key` (env `ASSEMBLYAI_API_KEY`), verify with a 1-file transcription
-   probe.
-2. On RunPod top-up → provision the RTX 4090 pod, install the identification stack, and
+1. ~~AssemblyAI account + probe~~ ✅ done (Codex) — key verified, spike 1 run on it.
+2. ~~Spike 1 STT eval~~ ✅ **CLOSED — VWP-D-02 = AssemblyAI** (96.8 % entity survival vs
+   Deepgram's best 90.4 %; 700 live transcriptions; full verdict + spec consequences in
+   `2026-08-25-spike-01-stt-vendor-eval.md`).
+3. On RunPod top-up → provision the RTX 4090 pod, install the identification stack, and
    run spikes 6–7 (latency topology, LightGlue phone-vs-packshot).
-3. On Deepgram/WS keys landing in the vault → verify each with a probe call.
-4. Spike 4 join-rate measurement can run NOW (datasets are local; joins against
-   `lwin_catalog`/canonical spine need no external resources).
+4. On the Wine-Searcher key landing (~48 h) → verify with a probe call, then spike 3
+   coverage run on ~50 LWIN'd wines.
+5. Spike 9 (voice-retrieval eval construction) is now unblocked by the vendor decision
+   and needs no external resources — buildable next.
+6. Spike 5 (DDGS 500-query soak): runnable, but Brave has zero monthly allocation, so
+   the soak must measure DDGS standalone reliability (no paid fallback tier).
