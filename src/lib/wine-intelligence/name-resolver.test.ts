@@ -59,6 +59,15 @@ describe("accent folding (spike-1 measured hard requirement)", () => {
     expect(foldAccents("Clos de la Cœur")).toBe("Clos de la Coeur");
     expect(similarity("cœur", "coeur")).toBe(1);
   });
+
+  it("EV-VWP-19.1 / EV-VWP-21.5: folds accented STT text before resolver scoring", () => {
+    const result = resolveWineName("the Côte-Rôtie from Guigal", [
+      { itemId: "A", displayName: "Cote Rotie", producer: "Guigal" },
+    ]);
+
+    expect(result.kind).toBe("resolved");
+    if (result.kind === "resolved") expect(result.match.candidate.itemId).toBe("A");
+  });
 });
 
 const inv = inventory as WineCandidate[];
@@ -70,7 +79,7 @@ describe("resolveWineName decision rule", () => {
     if (r.kind === "resolved") expect(r.match.candidate.itemId).toBe("I000");
   });
 
-  it("abstains on the spike-9 shared-vocabulary failure: out-of-inventory Biondi-Santi Brunello", () => {
+  it("EV-VWP-21.1: abstains on the spike-9 shared-vocabulary failure: out-of-inventory Biondi-Santi Brunello", () => {
     // A perfect transcript for a wine NOT in inventory. The naive baseline
     // resolves this to Fanti's Brunello at 0.59 (appellation vocabulary
     // dominates the trigram mass) — the exact confident-wrong-answer the

@@ -102,7 +102,7 @@ const FROZEN_AMBIGUOUS_PAIRS: Record<string, string> = {
   U45_nat_aai_plain: "I023+I070", U45_nat_aai_keyterm_full: "I023+I070",
 };
 
-describe("spike-9 eval replay (tuning-fixture snapshot gates)", () => {
+describe("EV-VWP-21.1: spike-9 eval replay (tuning-fixture snapshot gates)", () => {
   it("every ambiguous outcome is exactly the frozen same-producer pair containing the truth", () => {
     const seen: Record<string, string> = {};
     for (const c of all.filter((x) => x.expected.kind === "resolve")) {
