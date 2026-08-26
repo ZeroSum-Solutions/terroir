@@ -25,6 +25,7 @@
     "types:gen": "node scripts/generate-supabase-types.mjs",
     "types:check": "node scripts/generate-supabase-types.mjs && git diff --exit-code src/types/database.ts",
     "downs:check": "node scripts/check-down-migrations.mjs",
+    "manifest:check": "node scripts/check-migration-manifest.mjs",
     "supabase:seed:local": "node scripts/seed-local-supabase.mjs",
     "supabase:seed:local:apply": "node scripts/seed-local-supabase.mjs --confirm",
     "supabase:seed:local:teardown": "node scripts/seed-local-supabase.mjs --teardown --confirm"

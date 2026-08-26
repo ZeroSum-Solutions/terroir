@@ -183,6 +183,9 @@ jobs:
         # migration without writing its rollback.
         run: pnpm run downs:check
 
+      - name: Migration manifest check
+        run: pnpm run manifest:check
+
       - name: Local Supabase seed dry-run
         # Builds sanitized, production-like fixture data and prints counts.
         # No database writes happen without --confirm.
