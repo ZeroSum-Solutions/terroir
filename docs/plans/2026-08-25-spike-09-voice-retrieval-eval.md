@@ -10,8 +10,16 @@ cases.jsonl, mapping_report.json, baseline_results.json, build_eval.py, baseline
 250-item fixture built from the real production LWIN catalog, with queries carrying
 *measured* STT degradation (spike 1's actual AssemblyAI transcripts, primed and
 unprimed — not synthetic typos). A deliberately naive baseline resolver separates STT
-configs end-to-end (98 % vs 81 % resolution) and, more importantly, **exposes an
+configs end-to-end (92 % vs 81 % resolution) and, more importantly, **exposes an
 NFR-critical resolver failure that similarity thresholds cannot fix** (below).
+
+*Numbers updated 2026-08-25 after the spike-1 audit:* the scorer's span-width fix
+(GPT-5.6 Sol audit finding 3) made the naive baseline evaluate short spans it
+previously skipped, which raised scores across the board and **increased measured
+false accepts from 12 % to 50 %** at the best STT config — the danger got larger, not
+smaller. The full-catalog resolver replay in
+`2026-08-25-spike-01-stt-vendor-eval.md` then quantified the fix: producer
+corroboration cuts cross-producer misidentification to 6–8 %.
 
 ## Construction
 
@@ -36,11 +44,11 @@ NFR-critical resolver failure that similarity thresholds cannot fix** (below).
 
 | | resolve correct | out-of-inv abstain correct | garbage abstain |
 |---|---|---|---|
-| aai_keyterm_full | **98 %** (48) | 88 % (16) | — |
-| aai_plain | 81 % (48) | 81 % (16) | — |
+| aai_keyterm_full | **92 %** (48) | **50 %** (16) | — |
+| aai_plain | 81 % (48) | 62 % (16) | — |
 | synthetic garbage | — | — | **100 %** (6) |
 
-The 17-point resolution gap between primed and unprimed STT proves the eval measures the
+The 11-point resolution gap between primed and unprimed STT proves the eval measures the
 end-to-end pipeline, not just string matching.
 
 ## The finding that binds SPEC-21: threshold-only acceptance cannot ship
@@ -54,9 +62,9 @@ shared-vocabulary failure the P2 round-5 critic proved for the identity gate
 (0097_canonical_wines.sql: Pichon Baron vs Pichon Lalande at 0.55), now reproduced on
 the retrieval path with real audio-derived input.
 
-False-accept rate on out-of-inventory queries: 12 % even at the best STT config — and
-these are confident, wrong, guest-facing answers, the exact failure the
-abstain-over-misidentify NFR exists to prevent.
+False-accept rate on out-of-inventory queries: **50 %** at the best STT config (post
+scorer fix) — and these are confident, wrong, guest-facing answers, the exact failure
+the abstain-over-misidentify NFR exists to prevent.
 
 **Requirements this forces into SPEC-21's ticket spec:**
 1. The server-side resolver needs **producer-token corroboration** (accept only if the

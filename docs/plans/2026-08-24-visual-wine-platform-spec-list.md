@@ -164,7 +164,7 @@ doc (marked ★); the rest cite their source and go straight to tickets once gat
 
 | # | Spike | Feeds | Decides |
 |---|---|---|---|
-| 1 | STT 50-utterance wine-vocab eval (FR/IT/ES producers) — **CLOSED 2026-08-25, 700 live transcriptions** (`2026-08-25-spike-01-stt-vendor-eval.md`) | SPEC-19/22 | **VWP-D-02 = AssemblyAI** |
+| 1 | STT 50-utterance wine-vocab eval (FR/IT/ES producers) — **CLOSED 2026-08-25, audited (GPT-5.6 Sol) + remediated** (`2026-08-25-spike-01-stt-vendor-eval.md`) | SPEC-19/22 | **VWP-D-02 = AssemblyAI (demo-committed, production-provisional)** |
 | 2 | Splat FPS (desktop + mobile) | SPEC-14 | VWP-D-06 |
 | 3 | Wine-Searcher trial + ~~GWS~~ coverage on ~50 LWIN'd wines + written quotes — *GWS dropped 2026-08-25: domain parked/for-sale, no live API surface (evidence in `2026-08-25-spike-resources-status.md`); critic layer = WS aggregate + X-Wines community* | SPEC-16 | paid-tier viability |
 | 4 | X-Wines/WineSensed join rates + X-Wines image manifest count — *datasets downloaded + MD5-verified 2026-08-25 (`~/projects/terroir-data/`); manifest half ANSWERED: X-Wines Full publishes NO label images (author on-demand only; Slim = 1,007); WineSensed 996,808 image refs in a 35 GB undownloaded archive. Join-rate half runnable now* | SPEC-04/16 | corpus expectations |
@@ -176,21 +176,24 @@ doc (marked ★); the rest cite their source and go straight to tickets once gat
 | 10 | Partner-CSV GTIN coverage + vintage-uniqueness | SPEC-05 | VWP-D-07 barcode arm |
 | 11 | `wine_lineages` status (deprecated vs. still-read; note eval F-2) | SPEC-01/24 | VWP-D-05 |
 
-**Spike 1 — CLOSED 2026-08-25 (700 live transcriptions).** **VWP-D-02 = AssemblyAI
-(Universal-3.5 Pro)**: 96.8 % entity survival at full priming vs Deepgram Nova-3's best
-90.4 %, and it wins at every matched configuration. Two findings bind the specs beyond
-the vendor pick. (a) **Neither vendor can prime a 20k list.** AssemblyAI allows 1,000
-words; Deepgram's cap is 500 *tokens*, and wine vocabulary tokenises at ~3.9 tokens/word
-— measured live, Deepgram accepts only **75 phrases / 124 words**. Keyterm priming is
-therefore a per-venue *hot-list selection* problem in SPEC-19/21, not an optimisation.
-(b) **Silent empty transcripts are the dangerous failure mode**: Nova-3 defaults to
-`language=en` and returned *nothing at all* on 42 % of natively-pronounced clips — which
-reads as "no speech" rather than "low confidence" and would silently drop a bottle from
-intake. `language=multi` fixes it (42 % → 0 % empty), and empty-transcript rate now
-belongs in SPEC-21's voice eval. Caveat recorded on the verdict: the eval is TTS, noise-
-free, and oracle-primed, so every number is an upper bound; survival also measures
-retrievability by `match_lwin`, not end-to-end resolution. The abstain path stays
-mandatory — the best config still misses ~3 % under laboratory-clean audio.
+**Spike 1 — CLOSED 2026-08-25 (700 live transcriptions + 192 full-catalog resolutions;
+adversarially audited by GPT-5.6 Sol, all corrections applied).** **VWP-D-02 =
+AssemblyAI (Universal-3.5 Pro) — committed for the demo phase, provisional for
+production** pending a small human/noisy/streaming validation. The decision rests on
+the audit-prescribed metric: resolution correctness against the full 211k catalog,
+utterance-clustered — AssemblyAI +18.8 pp over corrected Deepgram (p = 0.009 naive,
+p = 0.042 producer-gated). Findings that bind the specs: (a) **hot-list selection** —
+Deepgram measured ceiling 75 phrases / 124 words (500-token cap); AssemblyAI accepted
+93/156, documented to 1,000 words; nobody primes a 20k list. (b) **The dangerous
+failure is the plausible-but-wrong transcript, now measured**: naive threshold
+resolution misidentifies across producers at 31–50 %; a producer-corroboration gate
+cuts that to 6–8 % (at 34–50 % abstention) — that gate is now a SPEC-21 requirement.
+Empty transcripts (Deepgram `language=en`: 42 % of native clips; `multi` fixes it) are
+the cheap detectable guard, mapped to abstention. (c) **Accent folding is a hard
+requirement**: live pg_trgm shows accented-query-vs-ASCII-catalog at 0.294, below
+match_lwin's 0.3 threshold, and match_lwin does not fold. All numbers are clean-TTS
+oracle-primed upper bounds; scorer validated byte-exact against live pg_trgm (203
+pairs, max delta 0.000000).
 
 **Spike 9 — CLOSED 2026-08-25 (constructed + baselined).** 206 cases / 250-item fixture
 from the production LWIN catalog; queries are spike 1's REAL AssemblyAI transcripts, so
