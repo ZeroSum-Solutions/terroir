@@ -1,74 +1,90 @@
 ---
 version: alpha
-name: Terroir — Beyond Ordinary
-description: A daylight gallery for a wine cellar — plaster beige and powder-blue dawn, ultralight editorial serif with an italic accent word, one burgundy anchor, frosted-glass tiles floating on atmosphere.
+name: Terroir — Cantina
+description: A wine cellar in two rooms — a cream tasting room by day, an espresso cellar by night. High-contrast Didone display over an engineered grotesque, one burgundy anchor in both modes, champagne-gold reserved for the dark, cards that sit a step above a tinted ground.
 colors:
   primary: "#722f37"
   primary-hover: "#5a252c"
-  canvas: "#ffffff"
-  beige: "#ece4da"
-  beige-deep: "#e3d9cb"
-  bridge-surface: "#faf7f2"
-  powder: "#c7d7e9"
-  powder-wash: "#e2eaf3"
-  powder-ink: "#41586e"
-  sage: "#adaa8a"
-  sage-wash: "#e6e4d4"
-  sage-ink: "#5f5c40"
-  ink: "#191919"
-  ink-soft: "#212121"
-  grey: "#707070"
-  hairline: "#e4ded4"
-  blush-wash: "#f2e6e2"
-  amber: "#8b6914"
-  amber-wash: "#fbf3dc"
-  glass-white: "rgba(255, 255, 255, 0.55)"
-  glass-edge: "rgba(255, 255, 255, 0.7)"
-  glass-shadow: "rgba(25, 25, 25, 0.07)"
+  canvas: "#f2ede3"
+  surface: "#fbf9f4"
+  surface-sunken: "#eae3d5"
+  ink: "#241d1a"
+  ink-soft: "#3a2f2a"
+  grey: "#6e6257"
+  hairline: "#ded5c4"
+  gold: "#7d5f33"
+  sage: "#5e6b4b"
+  sage-wash: "#e7e6d6"
+  sage-ink: "#4c573c"
+  powder: "#b2d7e7"
+  powder-wash: "#e3ecf2"
+  powder-ink: "#3f586c"
+  amber: "#7f5f12"
+  amber-wash: "#f7efd9"
+  blush-wash: "#f0e2dc"
+  glass: "rgba(251, 249, 244, 0.7)"
+  glass-edge: "rgba(255, 253, 247, 0.75)"
+  shadow-card: "rgba(46, 26, 26, 0.07)"
+  dark-canvas: "#1d1512"
+  dark-surface: "#291e1a"
+  dark-surface-sunken: "#171009"
+  dark-ink: "#ede3ce"
+  dark-ink-soft: "#d8c9b0"
+  dark-grey: "#b3a28e"
+  dark-hairline: "#3e2f28"
+  dark-primary: "#8a3a44"
+  dark-primary-hover: "#a04751"
+  dark-gold: "#c7a165"
+  dark-glass: "rgba(29, 21, 18, 0.65)"
 typography:
   caption:
-    fontFamily: Inter
+    fontFamily: Archivo
     fontSize: 11px
     fontWeight: 500
     lineHeight: 1.5
     letterSpacing: 0.18em
   body-sm:
-    fontFamily: Inter
+    fontFamily: Archivo
     fontSize: 13px
     fontWeight: 400
     lineHeight: 1.55
   body:
-    fontFamily: Inter
+    fontFamily: Archivo
     fontSize: 15px
     fontWeight: 400
     lineHeight: 1.6
   body-light:
-    fontFamily: Inter
+    fontFamily: Archivo
     fontSize: 16px
     fontWeight: 300
     lineHeight: 1.6
   subheading:
-    fontFamily: Inter
+    fontFamily: Archivo
     fontSize: 19px
     fontWeight: 500
     lineHeight: 1.45
-  heading-sm:
-    fontFamily: Cormorant Garamond
-    fontSize: 28px
+  ledger:
+    fontFamily: Courier Prime
+    fontSize: 12px
     fontWeight: 400
+    lineHeight: 1.4
+    letterSpacing: 0.04em
+  heading-sm:
+    fontFamily: Bodoni Moda
+    fontSize: 26px
+    fontWeight: 500
     lineHeight: 1.25
   heading:
-    fontFamily: Cormorant Garamond
-    fontSize: 44px
-    fontWeight: 400
-    lineHeight: 1.1
-    letterSpacing: -0.01em
+    fontFamily: Bodoni Moda
+    fontSize: 40px
+    fontWeight: 500
+    lineHeight: 1.12
   display:
-    fontFamily: Cormorant Garamond
-    fontSize: 84px
-    fontWeight: 300
-    lineHeight: 1.0
-    letterSpacing: -0.01em
+    fontFamily: Bodoni Moda
+    fontSize: 76px
+    fontWeight: 400
+    lineHeight: 1.02
+    letterSpacing: 0.01em
 rounded:
   control: 10px
   tile: 18px
@@ -86,8 +102,15 @@ components:
     backgroundColor: "{colors.canvas}"
     textColor: "{colors.ink}"
     typography: "{typography.body}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.card}"
+  card-well:
+    backgroundColor: "{colors.surface-sunken}"
+    textColor: "{colors.ink-soft}"
   nav-glass:
-    backgroundColor: "{colors.glass-white}"
+    backgroundColor: "{colors.glass}"
     textColor: "{colors.ink-soft}"
   hero-display:
     textColor: "{colors.ink}"
@@ -95,29 +118,14 @@ components:
   hero-display-accent:
     textColor: "{colors.primary}"
     typography: "{typography.display}"
-  bridge-band:
-    backgroundColor: "{colors.beige}"
-    textColor: "{colors.ink-soft}"
-  glass-tile:
-    backgroundColor: "{colors.glass-white}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.tile}"
-  panel:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.card}"
-  panel-header:
-    backgroundColor: "{colors.bridge-surface}"
-    textColor: "{colors.grey}"
-    typography: "{typography.caption}"
   button-primary:
     backgroundColor: "{colors.primary}"
-    textColor: "{colors.canvas}"
+    textColor: "{colors.surface}"
     rounded: "{rounded.pill}"
     typography: "{typography.body-sm}"
   button-primary-hover:
     backgroundColor: "{colors.primary-hover}"
-    textColor: "{colors.canvas}"
+    textColor: "{colors.surface}"
     rounded: "{rounded.pill}"
   button-ghost:
     textColor: "{colors.ink}"
@@ -128,18 +136,21 @@ components:
     typography: "{typography.body-sm}"
   chip-active:
     backgroundColor: "{colors.ink}"
-    textColor: "{colors.beige}"
+    textColor: "{colors.canvas}"
     rounded: "{rounded.pill}"
   input:
-    backgroundColor: "{colors.canvas}"
+    backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
     rounded: "{rounded.pill}"
     typography: "{typography.body-sm}"
   eyebrow:
     textColor: "{colors.grey}"
     typography: "{typography.caption}"
+  spec-line:
+    textColor: "{colors.grey}"
+    typography: "{typography.ledger}"
   bin-chip:
-    backgroundColor: "{colors.beige}"
+    backgroundColor: "{colors.surface-sunken}"
     textColor: "{colors.ink-soft}"
     rounded: "{rounded.pill}"
   badge-ok:
@@ -160,237 +171,242 @@ components:
     rounded: "{rounded.pill}"
   badge-danger:
     backgroundColor: "{colors.primary}"
-    textColor: "{colors.canvas}"
+    textColor: "{colors.surface}"
     rounded: "{rounded.pill}"
+  gold-mark:
+    textColor: "{colors.gold}"
   text-muted:
     textColor: "{colors.grey}"
   divider:
     backgroundColor: "{colors.hairline}"
-  divider-strong:
-    backgroundColor: "{colors.beige-deep}"
-  gradient-dawn-stop:
-    backgroundColor: "{colors.powder}"
-  gradient-dusk-stop:
-    backgroundColor: "{colors.beige}"
-  glass-hairline:
-    backgroundColor: "{colors.glass-edge}"
-  glass-ambient-shadow:
-    backgroundColor: "{colors.glass-shadow}"
-  sage-mark:
-    backgroundColor: "{colors.sage}"
-    textColor: "{colors.ink}"
 ---
 
-# Terroir — Beyond Ordinary
-> A daylight gallery for a wine cellar: powder-blue dawn settling onto plaster
-> beige, an ultralight serif that sets one word in italic burgundy, and frosted
-> glass floating on the atmosphere. Mediterranean light, not candlelight.
+# Terroir — Cantina
 
-**Theme:** light
+> A wine cellar in two rooms. By day: the tasting room — warm cream plaster,
+> espresso ink, one burgundy anchor. By night: the cellar — espresso walls,
+> champagne type, candle-gold accents. The same bones in both rooms; only the
+> light changes.
 
-Terroir reads like a gallery in morning light rather than a dashboard. The
-palette is borrowed from Normal is Boring's interiors studio — plaster beige,
-powder blue, vine sage, warm near-black — with their coral accent replaced by
-Terroir's own burgundy, which sits against beige and sage the way wine sits
-against plaster and vine. The structure is Cluely's: an atmospheric gradient
-hero that resolves into a crisp white workspace, an editorial serif display
-over a precise engineered sans, exactly one accent color doing all chromatic
-work, and hairline-separated compact UI. The editorial signature comes from
-Normal is Boring: an ultralight serif display with a single *italic* word (set
-in burgundy), spaced-caps labels, and pill-shaped controls. Glassmorphism is
-the high-tech layer, rationed to elements that genuinely float.
+**Theme:** light + dark (light default, `prefers-color-scheme` respected,
+manual toggle persisted)
+
+Terroir v2 is mixed from six wine identities Devin picked (2026-08-26), decoded
+three ways: Gemini 3.1 Pro vision audit, Kimi K3 vision audit, and live-CSS
+extraction where the brand has a production site. It replaces the "Beyond
+Ordinary" dawn-gallery system (2026-08-19), whose flat white-on-white workspace
+Devin rejected: *"hard to distinguish cards and the background — everything
+gets lost in white."*
 
 ## Overview
 
-Provenance:
-- Palette: extracted live from normalisboring.es CSS tokens (`--beige #ECE4DA`,
-  `--blue #C7D7E9`, `--green #ADAA8A`, `--grey #707070`, black ink); their
-  `--red #DB5C59` replaced by Terroir burgundy `#722f37` per Devin
-  (2026-08-19: "make that pinkish orange more of the red we have").
-- Structure: Cluely style reference via Refero Styles
-  (styles.refero.design/style/72da35d5) — atmospheric gradient hero, serif
-  display + engineered sans, single accent, compact hairline UI, tinted bridge
-  band after the hero.
-- Editorial voice: Normal is Boring — ultralight display serif with an italic
-  accent word, spaced-caps wordmark and labels, pill geometry.
-- Direction chosen by Devin 2026-08-19 ("this is the winner") over two earlier
-  candidates (parchment "Cellar Ledger" from Slab; "wine dusk" pure-Cluely
-  remap). Approved mockup:
-  `~/Inbox/html/terroir-cellar-normal-mockup.html`.
+Provenance — what each reference contributed:
+
+- **Cantina Simonetti** (Behance, Devin's favorite): the voice. High-contrast
+  Didone display caps, cream-on-espresso inversion, engraved heraldic line
+  work, typewriter mono for vintages/ABV ("artisanal ledger"), vowelless
+  abbreviations. Kimi's decode proposed the exact two-mode token inversion
+  this file adopts.
+- **Chéri bar & store** (Behance): the dark room. "Never pure white on pure
+  black" — deep cassis/espresso grounds with champagne-gold type; gold is the
+  constant accent of the dark mode. Sunburst engraving reserved for empty
+  states.
+- **Maison Mura** (Behance + maisonmura.wine live CSS): merlot ink on ecru
+  paper, powder-ice-blue as the info accent, Archivo as the working sans.
+- **Maxwell Wines** (maxwellwines.com.au live CSS): the card fix. Canvas is
+  tinted bone, cards sit one step *lighter* with a hairline — plus italic
+  Didone headlines that end with a period.
+- **Can Leandro** (Behance): the ledger card — ivory label-card on dark
+  ground, oversized display name allowed to crop, tracked-caps meta line,
+  one saturated accent doing all the alarm work.
+- **Tito bar de vinos** (Behance): ruthless two-color inversion discipline —
+  surfaces are cream or oxblood/espresso, never grey.
+
+Continuity: Terroir's burgundy `#722f37` survives as the single brand
+chromatic in both modes (it sits naturally inside every reference's palette
+family). Pill geometry, radii, and the spacing scale carry over unchanged.
 
 ## Colors
 
+### Light — "Tasting Room" (default)
+
 | Name | Value | Token | Role |
 |------|-------|-------|------|
-| Burgundy | `#722f37` | `--color-primary` | The only brand chromatic: filled CTAs, active nav, the italic display word, links, focus rings. One burgundy action per surface |
-| Burgundy Deep | `#5a252c` | `--color-primary-hover` | Hover/pressed state of the anchor |
-| Chalk | `#ffffff` | `--color-canvas` | Page canvas and card surfaces — the crisp white workspace the gradient resolves into |
-| Plaster Beige | `#ece4da` | `--color-beige` | The signature tinted surface: bridge band, bin chips, gradient's warm terminal stop |
-| Beige Deep | `#e3d9cb` | `--color-beige-deep` | Tiered dividers inside beige surfaces |
-| Bridge Ivory | `#faf7f2` | `--color-bridge-surface` | Table headers, hover washes — the quietest beige tint |
-| Powder Blue | `#c7d7e9` | `--color-powder` | The gradient's dawn stop and info accents — atmospheric, never structural |
-| Powder Wash / Ink | `#e2eaf3` / `#41586e` | `--color-powder-*` | Info badges (window-closing states) |
-| Vine Sage | `#adaa8a` | `--color-sage` | Decorative earthy accent; small marks and illustrative moments |
-| Sage Wash / Ink | `#e6e4d4` / `#5f5c40` | `--color-sage-*` | Success/in-window badges — the vineyard green of this system |
-| Ink | `#191919` / `#212121` | `--color-ink(-soft)` | Primary text and nav — warm near-black, never `#000` |
-| Grey | `#707070` | `--color-grey` | Muted text, captions, eyebrows |
-| Hairline | `#e4ded4` | `--color-hairline` | The dominant structural line — warm, beige-derived, 1px everywhere |
-| Blush Wash | `#f2e6e2` | `--color-blush-wash` | Burgundy-tinted fills: risk badges, selected rows |
-| Amber | `#8b6914` / `#fbf3dc` | `--color-amber(-wash)` | Warnings that are neither info nor risk — used sparingly |
-| Glass White | `rgba(255,255,255,.55)` | `--color-glass-white` | Frosted tiles and nav over the gradient, with `backdrop-filter: blur(18px) saturate(1.3)` |
-| Glass Edge | `rgba(255,255,255,.7)` | `--color-glass-edge` | 1px border that makes glass read as a pane |
-| Glass Shadow | `rgba(25,25,25,.07)` | `--color-glass-shadow` | The system's only shadow: `0 8px 32px` under floating glass |
+| Burgundy | `#722f37` | `--color-primary` | The only brand chromatic: filled CTAs, active nav, the display accent word, links, focus rings |
+| Burgundy Deep | `#5a252c` | `--color-primary-hover` | Hover/pressed anchor |
+| Cream | `#f2ede3` | `--color-canvas` | Page ground — warm plaster cream, never white |
+| Paper | `#fbf9f4` | `--color-surface` | Cards, panels, inputs — one step lighter than the ground, so surfaces read without borders doing all the work |
+| Parchment Well | `#eae3d5` | `--color-surface-sunken` | Table headers, wells, hover washes, bin chips |
+| Espresso | `#241d1a` / `#3a2f2a` | `--color-ink(-soft)` | Text — warm espresso black, never `#000` |
+| Warm Grey | `#6e6257` | `--color-grey` | Muted text, captions, eyebrows |
+| Hairline | `#ded5c4` | `--color-hairline` | Structural 1px lines, warm and visible on cream |
+| Bronze Gold | `#7d5f33` | `--color-gold` | Premium markers, ratings, subtle emphasis — quiet in the light room |
+| Olive Sage | `#5e6b4b` + washes | `--color-sage*` | "Aging well / hold" states |
+| Powder Ice | `#b2d7e7` + washes | `--color-powder*` | Informational states |
+| Amber | `#7f5f12` / wash | `--color-amber*` | Warnings that are neither info nor risk |
+| Blush | `#f0e2dc` | `--color-blush-wash` | Burgundy-tinted fills: risk badges, selected rows |
+| Card Shadow | `rgba(46,26,26,.07)` | `--shadow-card` | Soft warm lift under cards |
+
+### Dark — "Cellar"
+
+| Name | Value | Token | Role |
+|------|-------|-------|------|
+| Espresso Ground | `#1d1512` | `--color-canvas` | Page ground — espresso, not black |
+| Raised Espresso | `#291e1a` | `--color-surface` | Cards and panels, one step lighter than ground |
+| Cellar Floor | `#171009` | `--color-surface-sunken` | Wells, table headers |
+| Champagne | `#ede3ce` / `#d8c9b0` | `--color-ink(-soft)` | Text — champagne cream, never pure white |
+| Dust | `#b3a28e` | `--color-grey` | Muted text |
+| Dark Hairline | `#3e2f28` | `--color-hairline` | Structural lines |
+| Burgundy Fill | `#8a3a44` → `#a04751` | `--color-primary(-hover)` | Buttons/CTAs — brightened for dark contrast, champagne text on top |
+| Candle Gold | `#c7a165` | `--color-gold` | The dark room's accent: active nav, ratings, premium markers — gold is the constant of the cellar (Chéri) |
+| Badge families | re-tinted washes | `--color-*-wash/-ink` | Same semantic roles, dark-tuned values (see globals.css) |
+
+Mechanics: every token above is a CSS custom property that swaps under
+`[data-theme="dark"]` (and under `prefers-color-scheme: dark` when no explicit
+choice is stored). Components consume only semantic tokens — a component never
+references a mode-specific value.
 
 ## Typography
 
-### Cormorant Garamond — editorial voice · `--font-serif`
-- **Substitute:** EB Garamond, Editorial New, Lora
-- **Weights:** 300, 400 (+ 400 italic)
-- **Sizes:** 28px, 44px, 84px
-- **Line height:** 1.0–1.25
-- **Letter spacing:** -0.01em at display sizes
-- **Role:** Display and headings, plus wine names in tables at 17px/500 (the
-  one sub-28px exception — wine names are editorial objects, not UI). The
-  signature move: display headlines set one word in *italic*, colored
-  burgundy ("A cellar beyond the *ordinary*"). Weight 300 at 84px whispers;
-  never bold the serif.
+### Bodoni Moda — the cantina voice · `--font-serif`
+- **Substitute:** Playfair Display, Prata, Libre Bodoni
+- **Weights:** 400, 500, 600 (+ italics), variable with optical sizing
+- **Sizes:** 26px, 40px, 76px; wine names in lists at 17px/500
+- **Role:** Display and headings — high-contrast Didone, the letterform of
+  every reference board. Display headlines in caps carry slight positive
+  tracking (Simonetti); the signature move keeps one accent word per display
+  headline in *italic* burgundy (Maxwell's italic Didone). Optical sizing
+  keeps small wine names sturdy. Never below 17px.
 
-### Inter — engineered voice · `--font-sans`
-- **Substitute:** Geist, IBM Plex Sans
-- **Weights:** 300, 400, 500, 600
+### Archivo — the working voice · `--font-sans`
+- **Substitute:** Inter, IBM Plex Sans
+- **Weights:** 300, 400, 500, 600 (variable)
 - **Sizes:** 11–19px
-- **Line height:** 1.45–1.6
-- **Letter spacing:** -0.005em body (compact, engineered); 0.18em uppercase
-  for eyebrows/labels; 0.22em for the spaced-caps TERROIR wordmark
-- **Role:** Everything operational. Weight 300 for whisper-quiet secondary
-  copy, 500–600 for active states. Tight tracking keeps it precise against
-  the serif's air.
+- **Letter spacing:** -0.005em body; 0.18em uppercase eyebrows; 0.22em
+  spaced-caps wordmark
+- **Role:** Everything operational — Mura's own production sans. Tall
+  x-height grotesque that holds dense data. Weight does hierarchy work
+  (300 quiet / 400 default / 500–600 active) before color or size does.
+
+### Courier Prime — the ledger voice · `--font-mono`
+- **Substitute:** Space Mono, JetBrains Mono
+- **Weights:** 400, 700
+- **Role:** Technical wine specs only: vintage years, ABV, bin codes,
+  quantities in tables — the typewriter stamp of Simonetti's labels. Tabular
+  by nature. Never for prose.
 
 ### Type Scale
 
 | Role | Size | LH | Tracking | Token |
 |------|------|----|----------|-------|
 | caption / eyebrow | 11px | 1.5 | 0.18em, uppercase | `--text-caption` |
+| ledger / spec | 12px | 1.4 | 0.04em, mono | `--text-ledger` |
 | body-sm | 13px | 1.55 | -0.005em | `--text-body-sm` |
 | body | 15px | 1.6 | -0.005em | `--text-body` |
 | body-light | 16px | 1.6 | weight 300 | `--text-body-light` |
 | subheading | 19px | 1.45 | — | `--text-subheading` |
-| heading-sm | 28px | 1.25 | — | `--text-heading-sm` |
-| heading | 44px | 1.1 | -0.01em | `--text-heading` |
-| display | 84px | 1.0 | -0.01em, weight 300 | `--text-display` |
+| heading-sm | 26px | 1.25 | — | `--text-heading-sm` |
+| heading | 40px | 1.12 | — | `--text-heading` |
+| display | 76px | 1.02 | +0.01em | `--text-display` |
 
 ## Layout
 
-**Base unit:** 8px · **Density:** airy in heroes and marketing surfaces,
-compact (13.5px cell text, 12–13px paddings) inside data tables.
+**Base unit:** 8px · **Density:** airy in heroes, compact inside data tables.
 
-- Page max-width: 1200px; tables may stretch to 1400px.
-- Section gap: 72px · Card padding: 24px · Element gap: 14–18px.
-- Canonical page anatomy: glass nav → atmospheric gradient hero (display
-  headline + glass tiles) → beige bridge band (filters/toolbar) → white
-  workspace (panels and tables). The gradient always resolves INTO the
-  workspace; content sections after the bridge are white.
+- Page max-width 1200px; tables may stretch to 1400px.
+- Section gap 72px · Card padding 24px · Element gap 14–18px.
+- Canonical page anatomy: glass nav → hero (display headline on the canvas,
+  no gradient band) → toolbar on a sunken well → card workspace. The old
+  dawn-gradient hero is retired; atmosphere now comes from the cream/espresso
+  ground itself.
 
 ## Elevation & Depth
 
-### Surfaces
+| Level | Name | Light | Dark | Purpose |
+|-------|------|-------|------|---------|
+| 0 | Ground | cream `#f2ede3` | espresso `#1d1512` | The room |
+| 1 | Card | paper `#fbf9f4` + hairline + `--shadow-card` | raised espresso `#291e1a` + hairline + deeper shadow | Panels, cards, list containers |
+| 2 | Well | parchment `#eae3d5` | cellar floor `#171009` | Table headers, sunken zones inside cards |
+| 3 | Glass | `rgba(251,249,244,.7)` blur 18px | `rgba(29,21,18,.65)` blur 18px | Floating chrome only: nav, drawers, modals, toasts |
 
-| Level | Name | Value | Purpose |
-|-------|------|-------|---------|
-| 0 | Dawn Gradient | `linear-gradient(172deg, #c7d7e9 0%, #dfe6ea 22%, #f4efe7 55%, #ece4da 100%)` | Hero atmosphere only — never a full-page background |
-| 1 | Chalk | `#ffffff` | Workspace canvas and panels |
-| 2 | Beige / Ivory | `#ece4da` / `#faf7f2` | Bridge band, table headers, chips — separation by warm tint, not shadow |
-| 3 | Glass | `rgba(255,255,255,.55)` + blur 18px | Floating chrome: nav, stat tiles on the gradient, drawers, modals, command palette |
+**The card rule (the reversal that fixes "lost in white"):** cards are
+*lighter than the ground* and carry BOTH a hairline and a soft warm shadow
+(`0 1px 2px` + `0 6px 20px --shadow-card`). The previous system's "no shadows,
+hairline-only separation" law is explicitly repealed — Devin's call,
+2026-08-26. Elevation stays quiet (no hard drop shadows, no dark halos), but
+a card must never share its exact background with the page behind it.
 
-- The workspace is flat: hairlines and beige tints do all separation.
-- Glass carries the system's only shadow (`0 8px 32px glass-shadow`).
-
-### The Glass Layer
-
-Rationed like an accent. Rules:
-
-1. **Glass floats; surfaces sit.** Frosting is allowed only on elements layered
-   above other content: sticky nav, stat tiles on the gradient hero, drawers,
-   modals, command palette, toasts. Never on static content sections.
-2. **Recipe:** `background: {colors.glass-white}`,
-   `backdrop-filter: blur(18px) saturate(1.3)`, 1px `{colors.glass-edge}`
-   border, `0 8px 32px {colors.glass-shadow}`, radius `{rounded.tile}`.
-3. **Never glass on glass** — one frosted altitude per stack.
-4. **AA against the worst-case backdrop**; add a solid ivory well inside the
-   pane when in doubt.
-5. **Fallback:** solid `#ffffff` at 92% opacity where `backdrop-filter` is
-   unsupported. The design must survive the fallback.
-6. Glass stays white — never beige-tinted, never burgundy-tinted.
+Glass keeps its recipe (blur 18px, saturate 1.3, 1px glass-edge, one ambient
+shadow) and stays rationed to floating chrome. Never glass-on-glass.
 
 ## Shapes
 
-Pill geometry is the system's signature: buttons, chips, inputs, badges, and
-bin tags are all fully rounded (`999px`). Rectangular surfaces are soft —
-panels/cards 20px, glass tiles 18px, small controls 10px. Nothing sits between
-10px and 18px; the gap is what separates "control" from "surface".
+Unchanged from v1: pill geometry (999px) for every control — buttons, chips,
+inputs, badges; cards 20px; glass tiles 18px; small controls 10px. Nothing
+between 10 and 18.
 
 ## Components
 
 ### Glass Nav
-Sticky 54px bar: glass recipe over whatever scrolls beneath, hairline bottom
-edge. Wordmark is spaced-caps Inter 500 at 13px/0.22em — "TERR" in ink,
-"OIR" in burgundy. Links Inter 400 13px ink-soft; active link burgundy with a
-1px underline. Account/context info right-aligned, weight 300 grey.
+Sticky 54px glass bar. Wordmark in spaced-caps Archivo 600 13px/0.22em —
+"TERR" in ink, "OIR" in burgundy (gold in dark mode). Active link burgundy
+(light) / candle gold (dark) with a 1px underline.
 
-### Dawn Hero
-The one atmospheric moment per page: the dawn gradient (level-0 surface),
-eyebrow in spaced-caps grey, display headline in Cormorant 300 at 84px with
-exactly one italic burgundy word, one weight-300 Inter paragraph (max 480px),
-then a burgundy pill CTA beside an ink-outline ghost pill. Glass stat tiles
-sit at the hero's foot, bridging into the workspace.
+### Hero
+Display headline in Bodoni Moda over the canvas: caps with slight tracking,
+one accent word in *italic* burgundy. Eyebrow above in spaced caps. One
+Archivo-300 paragraph (max 480px). Stat tiles below as level-1 cards.
 
-### Glass Stat Tile
-On the gradient only: glass recipe, 18px radius, spaced-caps label in grey,
-Cormorant 400 number at 30px, delta line in sage-ink (positive) or burgundy
-(needs attention). On white surfaces the same tile renders solid ivory with a
-hairline instead of glass.
+### Card (the workspace unit)
+Level-1 surface: paper/raised-espresso ground, 20px radius, hairline border,
+`--shadow-card`. Header rows may use the level-2 well. Wine names in Bodoni
+Moda 500 17px; metadata beneath in Archivo 300; vintages/ABV/bins in Courier
+Prime ledger style.
 
-### Bridge Band
-Full-width beige `#ece4da` strip directly after the hero: filter chips
-(transparent pills with 25%-ink borders; active = solid ink pill with beige
-text), pill search input at 70% white, and the surface's single burgundy pill
-button. This band is the only beige structural section per page.
+### Toolbar / Bridge
+The filter-chip toolbar sits on a level-2 well strip (parchment / cellar
+floor), replacing the old beige bridge band. Chips are transparent pills with
+25%-ink borders; active chip = solid ink pill with canvas text.
 
-### Ledger Panel
-White panel, 20px radius, hairline border. Header row bridge-ivory with
-spaced-caps column labels. Rows hairline-separated, hover bridge-ivory; wine
-names in Cormorant 500 17px with weight-300 metadata beneath; quantities in
-tabular numerals; producer group rows as beige spaced-caps strips. No zebra
-striping, no shadows.
+### Ledger Table
+Level-1 card: header row on the level-2 well with spaced-caps labels, rows
+hairline-separated, hover wash = well tint. Quantities and vintages in
+Courier Prime. No zebra striping.
 
 ### Badges
-Pill, 10.5px spaced-caps: sage-wash/sage-ink for in-window; powder-wash/
-powder-ink for window-closing (informational); blush-wash/burgundy for
-sleepy-capital risk; solid burgundy/white for variance alarms — the only
-filled badge, reserved for money-at-risk. Amber only when a warning is
-neither info nor risk.
+Pill, 10.5px spaced caps: sage for in-window/aging-well, powder for
+informational, amber for warnings, blush/burgundy for risk, solid burgundy
+for money-at-risk (the only filled badge). Same semantics in dark mode with
+dark-tuned washes.
+
+### Empty States
+The one decorative license: a faint engraved sunburst or vine line-work mark
+(Chéri/Simonetti), in hairline tone, behind empty-state copy. Never behind
+data.
 
 ## Do's and Don'ts
 
 ### Do
-- Keep burgundy as the only brand chromatic; sage and powder are earthy/airy
-  support tints, never competing accents.
-- Set exactly one italic burgundy word in every display headline — it is the
-  brand's editorial signature.
-- Use the dawn gradient once per page, always resolving into the white
-  workspace; the beige bridge band is the handoff.
-- Keep all interactive geometry pill-shaped; keep all surfaces 18–20px.
-- Use warm, beige-derived hairlines (`#e4ded4`) for every structural line.
-- Let weight do hierarchy work in Inter (300 quiet / 400 default / 500–600
-  active) before reaching for color or size.
+- Keep burgundy the only brand chromatic in light mode; in dark mode gold
+  joins it as the accent of the cellar — burgundy fills, gold highlights.
+- Give every card the full level-1 recipe: lighter-than-ground fill +
+  hairline + soft shadow. All three, always.
+- Set exactly one italic burgundy accent word in display headlines.
+- Use Courier Prime for every vintage, ABV, bin code, and quantity — the
+  ledger voice is a system signature, not a garnish.
+- Keep neutrals warm in both modes: cream/espresso, never grey, never `#000`
+  or `#fff` as text or ground.
+- Respect `prefers-reduced-motion`; theme switching must not flash.
 
 ### Don't
-- Don't use Normal is Boring's coral `#DB5C59` or Cluely's blue `#3c83f6` —
-  both palettes contributed structure or tint, neither contributes its accent.
-- Don't bold Cormorant or use it below 17px; don't use it for UI chrome.
-- Don't tint glass beige or burgundy; don't stack frosted surfaces.
-- Don't apply shadows to anything except floating glass.
-- Don't use pure `#000` text or cool grays; every neutral leans warm except
-  powder, which is atmosphere.
-- Don't add a second beige band or a second gradient per page — one dawn, one
-  bridge, then white.
+- Don't put white cards on a white ground — the ground is cream or espresso,
+  surfaces are always one step lighter.
+- Don't use hard, dark drop shadows; lift is soft and warm.
+- Don't use gold as an accent in light mode beyond quiet premium markers —
+  it belongs to the dark room.
+- Don't bold Bodoni Moda past 600, use it below 17px, or use it for UI
+  chrome.
+- Don't reintroduce the dawn gradient, powder-blue heroes, or a second
+  accent hue; powder is a badge tint only now.
+- Don't hand any component a mode-specific hex — semantic tokens only, both
+  modes come free.
