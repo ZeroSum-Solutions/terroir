@@ -1241,7 +1241,7 @@ export function WineListEditor({
 
       {/* Copy URL toast */}
       {copyFeedback && (
-        <div className="fixed bottom-lg left-1/2 z-50 -translate-x-1/2 rounded-pill bg-ink px-lg py-sm text-[13px] font-medium text-white animate-in fade-in slide-in-from-bottom-2">
+        <div className="fixed bottom-lg left-1/2 z-50 -translate-x-1/2 rounded-pill bg-surface-inverse px-lg py-sm text-[13px] font-medium text-on-inverse animate-in fade-in slide-in-from-bottom-2">
           URL copied to clipboard.
         </div>
       )}

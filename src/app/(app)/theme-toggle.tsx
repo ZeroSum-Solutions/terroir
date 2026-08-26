@@ -5,6 +5,10 @@ import { Moon, Sun, SunMoon } from "lucide-react";
 
 const STORAGE_KEY = "terroir-theme";
 
+// Canvas colors for browser/PWA chrome — hand-synced with the DESIGN.md
+// tokens, viewport.themeColor in layout.tsx, and its themeInitScript.
+const THEME_COLORS = { light: "#f2ede3", dark: "#1d1512" } as const;
+
 type ThemeChoice = "light" | "dark" | "system";
 
 function readStoredChoice(): ThemeChoice {
@@ -26,6 +30,25 @@ function applyChoice(choice: ThemeChoice) {
   }
   if (choice === "system") delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = choice;
+  syncBrowserChrome(choice);
+}
+
+/**
+ * Next's viewport.themeColor metas only track the system scheme, so an
+ * explicit choice would leave browser/PWA chrome (status bar, tab strip)
+ * in the other mode's color. Force both metas to the chosen canvas; on
+ * "system", restore each meta to its own media query's color.
+ */
+function syncBrowserChrome(choice: ThemeChoice) {
+  const metas = document.querySelectorAll<HTMLMetaElement>(
+    'meta[name="theme-color"]',
+  );
+  for (const meta of metas) {
+    const systemColor = meta.media.includes("dark")
+      ? THEME_COLORS.dark
+      : THEME_COLORS.light;
+    meta.content = choice === "system" ? systemColor : THEME_COLORS[choice];
+  }
 }
 
 const OPTIONS: Array<{

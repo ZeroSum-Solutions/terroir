@@ -410,3 +410,10 @@ data.
   accent hue; powder is a badge tint only now.
 - Don't hand any component a mode-specific hex — semantic tokens only, both
   modes come free.
+- Don't set `text-white` on `accent`, `ink`, `sage-ink`, or `gold` surfaces —
+  those tokens go light in the dark room. Inverse chips (tooltips, toasts,
+  neutral buttons) use the `surface-inverse`/`on-inverse` pair; sage checks
+  pair `sage-ink` with `sage-wash`; solid CTAs stay on `primary`, which is
+  burgundy in both modes and safely carries white. The one sanctioned
+  `text-white`-on-fixed-dark exception: scrims over live camera video, which
+  are media overlays (`black/70`), not themed surfaces.

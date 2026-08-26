@@ -87,8 +87,10 @@ export function DrinkWindowTimeline({
       <div
         className={`absolute inset-x-0 ${trackTopOffset} ${trackHeight} overflow-hidden rounded-full`}
         style={{
+          // --t-* runtime vars, not --color-*: @theme inline only emits
+          // custom properties for tokens the scanner sees referenced.
           background:
-            "linear-gradient(90deg, #e6e4d4 0%, #e2eaf3 60%, #f2e6e2 88%, #f2e6e2 100%)",
+            "linear-gradient(90deg, var(--t-sage-wash) 0%, var(--t-powder-wash) 60%, var(--t-blush-wash) 88%, var(--t-blush-wash) 100%)",
         }}
       />
 

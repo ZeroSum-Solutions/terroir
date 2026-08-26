@@ -51,9 +51,12 @@ export const viewport: Viewport = {
  * Applies the stored theme choice before first paint so neither mode
  * flashes. "light" | "dark" set data-theme explicitly; anything else
  * (or no storage access) leaves the system preference in charge via
- * the prefers-color-scheme blocks in globals.css.
+ * the prefers-color-scheme blocks in globals.css. An explicit choice
+ * also overrides both theme-color metas so browser/PWA chrome matches
+ * the page rather than the system scheme (ThemeToggle keeps them in
+ * sync on later changes; hexes hand-synced with viewport.themeColor).
  */
-const themeInitScript = `try{var t=localStorage.getItem("terroir-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
+const themeInitScript = `try{var t=localStorage.getItem("terroir-theme");if(t==="light"||t==="dark"){document.documentElement.dataset.theme=t;var c=t==="dark"?"#1d1512":"#f2ede3";document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.setAttribute("content",c)})}}catch(e){}`;
 
 export default function RootLayout({
   children,

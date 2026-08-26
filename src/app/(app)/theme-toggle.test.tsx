@@ -73,4 +73,49 @@ describe("ThemeToggle", () => {
         ?.getAttribute("aria-pressed"),
     ).toBe("true");
   });
+
+  describe("browser-chrome theme-color sync", () => {
+    // Mirrors the two metas Next renders from viewport.themeColor.
+    let darkMeta: HTMLMetaElement;
+    let lightMeta: HTMLMetaElement;
+
+    beforeEach(() => {
+      darkMeta = document.createElement("meta");
+      darkMeta.name = "theme-color";
+      darkMeta.media = "(prefers-color-scheme: dark)";
+      darkMeta.content = "#1d1512";
+      lightMeta = document.createElement("meta");
+      lightMeta.name = "theme-color";
+      lightMeta.media = "(prefers-color-scheme: light)";
+      lightMeta.content = "#f2ede3";
+      document.head.append(darkMeta, lightMeta);
+    });
+
+    afterEach(() => {
+      darkMeta.remove();
+      lightMeta.remove();
+    });
+
+    it("forces both metas to the cellar color on an explicit dark choice", () => {
+      render();
+      press("Dark theme");
+      expect(darkMeta.content).toBe("#1d1512");
+      expect(lightMeta.content).toBe("#1d1512");
+    });
+
+    it("forces both metas to the tasting-room color on an explicit light choice", () => {
+      render();
+      press("Light theme");
+      expect(darkMeta.content).toBe("#f2ede3");
+      expect(lightMeta.content).toBe("#f2ede3");
+    });
+
+    it("restores each meta to its own media color on returning to system", () => {
+      render();
+      press("Dark theme");
+      press("Match device theme");
+      expect(darkMeta.content).toBe("#1d1512");
+      expect(lightMeta.content).toBe("#f2ede3");
+    });
+  });
 });

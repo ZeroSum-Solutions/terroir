@@ -123,10 +123,10 @@ export function ActionDialog({
             disabled={busy}
             onClick={onConfirm}
             className={cn(
-              "min-h-11 rounded-pill px-lg text-[14px] font-medium text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60",
+              "min-h-11 rounded-pill px-lg text-[14px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60",
               tone === "danger"
-                ? "bg-primary hover:bg-primary-hover"
-                : "bg-ink hover:bg-ink-soft",
+                ? "bg-primary text-white hover:bg-primary-hover"
+                : "bg-surface-inverse text-on-inverse hover:bg-ink-soft",
             )}
           >
             {confirmLabel}

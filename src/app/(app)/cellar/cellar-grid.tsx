@@ -192,13 +192,14 @@ export function CellarGridView({
                   const total = data?.totalBottles ?? 0;
 
                   // Contract tokens only: beige-deep (empty), amber (low), sage (in stock).
-                  let fill = "#E3D9CB"; // empty — beige-deep
-                  let textFill = "white";
+                  // --t-* runtime vars so both themes retint the SVG; the
+                  // canvas color reads on amber and sage in both modes.
+                  let fill = "var(--t-hairline-strong)"; // empty — beige-deep alias
+                  const textFill = "var(--t-canvas)";
                   if (total > 0 && total <= 2) {
-                    fill = "#8B6914"; // low — amber
+                    fill = "var(--t-amber)"; // low
                   } else if (total > 2) {
-                    fill = "#ADAA8A"; // in stock — sage
-                    textFill = "#191919"; // ink, for contrast against sage
+                    fill = "var(--t-sage)"; // in stock
                   }
 
                   const isSelected = selectedBin === binId;
@@ -212,7 +213,7 @@ export function CellarGridView({
                         height={CELL_SIZE}
                         rx={4}
                         fill={fill}
-                        stroke={isSelected ? "#722F37" : "transparent"}
+                        stroke={isSelected ? "var(--t-accent)" : "transparent"}
                         strokeWidth={isSelected ? 2 : 0}
                         role="button"
                         tabIndex={0}

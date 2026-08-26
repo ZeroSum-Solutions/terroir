@@ -170,7 +170,7 @@ export default async function ReconcileHistoryPage() {
           action={
             <Link
               href="/cellar/reconcile"
-              className="inline-flex h-11 items-center gap-sm rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
+              className="inline-flex h-11 items-center gap-sm rounded-sm bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
             >
               Go to reconcile
             </Link>

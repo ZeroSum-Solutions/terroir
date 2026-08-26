@@ -385,7 +385,7 @@ export default function ScanBottlePage() {
 
       {phase === "scanning" && (
         <div className="space-y-md">
-          <div className="relative overflow-hidden rounded-card border-2 border-hairline bg-ink">
+          <div className="relative overflow-hidden rounded-card border-2 border-hairline bg-black">
             <div className="relative pb-[75%]">
               <video
                 ref={videoRef}
@@ -399,7 +399,9 @@ export default function ScanBottlePage() {
               </div>
             </div>
             <div className="absolute bottom-md left-1/2 -translate-x-1/2">
-              <span className="inline-flex items-center gap-sm rounded-pill bg-ink/80 px-md py-sm text-[13px] font-medium text-white backdrop-blur-sm">
+              {/* Over live camera video — a fixed dark media scrim, not a
+                  themed surface (dark-mode ink is champagne). */}
+              <span className="inline-flex items-center gap-sm rounded-pill bg-black/70 px-md py-sm text-[13px] font-medium text-white backdrop-blur-sm">
                 <ScanLine className="h-4 w-4 animate-pulse" strokeWidth={2} />
                 Point camera at QR code
               </span>
@@ -717,7 +719,7 @@ export default function ScanBottlePage() {
         <div className="space-y-md">
           <div className="flex flex-col items-center gap-lg rounded-card border border-hairline bg-sage-wash/40 px-lg py-2xl text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-sage-ink">
-              <Check className="h-7 w-7 text-white" strokeWidth={2.5} />
+              <Check className="h-7 w-7 text-sage-wash" strokeWidth={2.5} />
             </div>
             <div>
               <h2 className="font-serif text-[22px] text-ink">

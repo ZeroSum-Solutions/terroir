@@ -164,7 +164,7 @@ function ThroughputBarChart({ data }: { data: { weekLabel: string; count: number
               className="w-full rounded-t-sm bg-accent/70 transition-colors hover:bg-accent"
               style={{ height: Math.max(barH, 2), minWidth: 4 }}
             >
-              <div className="invisible absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-1.5 py-0.5 font-mono text-[11px] text-white opacity-0 transition-opacity group-hover:visible group-hover:opacity-100">
+              <div className="invisible absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm bg-surface-inverse px-1.5 py-0.5 font-mono text-[11px] text-on-inverse opacity-0 transition-opacity group-hover:visible group-hover:opacity-100">
                 {d.count}
               </div>
             </div>

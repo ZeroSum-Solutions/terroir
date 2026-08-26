@@ -995,8 +995,10 @@ function DrinkWindowIndicator({
         aria-hidden
         className="relative inline-block h-[4px] w-[56px] rounded-full"
         style={{
+          // Dual-mode: sage wash (young) → amber wash → gold peak (mid-mix
+          // keeps the peak legible on both canvases) → sunken (past).
           background:
-            "linear-gradient(90deg, #E3EFE8 0%, #FBF3DC 60%, #F2D896 88%, #E8DCD0 100%)",
+            "linear-gradient(90deg, var(--t-sage-wash) 0%, var(--t-amber-wash) 60%, color-mix(in oklab, var(--t-amber) 45%, var(--t-amber-wash)) 88%, var(--t-surface-sunken) 100%)",
         }}
       >
         <span
