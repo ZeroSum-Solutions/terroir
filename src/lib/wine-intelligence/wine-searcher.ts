@@ -26,11 +26,15 @@
 import * as Sentry from "@sentry/nextjs";
 import { isRetailPlausible } from "@/lib/pricing/status";
 
-/** Public response shape — what callers persist to wines.retail_* columns. */
+export type RetailPriceBasis = "median" | "average";
+
+/** Public response shape — callers persist only true-median results. */
 export type WineSearcherResult = {
   retailMin: number;
   retailMax: number;
+  /** Legacy field name; retailMedianBasis distinguishes average fallback values. */
   retailMedian: number;
+  retailMedianBasis: RetailPriceBasis;
   retailerCount: number;
   /** Raw response timestamp; for cache freshness display. */
   refreshedAt: Date;
@@ -178,7 +182,7 @@ export async function fetchRetailPrices(
  * Parse a Wine-Searcher response into our internal shape.
  *
  * The trial-tier response varies by version, but the fields we care about
- * are: min_price, max_price, average_price, offers_count (or similar).
+ * are: min_price, max_price, median_price or average_price, and offers_count.
  * We're conservative — accept either the documented shape OR a slightly
  * older/newer variant. Reject anything we can't map.
  */
@@ -195,10 +199,10 @@ function parseResponse(body: unknown): WineSearcherResult | null {
 
   const min = readNumber(wine.min_price ?? wine.priceMin);
   const max = readNumber(wine.max_price ?? wine.priceMax);
-  // Wine-Searcher returns avg_price; we treat it as median for our purposes
-  // (close enough for the band visual + outlier filter; production tier
-  // returns true median).
-  const median = readNumber(wine.average_price ?? wine.priceAvg ?? wine.median_price);
+  const trueMedian = readNumber(wine.median_price);
+  const average = readNumber(wine.average_price ?? wine.priceAvg);
+  const median = trueMedian ?? average;
+  const medianBasis: RetailPriceBasis = trueMedian != null ? "median" : "average";
   const count = readNumber(wine.offers_count ?? wine.retailerCount ?? wine.merchant_count);
 
   if (min == null || max == null || median == null) return null;
@@ -210,9 +214,14 @@ function parseResponse(body: unknown): WineSearcherResult | null {
     retailMin: min,
     retailMax: max,
     retailMedian: median,
+    retailMedianBasis: medianBasis,
     retailerCount: count != null && count > 0 ? Math.floor(count) : 0,
     refreshedAt: new Date(),
   };
+}
+
+export function formatRetailPriceBasis(basis: RetailPriceBasis): "median" | "avg-based" {
+  return basis === "median" ? "median" : "avg-based";
 }
 
 function readNumber(v: unknown): number | null {

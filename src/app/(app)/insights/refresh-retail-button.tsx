@@ -124,7 +124,9 @@ export function RefreshRetailButton() {
               {" "}
               ·{" "}
               <span className="tabular">{progress.skipped}</span> unavailable
-              <span className="ml-xs text-grey">(no LWIN match or out of API quota)</span>
+              <span className="ml-xs text-grey">
+                (no true median, LWIN match, or API quota)
+              </span>
             </>
           )}
         </p>

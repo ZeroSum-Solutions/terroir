@@ -2,16 +2,19 @@ import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
-import { fetchRetailPrices } from "@/lib/wine-intelligence/wine-searcher";
+import {
+  fetchRetailPrices,
+  formatRetailPriceBasis,
+} from "@/lib/wine-intelligence/wine-searcher";
 
 export const runtime = "nodejs";
 
 /**
  * BND-040 — POST /api/wines/[id]/refresh-retail
  *
- * Single-wine retail-cache refresh. Calls Wine-Searcher (LWIN-keyed) and
- * writes the result to wines.retail_* columns. Returns the refreshed
- * row state.
+ * Single-wine retail-cache refresh. Calls Wine-Searcher (LWIN-keyed),
+ * writes true-median results to wines.retail_* columns, and returns
+ * average-only results with an explicit non-persisted label.
  *
  * Auth: owner+manager only — pricing intelligence burns Wine-Searcher
  * trial-tier quota fast under staff misuse (architect finding 8).
@@ -88,6 +91,26 @@ export async function POST(
     );
   }
 
+  if (result.retailMedianBasis === "average") {
+    // The frozen schema has no basis column, so never persist an average in
+    // retail_median. Return the value under an honest, non-persisted label.
+    return NextResponse.json({
+      wineId: wine.id,
+      refreshed: false,
+      reason: "average_only",
+      message: "Only an avg-based retail price was available; it was not saved as a median.",
+      retail: {
+        min: result.retailMin,
+        max: result.retailMax,
+        referencePrice: result.retailMedian,
+        referencePriceBasis: result.retailMedianBasis,
+        referencePriceLabel: formatRetailPriceBasis(result.retailMedianBasis),
+        retailerCount: result.retailerCount,
+        refreshedAt: result.refreshedAt.toISOString(),
+      },
+    });
+  }
+
   const { error: writeErr } = await supabase
     .from("wines")
     .update({
@@ -115,6 +138,8 @@ export async function POST(
       min: result.retailMin,
       max: result.retailMax,
       median: result.retailMedian,
+      medianBasis: result.retailMedianBasis,
+      medianLabel: formatRetailPriceBasis(result.retailMedianBasis),
       retailerCount: result.retailerCount,
       refreshedAt: result.refreshedAt.toISOString(),
     },

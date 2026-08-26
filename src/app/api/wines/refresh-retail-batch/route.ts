@@ -123,7 +123,10 @@ export async function POST() {
           lwinId: wine.lwin_id,
           invoiceCost: costByWine.get(wine.id),
         });
-        if (!result) return null;
+        // The frozen schema cannot record price basis. Keep average-only
+        // values out of retail_median so every persisted consumer sees a
+        // true median.
+        if (!result || result.retailMedianBasis !== "median") return null;
         return {
           id: wine.id,
           retail_min: result.retailMin,
