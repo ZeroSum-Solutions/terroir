@@ -89,7 +89,10 @@ export function VoiceCellarControl({
             : "Voice search is not ready yet. Use typed search for now.",
         );
       } else {
-        setAvailable(false);
+        // e.g. kind "unavailable": the key vanished between GET and POST.
+        // Keep the control mounted — setAvailable(false) here would unmount
+        // the notice along with the mic, making the feature vanish silently.
+        setNotice("Voice search is temporarily unavailable. Use typed search for now.");
       }
     },
     [onResolve],
@@ -110,8 +113,18 @@ export function VoiceCellarControl({
           method: "POST",
           body: form,
         });
-        const result = (await response.json()) as VoiceResolveResponse;
-        if (!("kind" in result)) throw new Error("Unexpected voice response");
+        const result = (await response.json()) as
+          | VoiceResolveResponse
+          | { error?: { message?: string } };
+        if (!("kind" in result)) {
+          const message =
+            "error" in result ? result.error?.message : undefined;
+          setNotice(
+            message ??
+              "Voice search couldn't finish. Try again or use typed search.",
+          );
+          return;
+        }
         applyResult(result);
       } catch {
         setNotice("Voice search couldn't finish. Try again or use typed search.");
