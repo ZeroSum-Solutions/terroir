@@ -313,9 +313,11 @@ describe("checked-in API contract gate", () => {
       // P3 (2026-08-23-p3-chunked-import.md §3) added three new session
       // routes (POST /api/import/sessions, GET /api/import/sessions/[id],
       // POST /api/import/sessions/[id]/revert) — 100 + 3 = 103.
-      discoveredOperationCount: 103,
+      // SPEC-20 voice retrieval added GET+POST /api/cellar/voice-resolve —
+      // 103 + 2 = 105.
+      discoveredOperationCount: 105,
       plannedOperationCount: 15,
-      classificationCount: 103,
+      classificationCount: 105,
     });
     expect(paths.map((file) => readFileSync(resolve(file), "utf8"))).toEqual(
       before,

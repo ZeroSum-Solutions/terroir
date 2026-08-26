@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 86,
+    "extensionDiscoveredCount": 88,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -407,6 +407,18 @@
           "note": "Returns a cellar grid projection but does not implement GET /api/cellar."
         }
       ]
+    },
+    {
+      "operationId": "api:GET:/api/cellar/voice-resolve",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/cellar/voice-resolve",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
     },
     {
       "operationId": "api:GET:/api/dev-login",

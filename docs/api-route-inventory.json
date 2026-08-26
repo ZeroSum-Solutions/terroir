@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 89,
-  "discoveredOperationCount": 103,
+  "routeFileCount": 90,
+  "discoveredOperationCount": 105,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/bins",
@@ -178,6 +178,28 @@
         "file": "src/app/api/cellar/grid/route.ts",
         "exportKind": "function-declaration",
         "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/cellar/voice-resolve",
+      "method": "GET",
+      "path": "/api/cellar/voice-resolve",
+      "source": {
+        "file": "src/app/api/cellar/voice-resolve/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/cellar/voice-resolve",
+      "method": "POST",
+      "path": "/api/cellar/voice-resolve",
+      "source": {
+        "file": "src/app/api/cellar/voice-resolve/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
         "moduleSpecifier": null
       }
     },
