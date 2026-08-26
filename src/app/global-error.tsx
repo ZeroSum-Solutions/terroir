@@ -10,8 +10,9 @@
  *
  * Styling is inline because this component renders its own <html>
  * and <body> — Tailwind + the root-layout font classes don't apply
- * when the root layout itself crashed. Colors mirror DESIGN.md
- * tokens (--bg-primary, --text-primary, --accent).
+ * when the root layout itself crashed. Colors mirror the DESIGN.md
+ * ("Terroir — Cantina") light-mode tokens and must be hand-synced
+ * when the contract changes.
  */
 
 import * as Sentry from "@sentry/nextjs";
@@ -32,10 +33,10 @@ export default function GlobalError({
         style={{
           margin: 0,
           minHeight: "100vh",
-          background: "#faf7f2",
-          color: "#191919",
+          background: "#f2ede3",
+          color: "#241d1a",
           fontFamily:
-            'Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+            'Archivo, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -46,7 +47,7 @@ export default function GlobalError({
           <h1
             style={{
               fontFamily:
-                '"Cormorant Garamond", Georgia, "Times New Roman", serif',
+                '"Bodoni Moda", Didot, Georgia, "Times New Roman", serif',
               fontSize: "28px",
               fontWeight: 500,
               margin: "0 0 12px",
@@ -59,7 +60,7 @@ export default function GlobalError({
             style={{
               fontSize: "15px",
               lineHeight: 1.5,
-              color: "#707070",
+              color: "#6e6257",
               margin: "0 0 24px",
             }}
           >
@@ -72,9 +73,9 @@ export default function GlobalError({
                 fontSize: "11px",
                 letterSpacing: "0.18em",
                 textTransform: "uppercase",
-                color: "#707070",
+                color: "#6e6257",
                 fontFamily:
-                  '"JetBrains Mono", ui-monospace, SFMono-Regular, monospace',
+                  '"Courier Prime", ui-monospace, SFMono-Regular, monospace',
                 margin: "0 0 24px",
               }}
             >

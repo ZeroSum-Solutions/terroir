@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Archive, ClipboardCheck, DollarSign, LogOut, Settings, Upload, Users } from "lucide-react";
+import { ThemeToggle } from "./theme-toggle";
 
 export function SettingsDropdown() {
   const [open, setOpen] = useState(false);
@@ -122,6 +123,8 @@ export function SettingsDropdown() {
               <Upload className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Import
             </Link>
+            <div className="mx-md my-xs border-t border-hairline" role="separator" />
+            <ThemeToggle />
             <div className="mx-md my-xs border-t border-hairline" role="separator" />
             <form action="/auth/signout" method="post">
               <button
