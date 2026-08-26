@@ -1,0 +1,1607 @@
+{
+"note": "computed by spike-1 score.py, itself validated byte-exact (max |delta| 0.000000, 203 pairs) against live Postgres 16 pg_trgm on 2026-08-25",
+"sim": [
+{
+"a": "Aglianico del Vulture",
+"b": "Aglianico del Vulture",
+"sim": 1.0
+},
+{
+"a": "Aglianico del Vulture",
+"b": "Muscadet Sèvre-et-Maine",
+"sim": 0.023255813953488372
+},
+{
+"a": "Alain Graillot",
+"b": "Alain Graillot",
+"sim": 1.0
+},
+{
+"a": "Alain Graillot",
+"b": "Puligny-Montrachet",
+"sim": 0.0
+},
+{
+"a": "Albariño",
+"b": "Albariño",
+"sim": 1.0
+},
+{
+"a": "Albariño",
+"b": "Satèn",
+"sim": 0.0
+},
+{
+"a": "Amarone della Valpolicella",
+"b": "Amarone della Valpolicella",
+"sim": 1.0
+},
+{
+"a": "Amarone della Valpolicella",
+"b": "Auslese",
+"sim": 0.03225806451612903
+},
+{
+"a": "Asili",
+"b": "Asili",
+"sim": 1.0
+},
+{
+"a": "Asili",
+"b": "Bierzo",
+"sim": 0.0
+},
+{
+"a": "Auslese",
+"b": "Auslese",
+"sim": 1.0
+},
+{
+"a": "Auslese",
+"b": "Tenuta San Guido",
+"sim": 0.0
+},
+{
+"a": "Bandol",
+"b": "Bandol",
+"sim": 1.0
+},
+{
+"a": "Bandol",
+"b": "Ghemme",
+"sim": 0.0
+},
+{
+"a": "Barbaresco",
+"b": "Barbaresco",
+"sim": 1.0
+},
+{
+"a": "Barbaresco",
+"b": "Condrieu",
+"sim": 0.0
+},
+{
+"a": "Barolo Monfortino",
+"b": "Barolo Monfortino",
+"sim": 1.0
+},
+{
+"a": "Barolo Monfortino",
+"b": "Pouilly-Fuissé",
+"sim": 0.0
+},
+{
+"a": "Bierzo",
+"b": "Bierzo",
+"sim": 1.0
+},
+{
+"a": "Bierzo",
+"b": "Domaine Tempier",
+"sim": 0.045454545454545456
+},
+{
+"a": "Biondi-Santi",
+"b": "Biondi-Santi",
+"sim": 1.0
+},
+{
+"a": "Biondi-Santi",
+"b": "Château Margaux",
+"sim": 0.0
+},
+{
+"a": "Bodegas Muga",
+"b": "Bodegas Muga",
+"sim": 1.0
+},
+{
+"a": "Bodegas Muga",
+"b": "Cahors",
+"sim": 0.0
+},
+{
+"a": "Brunello di Montalcino",
+"b": "Brunello di Montalcino",
+"sim": 1.0
+},
+{
+"a": "Brunello di Montalcino",
+"b": "La Tâche",
+"sim": 0.0
+},
+{
+"a": "Bâtard-Montrachet",
+"b": "Bâtard-Montrachet",
+"sim": 1.0
+},
+{
+"a": "Bâtard-Montrachet",
+"b": "Bierzo",
+"sim": 0.041666666666666664
+},
+{
+"a": "Cahors",
+"b": "Cahors",
+"sim": 1.0
+},
+{
+"a": "Cahors",
+"b": "Descendientes de José Palacios",
+"sim": 0.0
+},
+{
+"a": "Chassagne-Montrachet",
+"b": "Chassagne-Montrachet",
+"sim": 1.0
+},
+{
+"a": "Chassagne-Montrachet",
+"b": "Bâtard-Montrachet",
+"sim": 0.39285714285714285
+},
+{
+"a": "Château Margaux",
+"b": "Château Margaux",
+"sim": 1.0
+},
+{
+"a": "Château Margaux",
+"b": "Sassicaia",
+"sim": 0.0
+},
+{
+"a": "Châteauneuf-du-Pape",
+"b": "Châteauneuf-du-Pape",
+"sim": 1.0
+},
+{
+"a": "Châteauneuf-du-Pape",
+"b": "Auslese",
+"sim": 0.0
+},
+{
+"a": "Coche-Dury",
+"b": "Coche-Dury",
+"sim": 1.0
+},
+{
+"a": "Coche-Dury",
+"b": "Domaine de la Romanée-Conti",
+"sim": 0.08823529411764706
+},
+{
+"a": "Condrieu",
+"b": "Condrieu",
+"sim": 1.0
+},
+{
+"a": "Condrieu",
+"b": "Chassagne-Montrachet",
+"sim": 0.034482758620689655
+},
+{
+"a": "Crozes-Hermitage",
+"b": "Crozes-Hermitage",
+"sim": 1.0
+},
+{
+"a": "Crozes-Hermitage",
+"b": "Bodegas Muga",
+"sim": 0.0
+},
+{
+"a": "Côte-Rôtie",
+"b": "Côte-Rôtie",
+"sim": 1.0
+},
+{
+"a": "Côte-Rôtie",
+"b": "Coche-Dury",
+"sim": 0.1
+},
+{
+"a": "Descendientes de José Palacios",
+"b": "Descendientes de José Palacios",
+"sim": 1.0
+},
+{
+"a": "Descendientes de José Palacios",
+"b": "Asili",
+"sim": 0.0
+},
+{
+"a": "Domaine Fourrier",
+"b": "Domaine Fourrier",
+"sim": 1.0
+},
+{
+"a": "Domaine Fourrier",
+"b": "Rías Baixas",
+"sim": 0.0
+},
+{
+"a": "Domaine Leflaive",
+"b": "Domaine Leflaive",
+"sim": 1.0
+},
+{
+"a": "Domaine Leflaive",
+"b": "Les Combettes",
+"sim": 0.07142857142857142
+},
+{
+"a": "Domaine Santa Duc",
+"b": "Domaine Santa Duc",
+"sim": 1.0
+},
+{
+"a": "Domaine Santa Duc",
+"b": "Numanthia",
+"sim": 0.038461538461538464
+},
+{
+"a": "Domaine Tempier",
+"b": "Domaine Tempier",
+"sim": 1.0
+},
+{
+"a": "Domaine Tempier",
+"b": "Dönnhoff",
+"sim": 0.08695652173913043
+},
+{
+"a": "Domaine de la Romanée-Conti",
+"b": "Domaine de la Romanée-Conti",
+"sim": 1.0
+},
+{
+"a": "Domaine de la Romanée-Conti",
+"b": "Chassagne-Montrachet",
+"sim": 0.06818181818181818
+},
+{
+"a": "Dominio de Pingus",
+"b": "Dominio de Pingus",
+"sim": 1.0
+},
+{
+"a": "Dominio de Pingus",
+"b": "Txakoli",
+"sim": 0.0
+},
+{
+"a": "Dönnhoff",
+"b": "Dönnhoff",
+"sim": 1.0
+},
+{
+"a": "Dönnhoff",
+"b": "Puligny-Montrachet",
+"sim": 0.0
+},
+{
+"a": "Egon Müller",
+"b": "Egon Müller",
+"sim": 1.0
+},
+{
+"a": "Egon Müller",
+"b": "Meursault",
+"sim": 0.047619047619047616
+},
+{
+"a": "Elena Fucci",
+"b": "Elena Fucci",
+"sim": 1.0
+},
+{
+"a": "Elena Fucci",
+"b": "Passopisciaro",
+"sim": 0.0
+},
+{
+"a": "Etna Rosso",
+"b": "Etna Rosso",
+"sim": 1.0
+},
+{
+"a": "Etna Rosso",
+"b": "Vino Nobile di Montepulciano",
+"sim": 0.0
+},
+{
+"a": "Franciacorta",
+"b": "Franciacorta",
+"sim": 1.0
+},
+{
+"a": "Franciacorta",
+"b": "Chassagne-Montrachet",
+"sim": 0.0
+},
+{
+"a": "G-Max",
+"b": "G-Max",
+"sim": 1.0
+},
+{
+"a": "G-Max",
+"b": "Scharzhofberger",
+"sim": 0.0
+},
+{
+"a": "Gaja",
+"b": "Gaja",
+"sim": 1.0
+},
+{
+"a": "Gaja",
+"b": "G-Max",
+"sim": 0.1
+},
+{
+"a": "Gattinara",
+"b": "Gattinara",
+"sim": 1.0
+},
+{
+"a": "Gattinara",
+"b": "Quintarelli",
+"sim": 0.0
+},
+{
+"a": "Georges Vernay",
+"b": "Georges Vernay",
+"sim": 1.0
+},
+{
+"a": "Georges Vernay",
+"b": "Barbaresco",
+"sim": 0.0
+},
+{
+"a": "Gevrey-Chambertin",
+"b": "Gevrey-Chambertin",
+"sim": 1.0
+},
+{
+"a": "Gevrey-Chambertin",
+"b": "Toro",
+"sim": 0.0
+},
+{
+"a": "Ghemme",
+"b": "Ghemme",
+"sim": 1.0
+},
+{
+"a": "Ghemme",
+"b": "Egon Müller",
+"sim": 0.0
+},
+{
+"a": "Giacomo Conterno",
+"b": "Giacomo Conterno",
+"sim": 1.0
+},
+{
+"a": "Giacomo Conterno",
+"b": "Vouvray",
+"sim": 0.0
+},
+{
+"a": "Gigondas",
+"b": "Gigondas",
+"sim": 1.0
+},
+{
+"a": "Gigondas",
+"b": "Sancerre",
+"sim": 0.0
+},
+{
+"a": "Godello",
+"b": "Godello",
+"sim": 1.0
+},
+{
+"a": "Godello",
+"b": "Priorat",
+"sim": 0.0
+},
+{
+"a": "Grande Cuvée",
+"b": "Grande Cuvée",
+"sim": 1.0
+},
+{
+"a": "Grande Cuvée",
+"b": "Etna Rosso",
+"sim": 0.0
+},
+{
+"a": "Guigal",
+"b": "Guigal",
+"sim": 1.0
+},
+{
+"a": "Guigal",
+"b": "Txakoli",
+"sim": 0.0
+},
+{
+"a": "Huet",
+"b": "Huet",
+"sim": 1.0
+},
+{
+"a": "Huet",
+"b": "Bâtard-Montrachet",
+"sim": 0.045454545454545456
+},
+{
+"a": "Jumilla",
+"b": "Jumilla",
+"sim": 1.0
+},
+{
+"a": "Jumilla",
+"b": "Puligny-Montrachet",
+"sim": 0.0
+},
+{
+"a": "Krug",
+"b": "Krug",
+"sim": 1.0
+},
+{
+"a": "Krug",
+"b": "Gattinara",
+"sim": 0.0
+},
+{
+"a": "L'Ermita",
+"b": "L'Ermita",
+"sim": 1.0
+},
+{
+"a": "L'Ermita",
+"b": "Cahors",
+"sim": 0.0
+},
+{
+"a": "La Mouline",
+"b": "La Mouline",
+"sim": 1.0
+},
+{
+"a": "La Mouline",
+"b": "Puligny-Montrachet",
+"sim": 0.1111111111111111
+},
+{
+"a": "La Tâche",
+"b": "La Tâche",
+"sim": 1.0
+},
+{
+"a": "La Tâche",
+"b": "Coche-Dury",
+"sim": 0.1111111111111111
+},
+{
+"a": "Les Combettes",
+"b": "Les Combettes",
+"sim": 1.0
+},
+{
+"a": "Les Combettes",
+"b": "Georges Vernay",
+"sim": 0.037037037037037035
+},
+{
+"a": "Les Monts Damnés",
+"b": "Les Monts Damnés",
+"sim": 1.0
+},
+{
+"a": "Les Monts Damnés",
+"b": "Guigal",
+"sim": 0.0
+},
+{
+"a": "Les Suchots",
+"b": "Les Suchots",
+"sim": 1.0
+},
+{
+"a": "Les Suchots",
+"b": "Priorat",
+"sim": 0.0
+},
+{
+"a": "López de Heredia",
+"b": "López de Heredia",
+"sim": 1.0
+},
+{
+"a": "López de Heredia",
+"b": "Passopisciaro",
+"sim": 0.0
+},
+{
+"a": "Manzanilla",
+"b": "Manzanilla",
+"sim": 1.0
+},
+{
+"a": "Manzanilla",
+"b": "Monastrell",
+"sim": 0.047619047619047616
+},
+{
+"a": "Mastroberardino",
+"b": "Mastroberardino",
+"sim": 1.0
+},
+{
+"a": "Mastroberardino",
+"b": "Krug",
+"sim": 0.0
+},
+{
+"a": "Mencía",
+"b": "Mencía",
+"sim": 1.0
+},
+{
+"a": "Mencía",
+"b": "Descendientes de José Palacios",
+"sim": 0.0
+},
+{
+"a": "Meursault",
+"b": "Meursault",
+"sim": 1.0
+},
+{
+"a": "Meursault",
+"b": "Franciacorta",
+"sim": 0.0
+},
+{
+"a": "Monastrell",
+"b": "Monastrell",
+"sim": 1.0
+},
+{
+"a": "Monastrell",
+"b": "Côte-Rôtie",
+"sim": 0.0
+},
+{
+"a": "Muscadet Sèvre-et-Maine",
+"b": "Muscadet Sèvre-et-Maine",
+"sim": 1.0
+},
+{
+"a": "Muscadet Sèvre-et-Maine",
+"b": "López de Heredia",
+"sim": 0.0
+},
+{
+"a": "Nebbiolo d'Alba",
+"b": "Nebbiolo d'Alba",
+"sim": 1.0
+},
+{
+"a": "Nebbiolo d'Alba",
+"b": "Côte-Rôtie",
+"sim": 0.0
+},
+{
+"a": "Numanthia",
+"b": "Numanthia",
+"sim": 1.0
+},
+{
+"a": "Numanthia",
+"b": "Vosne-Romanée",
+"sim": 0.043478260869565216
+},
+{
+"a": "Passopisciaro",
+"b": "Passopisciaro",
+"sim": 1.0
+},
+{
+"a": "Passopisciaro",
+"b": "Elena Fucci",
+"sim": 0.0
+},
+{
+"a": "Perrières",
+"b": "Perrières",
+"sim": 1.0
+},
+{
+"a": "Perrières",
+"b": "Mencía",
+"sim": 0.0
+},
+{
+"a": "Pouilly-Fuissé",
+"b": "Pouilly-Fuissé",
+"sim": 1.0
+},
+{
+"a": "Pouilly-Fuissé",
+"b": "Les Monts Damnés",
+"sim": 0.0
+},
+{
+"a": "Prado Enea",
+"b": "Prado Enea",
+"sim": 1.0
+},
+{
+"a": "Prado Enea",
+"b": "Huet",
+"sim": 0.0
+},
+{
+"a": "Priorat",
+"b": "Priorat",
+"sim": 1.0
+},
+{
+"a": "Priorat",
+"b": "Nebbiolo d'Alba",
+"sim": 0.0
+},
+{
+"a": "Puligny-Montrachet",
+"b": "Puligny-Montrachet",
+"sim": 1.0
+},
+{
+"a": "Puligny-Montrachet",
+"b": "Meursault",
+"sim": 0.03571428571428571
+},
+{
+"a": "Quintarelli",
+"b": "Quintarelli",
+"sim": 1.0
+},
+{
+"a": "Quintarelli",
+"b": "Cahors",
+"sim": 0.0
+},
+{
+"a": "Ribera del Duero",
+"b": "Ribera del Duero",
+"sim": 1.0
+},
+{
+"a": "Ribera del Duero",
+"b": "Álvaro Palacios",
+"sim": 0.03225806451612903
+},
+{
+"a": "Rioja Gran Reserva",
+"b": "Rioja Gran Reserva",
+"sim": 1.0
+},
+{
+"a": "Rioja Gran Reserva",
+"b": "La Tâche",
+"sim": 0.0
+},
+{
+"a": "Rías Baixas",
+"b": "Rías Baixas",
+"sim": 1.0
+},
+{
+"a": "Rías Baixas",
+"b": "Sagrantino di Montefalco",
+"sim": 0.0
+},
+{
+"a": "Sagrantino di Montefalco",
+"b": "Sagrantino di Montefalco",
+"sim": 1.0
+},
+{
+"a": "Sagrantino di Montefalco",
+"b": "Toro",
+"sim": 0.0
+},
+{
+"a": "Sancerre",
+"b": "Sancerre",
+"sim": 1.0
+},
+{
+"a": "Sancerre",
+"b": "Biondi-Santi",
+"sim": 0.15789473684210525
+},
+{
+"a": "Sanlúcar de Barrameda",
+"b": "Sanlúcar de Barrameda",
+"sim": 1.0
+},
+{
+"a": "Sanlúcar de Barrameda",
+"b": "Trockenbeerenauslese",
+"sim": 0.0
+},
+{
+"a": "Sassicaia",
+"b": "Sassicaia",
+"sim": 1.0
+},
+{
+"a": "Sassicaia",
+"b": "Château Margaux",
+"sim": 0.0
+},
+{
+"a": "Satèn",
+"b": "Satèn",
+"sim": 1.0
+},
+{
+"a": "Satèn",
+"b": "Jumilla",
+"sim": 0.0
+},
+{
+"a": "Scharzhofberger",
+"b": "Scharzhofberger",
+"sim": 1.0
+},
+{
+"a": "Scharzhofberger",
+"b": "Viña Tondonia",
+"sim": 0.0
+},
+{
+"a": "Taurasi",
+"b": "Taurasi",
+"sim": 1.0
+},
+{
+"a": "Taurasi",
+"b": "López de Heredia",
+"sim": 0.0
+},
+{
+"a": "Tenuta San Guido",
+"b": "Tenuta San Guido",
+"sim": 1.0
+},
+{
+"a": "Tenuta San Guido",
+"b": "Dönnhoff",
+"sim": 0.0
+},
+{
+"a": "Toro",
+"b": "Toro",
+"sim": 1.0
+},
+{
+"a": "Toro",
+"b": "Álvaro Palacios",
+"sim": 0.05
+},
+{
+"a": "Trockenbeerenauslese",
+"b": "Trockenbeerenauslese",
+"sim": 1.0
+},
+{
+"a": "Trockenbeerenauslese",
+"b": "Weingut Keller",
+"sim": 0.0
+},
+{
+"a": "Txakoli",
+"b": "Txakoli",
+"sim": 1.0
+},
+{
+"a": "Txakoli",
+"b": "Nebbiolo d'Alba",
+"sim": 0.0
+},
+{
+"a": "Valdeorras",
+"b": "Valdeorras",
+"sim": 1.0
+},
+{
+"a": "Valdeorras",
+"b": "Prado Enea",
+"sim": 0.0
+},
+{
+"a": "Vega Sicilia Único",
+"b": "Vega Sicilia Único",
+"sim": 1.0
+},
+{
+"a": "Vega Sicilia Único",
+"b": "Albariño",
+"sim": 0.0
+},
+{
+"a": "Verdicchio dei Castelli di Jesi",
+"b": "Verdicchio dei Castelli di Jesi",
+"sim": 1.0
+},
+{
+"a": "Verdicchio dei Castelli di Jesi",
+"b": "Les Monts Damnés",
+"sim": 0.021739130434782608
+},
+{
+"a": "Vino Nobile di Montepulciano",
+"b": "Vino Nobile di Montepulciano",
+"sim": 1.0
+},
+{
+"a": "Vino Nobile di Montepulciano",
+"b": "Perrières",
+"sim": 0.0
+},
+{
+"a": "Viña Tondonia",
+"b": "Viña Tondonia",
+"sim": 1.0
+},
+{
+"a": "Viña Tondonia",
+"b": "Muscadet Sèvre-et-Maine",
+"sim": 0.0
+},
+{
+"a": "Vosne-Romanée",
+"b": "Vosne-Romanée",
+"sim": 1.0
+},
+{
+"a": "Vosne-Romanée",
+"b": "Gevrey-Chambertin",
+"sim": 0.0
+},
+{
+"a": "Vouvray",
+"b": "Vouvray",
+"sim": 1.0
+},
+{
+"a": "Vouvray",
+"b": "Scharzhofberger",
+"sim": 0.0
+},
+{
+"a": "Weingut Keller",
+"b": "Weingut Keller",
+"sim": 1.0
+},
+{
+"a": "Weingut Keller",
+"b": "Aglianico del Vulture",
+"sim": 0.0
+},
+{
+"a": "Álvaro Palacios",
+"b": "Álvaro Palacios",
+"sim": 1.0
+},
+{
+"a": "Álvaro Palacios",
+"b": "Côte-Rôtie",
+"sim": 0.0
+},
+{
+"a": "côte-rôtie",
+"b": "cote rotie",
+"sim": 1.0
+},
+{
+"a": "Château Rayas",
+"b": "chateau rayas",
+"sim": 1.0
+},
+{
+"a": "Bâtard-Montrachet",
+"b": "batard montrachet",
+"sim": 1.0
+},
+{
+"a": "Ridge Monte Bello",
+"b": "ridge monte bello",
+"sim": 1.0
+},
+{
+"a": "Peñafiel",
+"b": "penafiel",
+"sim": 1.0
+},
+{
+"a": "Grüner Veltliner",
+"b": "gruner veltliner",
+"sim": 1.0
+},
+{
+"a": "d'Yquem",
+"b": "dyquem",
+"sim": 0.5
+},
+{
+"a": "d'Yquem",
+"b": "d yquem",
+"sim": 1.0
+},
+{
+"a": "",
+"b": "anything",
+"sim": 0.0
+},
+{
+"a": "Romanée-Conti",
+"b": "romanee conti 2016",
+"sim": 0.7368421052631579
+},
+{
+"a": "Läfite",
+"b": "lafite",
+"sim": 1.0
+},
+{
+"a": "DRC La Tâche",
+"b": "la tache",
+"sim": 0.6923076923076923
+},
+{
+"a": "weird ß char",
+"b": "weird char",
+"sim": 1.0
+},
+{
+"a": "l'Église-Clinet",
+"b": "l eglise clinet",
+"sim": 1.0
+}
+],
+"bestSpan": [
+{
+"target": "Gevrey-Chambertin",
+"transcript": "Do we still have the from Domaine Foure?",
+"best": 0.0
+},
+{
+"target": "Franciacorta",
+"transcript": "Ad case of Franciacorta s'attende.",
+"best": 1.0
+},
+{
+"target": "Elena Fucci",
+"transcript": "L'OGD Aglianico del Vulture from Elena Fucci.",
+"best": 1.0
+},
+{
+"target": "Châteauneuf-du-Pape",
+"transcript": "Oh, Mani château 9 du pape parle effine de Sellard.",
+"best": 0.6521739130434783
+},
+{
+"target": "Vosne-Romanée",
+"transcript": "Rioja out of the Vosne-Romanée premier cru Les Suchots.",
+"best": 1.0
+},
+{
+"target": "Vouvray",
+"transcript": "count the Vuvray Moleks from Hewitt.",
+"best": 0.5
+},
+{
+"target": "Barbaresco",
+"transcript": "Gaia Barbaresco ni a new shelf tag.",
+"best": 1.0
+},
+{
+"target": "Gaja",
+"transcript": "Gaja Barbaresco need a new shelf tag.",
+"best": 1.0
+},
+{
+"target": "Châteauneuf-du-Pape",
+"transcript": "Romanée-Châteauneuf-du-Pape par Léphine de Selard.",
+"best": 1.0
+},
+{
+"target": "Manzanilla",
+"transcript": "Manzanilla from Sanlúcar de Barrameda, pasada.",
+"best": 1.0
+},
+{
+"target": "Egon Müller",
+"transcript": "Egon Müller Scharzhofberger Riesling Auslese.",
+"best": 1.0
+},
+{
+"target": "Satèn",
+"transcript": "Add a case of Franciacorta satin.",
+"best": 0.3333333333333333
+},
+{
+"target": "Txakoli",
+"transcript": "Dove steel pour de chocolate y by the glass?",
+"best": 0.09090909090909091
+},
+{
+"target": "Château Margaux",
+"transcript": "What advantage of Chateau Margaux do world?",
+"best": 1.0
+},
+{
+"target": "Barolo Monfortino",
+"transcript": "Verrollo Manfortino from Giacomo Quinturno. Check the vintage.",
+"best": 0.38095238095238093
+},
+{
+"target": "Guigal",
+"transcript": "I use the quote from Gigal.",
+"best": 0.4444444444444444
+},
+{
+"target": "Georges Vernay",
+"transcript": "Is the condriew from George Wernestie available?",
+"best": 0.375
+},
+{
+"target": "Krug",
+"transcript": "Open the Krug Grande Coupe for the corner booth.",
+"best": 1.0
+},
+{
+"target": "Meursault",
+"transcript": "Check the Mursault Terriers from Coche d'Uri.",
+"best": 0.5833333333333334
+},
+{
+"target": "Condrieu",
+"transcript": "Is the Chondreau from Georges Verneille still available?",
+"best": 0.1875
+},
+{
+"target": "Taurasi",
+"transcript": "Taurasi from Mastroberardino, is it decanted?",
+"best": 1.0
+},
+{
+"target": "Vosne-Romanée",
+"transcript": "We are out of the Vosne Romanée Premier Cru Les Suchauds.",
+"best": 1.0
+},
+{
+"target": "Pouilly-Fuissé",
+"transcript": "The guest wants something like Pouilly-Fuissé but drier.",
+"best": 1.0
+},
+{
+"target": "Vino Nobile di Montepulciano",
+"transcript": "pur de Vino Nobile di Montepulciano by the Glass.",
+"best": 1.0
+},
+{
+"target": "Godello",
+"transcript": "Godejo from Valdiaris. Four bottles.",
+"best": 0.36363636363636365
+},
+{
+"target": "Domaine Fourrier",
+"transcript": "Do we still have the 2018 Gevrey-Chambertin from Domaine Forriere?",
+"best": 0.6190476190476191
+},
+{
+"target": "Barolo Monfortino",
+"transcript": "Barolo Monfortino from Giacomo Conterno, check the vintage.",
+"best": 1.0
+},
+{
+"target": "Tenuta San Guido",
+"transcript": "Where is the Sassicaia from Tenuta San Guido?",
+"best": 1.0
+},
+{
+"target": "Domaine Tempier",
+"transcript": "The Bandyl Rose from Domain Tempere is running low.",
+"best": 0.47619047619047616
+},
+{
+"target": "Weingut Keller",
+"transcript": "Weingut Keller G-Max, דוב הפעני.",
+"best": 1.0
+},
+{
+"target": "Gattinara",
+"transcript": "Do we have Gattinara or only Ghemme?",
+"best": 1.0
+},
+{
+"target": "Domaine de la Romanée-Conti",
+"transcript": "Add 6 bottles of Domaine de la Romanée-Conti La Tâche to the reserve list.",
+"best": 1.0
+},
+{
+"target": "Vega Sicilia Único",
+"transcript": "Vega Sicilia Unico, which vintages are on the list?",
+"best": 1.0
+},
+{
+"target": "Château Margaux",
+"transcript": "What vintages of Château Margaux do we hold?",
+"best": 1.0
+},
+{
+"target": "Ribera del Duero",
+"transcript": "Two bottles of Ribera del Duero from dominio de Pingas.",
+"best": 1.0
+},
+{
+"target": "Bodegas Muga",
+"transcript": "Bodegas Muga Prado Enea, 2015.",
+"best": 1.0
+},
+{
+"target": "Rioja Gran Reserva",
+"transcript": "Rioja Gran Reserva from López de Heredia, Viña Tondonia.",
+"best": 1.0
+},
+{
+"target": "Châteauneuf-du-Pape",
+"transcript": "How many Chateau Nuffdew pop are left in the cellar?",
+"best": 0.3333333333333333
+},
+{
+"target": "Satèn",
+"transcript": "Add the case on Franciacorta Cetaine.",
+"best": 0.0
+},
+{
+"target": "Domaine Santa Duc",
+"transcript": "2 glasses of the Gigondas from Domaine Sanadoc.",
+"best": 0.5
+},
+{
+"target": "Txakoli",
+"transcript": "Do we still pour the exactly by the glass?",
+"best": 0.09090909090909091
+},
+{
+"target": "Godello",
+"transcript": "Godello from Valdeorras, Four Bottles.",
+"best": 1.0
+},
+{
+"target": "Bodegas Muga",
+"transcript": "Bodegas mugapra doenea, 2015.",
+"best": 0.7058823529411765
+},
+{
+"target": "Krug",
+"transcript": "Open the Krug Grande Coupe for the corner booth.",
+"best": 1.0
+},
+{
+"target": "Álvaro Palacios",
+"transcript": "Priorat from Álvaro Palacios, L'Ermita.",
+"best": 1.0
+},
+{
+"target": "Gevrey-Chambertin",
+"transcript": "Do we still have the 2018 Gevry Chamburton from Domain Fourier?",
+"best": 0.34615384615384615
+},
+{
+"target": "Les Monts Damnés",
+"transcript": "Log 12 bottles of Sancerre Les Monts Damnés.",
+"best": 1.0
+},
+{
+"target": "Barbaresco",
+"transcript": "How many Barbaresco Asili are left?",
+"best": 1.0
+},
+{
+"target": "Guigal",
+"transcript": "De côte rôti la mouline from gigal.",
+"best": 0.4444444444444444
+},
+{
+"target": "Passopisciaro",
+"transcript": "The Edna Rosso from Passopisciaro sold out",
+"best": 1.0
+},
+{
+"target": "Ghemme",
+"transcript": "Do we have Gotenara or only Gan?",
+"best": 0.1
+},
+{
+"target": "Sagrantino di Montefalco",
+"transcript": "We need more Sagrantino Di Montefalco.",
+"best": 1.0
+},
+{
+"target": "Gigondas",
+"transcript": "Two glasses of the Gigantas from Domaine Sanadoc",
+"best": 0.2857142857142857
+},
+{
+"target": "Álvaro Palacios",
+"transcript": "Priorat from Álvaro Palacios, l'ermita.",
+"best": 1.0
+},
+{
+"target": "Huet",
+"transcript": "de vous ouvrez-moi le front muet.",
+"best": 0.25
+},
+{
+"target": "Nebbiolo d'Alba",
+"transcript": "Move the Nebbiolo d'Alba to the fridge.",
+"best": 1.0
+},
+{
+"target": "Verdicchio dei Castelli di Jesi",
+"transcript": "Verdictio dei Castelli di Jesi: Sixbotless received.",
+"best": 0.7941176470588235
+},
+{
+"target": "Brunello di Montalcino",
+"transcript": "Bruneuf-twenty '16",
+"best": 0.19230769230769232
+},
+{
+"target": "Dönnhoff",
+"transcript": "The Trockenbeerenauslese from Dönnhoff is in the safe.",
+"best": 1.0
+},
+{
+"target": "Sassicaia",
+"transcript": "Where is the Sassicaia from Tenuta San Guido?",
+"best": 1.0
+},
+{
+"target": "Domaine Santa Duc",
+"transcript": "2 glasses of the Gigondas from Domaine Santa Duc.",
+"best": 1.0
+},
+{
+"target": "Puligny-Montrachet",
+"transcript": "Pull two bottles of Puligny Mantrachut La Combets for table nine.",
+"best": 0.52
+},
+{
+"target": "Jumilla",
+"transcript": "Order more Jumilla monastral.",
+"best": 1.0
+},
+{
+"target": "Châteauneuf-du-Pape",
+"transcript": "Romani Châteauneuf du Pape par Léphine de Sélard.",
+"best": 1.0
+},
+{
+"target": "G-Max",
+"transcript": "Weingut Keller G-Max, do we have any?",
+"best": 1.0
+},
+{
+"target": "Domaine Tempier",
+"transcript": "The Bandyl Rose from Domaine Tempier is running low.",
+"best": 1.0
+},
+{
+"target": "Condrieu",
+"transcript": "Is the Condrew from George's Verne still available?",
+"best": 0.4166666666666667
+},
+{
+"target": "Barbaresco",
+"transcript": "How many Barbarous Coasili are left?",
+"best": 0.35714285714285715
+},
+{
+"target": "Vino Nobile di Montepulciano",
+"transcript": "Pour the Vino Nobile di Montepulciano by the glass.",
+"best": 1.0
+},
+{
+"target": "Ghemme",
+"transcript": "Dojujev v Gattinara or only game.",
+"best": 0.2
+},
+{
+"target": "Les Combettes",
+"transcript": "Pull 2 bottles of Puligny-Montrachet Les Combettes for table 9.",
+"best": 1.0
+},
+{
+"target": "Scharzhofberger",
+"transcript": "Egon Müller Scharzhofberger Riesling Auslese.",
+"best": 1.0
+},
+{
+"target": "Giacomo Conterno",
+"transcript": "Verulo Manfortino from Giacomo Conterno. Check the vintage.",
+"best": 1.0
+},
+{
+"target": "Cahors",
+"transcript": "Find me a Cahors under $60.",
+"best": 1.0
+},
+{
+"target": "Álvaro Palacios",
+"transcript": "Priorat from Álvaro Palacios, El Ermita.",
+"best": 1.0
+},
+{
+"target": "Passopisciaro",
+"transcript": "The Etna Rosso from Passopisciaro sold out.",
+"best": 1.0
+},
+{
+"target": "Ribera del Duero",
+"transcript": "Two bottles of Ribera del Duero from Domaine de Pingas.",
+"best": 1.0
+},
+{
+"target": "Biondi-Santi",
+"transcript": "Bruno Lodi Montalcino from Biondi Santi 2016.",
+"best": 1.0
+},
+{
+"target": "Dominio de Pingus",
+"transcript": "Château Hautclés of Ribera del Duero from Dominio de Pingües.",
+"best": 0.75
+},
+{
+"target": "Chassagne-Montrachet",
+"transcript": "Move the Chassagne-Montrachet to Bin 42.",
+"best": 1.0
+},
+{
+"target": "Elena Fucci",
+"transcript": "L'Aglianico del Vulture from Elena Fucci.",
+"best": 1.0
+},
+{
+"target": "Cahors",
+"transcript": "Find me a Cahors under $60.",
+"best": 1.0
+},
+{
+"target": "Brunello di Montalcino",
+"transcript": "Brunello di Montalcino from Biondi Santi, 2016.",
+"best": 1.0
+},
+{
+"target": "Chassagne-Montrachet",
+"transcript": "Move the Chassagne-Montrachet to bin 42.",
+"best": 1.0
+},
+{
+"target": "La Tâche",
+"transcript": "Atsybot Love, Domaine de la Romanée-Conti, La Tâche, Taux de Réserve, Liste.",
+"best": 1.0
+},
+{
+"target": "Les Monts Damnés",
+"transcript": "Log 12 bottles of Sancerre Le Mans Tamnay's",
+"best": 0.14814814814814814
+},
+{
+"target": "Asili",
+"transcript": "Aumani Barbaresco Asiliare Left.",
+"best": 0.5
+},
+{
+"target": "Ghemme",
+"transcript": "Do we have Gattinara or only Ghemme?",
+"best": 1.0
+},
+{
+"target": "La Mouline",
+"transcript": "de Côte-Rôtie La Mouline from Gigal.",
+"best": 1.0
+},
+{
+"target": "Châteauneuf-du-Pape",
+"transcript": "How many Chateau Nuff du pop are left in the cellar?",
+"best": 0.38461538461538464
+},
+{
+"target": "Domaine Tempier",
+"transcript": "The bundle rose from Domaine Tempier is running low.",
+"best": 1.0
+},
+{
+"target": "Manzanilla",
+"transcript": "Manzanilla from sand liquor di baromita. Pasada.",
+"best": 1.0
+},
+{
+"target": "Muscadet Sèvre-et-Maine",
+"transcript": "Dos où il carie Muscadet Sèvre-et-Mène Sur-Li.",
+"best": 0.7727272727272727
+},
+{
+"target": "Vega Sicilia Único",
+"transcript": "Vega Sicilia Único. Beach Vintages are on the list?",
+"best": 1.0
+},
+{
+"target": "Nebbiolo d'Alba",
+"transcript": "Move the neviolo dalba to the fridge.",
+"best": 0.42857142857142855
+},
+{
+"target": "Giacomo Conterno",
+"transcript": "Virolo Monfortino from Giacomo Contorno. Check the vintage.",
+"best": 0.7
+},
+{
+"target": "Asili",
+"transcript": "A omani barbarisk wasili are left.",
+"best": 0.4444444444444444
+},
+{
+"target": "Vega Sicilia Único",
+"transcript": "Vega Sicilia Unico, beat vintage sarion the list.",
+"best": 1.0
+},
+{
+"target": "López de Heredia",
+"transcript": "Rioja Gran Reserva from Lopez De Heredia, Viña Tondonia.",
+"best": 1.0
+},
+{
+"target": "Barolo Monfortino",
+"transcript": "Barolo Monfortino from Giacomo Conterno, check the vintage.",
+"best": 1.0
+},
+{
+"target": "Mastroberardino",
+"transcript": "Taurasi from Mastroberardino, is with the counted.",
+"best": 1.0
+},
+{
+"target": "Passopisciaro",
+"transcript": "The Edna Rosso from Pissar Picchiero sold out",
+"best": 0.11538461538461539
+},
+{
+"target": "Bandol",
+"transcript": "de Bandol Rosé from Domaine Tempier is running low.",
+"best": 1.0
+},
+{
+"target": "Bandol",
+"transcript": "de Bandol, Rosé From Domaine Tempier, Ice Running Glow.",
+"best": 1.0
+},
+{
+"target": "Les Suchots",
+"transcript": "We are out of the Vos Ramanet premier crew Lesothoots.",
+"best": 0.2777777777777778
+},
+{
+"target": "Trockenbeerenauslese",
+"transcript": "The Trockenbeerenauslese from Dunhof is in the safe.",
+"best": 1.0
+},
+{
+"target": "Bodegas Muga",
+"transcript": "Bodegas Maga Prado Ainia, 2015.",
+"best": 0.625
+},
+{
+"target": "Côte-Rôtie",
+"transcript": "Price the code Radi Lama online from Gigal.",
+"best": 0.16666666666666666
+},
+{
+"target": "Vega Sicilia Único",
+"transcript": "Vega Sicilia Único, bit vintage Sareon de list.",
+"best": 1.0
+},
+{
+"target": "Mencía",
+"transcript": "The Bierzo Mencchio from Descendientes de Jose Palacios",
+"best": 0.3333333333333333
+},
+{
+"target": "Sagrantino di Montefalco",
+"transcript": "We need more Zagrantino di Montefalco.",
+"best": 0.7857142857142857
+},
+{
+"target": "Auslese",
+"transcript": "Ergon Muller Schatzhofberger Riesling Auslese.",
+"best": 1.0
+},
+{
+"target": "La Tâche",
+"transcript": "Atcibottlov, domaine de la Romanée, compte-t-il attache taux de réserve lisse",
+"best": 0.375
+},
+{
+"target": "Perrières",
+"transcript": "Check the Meursault Perrières from Coche-Dury.",
+"best": 1.0
+},
+{
+"target": "Elena Fucci",
+"transcript": "Log the Aglaia Nico del Vultur from Alain of Fucci.",
+"best": 0.5
+},
+{
+"target": "Alain Graillot",
+"transcript": "Receiving a case of Krause Ermitage from Alain Graillot.",
+"best": 1.0
+},
+{
+"target": "Priorat",
+"transcript": "Priorat from Álvaro Palacios, L'Ermita.",
+"best": 1.0
+},
+{
+"target": "Scharzhofberger",
+"transcript": "Egon Müller Scharzhofberger Riesling Auslese.",
+"best": 1.0
+},
+{
+"target": "Vino Nobile di Montepulciano",
+"transcript": "pur de Vino Nobile di Montepulciano by the Glass.",
+"best": 1.0
+},
+{
+"target": "Barolo Monfortino",
+"transcript": "Virolo Monfortino from Giacomo Contorno. Check the vintage.",
+"best": 0.6363636363636364
+}
+]
+}
