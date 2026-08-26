@@ -26,12 +26,12 @@
   --t-surface: #fbf9f4;
   --t-surface-sunken: #eae3d5;
   --t-wash: #efe9dc; /* quietest tint: table headers, hover washes */
-  --t-ink: #241d1a;
-  --t-ink-soft: #3a2f2a;
-  --t-grey: #6e6257;
+  --t-ink: #1d1b16;
+  --t-ink-soft: #343226;
+  --t-grey: #666459;
   --t-hairline: #ded5c4;
   --t-hairline-strong: #d3c8b2;
-  --t-gold: #7d5f33;
+  --t-gold: #786218;
   --t-sage: #5e6b4b;
   --t-sage-wash: #e7e6d6;
   --t-sage-ink: #4c573c;
@@ -41,32 +41,34 @@
   --t-amber: #7f5f12;
   --t-amber-wash: #f7efd9;
   --t-blush-wash: #f0e2dc;
-  --t-surface-inverse: #241d1a;
+  --t-surface-inverse: #14120d;
   --t-on-inverse: #f2ede3;
-  --t-scrim: rgba(36, 29, 26, 0.35);
+  --t-scrim: rgba(22, 19, 12, 0.4);
   --t-glass: rgba(251, 249, 244, 0.7);
   --t-glass-solid: rgba(251, 249, 244, 0.94);
   --t-glass-edge: rgba(255, 253, 247, 0.75);
-  --t-glass-shadow: rgba(46, 26, 26, 0.08);
-  --t-shadow-card: 0 1px 2px rgba(46, 26, 26, 0.05), 0 6px 20px rgba(46, 26, 26, 0.07);
-  --t-shadow-glass: 0 8px 32px rgba(46, 26, 26, 0.08);
+  --t-glass-shadow: rgba(30, 26, 16, 0.08);
+  --t-shadow-card: 0 1px 2px rgba(30, 26, 16, 0.05), 0 6px 20px rgba(30, 26, 16, 0.07);
+  --t-shadow-glass: 0 8px 32px rgba(30, 26, 16, 0.08);
   color-scheme: light;
 }
 
-/* ── Dark — "Cellar" ──────────────────────────────────────────── */
+/* ── Dark — "Cellar": silky gold-black lacquer, NEVER brown ────── */
+/* Brown ban (Devin, 2026-08-26): every near-black keeps R within ~2
+   of G (gold undertone), never R clearly above G above B (brown). */
 [data-theme="dark"] {
   --t-primary: #8a3a44;
   --t-primary-hover: #a04751;
   --t-accent: #c7a165; /* candle gold — the dark room's accent */
-  --t-canvas: #1d1512;
-  --t-surface: #291e1a;
-  --t-surface-sunken: #171009;
-  --t-wash: #241a16;
+  --t-canvas: #0d0c09;
+  --t-surface: #171512;
+  --t-surface-sunken: #060504;
+  --t-wash: #11100c;
   --t-ink: #ede3ce;
   --t-ink-soft: #d8c9b0;
-  --t-grey: #b3a28e;
-  --t-hairline: #3e2f28;
-  --t-hairline-strong: #4a382f;
+  --t-grey: #aea68f;
+  --t-hairline: #29271e;
+  --t-hairline-strong: #363428;
   --t-gold: #c7a165;
   --t-sage: #8fa06e;
   --t-sage-wash: #2c3325;
@@ -75,17 +77,17 @@
   --t-powder-wash: #23303a;
   --t-powder-ink: #a8c8dc;
   --t-amber: #d9b45c;
-  --t-amber-wash: #3a3013;
+  --t-amber-wash: #302a12;
   --t-blush-wash: #3b2226;
   --t-surface-inverse: #ede3ce;
-  --t-on-inverse: #241d1a;
-  --t-scrim: rgba(10, 6, 4, 0.55);
-  --t-glass: rgba(29, 21, 18, 0.65);
-  --t-glass-solid: rgba(29, 21, 18, 0.94);
-  --t-glass-edge: rgba(80, 60, 48, 0.5);
-  --t-glass-shadow: rgba(0, 0, 0, 0.4);
-  --t-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
-  --t-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --t-on-inverse: #12100b;
+  --t-scrim: rgba(0, 0, 0, 0.6);
+  --t-glass: rgba(13, 12, 9, 0.65);
+  --t-glass-solid: rgba(13, 12, 9, 0.94);
+  --t-glass-edge: rgba(199, 161, 101, 0.28);
+  --t-glass-shadow: rgba(0, 0, 0, 0.5);
+  --t-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
+  --t-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.5);
   color-scheme: dark;
 }
 
@@ -96,15 +98,15 @@
     --t-primary: #8a3a44;
     --t-primary-hover: #a04751;
     --t-accent: #c7a165;
-    --t-canvas: #1d1512;
-    --t-surface: #291e1a;
-    --t-surface-sunken: #171009;
-    --t-wash: #241a16;
+    --t-canvas: #0d0c09;
+    --t-surface: #171512;
+    --t-surface-sunken: #060504;
+    --t-wash: #11100c;
     --t-ink: #ede3ce;
     --t-ink-soft: #d8c9b0;
-    --t-grey: #b3a28e;
-    --t-hairline: #3e2f28;
-    --t-hairline-strong: #4a382f;
+    --t-grey: #aea68f;
+    --t-hairline: #29271e;
+    --t-hairline-strong: #363428;
     --t-gold: #c7a165;
     --t-sage: #8fa06e;
     --t-sage-wash: #2c3325;
@@ -113,17 +115,17 @@
     --t-powder-wash: #23303a;
     --t-powder-ink: #a8c8dc;
     --t-amber: #d9b45c;
-    --t-amber-wash: #3a3013;
+    --t-amber-wash: #302a12;
     --t-blush-wash: #3b2226;
     --t-surface-inverse: #ede3ce;
-    --t-on-inverse: #241d1a;
-    --t-scrim: rgba(10, 6, 4, 0.55);
-    --t-glass: rgba(29, 21, 18, 0.65);
-    --t-glass-solid: rgba(29, 21, 18, 0.94);
-    --t-glass-edge: rgba(80, 60, 48, 0.5);
-    --t-glass-shadow: rgba(0, 0, 0, 0.4);
-    --t-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
-    --t-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.45);
+    --t-on-inverse: #12100b;
+    --t-scrim: rgba(0, 0, 0, 0.6);
+    --t-glass: rgba(13, 12, 9, 0.65);
+    --t-glass-solid: rgba(13, 12, 9, 0.94);
+    --t-glass-edge: rgba(199, 161, 101, 0.28);
+    --t-glass-shadow: rgba(0, 0, 0, 0.5);
+    --t-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
+    --t-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.5);
     color-scheme: dark;
   }
 }

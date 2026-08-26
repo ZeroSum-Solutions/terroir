@@ -41,7 +41,7 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#1d1512" },
+    { media: "(prefers-color-scheme: dark)", color: "#0d0c09" },
     { media: "(prefers-color-scheme: light)", color: "#f2ede3" },
   ],
   viewportFit: "cover",
@@ -56,7 +56,7 @@ export const viewport: Viewport = {
  * the page rather than the system scheme (ThemeToggle keeps them in
  * sync on later changes; hexes hand-synced with viewport.themeColor).
  */
-const themeInitScript = `try{var t=localStorage.getItem("terroir-theme");if(t==="light"||t==="dark"){document.documentElement.dataset.theme=t;var c=t==="dark"?"#1d1512":"#f2ede3";document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.setAttribute("content",c)})}}catch(e){}`;
+const themeInitScript = `try{var t=localStorage.getItem("terroir-theme");if(t==="light"||t==="dark"){document.documentElement.dataset.theme=t;var c=t==="dark"?"#0d0c09":"#f2ede3";document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.setAttribute("content",c)})}}catch(e){}`;
 
 export default function RootLayout({
   children,

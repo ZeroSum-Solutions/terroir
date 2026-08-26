@@ -1,18 +1,18 @@
 ---
 version: alpha
 name: Terroir — Cantina
-description: A wine cellar in two rooms — a cream tasting room by day, an espresso cellar by night. High-contrast Didone display over an engineered grotesque, one burgundy anchor in both modes, champagne-gold reserved for the dark, cards that sit a step above a tinted ground.
+description: A wine cellar in two rooms — a cream tasting room by day, a lacquered gold-black cellar by night. High-contrast Didone display over an engineered grotesque, one burgundy anchor in both modes, champagne-gold reserved for the dark, cards that sit a step above a tinted ground. Brown is banned everywhere.
 colors:
   primary: "#722f37"
   primary-hover: "#5a252c"
   canvas: "#f2ede3"
   surface: "#fbf9f4"
   surface-sunken: "#eae3d5"
-  ink: "#241d1a"
-  ink-soft: "#3a2f2a"
-  grey: "#6e6257"
+  ink: "#1d1b16"
+  ink-soft: "#343226"
+  grey: "#666459"
   hairline: "#ded5c4"
-  gold: "#7d5f33"
+  gold: "#786218"
   sage: "#5e6b4b"
   sage-wash: "#e7e6d6"
   sage-ink: "#4c573c"
@@ -24,18 +24,18 @@ colors:
   blush-wash: "#f0e2dc"
   glass: "rgba(251, 249, 244, 0.7)"
   glass-edge: "rgba(255, 253, 247, 0.75)"
-  shadow-card: "rgba(46, 26, 26, 0.07)"
-  dark-canvas: "#1d1512"
-  dark-surface: "#291e1a"
-  dark-surface-sunken: "#171009"
+  shadow-card: "rgba(30, 26, 16, 0.07)"
+  dark-canvas: "#0d0c09"
+  dark-surface: "#171512"
+  dark-surface-sunken: "#060504"
   dark-ink: "#ede3ce"
   dark-ink-soft: "#d8c9b0"
-  dark-grey: "#b3a28e"
-  dark-hairline: "#3e2f28"
+  dark-grey: "#aea68f"
+  dark-hairline: "#29271e"
   dark-primary: "#8a3a44"
   dark-primary-hover: "#a04751"
   dark-gold: "#c7a165"
-  dark-glass: "rgba(29, 21, 18, 0.65)"
+  dark-glass: "rgba(13, 12, 9, 0.65)"
 typography:
   caption:
     fontFamily: Archivo
@@ -184,9 +184,11 @@ components:
 # Terroir — Cantina
 
 > A wine cellar in two rooms. By day: the tasting room — warm cream plaster,
-> espresso ink, one burgundy anchor. By night: the cellar — espresso walls,
-> champagne type, candle-gold accents. The same bones in both rooms; only the
-> light changes.
+> soft-black ink, one burgundy anchor. By night: the cellar — silky lacquered
+> gold-black, champagne type, candle-gold accents. The same bones in both
+> rooms; only the light changes. Brown never enters either room (Devin's law,
+> 2026-08-26): every near-black keeps its red channel level with green — a
+> gold undertone, never a brown one.
 
 **Theme:** light + dark (light default, `prefers-color-scheme` respected,
 manual toggle persisted)
@@ -237,26 +239,26 @@ family). Pill geometry, radii, and the spacing scale carry over unchanged.
 | Cream | `#f2ede3` | `--color-canvas` | Page ground — warm plaster cream, never white |
 | Paper | `#fbf9f4` | `--color-surface` | Cards, panels, inputs — one step lighter than the ground, so surfaces read without borders doing all the work |
 | Parchment Well | `#eae3d5` | `--color-surface-sunken` | Table headers, wells, hover washes, bin chips |
-| Espresso | `#241d1a` / `#3a2f2a` | `--color-ink(-soft)` | Text — warm espresso black, never `#000` |
-| Warm Grey | `#6e6257` | `--color-grey` | Muted text, captions, eyebrows |
+| Soft Black | `#1d1b16` / `#343226` | `--color-ink(-soft)` | Text — gold-cast soft black, never `#000`, never brown |
+| Stone Grey | `#666459` | `--color-grey` | Muted text, captions, eyebrows — warm-neutral, no brown cast |
 | Hairline | `#ded5c4` | `--color-hairline` | Structural 1px lines, warm and visible on cream |
-| Bronze Gold | `#7d5f33` | `--color-gold` | Premium markers, ratings, subtle emphasis — quiet in the light room |
+| Antique Gold | `#786218` | `--color-gold` | Premium markers, ratings, subtle emphasis — quiet in the light room |
 | Olive Sage | `#5e6b4b` + washes | `--color-sage*` | "Aging well / hold" states |
 | Powder Ice | `#b2d7e7` + washes | `--color-powder*` | Informational states |
 | Amber | `#7f5f12` / wash | `--color-amber*` | Warnings that are neither info nor risk |
 | Blush | `#f0e2dc` | `--color-blush-wash` | Burgundy-tinted fills: risk badges, selected rows |
-| Card Shadow | `rgba(46,26,26,.07)` | `--shadow-card` | Soft warm lift under cards |
+| Card Shadow | `rgba(30,26,16,.07)` | `--shadow-card` | Soft warm lift under cards |
 
 ### Dark — "Cellar"
 
 | Name | Value | Token | Role |
 |------|-------|-------|------|
-| Espresso Ground | `#1d1512` | `--color-canvas` | Page ground — espresso, not black |
-| Raised Espresso | `#291e1a` | `--color-surface` | Cards and panels, one step lighter than ground |
-| Cellar Floor | `#171009` | `--color-surface-sunken` | Wells, table headers |
+| Lacquer | `#0d0c09` | `--color-canvas` | Page ground — silky gold-black lacquer: deep black with a faint gold undertone, never brown, never flat `#000` |
+| Raised Lacquer | `#171512` | `--color-surface` | Cards and panels, one step lighter than ground |
+| Vault Floor | `#060504` | `--color-surface-sunken` | Wells, table headers |
 | Champagne | `#ede3ce` / `#d8c9b0` | `--color-ink(-soft)` | Text — champagne cream, never pure white |
-| Dust | `#b3a28e` | `--color-grey` | Muted text |
-| Dark Hairline | `#3e2f28` | `--color-hairline` | Structural lines |
+| Smoke Gold | `#aea68f` | `--color-grey` | Muted text — gold-grey, no brown cast |
+| Dark Hairline | `#29271e` | `--color-hairline` | Structural lines |
 | Burgundy Fill | `#8a3a44` → `#a04751` | `--color-primary(-hover)` | Buttons/CTAs — brightened for dark contrast, champagne text on top |
 | Candle Gold | `#c7a165` | `--color-gold` | The dark room's accent: active nav, ratings, premium markers — gold is the constant of the cellar (Chéri) |
 | Badge families | re-tinted washes | `--color-*-wash/-ink` | Same semantic roles, dark-tuned values (see globals.css) |
@@ -317,17 +319,17 @@ references a mode-specific value.
 - Section gap 72px · Card padding 24px · Element gap 14–18px.
 - Canonical page anatomy: glass nav → hero (display headline on the canvas,
   no gradient band) → toolbar on a sunken well → card workspace. The old
-  dawn-gradient hero is retired; atmosphere now comes from the cream/espresso
+  dawn-gradient hero is retired; atmosphere now comes from the cream/lacquer
   ground itself.
 
 ## Elevation & Depth
 
 | Level | Name | Light | Dark | Purpose |
 |-------|------|-------|------|---------|
-| 0 | Ground | cream `#f2ede3` | espresso `#1d1512` | The room |
-| 1 | Card | paper `#fbf9f4` + hairline + `--shadow-card` | raised espresso `#291e1a` + hairline + deeper shadow | Panels, cards, list containers |
-| 2 | Well | parchment `#eae3d5` | cellar floor `#171009` | Table headers, sunken zones inside cards |
-| 3 | Glass | `rgba(251,249,244,.7)` blur 18px | `rgba(29,21,18,.65)` blur 18px | Floating chrome only: nav, drawers, modals, toasts |
+| 0 | Ground | cream `#f2ede3` | lacquer `#0d0c09` | The room |
+| 1 | Card | paper `#fbf9f4` + hairline + `--shadow-card` | raised lacquer `#171512` + hairline + deeper shadow | Panels, cards, list containers |
+| 2 | Well | parchment `#eae3d5` | vault floor `#060504` | Table headers, sunken zones inside cards |
+| 3 | Glass | `rgba(251,249,244,.7)` blur 18px | `rgba(13,12,9,.65)` blur 18px | Floating chrome only: nav, drawers, modals, toasts |
 
 **The card rule (the reversal that fixes "lost in white"):** cards are
 *lighter than the ground* and carry BOTH a hairline and a soft warm shadow
@@ -358,7 +360,7 @@ one accent word in *italic* burgundy. Eyebrow above in spaced caps. One
 Archivo-300 paragraph (max 480px). Stat tiles below as level-1 cards.
 
 ### Card (the workspace unit)
-Level-1 surface: paper/raised-espresso ground, 20px radius, hairline border,
+Level-1 surface: paper/raised-lacquer ground, 20px radius, hairline border,
 `--shadow-card`. Header rows may use the level-2 well. Wine names in Bodoni
 Moda 500 17px; metadata beneath in Archivo 300; vintages/ABV/bins in Courier
 Prime ledger style.
@@ -394,12 +396,18 @@ data.
 - Set exactly one italic burgundy accent word in display headlines.
 - Use Courier Prime for every vintage, ABV, bin code, and quantity — the
   ledger voice is a system signature, not a garnish.
-- Keep neutrals warm in both modes: cream/espresso, never grey, never `#000`
-  or `#fff` as text or ground.
+- Keep neutrals warm in both modes: cream by day, gold-black lacquer by
+  night, never cold grey, never `#000` or `#fff` as text or ground.
 - Respect `prefers-reduced-motion`; theme switching must not flash.
 
 ### Don't
-- Don't put white cards on a white ground — the ground is cream or espresso,
+- **Never use brown. Anywhere. Ever** (Devin, 2026-08-26). No espresso
+  surfaces, no coffee/chocolate near-blacks, no taupe greys, no bronze-brown
+  tints. The mechanical test for near-blacks: red must not exceed green by
+  more than ~2 (warmth = a gold undertone, R≈G > B; brown = R clearly above
+  G above B). Lighter warm neutrals lean champagne/gold (`#ede3ce`,
+  `#aea68f`), never coffee or taupe.
+- Don't put white cards on a white ground — the ground is cream or lacquer,
   surfaces are always one step lighter.
 - Don't use hard, dark drop shadows; lift is soft and warm.
 - Don't use gold as an accent in light mode beyond quiet premium markers —

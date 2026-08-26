@@ -7,7 +7,7 @@ const STORAGE_KEY = "terroir-theme";
 
 // Canvas colors for browser/PWA chrome — hand-synced with the DESIGN.md
 // tokens, viewport.themeColor in layout.tsx, and its themeInitScript.
-const THEME_COLORS = { light: "#f2ede3", dark: "#1d1512" } as const;
+const THEME_COLORS = { light: "#f2ede3", dark: "#0d0c09" } as const;
 
 type ThemeChoice = "light" | "dark" | "system";
 
