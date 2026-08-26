@@ -83,7 +83,7 @@ describe("ThemeToggle", () => {
       darkMeta = document.createElement("meta");
       darkMeta.name = "theme-color";
       darkMeta.media = "(prefers-color-scheme: dark)";
-      darkMeta.content = "#1d1512";
+      darkMeta.content = "#0d0c09";
       lightMeta = document.createElement("meta");
       lightMeta.name = "theme-color";
       lightMeta.media = "(prefers-color-scheme: light)";
@@ -99,8 +99,8 @@ describe("ThemeToggle", () => {
     it("forces both metas to the cellar color on an explicit dark choice", () => {
       render();
       press("Dark theme");
-      expect(darkMeta.content).toBe("#1d1512");
-      expect(lightMeta.content).toBe("#1d1512");
+      expect(darkMeta.content).toBe("#0d0c09");
+      expect(lightMeta.content).toBe("#0d0c09");
     });
 
     it("forces both metas to the tasting-room color on an explicit light choice", () => {
@@ -114,7 +114,7 @@ describe("ThemeToggle", () => {
       render();
       press("Dark theme");
       press("Match device theme");
-      expect(darkMeta.content).toBe("#1d1512");
+      expect(darkMeta.content).toBe("#0d0c09");
       expect(lightMeta.content).toBe("#f2ede3");
     });
   });
