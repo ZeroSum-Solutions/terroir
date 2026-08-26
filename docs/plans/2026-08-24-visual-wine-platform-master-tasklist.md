@@ -144,9 +144,19 @@ frozen to the partner cellar's own editions.* Proper licensing happens before re
       normative migration manifest 0112–0126 + 0127-reserved published per VWP-FR-005 —
       P4 renamed 0113–0120, containers/slots/placements 0121–0123, ratings 0124–0126;
       spike register 1–11 mapped to the specs/decisions each gates). Pending PRD approval.
-- [ ] Run spikes 1–10; record verdicts against VWP-D-02/06/07 and fold into specs
+- [ ] Run spikes 1–3, 5–10; record verdicts against VWP-D-02/06/07 and fold into specs
       (these need external resources: STT accounts, Polycam, WS trial, demo hardware,
       the partner CSV)
+- [x] Spike 4 RUN 2026-08-25 — `docs/plans/2026-08-25-spike-04-corpus-join-rates.md`.
+      X-Wines→LWIN name join measured against the real 211,498-row catalog: 6.3% exact /
+      15.8% producer+cuvée / 47.3% producer-reachable (conservative floors; corpora aim at
+      different halves of the wine world). Decision-relevant rerun is partner-CSV→X-Wines,
+      blocked on the CSV — no community-coverage number may be quoted until then.
+      **Plan correction:** WineSensed carries NO wine/winery names (opaque Vivino IDs only)
+      → 0% name-joinability, so it CANNOT be the labeled accuracy benchmark D2.4 calls it;
+      re-scoped to hard negatives / out-of-corpus abstention material + domain-gap
+      reference. Gate-0's labeled denominator must come from partner-cellar photos (already
+      specified). Fold into SPEC-06 eval wording when tickets are cut.
 - [x] Spike resource setup — 2026-08-25: `docs/plans/2026-08-25-spike-resources-status.md`.
       Ready: Brave key (plan check pending), RunPod key + live GPU pricing (RTX 4090
       $0.74/hr; balance $0 → needs top-up), X-Wines full (MD5-verified, CC0) +

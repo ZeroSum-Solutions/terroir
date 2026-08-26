@@ -92,6 +92,12 @@ doc (marked ★); the rest cite their source and go straight to tickets once gat
   near-duplicate-vintage cases); query-level metrics with abstention-as-miss; report
   format; Gate 0-R re-run (SPEC-08) on the final index. Gated by: VWP-D-01 (owner
   thresholds). Acceptance: PRD criterion 4; published numbers = the "frozen scan proof".
+  *Spike-4 correction (2026-08-25): WineSensed cannot supply the labeled accuracy
+  denominator — its rows carry opaque Vivino IDs with no wine/winery names, so its photos
+  cannot be mapped to our editions. It is hard-negative / out-of-corpus abstention material
+  and a domain-gap reference only. The labeled top-1/top-3 denominator comes from
+  partner-cellar photos labeled by resolved edition (as Gate 0 already specifies). Drop
+  "benchmark" framing for WineSensed wherever it appears.*
 - **SPEC-08 Gate 0-R** — re-execution of SPEC-06 on the full partner index before any
   investor rehearsal; same metric family/thresholds; room bottles in the eval set.
 
