@@ -5,7 +5,6 @@ import { validateUploadedCsvFile } from "../../../src/domains/import/upload-vali
 import { MAX_ROWS, MAX_UPLOAD_BYTES, CANONICAL_HEADERS } from "../../../src/domains/import/constants";
 
 function log(...args: unknown[]) {
-  // eslint-disable-next-line no-console
   console.log(...args);
 }
 

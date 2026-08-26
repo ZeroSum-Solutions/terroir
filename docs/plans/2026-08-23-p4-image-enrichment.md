@@ -2,6 +2,22 @@
 
 Status: design only. No code, no migrations applied, no Supabase stack touched by this pass.
 
+> **Amendments (2026-08-24, from `2026-08-24-visual-wine-platform-synthesis.md` v3, audit
+> round 2):**
+> 1. **Migration renumbering:** the new global `wine_editions` table (synthesis D1) takes
+>    `0112`; P4's files are **renamed to `0113`–`0120` in the same commit that lands `0112`**
+>    (round-3 correction: no standing "read +1" rule — one numbering scheme only). This
+>    document's inline `0112`–`0119` references are updated when P4's tickets are cut from
+>    the published migration manifest (0112–0121+; containers/slots/placements take 0121+).
+> 2. **Cylinder unwarp** joins the derivative pipeline as a best-effort derivative (raw crop
+>    always retained); the implementation lands first as a shared library in the Gate-0 scan
+>    service and P4 reuses it at scale (synthesis D3).
+> 3. **NOT amended:** `wine_images` keeps its `canonical_wine_id` + `(vintage, size_ml)`
+>    value-tuple keying exactly as designed (P2 §10's zero-schema-change commitment).
+>    A briefly proposed `wine_edition_id` re-key was withdrawn in synthesis v3; editions join
+>    images at read time via the tuple. §12's `render_3d` extension point stays reserved but
+>    is unused by the template-geometry 3D approach.
+
 > **Migration-number reservation.** Confirmed by direct inspection, 2026-08-23:
 > `terroir-vw` (branch `feat/visual-wine-prototype`, tip `d8086ce`) is the furthest-along
 > lane and tops out at `0101_wine_identity_backfill.sql` (P2). `terroir-vw-p1` and

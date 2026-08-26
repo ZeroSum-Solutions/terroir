@@ -102,6 +102,9 @@ importers:
       happy-dom:
         specifier: ^20.9.0
         version: 20.9.0
+      js-yaml:
+        specifier: ^4.1.1
+        version: 4.1.1
       tailwindcss:
         specifier: ^4
         version: 4.2.2

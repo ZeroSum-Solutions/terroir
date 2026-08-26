@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { __parseForTests, __resetWineSearcherForTests, fetchRetailPrices } from "./wine-searcher";
+import {
+  __parseForTests,
+  __resetWineSearcherForTests,
+  fetchRetailPrices,
+  formatRetailPriceBasis,
+} from "./wine-searcher";
 
 // Network-touching code (fetchRetailPrices) is intentionally NOT tested
 // for business logic here — we'd be testing the fetch wrapper, not our logic.
@@ -9,17 +14,34 @@ import { __parseForTests, __resetWineSearcherForTests, fetchRetailPrices } from 
 // tested below.
 
 describe("Wine-Searcher response parser", () => {
-  it("parses a typical trade-API response (top-level fields)", () => {
+  it("prefers a true median when average and median fields are both present", () => {
+    const result = __parseForTests({
+      min_price: 80,
+      max_price: 110,
+      average_price: 92,
+      median_price: 95,
+      offers_count: 142,
+    });
+    expect(result?.retailMin).toBe(80);
+    expect(result?.retailMax).toBe(110);
+    expect(result?.retailMedian).toBe(95);
+    expect(result?.retailMedianBasis).toBe("median");
+    expect(result?.retailerCount).toBe(142);
+  });
+
+  it("labels an average fallback as avg-based", () => {
     const result = __parseForTests({
       min_price: 80,
       max_price: 110,
       average_price: 92,
       offers_count: 142,
     });
-    expect(result?.retailMin).toBe(80);
-    expect(result?.retailMax).toBe(110);
+
     expect(result?.retailMedian).toBe(92);
-    expect(result?.retailerCount).toBe(142);
+    expect(result?.retailMedianBasis).toBe("average");
+    expect(result && formatRetailPriceBasis(result.retailMedianBasis)).toBe(
+      "avg-based",
+    );
   });
 
   it("parses a wine-wrapped response variant", () => {
@@ -51,8 +73,11 @@ describe("Wine-Searcher response parser", () => {
     expect(__parseForTests(42)).toBeNull();
   });
 
-  it("rejects when required fields missing", () => {
+  it("rejects when min or max is missing", () => {
     expect(__parseForTests({ min_price: 80 })).toBeNull();
+  });
+
+  it("returns null when median and average are both absent", () => {
     expect(__parseForTests({ min_price: 80, max_price: 110 })).toBeNull();
   });
 
@@ -78,12 +103,13 @@ describe("Wine-Searcher response parser", () => {
     ).toBeNull();
   });
 
-  it("rejects when median is outside [min, max]", () => {
+  it("rejects when the preferred true median is outside [min, max]", () => {
     expect(
       __parseForTests({
         min_price: 80,
         max_price: 110,
-        average_price: 200,
+        average_price: 92,
+        median_price: 200,
         offers_count: 142,
       }),
     ).toBeNull();

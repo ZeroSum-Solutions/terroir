@@ -30,6 +30,11 @@ export const metadata: Metadata = {
     default: "Terroir",
   },
   description: "Wine management for upscale restaurants.",
+  appleWebApp: {
+    capable: true,
+    title: "Terroir",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {

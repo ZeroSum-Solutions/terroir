@@ -225,8 +225,6 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
   // ── C09 ──────────────────────────────────────────────────────────────
   describe("C09: re-confirming byte-identical content is idempotent, and a rows-insert failure never leaves an orphaned batch", () => {
     it("BEFORE (simulated pre-fix path): the OLD two-separate-statement confirm pattern really did create two batches and double quantities — proves the bug was real, not hypothetical", async () => {
-      const buffer = csvOf([{ producer: "C09-old Producer", name: "C09-old Wine", quantity: 6, unitCost: 24.5 }]);
-
       // Reproduces confirmImportBatch's EXACT pre-P3 body: two independent
       // client statements, no content hash, no atomicity between them.
       async function oldConfirm() {

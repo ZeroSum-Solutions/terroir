@@ -16,6 +16,7 @@ import { CellarGridView, CellarSetup } from "./cellar-grid";
 import { resolveCellarNavigationIntent } from "./cellar-navigation";
 import { useCellarUrlState } from "./use-cellar-url-state";
 import { buildCellarCounters, CellarCounters } from "./cellar-counters";
+import { VoiceCellarControl } from "./voice-cellar-control";
 
 type CellarSection = { id: string; name: string };
 
@@ -245,6 +246,13 @@ export function CellarShell({
           >
             <Search className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
+
+          <VoiceCellarControl
+            onResolve={(wineId) => {
+              setView("list");
+              openWine(wineId);
+            }}
+          />
 
           {cellarConfig && (
             <div className="hidden items-center overflow-hidden rounded-pill border border-ink/25 md:inline-flex">

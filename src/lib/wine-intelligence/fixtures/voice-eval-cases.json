@@ -1,0 +1,1208 @@
+[
+{
+"caseId": "U01_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Do Whiskey Ave de 2018, Gevrey-Chambertin From Domaine Fourrier.",
+"expected": {
+"kind": "resolve",
+"itemId": "I000"
+}
+},
+{
+"caseId": "U01_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Do we still have the 2018 Gevrey-Chambertin from Domaine Fourrier?",
+"expected": {
+"kind": "resolve",
+"itemId": "I000"
+}
+},
+{
+"caseId": "U01_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Do we still have the 2018 Gevrey-Chambertin from Domaine Fourier?",
+"expected": {
+"kind": "resolve",
+"itemId": "I000"
+}
+},
+{
+"caseId": "U02_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Pull 2 bottles of Puligny-Montrachet La Combe Vézelay for Table 9.",
+"expected": {
+"kind": "resolve",
+"itemId": "I001"
+}
+},
+{
+"caseId": "U02_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Pull 2 bottles of Puligny-Montrachet Les Combettes for Table 9.",
+"expected": {
+"kind": "resolve",
+"itemId": "I001"
+}
+},
+{
+"caseId": "U02_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Pull to butt love pull in him on trashy les combats fortables nin.",
+"expected": {
+"kind": "resolve",
+"itemId": "I001"
+}
+},
+{
+"caseId": "U02_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Pouilly-Fuissé, Puligny-Montrachet, Les Combettes, Fortable, Nîmes.",
+"expected": {
+"kind": "resolve",
+"itemId": "I001"
+}
+},
+{
+"caseId": "U04_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Add 6 bottles of Domaine de la Romanée-Conti La Tâche to the reserve list.",
+"expected": {
+"kind": "resolve",
+"itemId": "I002"
+}
+},
+{
+"caseId": "U04_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Add 6 bottles of Domaine de la Romanée-Conti La Tâche to the reserve list.",
+"expected": {
+"kind": "resolve",
+"itemId": "I002"
+}
+},
+{
+"caseId": "U01_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Dos Whisky Ave de 2018 Gevrey-Chambertin from Domaine Fourrier.",
+"expected": {
+"kind": "resolve",
+"itemId": "I000"
+}
+},
+{
+"caseId": "U04_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "At the Cbot Love domain de la Romane contient la tâche To de Reserve List.",
+"expected": {
+"kind": "resolve",
+"itemId": "I002"
+}
+},
+{
+"caseId": "U04_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Atsybot Love, Domaine de la Romanée-Conti, La Tâche, Taux de Réserve, Liste.",
+"expected": {
+"kind": "resolve",
+"itemId": "I002"
+}
+},
+{
+"caseId": "U06_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Log 12 bottles of Sanser Lemon Stamnays.",
+"expected": {
+"kind": "resolve",
+"itemId": "I003"
+}
+},
+{
+"caseId": "U06_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Look 12 But Love sans serre les mains d'année.",
+"expected": {
+"kind": "resolve",
+"itemId": "I003"
+}
+},
+{
+"caseId": "U07_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "We are out of the Voskhod-Romany Premier Cru Lesochets.",
+"expected": {
+"kind": "resolve",
+"itemId": "I004"
+}
+},
+{
+"caseId": "U07_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "We are out of the Vosne-Romanée Premier Cru Les Suchots.",
+"expected": {
+"kind": "resolve",
+"itemId": "I004"
+}
+},
+{
+"caseId": "U06_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "L'Aube 12 Bottles of Sancerre Les Monts Damnés.",
+"expected": {
+"kind": "resolve",
+"itemId": "I003"
+}
+},
+{
+"caseId": "U07_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "We are out of the Vosne Romanée Premier Cru Les Suchauds.",
+"expected": {
+"kind": "resolve",
+"itemId": "I004"
+}
+},
+{
+"caseId": "U07_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "We Are Out of the Vosne-Romanée Premier Cru Les Suchots.",
+"expected": {
+"kind": "resolve",
+"itemId": "I004"
+}
+},
+{
+"caseId": "U08_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Check the Mursault Terriers from Coche d'Uri.",
+"expected": {
+"kind": "resolve",
+"itemId": "I005"
+}
+},
+{
+"caseId": "U08_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Check the Meursault Perrières from Coche-Dury.",
+"expected": {
+"kind": "resolve",
+"itemId": "I005"
+}
+},
+{
+"caseId": "U08_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Check de Meursault périllère from gauche du riz.",
+"expected": {
+"kind": "resolve",
+"itemId": "I005"
+}
+},
+{
+"caseId": "U08_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Chèque de Meursault, Perrières, Fromme, Coche-Dury.",
+"expected": {
+"kind": "resolve",
+"itemId": "I005"
+}
+},
+{
+"caseId": "U09_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Receiving a case of Crozet's Hermitage from Alain Grelet.",
+"expected": {
+"kind": "resolve",
+"itemId": "I006"
+}
+},
+{
+"caseId": "U09_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Receiving a case of Crozes-Hermitage from Alain Graillot.",
+"expected": {
+"kind": "resolve",
+"itemId": "I006"
+}
+},
+{
+"caseId": "U06_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Log 12 bottles of Sancerre Les Monts Damnés.",
+"expected": {
+"kind": "resolve",
+"itemId": "I003"
+}
+},
+{
+"caseId": "U09_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Receiving Gakas of Crow's Hermitage from Alain Graillot.",
+"expected": {
+"kind": "resolve",
+"itemId": "I006"
+}
+},
+{
+"caseId": "U09_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Receiving Gagas of Crozermitage from Alain Graillot.",
+"expected": {
+"kind": "resolve",
+"itemId": "I006"
+}
+},
+{
+"caseId": "U12_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "2 glasses of the Gigondas from Domaine Sanadoc.",
+"expected": {
+"kind": "resolve",
+"itemId": "I007"
+}
+},
+{
+"caseId": "U12_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "2 glasses of the Gigondas from Domaine Santa Duc.",
+"expected": {
+"kind": "resolve",
+"itemId": "I007"
+}
+},
+{
+"caseId": "U12_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Glass of the Gigondas from Domaine Saint-Aduc.",
+"expected": {
+"kind": "resolve",
+"itemId": "I007"
+}
+},
+{
+"caseId": "U12_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Glass of the Gigondas from Domaine Santa Duc.",
+"expected": {
+"kind": "resolve",
+"itemId": "I007"
+}
+},
+{
+"caseId": "U13_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Price the Code Radi Lam outline from Gigaal.",
+"expected": {
+"kind": "resolve",
+"itemId": "I008"
+}
+},
+{
+"caseId": "U13_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Price the Côte-Rôtie La Mouline from Guigal.",
+"expected": {
+"kind": "resolve",
+"itemId": "I008"
+}
+},
+{
+"caseId": "U13_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Praius de Côte-Rôtie-la-Mouline from Gigal.",
+"expected": {
+"kind": "resolve",
+"itemId": "I008"
+}
+},
+{
+"caseId": "U13_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "de Côte-Rôtie La Mouline from Guigal.",
+"expected": {
+"kind": "resolve",
+"itemId": "I008"
+}
+},
+{
+"caseId": "U14_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "What vintages of Château Margaux do we hold?",
+"expected": {
+"kind": "resolve",
+"itemId": "I009"
+}
+},
+{
+"caseId": "U14_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "What vintages of Château Margaux do we hold?",
+"expected": {
+"kind": "resolve",
+"itemId": "I009"
+}
+},
+{
+"caseId": "U14_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "What advantage of Château Margaux do we hold?",
+"expected": {
+"kind": "resolve",
+"itemId": "I009"
+}
+},
+{
+"caseId": "U14_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "What vintage of Château Margaux do we hold?",
+"expected": {
+"kind": "resolve",
+"itemId": "I009"
+}
+},
+{
+"caseId": "U15_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Add domain laflavbatteredmantra to the buy the bottle list.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U15_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Add Domaine Leflaive Bâtard-Montrachet to the buy-the-bottle list.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U15_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "À domaine le fleuve bâtard montera château de bail de bottes le liste.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U15_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Domaine Leflaive, Bâtard-Montrachet, Haut-de-Bail de Botte, le list.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U16_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "The Bandol Rosé from Domaine Tempier is running low.",
+"expected": {
+"kind": "resolve",
+"itemId": "I010"
+}
+},
+{
+"caseId": "U16_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "De Bandol Rosé From Domaine Templier is Running Glow.",
+"expected": {
+"kind": "resolve",
+"itemId": "I010"
+}
+},
+{
+"caseId": "U16_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "de Bandol, Rosé From Domaine Tempier, Ice Running Glow.",
+"expected": {
+"kind": "resolve",
+"itemId": "I010"
+}
+},
+{
+"caseId": "U16_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "The Vandel Rosé from Domaine Tempier is running low.",
+"expected": {
+"kind": "resolve",
+"itemId": "I010"
+}
+},
+{
+"caseId": "U18_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Is the Condru from Georges Vernet still available?",
+"expected": {
+"kind": "resolve",
+"itemId": "I011"
+}
+},
+{
+"caseId": "U18_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Is the Condrieu from Georges Vernay still available?",
+"expected": {
+"kind": "resolve",
+"itemId": "I011"
+}
+},
+{
+"caseId": "U18_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "de Condrieu from Georges Vernay's Thiévet Le Bel.",
+"expected": {
+"kind": "resolve",
+"itemId": "I011"
+}
+},
+{
+"caseId": "U18_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Is de Combrille from George Verne's Tilleul et Lebel.",
+"expected": {
+"kind": "resolve",
+"itemId": "I011"
+}
+},
+{
+"caseId": "U19_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "count the Vuvray Moleks from Hewitt.",
+"expected": {
+"kind": "resolve",
+"itemId": "I012"
+}
+},
+{
+"caseId": "U19_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Count of Vouvray-Moloucs from Huet.",
+"expected": {
+"kind": "resolve",
+"itemId": "I012"
+}
+},
+{
+"caseId": "U19_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "de vous ouvrez-moi le front muet.",
+"expected": {
+"kind": "resolve",
+"itemId": "I012"
+}
+},
+{
+"caseId": "U19_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "de Vouvray-Moelleux fromuet.",
+"expected": {
+"kind": "resolve",
+"itemId": "I012"
+}
+},
+{
+"caseId": "U20_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Open the Krug Grande Cuvée for the corner booth.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U20_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Open the Krug Grande Cuvée for the corner booth.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U20_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Open de cru Grande Cuvée Fort de Corner Boot.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U20_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Open de Cru Grande Cuvée Fort de Corner Bout.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U21_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "How many Barbarous Coasili are left?",
+"expected": {
+"kind": "resolve",
+"itemId": "I013"
+}
+},
+{
+"caseId": "U21_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "How many Barbaresco Asili are left?",
+"expected": {
+"kind": "resolve",
+"itemId": "I013"
+}
+},
+{
+"caseId": "U21_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "A omani barbarisk wasili are left.",
+"expected": {
+"kind": "resolve",
+"itemId": "I013"
+}
+},
+{
+"caseId": "U21_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Aumani Barbaresco Asiliare Left.",
+"expected": {
+"kind": "resolve",
+"itemId": "I013"
+}
+},
+{
+"caseId": "U22_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Brunello di Montalcino from Beyond i Santi, 2016.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U22_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Brunello di Montalcino from Biondi-Santi, 2016.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U22_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Brunello di Montalcino from Biondi Santi, tutto usando Sixtine.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U22_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Brunello di Montalcino from Biondi-Santi, tutto usando Sixtène.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U24_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "L'Aglianico del Vulture from Elena Fucci.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U24_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "logged the Aglia Nico del Vulture from Elena Fucci.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U24_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Log de Alianico del Vulture from Elena Fucci.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U24_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "L'OGD Aglianico del Vulture from Elena Fucci.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U26_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Amarone della Valpolicella from Giuseppe Quintarelli, 1 bottle.",
+"expected": {
+"kind": "resolve",
+"itemId": "I014"
+}
+},
+{
+"caseId": "U26_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Amarone della Valpolicella from Giuseppe Quintarelli, 1 bottle.",
+"expected": {
+"kind": "resolve",
+"itemId": "I014"
+}
+},
+{
+"caseId": "U26_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Amarone della Valpolicella from Giuseppe Quintarelli, one bottle.",
+"expected": {
+"kind": "resolve",
+"itemId": "I014"
+}
+},
+{
+"caseId": "U26_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Amarone della Valpolicella from Giuseppe Quintarelli, one bottle.",
+"expected": {
+"kind": "resolve",
+"itemId": "I014"
+}
+},
+{
+"caseId": "U28_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "The Etna Rosso from Passapisci Eros sold out.",
+"expected": {
+"kind": "resolve",
+"itemId": "I015"
+}
+},
+{
+"caseId": "U28_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "The Etna Rosso from Passopisciaro sold out.",
+"expected": {
+"kind": "resolve",
+"itemId": "I015"
+}
+},
+{
+"caseId": "U28_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "etna roso from Pasoki šaro sold out.",
+"expected": {
+"kind": "resolve",
+"itemId": "I015"
+}
+},
+{
+"caseId": "U28_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "etna roso from Pasoki šaro sold out.",
+"expected": {
+"kind": "resolve",
+"itemId": "I015"
+}
+},
+{
+"caseId": "U30_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Spirolo Monfortino from Giacomo Conterno, check the vintage.",
+"expected": {
+"kind": "resolve",
+"itemId": "I016"
+}
+},
+{
+"caseId": "U30_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Barolo Monfortino from Giacomo Conterno, check the vintage.",
+"expected": {
+"kind": "resolve",
+"itemId": "I016"
+}
+},
+{
+"caseId": "U30_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Barolo Monfortino from Giacomo Conterno, check the vintage.",
+"expected": {
+"kind": "resolve",
+"itemId": "I016"
+}
+},
+{
+"caseId": "U32_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Where is the sashayya from Tanuta Sandwito?",
+"expected": {
+"kind": "resolve",
+"itemId": "I017"
+}
+},
+{
+"caseId": "U32_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Where is the Sassicaia from Tenuta San Guido?",
+"expected": {
+"kind": "resolve",
+"itemId": "I017"
+}
+},
+{
+"caseId": "U32_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Cuoris de sasicaia from tenuta sanguido.",
+"expected": {
+"kind": "resolve",
+"itemId": "I017"
+}
+},
+{
+"caseId": "U32_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Quariz de Sassicaia from Tenuta San Guido.",
+"expected": {
+"kind": "resolve",
+"itemId": "I017"
+}
+},
+{
+"caseId": "U30_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Barolo Monfortino from Giacomo Conterno, check the vintage.",
+"expected": {
+"kind": "resolve",
+"itemId": "I016"
+}
+},
+{
+"caseId": "U33_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Gaja Barbaresco needs a new shelf tag.",
+"expected": {
+"kind": "resolve",
+"itemId": "I018"
+}
+},
+{
+"caseId": "U33_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Gaia Barbaresco needs a new shelf tag.",
+"expected": {
+"kind": "resolve",
+"itemId": "I018"
+}
+},
+{
+"caseId": "U33_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Gaia Barbaresco need a new shelf tag.",
+"expected": {
+"kind": "resolve",
+"itemId": "I018"
+}
+},
+{
+"caseId": "U33_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Gaja Barbaresco need a new shelf tag.",
+"expected": {
+"kind": "resolve",
+"itemId": "I018"
+}
+},
+{
+"caseId": "U34_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Torazzi from Mastro Bernardino, is it decanted?",
+"expected": {
+"kind": "resolve",
+"itemId": "I019"
+}
+},
+{
+"caseId": "U34_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Taurasi from Mastroberardino, is it decanted?",
+"expected": {
+"kind": "resolve",
+"itemId": "I019"
+}
+},
+{
+"caseId": "U34_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Taurasi from Mastro Berardino, is it the counted?",
+"expected": {
+"kind": "resolve",
+"itemId": "I019"
+}
+},
+{
+"caseId": "U34_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Taurasi from Mastroberardino, is with the counted.",
+"expected": {
+"kind": "resolve",
+"itemId": "I019"
+}
+},
+{
+"caseId": "U36_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "2 bottles of Ribera del Duero from Dominio de Pingas.",
+"expected": {
+"kind": "resolve",
+"itemId": "I020"
+}
+},
+{
+"caseId": "U36_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "2 bottles of Ribera del Duero from Dominio de Pingus.",
+"expected": {
+"kind": "resolve",
+"itemId": "I020"
+}
+},
+{
+"caseId": "U36_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Tuvo Klesov Rivera del Duero from dominio de Pingus.",
+"expected": {
+"kind": "resolve",
+"itemId": "I020"
+}
+},
+{
+"caseId": "U36_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Nuevo Clesof, Ribera del Duero, from Dominio de Pingus.",
+"expected": {
+"kind": "resolve",
+"itemId": "I020"
+}
+},
+{
+"caseId": "U38_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Prioridad from Álvaro Palacios, El Ermita.",
+"expected": {
+"kind": "resolve",
+"itemId": "I021"
+}
+},
+{
+"caseId": "U38_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Priorat from Álvaro Palacios, L'Ermita.",
+"expected": {
+"kind": "resolve",
+"itemId": "I021"
+}
+},
+{
+"caseId": "U38_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Priorat from Álvaro Palacios, L'Ermita.",
+"expected": {
+"kind": "resolve",
+"itemId": "I021"
+}
+},
+{
+"caseId": "U38_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Priorat from Álvaro Palacios, L'Ermita.",
+"expected": {
+"kind": "resolve",
+"itemId": "I021"
+}
+},
+{
+"caseId": "U39_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Rioja Gran Reserva from López de Heredia, Viña Tondonia.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U39_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Rioja Gran Reserva from López de Heredia, Viña Tondonia.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U39_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Rioja Gran Reserva from López de Heredia, Viña Tondonia.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U39_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Rioja Gran Reserva From López de Heredia, Viña Tondonía.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U42_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Vega Sicilia Unico, which vintages are on the list?",
+"expected": {
+"kind": "resolve",
+"itemId": "I022"
+}
+},
+{
+"caseId": "U42_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Vega Sicilia Único, which vintages are on the list?",
+"expected": {
+"kind": "resolve",
+"itemId": "I022"
+}
+},
+{
+"caseId": "U42_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Vega Sicilia Unico, beat vintage sarion the list.",
+"expected": {
+"kind": "resolve",
+"itemId": "I022"
+}
+},
+{
+"caseId": "U42_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Vega Sicilia Único, bit vintage Sareon de list.",
+"expected": {
+"kind": "resolve",
+"itemId": "I022"
+}
+},
+{
+"caseId": "U43_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "the Birzo Mencía from descendants to José Palacios.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U43_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "The Bierzo Mencía from Descendientes de José Palacios.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U43_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "De Bierzo Mencía Fromm, descendientes de José Palacios.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U43_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "De Bierzo-Mencía from Descendientes de José Palacios.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U45_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Toro from Numantia needs repricing.",
+"expected": {
+"kind": "resolve",
+"itemId": "I023"
+}
+},
+{
+"caseId": "U45_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Toro from Numanthia needs repricing.",
+"expected": {
+"kind": "resolve",
+"itemId": "I023"
+}
+},
+{
+"caseId": "U45_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Toru from Numantia next reprising.",
+"expected": {
+"kind": "resolve",
+"itemId": "I023"
+}
+},
+{
+"caseId": "U45_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Toro from Numanthia next reprising.",
+"expected": {
+"kind": "resolve",
+"itemId": "I023"
+}
+},
+{
+"caseId": "U48_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Egon Müller Scharzhofberger Riesling Auslese.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U48_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Egon Müller Schartzhof Berger Riesling Auslese.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U48_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Egon Müller Scharzhofberger Riesling Auslese.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U48_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Egon Müller Scharzhofberger Riesling Auslese.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U50_en_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "The truck conveyor announced laser from Dunhoff is in the safe.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U50_nat_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "Trockenbeerenauslese from Dönnhoff ist intensiv.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U50_en_aai_keyterm_full",
+"sttConfig": "aai_keyterm_full",
+"transcript": "The Trockenbeerenauslese from Dönnhoff is in the safe.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "U50_nat_aai_plain",
+"sttConfig": "aai_plain",
+"transcript": "Trockenbeerenauslese. From Dönhoff ist intensiv.",
+"expected": {
+"kind": "abstain",
+"reason": "out_of_inventory"
+}
+},
+{
+"caseId": "G01",
+"sttConfig": "synthetic",
+"transcript": "",
+"expected": {
+"kind": "abstain",
+"reason": "garbage"
+}
+},
+{
+"caseId": "G02",
+"sttConfig": "synthetic",
+"transcript": "Uh.",
+"expected": {
+"kind": "abstain",
+"reason": "garbage"
+}
+},
+{
+"caseId": "G03",
+"sttConfig": "synthetic",
+"transcript": "What time do we close tonight?",
+"expected": {
+"kind": "abstain",
+"reason": "garbage"
+}
+},
+{
+"caseId": "G04",
+"sttConfig": "synthetic",
+"transcript": "Table twelve wants the check.",
+"expected": {
+"kind": "abstain",
+"reason": "garbage"
+}
+},
+{
+"caseId": "G05",
+"sttConfig": "synthetic",
+"transcript": "Two bottles of the, um, the red one.",
+"expected": {
+"kind": "abstain",
+"reason": "garbage"
+}
+},
+{
+"caseId": "G06",
+"sttConfig": "synthetic",
+"transcript": "Bruneuf-twenty '16",
+"expected": {
+"kind": "abstain",
+"reason": "garbage"
+}
+}
+]
