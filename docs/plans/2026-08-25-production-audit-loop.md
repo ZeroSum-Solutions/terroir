@@ -43,7 +43,9 @@ REVERIFY: CLOSED.
 9. **Fixture licensing exposure**: the resolver's tuning fixture embeds 250
    production-catalog rows (LWIN ids + names). LWIN redistribution terms are
    unverified — an owner decision is recorded in `fixtures/generate.py` and gates any
-   push of this branch to the public remote.
+   push of this branch to the public remote. *Resolved 2026-08-26: owner made the
+   repo PRIVATE; the note in `generate.py` is downgraded to a release-time check
+   (re-verify LWIN terms before any future public release or product exposure).*
 10. **Licensing-posture wording contradiction** between the master task list
     ("deliberately ignored this phase") and the PRD's NFR-5 containment — reconciled:
     deferral stands as the owner-stated posture; NFR-5 isolation is the mechanism that

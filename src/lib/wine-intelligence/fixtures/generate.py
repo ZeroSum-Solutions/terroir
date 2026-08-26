@@ -25,15 +25,16 @@ EVIDENTIARY STATUS: cases + inventory are the resolver rule's TUNING fixture
 (the v1→v5 rule was iterated against them); SPEC-21's sealed holdout is the
 acceptance set. See name-resolver.eval.test.ts.
 
-DATA LICENSING (flagged by the 2026-08-25 production audit — OWNER DECISION
-REQUIRED BEFORE THIS BRANCH IS PUSHED TO THE PUBLIC REMOTE): the inventory
-fixture embeds 250 rows derived from the production lwin_catalog (LWIN
-identifiers + producer/wine display names, Liv-ex's LWIN standard). LWIN is
-published as an open standard, but redistribution terms for catalog rows have
-NOT been verified. Options if redistribution is not cleared: regenerate with
-synthetic names (weakens eval realism) or keep the fixture out of the public
-tree. The STT transcripts are of self-generated TTS audio (no third-party
-rights).
+DATA LICENSING (flagged by the 2026-08-25 production audit; downgraded
+2026-08-26 when the repo went PRIVATE on owner decision — no longer a push
+gate): the inventory fixture embeds 250 rows derived from the production
+lwin_catalog (LWIN identifiers + producer/wine display names, Liv-ex's LWIN
+standard). Private-repo internal use is ordinary; but redistribution terms for
+catalog rows have NOT been verified, so RE-CHECK before any future public
+release of this tree or before catalog data is exposed through the product.
+Options if redistribution is not cleared: regenerate with synthetic names
+(weakens eval realism) or keep the fixture out of the public tree. The STT
+transcripts are of self-generated TTS audio (no third-party rights).
 
 Usage:  python3 generate.py          (any python3; stdlib only)
         python3 generate.py --pg     (additionally regenerate pg-oracle.json
@@ -188,8 +189,12 @@ def generate_pg_oracle(sim_vectors) -> None:
     pairs = []
     for v in sim_vectors:
         a, b = norm(v["a"]), norm(v["b"])
+        # norm() guarantees ['a-z0-9 '] output; enforce it before SQL interpolation
+        for s in (a, b):
+            if not re.fullmatch(r"[a-z0-9 ]*", s):
+                raise ValueError(f"unsafe normalized value for SQL: {s!r}")
         pairs.append((a, b, v["sim"]))
-    values = ",".join(f"('{a}','{b}')" for a, b, _ in pairs)  # norm'd strings are ['a-z0-9 ']-safe
+    values = ",".join(f"('{a}','{b}')" for a, b, _ in pairs)
     sql = f"SELECT similarity(a,b)::float8 FROM (VALUES {values}) AS t(a,b);"
     out = subprocess.run(
         ["psql", "-h", sock, "-p", port, "-d", "postgres", "-At", "-c", sql],
