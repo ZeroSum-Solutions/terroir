@@ -56,11 +56,21 @@ when the Workspace mailbox or an existing business integration requires it.
 
 ## Still blocked on Devin
 
-1. **RunPod top-up** — ~$25 at runpod.io (account wiggdevin@gmail.com). Gates spikes 6–7.
+1. ~~RunPod top-up~~ ✅ **cleared 2026-08-25** (~$25). Pod `bcod3vbu78gcav` (RTX 4090
+   secure, EUR-IS-2) provisioned same night; spikes 6 + 7a run and CLOSED (~58 min GPU,
+   ≈ $0.72); pod **stopped** with its 80 GB volume retained (stack + Slim labels intact)
+   for spike 7b — restart it from the console when the photos exist, terminate it if 7b
+   goes elsewhere.
 2. **Polycam** on your phone (free account) — spike 2 needs 20–200 photos or an mp4 sweep
-   of the partner cellar space; capture is a physical task.
+   of the partner cellar space; capture is a physical task. **While you're there: 10–20
+   plain phone photos of real bottle labels (varied angle/lighting, names noted) →
+   `~/projects/terroir-data/spike02-capture/` — that unblocks spike 7b**, the real
+   phone-photo half that synthetic degradation cannot answer.
 3. **Partner CSV** — spike 10 (GTIN coverage/vintage-uniqueness) and Phase B ingestion
    need the real ~20k-row export from the partner. Highest-value missing input.
+4. **PRD approval** — with spikes 1, 4, 5, 6, 7a, 9, 11 closed and `docs/evals/
+   vwp-evals.yaml` authored (wait-list item 4), the ticket-freeze critical path is now:
+   PRD sign-off + Gate-0 thresholds (VWP-D-01) + the two externals above.
 
 <details><summary>Historical: why the app password could not be automated (2026-08-25)</summary>
 
@@ -96,17 +106,21 @@ when the Workspace mailbox or an existing business integration requires it.
   (~3.9 tokens/word). Defaults to `language=en`, which returned empty transcripts on 42 %
   of natively-pronounced clips; `language=multi` is mandatory for wine audio.
 
-## Autonomous next steps (armed, in order)
+## Autonomous next steps (armed, in order — updated 2026-08-25 overnight)
 
 1. ~~AssemblyAI account + probe~~ ✅ done (Codex) — key verified, spike 1 run on it.
-2. ~~Spike 1 STT eval~~ ✅ **CLOSED — VWP-D-02 = AssemblyAI** (96.8 % entity survival vs
-   Deepgram's best 90.4 %; 700 live transcriptions; full verdict + spec consequences in
+2. ~~Spike 1 STT eval~~ ✅ **CLOSED — VWP-D-02 = AssemblyAI** (decision metric:
+   full-catalog resolution +18.8 pp, clustered p = 0.009; audited + remediated —
    `2026-08-25-spike-01-stt-vendor-eval.md`).
-3. On RunPod top-up → provision the RTX 4090 pod, install the identification stack, and
-   run spikes 6–7 (latency topology, LightGlue phone-vs-packshot).
-4. On the Wine-Searcher key landing (~48 h) → verify with a probe call, then spike 3
-   coverage run on ~50 LWIN'd wines.
-5. Spike 9 (voice-retrieval eval construction) is now unblocked by the vendor decision
-   and needs no external resources — buildable next.
-6. Spike 5 (DDGS 500-query soak): runnable, but Brave has zero monthly allocation, so
-   the soak must measure DDGS standalone reliability (no paid fallback tier).
+3. ~~Spikes 6–7a on RunPod~~ ✅ **CLOSED** (`2026-08-25-spike-06-scan-latency.md`,
+   `2026-08-25-spike-07a-lightglue-survival.md`). 7b awaits Devin's phone photos.
+4. ~~Spike 9~~ ✅ CLOSED · ~~Spike 5~~ ✅ CLOSED (DDGS standalone: 94 % ok, retry
+   discipline mandatory — `2026-08-25-spike-05-ddgs-soak.md`).
+5. ~~Eval YAML (wait-list item 4)~~ ✅ authored: `docs/evals/vwp-evals.yaml` — 69
+   EV-VWP evals, all 12 ★ slices, 13/13 PRD criteria mapped.
+6. Voice resolver precursor library landed (`src/lib/wine-intelligence/name-resolver.ts`)
+   with the spike-9 replay as its acceptance harness — SPEC-20 tickets start from
+   tested code, not a blank file.
+7. On the Wine-Searcher key landing (~48 h from 2026-08-25) → verify with a probe call,
+   then spike 3 coverage run on ~50 LWIN'd wines. **Last open spike that needs no Devin
+   action once the key arrives.**
