@@ -31,7 +31,7 @@ concurrency:
 jobs:
   health:
     name: Railway preview /api/health
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 8
     permissions:
       deployments: read
