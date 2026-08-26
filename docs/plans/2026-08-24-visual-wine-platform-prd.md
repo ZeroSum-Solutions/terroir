@@ -132,7 +132,7 @@ synthesis text is normative where this table compresses it.
 | VWP-FR-008 | The 20k-row partner CSV must have an explicit ingestion path (durable staging or a `MAX_ROWS` raise from the current 5,000) as a scheduled work item, not an assumption. |
 | VWP-FR-009 | P4 lands as designed — `wine_images` keeps its `canonical_wine_id` + `(vintage, size_ml)` tuple (NO edition re-key) — plus the cylinder-unwarp amendment: unwarp ships first as a shared library in the Gate-0 scan service and produces derivatives for REFERENCE images as well as queries. |
 | VWP-FR-010 | Editions join images only through the deterministic scope resolver: dated edition (vintage=Y) admits `images.vintage = Y OR IS NULL`; NV edition admits `IS NULL OR = 0`; explicit-NV images never attach to dated editions; size precedence exact-vintage+exact-size → exact-vintage+any → any-vintage+exact-size → base. `0`=NV applies to the vintage axis only; `size_ml` is positive-or-NULL, zero rejected. |
-| VWP-FR-011 | WineSensed is used ONLY as an evaluation benchmark and hard-negative source — never in the reference index. |
+| VWP-FR-011 | WineSensed is used ONLY as a hard-negative / out-of-corpus abstention source and domain-gap reference — never in the reference index. *[Corrected 2026-08-25 per spike 4: its rows carry opaque Vivino IDs with no wine/winery names, so it cannot supply a labeled accuracy denominator; the original "evaluation benchmark" framing is retracted. Labeled top-1/top-3 denominators come from partner-cellar photos per Gate 0.]* |
 
 ### Identification (D4, D8)
 
@@ -295,7 +295,7 @@ GPU box) · `wine_editions` now, migration 0112 · ratings displayed separate wi
 ## Risks (carried from synthesis, PRD-level view)
 
 - **R1 Gate 0 fails** → explicit gate + failure tree; no investor exposure until numbers.
-- **R2 Phone-photo domain gap** → spike 7 + WineSensed benchmark; abstain calibration.
+- **R2 Phone-photo domain gap** → spike 7 + WineSensed hard-negative/domain-gap material *(spike-4 correction — not a labeled benchmark)*; abstain calibration.
 - **R3 Corpus join rate on partner wines** → pilot measures first; 5k cap is a work item.
 - **R4 Demo-day dependencies** → demo mode; STT sole live third-party with typed fallback;
   box gets preflight/degrade.

@@ -55,7 +55,7 @@ end-to-end pipeline, not just string matching.
 
 With a **perfect transcript** — "Brunello di Montalcino from Biondi-Santi, 2016", the
 wine held out of inventory — the baseline resolves to **Fanti, Brunello di Montalcino,
-Vallocchio** at similarity 0.53, well above any plausible accept threshold. Appellation
+Vallocchio** at similarity 0.59 (post scorer-fix; 0.53 pre-fix), well above any plausible accept threshold. Appellation
 vocabulary ("Brunello di Montalcino") dominates the trigram mass; the producer tokens
 that distinguish right from wrong are a minority of the string. This is the same
 shared-vocabulary failure the P2 round-5 critic proved for the identity gate

@@ -25,6 +25,16 @@ EVIDENTIARY STATUS: cases + inventory are the resolver rule's TUNING fixture
 (the v1→v5 rule was iterated against them); SPEC-21's sealed holdout is the
 acceptance set. See name-resolver.eval.test.ts.
 
+DATA LICENSING (flagged by the 2026-08-25 production audit — OWNER DECISION
+REQUIRED BEFORE THIS BRANCH IS PUSHED TO THE PUBLIC REMOTE): the inventory
+fixture embeds 250 rows derived from the production lwin_catalog (LWIN
+identifiers + producer/wine display names, Liv-ex's LWIN standard). LWIN is
+published as an open standard, but redistribution terms for catalog rows have
+NOT been verified. Options if redistribution is not cleared: regenerate with
+synthetic names (weakens eval realism) or keep the fixture out of the public
+tree. The STT transcripts are of self-generated TTS audio (no third-party
+rights).
+
 Usage:  python3 generate.py          (any python3; stdlib only)
         python3 generate.py --pg     (additionally regenerate pg-oracle.json
                                       against a live Postgres+pg_trgm reached

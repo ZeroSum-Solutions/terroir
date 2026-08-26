@@ -43,7 +43,7 @@ frozen to the partner cellar's own editions.* Proper licensing happens before re
 - [ ] GitHub sweep: existing wine-label-recognition repos, wine datasets, vector-search infra
       (pgvector vs. FAISS vs. hosted), OCR engines (PaddleOCR, Tesseract, Apple Vision, cloud)
 
-### 1b. Corpus & data sourcing (licensing deliberately ignored this phase)
+### 1b. Corpus & data sourcing (licensing deferred this phase — but contained: NFR-5 per-source raw/derived isolation with deletion lineage is the PRD mechanism that keeps deferral reversible)
 - [ ] Inventory candidate sources: LWIN/Liv-ex (have 211k), Wine-Searcher, Vivino, CellarTracker,
       Wine.com, GWS/global wine score, Open datasets (Kaggle, X-Wines, etc.), producer sites
 - [ ] Compare at least two databases by coverage, label imagery availability, ratings, market price

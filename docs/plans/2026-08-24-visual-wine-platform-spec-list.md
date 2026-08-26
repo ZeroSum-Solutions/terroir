@@ -181,7 +181,7 @@ adversarially audited by GPT-5.6 Sol, all corrections applied).** **VWP-D-02 =
 AssemblyAI (Universal-3.5 Pro) — committed for the demo phase, provisional for
 production** pending a small human/noisy/streaming validation. The decision rests on
 the audit-prescribed metric: resolution correctness against the full 211k catalog,
-utterance-clustered — AssemblyAI +18.8 pp over corrected Deepgram (p = 0.009 naive,
+utterance-clustered — AssemblyAI +18.8 pp naive / +17.2 pp producer-gated over corrected Deepgram (p = 0.009 naive,
 p = 0.042 producer-gated). Findings that bind the specs: (a) **hot-list selection** —
 Deepgram measured ceiling 75 phrases / 124 words (500-token cap); AssemblyAI accepted
 93/156, documented to 1,000 words; nobody primes a 20k list. (b) **The dangerous
@@ -198,7 +198,7 @@ pairs, max delta 0.000000).
 **Spike 9 — CLOSED 2026-08-25 (constructed + baselined).** 206 cases / 250-item fixture
 from the production LWIN catalog; queries are spike 1's REAL AssemblyAI transcripts, so
 degradation is measured, not synthetic. Naive trigram baseline separates STT configs
-(98 % vs 81 % resolution) — the eval measures the pipeline end-to-end. Binding finding:
+(92 % vs 81 % resolution) — the eval measures the pipeline end-to-end. Binding finding:
 with a *perfect* transcript of an out-of-inventory wine ("Brunello di Montalcino from
 Biondi-Santi"), the resolver false-accepts another producer's Brunello at 0.53 —
 appellation vocabulary swamps producer signal, the same shared-vocabulary failure the
