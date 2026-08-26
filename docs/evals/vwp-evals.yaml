@@ -1,0 +1,630 @@
+# vwp-evals.yaml — acceptance evals for the Visual Wine Platform (VWP) build.
+#
+# Source docs:
+#   - docs/plans/2026-08-24-visual-wine-platform-prd.md (PRD: functional/non-functional
+#     requirements VWP-FR-*; 13 independently verifiable acceptance criteria; VWP-D-*
+#     owner decisions)
+#   - docs/plans/2026-08-24-visual-wine-platform-spec-list.md (§1 migration manifest
+#     0112-0126+, §2 spec list SPEC-01..SPEC-24, §3 spike register)
+#   - docs/plans/2026-08-24-visual-wine-platform-synthesis.md (design decisions D1-D9)
+#   - docs/plans/2026-08-25-spike-01-stt-vendor-eval.md (STT vendor eval: accent folding,
+#     empty-transcript, keyterm capacity)
+#   - docs/plans/2026-08-25-spike-04-corpus-join-rates.md (X-Wines/WineSensed corpus
+#     findings; WineSensed correction re: labeled-benchmark framing)
+#   - docs/plans/2026-08-25-spike-05-ddgs-soak.md (DDGS cascade tier: retry/backoff verdict)
+#   - docs/plans/2026-08-25-spike-09-voice-retrieval-eval.md (producer-corroboration/margin
+#     rule; false-accept findings)
+#
+# PRD approval pending — this file activates at ticket freeze (spec list §4 item 4).
+#
+# Protocol mirrors docs/evals/top10-evals.yaml: each eval becomes >=1 failing test FIRST
+# (vitest or playwright, tagged with the slice's e2e_tag), then implementation makes it
+# pass. A slice lands only when its own evals AND global_gates are green.
+#
+# PRD acceptance criteria 1 and 13 are cross-cutting / repo-wide rather than scoped to a
+# single slice's implementation, so they are wired below as `foundations` entries
+# (mirroring top10-evals.yaml's F-1/F-2 pattern) instead of folded into one SPEC-*'s
+# `evals:` list. See the "# PRD criteria map" block at the end of this file for the full
+# criterion 1-13 -> EV id / foundation mapping.
+version: 1
+global_gates:
+  - npm run lint
+  - npm test
+  - npm run test:contracts
+  - npm run snapshot:check
+  - npm run types:check
+  - npm run downs:check
+  - npm run verify:feature-ledger
+
+foundations:
+  - id: F-VWP-1
+    name: migration manifest 0112-0121+ published and CI-checked, no numbering collisions
+    # source: PRD criterion 1 ("Migration manifest 0112-0121+ published and CI-checked;
+    # P4 files renamed in the 0112 commit; no numbering collisions"); VWP-FR-005;
+    # spec-list §1 manifest header: "The CI uniqueness/order check ships with 0112. No
+    # migration file in this range may be created except from this manifest." This spans
+    # SPEC-01 (0112), SPEC-02 (0113-0120, P4 renumber — not drafted as its own eval slice
+    # here), and SPEC-09/10/15 (0121-0125) — a repo-wide gate, not one slice's property,
+    # so it is not folded into any single SPEC-*'s evals below.
+    evals:
+      - id: EV-VWP-F1.1
+        then: >-
+          the CI uniqueness/order check that ships with migration 0112 rejects any
+          migration file numbered 0112-0125 that is absent from the published manifest,
+          and rejects a duplicate or out-of-order migration number within that range —
+          the manifest itself lists 0112 (editions), 0113-0120 (P4, renamed in the same
+          commit that lands 0112), and 0121-0125 (containers/slots/placements, bins move,
+          ratings stores) with zero collisions
+  - id: F-VWP-2
+    name: existing restaurant critical journeys stay green across every phase
+    # source: PRD criterion 13 ("Existing restaurant critical journeys pass before and
+    # after each phase (repo e2e gates)"); NFR-4 migration safety. Cross-cutting across
+    # every SPEC-* landing in this build, not one slice's property. EV-VWP-10.5
+    # additionally proves the bins-specific case as part of SPEC-10's own evals; this
+    # foundation is the repo-wide superset criterion 13 actually asks for.
+    evals:
+      - id: EV-VWP-F2.1
+        then: >-
+          the existing restaurant critical-journey e2e suite (npm run test:e2e, the
+          repo's @opp-* tagged suite per docs/evals/top10-evals.yaml) passes, unmodified
+          in scope, both before and after every phase of this build lands — a phase does
+          not merge with that suite red
+
+slices:
+  # source: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 SPEC-01 (0112);
+  #   PRD VWP-FR-001..004, VWP-FR-006, PRD criteria 2-3; spike-11 verdict (VWP-D-05=KEEP-READ)
+  - id: SPEC-01
+    name: editions + backfill
+    branch: feat/vwp-01-editions-backfill
+    e2e_tag: "@vwp-01"
+    evals:
+      - id: EV-VWP-01.1
+        then: >-
+          inserting a second wine_editions row with the same (canonical_wine_id, vintage)
+          as an existing row is rejected by the UNIQUE constraint (SQL-regression test)
+      - id: EV-VWP-01.2
+        then: >-
+          a client-role INSERT or UPDATE against wine_editions is rejected under RLS, and a
+          client-role UPDATE of wine_variants.edition_id is rejected by the column
+          guard/trigger; only the server-side resolution function's role can write either
+      - id: EV-VWP-01.3
+        then: >-
+          an UPDATE setting wine_editions.lwin11 where the LWIN11's vintage digits disagree
+          with the row's own vintage is rejected by the corroboration gate function, and a
+          second edition row reusing an already-assigned lwin11 value is rejected by the
+          partial unique index
+      - id: EV-VWP-01.4
+        then: >-
+          on a labeled fixture set the backfill classifier writes vintage=0 only for
+          variants carrying explicit-NV evidence, writes a dated edition for variants with a
+          parsed vintage, and routes every vintage-NULL variant lacking explicit-NV evidence
+          to the quarantine queue — never auto-converts a NULL vintage to vintage=0
+      - id: EV-VWP-01.5
+        then: >-
+          the backfill report's known-NV + dated + quarantined counts sum to exactly the
+          pilot's 500 variants, and the Gate-0-start guard check fails while any pilot
+          variant is neither edition-resolved nor quarantined
+      - id: EV-VWP-01.6
+        then: >-
+          a variant whose only vintage signal is a wine_lineages-derived LWIN7 grouping
+          (trigger-heuristic, uncorroborated by dated/explicit-NV import evidence) is NOT
+          auto-resolved to an edition from that grouping alone — the backfill classifier
+          routes it to quarantine instead
+
+  # source: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 SPEC-03;
+  #   synthesis D3 (unwarp amendment #2, sequencing fix, round-3 addition); PRD VWP-FR-009, VWP-FR-031
+  - id: SPEC-03
+    name: unwarp shared library
+    branch: feat/vwp-03-unwarp-lib
+    e2e_tag: "@vwp-03"
+    evals:
+      - id: EV-VWP-03.1
+        then: >-
+          running the unwarp lib against a fixture image returns both a cylinder-unwarped
+          derivative AND the original raw crop persisted — the raw crop is never dropped or
+          overwritten (pipeline test asserting both artifacts exist post-run)
+      - id: EV-VWP-03.2
+        then: >-
+          for a fixture image that fails unwarp (e.g. no label-edge detection), both the
+          scan-query preprocessing path and the bottle-detail texture-export path return the
+          raw crop as fallback texture — never a null or missing texture response
+      - id: EV-VWP-03.3
+        then: >-
+          running a P4-style reference image through the Gate-0 enrichment path produces an
+          unwarp derivative on that reference wine_images row, not only on scan-time query
+          images (regression test distinguishing reference vs. query call sites)
+      - id: EV-VWP-03.4
+        then: >-
+          a module-boundary test shows the Gate-0 scan service's query-preprocessing call
+          site and P4's at-scale enrichment call site both import the same unwarp library
+          function — no second, divergent unwarp implementation exists in either path
+      - id: EV-VWP-03.5
+        then: >-
+          an unwarp failure on a fixture image completes the calling enrichment/scan job
+          with a recorded degraded/no-unwarp status rather than raising an unhandled
+          exception that aborts the job
+    # depends_on: none — spec list gates SPEC-03 on spike 7 only, not another SPEC id
+
+  # source: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 SPEC-04;
+  #   synthesis D3 (cascade order, hard-rejection gate) + P4 doc §8.5; spike-05 DDGS soak
+  #   verdict; spike-04 corpus-join-rates verdict; PRD VWP-FR-011, VWP-FR-015, VWP-FR-016;
+  #   PRD criterion 12 / NFR-5 (spec-list §2: "NFR-5 licensing containment applies to
+  #   SPEC-04/05/16 artifacts") — see EV-VWP-04.7.
+  - id: SPEC-04
+    name: pilot enrichment cascade (Gate 0 corpus)
+    branch: feat/vwp-04-pilot-enrichment
+    e2e_tag: "@vwp-04"
+    depends_on: [SPEC-01, SPEC-02]
+    evals:
+      - id: EV-VWP-04.1
+        then: >-
+          the 500-variant pilot's dedupe-then-editions-resolution step runs before any
+          variant enters the enrichment cascade, and any variant left with a NULL
+          edition_id after that step is excluded from the pilot's reference-index build and
+          counted in the pilot report
+      - id: EV-VWP-04.2
+        then: >-
+          cascade tier order is local dataset joins -> barcode -> DDGS -> Brave; for a
+          variant already accepted at the local-joins tier, an instrumented pipeline test
+          shows the barcode, DDGS, and Brave tiers are never invoked for it (tier
+          short-circuit)
+      - id: EV-VWP-04.3
+        then: >-
+          a DDGS query that fails with a transient transport error (timeout) is retried at
+          least twice with ~30s backoff spacing before being marked exhausted, matching
+          spike 5's measured retry requirement, rather than being abandoned after one attempt
+      - id: EV-VWP-04.4
+        then: >-
+          a Tier-2 (DDGS/Brave) candidate with an explicit vintage conflict, an explicit
+          size conflict, or producer_similarity below 0.3 while some producer text was
+          extracted is hard-rejected (state='rejected', rejected_reason set to
+          vintage_conflict/size_conflict/producer_mismatch) even when it scores highest; a
+          candidate with no vintage/size text found and low similarity is retained as
+          'unverified', never rejected on low score alone
+      - id: EV-VWP-04.5
+        then: >-
+          no wine_images row in the pilot's accepted reference set has X-Wines or
+          WineSensed as its source — every accepted reference traces to a local-join,
+          barcode, DDGS, or Brave candidate that passed the hard-rejection gate (X-Wines
+          Full ships no bulk label imagery; WineSensed carries no name/winery join key)
+      - id: EV-VWP-04.6
+        then: >-
+          the pilot enrichment report publishes reference-image coverage (share of the 500
+          pilot editions with >=1 accepted reference image) and verified-image precision as
+          measured numbers, evaluated against the floor and threshold at owner-confirmed
+          VWP-D-01 values, per VWP-FR-016
+      - id: EV-VWP-04.7
+        then: >-
+          removing one enrichment source's rows (e.g. Brave) from the pilot corpus and
+          rebuilding the reference index deletes only that source's raw AND derived
+          artifacts (candidate rows, embeddings, index shards, calibration data) for every
+          variant it touched, leaves every other source's raw+derived artifacts intact and
+          unorphaned, and the rebuilt index is queryable afterward (PRD criterion 12; NFR-5
+          per-source isolation with deletion lineage)
+
+  # EV-VWP fragment — SPEC-05 (scan service) + SPEC-06 (Gate 0 eval harness).
+  # Parent: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 SPEC-05/SPEC-06 entries.
+  # Gate 0-R (SPEC-08) is folded in as EV-VWP-06.6 — a dependent eval on SPEC-06's harness,
+  # per PRD criterion 4's own "Gate 0-R repeated on the final index" clause.
+
+  - id: SPEC-05
+    name: scan service — parallel arms, fusion, edition-only result
+    branch: feat/vwp-05-scan-service
+    e2e_tag: "@vwp-05"
+    depends_on: [SPEC-01, SPEC-03, SPEC-04]
+    # source: spec-list §2 "SPEC-05 ★ Scan service" (VWP-FR-012..015, D4; PRD criteria 5-6);
+    #   synthesis D4 fusion contract; spec-list SPEC-03 line ("consumed by the Gate-0 scan
+    #   service") and SPEC-04 line (reference images the rerank arm needs) justify depends_on
+    #   — inferred from cross-reference prose, not a literal spec-list "Gated by:" line;
+    #   editor-confirmed intentional (check f).
+    evals:
+      - id: EV-VWP-05.1
+        then: >-
+          for a fixture query image with reference-image coverage, the union set feeding
+          LightGlue rerank contains candidates sourced from at least the OCR-text arm and the
+          visual arm; rerank admits only candidates that have a reference image, while an
+          OCR-only candidate with no reference image is retained (never silently dropped) and
+          can still reach the top-3 on calibrated text score alone (VWP-FR-012; synthesis D4
+          per-arm retention bullet: "OCR-only candidates ... survive on calibrated text score")
+      - id: EV-VWP-05.2
+        then: >-
+          scanning a fixture out-of-corpus bottle photo and, separately, a non-wine image each
+          return ABSTAIN (never a top-1 pick) with a correction-search entry point in the
+          response; any accept-path response returns at most 3 ranked wine_edition_ids
+          (VWP-FR-012 "top-3 or ABSTAIN"; PRD criterion 5)
+      - id: EV-VWP-05.3
+        then: >-
+          given a barcode resolving to a vintage-ambiguous GTIN (multiple editions share it)
+          with no/low-confidence OCR-read vintage, the barcode arm contributes a
+          (canonical_wine_id, size_ml) candidate constraint into fusion rather than asserting an
+          edition; when fusion cannot resolve a single edition under that constraint, the scan
+          ABSTAINS and the response's correction-search entry surfaces the canonical wine
+          (VWP-FR-013; synthesis D4 barcode contract, round-3 rewrite)
+      - id: EV-VWP-05.4
+        then: >-
+          given a barcode resolving to a vintage-ambiguous GTIN and a disagreeing
+          high-confidence OCR-read vintage, the scan ABSTAINS outright — it never resolves to
+          either vintage's edition and never demotes one candidate over the other (VWP-FR-013;
+          synthesis D4 "never a pick, never a demotion fight")
+      - id: EV-VWP-05.5
+        then: >-
+          every scan response identifies only wine_edition_id values (never a bare
+          wine_variant or inventory row as an identification result), and a fixture variant
+          with NULL edition_id is absent from the service's queryable index / never returned as
+          a candidate (VWP-FR-014 first sentence; VWP-FR-015)
+      - id: EV-VWP-05.6
+        then: >-
+          for one resolved edition with zero tenant bottle_placements the response returns an
+          "in catalog, not placed" variant card; with exactly one placement it returns a
+          direct-open bottle_placement_id; with more than one placement it returns a
+          highlight-all/picker list, and format-disambiguation across candidate placements
+          follows the precedence GTIN size > OCR size > all (VWP-FR-014; PRD criterion 6, the
+          three placement states each demonstrated)
+
+  - id: SPEC-06
+    name: gate 0 eval harness + benchmark
+    branch: feat/vwp-06-gate0-harness
+    e2e_tag: "@vwp-06"
+    depends_on: [SPEC-01, SPEC-04, SPEC-05]
+    # source: spec-list §2 "SPEC-06 ★ Gate 0 eval harness + benchmark" (VWP-FR-016..017; PRD
+    #   criterion 4) + its spike-4 correction paragraph (2026-08-25); synthesis D8 "Gate 0 —
+    #   thin vertical slice" eval-contract paragraph; PRD criterion 4-5; VWP-FR-011 (superseded
+    #   per the spike-4 correction re: WineSensed). depends_on: SPEC-06 evaluates the landed
+    #   editions (SPEC-01), reference-image corpus (SPEC-04), and scan service (SPEC-05) —
+    #   inferred from that evaluation relationship, not a literal spec-list "Gated by:" line;
+    #   editor-confirmed intentional (check f).
+    evals:
+      - id: EV-VWP-06.1
+        then: >-
+          the harness computes top-1/top-3 accuracy with query-level denominators over the
+          frozen set, and an ABSTAIN response to an in-corpus query counts as both a top-1 AND
+          a top-3 miss rather than being excluded from the denominator (VWP-FR-016; synthesis
+          D8 "accuracy cannot be bought by abstaining")
+      - id: EV-VWP-06.2
+        then: >-
+          the harness maintains two disjoint query sets — a working frozen set and a sealed
+          holdout — and any reference/threshold/code change made in response to inspecting a
+          failed run's misses is retested only against a newly sampled holdout, never the
+          original sealed set, which the harness rejects reusing after a remediation cycle
+          (VWP-FR-016; synthesis D8 "a failed run that triggers fixes requires a NEWLY SAMPLED
+          holdout"; PRD criterion 4)
+      - id: EV-VWP-06.3
+        then: >-
+          the published report emits false-accept rate for in-corpus and out-of-corpus queries
+          as two separately denominated metrics (never pooled into one figure), alongside an
+          acceptance-coverage figure and a reference-image-coverage figure, each printed even
+          when it falls below threshold rather than omitted (VWP-FR-016; PRD criterion 5's
+          out-of-corpus behavior is what the out-of-corpus false-accept metric measures)
+      - id: EV-VWP-06.4
+        then: >-
+          the harness's labeled top-1/top-3 accuracy denominator is built only from
+          partner-cellar photos labeled by resolved edition; any WineSensed photos present in
+          the eval set are consumed only as out-of-corpus/hard-negative queries expected to
+          ABSTAIN, and the report contains no WineSensed-attributed accuracy figure (spike-4
+          correction, 2026-08-25: "WineSensed cannot supply the labeled accuracy denominator ...
+          hard-negative / out-of-corpus abstention material and a domain-gap reference only" —
+          supersedes VWP-FR-011's "evaluation benchmark" framing)
+      - id: EV-VWP-06.5
+        then: >-
+          the harness's GO/NO-GO verdict is computed by comparing the run's measured metrics
+          against a single owner-confirmed threshold configuration keyed to VWP-D-01 (top-1,
+          top-3, false-accept ceiling, acceptance-coverage floor, image-precision floor, warm
+          p95 latency) rather than literal numbers embedded in harness code; re-running the
+          verdict step against the same result set under a changed VWP-D-01 config changes the
+          verdict (VWP-FR-016 "thresholds met at owner-confirmed values"; PRD criterion 4)
+      - id: EV-VWP-06.6
+        then: >-
+          before any investor rehearsal, SPEC-08 (Gate 0-R) re-executes this harness against
+          the FINAL partner-edition index — grown from the 500-variant pilot to the full
+          partner cellar, with the demo room's own bottles included in the query set — using
+          the identical metric family and the same owner-confirmed VWP-D-01 thresholds as the
+          original run, and a rehearsal-readiness check fails if no Gate 0-R report exists for
+          the current index generation (VWP-FR-017; synthesis D8 "No silent 500→full cutover";
+          PRD criterion 4)
+
+  # source: spec-list §2 SPEC-09 (migrations 0121-0122) + PRD VWP-FR-028/029 + PRD criterion 7 (first half) + synthesis D7 round-3 invariants
+  - id: SPEC-09
+    name: containers/slots/placements DDL invariants
+    branch: feat/vwp-09-containers-slots-placements
+    e2e_tag: "@vwp-09"
+    evals:
+      - id: EV-VWP-09.1
+        then: >-
+          inserting a bottle_placement whose slot_id and inventory_item_id belong to
+          different restaurant_id values is rejected by the composite same-tenant FK
+          (VWP-FR-029); the row is never created
+      - id: EV-VWP-09.2
+        then: >-
+          a second active bottle_placement inserted into a slot that already holds one
+          active placement is rejected by the UNIQUE (slot_id)-over-active-rows
+          constraint; inserting after the first placement is marked removed succeeds
+      - id: EV-VWP-09.3
+        then: >-
+          placing bottles from a lot beyond inventory_items.quantity is rejected
+          transactionally once count(active placements) would exceed quantity; placing
+          up to quantity succeeds (VWP-FR-029 over-placement guard)
+      - id: EV-VWP-09.4
+        then: >-
+          a session scoped to one restaurant_id cannot select or insert containers,
+          slots, or bottle_placements rows carrying a different restaurant_id — RLS
+          holds across all three tables in the hierarchy
+      - id: EV-VWP-09.5
+        then: >-
+          the place-from-lot operation placing N bottles from one inventory_items lot
+          creates exactly N bottle_placement rows, one per bottle, never a single row
+          with a quantity column (VWP-FR-029 place-from-lot clause)
+
+  # source: spec-list §2 SPEC-10 (migration 0123, manifest Depends-on 0121-0122) + PRD VWP-FR-030 + PRD criterion 7 (second half)
+  - id: SPEC-10
+    name: bins one-time move to containers/slots
+    branch: feat/vwp-10-bins-migration
+    e2e_tag: "@vwp-10"
+    depends_on: [SPEC-09]
+    evals:
+      - id: EV-VWP-10.1
+        then: >-
+          running the one-time bins migration converts every live bin into exactly one
+          zone container carrying its code/zone/capacity, with the container count
+          after migration equal to the live bin count before (~40) and no bin dropped
+          or duplicated
+      - id: EV-VWP-10.2
+        then: >-
+          each lot's binned quantity converts into N bottle_placement rows (one per
+          bottle, no qty-on-slot shortcut) inside that bin's zone container's
+          auto-generated slots; the sum of placements per migrated container equals
+          its prior binned quantity
+      - id: EV-VWP-10.3
+        then: >-
+          after migration, an INSERT or UPDATE writing inventory_items.bin_id or
+          inventory_items.bin_location is rejected (writes revoked); the columns
+          remain readable at their prior values (read-legacy)
+      - id: EV-VWP-10.4
+        then: >-
+          a wine_list with show_bin_codes enabled renders the repointed container
+          code for a migrated bottle, never the legacy bin_id
+      - id: EV-VWP-10.5
+        then: >-
+          the existing bins e2e suite (@opp-6: CRUD, find-this-bottle bin path,
+          lineage-occupied-bin put-away suggestion, public bin-code render) passes
+          unmodified against the migrated containers/slots/placements tables
+
+  # source: spec-list §2 SPEC-11 + PRD VWP-FR-031 + PRD criterion 8 + synthesis D7 bottle-detail API paragraph
+  - id: SPEC-11
+    name: bottle-detail API keyed to bottle_placement_id
+    branch: feat/vwp-11-bottle-detail-api
+    e2e_tag: "@vwp-11"
+    depends_on: [SPEC-09]
+    # depends_on rationale: SPEC-11's response contract is keyed to bottle_placement_id
+    #   (spec-list SPEC-11: "Keyed to bottle_placement_id"), a row type SPEC-09's DDL
+    #   creates — inferred from that keying relationship, not a literal spec-list
+    #   "Gated by:" line; editor-confirmed intentional (check f).
+    evals:
+      - id: EV-VWP-11.1
+        then: >-
+          a bottle-detail request for a valid bottle_placement_id returns identity
+          (producer/cuvee/vintage/size), label texture URLs + bottle-shape class +
+          aspect ratio + UV hints + no-unwarp fallback texture, market rate, purchase
+          cost + acquired_at, scores, producer story, and container/slot coordinates —
+          every VWP-FR-031 field present
+      - id: EV-VWP-11.2
+        then: >-
+          a bottle-detail request for an inventory_item with no active placement
+          returns a variant-level fallback card (identity + market rate + scores, no
+          position/coordinates fields), never a 404 or a placement-shaped payload
+      - id: EV-VWP-11.3
+        then: >-
+          a bottle-detail request for a bottle_placement_id belonging to a different
+          tenant's restaurant_id returns no data (403/404), never that tenant's
+          payload — tenant isolation holds under test
+      - id: EV-VWP-11.4
+        then: >-
+          the response's scores field follows VWP-FR-020 read-model precedence: the
+          edition-grain aggregate when one exists, else the canonical aggregate
+          explicitly labeled as a base-wine score
+
+  # source: PRD VWP-FR-019/020/022 + criterion 9; synthesis D5 (ratings stores/read model);
+  # spec-list SPEC-15 (migrations 0124-0125) + SPEC-17 (WS median fix precondition)
+  - id: SPEC-15
+    name: ratings stores + read model
+    branch: feat/vwp-15-ratings-stores
+    e2e_tag: "@vwp-15"
+    depends_on: [SPEC-01, SPEC-17]
+    evals:
+      - id: EV-VWP-15.1
+        then: >-
+          an external_rating_events row scoped only to canonical_wine_id is never fanned
+          out into an edition-grain rating_aggregates row (masquerading as
+          vintage-specific), and an edition-grain event never leaks into the
+          canonical-grain aggregate; both grains are computed and stored separately
+          (property test on the aggregation function)
+      - id: EV-VWP-15.2
+        then: >-
+          two external_rating_events rows from the same source for the same subject
+          within one grain collapse to a single counted contribution to that grain's
+          rating_aggregates row ("one source counts once per subject within a grain")
+      - id: EV-VWP-15.3
+        then: >-
+          seeding rows into user_wine_reviews and re-running the aggregate job leaves
+          rating_aggregates unchanged; tenant stars/notes never enter any global
+          aggregate computation (tenant-scoped table excluded by construction, not just
+          by RLS)
+      - id: EV-VWP-15.4
+        then: >-
+          the read model returns the edition-grain aggregate for an edition that has
+          edition-grain events; for an edition with none whose canonical wine has
+          canonical-grain events, it returns that aggregate explicitly labeled as a
+          base-wine score, never presented as vintage-specific
+      - id: EV-VWP-15.5
+        then: >-
+          grep gate: the string "Vinous" appears nowhere in the read model's returned
+          labels, fixtures, or source — a read-model-scoped partial proof of PRD
+          criterion 9's UI-wide "nowhere in the UI" requirement; full closure additionally
+          needs a second grep gate over SPEC-18's UI source/templates once that
+          not-yet-drafted slice lands
+      - id: EV-VWP-15.6
+        then: >-
+          a Wine-Searcher-sourced rating_aggregates row is excluded from, or labeled
+          "avg-based" in, the read model's output until SPEC-17's true-median fix has
+          landed at wine-searcher.ts:196-201 — the read model never surfaces an
+          unlabeled median field from that source
+
+  # source: PRD VWP-FR-024/025 + criterion 10; synthesis D6 (voice retrieval); spec-list
+  # SPEC-20 ("ONE constrained tool ... hard-gated on populated placements")
+  - id: SPEC-20
+    name: voice retrieval tool
+    branch: feat/vwp-20-voice-retrieval-tool
+    e2e_tag: "@vwp-20"
+    depends_on: [SPEC-09, SPEC-10]
+    # depends_on rationale: spec-list SPEC-20 is "hard-gated on populated placements" —
+    #   SPEC-09 supplies the placements DDL/tenancy invariants and SPEC-10 is how this
+    #   phase's placements get populated from production bin data; inferred from that
+    #   gating clause, not a literal spec-list "Gated by:" line; editor-confirmed
+    #   intentional (check f).
+    evals:
+      - id: EV-VWP-20.1
+        then: >-
+          exactly one function-calling tool is exposed to the retrieval LLM over tenant
+          Postgres; no free-form-SQL path is reachable from the voice-retrieval surface
+          (contract test enumerating registered tools)
+      - id: EV-VWP-20.2
+        then: >-
+          name-to-ID resolution for wines and for containers/locations executes
+          server-side inside the tool; a call carrying an LLM-supplied raw text filter
+          or a model-invented row ID is rejected rather than trusted as identity
+      - id: EV-VWP-20.3
+        then: >-
+          a query whose resolved name matches multiple candidate wines or locations
+          returns a disambiguation list, never a single guessed match
+      - id: EV-VWP-20.4
+        then: >-
+          a query with no resolvable match returns the explicit "couldn't find that"
+          response shape, never a fabricated or empty-but-confident result
+      - id: EV-VWP-20.5
+        then: >-
+          invoking the retrieval tool for a tenant whose bottle_placements table is
+          empty is blocked with an explicit not-ready response rather than a silent
+          empty success
+
+  # source: PRD VWP-FR-026; spike 9 (2026-08-25-spike-09-voice-retrieval-eval.md,
+  # producer-corroboration/margin + false-accept findings); spike 1
+  # (2026-08-25-spike-01-stt-vendor-eval.md, accent-folding + empty-transcript +
+  # keyterm-capacity findings)
+  - id: SPEC-21
+    name: voice-retrieval eval
+    branch: feat/vwp-21-voice-retrieval-eval
+    e2e_tag: "@vwp-21"
+    depends_on: [SPEC-20]
+    # depends_on rationale: SPEC-21 scores the tool SPEC-20 builds (spec-list SPEC-21:
+    #   "Scored utterance set -> expected tool calls + result sets") — inferred from that
+    #   evaluation relationship, not a literal spec-list "Gated by:" line; editor-confirmed
+    #   intentional (check f).
+    evals:
+      - id: EV-VWP-21.1
+        then: >-
+          the eval's resolver rejects a bare similarity-threshold accept and only
+          resolves a match when producer-token corroboration or a top-1/top-2 margin
+          rule passes; a case reproducing spike 9's Biondi-Santi query (baseline
+          false-accepted Fanti Brunello at 0.53) must reject rather than accept
+      - id: EV-VWP-21.2
+        then: >-
+          the eval report's out-of-inventory false-accept rate is computed over the
+          out-of-inventory query subset alone, denominated separately from
+          in-inventory resolution accuracy, and gated at thresholds the owner
+          confirms before tickets freeze
+      - id: EV-VWP-21.3
+        then: >-
+          the eval report includes an empty-transcript rate as its own gated metric,
+          computed separately from resolution accuracy, exercised by the fixture's
+          garbage/empty-input cases
+      - id: EV-VWP-21.4
+        then: >-
+          the scored case set exercises wine resolution, location resolution,
+          ambiguity, out-of-domain/unanswerable questions, and abstention, each
+          passing its own pre-registered threshold before any retrieval demo line is
+          rehearsed
+      - id: EV-VWP-21.5
+        then: >-
+          an accented query (e.g. "côte-rôtie") is folded to ASCII before resolution;
+          an eval case asserts the folded form clears match_lwin's 0.3 similarity
+          threshold where the unfolded form (measured 0.294) would not
+      - id: EV-VWP-21.6
+        then: >-
+          the eval's tenant keyterm hot-list fixture stays within vendor-observed
+          capacity — at most 75 phrases when exercising a Deepgram-configured run, up
+          to 93 phrases for an AssemblyAI-configured run — never a full-catalog list
+
+  # source: PRD VWP-FR-034/027 + criterion 11; synthesis D8 (cross-cutting demo mode);
+  # spec-list SPEC-23
+  - id: SPEC-23
+    name: demo mode
+    branch: feat/vwp-23-demo-mode
+    e2e_tag: "@vwp-23"
+    depends_on: [SPEC-05, SPEC-22]
+    # depends_on rationale: spec-list SPEC-23 is "Preflight (STT + inference box), prewarm
+    #   [...]" — prewarm targets the scan service's identification models (SPEC-05) and
+    #   preflight covers STT (SPEC-22); inferred from that preflight/prewarm clause, not a
+    #   literal spec-list "Gated by:" line; editor-confirmed intentional (check f).
+    evals:
+      - id: EV-VWP-23.1
+        then: >-
+          demo-mode preflight fails loudly, blocking demo start with an explicit
+          error, when the STT vendor health check does not succeed
+      - id: EV-VWP-23.2
+        then: >-
+          demo-mode preflight fails loudly, blocking demo start with an explicit
+          error, when the GPU inference-box health check does not succeed
+      - id: EV-VWP-23.3
+        then: >-
+          entering demo mode prewarms the identification models to resident state
+          before the first scan is attempted, verified by a warm-vs-cold latency probe
+      - id: EV-VWP-23.4
+        then: >-
+          with the live inference box forced unreachable, a demo-mode scan returns
+          the cached golden-path scan result as last-resort degrade rather than
+          failing or hanging
+      - id: EV-VWP-23.5
+        then: >-
+          with STT forced unavailable, the typed-query fallback UI is reachable
+          mid-demo and completes a retrieval request without the voice path
+      - id: EV-VWP-23.6
+        then: >-
+          a request that exceeds its stage's explicit timeout enters its designed
+          degraded state rather than hanging indefinitely
+
+# PRD criteria map — every one of the PRD's 13 independently verifiable acceptance
+# criteria (docs/plans/2026-08-24-visual-wine-platform-prd.md, "Independently verifiable
+# acceptance criteria") mapped to its EV id(s) or foundation below. No criterion unmapped.
+#
+#  1. Migration manifest 0112-0121+ published/CI-checked, no numbering collisions
+#     -> foundation F-VWP-1 / EV-VWP-F1.1
+#  2. Editions invariants (dup rejected, RLS reject, lwin11 corroboration)
+#     -> EV-VWP-01.1, EV-VWP-01.2, EV-VWP-01.3
+#  3. Backfill report counts + pilot 100% resolved-or-quarantined
+#     -> EV-VWP-01.4, EV-VWP-01.5 (EV-VWP-01.6 supporting)
+#  4. Gate 0 numbers (abstain-as-miss, sealed holdout untouched, thresholds at
+#     owner-confirmed values, Gate 0-R repeated)
+#     -> EV-VWP-06.1, EV-VWP-06.2, EV-VWP-06.5, EV-VWP-06.6
+#  5. Out-of-corpus + non-wine image -> ABSTAIN + correction search
+#     -> EV-VWP-05.2 (EV-VWP-06.3 supporting via separated false-accept reporting)
+#  6. Scan of placed bottle / two-placement picker / unplaced catalog card
+#     -> EV-VWP-05.6
+#  7. Placement integrity (composite FK, second-active-placement, over-placement) +
+#     bins e2e green with ~40 rows
+#     -> EV-VWP-09.1, EV-VWP-09.2, EV-VWP-09.3 (first half);
+#        EV-VWP-10.1, EV-VWP-10.5 (second half)
+#  8. Bottle-detail response fields + tenant isolation
+#     -> EV-VWP-11.1, EV-VWP-11.3
+#  9. Ratings display (edition/labeled-canonical, WS-median gate, no "Vinous")
+#     -> EV-VWP-15.4, EV-VWP-15.6, EV-VWP-15.5 (EV-VWP-15.5 is read-model-scoped only —
+#        see its own eval text; full "nowhere in the UI" closure needs SPEC-18, not yet
+#        drafted here)
+# 10. Voice-retrieval eval passes thresholds pre-rehearsal; retrieval blocked while
+#     bottle_placements empty
+#     -> EV-VWP-21.4, EV-VWP-20.5
+# 11. Demo-mode preflight (STT/inference-box) + typed-query fallback + cached golden path
+#     -> EV-VWP-23.1, EV-VWP-23.2, EV-VWP-23.4, EV-VWP-23.5
+# 12. Per-source raw+derived artifact isolation with deletion lineage (NFR-5), verified
+#     by source removal + index rebuild
+#     -> EV-VWP-04.7
+# 13. Existing restaurant critical journeys pass before/after each phase (repo e2e gates)
+#     -> foundation F-VWP-2 / EV-VWP-F2.1
