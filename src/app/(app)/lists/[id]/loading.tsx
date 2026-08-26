@@ -14,7 +14,7 @@ export default function ListEditorLoading() {
       </div>
       <div className="flex-1">
         <Skeleton className="h-[28px] w-48 mb-md" />
-        <div className="rounded-card border border-hairline bg-white">
+        <div className="rounded-card card-surface">
           {Array.from({ length: 8 }, (_, i) => (
             <div
               key={i}

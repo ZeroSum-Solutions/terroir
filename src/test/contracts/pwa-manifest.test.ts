@@ -10,8 +10,8 @@ describe("PWA manifest contract", () => {
       description: "Wine management for upscale restaurants.",
       start_url: "/",
       display: "standalone",
-      background_color: "#ffffff",
-      theme_color: "#ffffff",
+      background_color: "#f2ede3",
+      theme_color: "#f2ede3",
       icons: [
         {
           src: "/icons/icon-192.png",

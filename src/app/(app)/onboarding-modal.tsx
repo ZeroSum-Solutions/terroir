@@ -35,12 +35,12 @@ export function OnboardingModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-md"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim px-md"
       role="dialog"
       aria-modal="true"
       aria-labelledby="onboarding-title"
     >
-      <div ref={trapRef} className="w-full max-w-[400px] rounded-card border border-hairline bg-canvas p-lg">
+      <div ref={trapRef} className="w-full max-w-[400px] rounded-card card-surface p-lg">
         <h2 id="onboarding-title" className="font-serif text-[22px] font-normal text-ink">
           Name your restaurant
         </h2>
@@ -56,14 +56,14 @@ export function OnboardingModal({
             if (e.key === "Enter") submit();
           }}
           placeholder="Tartine Cellar…"
-          className="mt-lg h-[38px] w-full rounded-pill border border-hairline bg-canvas px-md text-[14px] text-ink placeholder:text-grey focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+          className="mt-lg h-[38px] w-full rounded-pill border border-hairline bg-canvas px-md text-[14px] text-ink placeholder:text-grey focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
         />
         <div className="mt-lg flex justify-end">
           <button
             type="button"
             onClick={submit}
             disabled={saving || !name.trim()}
-            className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:opacity-60"
+            className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:opacity-60"
           >
             {saving ? "Saving..." : "Continue"}
           </button>

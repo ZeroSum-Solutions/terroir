@@ -27,13 +27,13 @@ function formatAbsoluteOz(ml: number): string {
 
 const varianceTextClasses = {
   positive: "text-sage-ink",
-  negative: "text-primary",
+  negative: "text-accent",
   neutral: "text-grey",
 } as const;
 
 const varianceBadgeClasses = {
   positive: "bg-sage-wash text-sage-ink",
-  negative: "bg-blush-wash text-primary",
+  negative: "bg-blush-wash text-accent",
   neutral: "bg-bridge-surface text-grey",
 } as const;
 
@@ -170,7 +170,7 @@ export default async function ReconcileHistoryPage() {
           action={
             <Link
               href="/cellar/reconcile"
-              className="inline-flex h-11 items-center gap-sm rounded-sm bg-accent px-md text-[14px] font-medium text-white hover:bg-accent-hover"
+              className="inline-flex h-11 items-center gap-sm rounded-sm bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
             >
               Go to reconcile
             </Link>
@@ -231,7 +231,7 @@ export default async function ReconcileHistoryPage() {
                     return (
                       <div
                         key={`${day.date}-${si}`}
-                        className="rounded-md border border-border bg-white"
+                        className="rounded-md border border-border bg-surface"
                       >
                         {/* Session header */}
                         <div className="flex items-center justify-between border-b border-border px-md py-sm">

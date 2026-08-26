@@ -45,7 +45,7 @@ export function PricingPlaysSection({
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-card border border-hairline bg-white">
+        <div className="overflow-hidden rounded-card card-surface">
           {PRICING_RECOMMENDATION_CLASSES.map((recommendationClass) => {
             const rows = recommendations.filter(
               (row) => row.class === recommendationClass,
@@ -87,7 +87,7 @@ function PricingGroup({
         </h3>
         <span className="tabular text-[11px] text-grey">{rows.length}</span>
       </div>
-      <ul className="divide-y divide-hairline bg-white">
+      <ul className="divide-y divide-hairline bg-surface">
         {rows.map((row) => <PricingRow key={row.wineId} row={row} />)}
       </ul>
     </section>
@@ -102,9 +102,9 @@ function PricingRow({ row }: { row: PricingPlay }) {
     >
       <Link
         href={metricHref("wine", row.wineId)}
-        className="group min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+        className="group min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
       >
-        <span className="block truncate font-serif text-[17px] font-medium text-ink group-hover:text-primary">
+        <span className="block truncate font-serif text-[17px] font-medium text-ink group-hover:text-accent">
           {row.wine.producer}, {row.wine.name}
         </span>
         <span className="mt-2xs block text-[11px] font-light text-grey">

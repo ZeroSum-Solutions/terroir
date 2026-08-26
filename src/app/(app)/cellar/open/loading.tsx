@@ -12,7 +12,7 @@ export default function OpenBottlesLoading() {
             <Skeleton className="h-[12px] w-28" />
           </div>
         </header>
-        <div className="divide-y divide-hairline rounded-card border border-hairline bg-white">
+        <div className="divide-y divide-hairline rounded-card card-surface">
           {Array.from({ length: 4 }, (_, i) => (
             <div key={i} className="flex items-center justify-between gap-md px-lg py-md">
               <div className="space-y-xs">

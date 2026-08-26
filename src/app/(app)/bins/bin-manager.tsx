@@ -43,7 +43,7 @@ export function BinManager({ bins, inventory, canManage, unplacedCount }: Props)
 }
 
 function ManagerToolbar({ query, onQueryChange, canManage, onCreate }: { query: string; onQueryChange: (value: string) => void; canManage: boolean; onCreate: () => void }) {
-  return <div className="mb-lg grid gap-sm md:grid-cols-[minmax(0,1fr)_auto]"><SearchBox query={query} onChange={onQueryChange} />{canManage && <button type="button" onClick={onCreate} className="flex h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"><Plus className="h-4 w-4" strokeWidth={2} aria-hidden />Create bin</button>}</div>;
+  return <div className="mb-lg grid gap-sm md:grid-cols-[minmax(0,1fr)_auto]"><SearchBox query={query} onChange={onQueryChange} />{canManage && <button type="button" onClick={onCreate} className="flex h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"><Plus className="h-4 w-4" strokeWidth={2} aria-hidden />Create bin</button>}</div>;
 }
 
 function UnplacedAnchor({ count }: { count: number }) {
@@ -62,7 +62,7 @@ function SearchBox({ query, onChange }: { query: string; onChange: (value: strin
         value={query}
         onChange={(event) => onChange(event.target.value)}
         placeholder="Find a bottle by wine or producer"
-        className="h-11 w-full rounded-pill border border-hairline bg-white pl-[40px] pr-sm text-[14px] text-ink placeholder:text-grey focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+        className="h-11 w-full rounded-pill border border-hairline bg-surface pl-[40px] pr-sm text-[14px] text-ink placeholder:text-grey focus:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
       />
     </label>
   );
@@ -72,7 +72,7 @@ type Match = ReturnType<typeof findBottleMatches>[number];
 
 function SearchResults({ matches }: { matches: Match[] }) {
   return (
-    <div className="mb-lg overflow-hidden rounded-card border border-hairline bg-canvas">
+    <div className="mb-lg overflow-hidden rounded-card card-surface">
       {matches.length === 0 ? (
         <p className="px-md py-md text-[13px] text-grey">No placed bottles match.</p>
       ) : (
@@ -108,7 +108,7 @@ type TableProps = {
 
 function BinTable(props: TableProps) {
   return (
-    <div className="overflow-hidden rounded-card border border-hairline bg-canvas">
+    <div className="overflow-hidden rounded-card card-surface">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-[13px]">
           <thead><tr className="bg-bridge-surface text-[11px] font-medium uppercase tracking-[0.18em] text-grey"><th className="px-md py-sm text-left">Code</th><th className="px-md py-sm text-left">Zone</th><th className="px-md py-sm text-left">Occupancy</th><th className="px-md py-sm text-right">Capacity</th><th className="px-md py-sm text-right">Priority</th>{props.canManage && <th className="w-[104px] px-sm py-sm" />}</tr></thead>
@@ -141,15 +141,15 @@ function BinRow({ bin, canManage, busy, editingId, draft, onDraftChange, onEdit,
       </td>
       <td className="px-md py-sm text-right tabular text-grey">{bin.capacity ?? "—"}</td>
       <td className="px-md py-sm text-right tabular text-grey">{bin.priority}</td>
-      {canManage && <td className="px-sm py-sm"><div className="flex justify-end gap-2xs"><IconButton label={`Edit bin ${bin.code}`} onClick={() => onEdit(bin)} className="rounded-md text-grey hover:bg-bridge-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"><Pencil className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton><IconButton label={`Retire bin ${bin.code}`} onClick={() => onRetire(bin)} disabled={busy} className="rounded-md text-grey hover:bg-blush-wash hover:text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"><Archive className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton></div></td>}
+      {canManage && <td className="px-sm py-sm"><div className="flex justify-end gap-2xs"><IconButton label={`Edit bin ${bin.code}`} onClick={() => onEdit(bin)} className="rounded-md text-grey hover:bg-bridge-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"><Pencil className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton><IconButton label={`Retire bin ${bin.code}`} onClick={() => onRetire(bin)} disabled={busy} className="rounded-md text-grey hover:bg-blush-wash hover:text-accent disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"><Archive className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton></div></td>}
     </tr>
   );
 }
 
 function FormPanel({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section className="mb-lg rounded-card border border-hairline bg-canvas p-md"><h2 className="mb-md text-[15px] font-semibold text-ink">{title}</h2>{children}</section>;
+  return <section className="mb-lg rounded-card card-surface p-md"><h2 className="mb-md text-[15px] font-semibold text-ink">{title}</h2>{children}</section>;
 }
 
 function ErrorBanner({ message, dismiss }: { message: string; dismiss: () => void }) {
-  return <div role="alert" className="mb-md flex items-center justify-between gap-sm rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[13px] text-primary"><span>{message}</span><IconButton label="Dismiss error" onClick={dismiss} className="shrink-0 rounded-md text-primary/70 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"><X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton></div>;
+  return <div role="alert" className="mb-md flex items-center justify-between gap-sm rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[13px] text-accent"><span>{message}</span><IconButton label="Dismiss error" onClick={dismiss} className="shrink-0 rounded-md text-accent/70 hover:bg-primary/10 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"><X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton></div>;
 }

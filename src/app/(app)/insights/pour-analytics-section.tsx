@@ -127,7 +127,7 @@ export default function PourAnalyticsSection() {
 
   if (loading) {
     return (
-      <section className="rounded-card border border-hairline bg-white p-lg">
+      <section className="rounded-card card-surface p-lg">
         <div className="mb-md flex items-center justify-between">
           <h2 className="text-[15px] font-medium text-ink">Pour analytics</h2>
         </div>
@@ -141,7 +141,7 @@ export default function PourAnalyticsSection() {
 
   if (error || !data) {
     return (
-      <section className="rounded-card border border-hairline bg-white p-lg">
+      <section className="rounded-card card-surface p-lg">
         <h2 className="text-[15px] font-medium text-ink">Pour analytics</h2>
         <p className="mt-sm text-[13px] text-grey">
           {error ?? "No data available yet. Start pouring to see analytics."}
@@ -171,7 +171,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
 
   return (
     <section
-      className="rounded-card border border-hairline bg-white p-lg"
+      className="rounded-card card-surface p-lg"
       aria-labelledby="pour-analytics-heading"
     >
       <div className="mb-md flex flex-wrap items-center justify-between gap-sm">
@@ -251,7 +251,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
                     <div key={w.wine_id} data-metric={`ranked-pours-${w.wine_id}`}>
                       <Link
                         href={metricHref("wine", w.wine_id)}
-                        className="flex min-h-11 items-center gap-sm rounded-sm p-xs transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                        className="flex min-h-11 items-center gap-sm rounded-sm p-xs transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                       >
                         <span className="w-[18px] shrink-0 text-right tabular text-[11px] text-grey">
                           {i + 1}
@@ -297,7 +297,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
                     >
                       <Link
                         href={metricHref("wine", w.wine_id)}
-                        className="flex min-h-11 items-center gap-sm rounded-sm p-xs transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                        className="flex min-h-11 items-center gap-sm rounded-sm p-xs transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                       >
                         <span className="w-[18px] shrink-0 text-right tabular text-[11px] text-grey">
                           {i + 1}

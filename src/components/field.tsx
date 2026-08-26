@@ -65,7 +65,7 @@ export function Field({
         <p
           id={`${id}-error`}
           role="alert"
-          className="mt-2xs text-[12px] text-primary"
+          className="mt-2xs text-[12px] text-accent"
         >
           {error}
         </p>

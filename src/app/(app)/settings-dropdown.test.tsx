@@ -42,7 +42,7 @@ describe("SettingsDropdown touch targets", () => {
       'button[aria-label="Settings"]',
     )!;
 
-    expect(trigger.className).toContain("focus-visible:outline-primary");
+    expect(trigger.className).toContain("focus-visible:outline-accent");
     expect(trigger.className).toContain("focus-visible:outline-offset-2");
     expect(trigger.className).toContain("focus-visible:transition-none");
     expect(trigger.className).not.toMatch(/focus:ring/);
@@ -91,7 +91,7 @@ describe("SettingsDropdown touch targets", () => {
     ];
     for (const action of actions) {
       expect.soft(action.className, action.textContent?.trim()).toContain(
-        "focus-visible:outline-primary",
+        "focus-visible:outline-accent",
       );
       expect.soft(action.className, action.textContent?.trim()).toContain(
         "focus-visible:transition-none",

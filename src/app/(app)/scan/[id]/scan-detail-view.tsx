@@ -99,7 +99,7 @@ export function ScanDetailView({
       <header className="mb-lg">
         <Link
           href="/scans"
-          className="mb-md inline-flex items-center gap-xs text-[13px] text-grey hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+          className="mb-md inline-flex items-center gap-xs text-[13px] text-grey hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
         >
           <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
           Back to scan history
@@ -112,7 +112,7 @@ export function ScanDetailView({
             <button
               type="button"
               onClick={handleExportCsv}
-              className="flex h-10 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 md:h-[38px]"
+              className="flex h-10 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 md:h-[38px]"
               title="Download line items as CSV"
             >
               <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -125,7 +125,7 @@ export function ScanDetailView({
 
       <div className="grid gap-md md:grid-cols-2">
         {/* Metadata card */}
-        <div className="rounded-card border border-hairline bg-white p-md md:col-span-2">
+        <div className="rounded-card card-surface p-md md:col-span-2">
           <div className="grid grid-cols-2 gap-sm md:grid-cols-4 md:gap-md">
             <div>
               <div className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
@@ -169,7 +169,7 @@ export function ScanDetailView({
             {flaggedCount > 0 && (
               <>
                 <span aria-hidden className="text-grey">·</span>
-                <span className="inline-flex items-center gap-xs rounded-pill bg-blush-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-primary">
+                <span className="inline-flex items-center gap-xs rounded-pill bg-blush-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-accent">
                   <AlertTriangle
                     className="h-3 w-3"
                     strokeWidth={2.5}
@@ -184,11 +184,11 @@ export function ScanDetailView({
 
         {/* OCR Text (if available) */}
         {hasOcr && (
-          <div className="rounded-card border border-hairline bg-white md:col-span-2">
+          <div className="rounded-card card-surface md:col-span-2">
             <button
               type="button"
               onClick={() => setOcrOpen(!ocrOpen)}
-              className="flex w-full items-center justify-between p-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-inset"
+              className="flex w-full items-center justify-between p-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:ring-inset"
             >
               <span className="flex items-center gap-sm text-[13px] font-medium text-ink">
                 <FileText className="h-4 w-4 text-grey" strokeWidth={1.75} />
@@ -214,13 +214,13 @@ export function ScanDetailView({
 
         {/* Invoice image */}
         {hasImage && (
-          <div className="rounded-card border border-hairline bg-white p-md md:sticky md:top-[72px] md:self-start">
+          <div className="rounded-card card-surface p-md md:sticky md:top-[72px] md:self-start">
             <div className="mb-sm text-caption font-medium uppercase tracking-[0.18em] text-grey">
               Original invoice
             </div>
             {imageLoading ? (
               <div className="flex h-[200px] items-center justify-center rounded-lg bg-bridge-surface">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
               </div>
             ) : imageUrl ? (
               <>
@@ -229,7 +229,7 @@ export function ScanDetailView({
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Open full-resolution invoice from ${distributor} in a new tab`}
-                  className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                  className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                 >
                   <Image
                     src={imageUrl}
@@ -245,7 +245,7 @@ export function ScanDetailView({
                   href={imageUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-sm inline-flex items-center gap-xs text-[12px] text-grey hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                  className="mt-sm inline-flex items-center gap-xs text-[12px] text-grey hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                 >
                   <ExternalLink className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                   Open full size
@@ -294,7 +294,7 @@ export function ScanDetailView({
                       <span className="inline-flex items-center gap-xs">
                         {lowConf && (
                           <AlertTriangle
-                            className="h-3.5 w-3.5 shrink-0 text-primary"
+                            className="h-3.5 w-3.5 shrink-0 text-accent"
                             strokeWidth={2.5}
                             aria-label={`Low confidence (${Math.round(it.confidence * 100)}%) — review`}
                           />
@@ -348,14 +348,14 @@ export function ScanDetailView({
                 key={it.id}
                 className={`rounded-lg border p-md ${
                   lowConf
-                    ? "border-primary/30 bg-blush-wash/40"
-                    : "border-hairline bg-white"
+                    ? "border-accent/30 bg-blush-wash/40"
+                    : "border-hairline bg-surface"
                 }`}
               >
                 <div className="flex items-start gap-xs">
                   {lowConf && (
                     <AlertTriangle
-                      className="mt-2xs h-4 w-4 shrink-0 text-primary"
+                      className="mt-2xs h-4 w-4 shrink-0 text-accent"
                       strokeWidth={2.5}
                       aria-label={`Low confidence (${Math.round(it.confidence * 100)}%) — review`}
                     />
@@ -426,7 +426,7 @@ export function ScanDetailView({
                       <td className="px-sm py-sm font-serif text-[17px] font-medium text-ink">
                         <Link
                           href={`/cellar?wine=${ii.wine_id}`}
-                          className="text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                          className="text-ink hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                         >
                           {ii.wine_name}
                         </Link>
@@ -458,7 +458,7 @@ export function ScanDetailView({
                 <Link
                   key={ii.id}
                   href={`/cellar?wine=${ii.wine_id}`}
-                  className="rounded-lg border border-hairline bg-white p-md hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                  className="rounded-lg card-surface p-md hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                 >
                   <div className="flex items-start gap-md">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill bg-bridge-surface">

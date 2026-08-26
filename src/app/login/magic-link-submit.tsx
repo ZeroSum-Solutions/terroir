@@ -13,7 +13,7 @@ export function MagicLinkSubmit() {
       type="submit"
       disabled={pending}
       aria-disabled={pending}
-      className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white outline-none transition-colors hover:bg-primary-hover focus-visible:ring-[3px] focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
+      className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white outline-none transition-colors hover:bg-primary-hover focus-visible:ring-[3px] focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
     >
       {pending ? (
         <>
@@ -37,7 +37,7 @@ export function ResetPasswordSubmit() {
       type="submit"
       disabled={pending}
       aria-disabled={pending}
-      className="flex min-h-11 items-center justify-center rounded-pill bg-primary px-md text-[14px] font-medium text-white outline-none transition-colors hover:bg-primary-hover focus-visible:ring-[3px] focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
+      className="flex min-h-11 items-center justify-center rounded-pill bg-primary px-md text-[14px] font-medium text-white outline-none transition-colors hover:bg-primary-hover focus-visible:ring-[3px] focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
     >
       {pending ? (
         <>
@@ -59,7 +59,7 @@ export function PasswordSubmit({ label }: { label: string }) {
       type="submit"
       disabled={pending}
       aria-disabled={pending}
-      className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white outline-none transition-colors hover:bg-primary-hover focus-visible:ring-[3px] focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
+      className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white outline-none transition-colors hover:bg-primary-hover focus-visible:ring-[3px] focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
     >
       {pending ? (
         <>
@@ -83,7 +83,7 @@ export function SetPasswordSubmit() {
       type="submit"
       disabled={pending}
       aria-disabled={pending}
-      className="flex min-h-11 items-center justify-center rounded-pill bg-primary px-md text-[14px] font-medium text-white outline-none transition-colors hover:bg-primary-hover focus-visible:ring-[3px] focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
+      className="flex min-h-11 items-center justify-center rounded-pill bg-primary px-md text-[14px] font-medium text-white outline-none transition-colors hover:bg-primary-hover focus-visible:ring-[3px] focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-primary"
     >
       {pending ? (
         <>

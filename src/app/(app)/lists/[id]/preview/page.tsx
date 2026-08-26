@@ -97,7 +97,7 @@ export default async function WineListPreviewPage({
           This is how guests will see the list.
           {" "}
           {list.is_published && (
-            <a href={`/list/${list.slug}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+            <a href={`/list/${list.slug}`} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
               Open live version
             </a>
           )}
@@ -210,7 +210,7 @@ export default async function WineListPreviewPage({
       {/* Footer */}
       <footer className="mt-3xl border-t border-hairline pt-lg text-center print:hidden">
         <p className="text-[12px] text-ink-subtle">
-          Powered by <span className="font-serif font-medium text-primary">Terroir</span>
+          Powered by <span className="font-serif font-medium text-accent">Terroir</span>
         </p>
       </footer>
     </main>

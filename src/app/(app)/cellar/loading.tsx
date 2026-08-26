@@ -20,7 +20,7 @@ export default function CellarLoading() {
           <Skeleton key={i} className="h-[32px] w-20 rounded-pill" />
         ))}
       </div>
-      <div className="flex flex-col divide-y divide-hairline rounded-card border border-hairline bg-white">
+      <div className="flex flex-col divide-y divide-hairline rounded-card card-surface">
         {Array.from({ length: 10 }, (_, i) => (
           <div key={i} className="px-md py-md">
             <div className="flex items-start justify-between gap-md">

@@ -33,7 +33,7 @@ export function MemberAnalyticsSection({
 
   if (error) {
     return (
-      <p role="alert" className="mt-lg rounded-md border border-primary/30 bg-blush-wash px-md py-sm text-[13px] text-primary">
+      <p role="alert" className="mt-lg rounded-md border border-accent/30 bg-blush-wash px-md py-sm text-[13px] text-accent">
         {error}
       </p>
     );
@@ -50,7 +50,7 @@ export function MemberAnalyticsTable({
   identities: MemberIdentityLookup;
 }) {
   return (
-    <section aria-labelledby="member-analytics-heading" className="mt-xl rounded-card border border-hairline bg-white p-md">
+    <section aria-labelledby="member-analytics-heading" className="mt-xl rounded-card card-surface p-md">
       <div className="mb-md flex flex-wrap items-baseline justify-between gap-xs">
         <h2 id="member-analytics-heading" className="text-[15px] font-semibold text-ink">Member analytics</h2>
         <span className="text-[12px] text-grey">House median {formatRate(data.houseMedianCompRate)}</span>
@@ -91,7 +91,7 @@ export function MemberAnalyticsTable({
 }
 
 function Metric({ href, name, children }: { href: string; name: string; children: React.ReactNode }) {
-  return <td data-metric={name} className="py-sm pr-md"><Link href={href} className="tabular inline-flex min-h-11 min-w-11 items-center rounded-sm text-ink underline decoration-beige-deep underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25">{children}</Link></td>;
+  return <td data-metric={name} className="py-sm pr-md"><Link href={href} className="tabular inline-flex min-h-11 min-w-11 items-center rounded-sm text-ink underline decoration-beige-deep underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25">{children}</Link></td>;
 }
 
 function formatRate(rate: number) {

@@ -90,7 +90,7 @@ export function CellarFilterSheet({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/30 md:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim md:items-center"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -100,7 +100,7 @@ export function CellarFilterSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={headingId}
-        className="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-card bg-canvas md:max-w-[440px] md:rounded-card md:border md:border-hairline"
+        className="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-card bg-surface md:max-w-[440px] md:rounded-card md:border md:border-hairline"
       >
         <header className="flex items-center justify-between border-b border-hairline px-md py-sm">
           <h2 id={headingId} className="font-serif text-[19px] font-medium text-ink">
@@ -110,7 +110,7 @@ export function CellarFilterSheet({
             type="button"
             onClick={onClose}
             aria-label="Close filters"
-            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
@@ -195,14 +195,14 @@ export function CellarFilterSheet({
           <button
             type="button"
             onClick={handleReset}
-            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill border border-ink/20 text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill border border-ink/20 text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             Reset
           </button>
           <button
             type="button"
             onClick={handleApply}
-            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill bg-primary text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill bg-primary text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             Apply
           </button>
@@ -213,7 +213,7 @@ export function CellarFilterSheet({
 }
 
 const fieldSelectClassName =
-  "h-11 w-full rounded-pill border border-ink/20 bg-white px-sm text-[13px] text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+  "h-11 w-full rounded-pill border border-ink/20 bg-surface px-sm text-[13px] text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 function SheetField({
   label,

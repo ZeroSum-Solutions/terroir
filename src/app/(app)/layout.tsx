@@ -29,7 +29,7 @@ export default async function AppLayout({
           href="/"
           className="inline-flex min-h-11 shrink-0 items-center font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink"
         >
-          TERR<span className="text-primary">OIR</span>
+          TERR<span className="text-accent">OIR</span>
         </Link>
 
         <ShellContext restaurantName={restaurantName} role={userRole} />

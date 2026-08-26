@@ -125,7 +125,7 @@ describe("ReconcileHistoryPage variance presentation", () => {
     expectPresentation(container, "positive", {
       copy: "−0.7 oz · under expected",
       background: "bg-blush-wash",
-      text: "text-primary",
+      text: "text-accent",
     });
     expectPresentation(container, "negative", {
       copy: "+0.7 oz · over expected",
@@ -178,7 +178,7 @@ function expectPresentation(
   expected: { copy: string; background: string; text: string },
 ) {
   const wineLink = container.querySelector(`a[href="/cellar?wine=wine-${id}"]`);
-  const sessionCard = wineLink?.closest(".rounded-md.border.border-border.bg-white");
+  const sessionCard = wineLink?.closest(".rounded-md.border.border-border.bg-surface");
   expect(sessionCard, `session card for ${id}`).not.toBeNull();
 
   const sessionBadge = sessionCard?.firstElementChild?.querySelector("span.inline-flex");

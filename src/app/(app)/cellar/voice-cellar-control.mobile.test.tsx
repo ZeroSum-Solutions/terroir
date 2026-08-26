@@ -70,8 +70,24 @@ function mockVoiceFetch(outcome: VoiceResolveResponse, available = true) {
       status:
         outcome.kind === "stt_failed"
           ? outcome.reason === "timeout" ? 504 : 502
-          : 200,
+          : outcome.kind === "unavailable"
+            ? 503
+            : 200,
     });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function mockVoiceErrorFetch(status: number, message: string) {
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    if (!init?.method || init.method === "GET") {
+      return Response.json({ available: true });
+    }
+    return Response.json(
+      { error: { code: "rejected", message } },
+      { status },
+    );
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
@@ -186,6 +202,36 @@ describe("VoiceCellarControl mobile flow", () => {
       const status = container.querySelector('[role="status"]');
       expect(status?.textContent).toContain("Didn't catch a cellar wine");
       expect(status?.textContent).toContain("heard: what is the weather tomorrow");
+    });
+  });
+
+  it("keeps the mic mounted and shows a notice when a POST reports voice unavailable", async () => {
+    // Regression: key present at GET, gone at POST (rotation mid-session).
+    // The old catch-all did setAvailable(false), silently unmounting the mic
+    // AND the notice — the feature vanished with zero feedback.
+    mockVoiceFetch({ kind: "unavailable", reason: "voice_unavailable" }, true);
+
+    await renderControl();
+    await recordOnce();
+
+    await vi.waitFor(() => {
+      const status = container.querySelector('[role="status"]');
+      expect(status?.textContent).toContain("temporarily unavailable");
+    });
+    expect(
+      container.querySelector('button[aria-label="Find a cellar wine by voice"]'),
+    ).not.toBeNull();
+  });
+
+  it("surfaces the server's rejection message when the POST returns an error envelope", async () => {
+    mockVoiceErrorFetch(413, "Voice recording must be under 2 MB.");
+
+    await renderControl();
+    await recordOnce();
+
+    await vi.waitFor(() => {
+      const status = container.querySelector('[role="status"]');
+      expect(status?.textContent).toContain("Voice recording must be under 2 MB.");
     });
   });
 

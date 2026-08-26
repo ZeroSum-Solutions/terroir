@@ -100,7 +100,7 @@ export function PricingTargetsPanel({
   return (
     <section
       aria-labelledby="pricing-targets-heading"
-      className="rounded-lg border border-hairline bg-white p-md md:p-lg"
+      className="rounded-lg card-surface p-md md:p-lg"
     >
       <div className="mb-md">
         <h2
@@ -134,7 +134,7 @@ export function PricingTargetsPanel({
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               }}
               aria-label="Glass pour cost percentage target"
-              className="h-[34px] w-[80px] rounded-pill border border-hairline bg-white px-sm text-right font-mono text-[14px]"
+              className="h-[34px] w-[80px] rounded-pill border border-hairline bg-surface px-sm text-right font-mono text-[14px]"
             />
             <span className="text-[12px] text-grey">%</span>
             <span className="ml-xs text-[11px] text-grey">
@@ -160,7 +160,7 @@ export function PricingTargetsPanel({
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               }}
               aria-label="Bottle markup ratio target"
-              className="h-[34px] w-[80px] rounded-pill border border-hairline bg-white px-sm text-right font-mono text-[14px]"
+              className="h-[34px] w-[80px] rounded-pill border border-hairline bg-surface px-sm text-right font-mono text-[14px]"
             />
             <span className="text-[12px] text-grey">× retail</span>
             <span className="ml-xs text-[11px] text-grey">
@@ -174,7 +174,7 @@ export function PricingTargetsPanel({
         <div
           role="alert"
           className={cn(
-            "mt-md rounded-md border border-primary/30 bg-blush-wash px-md py-sm text-[13px] text-primary",
+            "mt-md rounded-md border border-accent/30 bg-blush-wash px-md py-sm text-[13px] text-accent",
           )}
         >
           {error}

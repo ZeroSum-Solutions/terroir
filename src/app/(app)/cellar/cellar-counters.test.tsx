@@ -116,14 +116,14 @@ describe("CellarCounters", () => {
     expect(onSelect).toHaveBeenCalledExactlyOnceWith("open");
   });
 
-  it("uses the burgundy outline-primary focus color on the active tab, matching the inactive tabs (residuals audit — was beige)", async () => {
+  it("uses the theme accent outline focus color on the active tab, matching the inactive tabs (residuals audit — was beige)", async () => {
     const container = await mount("all", vi.fn());
     const tabs = [...container.querySelectorAll('[role="tab"]')];
     const selected = tabs.find((tab) => tab.getAttribute("aria-selected") === "true")!;
     const unselected = tabs.find((tab) => tab.getAttribute("aria-selected") === "false")!;
     for (const tab of [selected, unselected]) {
       const classes = tab.className.split(/\s+/);
-      expect(classes).toContain("focus-visible:outline-primary");
+      expect(classes).toContain("focus-visible:outline-accent");
       expect(classes).not.toContain("focus-visible:outline-beige");
     }
   });

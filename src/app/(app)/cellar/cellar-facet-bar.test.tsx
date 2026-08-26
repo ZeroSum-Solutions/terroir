@@ -321,7 +321,7 @@ function expectFocusOutlinePattern(element: HTMLElement) {
   expect(classes).toContain("focus-visible:outline");
   expect(classes).toContain("focus-visible:outline-2");
   expect(classes).toContain("focus-visible:outline-offset-2");
-  expect(classes).toContain("focus-visible:outline-primary");
+  expect(classes).toContain("focus-visible:outline-accent");
   // The banned pattern this replaces: `.glass`'s unlayered CSS beats a
   // layered Tailwind ring, so outline-none + a ring is an automatic fail.
   expect(classes).not.toContain("outline-none");

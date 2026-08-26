@@ -10,7 +10,7 @@ export default function PriceComparisonLoading() {
           <Skeleton className="h-[15px] w-56" />
         </header>
 
-        <div className="mb-lg rounded-card border border-hairline bg-white p-lg">
+        <div className="mb-lg rounded-card card-surface p-lg">
           <div className="flex flex-wrap items-baseline gap-lg">
             {["w-24", "w-28", "w-20"].map((width) => (
               <div key={width} className="space-y-xs">
@@ -21,7 +21,7 @@ export default function PriceComparisonLoading() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-card border border-hairline bg-white">
+        <div className="overflow-hidden rounded-card card-surface">
           <div className="flex items-center gap-md bg-bridge-surface px-md py-sm">
             <Skeleton className="h-[11px] w-24" />
             <Skeleton className="ml-auto h-[11px] w-14" />

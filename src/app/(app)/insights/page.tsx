@@ -164,7 +164,7 @@ function ThroughputBarChart({ data }: { data: { weekLabel: string; count: number
               className="w-full rounded-t-sm bg-accent/70 transition-colors hover:bg-accent"
               style={{ height: Math.max(barH, 2), minWidth: 4 }}
             >
-              <div className="invisible absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-1.5 py-0.5 font-mono text-[11px] text-white opacity-0 transition-opacity group-hover:visible group-hover:opacity-100">
+              <div className="invisible absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm bg-surface-inverse px-1.5 py-0.5 font-mono text-[11px] text-on-inverse opacity-0 transition-opacity group-hover:visible group-hover:opacity-100">
                 {d.count}
               </div>
             </div>
@@ -489,7 +489,7 @@ export default async function DashboardPage({
           </p>
           <Link
             href="/scan"
-            className="mt-lg flex h-[38px] items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
+            className="mt-lg flex h-[38px] items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
           >
             <ScanLine className="h-4 w-4" strokeWidth={2} />
             Go to scanner
@@ -520,7 +520,7 @@ export default async function DashboardPage({
           <a
             href="/api/insights/csv"
             download="insights-export.csv"
-            className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
+            className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
           >
             <svg
               width="16"
@@ -613,7 +613,7 @@ export default async function DashboardPage({
               {drinkWindowAlerts.length > visibleDrinkWindowAlerts.length && (
                 <Link
                   href={metricHref("drink-now-count")}
-                  className="inline-flex min-h-11 items-center justify-center self-start rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                  className="inline-flex min-h-11 items-center justify-center self-start rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                 >
                   View all {drinkWindowAlerts.length} in Cellar
                 </Link>
@@ -643,7 +643,7 @@ export default async function DashboardPage({
               {pastDrinkWindowWines.length} wine{pastDrinkWindowWines.length === 1 ? "" : "s"}
             </span>
           </div>
-          <div className="rounded-card border border-hairline bg-white p-lg">
+          <div className="rounded-card card-surface p-lg">
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead>
@@ -665,7 +665,7 @@ export default async function DashboardPage({
                         <td className="px-sm py-sm">
                           <Link
                             href={metricHref("wine", w.wine_id)}
-                            className="font-serif text-[17px] font-medium text-ink hover:text-primary transition-colors"
+                            className="font-serif text-[17px] font-medium text-ink hover:text-accent transition-colors"
                           >
                             {w.producer} {w.name}
                           </Link>
@@ -694,7 +694,7 @@ export default async function DashboardPage({
               visiblePastDrinkWindowWines.length && (
               <Link
                 href={metricHref("drink-now-count")}
-                className="mt-md inline-flex min-h-11 items-center justify-center rounded-pill border border-ink/25 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                className="mt-md inline-flex min-h-11 items-center justify-center rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
               >
                 View all {pastDrinkWindowWines.length} past-window wines in Cellar
               </Link>
@@ -741,7 +741,7 @@ export default async function DashboardPage({
       </h2>
       <div className="grid gap-md md:grid-cols-2">
         {/* Scan activity sparkline */}
-        <div className="rounded-card border border-hairline bg-white p-lg md:col-span-2">
+        <div className="rounded-card card-surface p-lg md:col-span-2">
           <div className="mb-sm flex items-center justify-between text-caption font-medium uppercase text-grey">
             <span>Scan activity</span>
             <InsightScope
@@ -765,7 +765,7 @@ export default async function DashboardPage({
         </div>
 
         {/* BND-149 — Extraction accuracy KPI */}
-        <div className="rounded-card border border-hairline bg-white p-lg">
+        <div className="rounded-card card-surface p-lg">
           <div className="mb-md flex items-center justify-between">
             <div>
               <h3 className="text-[15px] font-medium text-ink">
@@ -817,7 +817,7 @@ export default async function DashboardPage({
         </div>
 
         {/* BND-148 — Scan throughput */}
-        <div className="rounded-card border border-hairline bg-white p-lg">
+        <div className="rounded-card card-surface p-lg">
           <div className="mb-md flex items-center justify-between">
             <div>
               <h3 className="text-[15px] font-medium text-ink">
@@ -854,7 +854,7 @@ export default async function DashboardPage({
         </div>
 
         {/* Spend by varietal */}
-        <div className="rounded-card border border-hairline bg-white p-lg">
+        <div className="rounded-card card-surface p-lg">
           <div className="mb-md flex items-center justify-between">
             <div>
               <h3 className="text-[15px] font-medium text-ink">
@@ -912,7 +912,7 @@ export default async function DashboardPage({
         </div>
 
         {/* Top distributors */}
-        <div className="rounded-card border border-hairline bg-white p-lg">
+        <div className="rounded-card card-surface p-lg">
           <div className="mb-md flex items-center justify-between">
             <div>
               <h3 className="text-[15px] font-medium text-ink">
@@ -975,7 +975,7 @@ export default async function DashboardPage({
         </div>
 
         {/* Recent activity */}
-        <div className="rounded-card border border-hairline bg-white p-lg md:col-span-2">
+        <div className="rounded-card card-surface p-lg md:col-span-2">
           <div className="mb-md flex items-center justify-between">
             <div>
               <h3 className="text-[15px] font-medium text-ink">
@@ -1003,7 +1003,7 @@ export default async function DashboardPage({
               </p>
               <Link
                 href="/scan"
-                className="mt-md inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                className="mt-md inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
               >
                 <ScanLine className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                 Scan an invoice
@@ -1026,7 +1026,7 @@ export default async function DashboardPage({
                     key={scan.id}
                     href={`/scan/${scan.id}`}
                     aria-label={`View scan from ${scan.distributor_name}, ${scan.item_count} wines, ${formatMoney(scanTotal)}, ${relative}`}
-                    className={`flex items-center gap-md rounded-sm py-sm transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${i > 0 ? "border-t border-hairline" : ""}`}
+                    className={`flex items-center gap-md rounded-sm py-sm transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 ${i > 0 ? "border-t border-hairline" : ""}`}
                   >
                     <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-bridge-surface text-grey">
                       <ScanLine className="h-4 w-4" strokeWidth={1.75} />

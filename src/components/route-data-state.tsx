@@ -65,7 +65,7 @@ export function RouteDataEmpty({
       aria-label={title}
       className="rounded-card border border-hairline bg-bridge-surface p-xl text-center text-ink"
     >
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blush-wash text-primary">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blush-wash text-accent">
         {icon}
       </div>
       <h2 className="mt-md text-[16px] font-medium">{title}</h2>

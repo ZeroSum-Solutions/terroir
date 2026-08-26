@@ -312,7 +312,7 @@ export function CellarList({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-card border border-hairline bg-white px-md py-2xl text-center">
+      <div className="rounded-card card-surface px-md py-2xl text-center">
         <p className="font-serif text-[17px] font-medium text-ink">No wines in your cellar yet.</p>
         <p className="mt-xs text-[13px] text-grey">
           Scan an invoice to start building your cellar.
@@ -349,12 +349,12 @@ export function CellarList({
           onFacetsChange={onFacetsChange}
           onGroupByChange={onGroupByChange}
         />
-        <div className="rounded-card border border-hairline bg-white px-md py-lg text-center">
+        <div className="rounded-card card-surface px-md py-lg text-center">
           <p className="text-[13px] text-grey">{message}</p>
           <button
             type="button"
             onClick={onResetFilters}
-            className="mt-sm inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-white px-md text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-primary/25"
+            className="mt-sm inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-surface px-md text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent/25"
           >
             Clear filters & search
           </button>
@@ -379,7 +379,7 @@ export function CellarList({
             <button
               type="button"
               onClick={() => setSelectMode(true)}
-              className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface transition-colors"
+              className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/20 bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface transition-colors"
             >
               <CheckSquare className="h-4 w-4" strokeWidth={2} aria-hidden />
               Select wines
@@ -389,7 +389,7 @@ export function CellarList({
               <button
                 type="button"
                 onClick={selectAll}
-                className="inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface"
+                className="inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface"
               >
                 Select all ({filtered.length})
               </button>
@@ -397,7 +397,7 @@ export function CellarList({
                 <button
                   type="button"
                   onClick={deselectAll}
-                  className="inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
+                  className="inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
                 >
                   Clear
                 </button>
@@ -414,7 +414,7 @@ export function CellarList({
                     <ChevronDown className="h-3 w-3" strokeWidth={2} aria-hidden />
                   </button>
                   {assignTarget === "__open__" && (
-                    <div className="absolute top-full left-0 mt-1 z-20 w-56 rounded-lg border border-hairline bg-white py-xs">
+                    <div className="absolute top-full left-0 mt-1 z-20 w-56 rounded-lg card-surface py-xs">
                       {sections.map((s) => (
                         <button
                           key={s.id}
@@ -446,7 +446,7 @@ export function CellarList({
                     type="button"
                     onClick={() => setAssignTarget(null)}
                     disabled={busy}
-                    className="inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface disabled:opacity-60"
+                    className="inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface disabled:opacity-60"
                   >
                     <X className="h-3 w-3" strokeWidth={2} aria-hidden />
                   </button>
@@ -455,7 +455,7 @@ export function CellarList({
               <button
                 type="button"
                 onClick={() => { setSelectMode(false); setSelectedIds(new Set()); setAssignTarget(null); }}
-                className="ml-auto inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-white px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
+                className="ml-auto inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
               >
                 Done
               </button>
@@ -495,7 +495,7 @@ export function CellarList({
           </div>
         </DndContext>
       ) : (
-        <div className="flex flex-col divide-y divide-hairline rounded-card border border-hairline bg-white">
+        <div className="flex flex-col divide-y divide-hairline rounded-card card-surface">
           <LineageBlockList
             wines={visibleRows}
             renderRow={(row) => (
@@ -518,7 +518,7 @@ export function CellarList({
                 count: visibleCount + CELLAR_PAGE_SIZE,
               })
             }
-            className="inline-flex min-h-11 items-center justify-center rounded-pill border border-ink/20 bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+            className="inline-flex min-h-11 items-center justify-center rounded-pill border border-ink/20 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
           >
             Show {Math.min(CELLAR_PAGE_SIZE, filtered.length - visibleRows.length)} more · {visibleRows.length} of {filtered.length}
           </button>
@@ -541,7 +541,7 @@ function TaxonomyGroup({
     <section
       data-cellar-taxonomy-group
       data-group-value={group.key}
-      className="overflow-hidden rounded-card border border-hairline bg-white"
+      className="overflow-hidden rounded-card card-surface"
     >
       <header className="flex items-center justify-between gap-md border-b border-beige-deep bg-beige px-md py-sm">
         <h2 className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-soft">
@@ -683,7 +683,7 @@ function LineageBlockList({
               </span>
               <span
                 data-lineage-rollup
-                className="tabular inline-flex shrink-0 items-center rounded-pill bg-white/70 px-sm py-2xs text-[11px] font-medium text-ink-soft"
+                className="tabular inline-flex shrink-0 items-center rounded-pill bg-surface/70 px-sm py-2xs text-[11px] font-medium text-ink-soft"
               >
                 {block.rows.length} wines
                 {block.span ? ` · ${block.span[0]}–${block.span[1]}` : ""}
@@ -733,7 +733,7 @@ function SectionGroup({
   const dropId = `section-${sectionKey}`;
 
   return (
-    <div className="rounded-card border border-hairline bg-white overflow-hidden">
+    <div className="rounded-card card-surface overflow-hidden">
       {/* Section header — acts as drop target */}
       <div
         id={dropId}
@@ -742,7 +742,7 @@ function SectionGroup({
         <h3 className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-soft">
           {sectionName}
         </h3>
-        <span className="tabular inline-flex items-center rounded-pill bg-white/70 px-sm py-2xs text-[11px] font-medium text-ink-soft">
+        <span className="tabular inline-flex items-center rounded-pill bg-surface/70 px-sm py-2xs text-[11px] font-medium text-ink-soft">
           {wines.length}
         </span>
       </div>
@@ -884,11 +884,11 @@ function CellarRow({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onToggleSelect?.(); }}
-          className="flex h-[44px] w-[44px] shrink-0 items-center justify-center text-grey hover:text-primary"
+          className="flex h-[44px] w-[44px] shrink-0 items-center justify-center text-grey hover:text-accent"
           aria-label={selected ? "Deselect" : "Select"}
         >
           {selected ? (
-            <CheckSquare className="h-5 w-5 text-primary" strokeWidth={2} aria-hidden />
+            <CheckSquare className="h-5 w-5 text-accent" strokeWidth={2} aria-hidden />
           ) : (
             <Square className="h-5 w-5" strokeWidth={2} aria-hidden />
           )}
@@ -911,7 +911,7 @@ function CellarRow({
       <button
         type="button"
         onClick={selectMode ? undefined : onSelect}
-        className="flex-1 min-w-0 px-md py-md text-left transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-inset rounded-md"
+        className="flex-1 min-w-0 px-md py-md text-left transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:ring-inset rounded-md"
       >
         <div className="flex items-start justify-between gap-md">
           <div className="min-w-0 flex-1">
@@ -995,8 +995,10 @@ function DrinkWindowIndicator({
         aria-hidden
         className="relative inline-block h-[4px] w-[56px] rounded-full"
         style={{
+          // Dual-mode: sage wash (young) → amber wash → gold peak (mid-mix
+          // keeps the peak legible on both canvases) → sunken (past).
           background:
-            "linear-gradient(90deg, #E3EFE8 0%, #FBF3DC 60%, #F2D896 88%, #E8DCD0 100%)",
+            "linear-gradient(90deg, var(--t-sage-wash) 0%, var(--t-amber-wash) 60%, color-mix(in oklab, var(--t-amber) 45%, var(--t-amber-wash)) 88%, var(--t-surface-sunken) 100%)",
         }}
       >
         <span
@@ -1031,7 +1033,7 @@ function Chip({
         "inline-flex items-center rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide",
         tone === "ok" && "bg-sage-wash text-sage-ink",
         tone === "info" && "bg-powder-wash text-powder-ink",
-        tone === "risk" && "bg-blush-wash text-primary",
+        tone === "risk" && "bg-blush-wash text-accent",
         tone === "warn" && "bg-amber-wash text-amber",
         tone === "neutral" && "bg-beige text-ink-soft",
         tone === "muted" && "bg-bridge-surface text-grey",

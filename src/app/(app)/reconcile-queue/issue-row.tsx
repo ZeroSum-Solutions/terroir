@@ -14,7 +14,7 @@ const KIND_LABELS: Record<ReconcileQueueKind, string> = {
 const KIND_STYLES: Record<ReconcileQueueKind, string> = {
   unplaced: "bg-amber-wash text-amber",
   unmatched_scan: "bg-powder-wash text-powder-ink",
-  duplicate_suspect: "bg-blush-wash text-primary",
+  duplicate_suspect: "bg-blush-wash text-accent",
   ambiguous_lineage: "bg-amber-wash text-amber",
 };
 
@@ -46,7 +46,7 @@ export function QueueIssueRow(props: Props) {
           checked={checked}
           disabled={disabled || !actionable}
           onChange={onToggle}
-          className="h-4 w-4 rounded-sm border-beige-deep text-primary focus:ring-primary disabled:opacity-35"
+          className="h-4 w-4 rounded-sm border-beige-deep text-accent focus:ring-accent disabled:opacity-35"
         />
       </label>
       <IssueIdentity row={row} />
@@ -74,9 +74,9 @@ function IssueIdentity({ row }: { row: ReconcileQueueRow }) {
         {row.suggestion && <BasisChip row={row} />}
       </div>
       {row.deepLink ? (
-        <Link href={row.deepLink} className="group inline-flex min-h-11 items-center gap-xs font-serif text-[17px] font-medium text-ink hover:text-primary">
+        <Link href={row.deepLink} className="group inline-flex min-h-11 items-center gap-xs font-serif text-[17px] font-medium text-ink hover:text-accent">
           {row.title}
-          <ArrowUpRight className="h-3.5 w-3.5 text-grey group-hover:text-primary" aria-hidden />
+          <ArrowUpRight className="h-3.5 w-3.5 text-grey group-hover:text-accent" aria-hidden />
         </Link>
       ) : (
         <p className="py-xs font-serif text-[17px] font-medium text-ink">{row.title}</p>
@@ -110,7 +110,7 @@ function IssueControl({ row, bins, binId, onBinChange }: Pick<Props, "row" | "bi
         aria-label={`Bin for ${row.title}`}
         value={binId ?? ""}
         onChange={(event) => onBinChange(event.target.value)}
-        className="h-11 w-full rounded-pill border border-beige-deep bg-white px-md text-[13px] text-ink focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+        className="h-11 w-full rounded-pill border border-beige-deep bg-surface px-md text-[13px] text-ink focus:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
       >
         <option value="">Choose bin</option>
         {bins.map((bin) => <option key={bin.id} value={bin.id}>{bin.zone ? `${bin.zone} · ` : ""}{bin.code}</option>)}

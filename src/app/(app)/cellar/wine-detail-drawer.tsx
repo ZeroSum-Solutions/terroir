@@ -425,7 +425,7 @@ export function WineDetailDrawer({
           role="dialog"
           aria-modal="true"
           aria-labelledby={headingId}
-          className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-lg bg-canvas md:absolute md:inset-y-0 md:right-0 md:left-auto md:w-[420px] md:rounded-none md:border-l md:border-hairline"
+          className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-lg bg-surface md:absolute md:inset-y-0 md:right-0 md:left-auto md:w-[420px] md:rounded-none md:border-l md:border-hairline"
           style={{ maxHeight: "calc(100dvh - 3.5rem)" }}
         >
           {/* Header */}
@@ -490,7 +490,7 @@ export function WineDetailDrawer({
                 />
                 <label
                   htmlFor="hero-image-upload"
-                  className="flex h-[48px] w-full cursor-pointer items-center justify-center gap-xs rounded-lg border border-dashed border-beige-deep bg-white text-[13px] font-medium text-grey hover:bg-bridge-surface transition-colors"
+                  className="flex h-[48px] w-full cursor-pointer items-center justify-center gap-xs rounded-lg border border-dashed border-beige-deep bg-surface text-[13px] font-medium text-grey hover:bg-bridge-surface transition-colors"
                 >
                   {uploading ? (
                     <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
@@ -505,7 +505,7 @@ export function WineDetailDrawer({
             {/* Stock breakdown */}
             <section
               aria-label="Stock"
-              className="rounded-lg border border-hairline bg-white p-md"
+              className="rounded-lg card-surface p-md"
             >
               <div className="grid grid-cols-3 gap-md text-center">
                 <Stat
@@ -551,7 +551,7 @@ export function WineDetailDrawer({
             {row.tasting_notes && (
               <section
                 aria-label="Tasting notes"
-                className="mt-md rounded-lg border border-hairline bg-white p-md"
+                className="mt-md rounded-lg card-surface p-md"
               >
                 <h3 className="text-caption font-medium uppercase text-grey mb-sm">Tasting notes</h3>
                 <p className="text-[13px] text-ink-soft leading-relaxed whitespace-pre-wrap">
@@ -577,7 +577,7 @@ export function WineDetailDrawer({
             {errorMsg && pendingDirection === null && (
               <div
                 role="alert"
-                className="mt-md rounded-md border border-primary/30 bg-blush-wash px-md py-sm text-[13px] text-primary"
+                className="mt-md rounded-md border border-accent/30 bg-blush-wash px-md py-sm text-[13px] text-accent"
               >
                 {errorMsg}
               </div>
@@ -611,7 +611,7 @@ export function WineDetailDrawer({
                     aria-label="Preservation method"
                     value={preservationMethod}
                     onChange={(event) => setPreservationMethod(event.target.value as PreservationMethod)}
-                    className="mt-xs h-11 w-full rounded-pill border border-hairline bg-white px-sm text-[13px] text-ink"
+                    className="mt-xs h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[13px] text-ink"
                   >
                     <option value="none">None</option>
                     <option value="coravin">Coravin</option>
@@ -626,7 +626,7 @@ export function WineDetailDrawer({
                   type="button"
                   disabled={openBottleBusy}
                   onClick={doOpenBottle}
-                  className="flex h-[48px] items-center justify-center gap-xs rounded-pill border border-ink/25 bg-white text-[14px] font-medium text-ink hover:bg-bridge-surface transition-colors disabled:opacity-60"
+                  className="flex h-[48px] items-center justify-center gap-xs rounded-pill border border-ink/25 bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface transition-colors disabled:opacity-60"
                 >
                   <PackageOpen className="h-4 w-4" strokeWidth={2} aria-hidden />
                   {openBottleBusy ? "Opening..." : "Open bottle"}
@@ -653,7 +653,7 @@ export function WineDetailDrawer({
                       onClick={() => setPickerOpen(true)}
                       disabled={busy || outOfStock}
                       aria-label="Pick a custom pour size"
-                      className="flex h-[56px] w-[56px] items-center justify-center rounded-pill border border-hairline bg-white text-grey hover:bg-bridge-surface disabled:opacity-60"
+                      className="flex h-[56px] w-[56px] items-center justify-center rounded-pill border border-hairline bg-surface text-grey hover:bg-bridge-surface disabled:opacity-60"
                     >
                       <ChevronDown className="h-5 w-5" strokeWidth={2} aria-hidden />
                     </button>
@@ -684,8 +684,8 @@ export function WineDetailDrawer({
                   className={cn(
                     "flex h-[48px] items-center justify-center gap-xs rounded-pill border text-[14px] font-medium transition-colors disabled:opacity-60",
                     row.is_eightysixed
-                      ? "border-primary bg-primary text-white hover:bg-primary-hover"
-                      : "border-ink/25 bg-white text-ink hover:bg-bridge-surface",
+                      ? "border-accent bg-primary text-white hover:bg-primary-hover"
+                      : "border-ink/25 bg-surface text-ink hover:bg-bridge-surface",
                   )}
                 >
                   <PowerOff className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -703,7 +703,7 @@ export function WineDetailDrawer({
                       "flex h-11 items-center justify-center gap-xs rounded-pill border text-[13px] font-medium transition-colors disabled:opacity-60",
                       enrichMsg
                         ? "border-sage-ink/30 bg-sage-wash text-sage-ink"
-                        : "border-ink/25 bg-white text-ink hover:bg-bridge-surface",
+                        : "border-ink/25 bg-surface text-ink hover:bg-bridge-surface",
                     )}
                   >
                     {enriching ? (
@@ -725,7 +725,7 @@ export function WineDetailDrawer({
                 <button
                   type="button"
                   onClick={() => setEditOpen(true)}
-                  className="flex h-11 items-center justify-center gap-xs rounded-pill border border-ink/25 bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface transition-colors"
+                  className="flex h-11 items-center justify-center gap-xs rounded-pill border border-ink/25 bg-surface text-[13px] font-medium text-ink hover:bg-bridge-surface transition-colors"
                 >
                   <Edit3 className="h-4 w-4" strokeWidth={2} aria-hidden />
                   Edit metadata
@@ -753,7 +753,7 @@ export function WineDetailDrawer({
                           type="button"
                           disabled={busy}
                           onClick={() => setMergeConfirm(null)}
-                          className="h-11 flex-1 rounded-pill border border-hairline bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
+                          className="h-11 flex-1 rounded-pill border border-hairline bg-surface text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
                         >
                           Cancel
                         </button>
@@ -772,7 +772,7 @@ export function WineDetailDrawer({
                         type="button"
                         disabled={busy}
                         onClick={() => setMergeConfirm(dup.wine_id)}
-                        className="flex h-11 items-center justify-center rounded-pill border border-ink/25 bg-white px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
+                        className="flex h-11 items-center justify-center rounded-pill border border-ink/25 bg-surface px-sm text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
                       >
                         Merge &ldquo;{dup.producer} {dup.name}
                         {dup.vintage ? ` ${dup.vintage}` : ""}&rdquo; into this record
@@ -786,11 +786,11 @@ export function WineDetailDrawer({
               {isOwner && (
                 <>
                   {deleteConfirm ? (
-                    <div className="flex flex-col gap-xs rounded-lg border border-primary/30 bg-blush-wash p-sm">
-                      <p className="text-[13px] font-medium text-primary">
+                    <div className="flex flex-col gap-xs rounded-lg border border-accent/30 bg-blush-wash p-sm">
+                      <p className="text-[13px] font-medium text-accent">
                         Permanently delete this wine?
                       </p>
-                      <p className="text-[12px] text-primary/80">
+                      <p className="text-[12px] text-accent/80">
                         This action cannot be undone. Consider using &ldquo;86 this wine&rdquo; instead.
                       </p>
                       <div className="flex gap-xs mt-xs">
@@ -798,7 +798,7 @@ export function WineDetailDrawer({
                           type="button"
                           disabled={busy}
                           onClick={() => setDeleteConfirm(false)}
-                          className="h-11 flex-1 rounded-pill border border-hairline bg-white text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
+                          className="h-11 flex-1 rounded-pill border border-hairline bg-surface text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60"
                         >
                           Cancel
                         </button>
@@ -817,7 +817,7 @@ export function WineDetailDrawer({
                       type="button"
                       disabled={busy}
                       onClick={() => setDeleteConfirm(true)}
-                      className="flex h-11 items-center justify-center gap-xs rounded-pill border border-primary/30 bg-white text-[13px] font-medium text-primary hover:bg-blush-wash transition-colors disabled:opacity-60"
+                      className="flex h-11 items-center justify-center gap-xs rounded-pill border border-accent/30 bg-surface text-[13px] font-medium text-accent hover:bg-blush-wash transition-colors disabled:opacity-60"
                     >
                       <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
                       Delete wine
@@ -944,7 +944,7 @@ function PricingSection({
   return (
     <section
       aria-label="Pricing"
-      className="mt-md rounded-lg border border-hairline bg-white p-md"
+      className="mt-md rounded-lg card-surface p-md"
     >
       <h3 className="text-caption font-medium uppercase text-grey mb-sm">Pricing</h3>
 
@@ -1046,7 +1046,7 @@ function DecantTimeSection({ row }: { row: CellarWineRow }) {
   return (
     <section
       aria-label="Decant time"
-      className="mt-md rounded-lg border border-hairline bg-white p-md"
+      className="mt-md rounded-lg card-surface p-md"
     >
       <h3 className="text-caption font-medium uppercase text-grey mb-xs">Decant time</h3>
       <p className="text-[14px] text-ink-soft">
@@ -1064,7 +1064,7 @@ function ServingTempSection({ row }: { row: CellarWineRow }) {
   return (
     <section
       aria-label="Serving temperature"
-      className="mt-md rounded-lg border border-hairline bg-white p-md"
+      className="mt-md rounded-lg card-surface p-md"
     >
       <h3 className="text-caption font-medium uppercase text-grey mb-xs">Serving temperature</h3>
       <p className="text-[14px] text-ink-soft">
@@ -1096,7 +1096,7 @@ function DrinkWindowSection({ row }: { row: CellarWineRow }) {
       case "drink_now":
         return "bg-powder-wash text-powder-ink";
       case "past_peak":
-        return "bg-blush-wash text-primary";
+        return "bg-blush-wash text-accent";
       default:
         return "bg-bridge-surface text-grey";
     }
@@ -1105,7 +1105,7 @@ function DrinkWindowSection({ row }: { row: CellarWineRow }) {
   return (
     <section
       aria-label="Drink window"
-      className="mt-md rounded-lg border border-hairline bg-white p-md"
+      className="mt-md rounded-lg card-surface p-md"
     >
       <h3 className="text-caption font-medium uppercase text-grey mb-sm">Drink window</h3>
 
@@ -1113,7 +1113,7 @@ function DrinkWindowSection({ row }: { row: CellarWineRow }) {
       <div className="mb-xs flex items-center justify-between text-[11px] font-mono text-grey">
         <span>Start {row.drink_window_start}</span>
         {row.peak_year != null && (
-          <span className="text-primary font-medium">Peak {row.peak_year}</span>
+          <span className="text-accent font-medium">Peak {row.peak_year}</span>
         )}
         <span>End {row.drink_window_end}</span>
       </div>

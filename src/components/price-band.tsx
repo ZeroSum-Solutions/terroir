@@ -91,8 +91,10 @@ export function PriceBand({
       <div
         className={`absolute inset-x-0 ${trackTopOffset} ${trackHeight} overflow-hidden rounded-full`}
         style={{
+          // --t-* runtime vars, not --color-*: @theme inline only emits
+          // custom properties for tokens the scanner sees referenced.
           background:
-            "linear-gradient(90deg, #f2e6e2 0%, #f2e6e2 18%, #e6e4d4 18%, #e6e4d4 82%, #e2eaf3 82%, #e2eaf3 100%)",
+            "linear-gradient(90deg, var(--t-blush-wash) 0%, var(--t-blush-wash) 18%, var(--t-sage-wash) 18%, var(--t-sage-wash) 82%, var(--t-powder-wash) 82%, var(--t-powder-wash) 100%)",
         }}
       />
 
@@ -135,7 +137,7 @@ export function PriceBand({
           className="absolute left-1/2 -top-[6px] block h-[12px] w-[12px] -translate-x-1/2 rounded-full"
           style={{
             background: "var(--color-primary)",
-            boxShadow: "0 0 0 3px var(--color-canvas, #ffffff)",
+            boxShadow: "0 0 0 3px var(--color-canvas)",
           }}
         />
       </div>

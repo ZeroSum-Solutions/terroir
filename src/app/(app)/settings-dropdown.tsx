@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Archive, ClipboardCheck, DollarSign, LogOut, Settings, Upload, Users } from "lucide-react";
+import { ThemeToggle } from "./theme-toggle";
 
 export function SettingsDropdown() {
   const [open, setOpen] = useState(false);
@@ -59,13 +60,13 @@ export function SettingsDropdown() {
         aria-label="Settings"
         aria-expanded={open}
         aria-haspopup="true"
-        className="flex h-11 w-11 items-center justify-center rounded-pill text-grey transition-colors hover:bg-bridge-surface hover:text-ink focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary md:h-auto md:w-auto md:border md:border-beige-deep md:bg-white md:px-md md:py-sm"
+        className="flex h-11 w-11 items-center justify-center rounded-pill text-grey transition-colors hover:bg-bridge-surface hover:text-ink focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:h-auto md:w-auto md:border md:border-beige-deep md:bg-surface md:px-md md:py-sm"
       >
         <Settings className="h-5 w-5 md:h-4 md:w-4" strokeWidth={1.75} aria-hidden="true" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-xs w-[180px] rounded-card border border-hairline bg-canvas" role="menu">
+        <div className="absolute right-0 top-full z-30 mt-xs w-[180px] rounded-card card-surface" role="menu">
           <div className="flex flex-col py-xs">
             <Link
               ref={(el) => { itemsRef.current[0] = el; }}
@@ -73,7 +74,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <DollarSign className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Pricing
@@ -84,7 +85,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <Archive className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Bins
@@ -95,7 +96,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <ClipboardCheck className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Reconcile
@@ -106,7 +107,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <Users className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Team
@@ -117,11 +118,13 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <Upload className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Import
             </Link>
+            <div className="mx-md my-xs border-t border-hairline" role="separator" />
+            <ThemeToggle />
             <div className="mx-md my-xs border-t border-hairline" role="separator" />
             <form action="/auth/signout" method="post">
               <button
@@ -129,7 +132,7 @@ export function SettingsDropdown() {
                 type="submit"
                 role="menuitem"
                 tabIndex={-1}
-                className="flex min-h-11 w-full items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                className="flex min-h-11 w-full items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 <LogOut className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
                 Sign out

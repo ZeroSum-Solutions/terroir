@@ -83,7 +83,7 @@ function QueueView(props: QueueViewProps) {
       <QueueHeader summary={data.summary} latestBatch={data.latest_batch} busy={busy} undo={props.undo} />
       {(props.message || props.mutationError) && <StatusBanner message={props.message} error={props.mutationError} />}
       {rows.length === 0 ? <QueueEmpty /> : (
-        <div className="overflow-hidden rounded-card border border-hairline bg-canvas">
+        <div className="overflow-hidden rounded-card card-surface">
           {visibleRows.map((row) => (
           <QueueIssueRow
             key={row.id}
@@ -107,7 +107,7 @@ function QueueView(props: QueueViewProps) {
               count: visibleCount + QUEUE_PAGE_SIZE,
             })
           }
-          className="mt-md min-h-11 w-full rounded-pill border border-hairline bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+          className="mt-md min-h-11 w-full rounded-pill border border-hairline bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
         >
           Show {Math.min(QUEUE_PAGE_SIZE, rows.length - visibleRows.length)} more ·{" "}
           {visibleRows.length} of {rows.length}
@@ -161,12 +161,12 @@ function QueueHeader({ summary, latestBatch, busy, undo }: { summary: QueueRespo
   return (
     <header className="mb-lg flex flex-wrap items-end justify-between gap-md md:mb-xl">
       <div>
-        <p className="mb-xs text-caption font-medium uppercase text-primary">Inventory control</p>
+        <p className="mb-xs text-caption font-medium uppercase text-accent">Inventory control</p>
         <h1 className="font-serif text-heading-sm text-ink">Reconciliation queue</h1>
         <p className="mt-xs text-[14px] tabular-nums text-grey">{summary.itemCount} items · {summary.unitCount} units · ${formatRisk(summary.atRisk)} at risk</p>
       </div>
       {latestBatch && (
-        <button type="button" onClick={undo} disabled={busy} className="flex h-11 items-center gap-xs rounded-pill border border-beige-deep bg-white px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:opacity-50">
+        <button type="button" onClick={undo} disabled={busy} className="flex h-11 items-center gap-xs rounded-pill border border-beige-deep bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:opacity-50">
           <Undo2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />Undo latest batch
         </button>
       )}
@@ -177,11 +177,11 @@ function QueueHeader({ summary, latestBatch, busy, undo }: { summary: QueueRespo
 function BulkRail({ busy, selectedCount, readyCount, allReadySelected, accept, toggleAll }: { busy: boolean; selectedCount: number; readyCount: number; allReadySelected: boolean; accept: () => void; toggleAll: () => void }) {
   return (
     <div className="glass sticky bottom-[72px] z-10 mt-md flex flex-wrap items-center justify-between gap-sm rounded-lg px-sm py-sm md:bottom-md md:px-md">
-      <button type="button" onClick={toggleAll} disabled={busy || readyCount === 0} className="h-11 rounded-pill px-sm text-[13px] font-medium text-grey hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:opacity-40">
+      <button type="button" onClick={toggleAll} disabled={busy || readyCount === 0} className="h-11 rounded-pill px-sm text-[13px] font-medium text-grey hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:opacity-40">
         {allReadySelected ? "Clear actionable" : `Select actionable (${readyCount})`}
       </button>
       <span className="text-[12px] tabular text-grey">{selectedCount} selected</span>
-      <button type="button" onClick={accept} disabled={busy || selectedCount === 0} className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:opacity-45">
+      <button type="button" onClick={accept} disabled={busy || selectedCount === 0} className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:opacity-45">
         {busy ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={1.75} aria-hidden /> : <Check className="h-4 w-4" strokeWidth={2} aria-hidden />}
         Accept {selectedCount} item{selectedCount === 1 ? "" : "s"}
       </button>
@@ -194,7 +194,7 @@ function QueueLoading() {
 }
 
 function QueueError({ message, retry }: { message: string; retry: () => void }) {
-  return <div role="alert" className="rounded-md border border-primary/30 bg-blush-wash p-md text-[13px] text-primary"><p>{message}</p><button type="button" onClick={retry} className="mt-sm h-11 rounded-pill border border-primary/30 bg-white px-md font-medium hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25">Try again</button></div>;
+  return <div role="alert" className="rounded-md border border-accent/30 bg-blush-wash p-md text-[13px] text-accent"><p>{message}</p><button type="button" onClick={retry} className="mt-sm h-11 rounded-pill border border-accent/30 bg-surface px-md font-medium hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25">Try again</button></div>;
 }
 
 function QueueEmpty() {
@@ -202,7 +202,7 @@ function QueueEmpty() {
 }
 
 function StatusBanner({ message, error }: { message: string | null; error: string | null }) {
-  return <div role={error ? "alert" : "status"} className={`mb-md rounded-md border px-md py-sm text-[13px] ${error ? "border-primary/30 bg-blush-wash text-primary" : "border-sage-ink/30 bg-sage-wash text-sage-ink"}`}>{error ?? message}</div>;
+  return <div role={error ? "alert" : "status"} className={`mb-md rounded-md border px-md py-sm text-[13px] ${error ? "border-accent/30 bg-blush-wash text-accent" : "border-sage-ink/30 bg-sage-wash text-sage-ink"}`}>{error ?? message}</div>;
 }
 
 function toggleId(current: Set<string>, id: string) {

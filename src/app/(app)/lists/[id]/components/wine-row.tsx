@@ -99,7 +99,7 @@ export function PriceInput({ value, onChange, muted }: PriceInputProps) {
           setEditing(true);
         }}
         className={cn(
-          "min-h-11 w-full rounded-md border border-transparent px-xs py-2xs text-right font-mono text-[14px] transition-colors hover:border-hairline hover:bg-white",
+          "min-h-11 w-full rounded-md border border-transparent px-xs py-2xs text-right font-mono text-[14px] transition-colors hover:border-hairline hover:bg-surface",
           muted ? "text-ink-muted" : "text-ink",
         )}
       >
@@ -124,7 +124,7 @@ export function PriceInput({ value, onChange, muted }: PriceInputProps) {
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setEditing(false);
         }}
-        className="min-h-11 w-full rounded-md border border-primary bg-white py-2xs pl-md pr-xs text-right font-mono text-[14px] text-ink outline-none ring-2 ring-primary/25"
+        className="min-h-11 w-full rounded-md border border-accent bg-surface py-2xs pl-md pr-xs text-right font-mono text-[14px] text-ink outline-none ring-2 ring-accent/25"
       />
     </div>
   );
@@ -167,9 +167,9 @@ function NameEdit({
           setEditing(true);
         }}
         className={cn(
-          "min-h-11 rounded-md border border-transparent px-xs py-2xs text-left transition-colors hover:border-hairline hover:bg-white",
+          "min-h-11 rounded-md border border-transparent px-xs py-2xs text-left transition-colors hover:border-hairline hover:bg-surface",
           "font-serif text-[17px] font-medium",
-          isOverridden ? "text-primary italic" : "text-ink",
+          isOverridden ? "text-accent italic" : "text-ink",
         )}
         title={isOverridden ? "Custom display name (click to edit)" : "Click to set a custom display name"}
       >
@@ -197,7 +197,7 @@ function NameEdit({
         if (e.key === "Escape") setEditing(false);
       }}
       placeholder={item.wines.name}
-      className="min-h-11 w-full rounded-md border border-primary bg-white px-xs py-2xs font-serif text-[17px] font-medium text-ink outline-none ring-2 ring-primary/25"
+      className="min-h-11 w-full rounded-md border border-accent bg-surface px-xs py-2xs font-serif text-[17px] font-medium text-ink outline-none ring-2 ring-accent/25"
     />
   );
 }
@@ -245,7 +245,7 @@ function PourConfigRow({
           }}
           placeholder="148"
           aria-label={`Pour size in ml for ${item.wines.name}`}
-          className="h-11 w-[64px] rounded-md border border-hairline bg-white px-xs text-right font-mono text-[12px] text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
+          className="h-11 w-[64px] rounded-md border border-hairline bg-surface px-xs text-right font-mono text-[12px] text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
         />
         <span className="shrink-0 text-[11px] text-ink-subtle">ml</span>
         {ozHint && (
@@ -347,7 +347,7 @@ export function WineRow({
           type="button"
           aria-label={`Remove ${item.wines.name}`}
           onClick={() => onDelete(item.id)}
-          className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-subtle opacity-0 transition-opacity hover:bg-blush-wash hover:text-primary group-hover:opacity-100"
+          className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-subtle opacity-0 transition-opacity hover:bg-blush-wash hover:text-accent group-hover:opacity-100"
         >
           <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
         </button>
@@ -365,7 +365,7 @@ export function WineRow({
               onBlur={(e) => { if (!e.target.value.trim()) onBlurbChange(item.id, null); }}
               placeholder="Add a note for guests (e.g., sommelier pick, pairing suggestion)"
               rows={2}
-              className="min-h-11 min-w-0 flex-1 resize-none rounded-md border border-hairline bg-white px-xs py-1 text-[12px] text-ink outline-none placeholder:text-ink-muted/50 focus:border-primary focus:ring-2 focus:ring-primary/25"
+              className="min-h-11 min-w-0 flex-1 resize-none rounded-md border border-hairline bg-surface px-xs py-1 text-[12px] text-ink outline-none placeholder:text-ink-muted/50 focus:border-accent focus:ring-2 focus:ring-accent/25"
             />
             {/* BND-171: hide toggle */}
             <button
@@ -410,7 +410,7 @@ export function WineRow({
             type="button"
             aria-label={`Options for ${item.wines.name}`}
             onClick={() => onDelete(item.id)}
-            className="ml-sm flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-pill text-ink-subtle hover:text-primary"
+            className="ml-sm flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-pill text-ink-subtle hover:text-accent"
           >
             <MoreHorizontal className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           </button>
@@ -453,7 +453,7 @@ export function WineRow({
             onBlur={(e) => { if (!e.target.value.trim()) onBlurbChange(item.id, null); }}
             placeholder="Sommelier pick, pairing suggestion..."
             rows={2}
-            className="mt-xs w-full rounded-md border border-hairline bg-white px-xs py-1 text-[12px] text-ink resize-none outline-none focus:border-primary focus:ring-2 focus:ring-primary/25 placeholder:text-ink-muted/50"
+            className="mt-xs w-full rounded-md border border-hairline bg-surface px-xs py-1 text-[12px] text-ink resize-none outline-none focus:border-accent focus:ring-2 focus:ring-accent/25 placeholder:text-ink-muted/50"
           />
           <button
             type="button"

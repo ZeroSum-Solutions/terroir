@@ -76,8 +76,8 @@ export function CloseBottleButton({ bottleId, remainingOz }: Props) {
         disabled={isPending}
         className={
           confirming
-            ? "inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-pill bg-blush-wash px-2.5 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-blush-wash/70"
-            : "inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-pill px-2 py-1 text-[11px] text-grey transition-colors hover:bg-blush-wash/40 hover:text-primary"
+            ? "inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-pill bg-blush-wash px-2.5 py-1 text-[11px] font-medium text-accent transition-colors hover:bg-blush-wash/70"
+            : "inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-pill px-2 py-1 text-[11px] text-grey transition-colors hover:bg-blush-wash/40 hover:text-accent"
         }
         aria-label={confirming ? `Confirm discard ${remainingOz.toFixed(1)} oz` : "Close bottle"}
       >

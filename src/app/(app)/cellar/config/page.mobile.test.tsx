@@ -138,7 +138,7 @@ describe("Manage Cellar Sections mobile layout", () => {
     // never triggers.
     expect(rename.className).toContain("text-grey");
     expect(del.className).not.toContain("text-grey");
-    expect(del.className).toMatch(/text-primary/);
+    expect(del.className).toMatch(/text-accent/);
 
     // And they need real breathing room between them, not a 2px seam.
     const actionsRow = rename.parentElement!;
@@ -224,7 +224,7 @@ describe("Manage Cellar Sections mobile layout", () => {
     const newSectionInput = container.querySelector<HTMLInputElement>(
       'input[placeholder^="New section name"]',
     )!;
-    expect(newSectionInput.className).toContain("focus-visible:outline-primary");
+    expect(newSectionInput.className).toContain("focus-visible:outline-accent");
     expect(newSectionInput.className).not.toMatch(/focus:ring/);
 
     const rename = container.querySelector<HTMLButtonElement>(
@@ -234,7 +234,7 @@ describe("Manage Cellar Sections mobile layout", () => {
     const renameInput = container.querySelector<HTMLInputElement>(
       'li input[type="text"]',
     )!;
-    expect(renameInput.className).toContain("focus-visible:outline-primary");
+    expect(renameInput.className).toContain("focus-visible:outline-accent");
     expect(renameInput.className).not.toMatch(/focus:ring/);
   });
 
@@ -246,7 +246,7 @@ describe("Manage Cellar Sections mobile layout", () => {
     const addButton = [...container.querySelectorAll("button")].find(
       (button) => button.textContent?.trim() === "Add",
     )!;
-    expect(addButton.className).toContain("focus-visible:outline-primary");
+    expect(addButton.className).toContain("focus-visible:outline-accent");
     expect(addButton.className).toContain("focus-visible:transition-none");
     expect(addButton.className).not.toMatch(/focus:ring/);
   });

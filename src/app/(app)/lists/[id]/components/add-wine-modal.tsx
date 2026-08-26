@@ -272,7 +272,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
     <div
       ref={backdropRef}
       data-add-wine-backdrop
-      className="fixed inset-0 z-50 flex items-end justify-center overscroll-contain bg-ink/40 md:items-center md:p-md"
+      className="fixed inset-0 z-50 flex items-end justify-center overscroll-contain bg-scrim md:items-center md:p-md"
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-wine-title"
@@ -283,7 +283,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
       <div
         ref={trapRef}
         data-add-wine-panel
-        className="flex max-h-[100dvh] w-full min-w-0 flex-col overflow-hidden rounded-t-[20px] border border-hairline bg-canvas md:max-h-[calc(100dvh-2rem)] md:max-w-[480px] md:rounded-card"
+        className="flex max-h-[100dvh] w-full min-w-0 flex-col overflow-hidden rounded-t-[20px] card-surface md:max-h-[calc(100dvh-2rem)] md:max-w-[480px] md:rounded-card"
       >
         <div className="shrink-0 border-b border-hairline px-lg py-md">
           <h2 id="add-wine-title" className="font-serif text-[20px] text-ink">
@@ -302,7 +302,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                 onClick={() => { setSearchMode("inventory"); setQuery(""); setCatalogError(null); }}
                 className={`min-h-11 px-sm py-xs text-[13px] font-medium border-b-2 transition-colors ${
                   searchMode === "inventory"
-                    ? "border-primary text-primary"
+                    ? "border-accent text-accent"
                     : "border-transparent text-ink-muted hover:text-ink"
                 }`}
               >
@@ -313,7 +313,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                 onClick={() => { setSearchMode("catalog"); setQuery(""); setCatalogError(null); }}
                 className={`min-h-11 px-sm py-xs text-[13px] font-medium border-b-2 transition-colors ${
                   searchMode === "catalog"
-                    ? "border-primary text-primary"
+                    ? "border-accent text-accent"
                     : "border-transparent text-ink-muted hover:text-ink"
                 }`}
               >
@@ -332,7 +332,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                   }}
                   placeholder="Search by producer or wine name…"
                   aria-label="Search wines"
-                  className="h-11 w-full rounded-pill border border-hairline bg-white pl-xl pr-sm text-[16px] text-ink placeholder:text-ink-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 md:text-[14px]"
+                  className="h-11 w-full rounded-pill border border-hairline bg-surface pl-xl pr-sm text-[16px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 md:text-[14px]"
                 />
               </div>
             </div>
@@ -340,7 +340,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
               <div className="border-b border-hairline px-lg py-sm">
                 <p
                   role="alert"
-                  className="rounded-md border border-primary/30 bg-blush-wash px-sm py-xs text-[12px] text-primary"
+                  className="rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[12px] text-accent"
                 >
                   {catalogError}
                 </p>
@@ -457,8 +457,8 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                         <span
                           className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-xs border-2 transition-colors ${
                             checked
-                              ? "border-primary bg-primary"
-                              : "border-hairline bg-white"
+                              ? "border-accent bg-primary"
+                              : "border-hairline bg-surface"
                           }`}
                         >
                           {checked && (
@@ -503,7 +503,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                   <button
                     type="button"
                     onClick={applySuggestion}
-                    className="inline-flex min-h-11 items-center gap-2xs text-[11px] font-medium text-primary hover:underline"
+                    className="inline-flex min-h-11 items-center gap-2xs text-[11px] font-medium text-accent hover:underline"
                   >
                     <Sparkles className="h-3 w-3" strokeWidth={2} aria-hidden />
                     Use these
@@ -545,7 +545,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
               </div>
             )}
             {suggestError && (
-              <p role="alert" className="mt-sm text-[11px] text-primary">
+              <p role="alert" className="mt-sm text-[11px] text-accent">
                 {suggestError}
               </p>
             )}
@@ -566,7 +566,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     value={glassPrice}
                     onChange={(e) => setGlassPrice(e.target.value)}
                     placeholder="—"
-                    className="h-11 w-full rounded-pill border border-hairline bg-white pl-md pr-sm text-right font-mono text-[16px] text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25 md:text-[14px]"
+                    className="h-11 w-full rounded-pill border border-hairline bg-surface pl-md pr-sm text-right font-mono text-[16px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 md:text-[14px]"
                   />
                 </div>
               </div>
@@ -585,7 +585,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     value={bottlePrice}
                     onChange={(e) => setBottlePrice(e.target.value)}
                     placeholder="—"
-                    className="h-11 w-full rounded-pill border border-hairline bg-white pl-md pr-sm text-right font-mono text-[16px] text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25 md:text-[14px]"
+                    className="h-11 w-full rounded-pill border border-hairline bg-surface pl-md pr-sm text-right font-mono text-[16px] text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 md:text-[14px]"
                   />
                 </div>
               </div>
@@ -602,7 +602,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
               <button
                 type="button"
                 onClick={clearSelection}
-                className="min-h-11 rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                className="min-h-11 rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
               >
                 Back
               </button>
@@ -610,7 +610,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
             <button
               type="button"
               onClick={onClose}
-              className="min-h-11 rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+              className="min-h-11 rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
             >
               Cancel
             </button>
@@ -619,7 +619,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                 type="button"
                 onClick={handleAdd}
                 disabled={adding || selectedSectionIds.size === 0}
-                className="min-h-11 rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 disabled:opacity-60"
+                className="min-h-11 rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:opacity-60"
               >
                 {adding ? "Adding..." : `Add to ${selectedCount > 1 ? `${selectedCount} sections` : "list"}`}
               </button>

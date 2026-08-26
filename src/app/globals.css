@@ -2,68 +2,190 @@
 
 /*
  * Terroir Design System — token layer
- * Source: DESIGN.md ("Terroir — Beyond Ordinary", 2026-08-19).
+ * Source: DESIGN.md ("Terroir — Cantina", 2026-08-26).
  * Do not edit values here without updating DESIGN.md first.
  *
- * Two tiers:
- *  1. Contract tokens — names straight from DESIGN.md frontmatter.
- *  2. Legacy aliases — the pre-redesign semantic names (surface/accent/border…)
- *     still used across components, remapped onto contract values so the whole
- *     app retints. New/touched code should use contract tokens; aliases shrink
- *     as surfaces are migrated.
+ * Architecture:
+ *  1. Runtime theme variables (--t-*) — the light "Tasting Room" values on
+ *     :root, swapped to the dark "Cellar" set under [data-theme="dark"], and
+ *     under prefers-color-scheme: dark when no explicit choice is stored.
+ *  2. @theme inline — maps Tailwind tokens onto the runtime variables, so
+ *     every token utility (bg-canvas, text-ink, border-hairline…) retints
+ *     per mode with zero component changes.
+ *  3. Legacy aliases — pre-redesign semantic names still used across
+ *     components, remapped onto the runtime variables. New/touched code uses
+ *     contract tokens; aliases shrink as surfaces migrate.
  */
-@theme {
-  /* ── Contract tokens ─────────────────────────────────────── */
-  --color-primary: #722f37;
-  --color-primary-hover: #5a252c;
-  --color-canvas: #ffffff;
-  --color-beige: #ece4da;
-  --color-beige-deep: #e3d9cb;
-  --color-bridge-surface: #faf7f2;
-  --color-powder: #c7d7e9;
-  --color-powder-wash: #e2eaf3;
-  --color-powder-ink: #41586e;
-  --color-sage: #adaa8a;
-  --color-sage-wash: #e6e4d4;
-  --color-sage-ink: #5f5c40;
-  --color-ink: #191919;
-  --color-ink-soft: #212121;
-  --color-grey: #707070;
-  --color-hairline: #e4ded4;
-  --color-blush-wash: #f2e6e2;
-  --color-amber: #8b6914;
-  --color-amber-wash: #fbf3dc;
-  --color-glass-white: rgba(255, 255, 255, 0.55);
-  --color-glass-edge: rgba(255, 255, 255, 0.7);
-  --color-glass-shadow: rgba(25, 25, 25, 0.07);
 
-  /* ── Legacy aliases (remapped) ───────────────────────────── */
-  --color-surface: #ffffff; /* → canvas */
-  --color-surface-muted: #faf7f2; /* → bridge-surface */
-  --color-surface-sunken: #ece4da; /* → beige */
-  --color-surface-inverse: #191919; /* → ink */
-  --color-ink-muted: #707070; /* → grey */
-  --color-ink-subtle: #707070; /* → grey */
-  --color-accent: #722f37; /* → primary */
-  --color-accent-hover: #5a252c; /* → primary-hover */
-  --color-accent-soft: #f2e6e2; /* → blush-wash */
-  --color-success: #5f5c40; /* → sage-ink */
-  --color-success-soft: #e6e4d4; /* → sage-wash */
-  --color-warning: #8b6914; /* → amber */
-  --color-warning-soft: #fbf3dc; /* → amber-wash */
-  --color-danger: #722f37; /* burgundy is the only alarm chromatic */
-  --color-border: #e4ded4; /* → hairline */
-  --color-border-strong: #e3d9cb; /* → beige-deep */
+/* ── Light — "Tasting Room" (default) ─────────────────────────── */
+:root {
+  --t-primary: #722f37;
+  --t-primary-hover: #5a252c;
+  --t-accent: #722f37; /* interactive/text accent: burgundy by day, gold by night */
+  --t-canvas: #f2ede3;
+  --t-surface: #fbf9f4;
+  --t-surface-sunken: #eae3d5;
+  --t-wash: #efe9dc; /* quietest tint: table headers, hover washes */
+  --t-ink: #241d1a;
+  --t-ink-soft: #3a2f2a;
+  --t-grey: #6e6257;
+  --t-hairline: #ded5c4;
+  --t-hairline-strong: #d3c8b2;
+  --t-gold: #7d5f33;
+  --t-sage: #5e6b4b;
+  --t-sage-wash: #e7e6d6;
+  --t-sage-ink: #4c573c;
+  --t-powder: #b2d7e7;
+  --t-powder-wash: #e3ecf2;
+  --t-powder-ink: #3f586c;
+  --t-amber: #7f5f12;
+  --t-amber-wash: #f7efd9;
+  --t-blush-wash: #f0e2dc;
+  --t-surface-inverse: #241d1a;
+  --t-on-inverse: #f2ede3;
+  --t-scrim: rgba(36, 29, 26, 0.35);
+  --t-glass: rgba(251, 249, 244, 0.7);
+  --t-glass-solid: rgba(251, 249, 244, 0.94);
+  --t-glass-edge: rgba(255, 253, 247, 0.75);
+  --t-glass-shadow: rgba(46, 26, 26, 0.08);
+  --t-shadow-card: 0 1px 2px rgba(46, 26, 26, 0.05), 0 6px 20px rgba(46, 26, 26, 0.07);
+  --t-shadow-glass: 0 8px 32px rgba(46, 26, 26, 0.08);
+  color-scheme: light;
+}
+
+/* ── Dark — "Cellar" ──────────────────────────────────────────── */
+[data-theme="dark"] {
+  --t-primary: #8a3a44;
+  --t-primary-hover: #a04751;
+  --t-accent: #c7a165; /* candle gold — the dark room's accent */
+  --t-canvas: #1d1512;
+  --t-surface: #291e1a;
+  --t-surface-sunken: #171009;
+  --t-wash: #241a16;
+  --t-ink: #ede3ce;
+  --t-ink-soft: #d8c9b0;
+  --t-grey: #b3a28e;
+  --t-hairline: #3e2f28;
+  --t-hairline-strong: #4a382f;
+  --t-gold: #c7a165;
+  --t-sage: #8fa06e;
+  --t-sage-wash: #2c3325;
+  --t-sage-ink: #c3cdaa;
+  --t-powder: #7fa8c0;
+  --t-powder-wash: #23303a;
+  --t-powder-ink: #a8c8dc;
+  --t-amber: #d9b45c;
+  --t-amber-wash: #3a3013;
+  --t-blush-wash: #3b2226;
+  --t-surface-inverse: #ede3ce;
+  --t-on-inverse: #241d1a;
+  --t-scrim: rgba(10, 6, 4, 0.55);
+  --t-glass: rgba(29, 21, 18, 0.65);
+  --t-glass-solid: rgba(29, 21, 18, 0.94);
+  --t-glass-edge: rgba(80, 60, 48, 0.5);
+  --t-glass-shadow: rgba(0, 0, 0, 0.4);
+  --t-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --t-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+/* System dark when the user hasn't chosen explicitly. Must mirror the
+   [data-theme="dark"] block exactly. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --t-primary: #8a3a44;
+    --t-primary-hover: #a04751;
+    --t-accent: #c7a165;
+    --t-canvas: #1d1512;
+    --t-surface: #291e1a;
+    --t-surface-sunken: #171009;
+    --t-wash: #241a16;
+    --t-ink: #ede3ce;
+    --t-ink-soft: #d8c9b0;
+    --t-grey: #b3a28e;
+    --t-hairline: #3e2f28;
+    --t-hairline-strong: #4a382f;
+    --t-gold: #c7a165;
+    --t-sage: #8fa06e;
+    --t-sage-wash: #2c3325;
+    --t-sage-ink: #c3cdaa;
+    --t-powder: #7fa8c0;
+    --t-powder-wash: #23303a;
+    --t-powder-ink: #a8c8dc;
+    --t-amber: #d9b45c;
+    --t-amber-wash: #3a3013;
+    --t-blush-wash: #3b2226;
+    --t-surface-inverse: #ede3ce;
+    --t-on-inverse: #241d1a;
+    --t-scrim: rgba(10, 6, 4, 0.55);
+    --t-glass: rgba(29, 21, 18, 0.65);
+    --t-glass-solid: rgba(29, 21, 18, 0.94);
+    --t-glass-edge: rgba(80, 60, 48, 0.5);
+    --t-glass-shadow: rgba(0, 0, 0, 0.4);
+    --t-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --t-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.45);
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  /* ── Contract tokens ─────────────────────────────────────── */
+  --color-primary: var(--t-primary);
+  --color-primary-hover: var(--t-primary-hover);
+  --color-accent: var(--t-accent);
+  --color-canvas: var(--t-canvas);
+  --color-surface: var(--t-surface);
+  --color-surface-sunken: var(--t-surface-sunken);
+  --color-ink: var(--t-ink);
+  --color-ink-soft: var(--t-ink-soft);
+  --color-grey: var(--t-grey);
+  --color-hairline: var(--t-hairline);
+  --color-gold: var(--t-gold);
+  --color-sage: var(--t-sage);
+  --color-sage-wash: var(--t-sage-wash);
+  --color-sage-ink: var(--t-sage-ink);
+  --color-powder: var(--t-powder);
+  --color-powder-wash: var(--t-powder-wash);
+  --color-powder-ink: var(--t-powder-ink);
+  --color-amber: var(--t-amber);
+  --color-amber-wash: var(--t-amber-wash);
+  --color-blush-wash: var(--t-blush-wash);
+  --color-scrim: var(--t-scrim);
+  --color-glass-white: var(--t-glass);
+  --color-glass-edge: var(--t-glass-edge);
+  --color-glass-shadow: var(--t-glass-shadow);
+
+  /* ── Legacy aliases (remapped onto runtime vars) ─────────── */
+  --color-beige: var(--t-surface-sunken);
+  --color-beige-deep: var(--t-hairline-strong);
+  --color-bridge-surface: var(--t-wash);
+  --color-surface-muted: var(--t-wash);
+  --color-surface-inverse: var(--t-surface-inverse);
+  --color-on-inverse: var(--t-on-inverse);
+  --color-ink-muted: var(--t-grey);
+  --color-ink-subtle: var(--t-grey);
+  --color-accent-hover: var(--t-primary-hover);
+  --color-accent-soft: var(--t-blush-wash);
+  --color-success: var(--t-sage-ink);
+  --color-success-soft: var(--t-sage-wash);
+  --color-warning: var(--t-amber);
+  --color-warning-soft: var(--t-amber-wash);
+  --color-danger: var(--t-primary);
+  --color-border: var(--t-hairline);
+  --color-border-strong: var(--t-hairline-strong);
 
   /* Typography — fonts injected via next/font in layout.tsx */
-  --font-serif: var(--font-cormorant), "Cormorant Garamond", Georgia, serif;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
+  --font-serif: var(--font-bodoni), "Bodoni Moda", Didot, "Playfair Display", Georgia, serif;
+  --font-sans: var(--font-archivo), Archivo, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-courier), "Courier Prime", ui-monospace, SFMono-Regular, monospace;
 
   /* Type scale (contract) */
   --text-caption: 11px;
   --text-caption--line-height: 1.5;
   --text-caption--letter-spacing: 0.18em;
+  --text-ledger: 12px;
+  --text-ledger--line-height: 1.4;
+  --text-ledger--letter-spacing: 0.04em;
   --text-body-sm: 13px;
   --text-body-sm--line-height: 1.55;
   --text-body: 15px;
@@ -72,14 +194,13 @@
   --text-body-light--line-height: 1.6;
   --text-subheading: 19px;
   --text-subheading--line-height: 1.45;
-  --text-heading-sm: 28px;
+  --text-heading-sm: 26px;
   --text-heading-sm--line-height: 1.25;
-  --text-heading: 44px;
-  --text-heading--line-height: 1.1;
-  --text-heading--letter-spacing: -0.01em;
-  --text-display: 84px;
-  --text-display--line-height: 1;
-  --text-display--letter-spacing: -0.01em;
+  --text-heading: 40px;
+  --text-heading--line-height: 1.12;
+  --text-display: 76px;
+  --text-display--line-height: 1.02;
+  --text-display--letter-spacing: 0.01em;
 
   /* Spacing scale (named tokens alongside default numeric scale) */
   --spacing-2xs: 2px;
@@ -98,12 +219,12 @@
   --radius-card: 20px;
   --radius-pill: 999px;
 
-  /* Shadows — floating glass is the ONLY shadowed element in the system.
-     Legacy sm/md/lg kept as near-invisible whispers until usages migrate. */
-  --shadow-glass: 0 8px 32px rgba(25, 25, 25, 0.07);
+  /* Shadows — cards carry the soft warm lift; glass carries the float. */
+  --shadow-card: var(--t-shadow-card);
+  --shadow-glass: var(--t-shadow-glass);
   --shadow-sm: 0 1px 2px rgba(25, 25, 25, 0.03);
   --shadow-md: 0 2px 8px rgba(25, 25, 25, 0.04);
-  --shadow-lg: 0 8px 32px rgba(25, 25, 25, 0.07);
+  --shadow-lg: var(--t-shadow-glass);
 
   /* Layout */
   --container-prose: 720px;
@@ -132,13 +253,23 @@ body {
 }
 
 /*
- * Glass recipe (DESIGN.md — Elevation & Depth).
- * Only for elements that float above other content: sticky nav, stat tiles
- * on the gradient hero, drawers, modals, command palette, toasts.
- * Never glass-on-glass; glass stays white.
+ * Card recipe (DESIGN.md — Elevation & Depth, level 1).
+ * A card is lighter than the ground and carries BOTH a hairline and the soft
+ * warm shadow — all three, always. Replaces the flat white-on-white recipe.
+ */
+.card-surface {
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  box-shadow: var(--shadow-card);
+}
+
+/*
+ * Glass recipe (DESIGN.md — Elevation & Depth, level 3).
+ * Only for elements that float above other content: sticky nav, drawers,
+ * modals, command palette, toasts. Never glass-on-glass.
  */
 .glass {
-  background: rgba(255, 255, 255, 0.92); /* fallback when backdrop-filter unsupported */
+  background: var(--t-glass-solid); /* fallback when backdrop-filter unsupported */
   border: 1px solid var(--color-glass-edge);
   box-shadow: var(--shadow-glass);
 }
@@ -151,16 +282,16 @@ body {
 }
 
 /*
- * Dawn gradient (level-0 surface) — hero atmosphere only, once per page,
- * always resolving into the white workspace via the beige bridge band.
+ * Hero wash (level 0+). The dawn gradient is retired (DESIGN.md 2026-08-26);
+ * the class remains for unswept call sites and now renders a quiet warm
+ * vignette on the room's own ground in both modes.
  */
 .dawn-gradient {
   background: linear-gradient(
     172deg,
-    #c7d7e9 0%,
-    #dfe6ea 22%,
-    #f4efe7 55%,
-    #ece4da 100%
+    var(--t-surface) 0%,
+    var(--t-canvas) 60%,
+    var(--t-surface-sunken) 100%
   );
 }
 
@@ -190,7 +321,7 @@ body {
  * on padding, and a forced white surface so cellar/UI hover effects
  * don't print as grey blocks. The public wine-list page layers
  * print:-prefixed Tailwind utilities on top of this baseline; other
- * surfaces inherit only the page geometry.
+ * surfaces inherit only the page geometry. Print is always light.
  */
 @media print {
   @page {

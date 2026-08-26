@@ -13,7 +13,7 @@ export function formatMoney(n: number) {
 }
 
 const FIELD_WRAP =
-  "relative flex w-full items-center rounded-sm border border-transparent bg-transparent px-sm py-xs transition-colors focus-within:border-primary focus-within:bg-white focus-within:ring-2 focus-within:ring-primary/25 hover:border-hairline hover:bg-white";
+  "relative flex w-full items-center rounded-sm border border-transparent bg-transparent px-sm py-xs transition-colors focus-within:border-accent focus-within:bg-surface focus-within:ring-2 focus-within:ring-accent/25 hover:border-hairline hover:bg-surface";
 
 interface FieldWrapProps {
   low?: boolean;
@@ -33,7 +33,7 @@ export function FieldWrap({ low, edited, children }: FieldWrapProps) {
       {children}
       {low && (
         <AlertTriangle
-          className="ml-xs h-4 w-4 shrink-0 text-primary"
+          className="ml-xs h-4 w-4 shrink-0 text-accent"
           strokeWidth={2}
           aria-label="Needs review"
         />
@@ -226,12 +226,12 @@ interface QtyStepperProps {
 
 export function QtyStepper({ value, onChange }: QtyStepperProps) {
   return (
-    <div className="inline-flex items-center overflow-hidden rounded-pill border border-hairline bg-white">
+    <div className="inline-flex items-center overflow-hidden rounded-pill border border-hairline bg-surface">
       <button
         type="button"
         aria-label="Decrease quantity"
         onClick={() => onChange(Math.max(1, value - 1))}
-        className="flex h-11 w-11 items-center justify-center text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+        className="flex h-11 w-11 items-center justify-center text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
       >
         <Minus className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />
       </button>
@@ -242,7 +242,7 @@ export function QtyStepper({ value, onChange }: QtyStepperProps) {
         type="button"
         aria-label="Increase quantity"
         onClick={() => onChange(value + 1)}
-        className="flex h-11 w-11 items-center justify-center text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+        className="flex h-11 w-11 items-center justify-center text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
       >
         <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />
       </button>

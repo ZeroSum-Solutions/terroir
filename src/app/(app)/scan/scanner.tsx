@@ -820,7 +820,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         >
           <div className="flex items-center gap-sm">
             {feedback.kind === "error" ? (
-              <AlertTriangle className="h-4 w-4 text-primary" strokeWidth={2.25} aria-hidden="true" />
+              <AlertTriangle className="h-4 w-4 text-accent" strokeWidth={2.25} aria-hidden="true" />
             ) : (
               <Check className="h-4 w-4 text-sage-ink" strokeWidth={2.25} aria-hidden="true" />
             )}
