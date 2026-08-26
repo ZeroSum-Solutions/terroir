@@ -11,14 +11,19 @@ import type { CellarUrlState } from "@/lib/cellar-facets/url-state";
  * resurrect a param the user just cleared.
  */
 
+// Native history calls (the hook's navigation channel since the shallow-nav
+// fix) and Next router calls (which must stay untouched — a router call here
+// means a full force-dynamic RSC roundtrip).
 const replaceCalls: string[] = [];
 const pushCalls: string[] = [];
+const routerReplaceCalls: string[] = [];
+const routerPushCalls: string[] = [];
 const paramsHolder = { current: new URLSearchParams() };
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
-    replace: (href: string) => replaceCalls.push(href),
-    push: (href: string) => pushCalls.push(href),
+    replace: (href: string) => routerReplaceCalls.push(href),
+    push: (href: string) => routerPushCalls.push(href),
   }),
   useSearchParams: () => paramsHolder.current,
 }));
@@ -63,6 +68,14 @@ function lastReplace(): URLSearchParams {
 beforeEach(() => {
   replaceCalls.length = 0;
   pushCalls.length = 0;
+  routerReplaceCalls.length = 0;
+  routerPushCalls.length = 0;
+  vi.spyOn(window.history, "pushState").mockImplementation(
+    (_state, _unused, url) => pushCalls.push(String(url)),
+  );
+  vi.spyOn(window.history, "replaceState").mockImplementation(
+    (_state, _unused, url) => replaceCalls.push(String(url)),
+  );
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -74,6 +87,28 @@ afterEach(() => {
 });
 
 describe("useCellarUrlState", () => {
+  it("navigates via native history (shallow) — never the Next router", () => {
+    // The cellar page reads no searchParams on the server: every param is
+    // client-consumed, so a router.push/replace forces a full force-dynamic
+    // RSC roundtrip that re-renders the whole page for byte-identical props.
+    // Measured 2026-08-26: tap→drawer 391ms baseline vs 4429ms with the RSC
+    // fetch delayed 4s — on mobile networks the drawer reads as broken.
+    // window.history.pushState/replaceState sync useSearchParams without a
+    // server fetch (next/dist/docs single-page-applications.md).
+    paramsHolder.current = new URLSearchParams("filter=all");
+    renderHarness();
+
+    act(() => api().applyUrlState({ wine: "wine-1" }, "push"));
+    expect(pushCalls).toHaveLength(1);
+    expect(pushCalls[0]).toContain("wine=wine-1");
+
+    act(() => api().replaceUrlState({ groupBy: "producer" }));
+    expect(replaceCalls).toHaveLength(1);
+
+    expect(routerPushCalls).toEqual([]);
+    expect(routerReplaceCalls).toEqual([]);
+  });
+
   it("does not resurrect a cleared param when a stale snapshot lands between rapid changes", () => {
     paramsHolder.current = new URLSearchParams("filter=all&region=Napa");
     renderHarness();

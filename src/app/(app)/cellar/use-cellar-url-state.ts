@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   parseCellarUrlState,
   serializeCellarUrlState,
@@ -10,11 +10,16 @@ import {
 
 /**
  * URL-backed state for the Cellar surface. Local patches merge over the
- * committed URL and navigate via router.replace/push; the committed
- * searchParams remain the source of truth once a navigation lands.
+ * committed URL and navigate via native history.pushState/replaceState —
+ * which Next syncs into useSearchParams WITHOUT a server roundtrip. The
+ * cellar page reads no searchParams on the server, so a router.push here
+ * used to re-render the whole force-dynamic page for byte-identical props
+ * on every wine tap / filter change (tap→drawer measured 391ms baseline vs
+ * 4429ms with the RSC fetch delayed — on mobile networks the drawer read
+ * as broken). The committed searchParams remain the source of truth once
+ * a navigation lands.
  */
 export function useCellarUrlState() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const urlState = useMemo(
     () => parseCellarUrlState(searchParams),
@@ -50,10 +55,10 @@ export function useCellarUrlState() {
       }
       const params = serializeCellarUrlState(next);
       const href = `/cellar?${params.toString()}`;
-      if (mode === "push") router.push(href, { scroll: false });
-      else router.replace(href, { scroll: false });
+      if (mode === "push") window.history.pushState(null, "", href);
+      else window.history.replaceState(null, "", href);
     },
-    [router],
+    [],
   );
   const replaceUrlState = useCallback(
     (patch: Partial<CellarUrlState>) => applyUrlState(patch, "replace"),
