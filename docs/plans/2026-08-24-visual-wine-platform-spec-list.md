@@ -168,7 +168,7 @@ doc (marked ★); the rest cite their source and go straight to tickets once gat
 | 2 | Splat FPS (desktop + mobile) | SPEC-14 | VWP-D-06 |
 | 3 | Wine-Searcher trial + ~~GWS~~ coverage on ~50 LWIN'd wines + written quotes — *GWS dropped 2026-08-25: domain parked/for-sale, no live API surface (evidence in `2026-08-25-spike-resources-status.md`); critic layer = WS aggregate + X-Wines community* | SPEC-16 | paid-tier viability |
 | 4 | X-Wines/WineSensed join rates + X-Wines image manifest count — *datasets downloaded + MD5-verified 2026-08-25 (`~/projects/terroir-data/`); manifest half ANSWERED: X-Wines Full publishes NO label images (author on-demand only; Slim = 1,007); WineSensed 996,808 image refs in a 35 GB undownloaded archive. Join-rate half runnable now* | SPEC-04/16 | corpus expectations |
-| 5 | DDGS 500-query soak | SPEC-04 | cascade reliability |
+| 5 | DDGS 500-query soak — **CLOSED 2026-08-25** (`2026-08-25-spike-05-ddgs-soak.md`) | SPEC-04 | **viable cascade tier: 94.0 % ok / 0 empty over 500; transient timeout runs ≤ 3 force mandatory per-query retry (~30 s backoff) into SPEC-04** |
 | 6 | e2e scan latency on demo hardware (cold/warm/concurrent p50/p95) | SPEC-05 | topology; VWP-D-03 box spec |
 | 7 | Phone-photo vs. packshot LightGlue survival | SPEC-03/05 | rerank viability |
 | 8 | Assisted-grid UX flow (+ separate auto-grid feasibility) | SPEC-12 | v1 contract fit |
