@@ -1,6 +1,15 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 
 import { checkMigrationManifest } from "../../../scripts/check-migration-manifest.mjs";
 
@@ -8,6 +17,11 @@ const manifestPath = join(
   process.cwd(),
   "docs/plans/2026-08-24-visual-wine-platform-spec-list.md",
 );
+const checkerPath = join(
+  process.cwd(),
+  "scripts/check-migration-manifest.mjs",
+);
+const fixtureRoots: string[] = [];
 
 const manifestDocument = `
 ## 1. Migration manifest (normative)
@@ -20,6 +34,12 @@ const manifestDocument = `
 
 ## 2. Spec slices
 `;
+
+afterEach(() => {
+  for (const root of fixtureRoots.splice(0)) {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 describe("check-migration-manifest", () => {
   test("accepts the current migration tree", () => {
@@ -109,6 +129,46 @@ describe("check-migration-manifest", () => {
     expect(result.violations).toHaveLength(1);
     expect(result.violations[0]).toContain(
       "could not parse the migration manifest",
+    );
+  });
+
+  test("rejects out-of-order manifest rows", () => {
+    const outOfOrderManifest = manifestDocument.replace(
+      "| 0112 | `wine_editions.sql` | editions | — | SPEC-01 |\n| 0113 | `image_licenses.sql` | licenses | — | SPEC-02 |",
+      "| 0113 | `image_licenses.sql` | licenses | — | SPEC-02 |\n| 0112 | `wine_editions.sql` | editions | — | SPEC-01 |",
+    );
+
+    const result = checkMigrationManifest({
+      migrationFiles: [],
+      manifestMarkdown: outOfOrderManifest,
+    });
+
+    expect(result.violations).toHaveLength(1);
+    expect(result.violations[0]).toContain("out of order");
+    expect(result.violations[0]).toContain("strictly increasing");
+  });
+
+  test("examines and rejects a non-lowercase migration extension", () => {
+    const root = mkdtempSync(join(tmpdir(), "terroir-manifest-"));
+    fixtureRoots.push(root);
+    const migrationsDir = join(root, "supabase", "migrations");
+    const plansDir = join(root, "docs", "plans");
+    mkdirSync(migrationsDir, { recursive: true });
+    mkdirSync(plansDir, { recursive: true });
+    writeFileSync(join(migrationsDir, "0112_wine_editions.SQL"), "select 1;\n");
+    writeFileSync(
+      join(plansDir, "2026-08-24-visual-wine-platform-spec-list.md"),
+      manifestDocument,
+    );
+
+    const result = spawnSync(process.execPath, [checkerPath], {
+      cwd: root,
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "migration filename must match NNNN_name.sql: 0112_wine_editions.SQL",
     );
   });
 });

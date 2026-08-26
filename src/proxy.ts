@@ -15,6 +15,6 @@ export const config = {
      * - favicon, manifest, robots, sitemap
      * - static files with extensions
      */
-    "/((?!api|monitoring|_next/static|_next/image|favicon.ico|manifest.webmanifest|manifest.json|robots.txt|sitemap.xml|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js|woff2?)$).*)",
+    "/((?!api|monitoring|_next/static|_next/image|favicon.ico|manifest\\.webmanifest$|manifest.json|robots.txt|sitemap.xml|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js|woff2?)$).*)",
   ],
 };

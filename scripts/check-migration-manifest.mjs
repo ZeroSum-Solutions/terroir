@@ -3,6 +3,7 @@
 // Guards the normative migration manifest in the visual-wine platform spec.
 // Only root-level forward migrations are checked; down migrations have their
 // own gate in check-down-migrations.mjs.
+// Git-history/"manifest-first" enforcement is deliberately out of scope.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -65,6 +66,7 @@ export function parseMigrationManifest(manifestMarkdown) {
   }
 
   const entries = new Map();
+  let previousNumber = null;
   for (let index = headerIndex + 2; index < sectionEnd; index += 1) {
     const cells = parseTableRow(lines[index]);
     if (!cells) break;
@@ -78,7 +80,13 @@ export function parseMigrationManifest(manifestMarkdown) {
     if (entries.has(number)) {
       throw new Error(`manifest row ${number} is duplicated`);
     }
+    if (previousNumber !== null && Number(number) <= Number(previousNumber)) {
+      throw new Error(
+        `manifest row ${number} is out of order after ${previousNumber}; rows must be strictly increasing`,
+      );
+    }
     entries.set(number, filenameMatch[1]);
+    previousNumber = number;
   }
 
   if (!entries.has("0112")) {
@@ -153,7 +161,7 @@ function main() {
   let manifestMarkdown;
   try {
     migrationFiles = readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".sql"))
+      .filter((entry) => entry.isFile() && /\.sql$/i.test(entry.name))
       .map((entry) => entry.name);
     manifestMarkdown = readFileSync(MANIFEST_PATH, "utf8");
   } catch (error) {

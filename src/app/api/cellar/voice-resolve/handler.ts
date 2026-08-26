@@ -17,6 +17,7 @@ import type {
 } from "@/lib/wine-intelligence/voice-resolve-types";
 
 const MAX_AUDIO_BYTES = 2 * 1024 * 1024;
+const MAX_MULTIPART_BYTES = 3 * 1024 * 1024;
 const MAX_INVENTORY_ROWS = 5_000;
 const ALLOWED_AUDIO_TYPES = new Set(["audio/webm", "audio/mp4"]);
 const AudioSchema = z.strictObject({ file: fileField });
@@ -42,10 +43,6 @@ type VoiceQuery = {
 type VoiceDb = { from(table: string): VoiceQuery };
 
 type InventoryRow = {
-  wine_id?: unknown;
-  wines?: unknown;
-};
-type WineRow = {
   id?: unknown;
   name?: unknown;
   producer?: unknown;
@@ -68,7 +65,7 @@ async function getAvailability({ requireMembership, getApiKey }: Dependencies) {
 
   const placementState = await readPlacementState(asVoiceDb(auth.supabase), auth.restaurantId);
   return NextResponse.json<VoiceAvailabilityResponse>({
-    available: placementState !== "unavailable",
+    available: placementState === "populated",
   });
 }
 
@@ -94,6 +91,11 @@ async function postVoiceResolve(request: NextRequest, dependencies: Dependencies
       { kind: "unavailable", reason: "voice_unavailable" },
       503,
     );
+  }
+
+  const contentLength = request.headers.get("content-length");
+  if (contentLength !== null && Number(contentLength) > MAX_MULTIPART_BYTES) {
+    return Errors.tooLarge("Voice recording must be under 2 MB.");
   }
 
   const parsed = await parseMultipart(request, AudioSchema, {
@@ -154,11 +156,13 @@ async function readPlacementState(
   db: VoiceDb,
   restaurantId: string,
 ): Promise<"populated" | "empty" | "unavailable"> {
+  // SPEC-20's placements gate switches to bottle_placements when SPEC-09/10
+  // land (spec-list §1, migrations 0117+).
   const { data, error } = await db
-    .from("bottle_placements")
+    .from("inventory_items")
     .select("id")
     .eq("restaurant_id", restaurantId)
-    .is("removed_at", null)
+    .gt("quantity", 0)
     .limit(1);
   if (error) return "unavailable";
   return Array.isArray(data) && data.length > 0 ? "populated" : "empty";
@@ -166,38 +170,30 @@ async function readPlacementState(
 
 async function loadInventory(db: VoiceDb, restaurantId: string) {
   const { data, error } = await db
-    .from("inventory_items")
-    .select("wine_id, wines!inner(id, name, producer, vintage)")
+    .from("wines")
+    .select("id, name, producer, vintage, inventory_items!inner(restaurant_id, quantity)")
     .eq("restaurant_id", restaurantId)
-    .gt("quantity", 0)
-    .not("wine_id", "is", null)
+    .eq("inventory_items.restaurant_id", restaurantId)
+    .gt("inventory_items.quantity", 0)
     .limit(MAX_INVENTORY_ROWS);
   if (error) return { ok: false as const, error };
 
   const items = new Map<string, VoiceWineItem>();
   for (const raw of Array.isArray(data) ? data : []) {
     const row = raw as InventoryRow;
-    const related = Array.isArray(row.wines) ? row.wines[0] : row.wines;
-    const wine = related as WineRow | null | undefined;
     if (
-      !wine ||
-      typeof wine.id !== "string" ||
-      typeof wine.name !== "string" ||
-      typeof wine.producer !== "string" ||
-      row.wine_id !== wine.id
+      typeof row.id !== "string" ||
+      typeof row.name !== "string" ||
+      typeof row.producer !== "string"
     ) {
       continue;
     }
-    const existing = items.get(wine.id);
-    if (existing) {
-      continue;
-    }
-    items.set(wine.id, {
-      itemId: wine.id,
-      name: [typeof wine.vintage === "number" ? wine.vintage : null, wine.name]
+    items.set(row.id, {
+      itemId: row.id,
+      name: [typeof row.vintage === "number" ? row.vintage : null, row.name]
         .filter((value) => value != null)
         .join(" "),
-      producer: wine.producer,
+      producer: row.producer,
       // SPEC-09/10 have not landed in this branch. Do not present the
       // read-legacy inventory_items.bin_location as placement truth.
       locations: [],

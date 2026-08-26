@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { parseAndValidateVwpEvalSpec } from "../../../scripts/run-vwp-evals.mjs";
+import {
+  classifyReferences,
+  parseAndValidateVwpEvalSpec,
+} from "../../../scripts/run-vwp-evals.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const yamlSource = readFileSync(
@@ -93,5 +96,50 @@ describe("VWP eval contract", () => {
     });
 
     expect(result.missingGlobalGateScripts).toEqual(["lint"]);
+  });
+
+  it("does not implement an eval from its bare slice tag", () => {
+    const rows = classifyReferences(
+      [{
+        id: "EV-VWP-20.3",
+        slice: "SPEC-20",
+        tag: "@vwp-20",
+        tokens: ["EV-VWP-20.3", "@vwp-20"],
+      }],
+      [
+        {
+          file: "src/example.test.ts",
+          fullName: "@vwp-20 resolver behavior",
+          status: "passed",
+        },
+        {
+          file: "src/example.test.ts",
+          fullName: "xEV-VWP-20.3 near miss",
+          status: "passed",
+        },
+      ],
+      [],
+    );
+
+    expect(rows[0].status).toBe("PENDING");
+  });
+
+  it("reports Playwright tests discovered but not executed as DECLARED", () => {
+    const rows = classifyReferences(
+      [{
+        id: "EV-VWP-20.3",
+        slice: "SPEC-20",
+        tag: "@vwp-20",
+        tokens: ["EV-VWP-20.3", "@vwp-20"],
+      }],
+      [],
+      [{
+        file: "e2e/voice.spec.ts",
+        fullName: "EV-VWP-20.3 disambiguates voice matches",
+        status: "active",
+      }],
+    );
+
+    expect(rows[0].status).toBe("DECLARED");
   });
 });

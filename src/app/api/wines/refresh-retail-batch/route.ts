@@ -108,11 +108,14 @@ export async function POST() {
   let skipped = 0;
   const updatePayload: Array<{
     id: string;
-    retail_min: number;
-    retail_max: number;
-    retail_median: number;
-    retail_retailer_count: number;
-    retail_refreshed_at: string;
+    refreshed: boolean;
+    values: {
+      retail_min?: number;
+      retail_max?: number;
+      retail_median?: number;
+      retail_retailer_count?: number;
+      retail_refreshed_at: string;
+    };
   }> = [];
 
   for (let i = 0; i < eligible.length; i += REFRESH_CONCURRENCY) {
@@ -126,21 +129,32 @@ export async function POST() {
         // The frozen schema cannot record price basis. Keep average-only
         // values out of retail_median so every persisted consumer sees a
         // true median.
-        if (!result || result.retailMedianBasis !== "median") return null;
+        if (!result) return null;
+        if (result.retailMedianBasis !== "median") {
+          return {
+            id: wine.id,
+            refreshed: false,
+            values: { retail_refreshed_at: result.refreshedAt.toISOString() },
+          };
+        }
         return {
           id: wine.id,
-          retail_min: result.retailMin,
-          retail_max: result.retailMax,
-          retail_median: result.retailMedian,
-          retail_retailer_count: result.retailerCount,
-          retail_refreshed_at: result.refreshedAt.toISOString(),
+          refreshed: true,
+          values: {
+            retail_min: result.retailMin,
+            retail_max: result.retailMax,
+            retail_median: result.retailMedian,
+            retail_retailer_count: result.retailerCount,
+            retail_refreshed_at: result.refreshedAt.toISOString(),
+          },
         };
       }),
     );
     for (const row of settled) {
       if (row) {
         updatePayload.push(row);
-        refreshed += 1;
+        if (row.refreshed) refreshed += 1;
+        else skipped += 1;
       } else {
         skipped += 1;
       }
@@ -153,13 +167,7 @@ export async function POST() {
   for (const row of updatePayload) {
     const { error: writeErr } = await supabase
       .from("wines")
-      .update({
-        retail_min: row.retail_min,
-        retail_max: row.retail_max,
-        retail_median: row.retail_median,
-        retail_retailer_count: row.retail_retailer_count,
-        retail_refreshed_at: row.retail_refreshed_at,
-      })
+      .update(row.values)
       .eq("id", row.id)
       .eq("restaurant_id", restaurantId);
     if (writeErr) {

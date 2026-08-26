@@ -60,7 +60,19 @@ describe("accent folding (spike-1 measured hard requirement)", () => {
     expect(similarity("cœur", "coeur")).toBe(1);
   });
 
-  it("EV-VWP-19.1 / EV-VWP-21.5: folds accented STT text before resolver scoring", () => {
+  it("EV-VWP-21.5: folds accented STT text across the documented threshold boundary", () => {
+    const boundary = {
+      query: "côte-rôtie",
+      catalog: "cote rotie",
+      measuredUnfoldedSimilarity: 0.294,
+      threshold: 0.3,
+    };
+
+    expect(boundary.measuredUnfoldedSimilarity).toBeLessThan(boundary.threshold);
+    expect(similarity(boundary.query, boundary.catalog)).toBeGreaterThan(
+      boundary.threshold,
+    );
+
     const result = resolveWineName("the Côte-Rôtie from Guigal", [
       { itemId: "A", displayName: "Cote Rotie", producer: "Guigal" },
     ]);

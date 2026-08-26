@@ -28,7 +28,9 @@ function escapeRegExp(value) {
 }
 
 function containsToken(value, token) {
-  return new RegExp(`${escapeRegExp(token)}(?![A-Z0-9.])`).test(value);
+  return new RegExp(
+    `(?:^|[^A-Za-z0-9.])${escapeRegExp(token)}(?![A-Za-z0-9.])`,
+  ).test(value);
 }
 
 function packageScriptForGate(command) {
@@ -250,7 +252,7 @@ function findReferenceCandidates(root, evals) {
   );
 
   return evals.map((entry) => {
-    const tokens = [entry.id, entry.tag].filter(Boolean);
+    const tokens = [entry.id];
 
     return {
       ...entry,
@@ -405,33 +407,31 @@ function runPlaywrightList(root, candidateRows) {
   }
 }
 
-function classifyReferences(candidateRows, vitestAssertions, playwrightAssertions) {
+export function classifyReferences(candidateRows, vitestAssertions, playwrightAssertions) {
   return candidateRows.map((entry) => {
     const activeAssertions = vitestAssertions.filter(
       (assertion) =>
-        entry.tokens.some((token) => containsToken(assertion.fullName, token)) &&
+        containsToken(assertion.fullName, entry.id) &&
         ["passed", "failed"].includes(assertion.status),
     );
     const skippedAssertions = vitestAssertions.filter(
       (assertion) =>
-        entry.tokens.some((token) => containsToken(assertion.fullName, token)) &&
+        containsToken(assertion.fullName, entry.id) &&
         !["passed", "failed"].includes(assertion.status),
     );
     const activeE2eAssertions = playwrightAssertions.filter(
       (assertion) =>
-        entry.tokens.some((token) => containsToken(assertion.fullName, token)) &&
+        containsToken(assertion.fullName, entry.id) &&
         assertion.status === "active",
     );
     const skippedE2eAssertions = playwrightAssertions.filter(
       (assertion) =>
-        entry.tokens.some((token) => containsToken(assertion.fullName, token)) &&
+        containsToken(assertion.fullName, entry.id) &&
         assertion.status === "skipped",
     );
-    const files = [
-      ...new Set([
-        ...activeAssertions.map((assertion) => assertion.file),
-        ...activeE2eAssertions.map((assertion) => assertion.file),
-      ]),
+    const files = [...new Set(activeAssertions.map((assertion) => assertion.file))];
+    const declaredFiles = [
+      ...new Set(activeE2eAssertions.map((assertion) => assertion.file)),
     ];
     const skippedFiles = [
       ...new Set([
@@ -445,8 +445,13 @@ function classifyReferences(candidateRows, vitestAssertions, playwrightAssertion
       slice: entry.slice,
       tag: entry.tag,
       files,
+      declaredFiles,
       skippedFiles,
-      status: files.length > 0 ? "IMPLEMENTED" : "PENDING",
+      status: files.length > 0
+        ? "IMPLEMENTED"
+        : declaredFiles.length > 0
+          ? "DECLARED"
+          : "PENDING",
     };
   });
 }
@@ -484,7 +489,7 @@ export function runVwpEvals(root = process.cwd()) {
   );
 
   rows.forEach((row) => {
-    if (row.files.length === 0 && row.skippedFiles.length > 0) {
+    if (row.status === "PENDING" && row.skippedFiles.length > 0) {
       violations.push(
         `${row.id} is referenced only by skipped tests: ${row.skippedFiles.join(", ")}`,
       );
@@ -504,9 +509,12 @@ export function runVwpEvals(root = process.cwd()) {
 
   printTable(rows);
   const implemented = rows.filter((row) => row.status === "IMPLEMENTED").length;
-  const pending = rows.length - implemented;
+  const declared = rows.filter((row) => row.status === "DECLARED").length;
+  const pending = rows.length - implemented - declared;
   console.log("");
-  console.log(`Summary: ${implemented} IMPLEMENTED · ${pending} PENDING · ${rows.length} TOTAL`);
+  console.log(
+    `Summary: ${implemented} IMPLEMENTED · ${declared} DECLARED · ${pending} PENDING · ${rows.length} TOTAL`,
+  );
   console.log(
     `Executable Vitest files: ${testRun.files.length} ${testRun.passed ? "PASS" : "FAIL"}`,
   );
