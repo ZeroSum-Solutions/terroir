@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback } from "react";
 import Link from "next/link";
-import { MoreVertical, MapPin, GripVertical, CheckSquare, Square, Layers, ChevronDown, X } from "lucide-react";
+import { MapPin, GripVertical, CheckSquare, Square, Layers, ChevronDown, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -858,7 +858,6 @@ function CellarRow({
       ? (row.open_remaining_ml / ML_PER_OZ).toFixed(1)
       : null;
   const isLowStock = lowStockThreshold != null && row.sealed_count > 0 && row.sealed_count < lowStockThreshold && !row.is_eightysixed;
-  const isPeakWindow = row.peak_year != null && row.peak_year === new Date().getFullYear() && !row.is_eightysixed;
 
   let chip: { label: string; tone: "neutral" | "ok" | "risk" | "muted" };
   if (row.is_eightysixed) {
@@ -927,7 +926,10 @@ function CellarRow({
             <div className="mt-xs flex flex-wrap items-center gap-sm text-[12px] font-light text-grey">
               <Chip tone={chip.tone}>{chip.label}</Chip>
               {isLowStock && <Chip tone="risk">Low stock</Chip>}
-              {isPeakWindow && <Chip tone="ok">Peak window</Chip>}
+              {/* The independent "Peak window" chip is gone: it re-encoded
+                  what the DrinkWindowIndicator already says, and the two
+                  were computed differently — a row could read "Peak window"
+                  and "Optimal" at once (Kimi audit 2026-08-26). */}
               {/* OPP-1 (EV-1.2) — same lineage + vintage + format twin detected */}
               {row.duplicate_wine_ids.length > 0 && (
                 <span data-duplicate-suspect>
@@ -953,14 +955,9 @@ function CellarRow({
               )}
             </div>
           </div>
-          {!selectMode && (
-            <span
-              aria-hidden
-              className="mt-2xs flex h-8 w-8 shrink-0 items-center justify-center rounded-pill text-grey"
-            >
-              <MoreVertical className="h-4 w-4" strokeWidth={2} />
-            </span>
-          )}
+          {/* The decorative ⋮ glyph is gone — it rendered as an inert
+              aria-hidden span with no handler, a dead affordance inviting
+              taps it could not answer (Kimi audit 2026-08-26). */}
         </div>
       </button>
     </div>
@@ -995,10 +992,11 @@ function DrinkWindowIndicator({
         aria-hidden
         className="relative inline-block h-[4px] w-[56px] rounded-full"
         style={{
-          // Dual-mode: sage wash (young) → amber wash → gold peak (mid-mix
-          // keeps the peak legible on both canvases) → sunken (past).
+          // Two-stop ramp (Kimi audit 2026-08-26): warm neutral → burgundy
+          // by day, candle gold → burgundy by night. One accent, no muddy
+          // interpolated midpoint.
           background:
-            "linear-gradient(90deg, var(--t-sage-wash) 0%, var(--t-amber-wash) 60%, color-mix(in oklab, var(--t-amber) 45%, var(--t-amber-wash)) 88%, var(--t-surface-sunken) 100%)",
+            "linear-gradient(90deg, var(--t-window-ramp-start) 0%, var(--t-primary) 100%)",
         }}
       >
         <span
@@ -1006,7 +1004,7 @@ function DrinkWindowIndicator({
           style={{
             top: "-2px",
             left: `${markerPct}%`,
-            background: "var(--color-primary)",
+            background: "var(--t-window-marker)",
           }}
         />
       </span>

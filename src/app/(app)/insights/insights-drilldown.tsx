@@ -98,7 +98,9 @@ export function OwnerMetricGrid({ metrics }: { metrics: OwnerMetrics }) {
     },
     {
       key: "bottles-in",
-      label: "Bottles in",
+      // "Bottles in" uppercased to "BOTTLES IN" and read as a truncated
+      // label (Kimi audit 2026-08-26).
+      label: "Bottles on hand",
       value: metrics.totalBottles.toLocaleString("en-US"),
     },
     {
@@ -133,7 +135,9 @@ export function OwnerMetricGrid({ metrics }: { metrics: OwnerMetrics }) {
                 aria-hidden
               />
             </span>
-            <span className="mt-xs block font-serif text-[30px] font-normal leading-none tabular text-ink">
+            {/* Courier is the ledger voice — metric values speak mono;
+                Bodoni is display-only (DESIGN.md type roles; Kimi audit). */}
+            <span className="mt-xs block font-mono text-[26px] font-medium leading-none tabular text-ink">
               {item.value}
             </span>
           </Link>

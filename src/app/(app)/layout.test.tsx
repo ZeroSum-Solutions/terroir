@@ -61,7 +61,7 @@ describe("AppLayout shell context", () => {
     expect(root.querySelector("header")?.parentElement?.className).toContain(
       "overflow-x-hidden",
     );
-    expect(root.querySelector("main")?.className).toContain("pb-[88px]");
+    expect(root.querySelector("main")?.className).toContain("pb-[152px]");
   });
 
   it("keeps onboarding and visible fallback context for a null restaurant", async () => {

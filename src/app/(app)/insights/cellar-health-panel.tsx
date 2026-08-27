@@ -26,9 +26,11 @@ const SEGMENT_BG: Record<CellarHealthSegment, string> = {
 
 export function CellarHealthPanel({
   summary,
+  unscored,
   canRecompute,
 }: {
   summary: CellarHealthSummaryItem[];
+  unscored?: { count: number; value: number };
   canRecompute: boolean;
 }) {
   return (
@@ -56,7 +58,7 @@ export function CellarHealthPanel({
               <div className="mt-xs grid grid-cols-2 gap-xs">
                 <div data-metric={`cellar-health-${item.segment}-value`}>
                   <Link href={href} className="block rounded-sm hover:bg-beige">
-                    <span className="block font-serif text-[18px] font-normal text-ink">
+                    <span className="block font-mono text-[16px] font-medium tabular text-ink">
                       {formatMoney(item.value)}
                     </span>
                     <span className="text-[10px] uppercase tracking-[0.06em] text-grey">
@@ -66,7 +68,7 @@ export function CellarHealthPanel({
                 </div>
                 <div data-metric={`cellar-health-${item.segment}-count`}>
                   <Link href={href} className="block rounded-sm hover:bg-beige">
-                    <span className="block font-serif text-[18px] font-normal text-ink">{item.count}</span>
+                    <span className="block font-mono text-[16px] font-medium tabular text-ink">{item.count}</span>
                     <span className="text-[10px] uppercase tracking-[0.06em] text-grey">
                       wines
                     </span>
@@ -77,6 +79,20 @@ export function CellarHealthPanel({
           );
         })}
       </div>
+      {/* Reconciliation line: segments only cover scored wines, so without
+          this a "$0 / 0 wines · Healthy" grid could sit beside a six-figure
+          snapshot and read as broken data (Kimi audit 2026-08-26). */}
+      {unscored && unscored.count > 0 && (
+        <p
+          data-metric="cellar-health-unscored"
+          className="mt-xs text-[12px] text-grey"
+        >
+          <span className="font-mono tabular">{unscored.count}</span> wine
+          {unscored.count === 1 ? "" : "s"} ·{" "}
+          <span className="font-mono tabular">{formatMoney(unscored.value)}</span>{" "}
+          not yet scored — recompute to include them.
+        </p>
+      )}
     </section>
   );
 }

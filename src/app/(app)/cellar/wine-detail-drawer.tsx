@@ -428,21 +428,30 @@ export function WineDetailDrawer({
           className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-lg bg-surface md:absolute md:inset-y-0 md:right-0 md:left-auto md:w-[420px] md:rounded-none md:border-l md:border-hairline"
           style={{ maxHeight: "calc(100dvh - 3.5rem)" }}
         >
+          {/* Grab handle — mobile sheet affordance */}
+          <div className="flex justify-center pt-xs md:hidden" aria-hidden>
+            <div className="h-[5px] w-9 rounded-pill bg-ink/25" />
+          </div>
+
           {/* Header */}
           <div className="flex items-center justify-between border-b border-hairline px-md py-sm">
-            <h2 id={headingId} className="font-serif text-[17px] font-medium text-ink leading-snug">
-              <span>{row.producer}</span> <span>{row.name}</span>
+            <div className="min-w-0">
+              <h2 id={headingId} className="font-serif text-[19px] font-medium text-ink leading-snug">
+                <span>{row.producer}</span> <span>{row.name}</span>
+              </h2>
               {row.vintage != null && (
-                <span className="ml-1 font-sans text-[13px] font-light text-grey"> {row.vintage}</span>
+                <p className="mt-2xs font-mono text-[11px] tracking-[0.12em] text-grey">
+                  {row.vintage}
+                </p>
               )}
-            </h2>
+            </div>
             <button
               type="button"
               onClick={closeDrawer}
               aria-label="Close"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-ink-soft hover:bg-bridge-surface"
             >
-              <X className="h-4 w-4" strokeWidth={2} aria-hidden />
+              <X className="h-5 w-5" strokeWidth={2} aria-hidden />
             </button>
           </div>
 
@@ -475,30 +484,6 @@ export function WineDetailDrawer({
                     </button>
                   )}
                 </div>
-              </section>
-            )}
-
-            {canManage && !row.hero_image_url && (
-              <section aria-label="Upload image" className="mb-md">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                  id="hero-image-upload"
-                />
-                <label
-                  htmlFor="hero-image-upload"
-                  className="flex h-[48px] w-full cursor-pointer items-center justify-center gap-xs rounded-lg border border-dashed border-beige-deep bg-surface text-[13px] font-medium text-grey hover:bg-bridge-surface transition-colors"
-                >
-                  {uploading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
-                  ) : (
-                    <Upload className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  )}
-                  {uploading ? "Uploading..." : "Upload hero image"}
-                </label>
               </section>
             )}
 
@@ -535,10 +520,17 @@ export function WineDetailDrawer({
                   {placement.code} · {placement.quantity}
                 </p>
               ))}
+              {/* Placed vs. unplaced are different facts — never merged into
+                  one line ("Unplaced 8 · marked Row F14" read as a
+                  contradiction — Kimi UX audit). */}
+              {row.unplaced_count > 0 && row.bin_location && (
+                <p className="mt-2xs text-center font-mono text-[13px] text-ink-soft">
+                  Marked {row.bin_location}
+                </p>
+              )}
               {row.unplaced_count > 0 && (
                 <p className="mt-2xs text-center font-mono text-[12px] text-grey">
-                  Unplaced {row.unplaced_count}
-                  {row.bin_location && <> · marked {row.bin_location}</>}
+                  {row.unplaced_count} unplaced
                   {row.suggested_bin && (
                     <> · Suggested {row.suggested_bin.zone ? `${row.suggested_bin.zone} › ` : ""}
                       {row.suggested_bin.code}</>
@@ -546,33 +538,6 @@ export function WineDetailDrawer({
                 </p>
               )}
             </section>
-
-            {/* Tasting notes */}
-            {row.tasting_notes && (
-              <section
-                aria-label="Tasting notes"
-                className="mt-md rounded-lg card-surface p-md"
-              >
-                <h3 className="text-caption font-medium uppercase text-grey mb-sm">Tasting notes</h3>
-                <p className="text-[13px] text-ink-soft leading-relaxed whitespace-pre-wrap">
-                  {row.tasting_notes}
-                </p>
-              </section>
-            )}
-
-            {row.retail_median != null && (
-              <PricingSection row={row} canManage={canManage} />
-            )}
-
-            {row.drink_window_end != null && (
-              <DrinkWindowSection row={row} />
-            )}
-            {row.serving_temp_label && row.serving_temp_min != null && row.serving_temp_max != null && (
-              <ServingTempSection row={row} />
-            )}
-            {row.decant_minutes != null && row.decant_minutes > 0 && (
-              <DecantTimeSection row={row} />
-            )}
 
             {errorMsg && pendingDirection === null && (
               <div
@@ -827,6 +792,61 @@ export function WineDetailDrawer({
               )}
 
             </section>
+
+            {/* Reference sections — below the action zone so the drawer
+                leads with "what can I do" mid-service (Kimi UX audit). */}
+            {row.tasting_notes && (
+              <section
+                aria-label="Tasting notes"
+                className="mt-md rounded-lg card-surface p-md"
+              >
+                <h3 className="text-caption font-medium uppercase text-grey mb-sm">Tasting notes</h3>
+                <p className="text-[13px] text-ink-soft leading-relaxed whitespace-pre-wrap">
+                  {row.tasting_notes}
+                </p>
+              </section>
+            )}
+
+            {row.retail_median != null && (
+              <PricingSection row={row} canManage={canManage} />
+            )}
+
+            {row.drink_window_end != null && (
+              <DrinkWindowSection row={row} />
+            )}
+            {row.serving_temp_label && row.serving_temp_min != null && row.serving_temp_max != null && (
+              <ServingTempSection row={row} />
+            )}
+            {row.decant_minutes != null && row.decant_minutes > 0 && (
+              <DecantTimeSection row={row} />
+            )}
+
+            {/* Add a hero image — quiet hairline row at the drawer's foot;
+                a merchandising task, not a service task, so it no longer
+                owns the top slot or wears the dashed SaaS empty-state. */}
+            {canManage && !row.hero_image_url && (
+              <section aria-label="Upload image" className="mt-md">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                  id="hero-image-upload"
+                />
+                <label
+                  htmlFor="hero-image-upload"
+                  className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-xs rounded-lg border border-hairline bg-surface text-[12px] font-medium uppercase tracking-[0.1em] text-grey hover:bg-bridge-surface hover:text-ink transition-colors"
+                >
+                  {uploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
+                  ) : (
+                    <Upload className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  )}
+                  {uploading ? "Uploading..." : "Add hero image"}
+                </label>
+              </section>
+            )}
           </div>
         </div>
       )}
@@ -940,6 +960,21 @@ function PricingSection({
   );
   const glassStatus = getGlassStatus(pourCostPct, targetPourCost);
   const bottleStatus = getBottleStatus(markupRatio, targetMarkup);
+
+  // No list prices → no card. A full-weight card holding only a staleness
+  // disclaimer spent prime hierarchy on dead content (Kimi audit).
+  const hasAnyPrice =
+    (row.current_glass_price != null && row.glass_pour_ml != null) ||
+    row.current_bottle_price != null;
+  if (!hasAnyPrice) {
+    return (
+      <p aria-label="Pricing" className="mt-md text-[12px] text-grey">
+        Retail reference on file · no list prices set
+        {isRetailStale(row.retail_refreshed_at ?? undefined) &&
+          " · retail data over 30 days old"}
+      </p>
+    );
+  }
 
   return (
     <section
@@ -1109,15 +1144,9 @@ function DrinkWindowSection({ row }: { row: CellarWineRow }) {
     >
       <h3 className="text-caption font-medium uppercase text-grey mb-sm">Drink window</h3>
 
-      {/* BND-071 — start / peak / end year labels above the timeline. */}
-      <div className="mb-xs flex items-center justify-between text-[11px] font-mono text-grey">
-        <span>Start {row.drink_window_start}</span>
-        {row.peak_year != null && (
-          <span className="text-accent font-medium">Peak {row.peak_year}</span>
-        )}
-        <span>End {row.drink_window_end}</span>
-      </div>
-
+      {/* One axis only: the timeline renders start / peak / end itself, with
+          the peak label at its true position — a second flex-spaced row here
+          put "Peak 2017" over a conflicting midpoint tick (Kimi audit). */}
       <DrinkWindowTimeline
         start={row.drink_window_start as number}
         end={row.drink_window_end as number}

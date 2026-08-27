@@ -26,13 +26,7 @@ import { metricHref } from "./metric-href";
  *   • No "$X opportunity" framing — fine dining is calm
  */
 
-export function PricingReviewCard({
-  alerts,
-  firstName,
-}: {
-  alerts: PricingAlertRow[];
-  firstName: string;
-}) {
+export function PricingReviewCard({ alerts }: { alerts: PricingAlertRow[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -77,9 +71,10 @@ export function PricingReviewCard({
         "border-l-[3px] border-l-primary",
       )}
     >
+      {/* Fact first — the "Hey {firstName}" salutation leaked email
+          local-parts like "Owner+local" (Kimi audit 2026-08-26). */}
       <h3 className="font-serif text-[18px] text-ink md:text-[20px]">
-        {firstName !== "there" ? `Hey ${firstName} — ` : ""}
-        {alerts.length} wine{alerts.length === 1 ? "" : "s"} off your pricing targets
+        <span className="tabular">{alerts.length}</span> wine{alerts.length === 1 ? "" : "s"} off your pricing targets
       </h3>
       <p className="mt-xs text-[12px] text-grey">
         Worth a review when ready

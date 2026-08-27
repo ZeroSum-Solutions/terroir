@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Moon, Sun, SunMoon } from "lucide-react";
 
 const STORAGE_KEY = "terroir-theme";
 
@@ -51,14 +50,17 @@ function syncBrowserChrome(choice: ThemeChoice) {
   }
 }
 
+// Visible text labels, not icon guessing — the three unlabeled 28px icon
+// buttons were undiscoverable (Kimi audit 2026-08-26). "Cellar" is the dark
+// room's contract name; aria-labels stay descriptive for screen readers.
 const OPTIONS: Array<{
   value: ThemeChoice;
   label: string;
-  Icon: typeof Sun;
+  short: string;
 }> = [
-  { value: "light", label: "Light theme", Icon: Sun },
-  { value: "dark", label: "Dark theme", Icon: Moon },
-  { value: "system", label: "Match device theme", Icon: SunMoon },
+  { value: "light", label: "Light theme", short: "Light" },
+  { value: "dark", label: "Dark theme", short: "Cellar" },
+  { value: "system", label: "Match device theme", short: "Auto" },
 ];
 
 export function ThemeToggle() {
@@ -70,31 +72,31 @@ export function ThemeToggle() {
   useEffect(() => setChoice(readStoredChoice()), []);
 
   return (
-    <div
-      role="group"
-      aria-label="Theme"
-      className="flex items-center gap-2xs px-md py-sm"
-    >
-      <span className="mr-auto text-[14px] text-ink">Theme</span>
-      {OPTIONS.map(({ value, label, Icon }) => (
-        <button
-          key={value}
-          type="button"
-          aria-label={label}
-          aria-pressed={choice === value}
-          onClick={() => {
-            setChoice(value);
-            applyChoice(value);
-          }}
-          className={`flex h-8 w-8 items-center justify-center rounded-pill transition-colors focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-            choice === value
-              ? "bg-surface-inverse text-on-inverse"
-              : "text-grey hover:bg-bridge-surface hover:text-ink"
-          }`}
-        >
-          <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-        </button>
-      ))}
+    <div role="group" aria-label="Theme" className="px-md py-sm">
+      <span className="block text-[11px] font-medium uppercase tracking-[0.1em] text-grey">
+        Theme
+      </span>
+      <div className="mt-xs flex items-stretch overflow-hidden rounded-pill border border-hairline">
+        {OPTIONS.map(({ value, label, short }) => (
+          <button
+            key={value}
+            type="button"
+            aria-label={label}
+            aria-pressed={choice === value}
+            onClick={() => {
+              setChoice(value);
+              applyChoice(value);
+            }}
+            className={`min-h-10 flex-1 px-2xs text-[12px] font-medium transition-colors focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${
+              choice === value
+                ? "bg-surface-inverse text-on-inverse"
+                : "text-grey hover:bg-bridge-surface hover:text-ink"
+            }`}
+          >
+            {short}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

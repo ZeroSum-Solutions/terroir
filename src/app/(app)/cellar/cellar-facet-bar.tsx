@@ -313,7 +313,10 @@ function FacetSelect({
         onChange={(event) => onChange(event.target.value || null)}
         className={selectClassName}
       >
-        <option value="">All {label.toLocaleLowerCase()}</option>
+        {/* The unfiltered option shows just the category word — "All
+            producer" clipped to "All produc…" inside the mobile width cap
+            (Kimi audit 2026-08-26). */}
+        <option value="">{label}</option>
         {renderedOptions.map((option) => (
           <option
             key={option.value}
@@ -332,4 +335,4 @@ function FacetSelect({
 // one row down to 320px (each select would otherwise size toward its widest
 // option's text); md: restores the roomier desktop width.
 const selectClassName =
-  "h-11 max-w-[88px] md:max-w-[180px] rounded-pill border border-ink/20 bg-surface px-sm text-[12px] text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "h-11 max-w-[104px] md:max-w-[180px] rounded-pill border border-ink/20 bg-surface px-sm text-[12px] text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";

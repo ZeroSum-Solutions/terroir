@@ -31,7 +31,7 @@ colors:
   dark-ink: "#ede3ce"
   dark-ink-soft: "#d8c9b0"
   dark-grey: "#aea68f"
-  dark-hairline: "#29271e"
+  dark-hairline: "rgba(237, 227, 206, 0.10)"
   dark-primary: "#8a3a44"
   dark-primary-hover: "#a04751"
   dark-gold: "#c7a165"
@@ -258,7 +258,7 @@ family). Pill geometry, radii, and the spacing scale carry over unchanged.
 | Vault Floor | `#060504` | `--color-surface-sunken` | Wells, table headers |
 | Champagne | `#ede3ce` / `#d8c9b0` | `--color-ink(-soft)` | Text — champagne cream, never pure white |
 | Smoke Gold | `#aea68f` | `--color-grey` | Muted text — gold-grey, no brown cast |
-| Dark Hairline | `#29271e` | `--color-hairline` | Structural lines |
+| Dark Hairline | `rgba(237,227,206,0.10)` (strong `0.16`) | `--color-hairline(-strong)` | Structural lines — champagne alpha, not opaque near-black: the old `#29271e` vanished on lacquer (~1.1:1) and cards fused into one field. Raised surfaces also carry a 1px inset champagne top light (`--t-card-highlight`, 5% alpha) to sell the lacquer sheen |
 | Burgundy Fill | `#8a3a44` → `#a04751` | `--color-primary(-hover)` | Buttons/CTAs — brightened for dark contrast, champagne text on top |
 | Candle Gold | `#c7a165` | `--color-gold` | The dark room's accent: active nav, ratings, premium markers — gold is the constant of the cellar (Chéri) |
 | Badge families | re-tinted washes | `--color-*-wash/-ink` | Same semantic roles, dark-tuned values (see globals.css) |
@@ -395,7 +395,14 @@ data.
   hairline + soft shadow. All three, always.
 - Set exactly one italic burgundy accent word in display headlines.
 - Use Courier Prime for every vintage, ABV, bin code, and quantity — the
-  ledger voice is a system signature, not a garnish.
+  ledger voice is a system signature, not a garnish. This includes stat-tile
+  and counter numerals ($ totals, bottle counts): data speaks mono, Bodoni
+  is display-only (Kimi audit 2026-08-26).
+- Drink-window meters use the two-stop ramp only: `--t-window-ramp-start`
+  (warm neutral `#d9d2c4` by day, candle gold by night) → `--t-primary`,
+  with the today marker in `--t-window-marker` (burgundy day / gold night —
+  burgundy on lacquer fails contrast). No sage/powder/blush stops, no third
+  hue, no interpolated olive midpoint.
 - Keep neutrals warm in both modes: cream by day, gold-black lacquer by
   night, never cold grey, never `#000` or `#fff` as text or ground.
 - Respect `prefers-reduced-motion`; theme switching must not flash.

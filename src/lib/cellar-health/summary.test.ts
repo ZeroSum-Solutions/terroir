@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeCellarHealth } from "./summary";
+import { summarizeCellarHealth, summarizeUnscoredStock } from "./summary";
 
 describe("summarizeCellarHealth", () => {
   it("computes stocked-wine count and value for every segment", () => {
@@ -26,5 +26,34 @@ describe("summarizeCellarHealth", () => {
       { segment: "cash_trap", count: 0, value: 0 },
       { segment: "healthy", count: 1, value: 0 },
     ]);
+  });
+});
+
+describe("summarizeUnscoredStock", () => {
+  it("counts stocked wines that have no valid cellar_health segment", () => {
+    const unscored = summarizeUnscoredStock(
+      [
+        { wine_id: "scored", segment: "healthy" },
+        { wine_id: "bad-segment", segment: "not-a-segment" },
+      ],
+      [
+        { wine_id: "scored", quantity: 2, unit_cost: 50 },
+        { wine_id: "bad-segment", quantity: 1, unit_cost: 80 },
+        { wine_id: "never-scored", quantity: 3, unit_cost: 40 },
+        { wine_id: "no-stock", quantity: 0, unit_cost: 900 },
+      ],
+    );
+
+    // bad-segment ($80) + never-scored ($120); scored and zero-stock excluded.
+    expect(unscored).toEqual({ count: 2, value: 200 });
+  });
+
+  it("returns zeros when every stocked wine is scored", () => {
+    expect(
+      summarizeUnscoredStock(
+        [{ wine_id: "a", segment: "healthy" }],
+        [{ wine_id: "a", quantity: 1, unit_cost: 10 }],
+      ),
+    ).toEqual({ count: 0, value: 0 });
   });
 });

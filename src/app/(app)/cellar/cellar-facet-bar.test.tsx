@@ -104,7 +104,7 @@ describe("CellarFacetBar", () => {
     // Each compact-row select is capped narrow enough on mobile that
     // Producer + Region + the Filters button fit one row at 320px.
     const producerSelect = labelledSelect(container, "Producer")!;
-    expect(producerSelect.className).toContain("max-w-[88px]");
+    expect(producerSelect.className).toContain("max-w-[104px]");
   });
 
   it("hides a compact-row control once it has only one selectable option", async () => {

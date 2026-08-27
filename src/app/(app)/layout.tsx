@@ -47,8 +47,11 @@ export default async function AppLayout({
         </div>
       </header>
 
-      {/* Content — bottom padding on mobile to clear the tab bar */}
-      <main className="mx-auto w-full max-w-[1440px] flex-1 px-md py-lg pb-[88px] md:px-lg md:py-xl md:pb-xl">
+      {/* Content — mobile bottom padding clears the tab bar AND the FAB,
+          whose top edge sits ~136px above the viewport bottom (80px offset
+          + 56px button). 88px let it cover the last ~48px of every list
+          (Kimi audit 2026-08-26). */}
+      <main className="mx-auto w-full max-w-[1440px] flex-1 px-md py-lg pb-[152px] md:px-lg md:py-xl md:pb-xl">
         {children}
       </main>
 

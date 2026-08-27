@@ -64,7 +64,6 @@ describe("SettingsDropdown touch targets", () => {
     expect(actions.map((action) => action.textContent?.trim())).toEqual([
       "Pricing",
       "Bins",
-      "Reconcile",
       "Team",
       "Import",
       "Sign out",
