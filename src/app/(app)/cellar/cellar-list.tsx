@@ -485,6 +485,7 @@ export function CellarList({
               group={group}
               lowStockThreshold={lowStockThreshold}
               onSelectWine={onSelectWine}
+              sortActive={sort != null}
             />
           ))}
         </div>
@@ -502,6 +503,7 @@ export function CellarList({
                 selectMode={selectMode}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
+                sortActive={sort != null}
               />
             ))}
           </div>
@@ -525,6 +527,7 @@ export function CellarList({
           </div>
           <LineageBlockList
             wines={visibleRows}
+            preserveOrder={sort != null}
             renderRow={(row) => (
               <CellarRow
                 row={row}
@@ -559,10 +562,12 @@ function TaxonomyGroup({
   group,
   lowStockThreshold,
   onSelectWine,
+  sortActive,
 }: {
   group: CellarFacetGroup<CellarWineRow>;
   lowStockThreshold?: number;
   onSelectWine: (row: CellarWineRow) => void;
+  sortActive?: boolean;
 }) {
   return (
     <section
@@ -585,6 +590,7 @@ function TaxonomyGroup({
       <div className="divide-y divide-hairline">
         <LineageBlockList
           wines={group.wines}
+          preserveOrder={sortActive}
           renderRow={(row) => (
             <CellarRow
               row={row}
@@ -618,7 +624,10 @@ type LineageBlock =
       rows: CellarWineRow[];
     };
 
-function buildLineageBlocks(wines: CellarWineRow[]): LineageBlock[] {
+function buildLineageBlocks(
+  wines: CellarWineRow[],
+  preserveOrder: boolean,
+): LineageBlock[] {
   const counts = new Map<string, number>();
   for (const w of wines) {
     if (w.lineage_id) counts.set(w.lineage_id, (counts.get(w.lineage_id) ?? 0) + 1);
@@ -633,9 +642,14 @@ function buildLineageBlocks(wines: CellarWineRow[]): LineageBlock[] {
     }
     if (emitted.has(lid)) continue;
     emitted.add(lid);
-    const members = wines
-      .filter((x) => x.lineage_id === lid)
-      .sort((a, b) => (b.vintage ?? -1) - (a.vintage ?? -1));
+    // With an explicit sort active, siblings keep the incoming (already
+    // sorted) order — re-sorting newest-first here silently contradicted
+    // the chosen sort inside expanded blocks (Sol audit, 2026-08-27).
+    // Newest-first stays the default when no sort is chosen.
+    const filtered = wines.filter((x) => x.lineage_id === lid);
+    const members = preserveOrder
+      ? filtered
+      : filtered.sort((a, b) => (b.vintage ?? -1) - (a.vintage ?? -1));
     const vints = members
       .map((m) => m.vintage)
       .filter((v): v is number => v != null);
@@ -655,11 +669,18 @@ function buildLineageBlocks(wines: CellarWineRow[]): LineageBlock[] {
 function LineageBlockList({
   wines,
   renderRow,
+  preserveOrder = false,
 }: {
   wines: CellarWineRow[];
   renderRow: (row: CellarWineRow) => React.ReactNode;
+  // True when a URL sort is active: lineage siblings then keep the
+  // sorted order instead of the newest-first default.
+  preserveOrder?: boolean;
 }) {
-  const blocks = useMemo(() => buildLineageBlocks(wines), [wines]);
+  const blocks = useMemo(
+    () => buildLineageBlocks(wines, preserveOrder),
+    [wines, preserveOrder],
+  );
   const [collapsed, setCollapsed] = useState<Set<string>>(
     () =>
       new Set(
@@ -747,6 +768,7 @@ function SectionGroup({
   selectMode,
   selectedIds,
   onToggleSelect,
+  sortActive,
 }: {
   sectionKey: string;
   sectionName: string;
@@ -756,6 +778,7 @@ function SectionGroup({
   selectMode: boolean;
   selectedIds: Set<string>;
   onToggleSelect: (wineId: string) => void;
+  sortActive?: boolean;
 }) {
   const dropId = `section-${sectionKey}`;
 
@@ -779,6 +802,7 @@ function SectionGroup({
         <div className="divide-y divide-hairline">
           <LineageBlockList
             wines={wines}
+            preserveOrder={sortActive}
             renderRow={(row) => (
               <DraggableWineRow
                 row={row}

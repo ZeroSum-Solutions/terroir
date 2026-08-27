@@ -591,13 +591,15 @@ function SortSelect({
   compact?: boolean;
 }) {
   return (
-    <label className="relative inline-flex shrink-0 items-center">
+    <label className="relative inline-flex min-w-0 shrink items-center">
       <span className="sr-only">Sort wines</span>
       <select
         value={value ?? ""}
         onChange={(e) => onChange((e.target.value || null) as CellarSort | null)}
         className={cn(
-          "appearance-none rounded-pill border border-ink/20 bg-surface/70 pl-sm pr-[28px] text-[12px] font-medium text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25",
+          // max-w keeps a long selected label from pushing the control
+          // off a 320px masthead (Sol audit, 2026-08-27).
+          "max-w-[44vw] appearance-none truncate rounded-pill border border-ink/20 bg-surface/70 pl-sm pr-[28px] text-[12px] font-medium text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 md:max-w-none",
           compact ? "h-9" : "h-11",
         )}
       >
