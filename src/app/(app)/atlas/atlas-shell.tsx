@@ -130,6 +130,11 @@ function AtlasCountryList({
                 type="button"
                 onClick={() => onSelect(country.key)}
                 aria-pressed={selected}
+                aria-label={`${country.label}, ${
+                  country.bottles > 0
+                    ? `${country.bottles} ${country.bottles === 1 ? "bottle" : "bottles"}`
+                    : "open bottle only"
+                }`}
                 className={cn(
                   "inline-flex min-h-11 items-center gap-xs whitespace-nowrap rounded-pill border px-md transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
                   selected

@@ -295,24 +295,25 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
       // into this new session would split one file across two incomplete
       // sessions; stop and hand the original session back to the caller.
       if (body.alreadyExists && body.sessionId !== activeSessionId) {
+        // Either conflict path stops the upload — reflect that on the
+        // chunk itself so it never sits frozen at "uploading".
+        const conflictError =
+          !body.sessionId
+            ? `Chunk ${chunk.index} was already imported as a standalone batch. Revert that batch under ` +
+              "Recent imports before re-uploading this file."
+            : "This file was already partially uploaded as a different, unfinished import — resuming that import " +
+              "instead of starting a second one.";
+        results = results.map((c) =>
+          c.index === chunk.index ? { ...c, status: "failed", error: conflictError } : c,
+        );
+        onProgress(results);
         // sessionId null = the identical bytes were confirmed earlier as a
         // STANDALONE (sessionless) batch. There is no session to resume and
         // adopting the batch here would strand it outside this session.
         if (!body.sessionId) {
-          return {
-            ok: false,
-            error:
-              `Chunk ${chunk.index} was already imported as a standalone batch. Revert that batch under ` +
-              "Recent imports before re-uploading this file.",
-          };
+          return { ok: false, error: conflictError };
         }
-        return {
-          ok: false,
-          error:
-            "This file was already partially uploaded as a different, unfinished import — resuming that import " +
-            "instead of starting a second one.",
-          conflictingSessionId: body.sessionId as string,
-        };
+        return { ok: false, error: conflictError, conflictingSessionId: body.sessionId as string };
       }
 
       // 201 (new) or 200 (alreadyExists: identical bytes already confirmed

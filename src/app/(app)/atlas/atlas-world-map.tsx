@@ -59,9 +59,9 @@ export function AtlasWorldMap({
         }
 
         const selected = key === selectedKey;
-        // maxBottles can be 0 when every present wine is open-bottle-only;
-        // the MIN_INTENSITY floor keeps such countries visibly present.
-        const intensity = Math.max(MIN_INTENSITY, maxBottles > 0 ? country.bottles / maxBottles : 0);
+        // maxBottles is clamped to >= 1 above, so an open-bottle-only
+        // country (bottles 0) lands on the MIN_INTENSITY floor.
+        const intensity = Math.max(MIN_INTENSITY, country.bottles / maxBottles);
         const fillPct = Math.round(intensity * 100);
         const bottleLabel =
           country.bottles > 0
