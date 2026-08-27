@@ -10,7 +10,10 @@
 # Dedup: one open issue labeled `ci-main-failure` collects repeats; a new
 # failure comments on it instead of spamming new issues. Close the issue
 # when main is green again (or let anyone close it — the next failure
-# reopens the loop by creating a fresh one).
+# reopens the loop by creating a fresh one). The `concurrency` group
+# serializes alert runs so two near-simultaneous failures can't both
+# observe "no open issue" and create duplicates (Sol audit 2026-08-27
+# finding 3).
 #
 # NOTE (workflow_run semantics): this file only triggers once it exists on
 # the default branch.
@@ -25,11 +28,20 @@ on:
 permissions:
   issues: write
 
+concurrency:
+  group: ci-main-alert
+
 jobs:
   alert:
+    # event == 'push' is load-bearing: CI also runs for pull_request, and
+    # workflow_run.head_branch is the PR's HEAD branch name there — a fork
+    # PR from a branch named "main" would otherwise satisfy this condition
+    # (Sol audit 2026-08-27 finding 2). timed_out / startup_failure are
+    # red outcomes too, not just 'failure' (finding 4).
     if: >-
-      github.event.workflow_run.conclusion == 'failure' &&
-      github.event.workflow_run.head_branch == 'main'
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      contains(fromJSON('["failure","timed_out","startup_failure"]'), github.event.workflow_run.conclusion)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -43,12 +55,29 @@ jobs:
             const run = context.payload.workflow_run;
             const sha = run.head_sha.slice(0, 7);
             const line = [
-              `CI failed on \`main\` at ${sha}`,
+              `CI concluded \`${run.conclusion}\` on \`main\` at ${sha}`,
               `run: ${run.html_url}`,
               `completed: ${run.updated_at}`,
             ].join("\n");
 
             const label = "ci-main-failure";
+
+            // Ensure the label exists before referencing it — issue
+            // creation with an unknown label is not guaranteed to
+            // auto-create it (Sol audit 2026-08-27 finding 1). A 422
+            // "already_exists" is the normal steady-state path.
+            try {
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label,
+                color: "b60205",
+                description: "CI is red on the main branch",
+              });
+            } catch (e) {
+              if (e.status !== 422) throw e;
+            }
+
             const { data: open } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -70,7 +99,7 @@ jobs:
                 repo: context.repo.repo,
                 title: `CI is red on main (${sha})`,
                 body:
-                  `@wiggdevin — the \`CI\` workflow failed on \`main\`.\n\n${line}\n\n` +
+                  `@wiggdevin — the \`CI\` workflow concluded \`${run.conclusion}\` on \`main\`.\n\n${line}\n\n` +
                   `Close this issue once main is green again; the next failure opens a fresh one.`,
                 labels: [label],
               });
