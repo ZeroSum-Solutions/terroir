@@ -89,9 +89,13 @@ export const CANONICAL_HEADERS = [
 
 export type CanonicalHeader = (typeof CANONICAL_HEADERS)[number];
 
-/** A small set of forgiving synonyms for the two most commonly
- * mislabeled columns. Deliberately not a full column-mapping UI —
- * operators are pointed at the downloadable template instead. */
+/** Forgiving synonyms for commonly mislabeled columns — grown from the
+ * template's own names to the labels real spreadsheet exports actually
+ * use (first real partner export, 2026-08-27: "Wine Name" / "Volume" /
+ * "Cost Price"). Still deliberately not a full column-mapping UI.
+ * "total cost price" / "total cost" are NEVER mapped: they're derived
+ * (unit x quantity) columns, and importing one as unit_cost would
+ * multiply every cost by its quantity. */
 export const HEADER_SYNONYMS: Record<string, CanonicalHeader> = {
   producer: "producer",
   winery: "producer",
@@ -103,11 +107,18 @@ export const HEADER_SYNONYMS: Record<string, CanonicalHeader> = {
   year: "vintage",
   varietal: "varietal",
   variety: "varietal",
+  grape: "varietal",
+  grapes: "varietal",
+  "grape variety": "varietal",
   region: "region",
+  appellation: "region",
   country: "country",
   size_ml: "size_ml",
   "size (ml)": "size_ml",
   ml: "size_ml",
+  volume: "size_ml",
+  size: "size_ml",
+  "bottle size": "size_ml",
   format: "format",
   currency: "currency",
   quantity: "quantity",
@@ -117,17 +128,33 @@ export const HEADER_SYNONYMS: Record<string, CanonicalHeader> = {
   cost: "unit_cost",
   price: "unit_cost",
   "unit cost": "unit_cost",
+  "cost price": "unit_cost",
+  "unit price": "unit_cost",
+  "price per bottle": "unit_cost",
   bin: "bin",
   location: "bin",
   section: "section",
 };
 
-/** Columns a row cannot be validated without. */
+/** Columns a row cannot be validated without. Producer is NOT required
+ * (2026-08-27): real-world exports routinely carry one "Wine Name"
+ * column with the producer embedded in it. Such rows persist
+ * producer = "" (empty string, never null — wines.producer is NOT NULL,
+ * 0002, and apply inserts raw->>'producer' verbatim, 0108). */
 export const REQUIRED_HEADERS: readonly CanonicalHeader[] = [
-  "producer",
   "name",
   "quantity",
 ];
+
+/** Unambiguous currency symbols a cost cell may carry ("€45.00"). Used
+ * to infer the row currency ONLY when no explicit currency column value
+ * is present. "$" is deliberately absent — USD/CAD/AUD all use it, so a
+ * $-priced row keeps a null currency (the platform default). */
+export const CURRENCY_SYMBOL_TO_CODE: Record<string, string> = {
+  "€": "EUR",
+  "£": "GBP",
+  "¥": "JPY",
+};
 
 // ── C18 (db audit 2026-08-23) ───────────────────────────────────────────
 // Number.parseInt/parseFloat accept a numeric PREFIX and silently ignore
@@ -144,6 +171,13 @@ export const FLOAT_LITERAL = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
  * DB CHECK constraints added in 0111 exactly. */
 export const MAX_QUANTITY = 100_000;
 export const MAX_UNIT_COST = 1_000_000;
+
+/** Upper bound for a bottle size in ml (Sol audit 2026-08-27, finding 3).
+ * 100L sits far above the largest real formats (a 30L Midas) yet far
+ * below both Number.MAX_SAFE_INTEGER precision loss and the int4 range
+ * of wines.size_ml — without it, oversized digit strings were silently
+ * rounded by parseInt or failed only later at apply's ::int cast. */
+export const MAX_BOTTLE_SIZE_ML = 100_000;
 
 /** C18: currency accepted arbitrary free text. A small closed set of
  * ISO-4217 codes actually relevant to a wine cellar — not a full ISO-4217

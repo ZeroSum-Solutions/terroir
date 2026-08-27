@@ -706,7 +706,7 @@ function BatchStep({
             {pending.map((row) => (
               <li key={row.id} className="rounded-lg card-surface p-sm">
                 <p className="text-[14px] text-ink">
-                  Row {row.row_number}: {row.raw.producer} — {row.raw.name}
+                  Row {row.row_number}: {row.raw.producer ? `${row.raw.producer} — ` : ""}{row.raw.name}
                 </p>
                 <p className="mt-2xs text-caption text-grey">
                   {row.lwin_status === "unmatched" ? "No LWIN catalog match. " : ""}

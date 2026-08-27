@@ -238,51 +238,59 @@ test.describe("BND-038 pour → reconcile", () => {
   test("configure → pour → reconcile cycle", async ({ page }) => {
     await login(page);
     const wine = await ensureCascadeSafeWine(page);
-    const cardLabel = new RegExp(wine.producer.slice(0, 10), "i");
+    // Every demo wine shares one producer, so the wine NAME is the only
+    // reliable discriminator. Escape it for use inside a RegExp.
+    const nameLabel = new RegExp(
+      wine.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      "i",
+    );
 
     // --- Step 1: land on /cellar and find the wine row ----------------
     await page.goto("/cellar");
     await page
       .getByPlaceholder("Search name, producer, region…")
-      .fill(wine.producer);
+      .fill(wine.name);
     const lineageHeader = page
       .locator('[data-lineage-header][aria-expanded="false"]', {
-        hasText: cardLabel,
+        hasText: nameLabel,
       })
       .first();
     if (await lineageHeader.count()) await lineageHeader.click();
-    // Each row's trigger button carries the full row text (producer,
-    // name, chips, glass count). Pick the first one for the chosen wine.
+    // Since the One Accent row-anatomy pass (2d631a8) the row button no
+    // longer carries a "~N glass" chip — glass counts live in the
+    // wine-detail drawer now. Pick the row by wine name alone.
     const row = page
       .getByRole("button")
-      .filter({ hasText: cardLabel })
-      .filter({ hasText: /~\d+ glass/ })
+      .filter({ hasText: nameLabel })
       .first();
     await expect(row).toBeVisible();
-    const startText = (await row.textContent()) ?? "";
-    const startMatch = startText.match(/~(\d+) glass/);
-    expect(startMatch, `no glass count in row text: ${startText}`).toBeTruthy();
-    const startGlasses = Number(startMatch![1]);
-    expect(startGlasses).toBeGreaterThan(0);
 
-    // --- Step 2: open the drawer and tap the primary pour button -----
+    // --- Step 2: open the drawer, read the glass count, pour ---------
     await row.click();
     const drawer = page.getByRole("dialog", { name: /./ }); // any dialog
     await expect(drawer).toBeVisible();
+    const glassCount = drawer.getByText(/~\d+ glasses? left/);
+    await expect(glassCount).toBeVisible();
+    const startText = (await glassCount.textContent()) ?? "";
+    const startMatch = startText.match(/~(\d+) glass/);
+    expect(startMatch, `no glass count in drawer text: ${startText}`).toBeTruthy();
+    const startGlasses = Number(startMatch![1]);
+    expect(startGlasses).toBeGreaterThan(0);
+
     const pourBtn = drawer.getByRole("button", { name: /^Pour \d/i });
     await expect(pourBtn).toBeVisible();
     await pourBtn.click();
 
-    // Server component refresh should land the committed state back
-    // into the row. Poll until the glass count drops by exactly one.
-    // Close the drawer first so the row text reads cleanly.
-    await drawer.getByRole("button", { name: /^close$/i }).click();
+    // The pour handler calls router.refresh(); the drawer re-renders in
+    // place with the committed state. Poll until the drawer's glass
+    // count drops by exactly one, then close it.
     await expect(async () => {
-      const currentText = (await row.textContent()) ?? "";
+      const currentText = (await glassCount.textContent()) ?? "";
       const m = currentText.match(/~(\d+) glass/);
       expect(m).toBeTruthy();
       expect(Number(m![1])).toBe(startGlasses - 1);
     }).toPass({ timeout: 10_000 });
+    await drawer.getByRole("button", { name: /^close$/i }).click();
 
     // --- Step 3: reconcile to half via the Cellar reconcile modal -----
     await page.getByRole("button", { name: /Reconcile \d+ open bottle/i }).click();
@@ -293,7 +301,7 @@ test.describe("BND-038 pour → reconcile", () => {
 
     const reconcileRow = reconcileDialog
       .locator("li")
-      .filter({ hasText: cardLabel })
+      .filter({ hasText: nameLabel })
       .first();
     await expect(reconcileRow).toBeVisible();
     await reconcileRow.getByRole("button", { name: "Half" }).click();

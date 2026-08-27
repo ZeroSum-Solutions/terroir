@@ -372,7 +372,7 @@ describe("validate-bulk-import.ts — blank-line row-number attribution (round-3
       CANONICAL_HEADER,
       validRow("Producer One", "Wine One"), // data row 1 — valid
       "", // data row 2 — blank line, dropped by the real parser
-      validRow("", "Missing Producer Wine"), // data row 3 — INVALID (empty producer)
+      validRow("Producer Three", ""), // data row 3 — INVALID (empty name; producer became optional 2026-08-27)
       validRow("Producer Four", "Wine Four"), // data row 4 — valid
     ];
     const csvPath = join(d, "blank-interleaved.csv");
@@ -396,7 +396,7 @@ describe("validate-bulk-import.ts — full failure diagnostics written to file (
     const invalidCount = 15;
     const lines = [CANONICAL_HEADER];
     for (let i = 0; i < invalidCount; i++) {
-      lines.push(validRow("", `Bad Wine ${i}`)); // empty producer -> invalid, untagged (no manifest)
+      lines.push(validRow(`Producer ${i}`, "")); // empty name -> invalid, untagged (no manifest)
     }
     const csvPath = join(d, "dirty-real-file.csv");
     writeFileSync(csvPath, lines.join("\n") + "\n");
@@ -750,7 +750,7 @@ describe("validate-bulk-import.ts — unwritable failures.json warns without los
     const d = tmp();
     const invalidCount = 3;
     const lines = [CANONICAL_HEADER];
-    for (let i = 0; i < invalidCount; i++) lines.push(validRow("", `Bad Wine ${i}`));
+    for (let i = 0; i < invalidCount; i++) lines.push(validRow(`Producer ${i}`, ""));
     const csvPath = join(d, "unwritable-report.csv");
     writeFileSync(csvPath, lines.join("\n") + "\n");
 
@@ -914,6 +914,33 @@ describe("validate-bulk-import.ts — encoding fidelity matrix (round-5 CRITICAL
   });
 });
 
+describe("validate-bulk-import.ts — real-world literal forms are deliberate parses, not coercions (Sol audit 2026-08-27 finding 1)", () => {
+  it("PASSes a producer-less export with $-comma costs and unit-suffixed volumes, with zero coercion flags", () => {
+    // The exact shape of the first real partner export: no producer
+    // column, "Cost Price " with a trailing space and dollar strings,
+    // "Volume" with unit suffixes, NV vintages. The oracle must agree
+    // with the production validator that these are clean — before this
+    // fix it flagged "750ml"/"1.5L"/"45,50" as parseInt/parseFloat
+    // prefix-coercion risks and failed files production accepts.
+    const d = tmp();
+    const csvPath = join(d, "real-world-export.csv");
+    const lines = [
+      "Vintage,Volume,Wine Name,Quantity,Cost Price ,Total Cost Price",
+      '2018,,A.F. Gros Richebourg Grand Cru,3,"$2,034.00","$6,102.00"',
+      "NV,1.5L,A.Lamblot Intuition,1,$135.00,$135.00",
+      '2006,75cl,Chateau Climens Barsac,2,"45,50","91,00"',
+      '2015,750ml,Sine Qua Non Syrah,1,"123,456.89","123,456.89"',
+    ];
+    writeFileSync(csvPath, lines.join("\n") + "\n");
+
+    const result = runValidator(csvPath);
+    expect(result.stdout).toMatch(/Rows valid:\s+4\b/);
+    expect(result.stdout).not.toContain("silently truncated");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("=== RESULT: PASS ===");
+  });
+});
+
 describe("validate-bulk-import.ts — silent numeric-text coercion (round-5 CRITICAL fix, now fixed at the source by P3's C18 fix)", () => {
   it("P3 C18 fix confirmed via the independent oracle: trailing-garbage numeric text is now REJECTED outright by the real row-validator, never silently coerced into a 'valid' row", () => {
     // This test used to pin the PRE-FIX behavior (the coerced, silently-
@@ -922,8 +949,10 @@ describe("validate-bulk-import.ts — silent numeric-text coercion (round-5 CRIT
     // 2026-08-23, C18) fixed the underlying defect directly in
     // src/domains/import/row-validator.ts: every numeric field is now
     // tested against a whole-string literal regex BEFORE Number.parseInt/
-    // parseFloat ever runs, so '2015xyz'/'750ml'/'3abc'/'12.34USD' are
-    // field errors, not silently-coerced-and-accepted values. Proof this
+    // parseFloat ever runs, so '2015xyz'/'750mlx'/'3abc'/'12.34USD' are
+    // field errors, not silently-coerced-and-accepted values. ('750ml'
+    // itself graduated to a recognized whole-string volume literal,
+    // 2026-08-27 — parsed deliberately, never prefix-coerced.) Proof this
     // is a real fix, not a mocked assertion: this test drives the SHIPPED
     // oracle CLI as a real subprocess (runValidator), which calls the
     // REAL production validateRow() — the "Sample invalid-row reasons"
@@ -934,7 +963,7 @@ describe("validate-bulk-import.ts — silent numeric-text coercion (round-5 CRIT
       producer: "Acme",
       name: "Wine A",
       vintage: "2015xyz",
-      size_ml: "750ml",
+      size_ml: "750mlx",
       quantity: "3abc",
       unit_cost: "12.34USD",
     });
@@ -953,9 +982,9 @@ describe("validate-bulk-import.ts — silent numeric-text coercion (round-5 CRIT
     // its single year-range message. The rejection (not the wording) is
     // C18's guarantee — the variant-key assertion above is the real check.
     expect(result.stdout).toContain("vintage: Vintage must be a year between 1900 and");
-    expect(result.stdout).toContain("size_ml: Bottle size (ml) must be a whole number, with no other characters.");
+    expect(result.stdout).toContain("size_ml: Bottle size must be whole ml (e.g. 750) or a volume like 750ml, 75cl, or 1.5L.");
     expect(result.stdout).toContain("quantity: Quantity must be a whole number, with no other characters.");
-    expect(result.stdout).toContain("unit_cost: Unit cost must be a number, with no other characters.");
+    expect(result.stdout).toContain("unit_cost: Unit cost must be a number (a currency symbol and thousands separators are OK).");
   });
 
   it("a row whose coercion ALSO fails its own range check is already caught by the existing tagged/untagged machinery — not double-flagged", () => {
@@ -1754,7 +1783,7 @@ const PRECONDITION_CASES: Record<string, () => PreconditionCase> = {
     const d = tmp();
     const csvPath = join(d, "bad-headers.csv");
     writeFileSync(csvPath, "foo,bar,baz\nval1,val2,val3\n");
-    return { csvPath, expectedReason: "Missing required headers: producer, name, quantity" };
+    return { csvPath, expectedReason: "Missing required headers: name, quantity" };
   },
 
   no_ambiguous_duplicate_header_mapping: () => {
