@@ -11,14 +11,26 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { decodeCsvBuffer, parseCsv } from "./csv-parser";
-import { mapHeader, validateRow, type FieldError, type RawRowFields } from "./row-validator";
+import { mapHeader, validateRow, type FieldError, type FieldsInput, type RawRowFields } from "./row-validator";
 import { matchLwinBulk } from "./lwin-matching";
 import { mergeIntraBatchDuplicates, type IntraBatchDuplicateReason } from "./dedup-key";
 import type { CanonicalHeader } from "./constants";
 
+/** Inline row-fix overrides (see ConfirmBatchOptions.rowOverrides in
+ * batch-service.ts), keyed by the 1-indexed data row number a caller
+ * would have seen in this exact file's own preview — the same numbering
+ * validated/bounds-checked below, before row-validator.ts's own
+ * validation ever runs on the overridden text. */
+export type RowOverrides = Record<string, FieldsInput>;
+
 export type PreviewRow = {
   rowNumber: number;
   raw: RawRowFields;
+  /** See ValidatedRow.rawText (row-validator.ts) — the exact text this
+   * row was validated against, for every canonical field, so an inline
+   * row-fix UI can prefill an edit form even for a field that failed its
+   * own validation (and so `raw` nulled out). */
+  rawText: Record<CanonicalHeader, string>;
   rowState: "valid" | "error";
   errors: FieldError[];
   lwinStatus: "matched" | "unmatched";
@@ -57,6 +69,7 @@ export type PreviewResult =
 export async function buildImportPreview(
   supabase: SupabaseClient<Database>,
   fileBuffer: Buffer,
+  rowOverrides?: RowOverrides,
 ): Promise<PreviewResult> {
   const text = decodeCsvBuffer(fileBuffer);
   const parsed = parseCsv(text);
@@ -76,7 +89,27 @@ export async function buildImportPreview(
     };
   }
 
-  const validated = parsed.rows.map((cells) => validateRow(cells, columnToField));
+  // rowOverrides is keyed to THIS file's own row numbers (a chunked
+  // upload re-parses one chunk at a time, each with its own row 1) — an
+  // index outside what this file actually contains is a stale/mismatched
+  // client reference, never silently ignored, so confirm fails loudly
+  // instead of dropping an operator's edit on the floor.
+  if (rowOverrides) {
+    for (const key of Object.keys(rowOverrides)) {
+      const rowNumber = Number(key);
+      if (!Number.isInteger(rowNumber) || rowNumber < 1 || rowNumber > parsed.rows.length) {
+        return {
+          ok: false,
+          error: {
+            code: "invalid_row_override",
+            message: `Row ${key} does not exist in this file (it has ${parsed.rows.length} data row(s)).`,
+          },
+        };
+      }
+    }
+  }
+
+  const validated = parsed.rows.map((cells, idx) => validateRow(cells, columnToField, rowOverrides?.[String(idx + 1)]));
 
   // Producer-less rows (real-world single-"Wine Name"-column exports) put
   // the full name into BOTH match legs: match_lwin (0078) hard-gates on
@@ -101,6 +134,7 @@ export async function buildImportPreview(
       return {
         rowNumber,
         raw: row.raw,
+        rawText: row.rawText,
         rowState: "error",
         errors: row.errors,
         lwinStatus: "unmatched",
@@ -121,6 +155,7 @@ export async function buildImportPreview(
     return {
       rowNumber,
       raw: row.raw,
+      rawText: row.rawText,
       rowState: "valid",
       errors: [],
       lwinStatus,

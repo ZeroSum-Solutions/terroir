@@ -22,9 +22,21 @@ export type FieldError = { field: string; message: string };
  * reads back out with `->> 'field'`. */
 export type RawRowFields = Record<CanonicalHeader, string | null>;
 
+/** Already-extracted field text, keyed by canonical field — the shape
+ * validateFields consumes directly. Whatever sourced it (a CSV cell, an
+ * inline-edit override, a UI form draft) is irrelevant past this point;
+ * every field is optional (an absent key means "no text for this field",
+ * same as an empty cell). */
+export type FieldsInput = Partial<Record<CanonicalHeader, string>>;
+
 export type ValidRow = {
   state: "valid";
   raw: RawRowFields;
+  /** The exact (trimmed) input text validateFields was given for every
+   * canonical field, valid or not — round-trips into an inline-edit form
+   * so a UI can prefill it, unlike `raw`, which normalizes/nulls a field
+   * the moment it fails its own validation. */
+  rawText: Record<CanonicalHeader, string>;
   costMissing: boolean;
   producer: string;
   name: string;
@@ -33,6 +45,7 @@ export type ValidRow = {
 export type InvalidRow = {
   state: "error";
   raw: RawRowFields;
+  rawText: Record<CanonicalHeader, string>;
   errors: FieldError[];
 };
 
@@ -157,16 +170,21 @@ export function parseBottleSizeMl(rawText: string): number | null {
 }
 
 /**
- * Validate one CSV data row against the canonical schema. Never throws —
- * every outcome is either a valid row (with an explicit costMissing
- * flag, never a silently-defaulted 0) or an error row with row-number-
- * free, field-attributed reasons (the caller attaches the row number).
+ * Validate one row's already-extracted field text against the canonical
+ * schema. This is the SHARED core both validateRow (CSV path) and inline
+ * row-fix editing (UI path — see import-client.tsx/session-step.tsx) call
+ * through, so a browser re-validating an operator's edit can never
+ * disagree with what the server will do with the same text. Never
+ * throws — every outcome is either a valid row (with an explicit
+ * costMissing flag, never a silently-defaulted 0) or an error row with
+ * row-number-free, field-attributed reasons (the caller attaches the row
+ * number).
  */
-export function validateRow(
-  cells: string[],
-  columnToField: Map<number, CanonicalHeader>,
-): ValidatedRow {
-  const get = (field: CanonicalHeader) => cell(cells, columnToField, field);
+export function validateFields(fields: FieldsInput): ValidatedRow {
+  const rawText = Object.fromEntries(
+    CANONICAL_HEADERS.map((field) => [field, (fields[field] ?? "").trim()]),
+  ) as Record<CanonicalHeader, string>;
+  const get = (field: CanonicalHeader) => rawText[field];
   const errors: FieldError[] = [];
 
   // Producer is optional (2026-08-27): real-world exports embed it in the
@@ -275,8 +293,36 @@ export function validateRow(
   raw.section = get("section") || null;
 
   if (errors.length > 0) {
-    return { state: "error", raw, errors };
+    return { state: "error", raw, rawText, errors };
   }
 
-  return { state: "valid", raw, costMissing, producer, name };
+  return { state: "valid", raw, rawText, costMissing, producer, name };
+}
+
+/**
+ * Validate one CSV data row against the canonical schema: extracts every
+ * canonical field's cell text (via columnToField), applies `overrides` on
+ * top field-by-field (an inline row fix — see ConfirmBatchOptions.
+ * rowOverrides in batch-service.ts), then hands the result to
+ * validateFields. Overrides are applied here, BEFORE validateFields ever
+ * runs, so server-side validation stays the sole authority: a
+ * still-invalid override rejects the row with the normal per-row reason,
+ * never a bypass.
+ */
+export function validateRow(
+  cells: string[],
+  columnToField: Map<number, CanonicalHeader>,
+  overrides?: FieldsInput,
+): ValidatedRow {
+  const fields: FieldsInput = {};
+  for (const field of CANONICAL_HEADERS) {
+    fields[field] = cell(cells, columnToField, field);
+  }
+  if (overrides) {
+    for (const field of CANONICAL_HEADERS) {
+      const value = overrides[field];
+      if (value !== undefined) fields[field] = value;
+    }
+  }
+  return validateFields(fields);
 }

@@ -131,4 +131,60 @@ describe("buildImportPreview", () => {
     expect(result.ok).toBe(false);
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
+
+  it("carries rawText on every row, valid or error", async () => {
+    const supabase = makeSupabase([{ idx: 0, lwin_id: "LWIN001", score: 0.95 }]);
+    const result = await buildImportPreview(
+      supabase,
+      csv("Domaine A,Cuvee 1,2020,6,24.50\nDomaine B,,2020,0.9,10\n"),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows[0].rawText.quantity).toBe("6");
+    // Row 2 fails validation (blank name, fractional quantity) — rawText
+    // still preserves the original text `raw` would have nulled out.
+    expect(result.rows[1].rowState).toBe("error");
+    expect(result.rows[1].raw.quantity).toBeNull();
+    expect(result.rows[1].rawText.quantity).toBe("0.9");
+  });
+
+  describe("rowOverrides — inline row-fix", () => {
+    it("applies an override before validation, flipping an error row to valid", async () => {
+      const supabase = makeSupabase([{ idx: 0, lwin_id: null, score: null }]);
+      const result = await buildImportPreview(
+        supabase,
+        csv("Domaine A,Cuvee 1,2020,0.9,24.50\n"),
+        { "1": { quantity: "6" } },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.rows[0]).toMatchObject({ rowState: "valid" });
+      expect(result.rows[0].raw.quantity).toBe("6");
+    });
+
+    it("returns a clean top-level error for an out-of-bounds override row index, never silently ignoring it", async () => {
+      const supabase = makeSupabase([]);
+      const result = await buildImportPreview(
+        supabase,
+        csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+        { "5": { quantity: "6" } },
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe("invalid_row_override");
+      expect(supabase.rpc).not.toHaveBeenCalled();
+    });
+
+    it("rejects row index 0 as out of bounds (rows are 1-indexed)", async () => {
+      const supabase = makeSupabase([]);
+      const result = await buildImportPreview(
+        supabase,
+        csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+        { "0": { quantity: "6" } },
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe("invalid_row_override");
+    });
+  });
 });

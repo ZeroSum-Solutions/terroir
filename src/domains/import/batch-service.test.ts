@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
   applyImportBatchChunk,
+  canonicalizeRowOverrides,
   confirmImportBatch,
   deriveBatchStatus,
   resolveImportBatchRow,
@@ -184,6 +186,169 @@ describe("confirmImportBatch", () => {
     const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "empty.csv", csv(""));
     expect(result).toMatchObject({ ok: false, error: { code: "empty_file" } });
     expect(rpc).not.toHaveBeenCalled();
+  });
+
+  // Inline row-fix overrides — let an operator fix a rejected row inline
+  // instead of "fix the errors above and re-upload".
+  describe("rowOverrides", () => {
+    it("applies an override before validation, flipping an error row to valid", async () => {
+      let createArgs: { p_rows: Array<{ row_number: number; row_state: string; raw: Record<string, unknown> }> } | undefined;
+      const supabase = {
+        rpc: makeRpc({
+          match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+          create_import_batch: (args) => {
+            createArgs = args as typeof createArgs;
+            return { data: { batchId: BATCH_ID }, error: null };
+          },
+        }),
+      };
+
+      // Fractional quantity 0.9 is STRICTLY rejected by the validator —
+      // the inline fix here overrides it to a whole number, never adds
+      // partial-bottle logic.
+      const result = await confirmImportBatch(
+        supabase as never,
+        RESTAURANT_ID,
+        USER_ID,
+        "cellar.csv",
+        csv("Domaine A,Cuvee 1,2020,0.9,24.50\n"),
+        { rowOverrides: { "1": { quantity: "6" } } },
+      );
+
+      expect(result).toMatchObject({ ok: true, alreadyExists: false, totalRows: 1 });
+      expect(createArgs?.p_rows[0]).toMatchObject({ row_number: 1, row_state: "valid" });
+      expect(createArgs?.p_rows[0]?.raw.quantity).toBe("6");
+    });
+
+    it("leaves a still-invalid override as an error row with the normal per-row reason, never a whole-batch rejection", async () => {
+      let createArgs: {
+        p_rows: Array<{ row_number: number; row_state: string; validation_errors: Array<{ field: string }> }>;
+      } | undefined;
+      const supabase = {
+        rpc: makeRpc({
+          match_lwin_bulk: () => ({ data: [], error: null }),
+          create_import_batch: (args) => {
+            createArgs = args as typeof createArgs;
+            return { data: { batchId: BATCH_ID }, error: null };
+          },
+        }),
+      };
+
+      // The override itself is still fractional — server-side validation
+      // stays the authority and rejects it exactly as it would any other
+      // fractional quantity, never silently accepting a client's claim.
+      const result = await confirmImportBatch(
+        supabase as never,
+        RESTAURANT_ID,
+        USER_ID,
+        "cellar.csv",
+        csv("Domaine A,Cuvee 1,2020,0.9,24.50\n"),
+        { rowOverrides: { "1": { quantity: "0.9" } } },
+      );
+
+      expect(result).toMatchObject({ ok: true, alreadyExists: false, totalRows: 1 });
+      expect(createArgs?.p_rows[0]?.row_state).toBe("error");
+      expect(createArgs?.p_rows[0]?.validation_errors.some((e) => e.field === "quantity")).toBe(true);
+    });
+
+    it("rejects an out-of-bounds row override index without calling create_import_batch", async () => {
+      const rpc = makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+        create_import_batch: () => ({ data: { batchId: BATCH_ID }, error: null }),
+      });
+      const supabase = { rpc };
+
+      const result = await confirmImportBatch(
+        supabase as never,
+        RESTAURANT_ID,
+        USER_ID,
+        "cellar.csv",
+        csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+        { rowOverrides: { "2": { quantity: "6" } } },
+      );
+
+      expect(result).toMatchObject({ ok: false, error: { code: "invalid_row_override" } });
+      expect(rpc).not.toHaveBeenCalledWith("create_import_batch", expect.anything());
+    });
+
+    it("folds overrides into content_sha256 so the same file + different overrides hash differently", async () => {
+      const captured: string[] = [];
+      const supabase = {
+        rpc: makeRpc({
+          match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+          create_import_batch: (args) => {
+            captured.push((args as { p_content_sha256: string }).p_content_sha256);
+            return { data: { batchId: BATCH_ID }, error: null };
+          },
+        }),
+      };
+      const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+      const bareHash = createHash("sha256").update(file).digest("hex");
+
+      await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+      await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+        rowOverrides: { "1": { quantity: "12" } },
+      });
+      await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+        rowOverrides: { "1": { quantity: "18" } },
+      });
+
+      // No overrides -> unchanged bare-file digest, so every batch
+      // confirmed before this feature existed still resolves.
+      expect(captured[0]).toBe(bareHash);
+      // Overrides present -> different from the bare hash and from each
+      // OTHER override set (same file, different overrides = distinct
+      // batch).
+      expect(captured[1]).not.toBe(bareHash);
+      expect(captured[2]).not.toBe(bareHash);
+      expect(captured[1]).not.toBe(captured[2]);
+      expect(new Set(captured).size).toBe(3);
+    });
+
+    it("hashes identically for the same overrides regardless of client-side key order (resume still works)", async () => {
+      const captured: string[] = [];
+      const supabase = {
+        rpc: makeRpc({
+          match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }, { idx: 1, lwin_id: null, score: null }], error: null }),
+          create_import_batch: (args) => {
+            captured.push((args as { p_content_sha256: string }).p_content_sha256);
+            return { data: { batchId: BATCH_ID }, error: null };
+          },
+        }),
+      };
+      const file = csv("Domaine A,Cuvee 1,2020,6,24.50\nDomaine B,Cuvee 2,2019,3,18.00\n");
+
+      await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+        rowOverrides: { "1": { quantity: "6", unit_cost: "25.00" }, "2": { name: "Cuvee 2 Fixed" } },
+      });
+      await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+        // Same override content, different key/field order both at the
+        // row level and the field level.
+        rowOverrides: { "2": { name: "Cuvee 2 Fixed" }, "1": { unit_cost: "25.00", quantity: "6" } },
+      });
+
+      expect(captured[0]).toBe(captured[1]);
+    });
+  });
+});
+
+describe("canonicalizeRowOverrides", () => {
+  it("returns null for undefined overrides", () => {
+    expect(canonicalizeRowOverrides(undefined)).toBeNull();
+  });
+
+  it("returns null when every row's override is an empty field set", () => {
+    expect(canonicalizeRowOverrides({ "1": {}, "2": {} })).toBeNull();
+  });
+
+  it("sorts rows numerically and fields in CANONICAL_HEADERS order, regardless of input order", () => {
+    const a = canonicalizeRowOverrides({ "10": { quantity: "1" }, "2": { unit_cost: "5.00", name: "X" } });
+    const b = canonicalizeRowOverrides({ "2": { name: "X", unit_cost: "5.00" }, "10": { quantity: "1" } });
+    expect(a).toBe(b);
+    expect(a).toBe(JSON.stringify([
+      [2, [["name", "X"], ["unit_cost", "5.00"]]],
+      [10, [["quantity", "1"]]],
+    ]));
   });
 });
 

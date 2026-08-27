@@ -12,8 +12,48 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/types/database";
-import { buildImportPreview, type PreviewRow } from "./preview-service";
-import { APPLY_CHUNK_SIZE, CLEANUP_BUDGET_FROM_ENTRY_MS, LWIN_APPLY_MIN_SCORE } from "./constants";
+import { buildImportPreview, type PreviewRow, type RowOverrides } from "./preview-service";
+import {
+  APPLY_CHUNK_SIZE,
+  CANONICAL_HEADERS,
+  CLEANUP_BUDGET_FROM_ENTRY_MS,
+  LWIN_APPLY_MIN_SCORE,
+  type CanonicalHeader,
+} from "./constants";
+
+// A fixed, non-file-derived separator between the raw file bytes and the
+// canonical overrides JSON folded into content_sha256 (see
+// confirmImportBatch's own comment) — no real CSV upload's bytes could
+// ever end with this exact literal, so an overrides hash can never
+// collide with a plain file hash by coincidence of content.
+const OVERRIDES_HASH_TAG = "terroir-import-row-overrides-v1:";
+
+/** Stable-key-order JSON of a rowOverrides payload, or null when there is
+ * nothing to fold into content_sha256 — undefined, or every row's
+ * override is an empty field set (both must hash identically to "no
+ * overrides at all" so a no-op override never changes a batch's
+ * identity). Exported so batch-service.test.ts can pin its exact output
+ * independent of the hash itself. */
+export function canonicalizeRowOverrides(overrides: RowOverrides | undefined): string | null {
+  if (!overrides) return null;
+  const rowNumbers = Object.keys(overrides)
+    .map(Number)
+    .filter((rowNumber) => {
+      const fields = overrides[String(rowNumber)];
+      return fields && Object.keys(fields).length > 0;
+    })
+    .sort((a, b) => a - b);
+  if (rowNumbers.length === 0) return null;
+
+  const canonical = rowNumbers.map((rowNumber) => {
+    const fields = overrides[String(rowNumber)] as Partial<Record<CanonicalHeader, string>>;
+    const orderedFields = CANONICAL_HEADERS.filter((field) => fields[field] !== undefined).map(
+      (field) => [field, fields[field]] as const,
+    );
+    return [rowNumber, orderedFields] as const;
+  });
+  return JSON.stringify(canonical);
+}
 
 function summarize(rows: PreviewRow[]) {
   return {
@@ -40,6 +80,17 @@ export type ConfirmBatchOptions = {
    * with content_sha256 (this SPECIFIC chunk's own bytes), which is
    * always computed server-side below, never client-supplied. */
   sourceSha256?: string;
+  /** Inline row-fix overrides — let users fix rejected rows inline
+   * instead of "fix the errors above and re-upload": keyed by the
+   * 1-indexed data row number the operator saw in THIS SAME file's
+   * own preview, each a partial set of canonical-field replacement text.
+   * Applied inside buildImportPreview, after parsing but before
+   * row-validator.ts's own validation runs — so server-side validation
+   * stays the sole authority and a still-invalid override just rejects
+   * that one row with the normal per-row reason, never a bypass. Also
+   * folded into content_sha256 below — see the hash computation's own
+   * comment for why. */
+  rowOverrides?: RowOverrides;
 };
 
 export type ConfirmBatchResult =
@@ -90,7 +141,7 @@ export async function confirmImportBatch(
   fileBuffer: Buffer,
   options: ConfirmBatchOptions = {},
 ): Promise<ConfirmBatchResult> {
-  const preview = await buildImportPreview(supabase, fileBuffer);
+  const preview = await buildImportPreview(supabase, fileBuffer, options.rowOverrides);
   if (!preview.ok) {
     return { ok: false, error: preview.error };
   }
@@ -98,7 +149,28 @@ export async function confirmImportBatch(
     return { ok: false, error: { code: "empty_file", message: "CSV has no data rows." } };
   }
 
-  const contentSha256 = createHash("sha256").update(fileBuffer).digest("hex");
+  // content_sha256 identity, extended for inline row-fix overrides: an
+  // override changes the EFFECTIVE content of this confirm, so two
+  // requests for byte-identical file content but different overrides
+  // must never collide as "the same upload" (§2.2's own resume/dedup
+  // logic would otherwise silently resume the WRONG fix). Conversely,
+  // the same file with the SAME overrides must still resume exactly as
+  // before — and a request with NO overrides (every batch confirmed
+  // before this feature existed, and the overwhelming common case going
+  // forward) must hash to EXACTLY the bare-file digest, unchanged, so
+  // every content_sha256 already in the database keeps resolving.
+  // canonicalizeRowOverrides fixes key order (numeric row order, then
+  // CANONICAL_HEADERS field order) so one override SET always hashes
+  // identically regardless of client-side object key order, and the
+  // separator tag is a fixed, non-file-derived string so a pathological
+  // file whose own trailing bytes happen to resemble an overrides blob
+  // can never collide with a real override hash.
+  const overridesCanonicalJson = canonicalizeRowOverrides(options.rowOverrides);
+  const hasher = createHash("sha256").update(fileBuffer);
+  if (overridesCanonicalJson !== null) {
+    hasher.update(OVERRIDES_HASH_TAG + overridesCanonicalJson);
+  }
+  const contentSha256 = hasher.digest("hex");
 
   const rowsPayload: RowPayload[] = preview.rows.map((row) => ({
     row_number: row.rowNumber,

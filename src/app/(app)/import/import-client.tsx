@@ -10,7 +10,8 @@ import {
 } from "lucide-react";
 import { ActionDialog } from "@/components/action-dialog";
 import { cn } from "@/lib/utils";
-import { CANONICAL_HEADERS, CLIENT_CHUNK_TARGET_ROWS, MAX_ROWS } from "@/domains/import/constants";
+import { CANONICAL_HEADERS, CLIENT_CHUNK_TARGET_ROWS, MAX_ROWS, type CanonicalHeader } from "@/domains/import/constants";
+import { validateFields } from "@/domains/import/row-validator";
 import {
   AmbiguousRecordSplitError,
   UnsupportedEncodingError,
@@ -31,6 +32,37 @@ import {
   type ChunkedPreviewState,
   type ChunkUploadState,
 } from "./session-step";
+
+/** One error row's worth of prefill text for the inline row-fix form —
+ * the exact text the row was validated against, for every canonical
+ * field (see row-validator.ts's ValidatedRow.rawText). */
+export type ErrorRowEntry = {
+  rowNumber: number;
+  errors: { field: string; message: string }[];
+  rawText: Record<CanonicalHeader, string>;
+};
+
+/** rowNumber -> canonical field -> the operator's edited replacement
+ * text. Sent to confirm as an explicit overrides payload — server-side
+ * validation stays the sole authority (see request-schemas.ts's
+ * RowOverridesSchema and batch-service.ts's confirmImportBatch). */
+export type RowOverrides = Record<number, Partial<Record<CanonicalHeader, string>>>;
+
+const FIELD_LABELS: Record<CanonicalHeader, string> = {
+  producer: "Producer",
+  name: "Name",
+  vintage: "Vintage",
+  varietal: "Varietal",
+  region: "Region",
+  country: "Country",
+  size_ml: "Size (ml)",
+  format: "Format",
+  currency: "Currency",
+  quantity: "Quantity",
+  unit_cost: "Unit cost",
+  bin: "Bin",
+  section: "Section",
+};
 
 type BatchSummary = {
   id: string;
@@ -68,6 +100,13 @@ export function ImportClient() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ rows: PreviewRow[]; summary: PreviewSummary } | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // Inline row-fix: rowNumber is GLOBAL (the number shown in the preview
+  // UI) for both the plain and chunked paths — handleConfirmChunked
+  // translates it back to each chunk's own local row numbers.
+  const [rowOverrides, setRowOverrides] = useState<RowOverrides>({});
+  const onRowFieldChange = useCallback((rowNumber: number, field: CanonicalHeader, value: string) => {
+    setRowOverrides((prev) => ({ ...prev, [rowNumber]: { ...prev[rowNumber], [field]: value } }));
+  }, []);
   const [batch, setBatch] = useState<BatchDetail | null>(null);
   const [recent, setRecent] = useState<BatchSummary[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -171,6 +210,7 @@ export function ImportClient() {
     if (!file) return;
     setPreviewing(true);
     setPreviewError(null);
+    setRowOverrides({});
     try {
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
@@ -218,6 +258,9 @@ export function ImportClient() {
     try {
       const form = new FormData();
       form.append("file", file);
+      if (Object.keys(rowOverrides).length > 0) {
+        form.append("rowOverrides", JSON.stringify(rowOverrides));
+      }
       const response = await fetch("/api/import/batches", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) {
@@ -232,7 +275,7 @@ export function ImportClient() {
     } finally {
       setConfirming(false);
     }
-  }, [file, loadRecent]);
+  }, [file, rowOverrides, loadRecent]);
 
   /** Skips any chunk `chunkUpload` already marks "confirmed" — the
    * retry-after-failure path reruns confirmChunkedSession with the prior
@@ -253,6 +296,7 @@ export function ImportClient() {
         existingSessionId: sessionId,
         fileLabel: file?.name ?? sessionLabel,
         timestampsRef: requestTimestampsRef,
+        rowOverrides,
         onSessionId: (id) => {
           setSessionId(id);
           setSessionLabel(file?.name ?? sessionLabel);
@@ -307,7 +351,7 @@ export function ImportClient() {
     } finally {
       setConfirmingChunked(false);
     }
-  }, [chunkedPlan, chunkUpload, sessionId, file, sessionLabel, loadRecent]);
+  }, [chunkedPlan, chunkUpload, sessionId, file, sessionLabel, rowOverrides, loadRecent]);
 
   const reset = useCallback(() => {
     setStep("upload");
@@ -320,6 +364,7 @@ export function ImportClient() {
     setChunkUpload(null);
     setSessionId(null);
     setSessionLabel("cellar.csv");
+    setRowOverrides({});
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
@@ -349,8 +394,12 @@ export function ImportClient() {
           summary={chunkedPreview?.summary ?? preview?.summary ?? ZERO_SUMMARY}
           errorRows={
             chunkedPreview?.errorRows ??
-            (preview?.rows.filter((r) => r.rowState === "error").map((r) => ({ rowNumber: r.rowNumber, errors: r.errors })) ?? [])
+            (preview?.rows
+              .filter((r) => r.rowState === "error")
+              .map((r) => ({ rowNumber: r.rowNumber, errors: r.errors, rawText: r.rawText })) ?? [])
           }
+          rowOverrides={rowOverrides}
+          onRowFieldChange={onRowFieldChange}
           chunkBreakdown={chunkedPreview?.perChunk}
           chunkTotal={chunkedPlan?.chunkTotal}
           chunkUpload={chunkUpload}
@@ -466,6 +515,8 @@ function PreviewStep({
   filename,
   summary,
   errorRows,
+  rowOverrides,
+  onRowFieldChange,
   chunkBreakdown,
   chunkTotal,
   chunkUpload,
@@ -476,7 +527,9 @@ function PreviewStep({
 }: {
   filename: string;
   summary: PreviewSummary;
-  errorRows: { rowNumber: number; errors: { field: string; message: string }[] }[];
+  errorRows: ErrorRowEntry[];
+  rowOverrides: RowOverrides;
+  onRowFieldChange: (rowNumber: number, field: CanonicalHeader, value: string) => void;
   chunkBreakdown?: { index: number; startRow: number; endRow: number; summary: PreviewSummary }[];
   chunkTotal?: number;
   chunkUpload: ChunkUploadState[] | null;
@@ -486,7 +539,15 @@ function PreviewStep({
   error: string | null;
 }) {
   const shownErrorRows = errorRows.slice(0, 20);
-  const canConfirm = summary.validRows > 0;
+  // A row the operator has edited into passing validation counts toward
+  // "ready to confirm" too, even though summary (computed server-side
+  // from the ORIGINAL file) has no way to know about it yet — confirm
+  // re-validates every row server-side regardless, this only gates the
+  // button.
+  const fixedCount = shownErrorRows.filter(
+    (row) => validateFields({ ...row.rawText, ...rowOverrides[row.rowNumber] }).state === "valid",
+  ).length;
+  const canConfirm = summary.validRows > 0 || fixedCount > 0;
   const hasFailedChunk = chunkUpload?.some((c) => c.status === "failed") ?? false;
 
   return (
@@ -527,11 +588,17 @@ function PreviewStep({
           <h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
             Row errors
           </h3>
+          <p className="mt-2xs text-caption text-grey">
+            Edit a field below to fix a row inline — it counts toward the import once it&rsquo;s valid.
+          </p>
           <ul className="mt-xs space-y-2xs">
             {shownErrorRows.map((row) => (
-              <li key={row.rowNumber} className="rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink">
-                Row {row.rowNumber}: {row.errors.map((e) => e.message).join(" ")}
-              </li>
+              <RowFixItem
+                key={row.rowNumber}
+                row={row}
+                override={rowOverrides[row.rowNumber]}
+                onFieldChange={onRowFieldChange}
+              />
             ))}
           </ul>
           {summary.errorRows > shownErrorRows.length && (
@@ -571,9 +638,59 @@ function PreviewStep({
         </button>
       </div>
       {!canConfirm && (
-        <p className="mt-sm text-caption text-grey">No valid rows to import — fix the errors above and re-upload.</p>
+        <p className="mt-sm text-caption text-grey">No valid rows to import yet — fix a row below, or choose a different file.</p>
       )}
     </div>
+  );
+}
+
+/** One error row's inline fix form: an input per field the row actually
+ * failed on, prefilled with the exact text that failed (rawText), live
+ * re-validated through the SAME row-validator.ts logic the server uses —
+ * so "this row will now import" is never a guess. */
+function RowFixItem({
+  row,
+  override,
+  onFieldChange,
+}: {
+  row: ErrorRowEntry;
+  override: Partial<Record<CanonicalHeader, string>> | undefined;
+  onFieldChange: (rowNumber: number, field: CanonicalHeader, value: string) => void;
+}) {
+  const effective: Record<CanonicalHeader, string> = { ...row.rawText, ...override };
+  const live = validateFields(effective);
+  const editableFields = Array.from(new Set(row.errors.map((e) => e.field))).filter(
+    (field): field is CanonicalHeader => (CANONICAL_HEADERS as readonly string[]).includes(field),
+  );
+
+  return (
+    <li className="rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink">
+      <div className="flex items-center gap-xs">
+        <span>Row {row.rowNumber}</span>
+        {live.state === "valid" && (
+          <span className="inline-flex items-center gap-2xs text-primary">
+            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Fixed
+          </span>
+        )}
+      </div>
+      <p className="mt-2xs text-caption text-grey">
+        {live.state === "error" ? live.errors.map((e) => e.message).join(" ") : "This row will be imported once you confirm."}
+      </p>
+      <div className="mt-xs flex flex-wrap gap-sm">
+        {editableFields.map((field) => (
+          <label key={field} className="flex flex-col gap-2xs text-caption text-grey">
+            {FIELD_LABELS[field]}
+            <input
+              type="text"
+              value={effective[field] ?? ""}
+              onChange={(e) => onFieldChange(row.rowNumber, field, e.target.value)}
+              className="min-h-11 w-32 rounded-pill border border-hairline bg-surface px-sm text-[13px] text-ink focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
+            />
+          </label>
+        ))}
+      </div>
+    </li>
   );
 }
 

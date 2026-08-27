@@ -18,7 +18,7 @@ import { ActionDialog } from "@/components/action-dialog";
 import { CLIENT_CHUNK_TARGET_ROWS } from "@/domains/import/constants";
 import { buildChunkPlan, serializeChunk, sha256HexOfBytes } from "@/domains/import/csv-splitter";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
-import type { BatchRow } from "./import-client";
+import type { BatchRow, ErrorRowEntry, RowOverrides } from "./import-client";
 
 // ---------------------------------------------------------------------------
 // Chunk plan / upload state, and the pure functions that drive the two
@@ -45,7 +45,7 @@ export type ChunkPreviewEntry = { index: number; startRow: number; endRow: numbe
 export type ChunkedPreviewState = {
   summary: PreviewSummary;
   perChunk: ChunkPreviewEntry[];
-  errorRows: { rowNumber: number; errors: { field: string; message: string }[] }[];
+  errorRows: ErrorRowEntry[];
 };
 
 export type ChunkUploadStatus = "pending" | "waiting" | "uploading" | "confirmed" | "failed";
@@ -193,7 +193,9 @@ export async function planChunkedPreview(
       // rowNumber is local to this chunk's own submitted file (1 = this
       // chunk's first data row) — convert to the row number a human would
       // see in the ORIGINAL file.
-      if (row.rowState === "error") errorRows.push({ rowNumber: chunkEntry.startRow - 1 + row.rowNumber, errors: row.errors });
+      if (row.rowState === "error") {
+        errorRows.push({ rowNumber: chunkEntry.startRow - 1 + row.rowNumber, errors: row.errors, rawText: row.rawText });
+      }
     }
   }
 
@@ -212,9 +214,32 @@ export type ConfirmChunkedSessionParams = {
   existingSessionId: string | null;
   fileLabel: string;
   timestampsRef: { current: number[] };
+  /** Inline row-fix overrides, keyed by the GLOBAL row number shown in
+   * the aggregated chunked preview — localizeRowOverrides translates
+   * each chunk's own slice into the LOCAL row numbers that chunk's own
+   * re-upload of buildImportPreview will assign. */
+  rowOverrides?: RowOverrides;
   onSessionId: (sessionId: string) => void;
   onProgress: (upload: ChunkUploadState[]) => void;
 };
+
+/** Translates the operator's overrides (keyed by the GLOBAL row number
+ * the aggregated chunked preview shows) into the LOCAL row numbers one
+ * chunk's own re-upload will assign — a chunk is re-parsed from scratch
+ * server-side (buildImportPreview), so row 1 of that upload is always
+ * the chunk's own first data row, never the original file's. */
+export function localizeRowOverrides(
+  globalOverrides: RowOverrides,
+  chunk: { startRow: number; endRow: number },
+): Record<string, Partial<Record<string, string>>> {
+  const local: Record<string, Partial<Record<string, string>>> = {};
+  for (const [key, fields] of Object.entries(globalOverrides)) {
+    const globalRowNumber = Number(key);
+    if (globalRowNumber < chunk.startRow || globalRowNumber > chunk.endRow) continue;
+    local[String(globalRowNumber - chunk.startRow + 1)] = fields;
+  }
+  return local;
+}
 
 export type ConfirmChunkedSessionResult =
   | { ok: true }
@@ -229,7 +254,7 @@ export type ConfirmChunkedSessionResult =
  * after a failure with the same `plan` and the returned chunkUpload state
  * as `initialUpload` — already-confirmed chunks are skipped. */
 export async function confirmChunkedSession(params: ConfirmChunkedSessionParams): Promise<ConfirmChunkedSessionResult> {
-  const { plan, initialUpload, existingSessionId, fileLabel, timestampsRef, onSessionId, onProgress } = params;
+  const { plan, initialUpload, existingSessionId, fileLabel, timestampsRef, rowOverrides, onSessionId, onProgress } = params;
   let results = initialUpload;
   onProgress(results);
 
@@ -277,6 +302,10 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
     form.append("chunkIndex", String(chunk.index));
     form.append("chunkTotal", String(plan.chunkTotal));
     form.append("sourceSha256", plan.sourceSha256);
+    if (rowOverrides) {
+      const localOverrides = localizeRowOverrides(rowOverrides, chunk);
+      if (Object.keys(localOverrides).length > 0) form.append("rowOverrides", JSON.stringify(localOverrides));
+    }
 
     try {
       const response = await fetch("/api/import/batches", { method: "POST", body: form });

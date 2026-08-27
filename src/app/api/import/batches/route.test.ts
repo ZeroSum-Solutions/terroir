@@ -14,9 +14,10 @@ vi.mock("@/domains/import/batch-service", () => ({
 
 const { GET, POST } = await import("./route");
 
-function multipartRequest(file: File) {
+function multipartRequest(file: File, extraFields?: Record<string, string>) {
   const form = new FormData();
   form.append("file", file);
+  for (const [key, value] of Object.entries(extraFields ?? {})) form.append(key, value);
   return new Request("http://localhost/api/import/batches", { method: "POST", body: form }) as unknown as NextRequest;
 }
 
@@ -97,7 +98,7 @@ describe("POST /api/import/batches", () => {
       "user-a",
       "cellar.csv",
       expect.any(Buffer),
-      { sessionId: undefined, chunkIndex: undefined, chunkTotal: undefined, sourceSha256: undefined },
+      { sessionId: undefined, chunkIndex: undefined, chunkTotal: undefined, sourceSha256: undefined, rowOverrides: undefined },
     );
   });
 
@@ -137,5 +138,63 @@ describe("POST /api/import/batches", () => {
     mockConfirmImportBatch.mockResolvedValue({ ok: false, error: { code: "empty_file", message: "CSV has no data rows." } });
     const response = await POST(multipartRequest(new File(["producer,name,quantity\n"], "cellar.csv", { type: "text/csv" })));
     expect(response.status).toBe(422);
+  });
+
+  it("parses a valid rowOverrides field and forwards it to confirmImportBatch", async () => {
+    allow();
+    mockConfirmImportBatch.mockResolvedValue({
+      ok: true,
+      alreadyExists: false,
+      batchId: "batch-1",
+      totalRows: 1,
+      summary: { totalRows: 1 },
+    });
+    const response = await POST(
+      multipartRequest(new File(["producer,name,quantity\nA,B,0.9"], "cellar.csv", { type: "text/csv" }), {
+        rowOverrides: JSON.stringify({ "1": { quantity: "1" } }),
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(mockConfirmImportBatch).toHaveBeenCalledWith(
+      expect.anything(),
+      "restaurant-a",
+      "user-a",
+      "cellar.csv",
+      expect.any(Buffer),
+      expect.objectContaining({ rowOverrides: { "1": { quantity: "1" } } }),
+    );
+  });
+
+  it("rejects malformed JSON in rowOverrides before calling confirmImportBatch", async () => {
+    allow();
+    const response = await POST(
+      multipartRequest(new File(["producer,name,quantity\nA,B,1"], "cellar.csv", { type: "text/csv" }), {
+        rowOverrides: "{not json",
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(mockConfirmImportBatch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a rowOverrides field name outside the canonical whitelist", async () => {
+    allow();
+    const response = await POST(
+      multipartRequest(new File(["producer,name,quantity\nA,B,1"], "cellar.csv", { type: "text/csv" }), {
+        rowOverrides: JSON.stringify({ "1": { not_a_real_field: "x" } }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(mockConfirmImportBatch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-integer rowOverrides row index", async () => {
+    allow();
+    const response = await POST(
+      multipartRequest(new File(["producer,name,quantity\nA,B,1"], "cellar.csv", { type: "text/csv" }), {
+        rowOverrides: JSON.stringify({ "not-a-number": { quantity: "1" } }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(mockConfirmImportBatch).not.toHaveBeenCalled();
   });
 });

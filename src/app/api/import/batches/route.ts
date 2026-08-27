@@ -15,7 +15,7 @@ import { apiError, Errors } from "@/lib/api/errors";
 import { fileField, parseMultipart } from "@/lib/api/validation";
 import { confirmImportBatch } from "@/domains/import/batch-service";
 import { validateUploadedCsvFile } from "@/domains/import/upload-validation";
-import { ConfirmBatchSessionFieldsSchema } from "@/domains/import/request-schemas";
+import { ConfirmBatchSessionFieldsSchema, RowOverridesFieldSchema } from "@/domains/import/request-schemas";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -27,7 +27,9 @@ const CONFIRM_RATE_WINDOW_MS = 60 * 1000;
 // multi-chunk onboarding upload. All optional — a plain, non-chunked
 // single-file upload omits every one of these and behaves exactly as
 // before.
-const ConfirmSchema = z.object({ file: fileField }).merge(ConfirmBatchSessionFieldsSchema);
+const ConfirmSchema = z
+  .object({ file: fileField, rowOverrides: RowOverridesFieldSchema })
+  .merge(ConfirmBatchSessionFieldsSchema);
 
 export async function GET() {
   return withApiHandler(getBatches);
@@ -67,7 +69,7 @@ async function postBatches(request: NextRequest) {
 
   const parsed = await parseMultipart(request, ConfirmSchema, { message: "Expected a CSV file upload." });
   if (!parsed.ok) return parsed.response;
-  const { file, sessionId, chunkIndex, chunkTotal, sourceSha256 } = parsed.data;
+  const { file, sessionId, chunkIndex, chunkTotal, sourceSha256, rowOverrides } = parsed.data;
 
   const uploadCheck = validateUploadedCsvFile(file);
   if (!uploadCheck.ok) {
@@ -82,6 +84,7 @@ async function postBatches(request: NextRequest) {
     chunkIndex,
     chunkTotal,
     sourceSha256,
+    rowOverrides,
   });
 
   if (!result.ok) {
