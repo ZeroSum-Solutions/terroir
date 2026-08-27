@@ -6,6 +6,12 @@ import {
   resolveWineName,
   type WineCandidate,
 } from "@/lib/wine-intelligence/name-resolver";
+import {
+  resolveVoiceFilterIntent,
+  type FacetVocabulary,
+  type VoiceFilterPayload,
+  type VoiceStatusFilter,
+} from "@/lib/wine-intelligence/voice-filter-intent";
 import type {
   SpeechTranscriber,
   SttResult,
@@ -144,12 +150,87 @@ async function postVoiceResolve(request: NextRequest, dependencies: Dependencies
       ),
     });
   }
+
+  // Facet-filter fallback: only for the two abstain reasons a facet-only
+  // utterance ("pull up any wines from California") actually produces.
+  // "contradicted" (a wrong producer attribution) must stay an abstention,
+  // not get silently reinterpreted as a filter.
+  if (outcome.reason === "below_threshold" || outcome.reason === "no_corroboration") {
+    const vocabulary = await loadFacetVocabulary(db, auth.restaurantId);
+    const filters = resolveVoiceFilterIntent(stt.transcript, vocabulary);
+    if (filters) {
+      return voiceJson({
+        kind: "filter",
+        transcript: stt.transcript,
+        filters,
+        label: describeFilterPayload(filters),
+      });
+    }
+  }
+
   return voiceJson({
     kind: "abstain",
     transcript: stt.transcript,
     reason: outcome.reason,
     message: "Couldn't find that cellar wine.",
   });
+}
+
+const STATUS_FILTER_LABELS: Record<VoiceStatusFilter, string> = {
+  open: "with an open bottle",
+  out: "that are out of stock",
+  low: "running low",
+  "drink-now": "ready to drink",
+  hold: "on hold",
+};
+
+function describeFilterPayload(filters: VoiceFilterPayload): string {
+  const bits: string[] = [];
+  if (filters.varietal) bits.push(filters.varietal);
+  bits.push("wines");
+  if (filters.region) bits.push(`from ${filters.region}`);
+  else if (filters.country) bits.push(`from ${filters.country}`);
+  if (filters.filter) bits.push(STATUS_FILTER_LABELS[filters.filter]);
+  if (filters.search) bits.push(`matching "${filters.search}"`);
+  return bits.join(" ");
+}
+
+type FacetVocabularyRow = {
+  region?: unknown;
+  country?: unknown;
+  varietal?: unknown;
+};
+
+// A second, narrower query mirroring loadInventory's scoping — run only
+// after resolveWineName has abstained, so the common resolved/ambiguous
+// path pays no extra round-trip. Fails open to an empty vocabulary (the
+// filter parser then returns null and the caller falls through to the
+// existing abstain response) rather than throwing: this is a best-effort
+// fallback, not a hard requirement of the voice-intake path.
+async function loadFacetVocabulary(
+  db: VoiceDb,
+  restaurantId: string,
+): Promise<FacetVocabulary> {
+  const { data, error } = await db
+    .from("wines")
+    .select("region, country, varietal, inventory_items!inner(restaurant_id, quantity)")
+    .eq("restaurant_id", restaurantId)
+    .eq("inventory_items.restaurant_id", restaurantId)
+    .gt("inventory_items.quantity", 0)
+    .limit(MAX_INVENTORY_ROWS);
+
+  const region = new Set<string>();
+  const country = new Set<string>();
+  const varietal = new Set<string>();
+  if (!error) {
+    for (const raw of Array.isArray(data) ? data : []) {
+      const row = raw as FacetVocabularyRow;
+      if (typeof row.region === "string" && row.region.trim()) region.add(row.region.trim());
+      if (typeof row.country === "string" && row.country.trim()) country.add(row.country.trim());
+      if (typeof row.varietal === "string" && row.varietal.trim()) varietal.add(row.varietal.trim());
+    }
+  }
+  return { region: [...region], country: [...country], varietal: [...varietal] };
 }
 
 async function readPlacementState(

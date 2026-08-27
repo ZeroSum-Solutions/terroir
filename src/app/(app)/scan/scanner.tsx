@@ -807,6 +807,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
       {status === "bottle-results" && bottleResult && (
         <BottleResultsView
           result={bottleResult}
+          previewUrl={bottlePreviewUrl}
           onSave={saveBottleToInventory}
           onScanAnother={startOver}
           isSaving={isSaving}

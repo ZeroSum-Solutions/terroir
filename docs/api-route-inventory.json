@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 90,
-  "discoveredOperationCount": 105,
+  "routeFileCount": 91,
+  "discoveredOperationCount": 106,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/bins",
@@ -275,6 +275,17 @@
       "path": "/api/import/batches/[id]/apply",
       "source": {
         "file": "src/app/api/import/batches/[id]/apply/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/import/batches/{param}/resolve-all",
+      "method": "POST",
+      "path": "/api/import/batches/[id]/resolve-all",
+      "source": {
+        "file": "src/app/api/import/batches/[id]/resolve-all/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null

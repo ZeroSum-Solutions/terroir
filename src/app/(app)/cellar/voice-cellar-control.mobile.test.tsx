@@ -93,9 +93,9 @@ function mockVoiceErrorFetch(status: number, message: string) {
   return fetchMock;
 }
 
-async function renderControl(onResolve = vi.fn()) {
+async function renderControl(onResolve = vi.fn(), onFilter = vi.fn()) {
   await act(async () => {
-    root.render(<VoiceCellarControl onResolve={onResolve} />);
+    root.render(<VoiceCellarControl onResolve={onResolve} onFilter={onFilter} />);
   });
   await vi.waitFor(() => {
     expect(fetch).toHaveBeenCalled();
@@ -185,6 +185,23 @@ describe("VoiceCellarControl mobile flow", () => {
     )!;
     await act(async () => choice.click());
     expect(onResolve).toHaveBeenCalledWith("wine-vv");
+  });
+
+  it("applies a filter result through the parent onFilter callback", async () => {
+    mockVoiceFetch({
+      kind: "filter",
+      transcript: "pull up any wines from California",
+      filters: { region: "California" },
+      label: "wines from California",
+    });
+    const onFilter = vi.fn();
+    await renderControl(vi.fn(), onFilter);
+
+    await recordOnce();
+
+    await vi.waitFor(() => expect(onFilter).toHaveBeenCalledWith({ region: "California" }));
+    const status = container.querySelector('[role="status"]');
+    expect(status?.textContent).toContain("Showing wines from California.");
   });
 
   it("shows a non-blocking heard-transcript notice when the resolver abstains", async () => {

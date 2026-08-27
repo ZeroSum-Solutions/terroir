@@ -284,6 +284,19 @@ export function CellarShell({
               setView("list");
               openWine(wineId);
             }}
+            onFilter={(filters) => {
+              setView("list");
+              applyUrlState(
+                {
+                  ...(filters.country !== undefined ? { country: filters.country } : {}),
+                  ...(filters.region !== undefined ? { region: filters.region } : {}),
+                  ...(filters.varietal !== undefined ? { varietal: filters.varietal } : {}),
+                  ...(filters.filter !== undefined ? { filter: filters.filter } : {}),
+                  ...(filters.search !== undefined ? { q: filters.search } : {}),
+                },
+                "push",
+              );
+            }}
           />
 
           {view === "list" && (

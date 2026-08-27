@@ -27,6 +27,7 @@
     "types:check": "node scripts/generate-supabase-types.mjs && git diff --exit-code src/types/database.ts",
     "downs:check": "node scripts/check-down-migrations.mjs",
     "manifest:check": "node scripts/check-migration-manifest.mjs",
+    "atlas:geo": "tsx scripts/build-atlas-geo.ts",
     "supabase:seed:local": "node scripts/seed-local-supabase.mjs",
     "supabase:seed:local:apply": "node scripts/seed-local-supabase.mjs --confirm",
     "supabase:seed:local:teardown": "node scripts/seed-local-supabase.mjs --teardown --confirm"
@@ -55,20 +56,25 @@
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4",
+    "@types/d3-geo": "^3.1.1",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/topojson-client": "^3.1.5",
     "@vitejs/plugin-react": "^6.0.1",
     "ajv": "^8.18.0",
+    "d3-geo": "^3.1.1",
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "happy-dom": "^20.9.0",
     "js-yaml": "^4.1.1",
     "tailwindcss": "^4",
+    "topojson-client": "^3.1.0",
     "tsx": "^4.23.12",
     "typescript": "^5",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.4",
+    "world-atlas": "^2.0.2"
   }
 }

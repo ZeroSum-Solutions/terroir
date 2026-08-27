@@ -24,6 +24,24 @@ describe("PartialBottleCloseout", () => {
     expect(document.querySelector('option[value="reason-1"]')?.textContent).toBe("Spoiled");
   });
 
+  it("never renders the raw opened-by user id — a UUID must never leak into the UI", () => {
+    document.body.innerHTML = renderToStaticMarkup(
+      <PartialBottleCloseout
+        bottle={{
+          id: "b-1",
+          wineId: "w-1",
+          theoreticalRemainingMl: 515,
+          preservationMethod: "coravin",
+          openedBy: "d88b0a20-4b1e-4a3b-9c2f-1a2b3c4d5e6f",
+        }}
+        reasons={[]}
+      />,
+    );
+
+    expect(document.body.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
+    expect(document.body.textContent).toContain("opened");
+  });
+
   it("keeps every close-out control at least 44px tall", () => {
     document.body.innerHTML = renderToStaticMarkup(
       <PartialBottleCloseout

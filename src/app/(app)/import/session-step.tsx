@@ -1,0 +1,732 @@
+"use client";
+
+// P3 — multi-batch onboarding session UI: per-chunk status, aggregate
+// progress (GET /api/import/sessions/[id]), "Apply all" (drives each
+// chunk's own /apply loop in turn), pending-row resolution sourced across
+// every chunk, and revert-as-a-unit. Co-located with import-client.tsx,
+// which owns all upload/session-creation state — this file only ever reads
+// an existing sessionId and drives the session's own lifecycle from there.
+//
+// Deliberately duplicates import-client.tsx's tiny SummaryStat/status-chip
+// markup (identical classes — see DESIGN.md's "one StatusChip pattern"
+// contract) rather than importing them, so this file and import-client.tsx
+// never import from each other in both directions.
+
+import { useCallback, useEffect, useState } from "react";
+import { AlertTriangle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
+import { ActionDialog } from "@/components/action-dialog";
+import { CLIENT_CHUNK_TARGET_ROWS } from "@/domains/import/constants";
+import { buildChunkPlan, serializeChunk, sha256HexOfBytes } from "@/domains/import/csv-splitter";
+import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
+import type { BatchRow } from "./import-client";
+
+// ---------------------------------------------------------------------------
+// Chunk plan / upload state, and the pure functions that drive the two
+// network-heavy halves of the client-side auto-chunking flow (preview and
+// confirm). import-client.tsx owns all of this feature's REACT STATE and
+// wiring (the row-count precheck, when to call these, localStorage
+// resume-on-mount) — this file is the chunked-upload "engine" plus the
+// SessionStep UI, kept together so import-client.tsx stays a manageable
+// size. Every function below is plain async/pure (no hooks), so it's
+// callable from any handler regardless of React's render/commit timing.
+// ---------------------------------------------------------------------------
+
+export type ChunkPlanItem = { index: number; startRow: number; endRow: number; text: string };
+
+export type ChunkedPlanState = {
+  headerRecord: string;
+  chunkTotal: number;
+  chunks: ChunkPlanItem[];
+  sourceSha256: string;
+};
+
+export type ChunkPreviewEntry = { index: number; startRow: number; endRow: number; summary: PreviewSummary };
+
+export type ChunkedPreviewState = {
+  summary: PreviewSummary;
+  perChunk: ChunkPreviewEntry[];
+  errorRows: { rowNumber: number; errors: { field: string; message: string }[] }[];
+};
+
+export type ChunkUploadStatus = "pending" | "waiting" | "uploading" | "confirmed" | "failed";
+export type ChunkUploadState = { index: number; status: ChunkUploadStatus; batchId: string | null; error: string | null };
+
+export const ZERO_SUMMARY: PreviewSummary = {
+  totalRows: 0,
+  validRows: 0,
+  errorRows: 0,
+  matchedRows: 0,
+  unmatchedRows: 0,
+  missingCostRows: 0,
+  readyToApplyRows: 0,
+  pendingResolutionRows: 0,
+};
+
+// Resume: sessionId persisted per-browser so a page reload mid-multi-chunk
+// upload can reconcile against the server rather than starting over.
+// try/catch on every access — never load-bearing if storage is unavailable.
+const IMPORT_SESSION_STORAGE_KEY = "terroir-import-session-v1";
+
+export type StoredSession = { sessionId: string; sourceSha256: string; label: string };
+
+export function readStoredSession(): StoredSession | null {
+  try {
+    const raw = window.localStorage.getItem(IMPORT_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredSession>;
+    if (typeof parsed.sessionId !== "string") return null;
+    return {
+      sessionId: parsed.sessionId,
+      sourceSha256: typeof parsed.sourceSha256 === "string" ? parsed.sourceSha256 : "",
+      label: typeof parsed.label === "string" ? parsed.label : "cellar.csv",
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredSession(value: StoredSession | null) {
+  try {
+    if (value === null) window.localStorage.removeItem(IMPORT_SESSION_STORAGE_KEY);
+    else window.localStorage.setItem(IMPORT_SESSION_STORAGE_KEY, JSON.stringify(value));
+  } catch {
+    // best-effort — resume is a convenience only, never load-bearing.
+  }
+}
+
+// Client-side pacing, matching /api/import/batches' own CONFIRM_RATE_LIMIT
+// (10/60s, src/app/api/import/batches/route.ts) with a one-request margin
+// so a same-tab retry never itself trips the server's limiter.
+const CONFIRM_RATE_LIMIT_MARGIN = 9;
+const CONFIRM_RATE_WINDOW_MS = 60 * 1000;
+
+export type ChunkedPreviewResult = { ok: true; plan: ChunkedPlanState; preview: ChunkedPreviewState } | { ok: false; error: string };
+
+/** Splits an already-parsed, over-MAX_ROWS file into upload chunks and
+ * previews every chunk sequentially against the existing, unmodified
+ * POST /api/import/preview (read-only — no session/batch created here),
+ * aggregating the per-chunk PreviewSummary objects into one combined view. */
+export async function planChunkedPreview(
+  selectedFile: File,
+  headerRecord: string,
+  dataRecords: string[],
+  bytes: Uint8Array,
+): Promise<ChunkedPreviewResult> {
+  const chunkEntries = buildChunkPlan(dataRecords, CLIENT_CHUNK_TARGET_ROWS);
+
+  let sourceSha256: string;
+  try {
+    sourceSha256 = await sha256HexOfBytes(bytes);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Could not hash this file." };
+  }
+
+  const planChunks: ChunkPlanItem[] = [];
+  const perChunk: ChunkPreviewEntry[] = [];
+  const errorRows: ChunkedPreviewState["errorRows"] = [];
+  const summary: PreviewSummary = { ...ZERO_SUMMARY };
+
+  for (const chunkEntry of chunkEntries) {
+    const text = serializeChunk(headerRecord, chunkEntry.records);
+    planChunks.push({ index: chunkEntry.index, startRow: chunkEntry.startRow, endRow: chunkEntry.endRow, text });
+
+    const chunkFile = new File([text], `${selectedFile.name.replace(/\.csv$/i, "")}.part${chunkEntry.index}.csv`, {
+      type: "text/csv",
+    });
+    const form = new FormData();
+    form.append("file", chunkFile);
+    const response = await fetch("/api/import/preview", { method: "POST", body: form });
+    const body = await response.json();
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: `Chunk ${chunkEntry.index} of ${chunkEntries.length} failed to preview: ${body?.error?.message ?? "Preview failed."}`,
+      };
+    }
+
+    const chunkSummary = body.summary as PreviewSummary;
+    const chunkRows = body.rows as PreviewRow[];
+    perChunk.push({ index: chunkEntry.index, startRow: chunkEntry.startRow, endRow: chunkEntry.endRow, summary: chunkSummary });
+    for (const key of Object.keys(summary) as (keyof PreviewSummary)[]) summary[key] += chunkSummary[key];
+    for (const row of chunkRows) {
+      // rowNumber is local to this chunk's own submitted file (1 = this
+      // chunk's first data row) — convert to the row number a human would
+      // see in the ORIGINAL file.
+      if (row.rowState === "error") errorRows.push({ rowNumber: chunkEntry.startRow - 1 + row.rowNumber, errors: row.errors });
+    }
+  }
+
+  return {
+    ok: true,
+    plan: { headerRecord, chunkTotal: chunkEntries.length, chunks: planChunks, sourceSha256 },
+    preview: { summary, perChunk, errorRows },
+  };
+}
+
+export type ConfirmChunkedSessionParams = {
+  plan: ChunkedPlanState;
+  /** Prior chunkUpload state, if this is a retry — any chunk already
+   * "confirmed" is skipped, never re-sent. */
+  initialUpload: ChunkUploadState[];
+  existingSessionId: string | null;
+  fileLabel: string;
+  timestampsRef: { current: number[] };
+  onSessionId: (sessionId: string) => void;
+  onProgress: (upload: ChunkUploadState[]) => void;
+};
+
+export type ConfirmChunkedSessionResult = { ok: true } | { ok: false; error: string };
+
+/** Sequential, session-scoped chunk upload driver: creates the session (if
+ * needed), then POSTs each chunk to /api/import/batches in order, pacing
+ * itself under the server's rate limit. Never parallel. Safe to call again
+ * after a failure with the same `plan` and the returned chunkUpload state
+ * as `initialUpload` — already-confirmed chunks are skipped. */
+export async function confirmChunkedSession(params: ConfirmChunkedSessionParams): Promise<ConfirmChunkedSessionResult> {
+  const { plan, initialUpload, existingSessionId, fileLabel, timestampsRef, onSessionId, onProgress } = params;
+  let results = initialUpload;
+  onProgress(results);
+
+  let activeSessionId = existingSessionId;
+  if (!activeSessionId) {
+    const sessionResponse = await fetch("/api/import/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: fileLabel, sourceSha256: plan.sourceSha256, declaredChunkTotal: plan.chunkTotal }),
+    });
+    const sessionBody = await sessionResponse.json();
+    if (!sessionResponse.ok) {
+      return { ok: false, error: sessionBody?.error?.message ?? "Could not start the import session." };
+    }
+    activeSessionId = sessionBody.sessionId as string;
+  }
+  onSessionId(activeSessionId);
+  writeStoredSession({ sessionId: activeSessionId, sourceSha256: plan.sourceSha256, label: fileLabel });
+
+  for (const chunk of plan.chunks) {
+    const current = results.find((c) => c.index === chunk.index);
+    if (current?.status === "confirmed") continue;
+
+    const now = Date.now();
+    timestampsRef.current = timestampsRef.current.filter((t) => now - t < CONFIRM_RATE_WINDOW_MS);
+    if (timestampsRef.current.length >= CONFIRM_RATE_LIMIT_MARGIN) {
+      results = results.map((c) => (c.index === chunk.index ? { ...c, status: "waiting" } : c));
+      onProgress(results);
+      const waitMs = CONFIRM_RATE_WINDOW_MS - (now - timestampsRef.current[0]) + 250;
+      await new Promise((resolve) => setTimeout(resolve, Math.max(waitMs, 0)));
+    }
+
+    results = results.map((c) => (c.index === chunk.index ? { ...c, status: "uploading" } : c));
+    onProgress(results);
+    timestampsRef.current.push(Date.now());
+
+    const form = new FormData();
+    const chunkFile = new File([chunk.text], `${fileLabel.replace(/\.csv$/i, "")}.part${chunk.index}.csv`, { type: "text/csv" });
+    form.append("file", chunkFile);
+    form.append("sessionId", activeSessionId);
+    form.append("chunkIndex", String(chunk.index));
+    form.append("chunkTotal", String(plan.chunkTotal));
+    form.append("sourceSha256", plan.sourceSha256);
+
+    try {
+      const response = await fetch("/api/import/batches", { method: "POST", body: form });
+      const body = await response.json();
+      if (!response.ok) {
+        results = results.map((c) =>
+          c.index === chunk.index ? { ...c, status: "failed", error: body?.error?.message ?? "Upload failed." } : c,
+        );
+        onProgress(results);
+        return { ok: false, error: `Chunk ${chunk.index} of ${plan.chunkTotal} failed to upload — you can retry it below.` };
+      }
+      // 201 (new) or 200 (alreadyExists: identical bytes already confirmed)
+      // — either way this chunk is now live server-side.
+      results = results.map((c) =>
+        c.index === chunk.index ? { ...c, status: "confirmed", batchId: body.batchId as string, error: null } : c,
+      );
+      onProgress(results);
+    } catch {
+      results = results.map((c) => (c.index === chunk.index ? { ...c, status: "failed", error: "Network error." } : c));
+      onProgress(results);
+      return {
+        ok: false,
+        error: `Chunk ${chunk.index} of ${plan.chunkTotal} failed to upload — check your connection and retry.`,
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
+function chunkUploadStatusLabel(status: ChunkUploadStatus): string {
+  switch (status) {
+    case "pending":
+      return "Waiting to start";
+    case "waiting":
+      return "Waiting to avoid rate limit…";
+    case "uploading":
+      return "Uploading…";
+    case "confirmed":
+      return "Uploaded";
+    case "failed":
+      return "Failed";
+  }
+}
+
+export function ChunkUploadProgress({ chunks, chunkTotal }: { chunks: ChunkUploadState[]; chunkTotal: number }) {
+  const confirmedCount = chunks.filter((c) => c.status === "confirmed").length;
+  return (
+    <div className="mt-lg">
+      <h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
+        Upload progress ({confirmedCount} of {chunkTotal} chunks)
+      </h3>
+      <ul className="mt-xs space-y-2xs">
+        {chunks.map((c) => (
+          <li
+            key={c.index}
+            className="flex items-center justify-between rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink"
+          >
+            <span>Chunk {c.index}</span>
+            <span className="flex items-center gap-2xs text-caption text-grey">
+              {c.status === "uploading" && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+              {chunkUploadStatusLabel(c.status)}
+              {c.status === "failed" && c.error ? `: ${c.error}` : ""}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <dt className="text-caption text-grey">{label}</dt>
+      <dd className="tabular text-[20px] font-medium text-ink">{value}</dd>
+    </div>
+  );
+}
+
+/** import_batches.status values a chunk can carry (identical set BatchStep's
+ * own StatusBadge renders — see DESIGN.md's one-StatusChip-pattern rule). */
+function ChunkStatusChip({ status }: { status: string }) {
+  const label: Record<string, string> = {
+    created: "Not yet applied",
+    applying: "In progress",
+    completed: "Completed",
+    reverted: "Reverted",
+  };
+  return (
+    <span className="inline-flex items-center gap-2xs rounded-pill bg-bridge-surface px-sm py-2xs text-caption font-medium text-ink">
+      {status === "completed" && <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}
+      {label[status] ?? status}
+    </span>
+  );
+}
+
+type SessionChunkProgress = {
+  batchId: string;
+  chunkIndex: number | null;
+  status: string;
+  counts: { total: number; applied: number; excluded: number; pending: number; eligibleNotApplied: number };
+};
+
+type SessionProgress = {
+  sessionId: string;
+  status: string;
+  declaredChunkTotal: number | null;
+  chunks: SessionChunkProgress[];
+  totals: SessionChunkProgress["counts"];
+  allChunksPresent: boolean | null;
+  allApplied: boolean;
+};
+
+export function SessionStep({
+  sessionId,
+  label,
+  onDone,
+}: {
+  sessionId: string;
+  label: string;
+  onDone: () => void;
+}) {
+  const [progress, setProgress] = useState<SessionProgress | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [pendingRows, setPendingRows] = useState<Record<string, BatchRow[]>>({});
+  const [applying, setApplying] = useState(false);
+  const [reverting, setReverting] = useState(false);
+  const [revertDialogOpen, setRevertDialogOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [manualCostDrafts, setManualCostDrafts] = useState<Record<string, string>>({});
+
+  const refresh = useCallback(async () => {
+    const response = await fetch(`/api/import/sessions/${sessionId}`, { cache: "no-store" });
+    if (!response.ok) {
+      setNotFound(true);
+      return;
+    }
+    setProgress(await response.json());
+  }, [sessionId]);
+
+  useEffect(() => {
+    // Deferred a tick so the initial fetch's state updates never run
+    // synchronously inside the effect body (react-hooks/set-state-in-effect).
+    void Promise.resolve().then(refresh);
+  }, [refresh]);
+
+  // Pending-row resolution, sourced across every chunk that has one —
+  // tagged with its own chunkIndex so the operator knows which upload it
+  // came from (P3 §3.3, this lane's brief §6).
+  const pendingKey = progress
+    ? progress.chunks
+        .filter((c) => c.counts.pending > 0)
+        .map((c) => `${c.batchId}:${c.counts.pending}`)
+        .join(",")
+    : "";
+
+  useEffect(() => {
+    if (!progress) return;
+    let active = true;
+    const idsWithPending = progress.chunks.filter((c) => c.counts.pending > 0).map((c) => c.batchId);
+    if (idsWithPending.length === 0) {
+      // Deferred a tick: no synchronous setState inside the effect body.
+      void Promise.resolve().then(() => {
+        if (active) setPendingRows({});
+      });
+      return () => {
+        active = false;
+      };
+    }
+    Promise.all(
+      idsWithPending.map(async (batchId) => {
+        const response = await fetch(`/api/import/batches/${batchId}`, { cache: "no-store" });
+        if (!response.ok) return [batchId, []] as const;
+        const detail = (await response.json()) as { rows: BatchRow[] };
+        return [batchId, detail.rows.filter((r) => r.resolution === "pending")] as const;
+      }),
+    )
+      .then((entries) => {
+        if (active) setPendingRows(Object.fromEntries(entries));
+      })
+      .catch(() => {
+        // best-effort — pending rows still show once a later refresh succeeds.
+      });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingKey]);
+
+  const applyAllChunks = useCallback(async () => {
+    if (!progress) return;
+    setApplying(true);
+    setActionError(null);
+    try {
+      for (const chunk of progress.chunks) {
+        let done = chunk.counts.eligibleNotApplied === 0;
+        let guard = 0;
+        while (!done && guard < 200) {
+          guard += 1;
+          const response = await fetch(`/api/import/batches/${chunk.batchId}/apply`, { method: "POST" });
+          const body = await response.json();
+          if (!response.ok) {
+            setActionError(body?.error?.message ?? `Apply failed on chunk ${chunk.chunkIndex ?? chunk.batchId}.`);
+            return;
+          }
+          done = body.done;
+        }
+      }
+    } catch {
+      setActionError("Apply failed. Your progress so far is saved — try again.");
+    } finally {
+      await refresh();
+      setApplying(false);
+    }
+  }, [progress, refresh]);
+
+  const resolveRow = useCallback(
+    async (batchId: string, rowId: string, action: "include" | "exclude", manualUnitCost?: number) => {
+      setActionError(null);
+      try {
+        const response = await fetch(`/api/import/batches/${batchId}/rows/${rowId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, manualUnitCost }),
+        });
+        const body = await response.json();
+        if (!response.ok) {
+          setActionError(body?.error?.message ?? "Could not resolve row.");
+          return;
+        }
+        await refresh();
+      } catch {
+        setActionError("Could not resolve row. Check your connection and try again.");
+      }
+    },
+    [refresh],
+  );
+
+  // Bulk resolution across every chunk with pending rows — one
+  // POST /resolve-all per chunk, sequential like every other loop here.
+  // `include` only ever covers cost-present rows server-side; missing-cost
+  // rows stay pending and keep their per-row manual-cost path below.
+  const [bulkResolving, setBulkResolving] = useState(false);
+  const bulkResolve = useCallback(
+    async (action: "include" | "exclude") => {
+      if (!progress) return;
+      setBulkResolving(true);
+      setActionError(null);
+      try {
+        for (const chunk of progress.chunks) {
+          if (chunk.counts.pending === 0) continue;
+          const response = await fetch(`/api/import/batches/${chunk.batchId}/resolve-all`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action }),
+          });
+          if (!response.ok) {
+            const body = (await response.json().catch(() => null)) as
+              | { error?: { message?: string } }
+              | null;
+            setActionError(body?.error?.message ?? "Could not bulk-resolve rows.");
+            return;
+          }
+        }
+        await refresh();
+      } catch {
+        setActionError("Could not bulk-resolve rows. Check your connection and try again.");
+      } finally {
+        setBulkResolving(false);
+      }
+    },
+    [progress, refresh],
+  );
+
+  const doRevert = useCallback(async () => {
+    setReverting(true);
+    setActionError(null);
+    try {
+      const response = await fetch(`/api/import/sessions/${sessionId}/revert`, { method: "POST" });
+      const body = await response.json();
+      if (!response.ok) {
+        setActionError(body?.error?.message ?? "Revert failed.");
+        return;
+      }
+      setRevertDialogOpen(false);
+      onDone();
+    } catch {
+      setActionError("Revert failed. Check your connection and try again.");
+    } finally {
+      setReverting(false);
+    }
+  }, [sessionId, onDone]);
+
+  if (notFound) {
+    return (
+      <div className="rounded-card card-surface p-lg">
+        <p className="text-[14px] text-ink">This import session could not be found.</p>
+        <button
+          type="button"
+          onClick={onDone}
+          className="mt-md min-h-11 rounded-pill px-lg text-[14px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink"
+        >
+          Start a new import
+        </button>
+      </div>
+    );
+  }
+
+  if (!progress) {
+    return (
+      <div className="flex min-h-11 items-center justify-center gap-xs rounded-card card-surface p-lg text-[14px] text-grey">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        Loading session…
+      </div>
+    );
+  }
+
+  const allPendingRows = Object.entries(pendingRows).flatMap(([batchId, rows]) => {
+    const chunkIndex = progress.chunks.find((c) => c.batchId === batchId)?.chunkIndex ?? null;
+    return rows.map((row) => ({ batchId, chunkIndex, row }));
+  });
+
+  return (
+    <div className="rounded-card card-surface p-lg">
+      <div className="flex items-center justify-between">
+        <h2 className="font-serif text-[20px] text-ink">{label}</h2>
+        <span className="inline-flex items-center gap-2xs rounded-pill bg-bridge-surface px-sm py-2xs text-caption font-medium text-ink">
+          {progress.status === "completed" && <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}
+          {progress.status === "in_progress" ? "In progress" : progress.status === "completed" ? "Completed" : "Reverted"}
+        </span>
+      </div>
+
+      <dl className="mt-md grid grid-cols-2 gap-sm text-[13px]">
+        <MiniStat label="Total rows" value={progress.totals.total} />
+        <MiniStat label="Applied" value={progress.totals.applied} />
+        <MiniStat label="Needs resolution" value={progress.totals.pending} />
+        <MiniStat label="Ready, not yet applied" value={progress.totals.eligibleNotApplied} />
+      </dl>
+
+      <div className="mt-lg">
+        <h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
+          Chunks ({progress.chunks.length}
+          {progress.declaredChunkTotal ? ` of ${progress.declaredChunkTotal}` : ""})
+        </h3>
+        <ul className="mt-xs space-y-2xs">
+          {progress.chunks.map((chunk) => (
+            <li
+              key={chunk.batchId}
+              className="flex items-center justify-between rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink"
+            >
+              <span>Chunk {chunk.chunkIndex ?? "—"} ({chunk.counts.applied}/{chunk.counts.total} applied)</span>
+              <ChunkStatusChip status={chunk.status} />
+            </li>
+          ))}
+        </ul>
+        {progress.allChunksPresent === false && (
+          <p className="mt-xs text-caption text-grey">
+            Not every expected chunk has arrived yet — if the upload was interrupted, start a new import with the
+            same file to finish it.
+          </p>
+        )}
+      </div>
+
+      {actionError && (
+        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-accent">
+          <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
+          {actionError}
+        </p>
+      )}
+
+      {progress.totals.pending > 1 && progress.status !== "reverted" && (
+        <div className="mt-lg rounded-lg bg-bridge-surface px-md py-sm">
+          <p className="text-[13px] text-ink">
+            {progress.totals.pending.toLocaleString()} rows need a decision — most are simply
+            wines outside the LWIN catalog.
+          </p>
+          <div className="mt-sm flex flex-wrap items-center gap-sm">
+            <button
+              type="button"
+              disabled={bulkResolving}
+              onClick={() => void bulkResolve("include")}
+              className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {bulkResolving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+              Include all with a cost
+            </button>
+            <button
+              type="button"
+              disabled={bulkResolving}
+              onClick={() => void bulkResolve("exclude")}
+              className="min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Exclude all pending
+            </button>
+          </div>
+          <p className="mt-xs text-caption text-grey">
+            Rows missing a unit cost are never bulk-included — they stay listed below for an
+            explicit cost.
+          </p>
+        </div>
+      )}
+
+      {allPendingRows.length > 0 && (
+        <div className="mt-lg">
+          <h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
+            Needs your decision ({allPendingRows.length})
+          </h3>
+          <ul className="mt-xs space-y-sm">
+            {allPendingRows.map(({ batchId, chunkIndex, row }) => (
+              <li key={row.id} className="rounded-lg card-surface p-sm">
+                <p className="text-[14px] text-ink">
+                  Chunk {chunkIndex ?? "—"}, row {row.row_number}: {row.raw.producer} — {row.raw.name}
+                </p>
+                <p className="mt-2xs text-caption text-grey">
+                  {row.lwin_status === "unmatched" ? "No LWIN catalog match. " : ""}
+                  {row.cost_status === "missing" ? "No unit cost provided." : ""}
+                </p>
+                <div className="mt-sm flex flex-wrap items-center gap-sm">
+                  {row.cost_status === "missing" && (
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Unit cost"
+                      value={manualCostDrafts[row.id] ?? ""}
+                      onChange={(e) => setManualCostDrafts((prev) => ({ ...prev, [row.id]: e.target.value }))}
+                      className="min-h-11 w-28 rounded-pill border border-hairline bg-surface px-sm text-[14px] focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const draft = manualCostDrafts[row.id];
+                      const manualUnitCost = row.cost_status === "missing" && draft ? Number(draft) : undefined;
+                      void resolveRow(batchId, row.id, "include", manualUnitCost);
+                    }}
+                    disabled={row.cost_status === "missing" && !manualCostDrafts[row.id]}
+                    className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Include anyway
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void resolveRow(batchId, row.id, "exclude")}
+                    className="min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                  >
+                    Exclude
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="mt-lg flex flex-col gap-sm">
+        {progress.totals.eligibleNotApplied > 0 && (
+          <button
+            type="button"
+            disabled={applying}
+            onClick={() => void applyAllChunks()}
+            className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {applying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+            {applying
+              ? `Applying… (${progress.totals.applied} of ${progress.totals.total})`
+              : `Apply ${progress.totals.eligibleNotApplied} row(s)`}
+          </button>
+        )}
+
+        {(progress.allApplied || progress.totals.applied > 0) && progress.status !== "reverted" && (
+          <button
+            type="button"
+            onClick={() => setRevertDialogOpen(true)}
+            className="flex min-h-11 items-center justify-center gap-xs rounded-pill border border-ink/25 bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          >
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            Revert this import
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={onDone}
+          className="min-h-11 rounded-pill px-lg text-[14px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+        >
+          Start a new import
+        </button>
+      </div>
+
+      <ActionDialog
+        open={revertDialogOpen}
+        title="Revert this import?"
+        description={`This removes exactly the ${progress.totals.applied} inventory row(s) this session created, across every chunk. Nothing else in your cellar is touched.`}
+        confirmLabel="Revert import"
+        busy={reverting}
+        onConfirm={() => void doRevert()}
+        onClose={() => setRevertDialogOpen(false)}
+      />
+    </div>
+  );
+}
