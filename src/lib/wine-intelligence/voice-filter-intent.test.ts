@@ -46,6 +46,19 @@ describe("resolveVoiceFilterIntent", () => {
     ).toEqual({ region: "Napa Valley" });
   });
 
+  it("emits exactly one dimension when a value is both a country and a region (same evidence span)", () => {
+    const overlapping: FacetVocabulary = {
+      country: ["Georgia", "France"],
+      region: ["Georgia", "Napa"],
+      varietal: ["Chardonnay"],
+    };
+    const result = resolveVoiceFilterIntent("show me Georgia wines", overlapping);
+    expect(result).not.toBeNull();
+    expect(Object.keys(result ?? {})).toHaveLength(1);
+    // Same span, same score -> the more specific dimension (region) wins.
+    expect(result).toEqual({ region: "Georgia" });
+  });
+
   it("falls back to a tight search phrase when nothing in the vocabulary matches", () => {
     expect(
       resolveVoiceFilterIntent("show me any Opus One please", vocabulary),

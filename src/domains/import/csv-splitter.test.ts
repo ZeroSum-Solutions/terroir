@@ -15,9 +15,11 @@ import {
   buildChunkPlan,
   serializeChunk,
   sha256HexOfBytes,
+  decodeCsvBytesStrict,
   AmbiguousRecordSplitError,
   UnsupportedLineEndingError,
   SubtleCryptoUnavailableError,
+  UnsupportedEncodingError,
 } from "./csv-splitter";
 
 const HEADER = "producer,name,vintage,varietal,region,country,size_ml,format,currency,quantity,unit_cost,bin,section";
@@ -151,5 +153,35 @@ describe("sha256HexOfBytes", () => {
 
   it("SubtleCryptoUnavailableError is exported for callers to detect the unsupported-context case", () => {
     expect(SubtleCryptoUnavailableError.prototype).toBeInstanceOf(Error);
+  });
+});
+
+describe("decodeCsvBytesStrict", () => {
+  it("decodes plain UTF-8 bytes", () => {
+    const bytes = new TextEncoder().encode("a,b\n1,2");
+    expect(decodeCsvBytesStrict(bytes)).toBe("a,b\n1,2");
+  });
+
+  it("strips a leading UTF-8 BOM", () => {
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode("a,b\n1,2")]);
+    expect(decodeCsvBytesStrict(bytes)).toBe("a,b\n1,2");
+  });
+
+  it("throws UnsupportedEncodingError on an invalid UTF-8 byte sequence (e.g. Windows-1252 'é')", () => {
+    // 0xe9 alone is "é" in Windows-1252/Latin-1 but is never valid as a
+    // standalone UTF-8 byte — exactly the "Château" -> "Ch�teau" corruption
+    // the audit flagged.
+    const bytes = new Uint8Array([0x43, 0x68, 0xe9, 0x74, 0x65, 0x61, 0x75]);
+    expect(() => decodeCsvBytesStrict(bytes)).toThrow(UnsupportedEncodingError);
+  });
+
+  it("throws UnsupportedEncodingError on a UTF-16LE BOM", () => {
+    const bytes = new Uint8Array([0xff, 0xfe, 0x61, 0x00]);
+    expect(() => decodeCsvBytesStrict(bytes)).toThrow(UnsupportedEncodingError);
+  });
+
+  it("throws UnsupportedEncodingError on a UTF-16BE BOM", () => {
+    const bytes = new Uint8Array([0xfe, 0xff, 0x00, 0x61]);
+    expect(() => decodeCsvBytesStrict(bytes)).toThrow(UnsupportedEncodingError);
   });
 });

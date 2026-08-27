@@ -11,8 +11,13 @@ import {
 import { ActionDialog } from "@/components/action-dialog";
 import { cn } from "@/lib/utils";
 import { CANONICAL_HEADERS, CLIENT_CHUNK_TARGET_ROWS, MAX_ROWS } from "@/domains/import/constants";
-import { decodeCsvBuffer } from "@/domains/import/csv-parser";
-import { AmbiguousRecordSplitError, UnsupportedLineEndingError, splitLogicalRecords } from "@/domains/import/csv-splitter";
+import {
+  AmbiguousRecordSplitError,
+  UnsupportedEncodingError,
+  UnsupportedLineEndingError,
+  decodeCsvBytesStrict,
+  splitLogicalRecords,
+} from "@/domains/import/csv-splitter";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
 import {
   SessionStep,
@@ -112,7 +117,8 @@ export function ImportClient() {
         }
         const progress = (await response.json()) as { status: string };
         if (!active) return;
-        if (progress.status === "reverted") {
+        if (progress.status === "reverted" || progress.status === "completed") {
+          // Nothing left to resume — never re-jump into a finished session.
           writeStoredSession(null);
           return;
         }
@@ -168,10 +174,14 @@ export function ImportClient() {
     try {
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
-      // decodeCsvBuffer's parameter type is Node's Buffer, but its body only
-      // ever calls the global TextDecoder on it — a plain Uint8Array works
-      // identically at runtime; the cast is type-only.
-      const text = decodeCsvBuffer(bytes as unknown as Buffer);
+
+      let text: string;
+      try {
+        text = decodeCsvBytesStrict(bytes);
+      } catch (err) {
+        setPreviewError(err instanceof UnsupportedEncodingError ? err.message : "Could not read this CSV file.");
+        return;
+      }
 
       let allRecords: string[];
       try {
@@ -233,29 +243,46 @@ export function ImportClient() {
     if (!chunkedPlan) return;
     setConfirmingChunked(true);
     setPreviewError(null);
-    const initial: ChunkUploadState[] =
-      chunkUpload ?? chunkedPlan.chunks.map((c) => ({ index: c.index, status: "pending" as const, batchId: null, error: null }));
+    try {
+      const initial: ChunkUploadState[] =
+        chunkUpload ?? chunkedPlan.chunks.map((c) => ({ index: c.index, status: "pending" as const, batchId: null, error: null }));
 
-    const result = await confirmChunkedSession({
-      plan: chunkedPlan,
-      initialUpload: initial,
-      existingSessionId: sessionId,
-      fileLabel: file?.name ?? sessionLabel,
-      timestampsRef: requestTimestampsRef,
-      onSessionId: (id) => {
-        setSessionId(id);
-        setSessionLabel(file?.name ?? sessionLabel);
-      },
-      onProgress: setChunkUpload,
-    });
-    setConfirmingChunked(false);
+      const result = await confirmChunkedSession({
+        plan: chunkedPlan,
+        initialUpload: initial,
+        existingSessionId: sessionId,
+        fileLabel: file?.name ?? sessionLabel,
+        timestampsRef: requestTimestampsRef,
+        onSessionId: (id) => {
+          setSessionId(id);
+          setSessionLabel(file?.name ?? sessionLabel);
+        },
+        onProgress: setChunkUpload,
+      });
 
-    if (!result.ok) {
-      setPreviewError(result.error);
-      return;
+      if (!result.ok) {
+        if (result.conflictingSessionId) {
+          // This chunk's content already belongs to a DIFFERENT, unfinished
+          // session — never adopt it into this one (that would split the
+          // file across two sessions). Resume the original session instead.
+          const label = file?.name ?? sessionLabel;
+          writeStoredSession({ sessionId: result.conflictingSessionId, sourceSha256: chunkedPlan.sourceSha256, label });
+          setSessionId(result.conflictingSessionId);
+          setSessionLabel(label);
+          setPreviewError(result.error);
+          setStep("session");
+          return;
+        }
+        setPreviewError(result.error);
+        return;
+      }
+      setStep("session");
+      void loadRecent();
+    } catch {
+      setPreviewError("Import could not be created. Check your connection and try again.");
+    } finally {
+      setConfirmingChunked(false);
     }
-    setStep("session");
-    void loadRecent();
   }, [chunkedPlan, chunkUpload, sessionId, file, sessionLabel, loadRecent]);
 
   const reset = useCallback(() => {

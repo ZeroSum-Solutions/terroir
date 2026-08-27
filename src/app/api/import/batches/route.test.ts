@@ -108,12 +108,28 @@ describe("POST /api/import/batches", () => {
       alreadyExists: true,
       batchId: "batch-1",
       status: "applying",
+      sessionId: null,
       counts: { total: 5, applied: 3, excluded: 0, pending: 0, eligibleNotApplied: 2 },
     });
     const response = await POST(multipartRequest(new File(["producer,name,quantity\nA,B,1"], "cellar.csv", { type: "text/csv" })));
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body).toMatchObject({ batchId: "batch-1", alreadyExists: true, status: "applying" });
+  });
+
+  it("surfaces the duplicate batch's own sessionId — the caller needs it to detect a cross-session collision", async () => {
+    allow();
+    mockConfirmImportBatch.mockResolvedValue({
+      ok: true,
+      alreadyExists: true,
+      batchId: "batch-1",
+      status: "created",
+      sessionId: "session-old",
+      counts: { total: 5, applied: 0, excluded: 0, pending: 0, eligibleNotApplied: 5 },
+    });
+    const response = await POST(multipartRequest(new File(["producer,name,quantity\nA,B,1"], "cellar.csv", { type: "text/csv" })));
+    const body = await response.json();
+    expect(body).toMatchObject({ sessionId: "session-old" });
   });
 
   it("surfaces a confirm-level validation error as 422", async () => {

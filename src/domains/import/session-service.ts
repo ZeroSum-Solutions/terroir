@@ -147,9 +147,22 @@ export async function getImportSessionProgress(
 
   const allApplied = chunks.every((c) => c.counts.eligibleNotApplied === 0 && c.counts.pending === 0);
 
+  // Nothing ever promotes import_sessions.status out of its default
+  // 'in_progress' — only revert_import_session (0110) writes a session
+  // status, and only to 'reverted'. Derive 'completed' here instead of
+  // writing it: every expected chunk has arrived and every child batch is
+  // fully settled. Purely a reporting derivation — never overrides a
+  // 'reverted' session, and chunks.length === 0 (no batches yet) never
+  // reports 'completed' even though `.every()` on an empty array is
+  // vacuously true.
+  const status =
+    sessionRow.status === "in_progress" && chunks.length > 0 && allChunksPresent !== false && allApplied
+      ? "completed"
+      : sessionRow.status;
+
   return {
     sessionId: sessionRow.id,
-    status: sessionRow.status,
+    status,
     declaredChunkTotal: sessionRow.declared_chunk_total,
     chunks,
     totals,

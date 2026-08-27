@@ -2,6 +2,27 @@ import { facetCounts, type CellarFacetRow, type FacetCount } from "@/lib/cellar-
 import { lookupCountry, normalizeCountryText, UNMATCHED } from "./country-lookup";
 import { WORLD_COUNTRY_PATHS } from "./world-paths.generated";
 
+/** A cellar row plus whether it has a currently-open bottle. `hasOpenBottle`
+ * is optional so plain CellarFacetRow[] (no open-bottle fetch) still
+ * type-checks — those rows just fall back to sealed-count-only presence. */
+export type AtlasFacetRow = CellarFacetRow & { hasOpenBottle?: boolean };
+
+/** A wine only belongs on the Atlas map if it's actually in the cellar right
+ * now: sealed stock, or a bottle currently open. A catalog row with neither
+ * (86'd or fully depleted) must not inflate country/region counts. */
+function hasCellarPresence(row: AtlasFacetRow): boolean {
+  return row.sealed_count > 0 || row.hasOpenBottle === true;
+}
+
+// Mirrors cellar-facets' own text-equality contract (trim + locale-lowercase,
+// src/lib/cellar-facets/index.ts's private normalize()) — the exact
+// equivalence facetCounts uses to match a `country: rawLabel` facet. Kept as
+// a local copy so rawLabels dedup below never diverges from what actually
+// merges in a facetCounts() call.
+function simpleTextKey(s: string): string {
+  return s.trim().toLocaleLowerCase();
+}
+
 export type AtlasCountryAggregate = {
   /** world-paths.generated.ts key (ISO 3166-1 numeric). */
   key: string;
@@ -34,12 +55,17 @@ export type AtlasAggregate = {
  * it never produced a country label to fail to resolve in the first
  * place, so it's excluded from both lists (the page's own empty state
  * covers a cellar with no country data at all).
+ *
+ * A row with zero cellar presence (no sealed stock, no open bottle — a
+ * catalog-only or fully-depleted wine) is excluded the same way: it never
+ * counts toward either list.
  */
-export function aggregateAtlasCountries(rows: readonly CellarFacetRow[]): AtlasAggregate {
+export function aggregateAtlasCountries(rows: readonly AtlasFacetRow[]): AtlasAggregate {
   const byKey = new Map<string, AtlasCountryAggregate>();
   const byUnmatched = new Map<string, AtlasUnmatchedAggregate>();
 
   for (const row of rows) {
+    if (!hasCellarPresence(row)) continue;
     const raw = row.country?.trim();
     if (!raw) continue;
 
@@ -60,7 +86,12 @@ export function aggregateAtlasCountries(rows: readonly CellarFacetRow[]): AtlasA
       bottles: 0,
       wines: 0,
     };
-    if (!existing.rawLabels.includes(raw)) existing.rawLabels.push(raw);
+    // Dedupe by the same trim+lowercase equality facetCounts uses, so
+    // "France" and "france" never both land in rawLabels — merging both
+    // into a region drill below would double-count every row (finding #8).
+    if (!existing.rawLabels.some((label) => simpleTextKey(label) === simpleTextKey(raw))) {
+      existing.rawLabels.push(raw);
+    }
     existing.bottles += row.sealed_count;
     existing.wines += 1;
     byKey.set(key, existing);
@@ -80,12 +111,18 @@ export function aggregateAtlasCountries(rows: readonly CellarFacetRow[]): AtlasA
  * spelling in the same cellar.
  */
 export function regionsForCountry(
-  rows: readonly CellarFacetRow[],
+  rows: readonly AtlasFacetRow[],
   rawLabels: readonly string[],
 ): FacetCount[] {
+  const presentRows = rows.filter(hasCellarPresence);
+  // Dedupe defensively (aggregateAtlasCountries already dedupes rawLabels
+  // before this is called, but two spellings that are equal under
+  // facetCounts' text match — e.g. "France"/"france" — must never be
+  // walked twice here either, or every region count doubles).
+  const dedupedLabels = [...new Map(rawLabels.map((label) => [simpleTextKey(label), label])).values()];
   const merged = new Map<string, FacetCount>();
-  for (const rawLabel of rawLabels) {
-    for (const region of facetCounts(rows, { country: rawLabel }).region) {
+  for (const rawLabel of dedupedLabels) {
+    for (const region of facetCounts(presentRows, { country: rawLabel }).region) {
       const existing = merged.get(region.value);
       merged.set(
         region.value,

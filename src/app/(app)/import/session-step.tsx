@@ -100,6 +100,16 @@ export function writeStoredSession(value: StoredSession | null) {
 const CONFIRM_RATE_LIMIT_MARGIN = 9;
 const CONFIRM_RATE_WINDOW_MS = 60 * 1000;
 
+// /api/import/preview's own PREVIEW_RATE_WINDOW_MS (src/app/api/import/
+// preview/route.ts) — used as the wait fallback on a 429 that arrives
+// without a Retry-After header. Unlike confirm, preview isn't paced
+// proactively (every chunk is read-only and idempotent to retry), so a
+// large file can legitimately hit the window; on 429 this loop honors
+// Retry-After and resumes at the failed chunk, capped, rather than
+// discarding every chunk previewed so far.
+const PREVIEW_RATE_WINDOW_MS = 60 * 1000;
+const PREVIEW_MAX_RETRIES_PER_CHUNK = 5;
+
 export type ChunkedPreviewResult = { ok: true; plan: ChunkedPlanState; preview: ChunkedPreviewState } | { ok: false; error: string };
 
 /** Splits an already-parsed, over-MAX_ROWS file into upload chunks and
@@ -133,19 +143,50 @@ export async function planChunkedPreview(
     const chunkFile = new File([text], `${selectedFile.name.replace(/\.csv$/i, "")}.part${chunkEntry.index}.csv`, {
       type: "text/csv",
     });
-    const form = new FormData();
-    form.append("file", chunkFile);
-    const response = await fetch("/api/import/preview", { method: "POST", body: form });
-    const body = await response.json();
-    if (!response.ok) {
-      return {
-        ok: false,
-        error: `Chunk ${chunkEntry.index} of ${chunkEntries.length} failed to preview: ${body?.error?.message ?? "Preview failed."}`,
-      };
+
+    // Retries THIS chunk only — every prior chunk's summary/errorRows are
+    // already accumulated above and untouched, so a 429 partway through a
+    // large file resumes at the failed chunk rather than discarding
+    // everything previewed so far.
+    let body: { summary: PreviewSummary; rows: PreviewRow[] } | null = null;
+    for (let attempt = 0; body === null; attempt += 1) {
+      const form = new FormData();
+      form.append("file", chunkFile);
+      let response: Response;
+      try {
+        response = await fetch("/api/import/preview", { method: "POST", body: form });
+      } catch {
+        return {
+          ok: false,
+          error: `Chunk ${chunkEntry.index} of ${chunkEntries.length} failed to preview — check your connection and try again.`,
+        };
+      }
+
+      if (response.status === 429) {
+        if (attempt >= PREVIEW_MAX_RETRIES_PER_CHUNK) {
+          return {
+            ok: false,
+            error: `Chunk ${chunkEntry.index} of ${chunkEntries.length} is still rate-limited after ${PREVIEW_MAX_RETRIES_PER_CHUNK} retries — wait a minute and try again.`,
+          };
+        }
+        const retryAfterSeconds = Number(response.headers.get("Retry-After"));
+        const waitMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0 ? retryAfterSeconds * 1000 : PREVIEW_RATE_WINDOW_MS;
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        continue;
+      }
+
+      const parsedBody = await response.json();
+      if (!response.ok) {
+        return {
+          ok: false,
+          error: `Chunk ${chunkEntry.index} of ${chunkEntries.length} failed to preview: ${parsedBody?.error?.message ?? "Preview failed."}`,
+        };
+      }
+      body = parsedBody;
     }
 
-    const chunkSummary = body.summary as PreviewSummary;
-    const chunkRows = body.rows as PreviewRow[];
+    const chunkSummary = body.summary;
+    const chunkRows = body.rows;
     perChunk.push({ index: chunkEntry.index, startRow: chunkEntry.startRow, endRow: chunkEntry.endRow, summary: chunkSummary });
     for (const key of Object.keys(summary) as (keyof PreviewSummary)[]) summary[key] += chunkSummary[key];
     for (const row of chunkRows) {
@@ -175,7 +216,12 @@ export type ConfirmChunkedSessionParams = {
   onProgress: (upload: ChunkUploadState[]) => void;
 };
 
-export type ConfirmChunkedSessionResult = { ok: true } | { ok: false; error: string };
+export type ConfirmChunkedSessionResult =
+  | { ok: true }
+  /** conflictingSessionId is set when a chunk's content already belongs to
+   * a DIFFERENT, unfinished session — the caller's job is to resume that
+   * session, never to adopt the batch into the one being uploaded here. */
+  | { ok: false; error: string; conflictingSessionId?: string };
 
 /** Sequential, session-scoped chunk upload driver: creates the session (if
  * needed), then POSTs each chunk to /api/import/batches in order, pacing
@@ -189,16 +235,20 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
 
   let activeSessionId = existingSessionId;
   if (!activeSessionId) {
-    const sessionResponse = await fetch("/api/import/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label: fileLabel, sourceSha256: plan.sourceSha256, declaredChunkTotal: plan.chunkTotal }),
-    });
-    const sessionBody = await sessionResponse.json();
-    if (!sessionResponse.ok) {
-      return { ok: false, error: sessionBody?.error?.message ?? "Could not start the import session." };
+    try {
+      const sessionResponse = await fetch("/api/import/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: fileLabel, sourceSha256: plan.sourceSha256, declaredChunkTotal: plan.chunkTotal }),
+      });
+      const sessionBody = await sessionResponse.json();
+      if (!sessionResponse.ok) {
+        return { ok: false, error: sessionBody?.error?.message ?? "Could not start the import session." };
+      }
+      activeSessionId = sessionBody.sessionId as string;
+    } catch {
+      return { ok: false, error: "Could not start the import session. Check your connection and try again." };
     }
-    activeSessionId = sessionBody.sessionId as string;
   }
   onSessionId(activeSessionId);
   writeStoredSession({ sessionId: activeSessionId, sourceSha256: plan.sourceSha256, label: fileLabel });
@@ -238,8 +288,24 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
         onProgress(results);
         return { ok: false, error: `Chunk ${chunk.index} of ${plan.chunkTotal} failed to upload — you can retry it below.` };
       }
-      // 201 (new) or 200 (alreadyExists: identical bytes already confirmed)
-      // — either way this chunk is now live server-side.
+      // 200 (alreadyExists) can point at a batch that belongs to a
+      // DIFFERENT session than the one being uploaded here — this file's
+      // upload was interrupted earlier and started fresh, and this chunk's
+      // content collided by hash with the OLD session's chunk. Adopting it
+      // into this new session would split one file across two incomplete
+      // sessions; stop and hand the original session back to the caller.
+      if (body.alreadyExists && body.sessionId && body.sessionId !== activeSessionId) {
+        return {
+          ok: false,
+          error:
+            "This file was already partially uploaded as a different, unfinished import — resuming that import " +
+            "instead of starting a second one.",
+          conflictingSessionId: body.sessionId as string,
+        };
+      }
+
+      // 201 (new) or 200 (alreadyExists: identical bytes already confirmed
+      // under THIS session) — either way this chunk is now live server-side.
       results = results.map((c) =>
         c.index === chunk.index ? { ...c, status: "confirmed", batchId: body.batchId as string, error: null } : c,
       );
@@ -352,6 +418,7 @@ export function SessionStep({
 }) {
   const [progress, setProgress] = useState<SessionProgress | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [pendingRows, setPendingRows] = useState<Record<string, BatchRow[]>>({});
   const [applying, setApplying] = useState(false);
   const [reverting, setReverting] = useState(false);
@@ -359,13 +426,22 @@ export function SessionStep({
   const [actionError, setActionError] = useState<string | null>(null);
   const [manualCostDrafts, setManualCostDrafts] = useState<Record<string, string>>({});
 
+  // Never throws — a network/JSON failure here is common (this also runs
+  // inside applyAllChunks' outer `finally`, where a throw would strand
+  // `applying` permanently true) and instead surfaces as loadError with a
+  // retry, distinct from the terminal "session not found" state.
   const refresh = useCallback(async () => {
-    const response = await fetch(`/api/import/sessions/${sessionId}`, { cache: "no-store" });
-    if (!response.ok) {
-      setNotFound(true);
-      return;
+    try {
+      const response = await fetch(`/api/import/sessions/${sessionId}`, { cache: "no-store" });
+      if (!response.ok) {
+        setNotFound(true);
+        return;
+      }
+      setProgress(await response.json());
+      setLoadError(null);
+    } catch {
+      setLoadError("Could not load this import session. Check your connection and try again.");
     }
-    setProgress(await response.json());
   }, [sessionId]);
 
   useEffect(() => {
@@ -531,6 +607,24 @@ export function SessionStep({
           className="mt-md min-h-11 rounded-pill px-lg text-[14px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink"
         >
           Start a new import
+        </button>
+      </div>
+    );
+  }
+
+  if (!progress && loadError) {
+    return (
+      <div className="rounded-card card-surface p-lg">
+        <p role="alert" className="flex items-start gap-xs text-[14px] text-accent">
+          <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
+          {loadError}
+        </p>
+        <button
+          type="button"
+          onClick={() => void refresh()}
+          className="mt-md min-h-11 rounded-pill bg-primary px-lg text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+        >
+          Retry
         </button>
       </div>
     );

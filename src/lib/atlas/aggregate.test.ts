@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { facetCounts, type CellarFacetRow } from "@/lib/cellar-facets";
-import { aggregateAtlasCountries, regionsForCountry } from "./aggregate";
+import { aggregateAtlasCountries, regionsForCountry, type AtlasFacetRow } from "./aggregate";
 
-function wine(overrides: Partial<CellarFacetRow> = {}): CellarFacetRow {
+function wine(overrides: Partial<AtlasFacetRow> = {}): AtlasFacetRow {
   return {
     wine_id: "wine-1",
     producer: "Alpha Estate",
@@ -63,6 +63,32 @@ describe("aggregateAtlasCountries", () => {
     const noCountryRows = [wine({ wine_id: "w1", country: null })];
     expect(aggregateAtlasCountries(noCountryRows)).toEqual({ countries: [], unmatched: [] });
   });
+
+  it("excludes zero-presence rows (no sealed stock, no open bottle) from aggregation", () => {
+    const zeroStockRows: CellarFacetRow[] = [
+      wine({ wine_id: "z1", country: "France", region: "Burgundy", sealed_count: 0 }),
+    ];
+    expect(aggregateAtlasCountries(zeroStockRows)).toEqual({ countries: [], unmatched: [] });
+  });
+
+  it("still counts a zero-sealed row with a currently-open bottle", () => {
+    const openOnlyRows: AtlasFacetRow[] = [
+      wine({ wine_id: "z2", country: "France", region: "Burgundy", sealed_count: 0, hasOpenBottle: true }),
+    ];
+    const { countries } = aggregateAtlasCountries(openOnlyRows);
+    const france = countries.find((c) => c.key === "250");
+    expect(france?.wines).toBe(1);
+  });
+
+  it("dedupes case/spacing variants of the same raw country label", () => {
+    const mixedCaseRows: CellarFacetRow[] = [
+      wine({ wine_id: "m1", country: "France", region: "Burgundy", sealed_count: 2 }),
+      wine({ wine_id: "m2", country: "france", region: "Loire", sealed_count: 3 }),
+    ];
+    const { countries } = aggregateAtlasCountries(mixedCaseRows);
+    const france = countries.find((c) => c.key === "250")!;
+    expect(france.rawLabels).toEqual(["France"]);
+  });
 });
 
 describe("regionsForCountry", () => {
@@ -84,5 +110,17 @@ describe("regionsForCountry", () => {
     const unknown = result.find((r) => r.isUnknown);
     expect(unknown).toBeDefined();
     expect(unknown?.count).toBe(1); // w4
+  });
+
+  it("counts a region once even when rawLabels carries a case/spacing duplicate", () => {
+    const mixedCaseRows: CellarFacetRow[] = [
+      wine({ wine_id: "m1", country: "France", region: "Burgundy", sealed_count: 2 }),
+    ];
+    // Simulates the pre-fix bug directly: rawLabels holding both spellings
+    // (aggregateAtlasCountries itself now dedupes, but regionsForCountry
+    // must not double-count even if it's ever called with a duplicate).
+    const result = regionsForCountry(mixedCaseRows, ["France", "france"]);
+    const burgundy = result.find((r) => r.label === "Burgundy");
+    expect(burgundy?.count).toBe(1);
   });
 });

@@ -18,8 +18,10 @@ const MIN_INTENSITY = 0.16;
  * cellar's own max country (never an absolute scale) — semantic tokens
  * only, no hex.
  * Tap-only in v1: no pan/zoom. Each country with bottles is a button-role
- * path (44px targets don't apply to map geometry — a focus outline
- * stands in for the touch-target contract instead).
+ * path, but small-country geometry can't guarantee a 44px hit area — the
+ * accessible country list AtlasShell renders below the map is the reliable
+ * touch/keyboard path; the map itself is exposed as a labelled `group` (not
+ * `img`) so its button-role descendants stay in the accessibility tree.
  */
 export function AtlasWorldMap({
   countries,
@@ -36,7 +38,7 @@ export function AtlasWorldMap({
   return (
     <svg
       viewBox={ATLAS_VIEWBOX}
-      role="img"
+      role="group"
       aria-label="Map of the countries in your cellar"
       className="h-auto w-full"
     >

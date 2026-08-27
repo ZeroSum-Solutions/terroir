@@ -48,8 +48,11 @@ export type ConfirmBatchResult =
    * were already confirmed as a live (non-reverted) batch — a resume
    * pointer, not a bare rejection. Re-applying is already idempotent
    * (§2.1), so the client's correct move is "call /apply on batchId
-   * again," never "upload again." */
-  | { ok: true; alreadyExists: true; batchId: string; status: string; counts: BatchCounts }
+   * again," never "upload again." sessionId is the EXISTING batch's own
+   * session (null if it has none) — the caller must compare this against
+   * whatever session it thinks it's uploading into, since a content-hash
+   * match can point at a batch from a completely different session. */
+  | { ok: true; alreadyExists: true; batchId: string; status: string; sessionId: string | null; counts: BatchCounts }
   | { ok: false; error: { code: string; message: string; missingHeaders?: string[] } };
 
 type RowPayload = {
@@ -165,29 +168,29 @@ async function findDuplicateBatch(
 ): Promise<ConfirmBatchResult | null> {
   const { data: byHash } = await supabase
     .from("import_batches")
-    .select("id, status")
+    .select("id, status, session_id")
     .eq("restaurant_id", restaurantId)
     .eq("content_sha256", contentSha256)
     .neq("status", "reverted")
     .maybeSingle();
 
-  let match = byHash as { id: string; status: string } | null;
+  let match = byHash as { id: string; status: string; session_id: string | null } | null;
 
   if (!match && options.sessionId && options.chunkIndex !== undefined) {
     const { data: byChunk } = await supabase
       .from("import_batches")
-      .select("id, status")
+      .select("id, status, session_id")
       .eq("session_id", options.sessionId)
       .eq("chunk_index", options.chunkIndex)
       .neq("status", "reverted")
       .maybeSingle();
-    match = byChunk as { id: string; status: string } | null;
+    match = byChunk as { id: string; status: string; session_id: string | null } | null;
   }
 
   if (!match) return null;
 
   const counts = await countBatchRows(supabase, match.id);
-  return { ok: true, alreadyExists: true, batchId: match.id, status: match.status, counts };
+  return { ok: true, alreadyExists: true, batchId: match.id, status: match.status, sessionId: match.session_id, counts };
 }
 
 export type BatchCounts = {

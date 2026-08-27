@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
-import type { CellarFacetRow } from "@/lib/cellar-facets";
+import type { AtlasFacetRow } from "@/lib/atlas/aggregate";
 import { AtlasShell } from "./atlas-shell";
 
 export const runtime = "nodejs";
@@ -13,8 +13,10 @@ export const metadata: Metadata = { title: "Atlas" };
  * cellar. Mirrors cellar/page.tsx's auth + restaurant-scoped fetch
  * pattern, but only pulls the fields src/lib/cellar-facets actually
  * groups by: producer/region/country/varietal/vintage/format + sealed
- * count. No health, pricing, or list-price joins — those don't affect
- * the map.
+ * count, plus a minimal open-bottles presence scan (mirrors cellar/page.tsx's
+ * open_bottles query, id/wine_id/timestamps dropped — only wine_id matters
+ * here) so a depleted-but-open wine still counts as present. No health,
+ * pricing, or list-price joins — those don't affect the map.
  */
 export default async function AtlasPage() {
   const auth = (await getAuthContext())!; // AppLayout redirects when null
@@ -23,6 +25,7 @@ export default async function AtlasPage() {
   const [
     { data: wineRows, error: wineError },
     { data: inventoryRows, error: inventoryError },
+    { data: openBottleRows, error: openBottleError },
   ] = await Promise.all([
     supabase
       .from("wines")
@@ -32,9 +35,16 @@ export default async function AtlasPage() {
       .from("inventory_items")
       .select("wine_id, quantity")
       .eq("restaurant_id", restaurantId),
+    supabase
+      .from("open_bottles")
+      .select("wine_id")
+      .eq("restaurant_id", restaurantId)
+      .is("closed_at", null),
   ]);
 
-  if (wineError || inventoryError) throw wineError ?? inventoryError;
+  if (wineError || inventoryError || openBottleError) {
+    throw wineError ?? inventoryError ?? openBottleError;
+  }
 
   const sealedByWine = new Map<string, number>();
   for (const item of inventoryRows ?? []) {
@@ -45,7 +55,12 @@ export default async function AtlasPage() {
     );
   }
 
-  const rows: CellarFacetRow[] = (wineRows ?? []).map((w) => ({
+  const openWineIds = new Set<string>();
+  for (const bottle of openBottleRows ?? []) {
+    if (bottle.wine_id) openWineIds.add(bottle.wine_id);
+  }
+
+  const rows: AtlasFacetRow[] = (wineRows ?? []).map((w) => ({
     wine_id: w.id,
     producer: w.producer,
     region: w.region,
@@ -55,6 +70,7 @@ export default async function AtlasPage() {
     wine_size_ml: w.size_ml,
     sealed_count: sealedByWine.get(w.id) ?? 0,
     healthSegment: null, // not fetched here — the map never facets on health
+    hasOpenBottle: openWineIds.has(w.id),
   }));
 
   return <AtlasShell rows={rows} restaurantName={restaurantName} />;

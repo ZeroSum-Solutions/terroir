@@ -4,11 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
-import type { CellarFacetRow, FacetCount } from "@/lib/cellar-facets";
+import { cn } from "@/lib/utils";
+import type { FacetCount } from "@/lib/cellar-facets";
 import {
   aggregateAtlasCountries,
   regionsForCountry,
   type AtlasCountryAggregate,
+  type AtlasFacetRow,
 } from "@/lib/atlas/aggregate";
 import { AtlasWorldMap } from "./atlas-world-map";
 
@@ -22,7 +24,7 @@ export function AtlasShell({
   rows,
   restaurantName,
 }: {
-  rows: CellarFacetRow[];
+  rows: AtlasFacetRow[];
   restaurantName: string;
 }) {
   const { countries, unmatched } = useMemo(() => aggregateAtlasCountries(rows), [rows]);
@@ -57,6 +59,11 @@ export function AtlasShell({
             selectedKey={selectedKey}
             onSelect={setSelectedKey}
           />
+          <AtlasCountryList
+            countries={countries}
+            selectedKey={selectedKey}
+            onSelect={setSelectedKey}
+          />
         </div>
       )}
 
@@ -87,6 +94,55 @@ export function AtlasShell({
         />
       )}
     </section>
+  );
+}
+
+/**
+ * Accessible companion to the SVG map's button-role paths — small-country
+ * geometry can't guarantee a real 44px hit area, and touch/assistive tech
+ * shouldn't depend on hitting a sliver of coastline. Same onSelect as the
+ * map, so both stay in sync; this is the reliable path, the map is the
+ * at-a-glance one.
+ */
+function AtlasCountryList({
+  countries,
+  selectedKey,
+  onSelect,
+}: {
+  countries: AtlasCountryAggregate[];
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
+}) {
+  const withBottles = countries.filter((country) => country.bottles > 0);
+  if (withBottles.length === 0) return null;
+
+  return (
+    <div className="mt-md">
+      <h2 className="text-caption font-medium uppercase text-grey">Countries</h2>
+      <ul className="mt-sm flex flex-wrap gap-xs" aria-label="Countries in your cellar">
+        {withBottles.map((country) => {
+          const selected = country.key === selectedKey;
+          return (
+            <li key={country.key}>
+              <button
+                type="button"
+                onClick={() => onSelect(country.key)}
+                aria-pressed={selected}
+                className={cn(
+                  "inline-flex min-h-11 items-center gap-xs whitespace-nowrap rounded-pill border px-md transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                  selected
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-hairline bg-surface text-ink hover:bg-bridge-surface",
+                )}
+              >
+                <span className="text-body-sm">{country.label}</span>
+                <span className="font-mono tabular-nums text-body-sm">{country.bottles}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

@@ -14,7 +14,7 @@
 // ("contradicted") must stay an abstention, not get reinterpreted as a
 // filter here.
 
-import { bestSpanSimilarity, foldAccents } from "./name-resolver";
+import { foldAccents } from "./name-resolver";
 import type { CellarUrlFilter } from "@/lib/cellar-facets/url-state";
 
 /** The tenant's own DISTINCT facet values for the current cellar — never
@@ -88,22 +88,114 @@ const MAX_FALLBACK_TRANSCRIPT_WORDS = 8;
 const MAX_RESIDUE_WORDS = 3;
 const MIN_RESIDUE_WORD_LENGTH = 3;
 
+// --- Span-aware matching -----------------------------------------------
+// bestSpanSimilarity (name-resolver.ts) reports only a score, not WHERE in
+// the transcript it found that score. Cross-dimension disambiguation below
+// needs the evidence span too (e.g. "Georgia" as both a country and a region
+// must be recognized as the SAME transcript words, not two independent
+// hits), so this mirrors name-resolver's private span-trigram machinery
+// locally — same local-copy convention as normalize()/norm() above.
+
+interface Span {
+  start: number;
+  end: number; // exclusive
+}
+
+function trigramSet(s: string): Set<string> {
+  const out = new Set<string>();
+  for (const w of normalize(s).match(/[a-z0-9]+/g) ?? []) {
+    const p = `  ${w} `;
+    for (let i = 0; i + 3 <= p.length; i++) out.add(p.slice(i, i + 3));
+  }
+  return out;
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  return inter / (a.size + b.size - inter);
+}
+
+/** Best-scoring contiguous word span of `transcript` against `target`, plus
+ * that span's word indices. Same width policy (1..targetWords+2) as
+ * name-resolver's bestSpanSimilarity, so scores are identical. */
+function bestSpanForTarget(target: string, transcript: string): { score: number; span: Span } {
+  const words = normalize(transcript).split(" ").filter(Boolean);
+  const targetWords = normalize(target).split(" ").filter(Boolean).length;
+  const targetTris = trigramSet(target);
+  const cap = Math.min(targetWords + 2, words.length);
+  let best = 0;
+  let bestSpan: Span = { start: 0, end: 0 };
+  for (let width = 1; width <= cap; width++) {
+    for (let i = 0; i + width <= words.length; i++) {
+      const s = jaccard(targetTris, trigramSet(words.slice(i, i + width).join(" ")));
+      if (s > best) {
+        best = s;
+        bestSpan = { start: i, end: i + width };
+      }
+    }
+  }
+  return { score: best, span: bestSpan };
+}
+
+function spansOverlap(a: Span, b: Span): boolean {
+  return a.start < b.end && b.start < a.end;
+}
+
+interface VocabMatch {
+  value: string;
+  score: number;
+  words: number;
+  span: Span;
+}
+
 /** Picks the tenant's vocabulary value that best explains the transcript, if
  * any clears the accept threshold. Ties (e.g. "Napa" vs "Napa Valley" both
  * matching exactly) prefer the more specific — longer — value. */
-function bestVocabMatch(vocabulary: readonly string[], transcript: string): string | undefined {
-  let winner: { value: string; score: number; words: number } | undefined;
+function bestVocabMatch(vocabulary: readonly string[], transcript: string): VocabMatch | undefined {
+  let winner: VocabMatch | undefined;
   for (const raw of vocabulary) {
     const value = raw.trim();
     if (!value) continue;
-    const score = bestSpanSimilarity(value, transcript);
+    const { score, span } = bestSpanForTarget(value, transcript);
     if (score < ACCEPT_THRESHOLD) continue;
     const words = normalize(value).split(" ").filter(Boolean).length;
     if (!winner || score > winner.score || (score === winner.score && words > winner.words)) {
-      winner = { value, score, words };
+      winner = { value, score, words, span };
     }
   }
-  return winner?.value;
+  return winner;
+}
+
+type FacetDimension = "country" | "region" | "varietal";
+
+// More specific wins a same-span tie: a region name is more specific than a
+// country name, which is more specific than a varietal.
+const DIMENSION_SPECIFICITY: Record<FacetDimension, number> = {
+  region: 2,
+  country: 1,
+  varietal: 0,
+};
+
+/** Drops dimension matches whose best evidence span overlaps a
+ * higher-ranked match's span (higher score wins; same-score ties go to the
+ * more specific dimension) — so "Georgia" as both a country and a region
+ * yields exactly one filter, while "Chardonnay from Burgundy" (distinct
+ * spans) keeps both. */
+function resolveDimensionMatches(
+  candidates: ReadonlyArray<{ dimension: FacetDimension; match: VocabMatch }>,
+): ReadonlyArray<{ dimension: FacetDimension; match: VocabMatch }> {
+  const ordered = [...candidates].sort((a, b) => {
+    if (b.match.score !== a.match.score) return b.match.score - a.match.score;
+    return DIMENSION_SPECIFICITY[b.dimension] - DIMENSION_SPECIFICITY[a.dimension];
+  });
+  const kept: Array<{ dimension: FacetDimension; match: VocabMatch }> = [];
+  for (const candidate of ordered) {
+    if (kept.some(({ match }) => spansOverlap(match.span, candidate.match.span))) continue;
+    kept.push(candidate);
+  }
+  return kept;
 }
 
 function matchStatus(normalizedTranscript: string): VoiceStatusFilter | undefined {
@@ -136,13 +228,18 @@ export function resolveVoiceFilterIntent(
   const normalized = normalize(transcript);
   if (!normalized) return null;
 
-  const payload: VoiceFilterPayload = {};
+  const candidates: Array<{ dimension: FacetDimension; match: VocabMatch }> = [];
   const country = bestVocabMatch(vocabulary.country, transcript);
-  if (country) payload.country = country;
+  if (country) candidates.push({ dimension: "country", match: country });
   const region = bestVocabMatch(vocabulary.region, transcript);
-  if (region) payload.region = region;
+  if (region) candidates.push({ dimension: "region", match: region });
   const varietal = bestVocabMatch(vocabulary.varietal, transcript);
-  if (varietal) payload.varietal = varietal;
+  if (varietal) candidates.push({ dimension: "varietal", match: varietal });
+
+  const payload: VoiceFilterPayload = {};
+  for (const { dimension, match } of resolveDimensionMatches(candidates)) {
+    payload[dimension] = match.value;
+  }
   const status = matchStatus(normalized);
   if (status) payload.filter = status;
 

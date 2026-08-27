@@ -187,6 +187,51 @@ export function serializeChunk(headerRecord: string, records: string[]): string 
 
 export class SubtleCryptoUnavailableError extends Error {}
 
+// ---------------------------------------------------------------------------
+// Strict UTF-8 decode for the browser upload path. csv-parser.ts's own
+// decodeCsvBuffer() (server-side) stays lenient — byte-replacement, never
+// throwing — because preview/confirm always re-derive everything from the
+// re-uploaded file server-side regardless of what the browser showed. This
+// client entry point is the one place a garbled-but-plausible file (a
+// Windows-1252 "Château" silently becoming "Ch�teau") could pass the
+// operator's own eyeballed preview, so it fails CLOSED on the first byte
+// sequence that isn't valid UTF-8 rather than replacing it, and rejects a
+// UTF-16-BOM'd file outright instead of misreading it as UTF-8.
+// ---------------------------------------------------------------------------
+
+export class UnsupportedEncodingError extends Error {}
+
+const UTF8_BOM = [0xef, 0xbb, 0xbf];
+const UTF16_LE_BOM = [0xff, 0xfe];
+const UTF16_BE_BOM = [0xfe, 0xff];
+
+function startsWithBytes(bytes: Uint8Array, prefix: number[]): boolean {
+  if (bytes.length < prefix.length) return false;
+  return prefix.every((b, i) => bytes[i] === b);
+}
+
+/** Decode raw file bytes as UTF-8, fatally — throws UnsupportedEncodingError
+ * on a UTF-16 BOM or any byte sequence that isn't valid UTF-8, instead of
+ * silently replacing it. Strips a leading UTF-8 BOM before decoding. */
+export function decodeCsvBytesStrict(bytes: Uint8Array): string {
+  if (startsWithBytes(bytes, UTF16_LE_BOM) || startsWithBytes(bytes, UTF16_BE_BOM)) {
+    throw new UnsupportedEncodingError(
+      "This file isn't UTF-8 — it looks like UTF-16 (a byte-order mark for it was found). Re-save it as UTF-8 CSV and try again.",
+    );
+  }
+
+  const body = startsWithBytes(bytes, UTF8_BOM) ? bytes.subarray(UTF8_BOM.length) : bytes;
+
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(body);
+  } catch {
+    throw new UnsupportedEncodingError(
+      "This file isn't UTF-8 — it contains a byte sequence that isn't valid UTF-8 text (often a sign it was saved " +
+        "as Windows-1252/Latin-1 by an older spreadsheet program). Re-save it as UTF-8 CSV and try again.",
+    );
+  }
+}
+
 export async function sha256HexOfBytes(bytes: Uint8Array): Promise<string> {
   if (typeof crypto === "undefined" || !crypto.subtle) {
     throw new SubtleCryptoUnavailableError(
