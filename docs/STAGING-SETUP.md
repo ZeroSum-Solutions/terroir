@@ -319,3 +319,37 @@ Rollback is also a production operation. Record the failed and prior-known-good
 SHAs, deployment state, migration state, and incident approval before acting.
 Do not copy or restore database data as part of an application rollback without
 a separate approved restore procedure.
+
+## Guardrail update — 2026-08-27 (CI-guardrails slice)
+
+Re-verified through the GitHub API on 2026-08-27 while landing the
+CI-guardrails changes. One earlier claim no longer holds:
+
+- **The repository is private again, and main's branch protection is gone.**
+  `GET /repos/ZeroSum-Solutions/terroir` returns `"visibility": "private"`;
+  `GET .../branches/main/protection` 403s with the Free-org-plan upgrade
+  message, exactly the pre-G0-4 state. Flipping the repo back to private
+  (after G0-4 made it public on 2026-08-22) silently dropped the protection
+  that section "Re-verification — 2026-08-22" records as installed. As of
+  this writing `main` has NO required checks, NO force-push protection, and
+  NO deletion protection. Restoring protection requires an owner decision:
+  make the repo public again, or move the org to a paid GitHub plan. Until
+  then, merge discipline is process-only (zs-land refuses red checks; manual
+  merges wait for CI green).
+
+Two compensating changes landed in this slice:
+
+- **`Preview health` no longer reports a permanently red check.** The
+  fail-closed poll (commit `1cb8ef9`) is preserved verbatim but the job now
+  runs only when the repository variable `RAILWAY_PR_PREVIEWS_ENABLED` is
+  `'true'`. Railway PR Environments remain unprovisioned and unsafe to enable
+  (see the 2026-08-22 re-verification above); until an isolated preview base
+  exists the check reports "skipped" instead of training everyone to ignore a
+  red X. When previews are provisioned, set the variable and the gate arms
+  again unchanged.
+- **A red `main` now notifies.** `.github/workflows/ci-main-alert.yml`
+  triggers on a failed `CI` run for `main` and opens (or comments on) a
+  GitHub issue labeled `ci-main-failure`, pinging the owner through native
+  GitHub notifications. No secrets involved. This exists because every CI
+  run on `main` was red from ~2026-08-10 to 2026-08-27 (PostgREST types
+  drift, then two latent e2e breaks) and nothing surfaced it.

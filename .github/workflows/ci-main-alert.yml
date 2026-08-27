@@ -1,0 +1,77 @@
+# Main-CI failure alarm.
+#
+# Context: between ~2026-08-10 and 2026-08-27 every CI run on main was red
+# (PostgREST types drift, then two latent e2e breaks) and nobody noticed,
+# because nothing turned a red main into a notification. This workflow
+# makes that state impossible to miss without requiring any secret:
+# on a failed CI run for main it opens (or comments on) a pinned-by-label
+# GitHub issue, which triggers GitHub's native notifications to the owner.
+#
+# Dedup: one open issue labeled `ci-main-failure` collects repeats; a new
+# failure comments on it instead of spamming new issues. Close the issue
+# when main is green again (or let anyone close it — the next failure
+# reopens the loop by creating a fresh one).
+#
+# NOTE (workflow_run semantics): this file only triggers once it exists on
+# the default branch.
+
+name: Main CI alert
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  issues: write
+
+jobs:
+  alert:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Open or update the ci-main-failure issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // All event fields stay inside JS values — never interpolated
+            // into a shell — so untrusted text (e.g. commit messages)
+            // cannot inject commands.
+            const run = context.payload.workflow_run;
+            const sha = run.head_sha.slice(0, 7);
+            const line = [
+              `CI failed on \`main\` at ${sha}`,
+              `run: ${run.html_url}`,
+              `completed: ${run.updated_at}`,
+            ].join("\n");
+
+            const label = "ci-main-failure";
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: label,
+              per_page: 1,
+            });
+
+            if (open.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: open[0].number,
+                body: line,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `CI is red on main (${sha})`,
+                body:
+                  `@wiggdevin — the \`CI\` workflow failed on \`main\`.\n\n${line}\n\n` +
+                  `Close this issue once main is green again; the next failure opens a fresh one.`,
+                labels: [label],
+              });
+            }
