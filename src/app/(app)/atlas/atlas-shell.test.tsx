@@ -22,9 +22,12 @@ describe("AtlasShell — open-bottle-only presence (Sol round-2/3)", () => {
     const html = renderToStaticMarkup(
       <AtlasShell rows={[wine({ sealed_count: 0, hasOpenBottle: true })]} restaurantName="Test" />,
     );
-    // Both the SVG path and the country chip expose the country with the
-    // explicit open-bottle wording, never a bare misleading "0 bottles".
-    expect(html).toContain('aria-label="France, open bottle only"');
+    // Both the SVG path AND the country chip <button> expose the country
+    // with the explicit open-bottle wording (the chip assertion is scoped
+    // to a <button> element so the map path's identical label can't
+    // satisfy it), never a bare misleading "0 bottles".
+    expect(html).toMatch(/<path[^>]*aria-label="France, open bottle only"/);
+    expect(html).toMatch(/<button[^>]*aria-label="France, open bottle only"/);
     expect(html).not.toContain("0 bottles");
   });
 
@@ -32,7 +35,7 @@ describe("AtlasShell — open-bottle-only presence (Sol round-2/3)", () => {
     const html = renderToStaticMarkup(
       <AtlasShell rows={[wine({ sealed_count: 7, hasOpenBottle: false })]} restaurantName="Test" />,
     );
-    expect(html).toContain('aria-label="France, 7 bottles"');
+    expect(html).toMatch(/<button[^>]*aria-label="France, 7 bottles"/);
   });
 
   it("renders the empty state when no row has cellar presence", () => {
