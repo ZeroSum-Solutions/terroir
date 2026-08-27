@@ -180,8 +180,12 @@ describe("formatStatusLabel", () => {
   });
 
   it("formats hold with years until ready", () => {
-    expect(formatStatusLabel("hold", -3)).toBe("Hold · ready in 3 yrs");
-    expect(formatStatusLabel("hold", -1)).toBe("Hold · ready in 1 yr");
+    // Hold reads "ready in" off yearsUntilStart (third arg) — it used to
+    // abuse yearsLeft (years until CLOSE), so a 2030–2040 window claimed
+    // "ready in 14 yrs" instead of 4 (Kimi audit follow-up 2026-08-26).
+    expect(formatStatusLabel("hold", 14, 3)).toBe("Hold · ready in 3 yrs");
+    expect(formatStatusLabel("hold", 14, 1)).toBe("Hold · ready in 1 yr");
+    expect(formatStatusLabel("hold", 14)).toBe("Hold");
   });
 
   it("returns plain status when years missing", () => {

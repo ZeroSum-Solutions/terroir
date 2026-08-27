@@ -4,6 +4,7 @@ import {
   PRICING_RECOMMENDATION_CLASSES,
   type PricingRecommendationClass,
 } from "@/lib/pricing-recommendations/recommend";
+import { StatusChip } from "@/components/status-chip";
 import { metricHref } from "./metric-href";
 import { RecomputePricingRecommendationsButton } from "./recompute-pricing-recommendations-button";
 
@@ -126,9 +127,7 @@ function PricingRow({ row }: { row: PricingPlay }) {
       </div>
       <div className="md:text-right">
         {row.timing ? (
-          <span className="inline-flex rounded-pill bg-powder-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-powder-ink">
-            {row.timing}
-          </span>
+          <StatusChip tone="attention">{row.timing}</StatusChip>
         ) : (
           <span className="text-[11px] text-grey">No timing action</span>
         )}

@@ -22,6 +22,7 @@ colors:
   amber: "#7f5f12"
   amber-wash: "#f7efd9"
   blush-wash: "#f0e2dc"
+  seal-ink: "#f6f0e3"
   glass: "rgba(251, 249, 244, 0.7)"
   glass-edge: "rgba(255, 253, 247, 0.75)"
   shadow-card: "rgba(30, 26, 16, 0.07)"
@@ -35,6 +36,7 @@ colors:
   dark-primary: "#8a3a44"
   dark-primary-hover: "#a04751"
   dark-gold: "#c7a165"
+  dark-seal-ink: "#f2e7cf"
   dark-glass: "rgba(13, 12, 9, 0.65)"
 typography:
   caption:
@@ -153,25 +155,23 @@ components:
     backgroundColor: "{colors.surface-sunken}"
     textColor: "{colors.ink-soft}"
     rounded: "{rounded.pill}"
-  badge-ok:
-    backgroundColor: "{colors.sage-wash}"
-    textColor: "{colors.sage-ink}"
+  wax-muted:
+    backgroundColor: "{colors.surface-sunken}"
+    textColor: "{colors.grey}"
     rounded: "{rounded.pill}"
-  badge-info:
-    backgroundColor: "{colors.powder-wash}"
-    textColor: "{colors.powder-ink}"
+  wax-neutral:
+    textColor: "{colors.ink-soft}"
     rounded: "{rounded.pill}"
-  badge-warning:
-    backgroundColor: "{colors.amber-wash}"
-    textColor: "{colors.amber}"
+  wax-optimal:
+    textColor: "{colors.gold}"
     rounded: "{rounded.pill}"
-  badge-risk:
+  wax-attention:
     backgroundColor: "{colors.blush-wash}"
     textColor: "{colors.primary}"
     rounded: "{rounded.pill}"
-  badge-danger:
+  wax-urgent:
     backgroundColor: "{colors.primary}"
-    textColor: "{colors.surface}"
+    textColor: "{colors.seal-ink}"
     rounded: "{rounded.pill}"
   gold-mark:
     textColor: "{colors.gold}"
@@ -243,10 +243,11 @@ family). Pill geometry, radii, and the spacing scale carry over unchanged.
 | Stone Grey | `#666459` | `--color-grey` | Muted text, captions, eyebrows — warm-neutral, no brown cast |
 | Hairline | `#ded5c4` | `--color-hairline` | Structural 1px lines, warm and visible on cream |
 | Antique Gold | `#786218` | `--color-gold` | Premium markers, ratings, subtle emphasis — quiet in the light room |
-| Olive Sage | `#5e6b4b` + washes | `--color-sage*` | "Aging well / hold" states |
-| Powder Ice | `#b2d7e7` + washes | `--color-powder*` | Informational states |
-| Amber | `#7f5f12` / wash | `--color-amber*` | Warnings that are neither info nor risk |
-| Blush | `#f0e2dc` | `--color-blush-wash` | Burgundy-tinted fills: risk badges, selected rows |
+| Olive Sage | `#5e6b4b` + washes | `--color-sage*` | Transient success feedback only (retired from status chips — Wax & Counter, 2026-08-26) |
+| Powder Ice | `#b2d7e7` + washes | `--color-powder*` | Transient/informational feedback only (retired from status chips) |
+| Amber | `#7f5f12` / wash | `--color-amber*` | Transient warning feedback only (retired from status chips) |
+| Blush | `#f0e2dc` | `--color-blush-wash` | Burgundy-tinted fills: attention chips, risk zones, selected rows |
+| Seal Ink | `#f6f0e3` (dark `#f2e7cf`) | `--color-seal-ink` | Text pressed into the filled burgundy wax seal (urgent chips) |
 | Card Shadow | `rgba(30,26,16,.07)` | `--shadow-card` | Soft warm lift under cards |
 
 ### Dark — "Cellar"
@@ -375,11 +376,27 @@ Level-1 card: header row on the level-2 well with spaced-caps labels, rows
 hairline-separated, hover wash = well tint. Quantities and vintages in
 Courier Prime. No zebra striping.
 
-### Badges
-Pill, 10.5px spaced caps: sage for in-window/aging-well, powder for
-informational, amber for warnings, blush/burgundy for risk, solid burgundy
-for money-at-risk (the only filled badge). Same semantics in dark mode with
-dark-tuned washes.
+### Status — Wax & Counter
+The one status language (amendment, 2026-08-26 — Devin's D1 call; the
+sage/powder/amber badge families are **retired from status duty**). Every
+persistent status chip sits on a single urgency scale, styled as a
+wax-seal stamp — pill, 10px spaced caps, hairline border:
+
+| Tone | Treatment | Means |
+|------|-----------|-------|
+| muted | sunken fill, grey text, no border | out of play (no stock, snoozed) |
+| neutral | borderless-fill ledger stamp: ink hairline, no fill | routine facts (open bottle, draft, duplicate flag) |
+| optimal | gold text + gold hairline + 10% gold fill | a wine at its best; live/published |
+| attention | accent text + hairline + 10% accent fill | act soon (drink now, low stock, timing plays) |
+| urgent | **the filled seal**: solid burgundy, seal-ink text, faint inner impression ring | act now (past peak, 86'd, money at risk) |
+
+Because `accent` swaps per room, urgency reads burgundy by day and candle
+gold by night. Implementation: `StatusChip` (`src/components/status-chip.tsx`)
+— never hand-roll a status pill. Sage/powder/amber washes remain in the
+palette for transient feedback (toasts, success confirmations) and legacy
+surfaces only; migrate to wax tones whenever a surface is touched. Meters
+follow the same grammar: risk zones in burgundy tint, target/optimal zones
+in gold tint, informational zones in the quiet wash.
 
 ### Empty States
 The one decorative license: a faint engraved sunburst or vine line-work mark
@@ -422,7 +439,11 @@ data.
 - Don't bold Bodoni Moda past 600, use it below 17px, or use it for UI
   chrome.
 - Don't reintroduce the dawn gradient, powder-blue heroes, or a second
-  accent hue; powder is a badge tint only now.
+  accent hue. Powder/sage/amber are no longer status colors at all
+  (Wax & Counter, 2026-08-26): status chips use only the urgency scale —
+  neutral ink, gold optimal, accent attention, filled-burgundy urgent.
+  The retired washes survive only in transient feedback and unmigrated
+  legacy surfaces.
 - Don't hand any component a mode-specific hex — semantic tokens only, both
   modes come free.
 - Don't set `text-white` on `accent`, `ink`, `sage-ink`, or `gold` surfaces —

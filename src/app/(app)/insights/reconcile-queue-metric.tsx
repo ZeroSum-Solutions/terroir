@@ -26,7 +26,7 @@ export function ReconcileQueueMetric() {
     <div data-metric="reconcile-queue-count" className="mb-lg md:mb-xl">
       <Link href="/reconcile-queue" className="group flex min-h-11 items-center justify-between gap-md rounded-lg border border-hairline bg-bridge-surface px-md py-sm transition-colors hover:bg-beige focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25">
         <span className="flex min-w-0 items-center gap-sm">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-pill bg-amber-wash text-amber">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-pill bg-accent/10 text-accent">
             <ClipboardCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden />
           </span>
           <span>
@@ -35,7 +35,8 @@ export function ReconcileQueueMetric() {
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-sm">
-          <span className="font-serif text-[22px] font-normal tabular text-ink" aria-label={metricLabel(count)}>{metricValue(count)}</span>
+          {/* Data speaks Courier, Bodoni is display-only (DESIGN.md). */}
+          <span className="font-mono text-[20px] font-medium tabular text-ink" aria-label={metricLabel(count)}>{metricValue(count)}</span>
           <ArrowUpRight className="h-4 w-4 text-grey transition-colors group-hover:text-accent" aria-hidden />
         </span>
       </Link>

@@ -158,14 +158,17 @@ function exceptionLabel(kind: TodayException["kind"]): string {
   }
 }
 
+// Wax & Counter (DESIGN.md 2026-08-26): one urgency scale — window
+// closing and pricing review are burgundy attention steps, past-window
+// is the filled seal.
 function exceptionBadgeClass(kind: TodayException["kind"]): string {
   switch (kind) {
     case "drink-window":
-      return "bg-powder-wash text-powder-ink";
+      return "border border-accent/40 bg-accent/10 text-accent";
     case "past-window":
-      return "bg-blush-wash text-accent";
+      return "border border-primary bg-primary text-seal-ink";
     case "pricing":
-      return "bg-amber-wash text-amber";
+      return "border border-ink/15 bg-transparent text-ink-soft";
   }
 }
 

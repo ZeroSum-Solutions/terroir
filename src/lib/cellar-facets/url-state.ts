@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { CellarGroupBy, CellarFacets } from ".";
+import { CELLAR_SORTS, type CellarSort } from "./sort";
 import {
   HEALTH_SEGMENTS,
   type CellarHealthSegment,
@@ -28,6 +29,7 @@ export type CellarUrlState = CellarFacets & {
   format: number | null;
   groupBy: CellarGroupBy | null;
   health: CellarHealthSegment | null;
+  sort: CellarSort | null;
   wine: string | null;
 };
 
@@ -40,6 +42,7 @@ const vintageSchema = z.coerce.number().int().min(1000).max(3000);
 const filterSchema = z.enum(CELLAR_FILTERS);
 const groupSchema = z.enum(["producer", "region", "varietal", "vintage"]);
 const healthSchema = z.enum(HEALTH_SEGMENTS);
+const sortSchema = z.enum(CELLAR_SORTS);
 const wineSchema = z.string().uuid();
 
 export function parseCellarUrlState(params: SearchParamsReader): CellarUrlState {
@@ -55,6 +58,7 @@ export function parseCellarUrlState(params: SearchParamsReader): CellarUrlState 
     format: parseValue(positiveIntSchema, params.get("format")),
     groupBy: parseValue(groupSchema, params.get("group_by")),
     health: parseValue(healthSchema, params.get("health")),
+    sort: parseValue(sortSchema, params.get("sort")),
     wine: parseValue(wineSchema, params.get("wine")),
   };
 }
@@ -72,6 +76,7 @@ export function serializeCellarUrlState(state: CellarUrlState): URLSearchParams 
   setNumber(params, "format", state.format);
   setText(params, "group_by", state.groupBy);
   setText(params, "health", state.health);
+  setText(params, "sort", state.sort);
   setText(params, "wine", state.wine);
   return params;
 }

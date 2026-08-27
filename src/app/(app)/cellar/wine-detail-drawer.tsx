@@ -18,7 +18,9 @@ import {
   formatStatusLabel,
   getDrinkWindowStatus,
   getYearsUntilWindowClose,
+  getYearsUntilWindowOpen,
 } from "@/lib/drink-window/status";
+import { StatusChip, type WaxTone } from "@/components/status-chip";
 import {
   formatPricingStatusLabel,
   getBottleStatus,
@@ -455,9 +457,10 @@ export function WineDetailDrawer({
             </button>
           </div>
 
-          {/* Body */}
+          {/* Body — flex-1/min-h-0 so the sticky action bar below never
+              scrolls away with it */}
           <div
-            className="overflow-y-auto px-md py-md md:px-lg md:py-lg"
+            className="min-h-0 flex-1 overflow-y-auto px-md py-md md:px-lg md:py-lg"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
           >
             {/* Hero image */}
@@ -585,59 +588,9 @@ export function WineDetailDrawer({
                   </select>
                 </label>
               )}
-              {/* BND-121: Manually open a bottle without recording a pour */}
-              {row.sealed_count > 0 && (
-                <button
-                  type="button"
-                  disabled={openBottleBusy}
-                  onClick={doOpenBottle}
-                  className="flex h-[48px] items-center justify-center gap-xs rounded-pill border border-ink/25 bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface transition-colors disabled:opacity-60"
-                >
-                  <PackageOpen className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  {openBottleBusy ? "Opening..." : "Open bottle"}
-                </button>
-              )}
-              {canPour && (
-                <div className="flex gap-xs">
-                  <button
-                    type="button"
-                    disabled={busy || outOfStock}
-                    onClick={() => row.glass_pour_ml && doPour(row.glass_pour_ml)}
-                    className={cn(
-                      "h-[56px] flex-1 rounded-pill bg-primary text-[15px] font-medium text-white transition-colors",
-                      "hover:bg-primary-hover disabled:opacity-60",
-                    )}
-                  >
-                    {outOfStock
-                      ? "Out of stock"
-                      : `Pour ${(row.glass_pour_ml! / ML_PER_OZ).toFixed(1)} oz`}
-                  </button>
-                  {row.pour_size_mode === "picker" && pickerItem && (
-                    <button
-                      type="button"
-                      onClick={() => setPickerOpen(true)}
-                      disabled={busy || outOfStock}
-                      aria-label="Pick a custom pour size"
-                      className="flex h-[56px] w-[56px] items-center justify-center rounded-pill border border-hairline bg-surface text-grey hover:bg-bridge-surface disabled:opacity-60"
-                    >
-                      <ChevronDown className="h-5 w-5" strokeWidth={2} aria-hidden />
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* BND-119: Undo last pour */}
-              {lastPour && canPour && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={doUndo}
-                  className="flex h-11 items-center justify-center gap-xs rounded-pill border border-amber/40 bg-amber-wash text-[13px] font-medium text-amber transition-colors hover:bg-amber-wash/70 disabled:opacity-60"
-                >
-                  <Undo2 className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  Undo last pour ({(lastPour.ml / ML_PER_OZ).toFixed(1)} oz)
-                </button>
-              )}
+              {/* Open bottle / Pour / Undo moved to the sticky action bar
+                  at the drawer's foot — the service actions stay in reach
+                  without scrolling (Kimi audit 2026-08-26). */}
 
               {canManage && (
                 <button
@@ -667,7 +620,7 @@ export function WineDetailDrawer({
                     className={cn(
                       "flex h-11 items-center justify-center gap-xs rounded-pill border text-[13px] font-medium transition-colors disabled:opacity-60",
                       enrichMsg
-                        ? "border-sage-ink/30 bg-sage-wash text-sage-ink"
+                        ? "border-gold/40 bg-gold/10 text-gold"
                         : "border-ink/25 bg-surface text-ink hover:bg-bridge-surface",
                     )}
                   >
@@ -848,6 +801,77 @@ export function WineDetailDrawer({
               </section>
             )}
           </div>
+
+          {/* Sticky action bar — the drawer's service verbs (Open / Pour /
+              Undo) pinned at the foot so they never sit below the fold
+              (Kimi audit 2026-08-26). Reference sections scroll; actions
+              don't. */}
+          {(canPour || row.sealed_count > 0) && (
+            <div
+              className="shrink-0 border-t border-hairline bg-surface px-md pt-sm md:px-lg"
+              style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" }}
+            >
+              {/* BND-119: Undo last pour */}
+              {lastPour && canPour && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={doUndo}
+                  className="mb-xs flex h-11 w-full items-center justify-center gap-xs rounded-pill border border-ink/25 bg-surface text-[13px] font-medium text-ink transition-colors hover:bg-bridge-surface disabled:opacity-60"
+                >
+                  <Undo2 className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  Undo last pour ({(lastPour.ml / ML_PER_OZ).toFixed(1)} oz)
+                </button>
+              )}
+              <div className="flex gap-xs">
+                {/* BND-121: Manually open a bottle without recording a pour */}
+                {row.sealed_count > 0 && (
+                  <button
+                    type="button"
+                    disabled={openBottleBusy}
+                    onClick={doOpenBottle}
+                    className={cn(
+                      "flex h-[52px] flex-1 items-center justify-center gap-xs rounded-pill text-[14px] font-medium transition-colors disabled:opacity-60",
+                      canPour
+                        ? "border border-ink/25 bg-surface text-ink hover:bg-bridge-surface"
+                        : "bg-primary text-white hover:bg-primary-hover",
+                    )}
+                  >
+                    <PackageOpen className="h-4 w-4" strokeWidth={2} aria-hidden />
+                    {openBottleBusy ? "Opening..." : "Open bottle"}
+                  </button>
+                )}
+                {canPour && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busy || outOfStock}
+                      onClick={() => row.glass_pour_ml && doPour(row.glass_pour_ml)}
+                      className={cn(
+                        "h-[52px] flex-1 rounded-pill bg-primary text-[15px] font-medium text-white transition-colors",
+                        "hover:bg-primary-hover disabled:opacity-60",
+                      )}
+                    >
+                      {outOfStock
+                        ? "Out of stock"
+                        : `Pour ${(row.glass_pour_ml! / ML_PER_OZ).toFixed(1)} oz`}
+                    </button>
+                    {row.pour_size_mode === "picker" && pickerItem && (
+                      <button
+                        type="button"
+                        onClick={() => setPickerOpen(true)}
+                        disabled={busy || outOfStock}
+                        aria-label="Pick a custom pour size"
+                        className="flex h-[52px] w-[52px] items-center justify-center rounded-pill border border-hairline bg-surface text-grey hover:bg-bridge-surface disabled:opacity-60"
+                      >
+                        <ChevronDown className="h-5 w-5" strokeWidth={2} aria-hidden />
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -920,8 +944,10 @@ function Stat({
       <span
         className={cn(
           "text-[14px] font-semibold leading-none",
-          tone === "warn" && "text-amber",
-          tone === "ok" && "text-sage-ink",
+          // Wax & Counter: urgency speaks burgundy/gold via `accent`;
+          // "Available" is the quiet default, not a celebration.
+          tone === "warn" && "text-accent",
+          tone === "ok" && "text-ink",
           !tone && "text-ink",
         )}
       >
@@ -1120,20 +1146,21 @@ function ServingTempSection({ row }: { row: CellarWineRow }) {
 function DrinkWindowSection({ row }: { row: CellarWineRow }) {
   const status = getDrinkWindowStatus(row.drink_window_start, row.drink_window_end);
   const yearsLeft = getYearsUntilWindowClose(row.drink_window_end);
+  const yearsUntilOpen = getYearsUntilWindowOpen(row.drink_window_start);
 
-  // BND-071 — status pill color mapping (contract badge tokens).
-  const pillStyle = (() => {
+  // BND-071 — status on the Wax & Counter urgency scale (DESIGN.md
+  // 2026-08-26): quiet hold, gold optimal, burgundy steps for the rest.
+  const pillTone: WaxTone = (() => {
     switch (status) {
-      case "hold":
-        return "bg-bridge-surface text-grey";
       case "optimal":
-        return "bg-sage-wash text-sage-ink";
+        return "optimal";
       case "drink_now":
-        return "bg-powder-wash text-powder-ink";
+        return "attention";
       case "past_peak":
-        return "bg-blush-wash text-accent";
+        return "urgent";
+      case "hold":
       default:
-        return "bg-bridge-surface text-grey";
+        return "muted";
     }
   })();
 
@@ -1154,12 +1181,10 @@ function DrinkWindowSection({ row }: { row: CellarWineRow }) {
       />
 
       <div className="mt-sm flex items-center justify-between text-[12px]">
-        {/* BND-071 — status pill, contract badge mapping. */}
-        <span
-          className={`inline-flex items-center rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide ${pillStyle}`}
-        >
-          {formatStatusLabel(status, yearsLeft)}
-        </span>
+        {/* BND-071 — status pill, Wax & Counter mapping. */}
+        <StatusChip tone={pillTone}>
+          {formatStatusLabel(status, yearsLeft, yearsUntilOpen)}
+        </StatusChip>
         {yearsLeft !== null && (
           <span className="text-grey">
             {yearsLeft >= 0
