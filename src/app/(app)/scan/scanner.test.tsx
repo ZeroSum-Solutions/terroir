@@ -390,6 +390,22 @@ describe("Scanner progress reset", () => {
   });
 });
 
+describe("Scanner initialMode", () => {
+  it("starts in bottle mode when initialMode=\"bottle\" (the /scan?mode=bottle path)", async () => {
+    // initialMode seeds useState, so it only matters at MOUNT — re-rendering
+    // the beforeEach root would keep invoice mode. Mount fresh.
+    act(() => root?.unmount());
+    root = createRoot(container);
+    await act(async () => root?.render(<Scanner initialMode="bottle" />));
+    expect(container.textContent).toContain("Scan a bottle label");
+    expect(container.textContent).not.toContain("Scan an invoice");
+  });
+
+  it("defaults to invoice mode without the prop", () => {
+    expect(container.textContent).toContain("Scan an invoice");
+  });
+});
+
 describe("Scanner mode-specific retry", () => {
   it("retries an invoice failure only through the invoice endpoint", async () => {
     const retry = deferred<Response>();
