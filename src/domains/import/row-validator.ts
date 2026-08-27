@@ -3,9 +3,11 @@
 import {
   ALLOWED_CURRENCIES,
   CANONICAL_HEADERS,
+  CURRENCY_SYMBOL_TO_CODE,
   FLOAT_LITERAL,
   HEADER_SYNONYMS,
   INTEGER_LITERAL,
+  MAX_BOTTLE_SIZE_ML,
   MAX_QUANTITY,
   MAX_UNIT_COST,
   REQUIRED_HEADERS,
@@ -67,6 +69,93 @@ function cell(cells: string[], columnToField: Map<number, CanonicalHeader>, fiel
   return "";
 }
 
+/** Unambiguous thousands-separated numbers (Sol audit 2026-08-27,
+ * finding 2). Because decimal commas are also supported, a LONE
+ * three-digit comma group with no dot ("1,234") could mean 1234 OR
+ * 1.234 — a ~1000x cost difference — so it is rejected outright, never
+ * guessed. Thousands are only accepted when nothing else could be
+ * meant: two-plus comma groups (a decimal comma is always single), or
+ * one group WITH a decimal dot (a decimal comma never coexists with a
+ * dot). */
+const THOUSANDS_MULTI_GROUP = /^\d{1,3}(?:,\d{3}){2,}(?:\.\d+)?$/;
+const THOUSANDS_WITH_DOT = /^\d{1,3}(?:,\d{3})+\.\d+$/;
+
+/** European decimal comma ("45,50") — one comma, at most TWO digits
+ * after it, no dot. Three digits after a lone comma falls through to
+ * the ambiguity rejection above. */
+const DECIMAL_COMMA_LITERAL = /^\d+,\d{1,2}$/;
+
+/**
+ * Normalize a real-world money cell ("$2,034.00", "€45,50", "£1,200.50")
+ * to a plain decimal string, plus the currency inferred from an
+ * unambiguous symbol. Returns null when the cell can't be read as one
+ * non-negative money amount — the caller reports that as a field error,
+ * never as a missing cost (the cell wasn't blank). Whatever survives
+ * still has to pass the strict FLOAT_LITERAL gate (C18) downstream.
+ */
+export function normalizeMoneyText(rawText: string): { text: string; symbolCurrency: string | null } | null {
+  let text = rawText.trim();
+  let symbolCurrency: string | null = null;
+
+  const leading = text.match(/^([$€£¥])\s?/);
+  const trailing = leading ? null : text.match(/\s?([$€£¥])$/);
+  const symbol = leading?.[1] ?? trailing?.[1] ?? null;
+  if (symbol) {
+    text = leading ? text.slice(leading[0].length) : text.slice(0, text.length - (trailing as RegExpMatchArray)[0].length);
+    symbolCurrency = CURRENCY_SYMBOL_TO_CODE[symbol] ?? null;
+  }
+
+  if (text.includes(",")) {
+    if (THOUSANDS_MULTI_GROUP.test(text) || THOUSANDS_WITH_DOT.test(text)) {
+      text = text.replaceAll(",", "");
+    } else if (DECIMAL_COMMA_LITERAL.test(text)) {
+      text = text.replace(",", ".");
+    } else {
+      return null;
+    }
+  }
+
+  if (text.length === 0) return null;
+  return { text, symbolCurrency };
+}
+
+const VOLUME_LITERAL = /^(\d+)(?:\.(\d+))?\s*(ml|cl|l)$/i;
+const VOLUME_UNIT_DECIMAL_SHIFT: Record<string, number> = { ml: 0, cl: 1, l: 3 };
+
+/** Digit-string bound check shared by both size forms (Sol audit
+ * 2026-08-27, finding 3): parseInt silently loses precision past
+ * MAX_SAFE_INTEGER and very long digit strings reach Infinity, so the
+ * bound is applied to the DIGITS, before any Number conversion. */
+function boundedWholeMl(digits: string): number | null {
+  const trimmed = digits.replace(/^0+(?=\d)/, "");
+  if (trimmed.length > String(MAX_BOTTLE_SIZE_ML).length) return null;
+  const value = Number(trimmed);
+  return value > 0 && value <= MAX_BOTTLE_SIZE_ML ? value : null;
+}
+
+/**
+ * Parse a real-world bottle-size cell into whole ml: bare ml integers
+ * ("750") plus unit-suffixed volumes ("750ml", "75cl", "1.5L"). The unit
+ * conversion is exact decimal-shift string arithmetic, never binary
+ * float multiplication (which computes 1.001 * 1000 as 1000.999…9 and
+ * would wrongly reject an exactly-whole 1001 ml). Null for anything
+ * else, including a conversion that doesn't land on a whole ml count in
+ * (0, MAX_BOTTLE_SIZE_ML] — rounding a volume would silently alter
+ * cellar data.
+ */
+export function parseBottleSizeMl(rawText: string): number | null {
+  if (/^\d+$/.test(rawText)) return boundedWholeMl(rawText);
+  const match = rawText.match(VOLUME_LITERAL);
+  if (!match) return null;
+  const shift = VOLUME_UNIT_DECIMAL_SHIFT[match[3].toLowerCase()];
+  const frac = match[2] ?? "";
+  // Shift the decimal point right by `shift` digits, exactly: digits that
+  // remain to the right after the shift must all be zero.
+  const shifted = match[1] + frac.slice(0, shift).padEnd(shift, "0");
+  if (/[^0]/.test(frac.slice(shift))) return null;
+  return boundedWholeMl(shifted);
+}
+
 /**
  * Validate one CSV data row against the canonical schema. Never throws —
  * every outcome is either a valid row (with an explicit costMissing
@@ -80,8 +169,11 @@ export function validateRow(
   const get = (field: CanonicalHeader) => cell(cells, columnToField, field);
   const errors: FieldError[] = [];
 
+  // Producer is optional (2026-08-27): real-world exports embed it in the
+  // wine name. It stays a string ("" when absent) all the way into
+  // raw.producer — never null, because apply (0108) inserts raw->>
+  // 'producer' straight into wines.producer, which is NOT NULL (0002).
   const producer = get("producer");
-  if (!producer) errors.push({ field: "producer", message: "Producer is required." });
 
   const name = get("name");
   if (!name) errors.push({ field: "name", message: "Wine name is required." });
@@ -108,15 +200,11 @@ export function validateRow(
   let sizeMl: number | null = 750;
   const sizeRaw = get("size_ml");
   if (sizeRaw) {
-    if (!INTEGER_LITERAL.test(sizeRaw)) {
-      errors.push({ field: "size_ml", message: "Bottle size (ml) must be a whole number, with no other characters." });
+    const parsed = parseBottleSizeMl(sizeRaw);
+    if (parsed === null) {
+      errors.push({ field: "size_ml", message: "Bottle size must be whole ml (e.g. 750) or a volume like 750ml, 75cl, or 1.5L." });
     } else {
-      const parsed = Number.parseInt(sizeRaw, 10);
-      if (parsed <= 0) {
-        errors.push({ field: "size_ml", message: "Bottle size (ml) must be a positive whole number." });
-      } else {
-        sizeMl = parsed;
-      }
+      sizeMl = parsed;
     }
   }
 
@@ -143,13 +231,16 @@ export function validateRow(
   //   present and valid -> the value itself
   let unitCost: number | null = null;
   let costMissing = false;
+  let symbolCurrency: string | null = null;
   const costRaw = get("unit_cost");
+  const normalizedCost = costRaw ? normalizeMoneyText(costRaw) : null;
   if (!costRaw) {
     costMissing = true;
-  } else if (!FLOAT_LITERAL.test(costRaw)) {
-    errors.push({ field: "unit_cost", message: "Unit cost must be a number, with no other characters." });
+  } else if (normalizedCost === null || !FLOAT_LITERAL.test(normalizedCost.text)) {
+    errors.push({ field: "unit_cost", message: "Unit cost must be a number (a currency symbol and thousands separators are OK)." });
   } else {
-    const parsed = Number.parseFloat(costRaw);
+    symbolCurrency = normalizedCost.symbolCurrency;
+    const parsed = Number.parseFloat(normalizedCost.text);
     if (!Number.isFinite(parsed) || parsed < 0) {
       errors.push({ field: "unit_cost", message: "Unit cost must be a non-negative number." });
     } else if (parsed > MAX_UNIT_COST) {
@@ -159,6 +250,8 @@ export function validateRow(
     }
   }
 
+  // An explicit currency column always wins; a symbol on the cost cell
+  // only fills the gap when that column is absent or blank.
   const currencyRaw = get("currency");
   if (currencyRaw && !ALLOWED_CURRENCIES.has(currencyRaw.toUpperCase())) {
     errors.push({ field: "currency", message: `Currency must be one of: ${[...ALLOWED_CURRENCIES].join(", ")}.` });
@@ -167,7 +260,7 @@ export function validateRow(
   const raw: RawRowFields = Object.fromEntries(
     CANONICAL_HEADERS.map((field) => [field, null]),
   ) as RawRowFields;
-  raw.producer = producer || null;
+  raw.producer = producer;
   raw.name = name || null;
   raw.vintage = vintage !== null ? String(vintage) : null;
   raw.varietal = get("varietal") || null;
@@ -175,7 +268,7 @@ export function validateRow(
   raw.country = get("country") || null;
   raw.size_ml = sizeMl !== null ? String(sizeMl) : null;
   raw.format = get("format") || null;
-  raw.currency = currencyRaw ? currencyRaw.toUpperCase() : null;
+  raw.currency = currencyRaw ? currencyRaw.toUpperCase() : symbolCurrency;
   raw.quantity = quantity !== null ? String(quantity) : null;
   raw.unit_cost = unitCost !== null ? unitCost.toFixed(2) : null;
   raw.bin = get("bin") || null;

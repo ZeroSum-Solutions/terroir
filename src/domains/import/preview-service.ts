@@ -78,14 +78,19 @@ export async function buildImportPreview(
 
   const validated = parsed.rows.map((cells) => validateRow(cells, columnToField));
 
+  // Producer-less rows (real-world single-"Wine Name"-column exports) put
+  // the full name into BOTH match legs: match_lwin (0078) hard-gates on
+  // producer-leg similarity, so an empty producer would never match — and
+  // the full name contains the producer anyway. Weak candidates are still
+  // held to apply's own 0.6 confidence bar (0108) before any lwin_id is
+  // written.
   const lwinQueries = validated
     .map((row, idx) => ({ row, idx }))
     .filter(({ row }) => row.state === "valid")
-    .map(({ row, idx }) => ({
-      idx,
-      producer: (row as { producer: string }).producer,
-      name: (row as { name: string }).name,
-    }));
+    .map(({ row, idx }) => {
+      const { producer, name } = row as { producer: string; name: string };
+      return { idx, producer: producer || name, name };
+    });
 
   const matches = await matchLwinBulk(supabase, lwinQueries);
 

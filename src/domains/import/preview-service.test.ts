@@ -78,7 +78,7 @@ describe("buildImportPreview", () => {
 
   it("marks an invalid row as error and excludes it from LWIN matching", async () => {
     const supabase = makeSupabase([]);
-    const result = await buildImportPreview(supabase, csv(",Missing Producer,2020,6,10\n"));
+    const result = await buildImportPreview(supabase, csv("Domaine A,,2020,6,10\n"));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.rows[0]).toMatchObject({ rowState: "error", resolution: "exclude" });
@@ -94,7 +94,35 @@ describe("buildImportPreview", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe("missing_headers");
-    expect(result.error.missingHeaders).toEqual(expect.arrayContaining(["producer", "name", "quantity"]));
+    expect(result.error.missingHeaders).toEqual(expect.arrayContaining(["name", "quantity"]));
+  });
+
+  // Real-world exports (2026-08-27) often have no producer column — the
+  // producer lives inside the wine name. match_lwin (0078) hard-gates on
+  // producer-leg trigram similarity, so an empty producer would never
+  // match anything; the full name goes into BOTH legs instead as a
+  // best-effort candidate query. Apply's 0.6 confidence bar (0108) is
+  // unchanged, so a weak candidate still never writes a lwin_id.
+  it("queries LWIN with the full name in both legs for producer-less rows", async () => {
+    const supabase = makeSupabase([]);
+    const result = await buildImportPreview(
+      supabase,
+      Buffer.from("wine name,quantity,cost price\nA.F. Gros Richebourg Grand Cru,3,$678.00\n"),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows[0]).toMatchObject({ rowState: "valid", costStatus: "present" });
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      "match_lwin_bulk",
+      expect.objectContaining({
+        p_queries: [
+          expect.objectContaining({
+            producer: "A.F. Gros Richebourg Grand Cru",
+            name: "A.F. Gros Richebourg Grand Cru",
+          }),
+        ],
+      }),
+    );
   });
 
   it("returns a top-level error for an unparseable file without touching the database", async () => {

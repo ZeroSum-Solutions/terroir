@@ -138,7 +138,13 @@ import { readFileSync, existsSync, writeFileSync, unlinkSync, mkdirSync, rmSync 
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodeCsvBuffer, parseCsv } from "../src/domains/import/csv-parser";
-import { mapHeader, validateRow, type ValidatedRow } from "../src/domains/import/row-validator";
+import {
+  mapHeader,
+  normalizeMoneyText,
+  parseBottleSizeMl,
+  validateRow,
+  type ValidatedRow,
+} from "../src/domains/import/row-validator";
 import {
   MAX_ROWS,
   MAX_UPLOAD_BYTES,
@@ -399,6 +405,18 @@ export function detectNumericCoercions(
     if (!raw) continue;
     const literalOk = spec.kind === "int" ? INTEGER_LITERAL.test(raw) : FLOAT_LITERAL.test(raw);
     if (literalOk) continue;
+    // 2026-08-27 (Sol audit finding 1): size_ml and unit_cost grew
+    // whole-string real-world literal forms ("750ml" / "1.5L",
+    // "$2,034.00" / "45,50") recognized by the SAME production parsers
+    // this oracle certifies against — a value those parsers accept is a
+    // deliberate parse, not a prefix coercion, and flagging it here made
+    // the oracle fail files production accepts. vintage and quantity
+    // keep the bare-literal contract.
+    if (spec.field === "size_ml" && parseBottleSizeMl(raw) !== null) continue;
+    if (spec.field === "unit_cost") {
+      const normalized = normalizeMoneyText(raw);
+      if (normalized !== null && FLOAT_LITERAL.test(normalized.text)) continue;
+    }
     const parsed = spec.kind === "int" ? Number.parseInt(raw, 10) : Number.parseFloat(raw);
     if (Number.isFinite(parsed)) risks.push({ field: spec.field, raw, coercedTo: String(parsed) });
   }

@@ -83,6 +83,38 @@ describe("confirmImportBatch", () => {
     expect(createArgs?.p_content_sha256).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  // Sol audit (2026-08-27) finding 5: producer-less rows must reach the
+  // create_import_batch RPC payload with producer as EMPTY STRING, never
+  // JSON null — apply (0108) inserts raw->>'producer' straight into
+  // wines.producer, which is NOT NULL (0002), so a null here would fail
+  // every such row at apply time.
+  it("sends producer as empty string (never null) in the RPC payload for a producer-less file", async () => {
+    let createArgs: { p_rows: Array<{ raw: Record<string, unknown>; row_state: string }> } | undefined;
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: (args) => {
+          createArgs = args as typeof createArgs;
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+      }),
+    };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      Buffer.from("wine name,quantity,cost price\nA.F. Gros Richebourg Grand Cru,3,$678.00\n"),
+    );
+
+    expect(result).toMatchObject({ ok: true, totalRows: 1 });
+    expect(createArgs?.p_rows[0]?.row_state).toBe("valid");
+    expect(createArgs?.p_rows[0]?.raw.producer).toBe("");
+    expect(createArgs?.p_rows[0]?.raw.name).toBe("A.F. Gros Richebourg Grand Cru");
+    expect(createArgs?.p_rows[0]?.raw.unit_cost).toBe("678.00");
+  });
+
   it("propagates a create_import_batch failure as-is (C09: the function's own implicit transaction is the only rollback needed — no separate client-side cleanup step exists anymore)", async () => {
     const supabase = {
       rpc: makeRpc({
