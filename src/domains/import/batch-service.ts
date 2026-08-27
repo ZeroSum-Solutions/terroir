@@ -48,8 +48,11 @@ export type ConfirmBatchResult =
    * were already confirmed as a live (non-reverted) batch — a resume
    * pointer, not a bare rejection. Re-applying is already idempotent
    * (§2.1), so the client's correct move is "call /apply on batchId
-   * again," never "upload again." */
-  | { ok: true; alreadyExists: true; batchId: string; status: string; counts: BatchCounts }
+   * again," never "upload again." sessionId is the EXISTING batch's own
+   * session (null if it has none) — the caller must compare this against
+   * whatever session it thinks it's uploading into, since a content-hash
+   * match can point at a batch from a completely different session. */
+  | { ok: true; alreadyExists: true; batchId: string; status: string; sessionId: string | null; counts: BatchCounts }
   | { ok: false; error: { code: string; message: string; missingHeaders?: string[] } };
 
 type RowPayload = {
@@ -165,29 +168,29 @@ async function findDuplicateBatch(
 ): Promise<ConfirmBatchResult | null> {
   const { data: byHash } = await supabase
     .from("import_batches")
-    .select("id, status")
+    .select("id, status, session_id")
     .eq("restaurant_id", restaurantId)
     .eq("content_sha256", contentSha256)
     .neq("status", "reverted")
     .maybeSingle();
 
-  let match = byHash as { id: string; status: string } | null;
+  let match = byHash as { id: string; status: string; session_id: string | null } | null;
 
   if (!match && options.sessionId && options.chunkIndex !== undefined) {
     const { data: byChunk } = await supabase
       .from("import_batches")
-      .select("id, status")
+      .select("id, status, session_id")
       .eq("session_id", options.sessionId)
       .eq("chunk_index", options.chunkIndex)
       .neq("status", "reverted")
       .maybeSingle();
-    match = byChunk as { id: string; status: string } | null;
+    match = byChunk as { id: string; status: string; session_id: string | null } | null;
   }
 
   if (!match) return null;
 
   const counts = await countBatchRows(supabase, match.id);
-  return { ok: true, alreadyExists: true, batchId: match.id, status: match.status, counts };
+  return { ok: true, alreadyExists: true, batchId: match.id, status: match.status, sessionId: match.session_id, counts };
 }
 
 export type BatchCounts = {
@@ -363,6 +366,76 @@ export async function resolveImportBatchRow(
   await recomputeBatchStatus(supabase, current.batch_id);
 
   return { ok: true };
+}
+
+export type BulkResolveResult =
+  | { ok: true; resolved: number; remainingPending: number }
+  | { ok: false; error: { code: string; message: string } };
+
+/**
+ * Bulk operator resolution for every row in one batch's pending bucket.
+ * `include` deliberately touches ONLY cost-present rows — a missing-cost
+ * row still requires the per-row path with an explicit manualUnitCost
+ * (resolveImportBatchRow), preserving the "no silently-defaulted cost"
+ * invariant verbatim. `exclude` covers every pending row regardless of
+ * cost state. Counts are derived from exact count queries before/after,
+ * never from an UPDATE's returned row list (PostgREST truncates returned
+ * rows at max_rows — the C03 lesson).
+ */
+export async function bulkResolveImportBatchRows(
+  supabase: SupabaseClient<Database>,
+  restaurantId: string,
+  userId: string,
+  batchId: string,
+  action: ResolveAction,
+): Promise<BulkResolveResult> {
+  const { data: batch, error: batchError } = await supabase
+    .from("import_batches")
+    .select("id, status")
+    .eq("id", batchId)
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+  if (batchError) throw batchError;
+  if (!batch) return { ok: false, error: { code: "not_found", message: "Import batch not found." } };
+  if ((batch as { status: string }).status === "reverted") {
+    return { ok: false, error: { code: "reverted", message: "A reverted batch cannot be resolved." } };
+  }
+
+  const eligible = supabase
+    .from("import_batch_rows")
+    .select("id", { count: "exact", head: true })
+    .eq("batch_id", batchId)
+    .eq("restaurant_id", restaurantId)
+    .eq("resolution", "pending");
+  const { count: before, error: beforeError } =
+    action === "include" ? await eligible.eq("cost_status", "present") : await eligible;
+  if (beforeError) throw beforeError;
+
+  const update = supabase
+    .from("import_batch_rows")
+    .update({
+      resolution: action,
+      resolved_at: new Date().toISOString(),
+      resolved_by: userId,
+    } as never)
+    .eq("batch_id", batchId)
+    .eq("restaurant_id", restaurantId)
+    .eq("resolution", "pending");
+  const { error: updateError } =
+    action === "include" ? await update.eq("cost_status", "present") : await update;
+  if (updateError) throw updateError;
+
+  const { count: after, error: afterError } = await supabase
+    .from("import_batch_rows")
+    .select("id", { count: "exact", head: true })
+    .eq("batch_id", batchId)
+    .eq("restaurant_id", restaurantId)
+    .eq("resolution", "pending");
+  if (afterError) throw afterError;
+
+  await recomputeBatchStatus(supabase, batchId);
+
+  return { ok: true, resolved: before ?? 0, remainingPending: after ?? 0 };
 }
 
 export type RevertBatchResult =

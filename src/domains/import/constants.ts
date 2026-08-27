@@ -24,6 +24,15 @@ export const ALLOWED_CSV_MIME_TYPES = new Set([
   "text/plain",
 ]);
 
+/** P3 — target row count for one client- or script-planned upload chunk of
+ * a file that exceeds MAX_ROWS. Deliberately smaller than MAX_ROWS (5000):
+ * leaves headroom so a plan stays valid even if MAX_ROWS is ever tightened,
+ * or a particular chunk's rows happen to be unusually wide in bytes. Shared
+ * by scripts/validate-bulk-import.ts (CLI chunk planner) and
+ * src/domains/import/csv-splitter.ts (browser auto-split in /import) so the
+ * two can never drift on chunk size. */
+export const CLIENT_CHUNK_TARGET_ROWS = 4000;
+
 /** Rows applied per apply-chunk API call. Small enough that every call
  * comfortably finishes well inside a normal serverless request budget,
  * regardless of total file size — this is what makes big files

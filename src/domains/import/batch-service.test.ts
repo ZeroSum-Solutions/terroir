@@ -116,7 +116,10 @@ describe("confirmImportBatch", () => {
               eq: () => ({
                 eq: () => ({
                   neq: () => ({
-                    maybeSingle: async () => ({ data: { id: BATCH_ID, status: "completed" }, error: null }),
+                    maybeSingle: async () => ({
+                      data: { id: BATCH_ID, status: "completed", session_id: "session-x" },
+                      error: null,
+                    }),
                   }),
                 }),
               }),
@@ -135,7 +138,11 @@ describe("confirmImportBatch", () => {
       csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
     );
 
-    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: BATCH_ID, status: "completed" });
+    // sessionId is the EXISTING batch's own session — a chunked-upload
+    // caller compares this against the session it's uploading into, so a
+    // duplicate that belongs to a DIFFERENT session is never silently
+    // adopted (see session-step.tsx's confirmChunkedSession).
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: BATCH_ID, status: "completed", sessionId: "session-x" });
   });
 
   it("rejects an empty CSV without ever calling create_import_batch", async () => {

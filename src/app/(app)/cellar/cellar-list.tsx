@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { GripVertical, CheckSquare, Square, Layers, ChevronDown, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -961,6 +962,16 @@ function CellarRow({
             )}
           </div>
           <div className="mt-2xs flex items-center gap-sm">
+            {row.hero_image_url && (
+              <Image
+                src={row.hero_image_url}
+                alt=""
+                width={36}
+                height={36}
+                unoptimized
+                className="h-9 w-9 shrink-0 rounded-md object-cover"
+              />
+            )}
             <span className="min-w-0 flex-1 truncate font-serif text-[17px] font-medium text-ink">
               {row.name}
             </span>
@@ -982,12 +993,24 @@ function CellarRow({
 
         {/* Desktop ledger-table row (D4) */}
         <div className={cn("hidden items-center gap-md lg:grid", LEDGER_COLS)}>
-          <div className="min-w-0">
-            <div className="truncate text-[10.5px] font-medium uppercase tracking-[0.14em] text-grey">
-              {row.producer}
-            </div>
-            <div className="truncate font-serif text-[17px] font-medium text-ink">
-              {row.name}
+          <div className="flex min-w-0 items-center gap-sm">
+            {row.hero_image_url && (
+              <Image
+                src={row.hero_image_url}
+                alt=""
+                width={40}
+                height={40}
+                unoptimized
+                className="h-10 w-10 shrink-0 rounded-md object-cover"
+              />
+            )}
+            <div className="min-w-0">
+              <div className="truncate text-[10.5px] font-medium uppercase tracking-[0.14em] text-grey">
+                {row.producer}
+              </div>
+              <div className="truncate font-serif text-[17px] font-medium text-ink">
+                {row.name}
+              </div>
             </div>
           </div>
           <span className="font-mono text-[13px] tabular text-ink-soft">

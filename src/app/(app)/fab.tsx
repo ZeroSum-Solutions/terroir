@@ -38,8 +38,11 @@ const ACTIONS: Action[] = [
 ];
 
 // Routes where the FAB is hidden — pages that are themselves a
-// primary-action surface or that don't need it.
-const HIDE_ON: ReadonlyArray<string> = ["/scan", "/login"];
+// primary-action surface or that don't need it. /atlas: the map's own
+// tap targets (and the region bottom sheet) sit in the same bottom-right
+// zone the FAB floats in — none of its actions (Scan/Pour/86) are Atlas
+// tasks anyway.
+const HIDE_ON: ReadonlyArray<string> = ["/scan", "/login", "/atlas"];
 
 function shouldHide(pathname: string): boolean {
   return HIDE_ON.some(

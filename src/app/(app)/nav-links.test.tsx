@@ -12,7 +12,7 @@ describe("primary navigation", () => {
   });
 
   it.each([DesktopNavLinks, MobileNavLinks])(
-    "preserves the four primary destinations",
+    "preserves the five primary destinations, Atlas center",
     (Navigation) => {
       document.body.innerHTML = renderToStaticMarkup(
         <Navigation role="staff" />,
@@ -27,6 +27,7 @@ describe("primary navigation", () => {
       ).toEqual([
         ["Scan", "/scan"],
         ["Cellar", "/cellar"],
+        ["Atlas", "/atlas"],
         ["Lists", "/lists"],
         ["Insights", "/insights"],
       ]);

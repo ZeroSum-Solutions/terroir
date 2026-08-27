@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import {
   ChevronDown,
   Download,
@@ -11,7 +12,8 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
 import { ActionDialog } from "@/components/action-dialog";
 import { Field } from "@/components/field";
 import { IconButton } from "@/components/icon-button";
@@ -109,6 +111,36 @@ export function ResultsView({
   const [discardOpen, setDiscardOpen] = useState(false);
   const [discardBusy, setDiscardBusy] = useState(false);
 
+  // POST /api/scan responds with `{ scanId, ...Scan }` — scanId isn't part
+  // of the `Scan` type (it doesn't exist until the scan is persisted), but
+  // it round-trips on the object through setScan/saveScan/localStorage, so
+  // it's safe to read here at runtime. Degrade gracefully when absent (e.g.
+  // manual entry, which never has a scan id).
+  const scanId = (scan as unknown as { scanId?: string }).scanId;
+  const [capturedImageUrl, setCapturedImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    // No scan id (e.g. manual entry) — nothing to fetch; the render guard
+    // below ignores any stale URL rather than resetting state here.
+    if (!scanId) return;
+    let cancelled = false;
+    fetch(`/api/scans/${scanId}/image`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { url?: string } | null) => {
+        if (!cancelled && data?.url) setCapturedImageUrl(data.url);
+      })
+      .catch((err) => {
+        console.error("Failed to load captured invoice photo:", err);
+        Sentry.captureException(err, {
+          tags: { surface: "scanner", phase: "results-image-load" },
+          extra: { scan_id: scanId },
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scanId]);
+
   const confirmDiscard = () => {
     setDiscardBusy(true);
     try {
@@ -200,6 +232,31 @@ export function ResultsView({
           </button>
         </div>
       </header>
+
+      {scanId != null && capturedImageUrl && (
+        <div className="mb-lg rounded-card card-surface p-md">
+          <div className="mb-sm text-caption font-medium uppercase tracking-[0.18em] text-grey">
+            Captured photo
+          </div>
+          <a
+            href={capturedImageUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Open full-resolution invoice photo in a new tab"
+            className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          >
+            <Image
+              src={capturedImageUrl}
+              alt="Captured invoice photo"
+              width={0}
+              height={0}
+              unoptimized
+              className="max-h-[220px] w-full cursor-zoom-in rounded-lg object-contain"
+              style={{ width: "100%", height: "auto", touchAction: "pinch-zoom" }}
+            />
+          </a>
+        </div>
+      )}
 
       <div className="mb-lg rounded-card card-surface p-md">
         <div className="flex flex-col gap-sm">

@@ -115,7 +115,10 @@ function BottleSummary({ bottle }: { bottle: Bottle }) {
       </div>
       <p className="mt-xs text-[12px] text-grey">
         {bottle.theoreticalRemainingMl} ml theoretical remaining
-        {bottle.openedBy ? ` · opened by ${bottle.openedBy}` : ""}
+        {/* openedBy is a raw auth user id — no display name is cheaply
+            available in already-fetched data here, so show that someone
+            opened it without ever rendering the UUID itself. */}
+        {bottle.openedBy ? " · opened" : ""}
       </p>
     </>
   );

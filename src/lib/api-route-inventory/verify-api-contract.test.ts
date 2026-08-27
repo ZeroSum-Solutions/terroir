@@ -315,9 +315,11 @@ describe("checked-in API contract gate", () => {
       // POST /api/import/sessions/[id]/revert) — 100 + 3 = 103.
       // SPEC-20 voice retrieval added GET+POST /api/cellar/voice-resolve —
       // 103 + 2 = 105.
-      discoveredOperationCount: 105,
+      // Bulk onboarding resolution added
+      // POST /api/import/batches/[id]/resolve-all — 105 + 1 = 106.
+      discoveredOperationCount: 106,
       plannedOperationCount: 15,
-      classificationCount: 105,
+      classificationCount: 106,
     });
     expect(paths.map((file) => readFileSync(resolve(file), "utf8"))).toEqual(
       before,

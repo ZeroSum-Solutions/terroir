@@ -8,6 +8,7 @@ import type {
   VoiceResolveResponse,
   VoiceWineItem,
 } from "@/lib/wine-intelligence/voice-resolve-types";
+import type { VoiceFilterPayload } from "@/lib/wine-intelligence/voice-filter-intent";
 
 const AUTO_STOP_MS = 15_000;
 const MIME_TYPES = ["audio/webm;codecs=opus", "audio/mp4"];
@@ -16,8 +17,10 @@ type Phase = "idle" | "requesting" | "recording" | "processing";
 
 export function VoiceCellarControl({
   onResolve,
+  onFilter,
 }: {
   onResolve: (wineId: string) => void;
+  onFilter: (filters: VoiceFilterPayload) => void;
 }) {
   const [available, setAvailable] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -74,6 +77,9 @@ export function VoiceCellarControl({
           transcript: result.transcript,
           candidates: result.candidates,
         });
+      } else if (result.kind === "filter") {
+        setNotice(`Showing ${result.label}.`);
+        onFilter(result.filters);
       } else if (result.kind === "abstain") {
         setNotice(`Didn't catch a cellar wine — heard: ${result.transcript || "nothing"}.`);
       } else if (result.kind === "stt_failed") {
@@ -95,7 +101,7 @@ export function VoiceCellarControl({
         setNotice("Voice search is temporarily unavailable. Use typed search for now.");
       }
     },
-    [onResolve],
+    [onResolve, onFilter],
   );
 
   const submitRecording = useCallback(

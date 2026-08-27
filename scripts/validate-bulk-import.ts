@@ -139,7 +139,37 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodeCsvBuffer, parseCsv } from "../src/domains/import/csv-parser";
 import { mapHeader, validateRow, type ValidatedRow } from "../src/domains/import/row-validator";
-import { MAX_ROWS, MAX_UPLOAD_BYTES, HEADER_SYNONYMS, type CanonicalHeader } from "../src/domains/import/constants";
+import {
+  MAX_ROWS,
+  MAX_UPLOAD_BYTES,
+  HEADER_SYNONYMS,
+  CLIENT_CHUNK_TARGET_ROWS,
+  type CanonicalHeader,
+} from "../src/domains/import/constants";
+import {
+  AmbiguousRecordSplitError,
+  UnsupportedLineEndingError,
+  splitLogicalRecords,
+  isBlankRecord,
+  buildChunkPlan,
+  serializeChunk,
+  type ChunkPlanEntry,
+} from "../src/domains/import/csv-splitter";
+
+// Re-exported so existing consumers (src/test/fixtures/validate-bulk-import.test.ts
+// imports every one of these by name from THIS module path) keep working
+// unchanged — the splitter/planner/serializer now live in the browser-safe
+// src/domains/import/csv-splitter.ts (P3: shared with the client-side
+// auto-chunking import flow), this script is just their other call site.
+export {
+  AmbiguousRecordSplitError,
+  UnsupportedLineEndingError,
+  splitLogicalRecords,
+  isBlankRecord,
+  buildChunkPlan,
+  serializeChunk,
+};
+export type { ChunkPlanEntry };
 
 type DirtyRowEntry = { row_index: number; category: string; detail?: string };
 type NvLiteralRowEntry = { row_index: number; producer?: string; name?: string };
@@ -195,101 +225,6 @@ type Manifest = {
 // sees a `\r` outside quotes that isn't immediately followed by `\n`,
 // instead of ever handing that ambiguous text to the chunker.
 // ---------------------------------------------------------------------------
-
-export class AmbiguousRecordSplitError extends Error {}
-export class UnsupportedLineEndingError extends Error {}
-
-export function splitLogicalRecords(text: string): string[] {
-  const records: string[] = [];
-  let recordStart = 0;
-  let inQuotes = false;
-  let fieldEmpty = true;
-  let i = 0;
-  const len = text.length;
-
-  while (i < len) {
-    const char = text[i];
-
-    if (inQuotes) {
-      if (char === '"') {
-        if (text[i + 1] === '"') {
-          i += 2;
-          fieldEmpty = false;
-          continue;
-        }
-        inQuotes = false;
-        i += 1;
-        continue;
-      }
-      i += 1;
-      fieldEmpty = false;
-      continue;
-    }
-
-    if (char === '"' && fieldEmpty) {
-      inQuotes = true;
-      i += 1;
-      continue;
-    }
-    if (char === ",") {
-      fieldEmpty = true;
-      i += 1;
-      continue;
-    }
-    if (char === "\r") {
-      if (text[i + 1] !== "\n") {
-        throw new UnsupportedLineEndingError(
-          "A bare carriage return (\\r) was found outside any quoted field, not followed by a line " +
-            "feed (\\n). This is a classic pre-OS X Excel/Mac line ending — the importer's CSV parser " +
-            "does not treat a lone \\r as a record break, so it would silently merge every logical " +
-            "record after this point into one. Convert this file to Unix (LF) or Windows (CRLF) line " +
-            "endings before validating or importing it.",
-        );
-      }
-      i += 1;
-      continue;
-    }
-    if (char === "\n") {
-      records.push(text.slice(recordStart, i));
-      i += 1;
-      recordStart = i;
-      fieldEmpty = true;
-      continue;
-    }
-    fieldEmpty = false;
-    i += 1;
-  }
-
-  if (inQuotes) {
-    throw new AmbiguousRecordSplitError(
-      "A quoted field is never closed (unterminated quote through EOF) — cannot determine logical record boundaries.",
-    );
-  }
-
-  if (recordStart < len) {
-    records.push(text.slice(recordStart));
-  }
-  // Drop one fully-blank trailing record (a file that ends with a newline).
-  if (records.length > 0 && records[records.length - 1] === "") records.pop();
-  return records;
-}
-
-/**
- * Is this logical record one the real parseCsv() silently drops as a fully
- * blank line (its own `pushRow()` rule): exactly one field, and that field
- * is empty)? Rather than reimplement that field-parsing rule a second time
- * — which is exactly how the splitter/parser disagreement this fix is
- * closing happened in the first place — this asks the real parser itself:
- * a standalone record that parseCsv() would drop as blank is, when parsed
- * completely alone, indistinguishable from an empty file (its `rows` array
- * ends up empty), which is the one condition parseCsv() reports as the
- * "empty_file" error. A non-blank record, standalone, always parses `ok`
- * (it is simply treated as a one-row "header" with no data rows).
- */
-export function isBlankRecord(record: string): boolean {
-  const probe = parseCsv(`${record}\n`);
-  return !probe.ok && probe.error.code === "empty_file";
-}
 
 function sha256HexOfBuffer(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
@@ -482,8 +417,7 @@ export function detectNumericCoercions(
 // between two already-correctly-delimited logical records, never inside
 // one.
 //
-// CHUNK_TARGET_ROWS (4000) is THIS TOOL's own planning choice, not a
-// product constant — it lives here, not in constants.ts, and is
+// CHUNK_TARGET_ROWS (4000, CLIENT_CHUNK_TARGET_ROWS in constants.ts) is
 // deliberately smaller than MAX_ROWS (5000) to leave headroom: a plan built
 // with margin stays valid even if MAX_ROWS is ever tightened, or a
 // particular chunk's rows happen to be unusually wide in bytes. Every chunk
@@ -492,40 +426,11 @@ export function detectNumericCoercions(
 // trusted to fit just because it targets a smaller row count.
 // ---------------------------------------------------------------------------
 
-export const CHUNK_TARGET_ROWS = 4000;
-
-export interface ChunkPlanEntry {
-  /** 1-indexed, in upload order. */
-  index: number;
-  /** Raw logical data records (blank lines included), in original file order. */
-  records: string[];
-  /** 1-indexed row number (matches this file's rowIndex numbering — every physical row a human would see in
-   * their spreadsheet, blank lines included) of the first record in this chunk. */
-  startRow: number;
-  /** 1-indexed row number of the last record in this chunk. */
-  endRow: number;
-}
-
-/** Partition dataRecords into chunks of at most chunkTargetRows records
- * each, by ARRAY SLICING — never by re-joining and re-splitting text. Every
- * element of dataRecords is already a complete, self-contained logical
- * record (guaranteed by splitLogicalRecords()'s own quote-tracking), so
- * slicing this array can never bisect one — the "a chunk boundary must
- * never cut a record" property holds by construction, not by luck. */
-export function buildChunkPlan(dataRecords: string[], chunkTargetRows: number): ChunkPlanEntry[] {
-  const chunks: ChunkPlanEntry[] = [];
-  for (let offset = 0; offset < dataRecords.length; offset += chunkTargetRows) {
-    const records = dataRecords.slice(offset, offset + chunkTargetRows);
-    chunks.push({ index: chunks.length + 1, records, startRow: offset + 1, endRow: offset + records.length });
-  }
-  return chunks;
-}
-
-/** Exactly the format the real product would see for one uploaded chunk:
- * the shared header line, then this chunk's records, one per line. */
-export function serializeChunk(headerRecord: string, records: string[]): string {
-  return [headerRecord, ...records].join("\n") + "\n";
-}
+// CHUNK_TARGET_ROWS, ChunkPlanEntry, buildChunkPlan(), and serializeChunk()
+// now live in src/domains/import/csv-splitter.ts (imported above, re-exported
+// below) so the browser-side auto-chunking import flow shares this exact
+// planner instead of a second, independently-maintained copy.
+export const CHUNK_TARGET_ROWS = CLIENT_CHUNK_TARGET_ROWS;
 
 export type ChunkPlanCheck = {
   index: number;

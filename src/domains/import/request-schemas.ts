@@ -12,6 +12,13 @@ export const ResolveRowBodySchema = z.object({
   manualUnitCost: z.number().min(0).max(1_000_000).optional(),
 });
 
+// Bulk resolution deliberately has no manualUnitCost: `include` only ever
+// covers cost-present rows (see bulkResolveImportBatchRows) — a missing
+// cost always goes through the per-row path with an explicit value.
+export const BulkResolveBodySchema = z.object({
+  action: z.enum(["include", "exclude"]),
+});
+
 // P3 (2026-08-23-p3-chunked-import.md §3) — multi-batch onboarding session
 // schemas. Confirm's session fields arrive as multipart form fields
 // (strings) alongside the file, so numeric ones use z.coerce.

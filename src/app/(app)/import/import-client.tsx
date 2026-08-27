@@ -10,8 +10,27 @@ import {
 } from "lucide-react";
 import { ActionDialog } from "@/components/action-dialog";
 import { cn } from "@/lib/utils";
-import { CANONICAL_HEADERS } from "@/domains/import/constants";
+import { CANONICAL_HEADERS, CLIENT_CHUNK_TARGET_ROWS, MAX_ROWS } from "@/domains/import/constants";
+import {
+  AmbiguousRecordSplitError,
+  UnsupportedEncodingError,
+  UnsupportedLineEndingError,
+  decodeCsvBytesStrict,
+  splitLogicalRecords,
+} from "@/domains/import/csv-splitter";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
+import {
+  SessionStep,
+  ChunkUploadProgress,
+  planChunkedPreview,
+  confirmChunkedSession,
+  readStoredSession,
+  writeStoredSession,
+  ZERO_SUMMARY,
+  type ChunkedPlanState,
+  type ChunkedPreviewState,
+  type ChunkUploadState,
+} from "./session-step";
 
 type BatchSummary = {
   id: string;
@@ -22,7 +41,7 @@ type BatchSummary = {
   reverted_at: string | null;
 };
 
-type BatchRow = {
+export type BatchRow = {
   id: string;
   row_number: number;
   raw: Record<string, string | null>;
@@ -38,7 +57,7 @@ type BatchRow = {
 
 type BatchDetail = { batch: BatchSummary; rows: BatchRow[] };
 
-type Step = "upload" | "preview" | "batch";
+type Step = "upload" | "preview" | "batch" | "session";
 
 const TEMPLATE_CSV = `${CANONICAL_HEADERS.join(",")}\nDomaine Example,Cuvee One,2020,Pinot Noir,Burgundy,France,750,,USD,6,24.50,,\n`;
 
@@ -52,6 +71,15 @@ export function ImportClient() {
   const [batch, setBatch] = useState<BatchDetail | null>(null);
   const [recent, setRecent] = useState<BatchSummary[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Chunked (> MAX_ROWS) path — untouched for the common small-file case.
+  const [chunkedPlan, setChunkedPlan] = useState<ChunkedPlanState | null>(null);
+  const [chunkedPreview, setChunkedPreview] = useState<ChunkedPreviewState | null>(null);
+  const [chunkUpload, setChunkUpload] = useState<ChunkUploadState[] | null>(null);
+  const [confirmingChunked, setConfirmingChunked] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionLabel, setSessionLabel] = useState<string>("cellar.csv");
+  const requestTimestampsRef = useRef<number[]>([]);
 
   const loadRecent = useCallback(async () => {
     const response = await fetch("/api/import/batches", { cache: "no-store" });
@@ -73,28 +101,116 @@ export function ImportClient() {
     };
   }, [loadRecent]);
 
+  // Resume: if a prior session is still in progress (per this browser's
+  // localStorage), jump straight to its SessionStep — reconciled against
+  // the server's own progress, never trusted on its own.
+  useEffect(() => {
+    const stored = readStoredSession();
+    if (!stored) return;
+    let active = true;
+    (async () => {
+      try {
+        const response = await fetch(`/api/import/sessions/${stored.sessionId}`, { cache: "no-store" });
+        if (!response.ok) {
+          writeStoredSession(null);
+          return;
+        }
+        const progress = (await response.json()) as { status: string };
+        if (!active) return;
+        if (progress.status === "reverted" || progress.status === "completed") {
+          // Nothing left to resume — never re-jump into a finished session.
+          writeStoredSession(null);
+          return;
+        }
+        setSessionId(stored.sessionId);
+        setSessionLabel(stored.label);
+        setStep("session");
+      } catch {
+        // best-effort — resume is a convenience, never load-bearing.
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const runSingleFilePreview = useCallback(async (selectedFile: File) => {
+    const form = new FormData();
+    form.append("file", selectedFile);
+    const response = await fetch("/api/import/preview", { method: "POST", body: form });
+    const body = await response.json();
+    if (!response.ok) {
+      setPreviewError(body?.error?.message ?? "Preview failed.");
+      setPreview(null);
+      return;
+    }
+    setPreview(body);
+    setChunkedPlan(null);
+    setChunkedPreview(null);
+    setStep("preview");
+  }, []);
+
+  const runChunkedPreview = useCallback(
+    async (selectedFile: File, headerRecord: string, dataRecords: string[], bytes: Uint8Array) => {
+      const result = await planChunkedPreview(selectedFile, headerRecord, dataRecords, bytes);
+      if (!result.ok) {
+        setPreviewError(result.error);
+        return;
+      }
+      setChunkedPlan(result.plan);
+      setChunkedPreview(result.preview);
+      setChunkUpload(null);
+      setSessionId(null);
+      setPreview(null);
+      setStep("preview");
+    },
+    [],
+  );
+
   const handlePreview = useCallback(async () => {
     if (!file) return;
     setPreviewing(true);
     setPreviewError(null);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const response = await fetch("/api/import/preview", { method: "POST", body: form });
-      const body = await response.json();
-      if (!response.ok) {
-        setPreviewError(body?.error?.message ?? "Preview failed.");
-        setPreview(null);
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+
+      let text: string;
+      try {
+        text = decodeCsvBytesStrict(bytes);
+      } catch (err) {
+        setPreviewError(err instanceof UnsupportedEncodingError ? err.message : "Could not read this CSV file.");
         return;
       }
-      setPreview(body);
-      setStep("preview");
+
+      let allRecords: string[];
+      try {
+        allRecords = splitLogicalRecords(text);
+      } catch (err) {
+        setPreviewError(
+          err instanceof AmbiguousRecordSplitError || err instanceof UnsupportedLineEndingError
+            ? err.message
+            : "Could not read this CSV file.",
+        );
+        return;
+      }
+      if (allRecords.length === 0) {
+        setPreviewError("File is empty.");
+        return;
+      }
+
+      const [headerRecord, ...dataRecords] = allRecords;
+      if (dataRecords.length <= MAX_ROWS) {
+        await runSingleFilePreview(file);
+      } else {
+        await runChunkedPreview(file, headerRecord, dataRecords, bytes);
+      }
     } catch {
       setPreviewError("Preview failed. Check your connection and try again.");
     } finally {
       setPreviewing(false);
     }
-  }, [file]);
+  }, [file, runSingleFilePreview, runChunkedPreview]);
 
   const handleConfirm = useCallback(async () => {
     if (!file) return;
@@ -118,12 +234,92 @@ export function ImportClient() {
     }
   }, [file, loadRecent]);
 
+  /** Skips any chunk `chunkUpload` already marks "confirmed" — the
+   * retry-after-failure path reruns confirmChunkedSession with the prior
+   * chunkUpload state as initialUpload, so only the failed/unsent chunks
+   * are actually re-sent. See session-step.tsx for the sequential driver
+   * itself. */
+  const handleConfirmChunked = useCallback(async () => {
+    if (!chunkedPlan) return;
+    setConfirmingChunked(true);
+    setPreviewError(null);
+    try {
+      const initial: ChunkUploadState[] =
+        chunkUpload ?? chunkedPlan.chunks.map((c) => ({ index: c.index, status: "pending" as const, batchId: null, error: null }));
+
+      const result = await confirmChunkedSession({
+        plan: chunkedPlan,
+        initialUpload: initial,
+        existingSessionId: sessionId,
+        fileLabel: file?.name ?? sessionLabel,
+        timestampsRef: requestTimestampsRef,
+        onSessionId: (id) => {
+          setSessionId(id);
+          setSessionLabel(file?.name ?? sessionLabel);
+        },
+        onProgress: setChunkUpload,
+      });
+
+      if (!result.ok) {
+        if (result.conflictingSessionId) {
+          // This chunk's content already belongs to a DIFFERENT session —
+          // never adopt it into this one (that would split the file across
+          // two sessions). Resume the original session instead, but only
+          // after verifying it really is THIS file's own unfinished
+          // session: same source hash, still in progress. Anything else
+          // (different file sharing one identical chunk, already-completed
+          // or reverted session, unreachable progress) is a hard stop the
+          // operator must resolve, not a silent redirect.
+          try {
+            const check = await fetch(`/api/import/sessions/${result.conflictingSessionId}`, { cache: "no-store" });
+            const progress = check.ok
+              ? ((await check.json()) as { status?: string; sourceSha256?: string | null })
+              : null;
+            if (
+              progress?.status === "in_progress" &&
+              progress.sourceSha256 != null &&
+              progress.sourceSha256 === chunkedPlan.sourceSha256
+            ) {
+              const label = file?.name ?? sessionLabel;
+              writeStoredSession({ sessionId: result.conflictingSessionId, sourceSha256: chunkedPlan.sourceSha256, label });
+              setSessionId(result.conflictingSessionId);
+              setSessionLabel(label);
+              setPreviewError(result.error);
+              setStep("session");
+              return;
+            }
+          } catch {
+            // fall through to the hard stop below
+          }
+          setPreviewError(
+            "A chunk of this file matches content from another import that can't be resumed for this file " +
+              "(different source file, or already completed/reverted). Revert that import before re-uploading.",
+          );
+          return;
+        }
+        setPreviewError(result.error);
+        return;
+      }
+      setStep("session");
+      void loadRecent();
+    } catch {
+      setPreviewError("Import could not be created. Check your connection and try again.");
+    } finally {
+      setConfirmingChunked(false);
+    }
+  }, [chunkedPlan, chunkUpload, sessionId, file, sessionLabel, loadRecent]);
+
   const reset = useCallback(() => {
     setStep("upload");
     setFile(null);
     setPreview(null);
     setPreviewError(null);
     setBatch(null);
+    setChunkedPlan(null);
+    setChunkedPreview(null);
+    setChunkUpload(null);
+    setSessionId(null);
+    setSessionLabel("cellar.csv");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
@@ -147,12 +343,19 @@ export function ImportClient() {
         />
       )}
 
-      {step === "preview" && preview && (
+      {step === "preview" && (preview || chunkedPreview) && (
         <PreviewStep
-          preview={preview}
           filename={file?.name ?? "cellar.csv"}
-          onConfirm={handleConfirm}
-          confirming={confirming}
+          summary={chunkedPreview?.summary ?? preview?.summary ?? ZERO_SUMMARY}
+          errorRows={
+            chunkedPreview?.errorRows ??
+            (preview?.rows.filter((r) => r.rowState === "error").map((r) => ({ rowNumber: r.rowNumber, errors: r.errors })) ?? [])
+          }
+          chunkBreakdown={chunkedPreview?.perChunk}
+          chunkTotal={chunkedPlan?.chunkTotal}
+          chunkUpload={chunkUpload}
+          onConfirm={chunkedPreview ? () => void handleConfirmChunked() : () => void handleConfirm()}
+          confirming={chunkedPreview ? confirmingChunked : confirming}
           onBack={reset}
           error={previewError}
         />
@@ -160,6 +363,18 @@ export function ImportClient() {
 
       {step === "batch" && batch && (
         <BatchStep batch={batch} setBatch={setBatch} onDone={() => { reset(); void loadRecent(); }} />
+      )}
+
+      {step === "session" && sessionId && (
+        <SessionStep
+          sessionId={sessionId}
+          label={sessionLabel}
+          onDone={() => {
+            writeStoredSession(null);
+            reset();
+            void loadRecent();
+          }}
+        />
       )}
 
       <RecentImports batches={recent} onOpen={async (id) => {
@@ -211,7 +426,9 @@ function UploadStep({
         <span className="text-[14px] font-medium text-ink">
           {file ? file.name : "Choose a CSV file"}
         </span>
-        <span className="text-caption text-grey">.csv up to 5 MB</span>
+        <span className="text-caption text-grey">
+          .csv up to 5 MB per upload — larger files split into {CLIENT_CHUNK_TARGET_ROWS}-row chunks automatically
+        </span>
       </label>
 
       {error && (
@@ -242,28 +459,46 @@ function UploadStep({
   );
 }
 
+/** Renders either the plain (<= MAX_ROWS) preview or the aggregated,
+ * chunked (> MAX_ROWS) preview — chunkBreakdown/chunkTotal/chunkUpload are
+ * only ever set for the latter. */
 function PreviewStep({
-  preview,
   filename,
+  summary,
+  errorRows,
+  chunkBreakdown,
+  chunkTotal,
+  chunkUpload,
   onConfirm,
   confirming,
   onBack,
   error,
 }: {
-  preview: { rows: PreviewRow[]; summary: PreviewSummary };
   filename: string;
+  summary: PreviewSummary;
+  errorRows: { rowNumber: number; errors: { field: string; message: string }[] }[];
+  chunkBreakdown?: { index: number; startRow: number; endRow: number; summary: PreviewSummary }[];
+  chunkTotal?: number;
+  chunkUpload: ChunkUploadState[] | null;
   onConfirm: () => void;
   confirming: boolean;
   onBack: () => void;
   error: string | null;
 }) {
-  const { summary } = preview;
-  const errorRows = preview.rows.filter((r) => r.rowState === "error").slice(0, 20);
+  const shownErrorRows = errorRows.slice(0, 20);
   const canConfirm = summary.validRows > 0;
+  const hasFailedChunk = chunkUpload?.some((c) => c.status === "failed") ?? false;
 
   return (
     <div className="rounded-card card-surface p-lg">
       <h2 className="font-serif text-[20px] text-ink">Preview: {filename}</h2>
+      {chunkTotal !== undefined && (
+        <p className="mt-2xs text-[13px] text-grey">
+          This file will be split into {chunkTotal} chunk{chunkTotal === 1 ? "" : "s"} of up to{" "}
+          {CLIENT_CHUNK_TARGET_ROWS} rows, uploaded one at a time under a single import session.
+        </p>
+      )}
+
       <dl className="mt-md grid grid-cols-2 gap-sm text-[13px]">
         <SummaryStat label="Total rows" value={summary.totalRows} />
         <SummaryStat label="Ready to apply" value={summary.readyToApplyRows} />
@@ -273,25 +508,41 @@ function PreviewStep({
         <SummaryStat label="Missing cost" value={summary.missingCostRows} />
       </dl>
 
-      {errorRows.length > 0 && (
+      {chunkBreakdown && (
+        <div className="mt-lg">
+          <h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">Chunk breakdown</h3>
+          <ul className="mt-xs space-y-2xs">
+            {chunkBreakdown.map((chunk) => (
+              <li key={chunk.index} className="rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink">
+                Chunk {chunk.index} (rows {chunk.startRow}–{chunk.endRow}): {chunk.summary.validRows} valid,{" "}
+                {chunk.summary.errorRows} error(s)
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {shownErrorRows.length > 0 && (
         <div className="mt-lg">
           <h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
             Row errors
           </h3>
           <ul className="mt-xs space-y-2xs">
-            {errorRows.map((row) => (
+            {shownErrorRows.map((row) => (
               <li key={row.rowNumber} className="rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink">
                 Row {row.rowNumber}: {row.errors.map((e) => e.message).join(" ")}
               </li>
             ))}
           </ul>
-          {summary.errorRows > errorRows.length && (
+          {summary.errorRows > shownErrorRows.length && (
             <p className="mt-2xs text-caption text-grey">
-              +{summary.errorRows - errorRows.length} more error row(s) not shown.
+              +{summary.errorRows - shownErrorRows.length} more error row(s) not shown.
             </p>
           )}
         </div>
       )}
+
+      {chunkUpload && <ChunkUploadProgress chunks={chunkUpload} chunkTotal={chunkTotal ?? chunkUpload.length} />}
 
       {error && (
         <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-accent">
@@ -304,7 +555,8 @@ function PreviewStep({
         <button
           type="button"
           onClick={onBack}
-          className="min-h-11 flex-1 rounded-pill border border-ink/25 bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          disabled={confirming}
+          className="min-h-11 flex-1 rounded-pill border border-ink/25 bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Choose a different file
         </button>
@@ -315,7 +567,7 @@ function PreviewStep({
           className="flex min-h-11 flex-1 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {confirming ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-          {confirming ? "Creating import…" : "Confirm import"}
+          {confirming ? "Creating import…" : hasFailedChunk ? "Retry upload" : "Confirm import"}
         </button>
       </div>
       {!canConfirm && (

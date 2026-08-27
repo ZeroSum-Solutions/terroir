@@ -13,6 +13,10 @@ import {
 
 interface BottleResultsViewProps {
   result: BottleScanResult;
+  /** Object URL of the label photo the user just captured (scanner.tsx
+   * holds it until save/start-over) — shown beside the identification so
+   * the operator can eyeball the match against their own photo. */
+  previewUrl?: string | null;
   onSave: (wine: {
     name: string;
     producer: string;
@@ -83,6 +87,7 @@ function InfoRow({
 
 export function BottleResultsView({
   result,
+  previewUrl,
   onSave,
   onScanAnother,
   isSaving,
@@ -163,6 +168,22 @@ export function BottleResultsView({
             : "Update the fields, then save to inventory."}
         </p>
       </header>
+
+      {previewUrl && (
+        <div className="mb-md">
+          <div className="mb-sm text-caption font-medium uppercase tracking-[0.18em] text-grey">
+            Your label photo
+          </div>
+          {/* Plain <img>: previewUrl is a local object URL, never a remote
+              asset — next/image adds nothing here. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewUrl}
+            alt="Label photo you captured"
+            className="max-h-[38vh] w-full rounded-lg bg-bridge-surface object-contain"
+          />
+        </div>
+      )}
 
       {lowConfidence && (
         <div className="mb-md flex items-start gap-sm rounded-card border border-accent/20 bg-blush-wash/60 px-md py-sm">

@@ -95,7 +95,7 @@ async function postBatches(request: NextRequest) {
   // /apply on it" rather than treating this as an error.
   if (result.alreadyExists) {
     return NextResponse.json(
-      { batchId: result.batchId, alreadyExists: true, status: result.status, counts: result.counts },
+      { batchId: result.batchId, alreadyExists: true, status: result.status, sessionId: result.sessionId, counts: result.counts },
       { status: 200 },
     );
   }
