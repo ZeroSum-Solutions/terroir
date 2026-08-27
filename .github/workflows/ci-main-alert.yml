@@ -10,10 +10,17 @@
 # Dedup: one open issue labeled `ci-main-failure` collects repeats; a new
 # failure comments on it instead of spamming new issues. Close the issue
 # when main is green again (or let anyone close it — the next failure
-# reopens the loop by creating a fresh one). The `concurrency` group
-# serializes alert runs so two near-simultaneous failures can't both
-# observe "no open issue" and create duplicates (Sol audit 2026-08-27
-# finding 3).
+# reopens the loop by creating a fresh one).
+#
+# Deliberately NO `concurrency` group (Sol audit 2026-08-27 round 2):
+# GitHub keeps one running + one PENDING run per group and a third
+# arrival CANCELS the pending one — and every completed CI run (including
+# unrelated green PR runs) enters the group before the job-level `if` is
+# evaluated, so a queued main-failure alert could be silently cancelled
+# by a green PR run. A lost alert is strictly worse than the race it
+# prevented: two near-simultaneous main failures at worst create two
+# issues (visible, closable) instead of one issue + one comment. Alerts
+# must be lossless; dedup is best-effort.
 #
 # NOTE (workflow_run semantics): this file only triggers once it exists on
 # the default branch.
@@ -27,9 +34,6 @@ on:
 
 permissions:
   issues: write
-
-concurrency:
-  group: ci-main-alert
 
 jobs:
   alert:

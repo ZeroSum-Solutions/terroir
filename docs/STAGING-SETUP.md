@@ -323,7 +323,12 @@ a separate approved restore procedure.
 ## Guardrail update — 2026-08-27 (CI-guardrails slice)
 
 Re-verified through the GitHub API on 2026-08-27 while landing the
-CI-guardrails changes. One earlier claim no longer holds:
+CI-guardrails changes. Two earlier claims no longer hold: the
+branch-protection state recorded in "Re-verification — 2026-08-22" (see
+the next bullet), and the statement that `Preview health` "fails on every
+PR by design" — the fail-closed poll is unchanged but its job is now
+gated behind `RAILWAY_PR_PREVIEWS_ENABLED` and reports "skipped" until
+previews are provisioned (see the compensating-changes list below):
 
 - **The repository is private again, and main's branch protection is gone.**
   `GET /repos/ZeroSum-Solutions/terroir` returns `"visibility": "private"`;
