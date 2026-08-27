@@ -174,7 +174,7 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
     // User B cannot revert it either — the batch is invisible to them,
     // so revert_import_batch's own lookup reports "not found", not
     // "not completed" (which would leak that the batch exists).
-    const revertAsB = await revertImportBatch(userBClient, batchId);
+    const revertAsB = await revertImportBatch(userBClient, restaurantB, batchId);
     expect(revertAsB).toMatchObject({ ok: false, error: { code: "not_found" } });
 
     // The batch is untouched by user B's attempt — still completed, not reverted.
@@ -182,9 +182,13 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
     expect((batchAfterAttempt as { status: string }).status).toBe("completed");
 
     // User A can revert their own batch, which actually removes the
-    // inventory row it created.
-    const revertAsA = await revertImportBatch(userAClient, batchId);
-    expect(revertAsA).toEqual({ ok: true, revertedCount: 1 });
+    // inventory row it created. This wine was freshly created by this
+    // batch's own apply step and has no other references once its
+    // inventory is gone, so orphan cleanup removes it too — see "bar 4"
+    // below, which relies on that (it inserts its own pre-existing wine
+    // fixture rather than reusing this one for exactly that reason).
+    const revertAsA = await revertImportBatch(userAClient, restaurantA, batchId);
+    expect(revertAsA).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 1 });
 
     const { data: inventoryAfterRevert } = await admin
       .from("inventory_items")
@@ -194,22 +198,26 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
     expect(inventoryAfterRevert).toBeNull();
   });
 
-  // Depends on the previous test having already run (vitest runs `it`
-  // blocks within a file sequentially by default) — it reuses the wine
-  // that test's import created under restaurant A.
   it("bar 4: revert removes only the inventory it created, never pre-existing inventory for the same wine", async () => {
-    // The earlier test already created this exact wine (find_or_create
-    // dedup by restaurant/producer/name/vintage/size) — reuse its id so
-    // this test's pre-existing bottle is unambiguously the SAME wine
-    // the new import below will also resolve to.
+    // The previous test's own wine no longer exists — its revert's
+    // orphan-wine cleanup deleted it (nothing referenced it once its
+    // inventory was gone). So this test creates its OWN pre-existing wine
+    // fixture directly, matching the same dedup key (restaurant/producer/
+    // name/vintage/size) the new import below will upsert onto — this is
+    // also a truer fixture for what "pre-existing" means here: a wine a
+    // manual add or scan created, never a prior batch's leftovers.
     const { data: existingWine, error: wineError } = await admin
       .from("wines")
+      .insert({
+        restaurant_id: restaurantA,
+        producer: "Cross Tenant Producer",
+        name: "Cross Tenant Wine",
+        vintage: 2020,
+        size_ml: 750,
+      } as never)
       .select("id")
-      .eq("restaurant_id", restaurantA)
-      .eq("producer", "Cross Tenant Producer")
-      .eq("name", "Cross Tenant Wine")
       .single();
-    if (wineError || !existingWine) throw wineError ?? new Error("expected wine from the earlier test to exist");
+    if (wineError || !existingWine) throw wineError ?? new Error("failed to insert pre-existing wine fixture");
 
     const { data: preExisting, error: invError } = await admin
       .from("inventory_items")
@@ -258,8 +266,10 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
     const importedInventoryId = applied.processed[0].inventoryItemId!;
     expect(importedInventoryId).not.toBe(preExistingId);
 
-    const reverted = await revertImportBatch(userAClient, confirmed.batchId);
-    expect(reverted).toEqual({ ok: true, revertedCount: 1 });
+    const reverted = await revertImportBatch(userAClient, restaurantA, confirmed.batchId);
+    // The wine is spared twice over: the pre-existing inventory row still
+    // references it, AND it predates this batch (created_at guard).
+    expect(reverted).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0 });
 
     const { data: preExistingAfter } = await admin
       .from("inventory_items")

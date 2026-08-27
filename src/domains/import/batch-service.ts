@@ -439,7 +439,7 @@ export async function bulkResolveImportBatchRows(
 }
 
 export type RevertBatchResult =
-  | { ok: true; revertedCount: number }
+  | { ok: true; revertedCount: number; orphanWinesDeleted: number }
   | { ok: false; error: { code: string; message: string } };
 
 /** Revert a batch. C-new-1 (db audit 2026-08-23): revert_import_batch_v2
@@ -447,9 +447,19 @@ export type RevertBatchResult =
  * reverted" — a partially-applied, abandoned batch (or one that never got
  * past 'created') can now be reverted too, not only a fully-completed
  * one. See revert_import_batch (0109) for the exact deletion scope
- * guarantee, unchanged by this relaxation. */
+ * guarantee, unchanged by this relaxation.
+ *
+ * revert_import_batch only ever deletes the inventory it created — never
+ * wines, since a batch row's applied_wine_id may point at a pre-existing
+ * wine the apply RPC's upsert matched onto (see wines_dedup_idx), and
+ * deleting that would destroy data shared with other batches/scans/manual
+ * adds. After the RPC succeeds, best-effort clean up wines that are
+ * provably orphaned by this specific revert (see cleanupOrphanWines).
+ * Cleanup failure must never fail the revert — the revert already
+ * succeeded — so it's caught and logged, never rethrown. */
 export async function revertImportBatch(
   supabase: SupabaseClient<Database>,
+  restaurantId: string,
   batchId: string,
 ): Promise<RevertBatchResult> {
   const { data, error } = await supabase.rpc("revert_import_batch", {
@@ -467,5 +477,114 @@ export async function revertImportBatch(
     throw error;
   }
 
-  return { ok: true, revertedCount: (data as number | null) ?? 0 };
+  let orphanWinesDeleted = 0;
+  try {
+    orphanWinesDeleted = await cleanupOrphanWines(supabase, restaurantId, batchId);
+  } catch (cleanupError) {
+    console.error(`revertImportBatch: orphan wine cleanup failed for batch ${batchId}`, cleanupError);
+  }
+
+  return { ok: true, revertedCount: (data as number | null) ?? 0, orphanWinesDeleted };
+}
+
+/** Every table (besides import_batch_rows itself) with a wines(id) FK.
+ * Verified against supabase/schema.snapshot.sql — keep in sync if a
+ * migration adds another one. */
+const WINE_REFERENCING_TABLES = [
+  "stock_adjustments",
+  "wine_list_items",
+  "inventory_items",
+  "availability_events",
+  "open_bottles",
+  "pour_events",
+  "pricing_recommendations",
+  "cellar_health",
+  "bottle_closeouts",
+] as const;
+
+/** Deletes wines this batch's apply step created, and ONLY those. No
+ * column on import_batch_rows/wines records true created-vs-found
+ * provenance (the apply RPC's wine insert is an upsert keyed on
+ * wines_dedup_idx, so applied_wine_id may equally point at a wine a scan,
+ * a manual add, or an earlier batch already owned) — so a wine qualifies
+ * only when ALL of these hold:
+ *   1. it's in this batch's own applied_wine_id set;
+ *   2. it has zero references across every other wines(id)-referencing
+ *      table (WINE_REFERENCING_TABLES), AND zero references from
+ *      import_batch_rows.applied_wine_id belonging to any OTHER batch —
+ *      this batch's own rows don't count against it, that's how the
+ *      candidate set was built;
+ *   3. it belongs to the reverting restaurant (explicit filter, matching
+ *      this file's belt-and-suspenders pattern — never rely on RLS alone);
+ *   4. wines.created_at >= this batch's created_at — the conservative
+ *      stand-in for real creation provenance: a wine this batch matched
+ *      onto (rather than created) necessarily already existed before the
+ *      batch was confirmed, so this guard cannot exclude any wine the
+ *      batch actually created, and it excludes anything provably older.
+ * Returns the count deleted; throws on any query/delete error so the
+ * caller can log-and-swallow without silently pretending cleanup ran. */
+async function cleanupOrphanWines(
+  supabase: SupabaseClient<Database>,
+  restaurantId: string,
+  batchId: string,
+): Promise<number> {
+  const { data: batch, error: batchError } = await supabase
+    .from("import_batches")
+    .select("created_at")
+    .eq("id", batchId)
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+  if (batchError) throw batchError;
+  if (!batch) return 0;
+
+  const { data: appliedRows, error: appliedRowsError } = await supabase
+    .from("import_batch_rows")
+    .select("applied_wine_id")
+    .eq("batch_id", batchId)
+    .not("applied_wine_id", "is", null);
+  if (appliedRowsError) throw appliedRowsError;
+
+  const candidateWineIds = Array.from(
+    new Set(
+      ((appliedRows ?? []) as { applied_wine_id: string | null }[])
+        .map((row) => row.applied_wine_id)
+        .filter((id): id is string => id !== null),
+    ),
+  );
+  if (candidateWineIds.length === 0) return 0;
+
+  const referencedIds = new Set<string>();
+
+  for (const table of WINE_REFERENCING_TABLES) {
+    const { data: refs, error: refsError } = await supabase
+      .from(table)
+      .select("wine_id")
+      .in("wine_id", candidateWineIds);
+    if (refsError) throw refsError;
+    for (const row of (refs ?? []) as { wine_id: string }[]) referencedIds.add(row.wine_id);
+  }
+
+  const { data: otherBatchRows, error: otherBatchRowsError } = await supabase
+    .from("import_batch_rows")
+    .select("applied_wine_id")
+    .in("applied_wine_id", candidateWineIds)
+    .neq("batch_id", batchId);
+  if (otherBatchRowsError) throw otherBatchRowsError;
+  for (const row of (otherBatchRows ?? []) as { applied_wine_id: string | null }[]) {
+    if (row.applied_wine_id) referencedIds.add(row.applied_wine_id);
+  }
+
+  const orphanWineIds = candidateWineIds.filter((id) => !referencedIds.has(id));
+  if (orphanWineIds.length === 0) return 0;
+
+  const { data: deleted, error: deleteError } = await supabase
+    .from("wines")
+    .delete()
+    .in("id", orphanWineIds)
+    .eq("restaurant_id", restaurantId)
+    .gte("created_at", (batch as { created_at: string }).created_at)
+    .select("id");
+  if (deleteError) throw deleteError;
+
+  return (deleted ?? []).length;
 }

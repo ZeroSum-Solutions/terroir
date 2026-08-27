@@ -285,22 +285,181 @@ describe("resolveImportBatchRow", () => {
   });
 });
 
+/** A thenable mini query-builder: every chain method returns itself (so
+ * any call order/combination works), and `await`ing the chain (or calling
+ * a terminal method like .maybeSingle()) resolves to `result`. Good
+ * enough for mocks that don't need to inspect which filters were applied. */
+function chain(result: { data: unknown; error: unknown }) {
+  const node: Record<string, unknown> = {
+    select: () => node,
+    eq: () => node,
+    neq: () => node,
+    in: () => node,
+    not: () => node,
+    gte: () => node,
+    maybeSingle: async () => result,
+    single: async () => result,
+    then: (resolve: (v: typeof result) => unknown, reject?: (e: unknown) => unknown) =>
+      Promise.resolve(result).then(resolve, reject),
+  };
+  return node;
+}
+
+/** A `from` mock for revertImportBatch's cleanup step that finds nothing
+ * to clean up — for tests that only care about the RPC-translation
+ * behavior, not the cleanup itself. */
+function noopCleanupFrom() {
+  return vi.fn((table: string) => {
+    if (table === "import_batches") {
+      return chain({ data: { created_at: "2020-01-01T00:00:00Z" }, error: null });
+    }
+    if (table === "import_batch_rows") {
+      return chain({ data: [], error: null });
+    }
+    throw new Error(`unexpected table ${table}`);
+  });
+}
+
 describe("revertImportBatch", () => {
   it("returns the reverted row count on success", async () => {
-    const supabase = { rpc: vi.fn().mockResolvedValue({ data: 4, error: null }) };
-    const result = await revertImportBatch(supabase as never, BATCH_ID);
-    expect(result).toEqual({ ok: true, revertedCount: 4 });
+    const supabase = { rpc: vi.fn().mockResolvedValue({ data: 4, error: null }), from: noopCleanupFrom() };
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
+    expect(result).toEqual({ ok: true, revertedCount: 4, orphanWinesDeleted: 0 });
   });
 
   it("translates a not-found error", async () => {
     const supabase = { rpc: vi.fn().mockResolvedValue({ data: null, error: { code: "P0002", message: "not found" } }) };
-    const result = await revertImportBatch(supabase as never, BATCH_ID);
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
     expect(result).toMatchObject({ ok: false, error: { code: "not_found" } });
   });
 
   it("translates a not-completed error", async () => {
     const supabase = { rpc: vi.fn().mockResolvedValue({ data: null, error: { code: "P0001", message: "not completed" } }) };
-    const result = await revertImportBatch(supabase as never, BATCH_ID);
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
     expect(result).toMatchObject({ ok: false, error: { code: "not_completed" } });
+  });
+});
+
+describe("revertImportBatch orphan wine cleanup", () => {
+  const WINE_ID = "55555555-5555-4555-8555-555555555555";
+
+  /** Real filter semantics for the "wines" table only, since the
+   * created_at provenance guard is expressed as query filters
+   * (.eq/.gte) that only a filtering mock can actually exercise —
+   * everything else in this file uses the looser `chain()` helper. */
+  function winesTable(rows: Array<{ id: string; restaurant_id: string; created_at: string }>) {
+    return {
+      delete: () => {
+        let filtered = rows;
+        const builder = {
+          in: (column: string, values: string[]) => {
+            filtered = filtered.filter((row) => values.includes((row as Record<string, unknown>)[column] as string));
+            return builder;
+          },
+          eq: (column: string, value: string) => {
+            filtered = filtered.filter((row) => (row as Record<string, unknown>)[column] === value);
+            return builder;
+          },
+          gte: (column: string, value: string) => {
+            filtered = filtered.filter((row) => ((row as Record<string, unknown>)[column] as string) >= value);
+            return builder;
+          },
+          select: async () => ({ data: filtered.map((row) => ({ id: row.id })), error: null }),
+        };
+        return builder;
+      },
+    };
+  }
+
+  /** Builds the full `from` dispatcher for a revert cleanup call.
+   * `referencedByTable` lists, per wine-referencing table, which wine
+   * ids that table has a row for. `crossBatchWineIds` lists wine ids
+   * some OTHER batch's import_batch_rows.applied_wine_id still names. */
+  function makeCleanupSupabase(opts: {
+    batchCreatedAt: string;
+    ownAppliedWineIds: string[];
+    referencedByTable?: Record<string, string[]>;
+    crossBatchWineIds?: string[];
+    wineRows: Array<{ id: string; restaurant_id: string; created_at: string }>;
+  }) {
+    let importBatchRowsCalls = 0;
+    const from = vi.fn((table: string) => {
+      if (table === "import_batches") {
+        return chain({ data: { created_at: opts.batchCreatedAt }, error: null });
+      }
+      if (table === "import_batch_rows") {
+        importBatchRowsCalls += 1;
+        if (importBatchRowsCalls === 1) {
+          return chain({ data: opts.ownAppliedWineIds.map((id) => ({ applied_wine_id: id })), error: null });
+        }
+        return chain({ data: (opts.crossBatchWineIds ?? []).map((id) => ({ applied_wine_id: id })), error: null });
+      }
+      if (table === "wines") {
+        return winesTable(opts.wineRows);
+      }
+      const refs = opts.referencedByTable?.[table] ?? [];
+      return chain({ data: refs.map((id) => ({ wine_id: id })), error: null });
+    });
+    return { rpc: vi.fn().mockResolvedValue({ data: 1, error: null }), from };
+  }
+
+  it("deletes a wine that this batch's apply step created and nothing else references", async () => {
+    const supabase = makeCleanupSupabase({
+      batchCreatedAt: "2026-01-01T00:00:00Z",
+      ownAppliedWineIds: [WINE_ID],
+      wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, created_at: "2026-01-01T00:00:01Z" }],
+    });
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 1 });
+  });
+
+  it("spares a wine still referenced by another table (e.g. inventory_items)", async () => {
+    const supabase = makeCleanupSupabase({
+      batchCreatedAt: "2026-01-01T00:00:00Z",
+      ownAppliedWineIds: [WINE_ID],
+      referencedByTable: { inventory_items: [WINE_ID] },
+      wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, created_at: "2026-01-01T00:00:01Z" }],
+    });
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0 });
+  });
+
+  it("spares a wine another (non-reverting) batch's import_batch_rows still names", async () => {
+    const supabase = makeCleanupSupabase({
+      batchCreatedAt: "2026-01-01T00:00:00Z",
+      ownAppliedWineIds: [WINE_ID],
+      crossBatchWineIds: [WINE_ID],
+      wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, created_at: "2026-01-01T00:00:01Z" }],
+    });
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0 });
+    expect(supabase.from).toHaveBeenCalledWith("import_batch_rows");
+  });
+
+  it("spares a pre-existing wine (created before the batch) via the created_at provenance guard", async () => {
+    // Unreferenced everywhere — the ONLY thing standing between this wine
+    // and deletion is that it predates the batch, e.g. a scan or manual
+    // add the apply RPC's upsert matched onto instead of creating.
+    const supabase = makeCleanupSupabase({
+      batchCreatedAt: "2026-01-01T00:00:00Z",
+      ownAppliedWineIds: [WINE_ID],
+      wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, created_at: "2025-06-01T00:00:00Z" }],
+    });
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0 });
+  });
+
+  it("never fails the revert when cleanup itself errors", async () => {
+    const supabase = {
+      rpc: vi.fn().mockResolvedValue({ data: 3, error: null }),
+      from: vi.fn(() => {
+        throw new Error("boom: cleanup query failed");
+      }),
+    };
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
+    expect(result).toEqual({ ok: true, revertedCount: 3, orphanWinesDeleted: 0 });
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });

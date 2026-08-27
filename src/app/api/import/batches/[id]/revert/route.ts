@@ -39,11 +39,11 @@ async function postRevert(params: Params) {
   if (batchError) throw batchError;
   if (!batch) return Errors.notFound("Import batch");
 
-  const result = await revertImportBatch(supabase, id);
+  const result = await revertImportBatch(supabase, restaurantId, id);
   if (!result.ok) {
     if (result.error.code === "not_found") return Errors.notFound("Import batch");
     return apiError(409, result.error.code, result.error.message);
   }
 
-  return NextResponse.json({ revertedCount: result.revertedCount });
+  return NextResponse.json({ revertedCount: result.revertedCount, orphanWinesDeleted: result.orphanWinesDeleted });
 }
