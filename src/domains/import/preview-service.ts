@@ -138,10 +138,16 @@ export async function buildImportPreview(
     });
 
   const variantMatches = await matchLwinBulk(supabase, lwinQueries);
+  // Reduce best-per-row over ASCENDING flat index, not Map iteration
+  // order (which follows RPC row order and is not guaranteed): with
+  // strict >, an exact score tie deterministically keeps the
+  // lowest-variant-index match, so preview and confirm — which each
+  // rerun matching independently — always pick the same winner.
   const matches = new Map<number, LwinMatch>();
-  for (const [variantIdx, match] of variantMatches) {
+  for (let variantIdx = 0; variantIdx < variantOwners.length; variantIdx++) {
+    const match = variantMatches.get(variantIdx);
+    if (!match) continue;
     const rowIdx = variantOwners[variantIdx];
-    if (rowIdx === undefined) continue;
     const current = matches.get(rowIdx);
     if (!current || match.score > current.score) matches.set(rowIdx, match);
   }

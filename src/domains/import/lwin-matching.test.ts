@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { buildLwinQueryVariants } from "./lwin-matching";
+import { describe, it, expect, vi } from "vitest";
+import { buildLwinQueryVariants, matchLwinBulk, type LwinMatchQuery } from "./lwin-matching";
+import { LWIN_MATCH_BATCH_SIZE } from "./constants";
 
 describe("buildLwinQueryVariants", () => {
   it("returns exactly the one classic query for rows with a real producer", () => {
@@ -45,5 +46,61 @@ describe("buildLwinQueryVariants", () => {
       { producer: "  Le  Ragnaie   Brunello  ", name: "  Le  Ragnaie   Brunello  " },
       { producer: "Le Ragnaie", name: "  Le  Ragnaie   Brunello  " },
     ]);
+  });
+});
+
+describe("matchLwinBulk", () => {
+  function makeSupabase(
+    respond: (batch: LwinMatchQuery[]) => Array<{ idx: number; lwin_id: string | null; score: number | null }>,
+  ) {
+    const rpc = vi.fn().mockImplementation((_fn: string, args: { p_queries: LwinMatchQuery[] }) =>
+      Promise.resolve({ data: respond(args.p_queries), error: null }),
+    );
+    return { rpc } as unknown as Parameters<typeof matchLwinBulk>[0] & { rpc: typeof rpc };
+  }
+
+  it("splits queries into batches of LWIN_MATCH_BATCH_SIZE and merges every chunk's results", async () => {
+    const total = 2 * LWIN_MATCH_BATCH_SIZE + 50;
+    const queries: LwinMatchQuery[] = Array.from({ length: total }, (_, i) => ({
+      idx: i,
+      producer: `P${i}`,
+      name: `N${i}`,
+    }));
+    // Every chunk matches its own FIRST query — so a dropped or
+    // mis-merged chunk loses a specific, identifiable idx.
+    const supabase = makeSupabase((batch) => [
+      { idx: batch[0].idx, lwin_id: `LWIN-${batch[0].idx}`, score: 0.7 },
+    ]);
+    const result = await matchLwinBulk(supabase, queries);
+    expect(supabase.rpc).toHaveBeenCalledTimes(3);
+    expect(supabase.rpc.mock.calls.map((c) => (c[1] as { p_queries: LwinMatchQuery[] }).p_queries.length)).toEqual([
+      LWIN_MATCH_BATCH_SIZE,
+      LWIN_MATCH_BATCH_SIZE,
+      50,
+    ]);
+    expect(result.get(0)).toEqual({ lwinId: "LWIN-0", score: 0.7 });
+    expect(result.get(LWIN_MATCH_BATCH_SIZE)).toEqual({ lwinId: `LWIN-${LWIN_MATCH_BATCH_SIZE}`, score: 0.7 });
+    expect(result.get(2 * LWIN_MATCH_BATCH_SIZE)).toEqual({ lwinId: `LWIN-${2 * LWIN_MATCH_BATCH_SIZE}`, score: 0.7 });
+    expect(result.size).toBe(3);
+  });
+
+  it("rejects when any chunk's RPC errors", async () => {
+    const queries: LwinMatchQuery[] = Array.from({ length: LWIN_MATCH_BATCH_SIZE + 1 }, (_, i) => ({
+      idx: i,
+      producer: `P${i}`,
+      name: `N${i}`,
+    }));
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: null, error: new Error("boom") });
+    const supabase = { rpc } as unknown as Parameters<typeof matchLwinBulk>[0];
+    await expect(matchLwinBulk(supabase, queries)).rejects.toThrow("boom");
+  });
+
+  it("treats a null score on a matched row as 0", async () => {
+    const supabase = makeSupabase(() => [{ idx: 0, lwin_id: "LWIN-NULLSCORE", score: null }]);
+    const result = await matchLwinBulk(supabase, [{ idx: 0, producer: "P", name: "N" }]);
+    expect(result.get(0)).toEqual({ lwinId: "LWIN-NULLSCORE", score: 0 });
   });
 });

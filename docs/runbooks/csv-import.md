@@ -42,8 +42,11 @@ sub-chunks via repeated `POST /apply` calls, unchanged by chunking.
   exception handler — no change from chunking.
 - Preview (`buildImportPreview`) still does the same bulk LWIN-matching
   work synchronously, bounded by `LWIN_MATCH_BATCH_SIZE` rows per RPC
-  call, per chunk — still well inside one request even at the 5,000-row
-  cap.
+  call, per chunk. Producer-less rows now issue up to 3 query variants
+  each (`buildLwinQueryVariants`), and `matchLwinBulk` runs chunks at
+  `LWIN_MATCH_CONCURRENCY` (4) in flight — worst-case wall-clock for the
+  3× variant load is ≈0.75× the old sequential single-query time, so the
+  5,000-row cap still fits one request with more margin than before.
 
 **What chunking actually needed, that a single-batch design didn't:**
 inventory-level duplicate prevention (§1 — effectively unimplemented

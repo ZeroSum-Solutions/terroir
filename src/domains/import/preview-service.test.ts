@@ -178,6 +178,46 @@ describe("buildImportPreview", () => {
     });
   });
 
+  it("keeps variant→row alignment when an invalid row is interleaved between producer-less rows", async () => {
+    // Row 1 (valid, 3 tokens → flat variants 0,1), row 2 (INVALID: empty
+    // name, contributes no variants), row 3 (valid, 6 tokens → flat
+    // variants 2,3,4). A match on flat idx 3 must land on row 3 — a
+    // shift-by-one bug would drop it or misattribute it.
+    const supabase = makeSupabase([{ idx: 3, lwin_id: "LWIN-ROW3", score: 0.8 }]);
+    const result = await buildImportPreview(
+      supabase,
+      Buffer.from(
+        "wine name,quantity,cost price\n" +
+          "Vietti Barolo Lazzarito,3,$10.00\n" +
+          ",1,$5.00\n" +
+          "Poggio di Sotto Brunello di Montalcino,2,$20.00\n",
+      ),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows[0]).toMatchObject({ rowState: "valid", lwinStatus: "unmatched" });
+    expect(result.rows[1]).toMatchObject({ rowState: "error" });
+    expect(result.rows[2]).toMatchObject({
+      rowState: "valid",
+      lwinStatus: "matched",
+      lwinId: "LWIN-ROW3",
+    });
+  });
+
+  it("breaks exact score ties deterministically toward the lowest variant index", async () => {
+    const supabase = makeSupabase([
+      { idx: 1, lwin_id: "LWIN-V1", score: 0.8 },
+      { idx: 0, lwin_id: "LWIN-V0", score: 0.8 },
+    ]);
+    const result = await buildImportPreview(
+      supabase,
+      Buffer.from("wine name,quantity,cost price\nA.F. Gros Richebourg Grand Cru,3,$678.00\n"),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows[0]).toMatchObject({ lwinId: "LWIN-V0" });
+  });
+
   it("returns a top-level error for an unparseable file without touching the database", async () => {
     const supabase = makeSupabase([]);
     const result = await buildImportPreview(supabase, Buffer.from(""));

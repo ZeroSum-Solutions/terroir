@@ -70,6 +70,17 @@ export const LWIN_APPLY_MIN_SCORE = 0.6;
  * catalog and concurrent load. */
 export const LWIN_MATCH_BATCH_SIZE = 100;
 
+/** Concurrent match_lwin_bulk RPC calls in flight (Sol audit 2026-08-27
+ * finding 1). Producer-less variant queries (buildLwinQueryVariants)
+ * amplify query count up to 3× — sequential chunks would triple the
+ * matching wall-clock and threaten the preview/confirm routes' 60s
+ * budget at the 5,000-row cap. At concurrency 4, worst-case wall-clock
+ * for 3N variant queries is ceil(3N/100/4) waves ≈ 0.75× the OLD
+ * sequential time for N single queries — i.e. the variant path is
+ * strictly faster than the pre-variant contract for every file size.
+ * Kept small so at most 4 trigram scans hit the catalog at once. */
+export const LWIN_MATCH_CONCURRENCY = 4;
+
 /** Canonical CSV column names, in the order the downloadable template uses. */
 export const CANONICAL_HEADERS = [
   "producer",
