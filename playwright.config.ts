@@ -20,6 +20,12 @@ export default defineConfig({
   // Suites share one dev-login identity and one database: parallel workers
   // invalidate each other's magic-link tokens and race config mutations.
   workers: 1,
+  // CI runs against the dev-mode webServer (dev-login 404s under a
+  // production `next start`), so the first navigation to an uncompiled
+  // route can abort while Turbopack compiles it on demand
+  // (net::ERR_ABORTED on /scan). Retries absorb that cold-compile race;
+  // a deterministic failure still fails every attempt.
+  retries: process.env.CI ? 2 : 0,
   use: {
     baseURL,
     screenshot: "only-on-failure",
