@@ -262,15 +262,39 @@ export function ImportClient() {
 
       if (!result.ok) {
         if (result.conflictingSessionId) {
-          // This chunk's content already belongs to a DIFFERENT, unfinished
-          // session — never adopt it into this one (that would split the
-          // file across two sessions). Resume the original session instead.
-          const label = file?.name ?? sessionLabel;
-          writeStoredSession({ sessionId: result.conflictingSessionId, sourceSha256: chunkedPlan.sourceSha256, label });
-          setSessionId(result.conflictingSessionId);
-          setSessionLabel(label);
-          setPreviewError(result.error);
-          setStep("session");
+          // This chunk's content already belongs to a DIFFERENT session —
+          // never adopt it into this one (that would split the file across
+          // two sessions). Resume the original session instead, but only
+          // after verifying it really is THIS file's own unfinished
+          // session: same source hash, still in progress. Anything else
+          // (different file sharing one identical chunk, already-completed
+          // or reverted session, unreachable progress) is a hard stop the
+          // operator must resolve, not a silent redirect.
+          try {
+            const check = await fetch(`/api/import/sessions/${result.conflictingSessionId}`, { cache: "no-store" });
+            const progress = check.ok
+              ? ((await check.json()) as { status?: string; sourceSha256?: string | null })
+              : null;
+            if (
+              progress?.status === "in_progress" &&
+              progress.sourceSha256 != null &&
+              progress.sourceSha256 === chunkedPlan.sourceSha256
+            ) {
+              const label = file?.name ?? sessionLabel;
+              writeStoredSession({ sessionId: result.conflictingSessionId, sourceSha256: chunkedPlan.sourceSha256, label });
+              setSessionId(result.conflictingSessionId);
+              setSessionLabel(label);
+              setPreviewError(result.error);
+              setStep("session");
+              return;
+            }
+          } catch {
+            // fall through to the hard stop below
+          }
+          setPreviewError(
+            "A chunk of this file matches content from another import that can't be resumed for this file " +
+              "(different source file, or already completed/reverted). Revert that import before re-uploading.",
+          );
           return;
         }
         setPreviewError(result.error);

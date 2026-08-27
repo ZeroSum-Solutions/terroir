@@ -113,7 +113,9 @@ function AtlasCountryList({
   selectedKey: string | null;
   onSelect: (key: string) => void;
 }) {
-  const withBottles = countries.filter((country) => country.bottles > 0);
+  // Presence (wines > 0), not sealed count — an open-bottle-only country
+  // must stay reachable from the list just like on the map.
+  const withBottles = countries.filter((country) => country.wines > 0);
   if (withBottles.length === 0) return null;
 
   return (
@@ -136,7 +138,9 @@ function AtlasCountryList({
                 )}
               >
                 <span className="text-body-sm">{country.label}</span>
-                <span className="font-mono tabular-nums text-body-sm">{country.bottles}</span>
+                <span className="font-mono tabular-nums text-body-sm">
+                  {country.bottles > 0 ? country.bottles : "open"}
+                </span>
               </button>
             </li>
           );

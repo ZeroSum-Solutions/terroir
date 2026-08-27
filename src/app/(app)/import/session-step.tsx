@@ -294,7 +294,18 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
       // content collided by hash with the OLD session's chunk. Adopting it
       // into this new session would split one file across two incomplete
       // sessions; stop and hand the original session back to the caller.
-      if (body.alreadyExists && body.sessionId && body.sessionId !== activeSessionId) {
+      if (body.alreadyExists && body.sessionId !== activeSessionId) {
+        // sessionId null = the identical bytes were confirmed earlier as a
+        // STANDALONE (sessionless) batch. There is no session to resume and
+        // adopting the batch here would strand it outside this session.
+        if (!body.sessionId) {
+          return {
+            ok: false,
+            error:
+              `Chunk ${chunk.index} was already imported as a standalone batch. Revert that batch under ` +
+              "Recent imports before re-uploading this file.",
+          };
+        }
         return {
           ok: false,
           error:

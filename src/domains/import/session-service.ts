@@ -52,6 +52,10 @@ export type SessionProgress = {
   sessionId: string;
   status: string;
   declaredChunkTotal: number | null;
+  /** The source file hash the session was created with (null for legacy
+   * sessions) — lets a client verify an adopted/resumed session actually
+   * belongs to the file it is holding. */
+  sourceSha256: string | null;
   chunks: SessionChunkProgress[];
   totals: BatchCounts;
   /** Every declared chunk_index 1..declaredChunkTotal has at least one
@@ -80,7 +84,7 @@ export async function getImportSessionProgress(
 ): Promise<SessionProgress | null> {
   const { data: session, error: sessionError } = await supabase
     .from("import_sessions")
-    .select("id, status, declared_chunk_total")
+    .select("id, status, declared_chunk_total, source_sha256")
     .eq("id", sessionId)
     .maybeSingle();
   if (sessionError) throw sessionError;
@@ -129,7 +133,12 @@ export async function getImportSessionProgress(
     { total: 0, applied: 0, excluded: 0, pending: 0, eligibleNotApplied: 0 },
   );
 
-  const sessionRow = session as { id: string; status: string; declared_chunk_total: number | null };
+  const sessionRow = session as {
+    id: string;
+    status: string;
+    declared_chunk_total: number | null;
+    source_sha256: string | null;
+  };
 
   let allChunksPresent: boolean | null = null;
   if (sessionRow.declared_chunk_total !== null) {
@@ -164,6 +173,7 @@ export async function getImportSessionProgress(
     sessionId: sessionRow.id,
     status,
     declaredChunkTotal: sessionRow.declared_chunk_total,
+    sourceSha256: sessionRow.source_sha256,
     chunks,
     totals,
     allChunksPresent,

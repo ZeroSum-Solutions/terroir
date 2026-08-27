@@ -44,7 +44,9 @@ export function AtlasWorldMap({
     >
       {Object.entries(WORLD_COUNTRY_PATHS).map(([key, geo]) => {
         const country = byKey.get(key);
-        if (!country || country.bottles <= 0) {
+        // Presence, not sealed count, decides interactivity: a wine with
+        // only an open bottle has bottles === 0 but still lives here.
+        if (!country || country.wines <= 0) {
           return (
             <path
               key={key}
@@ -57,9 +59,14 @@ export function AtlasWorldMap({
         }
 
         const selected = key === selectedKey;
-        const intensity = Math.max(MIN_INTENSITY, country.bottles / maxBottles);
+        // maxBottles can be 0 when every present wine is open-bottle-only;
+        // the MIN_INTENSITY floor keeps such countries visibly present.
+        const intensity = Math.max(MIN_INTENSITY, maxBottles > 0 ? country.bottles / maxBottles : 0);
         const fillPct = Math.round(intensity * 100);
-        const bottleWord = country.bottles === 1 ? "bottle" : "bottles";
+        const bottleLabel =
+          country.bottles > 0
+            ? `${country.bottles} ${country.bottles === 1 ? "bottle" : "bottles"}`
+            : "open bottle only";
 
         return (
           <path
@@ -67,7 +74,7 @@ export function AtlasWorldMap({
             d={geo.d}
             role="button"
             tabIndex={0}
-            aria-label={`${country.label}, ${country.bottles} ${bottleWord}`}
+            aria-label={`${country.label}, ${bottleLabel}`}
             aria-pressed={selected}
             onClick={() => onSelect(key)}
             onKeyDown={(event) => {
@@ -81,7 +88,7 @@ export function AtlasWorldMap({
             strokeWidth={selected ? 2 : 0.5}
             className="cursor-pointer outline-none transition-[stroke-width] duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
           >
-            <title>{`${country.label} — ${country.bottles} ${bottleWord}`}</title>
+            <title>{`${country.label} — ${bottleLabel}`}</title>
           </path>
         );
       })}
