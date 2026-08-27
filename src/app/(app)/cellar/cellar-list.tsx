@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import Link from "next/link";
-import { MapPin, GripVertical, CheckSquare, Square, Layers, ChevronDown, X } from "lucide-react";
+import { GripVertical, CheckSquare, Square, Layers, ChevronDown, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -16,7 +16,6 @@ import {
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
-import { ML_PER_OZ } from "@/lib/units";
 import { useToast } from "@/lib/toast";
 import {
   applyFacets,
@@ -26,14 +25,10 @@ import {
   type CellarFacets,
   type CellarGroupBy,
 } from "@/lib/cellar-facets";
-import {
-  formatStatusLabel,
-  getDrinkWindowStatus,
-  getMarkerPosition,
-  getYearsUntilWindowClose,
-  isClosingWindow,
-  isHolding,
-} from "@/lib/drink-window/status";
+import { sortCellarRows, type CellarSort } from "@/lib/cellar-facets/sort";
+import { isClosingWindow, isHolding } from "@/lib/drink-window/status";
+import { StatusChip } from "@/components/status-chip";
+import { bottlesOnHand, pickRowChip } from "./row-chip";
 import type { CellarWineRow } from "./types";
 import {
   CellarFacetBar,
@@ -60,7 +55,7 @@ export type CellarFilter =
   | "hold";
 
 // Human-readable labels for filter chips
-const FILTER_LABELS: Record<Exclude<CellarFilter, "all">, string> = {
+export const FILTER_LABELS: Record<Exclude<CellarFilter, "all">, string> = {
   open: "Open",
   out: "86'd",
   low: "Low stock",
@@ -72,6 +67,14 @@ const FILTER_LABELS: Record<Exclude<CellarFilter, "all">, string> = {
 type CellarSection = { id: string; name: string };
 const CELLAR_PAGE_SIZE = 50;
 
+/**
+ * Desktop ledger-table column template (Kimi audit D4 — a real workspace
+ * ≥1024px instead of the mobile stack stretched to full width):
+ * Wine | Vintage | Region | Status | Bin | Qty.
+ */
+const LEDGER_COLS =
+  "lg:grid-cols-[minmax(0,1fr)_60px_minmax(110px,170px)_150px_100px_52px]";
+
 export function CellarList({
   rows,
   query,
@@ -81,8 +84,10 @@ export function CellarList({
   onResetFilters,
   facets,
   groupBy,
+  sort,
   onFacetsChange,
   onGroupByChange,
+  onFilteredCountChange,
   sections,
 }: {
   rows: CellarWineRow[];
@@ -93,8 +98,11 @@ export function CellarList({
   onResetFilters: () => void;
   facets: CellarFacets;
   groupBy: CellarGroupBy | null;
+  sort: CellarSort | null;
   onFacetsChange: (patch: CellarFacetPatch) => void;
   onGroupByChange: (groupBy: CellarGroupBy | null) => void;
+  // Reports the post-filter row count up to the shell's sticky masthead.
+  onFilteredCountChange?: (count: number) => void;
   // BND-063/064 — cellar sections for grouping, DnD, and bulk assign
   sections?: CellarSection[];
 }) {
@@ -118,6 +126,7 @@ export function CellarList({
     facets.format,
     facets.health,
     groupBy,
+    sort,
   ].join("\u0000");
   const [pagination, setPagination] = useState({
     key: paginationKey,
@@ -173,9 +182,12 @@ export function CellarList({
   }, [rows, query, filter]);
 
   const filtered = useMemo(
-    () => applyFacets(filteredWithoutFacets, facets),
-    [filteredWithoutFacets, facets],
+    () => sortCellarRows(applyFacets(filteredWithoutFacets, facets), sort),
+    [filteredWithoutFacets, facets, sort],
   );
+  useEffect(() => {
+    onFilteredCountChange?.(filtered.length);
+  }, [filtered.length, onFilteredCountChange]);
   const visibleRows = useMemo(
     () => filtered.slice(0, visibleCount),
     [filtered, visibleCount],
@@ -495,7 +507,22 @@ export function CellarList({
           </div>
         </DndContext>
       ) : (
-        <div className="flex flex-col divide-y divide-hairline rounded-card card-surface">
+        <div className="flex flex-col divide-y divide-hairline overflow-hidden rounded-card card-surface">
+          {/* Ledger-table header — desktop workspace only */}
+          <div
+            aria-hidden
+            className={cn(
+              "hidden items-center gap-md bg-bridge-surface px-md py-xs lg:grid",
+              LEDGER_COLS,
+            )}
+          >
+            <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-grey">Wine</span>
+            <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-grey">Vintage</span>
+            <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-grey">Region</span>
+            <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-grey">Status</span>
+            <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-grey">Bin</span>
+            <span className="text-right text-[10px] font-medium uppercase tracking-[0.18em] text-grey">Qty</span>
+          </div>
           <LineageBlockList
             wines={visibleRows}
             renderRow={(row) => (
@@ -845,39 +872,18 @@ function CellarRow({
     listeners: Record<string, unknown>;
   };
 }) {
-  const totalMl =
-    row.size_ml === null
-      ? null
-      : (row.open_remaining_ml ?? 0) + row.sealed_count * row.size_ml;
-  const glassesLeft =
-    row.glass_pour_ml && totalMl !== null
-      ? Math.floor(totalMl / row.glass_pour_ml)
-      : null;
-  const ozLeft =
-    row.open_remaining_ml !== null
-      ? (row.open_remaining_ml / ML_PER_OZ).toFixed(1)
-      : null;
-  const isLowStock = lowStockThreshold != null && row.sealed_count > 0 && row.sealed_count < lowStockThreshold && !row.is_eightysixed;
-
-  let chip: { label: string; tone: "neutral" | "ok" | "risk" | "muted" };
-  if (row.is_eightysixed) {
-    chip = { label: "86'd", tone: "risk" };
-  } else if (row.open_remaining_ml !== null && row.open_remaining_ml > 0) {
-    chip = {
-      label: `Open · ${ozLeft} oz`,
-      tone: "ok",
-    };
-  } else if (row.sealed_count > 0) {
-    chip = {
-      label: `${row.sealed_count} sealed`,
-      tone: "neutral",
-    };
-  } else {
-    chip = { label: "No stock", tone: "muted" };
-  }
+  // One chip per row (Kimi audit 2026-08-26) — the most urgent fact wins;
+  // stock lives in the quantity column, location in the bin column, and
+  // the full drink-window instrument in the drawer.
+  const chip = pickRowChip(row, lowStockThreshold);
+  const onHand = bottlesOnHand(row);
 
   return (
-    <div className="flex items-center">
+    <div
+      className="flex items-center"
+      // OPP-1 (EV-1.2) — same lineage + vintage + format twin detected
+      data-duplicate-suspect={row.duplicate_wine_ids.length > 0 ? "" : undefined}
+    >
       {/* Selection checkbox */}
       {selectMode && (
         <button
@@ -894,14 +900,16 @@ function CellarRow({
         </button>
       )}
 
-      {/* Drag handle for DnD in non-select mode */}
+      {/* Drag handle for DnD in non-select mode — desktop only: on
+          phones it burned 44px of every ledger row (worsening name
+          truncation) for a gesture Select-mode already covers. */}
       {dragHandle && (
         <button
           type="button"
           {...dragHandle.attributes}
           {...dragHandle.listeners}
           aria-label="Drag to reorder"
-          className="flex h-11 w-11 shrink-0 items-center justify-center cursor-grab active:cursor-grabbing text-grey hover:text-ink-soft"
+          className="hidden h-11 w-11 shrink-0 cursor-grab items-center justify-center text-grey hover:text-ink-soft active:cursor-grabbing md:flex"
         >
           <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
         </button>
@@ -910,134 +918,78 @@ function CellarRow({
       <button
         type="button"
         onClick={selectMode ? undefined : onSelect}
-        className="flex-1 min-w-0 px-md py-md text-left transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:ring-inset rounded-md"
+        className="flex-1 min-w-0 px-md py-sm text-left transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:ring-inset rounded-md"
       >
-        <div className="flex items-start justify-between gap-md">
-          <div className="min-w-0 flex-1">
-            {/* Producer · Vintage · Region */}
-            <div className="text-caption font-medium uppercase text-grey">
+        {/* Mobile ledger row — two lines, location top-right, quantity in
+            the Courier column (Kimi audit row anatomy: ~6–7 rows per
+            viewport instead of 3). */}
+        <div className="lg:hidden">
+          <div className="flex items-baseline justify-between gap-sm">
+            <div className="min-w-0 truncate text-caption font-medium uppercase text-grey">
               <span>{row.producer}</span>
               {row.vintage && <span className="tabular ml-xs">{row.vintage}</span>}
               {row.region && <span className="ml-xs">· {row.region}</span>}
             </div>
-            {/* Wine name */}
-            <div className="mt-2xs font-serif text-[17px] font-medium text-ink">{row.name}</div>
-            {/* Stock + drink-window + bin row */}
-            <div className="mt-xs flex flex-wrap items-center gap-sm text-[12px] font-light text-grey">
-              <Chip tone={chip.tone}>{chip.label}</Chip>
-              {isLowStock && <Chip tone="risk">Low stock</Chip>}
-              {/* The independent "Peak window" chip is gone: it re-encoded
-                  what the DrinkWindowIndicator already says, and the two
-                  were computed differently — a row could read "Peak window"
-                  and "Optimal" at once (Kimi audit 2026-08-26). */}
-              {/* OPP-1 (EV-1.2) — same lineage + vintage + format twin detected */}
-              {row.duplicate_wine_ids.length > 0 && (
-                <span data-duplicate-suspect>
-                  <Chip tone="warn">Possible duplicate</Chip>
-                </span>
+            {row.bin_location && (
+              <span className="shrink-0 font-mono text-[11px] tracking-[0.04em] text-grey">
+                {row.bin_location}
+              </span>
+            )}
+          </div>
+          <div className="mt-2xs flex items-center gap-sm">
+            <span className="min-w-0 flex-1 truncate font-serif text-[17px] font-medium text-ink">
+              {row.name}
+            </span>
+            {chip && (
+              <StatusChip tone={chip.tone} className="shrink-0">
+                {chip.label}
+              </StatusChip>
+            )}
+            <span
+              className={cn(
+                "w-[38px] shrink-0 text-right font-mono text-[14px] tabular",
+                onHand === 0 ? "text-grey" : "text-ink",
               )}
-              {glassesLeft !== null && glassesLeft > 0 && !row.is_eightysixed && (
-                <span className="tabular text-grey">
-                  ~{glassesLeft} glass{glassesLeft === 1 ? "" : "es"} left
-                </span>
-              )}
-              {!row.is_eightysixed && (
-                <DrinkWindowIndicator
-                  start={row.drink_window_start}
-                  end={row.drink_window_end}
-                />
-              )}
-              {row.bin_location && (
-                <span className="tabular inline-flex items-center gap-2xs rounded-pill bg-beige px-sm py-[2px] text-[11px] text-ink-soft">
-                  <MapPin className="h-3 w-3" strokeWidth={2} aria-hidden />
-                  {row.bin_location}
-                </span>
-              )}
+            >
+              ×{onHand}
+            </span>
+          </div>
+        </div>
+
+        {/* Desktop ledger-table row (D4) */}
+        <div className={cn("hidden items-center gap-md lg:grid", LEDGER_COLS)}>
+          <div className="min-w-0">
+            <div className="truncate text-[10.5px] font-medium uppercase tracking-[0.14em] text-grey">
+              {row.producer}
+            </div>
+            <div className="truncate font-serif text-[17px] font-medium text-ink">
+              {row.name}
             </div>
           </div>
-          {/* The decorative ⋮ glyph is gone — it rendered as an inert
-              aria-hidden span with no handler, a dead affordance inviting
-              taps it could not answer (Kimi audit 2026-08-26). */}
+          <span className="font-mono text-[13px] tabular text-ink-soft">
+            {row.vintage ?? "—"}
+          </span>
+          <span className="truncate text-[12px] text-grey">{row.region ?? "—"}</span>
+          <span>
+            {chip ? (
+              <StatusChip tone={chip.tone}>{chip.label}</StatusChip>
+            ) : (
+              <span className="text-[12px] text-grey">—</span>
+            )}
+          </span>
+          <span className="truncate font-mono text-[12px] text-grey">
+            {row.bin_location ?? "—"}
+          </span>
+          <span
+            className={cn(
+              "text-right font-mono text-[14px] tabular",
+              onHand === 0 ? "text-grey" : "text-ink",
+            )}
+          >
+            ×{onHand}
+          </span>
         </div>
       </button>
     </div>
-  );
-}
-
-function DrinkWindowIndicator({
-  start,
-  end,
-}: {
-  start: number | null;
-  end: number | null;
-}) {
-  if (start == null || end == null) return null;
-  const status = getDrinkWindowStatus(start, end);
-  const yearsLeft = getYearsUntilWindowClose(end);
-  const markerPct = getMarkerPosition(start, end);
-  const label = formatStatusLabel(status, yearsLeft);
-
-  const tone: "info" | "muted" | "ok" =
-    status === "drink_now" || status === "past_peak"
-      ? "info"
-      : status === "hold"
-        ? "muted"
-        : status === "optimal"
-          ? "ok"
-          : "muted";
-
-  return (
-    <span className="inline-flex items-center gap-xs">
-      <span
-        aria-hidden
-        className="relative inline-block h-[4px] w-[56px] rounded-full"
-        style={{
-          // Two-stop ramp (Kimi audit 2026-08-26): warm neutral → burgundy
-          // by day, candle gold → burgundy by night. One accent, no muddy
-          // interpolated midpoint.
-          background:
-            "linear-gradient(90deg, var(--t-window-ramp-start) 0%, var(--t-primary) 100%)",
-        }}
-      >
-        <span
-          className="absolute h-[8px] w-[2px]"
-          style={{
-            top: "-2px",
-            left: `${markerPct}%`,
-            background: "var(--t-window-marker)",
-          }}
-        />
-      </span>
-      <Chip tone={tone}>{label}</Chip>
-    </span>
-  );
-}
-
-/**
- * Ledger Panel badge — DESIGN.md mapping: sage = healthy/in-window/ok,
- * powder = informational (window closing/drink now), blush+primary = risk,
- * amber = other warnings, neutral = routine stock count (no status signal).
- */
-function Chip({
-  tone,
-  children,
-}: {
-  tone: "neutral" | "ok" | "info" | "risk" | "warn" | "muted";
-  children: React.ReactNode;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide",
-        tone === "ok" && "bg-sage-wash text-sage-ink",
-        tone === "info" && "bg-powder-wash text-powder-ink",
-        tone === "risk" && "bg-blush-wash text-accent",
-        tone === "warn" && "bg-amber-wash text-amber",
-        tone === "neutral" && "bg-beige text-ink-soft",
-        tone === "muted" && "bg-bridge-surface text-grey",
-      )}
-    >
-      {children}
-    </span>
   );
 }

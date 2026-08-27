@@ -11,16 +11,15 @@ const LABELS: Record<CellarHealthSegment, string> = {
   healthy: "Healthy",
 };
 
-// Background tint per segment carries the same risk/health meaning as the
-// badge system elsewhere (DESIGN.md): window_risk reads as an informational
-// window-closing heads-up, hold as a positive appreciating-asset call,
-// dead_stock as a plain warning, cash_trap as the "sleepy capital" risk
-// case, and healthy stays the quiet neutral default.
+// Wax & Counter (DESIGN.md 2026-08-26): segment tint is an urgency ramp
+// on the one accent, not four competing hues. Healthy and hold stay
+// quiet neutrals, window risk carries the gold time-marker, and the two
+// capital-at-risk segments step up in burgundy intensity.
 const SEGMENT_BG: Record<CellarHealthSegment, string> = {
-  window_risk: "bg-powder-wash",
-  hold: "bg-sage-wash",
-  dead_stock: "bg-amber-wash",
-  cash_trap: "bg-blush-wash",
+  window_risk: "bg-gold/10",
+  hold: "bg-bridge-surface",
+  dead_stock: "bg-accent/10",
+  cash_trap: "bg-accent/20",
   healthy: "bg-surface",
 };
 

@@ -407,6 +407,24 @@ export default async function DashboardPage({
   const visibleDrinkWindowAlerts = drinkWindowAlerts.slice(0, 6);
   const visiblePastDrinkWindowWines = pastDrinkWindowWines.slice(0, 12);
 
+  // Alert triage buckets (Kimi audit 2026-08-26): a bare "162 alerts"
+  // count gives no sense of how bad the queue is — break it down by how
+  // late each window is before the reader ever opens it.
+  const alertYear = new Date().getFullYear();
+  const pastWindowAlertCount = drinkWindowAlerts.filter(
+    (a) => a.drink_window_end != null && a.drink_window_end < alertYear,
+  ).length;
+  const finalYearAlertCount = drinkWindowAlerts.filter(
+    (a) => a.drink_window_end === alertYear,
+  ).length;
+  const closingAlertCount =
+    drinkWindowAlerts.length - pastWindowAlertCount - finalYearAlertCount;
+  const alertTriageParts = [
+    pastWindowAlertCount > 0 && `${pastWindowAlertCount} past window`,
+    finalYearAlertCount > 0 && `${finalYearAlertCount} final year`,
+    closingAlertCount > 0 && `${closingAlertCount} closing`,
+  ].filter(Boolean) as string[];
+
   // Varietal breakdown (current inventory — not time-filtered)
   const varietalMap = new Map<string, number>();
   for (const item of items) {
@@ -596,10 +614,12 @@ export default async function DashboardPage({
             ) : (
               <Link
                 href={metricHref("drink-now-count")}
-                className="text-[12px] font-medium text-ink underline decoration-hairline underline-offset-4 hover:text-accent"
+                aria-label={`All ${drinkWindowAlerts.length} alerts`}
+                className="tabular text-[12px] font-medium text-ink underline decoration-hairline underline-offset-4 hover:text-accent"
               >
-                All {drinkWindowAlerts.length} alert
-                {drinkWindowAlerts.length === 1 ? "" : "s"} →
+                {alertTriageParts.length > 1
+                  ? `${alertTriageParts.join(" · ")} →`
+                  : `All ${drinkWindowAlerts.length} alert${drinkWindowAlerts.length === 1 ? "" : "s"} →`}
               </Link>
             )}
           </div>

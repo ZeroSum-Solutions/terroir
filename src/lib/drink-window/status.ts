@@ -120,17 +120,36 @@ export function isHolding(
 }
 
 /**
+ * Years until the drink window opens. Positive while holding, zero or
+ * negative once open. Returns null when start is unknown.
+ */
+export function getYearsUntilWindowOpen(
+  start: number | null | undefined,
+  currentYear: number = new Date().getFullYear(),
+): number | null {
+  if (start == null) return null;
+  return start - currentYear;
+}
+
+/**
  * Human-readable status label for chips and pills. Renders the same
  * verbiage shown in the mock.
+ *
+ * `yearsUntilStart` feeds ONLY the hold label ("ready in N yrs"). It used
+ * to be derived from `Math.abs(yearsLeft)` — years until the window
+ * CLOSES — so a 2030–2040 wine claimed "ready in 14 yrs" instead of 4
+ * (Kimi audit follow-up, 2026-08-26). Callers without the start year get
+ * a plain "Hold".
  */
 export function formatStatusLabel(
   status: DrinkStatus,
   yearsLeft: number | null,
+  yearsUntilStart: number | null = null,
 ): string {
   switch (status) {
     case "hold":
-      return yearsLeft != null
-        ? `Hold · ready in ${Math.abs(yearsLeft)} yr${Math.abs(yearsLeft) === 1 ? "" : "s"}`
+      return yearsUntilStart != null && yearsUntilStart > 0
+        ? `Hold · ready in ${yearsUntilStart} yr${yearsUntilStart === 1 ? "" : "s"}`
         : "Hold";
     case "drink_now":
       if (yearsLeft == null) return "Drink now";

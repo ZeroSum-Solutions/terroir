@@ -18,6 +18,7 @@ import {
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { ActionDialog } from "@/components/action-dialog";
 import { RouteDataEmpty } from "@/components/route-data-state";
+import { StatusChip } from "@/components/status-chip";
 import { TimeAgo } from "@/components/time-ago";
 import type { WineListWithCount } from "@/lib/wine-list/types";
 
@@ -221,19 +222,22 @@ export function WineListLanding({
               {list.name}
             </h3>
             <div className="flex items-center gap-xs">
+              {/* Wax & Counter (DESIGN.md 2026-08-26): live = the gold
+                  marker, draft/archived = quiet ledger stamps. The sage
+                  pill was a second accent. */}
               {list.archived ? (
-                <span className="shrink-0 rounded-pill bg-beige px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-ink-soft">
+                <StatusChip tone="muted" className="shrink-0">
                   Archived
-                </span>
+                </StatusChip>
               ) : list.is_published ? (
-                <span className="flex shrink-0 items-center gap-xs rounded-pill bg-sage-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-sage-ink">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sage-ink" />
+                <StatusChip tone="optimal" className="shrink-0">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold" />
                   Published
-                </span>
+                </StatusChip>
               ) : (
-                <span className="shrink-0 rounded-pill bg-beige px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-ink-soft">
+                <StatusChip tone="neutral" className="shrink-0">
                   Draft
-                </span>
+                </StatusChip>
               )}
             </div>
           </div>

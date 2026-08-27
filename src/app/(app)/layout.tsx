@@ -51,7 +51,9 @@ export default async function AppLayout({
           whose top edge sits ~136px above the viewport bottom (80px offset
           + 56px button). 88px let it cover the last ~48px of every list
           (Kimi audit 2026-08-26). */}
-      <main className="mx-auto w-full max-w-[1440px] flex-1 px-md py-lg pb-[152px] md:px-lg md:py-xl md:pb-xl">
+      {/* Content cap ~1160px (Kimi audit D4): the mobile stack stretched
+          full-width to 1440px read as an unfinished desktop. */}
+      <main className="mx-auto w-full max-w-[1160px] flex-1 px-md py-lg pb-[152px] md:px-lg md:py-xl md:pb-xl">
         {children}
       </main>
 

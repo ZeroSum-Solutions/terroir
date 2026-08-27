@@ -3,12 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Search, SlidersHorizontal, LayoutGrid, List as ListIcon, X } from "lucide-react";
+import { Search, SlidersHorizontal, LayoutGrid, List as ListIcon, X, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isClosingWindow, isHolding } from "@/lib/drink-window/status";
+import {
+  CELLAR_SORTS,
+  CELLAR_SORT_LABELS,
+  type CellarSort,
+} from "@/lib/cellar-facets/sort";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
-import { CellarList } from "./cellar-list";
+import { CellarList, FILTER_LABELS } from "./cellar-list";
 import { drawerStateKey, WineDetailDrawer } from "./wine-detail-drawer";
 import { ReconcileModal } from "./reconcile-modal";
 import { AutoEightysixModal } from "./auto-eightysix-modal";
@@ -107,6 +112,30 @@ export function CellarShell({
 
   const [initialMode] = useState(() => mode ?? "");
   const [view, setView] = useState<"list" | "grid">("list");
+
+  // D2 (Kimi audit 2026-08-26) — the hero keeps its ceremony, then hands
+  // off to a compact sticky masthead once it scrolls away: count, active
+  // filter, search, and the sort control stay in reach on a 1,364-bottle
+  // list. A sentinel under the bridge band drives the swap.
+  const [stuck, setStuck] = useState(false);
+  const [filteredCount, setFilteredCount] = useState<number | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const mastheadSearchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return;
+    const el = sentinelRef.current;
+    if (!el) {
+      setStuck(false);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => setStuck(!entry.isIntersecting),
+      // Account for the 54px glass app header the sentinel slides under.
+      { rootMargin: "-54px 0px 0px 0px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [view]);
   const selected = useMemo(
     () =>
       urlState.wine
@@ -257,6 +286,13 @@ export function CellarShell({
             }}
           />
 
+          {view === "list" && (
+            <SortSelect
+              value={urlState.sort}
+              onChange={(sort) => replaceUrlState({ sort })}
+            />
+          )}
+
           {cellarConfig && (
             <div className="hidden items-center overflow-hidden rounded-pill border border-ink/25 md:inline-flex">
               <ViewToggleButton
@@ -300,6 +336,57 @@ export function CellarShell({
           )}
         </div>
       </div>
+
+      {/* Sticky-masthead sentinel — when this scrolls under the app
+          header, the hero has left the stage and the compact masthead
+          takes over. */}
+      {view === "list" && <div ref={sentinelRef} aria-hidden className="h-px" />}
+
+      {/* Compact sticky masthead (D2) */}
+      {view === "list" && stuck && (
+        <div className="glass fixed inset-x-0 top-[54px] z-20">
+          <div className="mx-auto flex w-full max-w-[1160px] items-center gap-sm px-md py-xs md:px-lg">
+            <p className="min-w-0 flex-1 truncate text-[12px] text-grey">
+              <span className="font-mono text-[14px] font-medium tabular text-ink">
+                {(filteredCount ?? rows.length).toLocaleString()}
+              </span>{" "}
+              {urlState.filter === "all"
+                ? "wines"
+                : FILTER_LABELS[urlState.filter].toLocaleLowerCase()}
+            </p>
+            {urlState.filter !== "all" && (
+              <button
+                type="button"
+                onClick={() => replaceUrlState({ filter: "all" })}
+                className="inline-flex h-9 shrink-0 items-center gap-2xs whitespace-nowrap rounded-pill border border-ink/20 px-sm text-[11.5px] font-medium text-ink hover:bg-surface/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                {FILTER_LABELS[urlState.filter]}
+                <X className="h-3 w-3" strokeWidth={2} aria-hidden />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              aria-label="Search wines"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-pill text-ink-soft hover:bg-surface/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:hidden"
+            >
+              <Search className="h-4 w-4" strokeWidth={2} aria-hidden />
+            </button>
+            <div className="hidden md:block">
+              <SearchInput
+                value={qDraft}
+                onChange={setQDraft}
+                inputRef={mastheadSearchRef}
+              />
+            </div>
+            <SortSelect
+              value={urlState.sort}
+              onChange={(sort) => replaceUrlState({ sort })}
+              compact
+            />
+          </div>
+        </div>
+      )}
 
       {/* Alerts banner */}
       {alerts.lowCount > 0 && view === "list" && (
@@ -353,8 +440,10 @@ export function CellarShell({
             health: urlState.health,
           }}
           groupBy={urlState.groupBy}
+          sort={urlState.sort}
           onFacetsChange={replaceUrlState}
           onGroupByChange={(groupBy) => replaceUrlState({ groupBy })}
+          onFilteredCountChange={setFilteredCount}
           sections={cellarSections}
         />
       ) : cellarConfig ? (
@@ -489,6 +578,42 @@ function SearchInput({
         )
       )}
     </div>
+  );
+}
+
+function SortSelect({
+  value,
+  onChange,
+  compact,
+}: {
+  value: CellarSort | null;
+  onChange: (sort: CellarSort | null) => void;
+  compact?: boolean;
+}) {
+  return (
+    <label className="relative inline-flex shrink-0 items-center">
+      <span className="sr-only">Sort wines</span>
+      <select
+        value={value ?? ""}
+        onChange={(e) => onChange((e.target.value || null) as CellarSort | null)}
+        className={cn(
+          "appearance-none rounded-pill border border-ink/20 bg-surface/70 pl-sm pr-[28px] text-[12px] font-medium text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25",
+          compact ? "h-9" : "h-11",
+        )}
+      >
+        <option value="">Name A–Z</option>
+        {CELLAR_SORTS.map((s) => (
+          <option key={s} value={s}>
+            {CELLAR_SORT_LABELS[s]}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        className="pointer-events-none absolute right-[10px] h-3.5 w-3.5 text-grey"
+        strokeWidth={2}
+        aria-hidden
+      />
+    </label>
   );
 }
 

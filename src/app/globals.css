@@ -34,6 +34,7 @@
   --t-window-ramp-start: #d9d2c4; /* drink-window ramp start: warm neutral by day, candle gold by night */
   --t-window-marker: #722f37; /* drink-window today marker: burgundy by day, gold by night */
   --t-card-highlight: transparent; /* inner top light on raised cards — dark mode only */
+  --t-seal-ink: #f6f0e3; /* text on a filled wax seal (urgent status chip) */
   --t-gold: #786218;
   --t-sage: #5e6b4b;
   --t-sage-wash: #e7e6d6;
@@ -78,6 +79,7 @@
   --t-window-ramp-start: #c7a165;
   --t-window-marker: #c7a165;
   --t-card-highlight: rgba(237, 227, 206, 0.05);
+  --t-seal-ink: #f2e7cf;
   --t-gold: #c7a165;
   --t-sage: #8fa06e;
   --t-sage-wash: #2c3325;
@@ -119,6 +121,7 @@
     --t-window-ramp-start: #c7a165;
     --t-window-marker: #c7a165;
     --t-card-highlight: rgba(237, 227, 206, 0.05);
+    --t-seal-ink: #f2e7cf;
     --t-gold: #c7a165;
     --t-sage: #8fa06e;
     --t-sage-wash: #2c3325;
@@ -164,6 +167,7 @@
   --color-amber: var(--t-amber);
   --color-amber-wash: var(--t-amber-wash);
   --color-blush-wash: var(--t-blush-wash);
+  --color-seal-ink: var(--t-seal-ink);
   --color-scrim: var(--t-scrim);
   --color-glass-white: var(--t-glass);
   --color-glass-edge: var(--t-glass-edge);
