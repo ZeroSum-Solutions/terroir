@@ -103,7 +103,7 @@ describe("buildImportPreview", () => {
   // match anything; the full name goes into BOTH legs instead as a
   // best-effort candidate query. Apply's 0.6 confidence bar (0108) is
   // unchanged, so a weak candidate still never writes a lwin_id.
-  it("queries LWIN with the full name in both legs for producer-less rows", async () => {
+  it("queries LWIN with full-name and leading-token variants for producer-less rows", async () => {
     const supabase = makeSupabase([]);
     const result = await buildImportPreview(
       supabase,
@@ -117,12 +117,43 @@ describe("buildImportPreview", () => {
       expect.objectContaining({
         p_queries: [
           expect.objectContaining({
+            idx: 0,
             producer: "A.F. Gros Richebourg Grand Cru",
+            name: "A.F. Gros Richebourg Grand Cru",
+          }),
+          expect.objectContaining({
+            idx: 1,
+            producer: "A.F. Gros",
+            name: "A.F. Gros Richebourg Grand Cru",
+          }),
+          expect.objectContaining({
+            idx: 2,
+            producer: "A.F. Gros Richebourg",
             name: "A.F. Gros Richebourg Grand Cru",
           }),
         ],
       }),
     );
+  });
+
+  it("keeps the best-scoring variant match per producer-less row", async () => {
+    // Variant flat idx 1 (producer = first 2 tokens) scores higher than
+    // idx 0 (full name in the producer leg) — the row must surface the
+    // idx-1 match, proving best-of-variants selection per row.
+    const supabase = makeSupabase([
+      { idx: 0, lwin_id: "LWIN-WEAK", score: 0.45 },
+      { idx: 1, lwin_id: "LWIN-STRONG", score: 0.85 },
+    ]);
+    const result = await buildImportPreview(
+      supabase,
+      Buffer.from("wine name,quantity,cost price\nA.F. Gros Richebourg Grand Cru,3,$678.00\n"),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows[0]).toMatchObject({
+      rowState: "valid",
+      lwinId: "LWIN-STRONG",
+    });
   });
 
   it("returns a top-level error for an unparseable file without touching the database", async () => {

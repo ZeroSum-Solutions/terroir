@@ -12,7 +12,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { decodeCsvBuffer, parseCsv } from "./csv-parser";
 import { mapHeader, validateRow, type FieldError, type FieldsInput, type RawRowFields } from "./row-validator";
-import { matchLwinBulk } from "./lwin-matching";
+import { matchLwinBulk, buildLwinQueryVariants, type LwinMatch } from "./lwin-matching";
 import { mergeIntraBatchDuplicates, type IntraBatchDuplicateReason } from "./dedup-key";
 import type { CanonicalHeader } from "./constants";
 
@@ -111,21 +111,32 @@ export async function buildImportPreview(
 
   const validated = parsed.rows.map((cells, idx) => validateRow(cells, columnToField, rowOverrides?.[String(idx + 1)]));
 
-  // Producer-less rows (real-world single-"Wine Name"-column exports) put
-  // the full name into BOTH match legs: match_lwin (0078) hard-gates on
-  // producer-leg similarity, so an empty producer would never match — and
-  // the full name contains the producer anyway. Weak candidates are still
-  // held to apply's own 0.6 confidence bar (0108) before any lwin_id is
-  // written.
+  // Producer-less rows (real-world single-"Wine Name"-column exports) are
+  // matched with several query variants — full name in both legs, plus the
+  // leading 2/3 name tokens as the producer leg (see buildLwinQueryVariants
+  // for the measured rationale) — and each row keeps its best-scoring
+  // match. Weak candidates are still held to apply's own 0.6 confidence
+  // bar (0108) before any lwin_id is written.
+  const variantOwners: number[] = [];
   const lwinQueries = validated
     .map((row, idx) => ({ row, idx }))
     .filter(({ row }) => row.state === "valid")
-    .map(({ row, idx }) => {
+    .flatMap(({ row, idx }) => {
       const { producer, name } = row as { producer: string; name: string };
-      return { idx, producer: producer || name, name };
+      return buildLwinQueryVariants(producer, name).map((variant) => {
+        variantOwners.push(idx);
+        return { idx: variantOwners.length - 1, ...variant };
+      });
     });
 
-  const matches = await matchLwinBulk(supabase, lwinQueries);
+  const variantMatches = await matchLwinBulk(supabase, lwinQueries);
+  const matches = new Map<number, LwinMatch>();
+  for (const [variantIdx, match] of variantMatches) {
+    const rowIdx = variantOwners[variantIdx];
+    if (rowIdx === undefined) continue;
+    const current = matches.get(rowIdx);
+    if (!current || match.score > current.score) matches.set(rowIdx, match);
+  }
 
   const rows: PreviewRow[] = validated.map((row, idx) => {
     const rowNumber = idx + 1;
