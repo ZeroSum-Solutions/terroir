@@ -330,12 +330,20 @@ CI-guardrails changes. One earlier claim no longer holds:
   `GET .../branches/main/protection` 403s with the Free-org-plan upgrade
   message, exactly the pre-G0-4 state. Flipping the repo back to private
   (after G0-4 made it public on 2026-08-22) silently dropped the protection
-  that section "Re-verification — 2026-08-22" records as installed. As of
-  this writing `main` has NO required checks, NO force-push protection, and
-  NO deletion protection. Restoring protection requires an owner decision:
-  make the repo public again, or move the org to a paid GitHub plan. Until
-  then, merge discipline is process-only (zs-land refuses red checks; manual
-  merges wait for CI green).
+  that section "Re-verification — 2026-08-22" records as installed. At
+  discovery time `main` had NO required checks, NO force-push protection,
+  and NO deletion protection.
+
+  **Resolved same day by owner decision (2026-08-27): the repo is public
+  again** (`"visibility": "public"`, verified via PATCH + GET), and branch
+  protection is reinstalled on `main` — stricter than the G0-4 version:
+  required status check `Typecheck / Lint / Test / Schema` (strict=false),
+  `enforce_admins: true` (G0-4 had `false`, which let admin merges bypass
+  the check — that hole is closed), force pushes and deletions blocked. The
+  G0-4-era 1-approving-review requirement was deliberately NOT reinstalled:
+  with a solo maintainer and `enforce_admins: true` it would deadlock every
+  merge, and with `enforce_admins: false` it was decorative. The CI check
+  is the real gate and now binds everyone.
 
 Two compensating changes landed in this slice:
 
