@@ -30,25 +30,21 @@ import { metricHref } from "./metric-href";
 // @/lib/drink-window/alerts (DrinkWindowAlertRow) and is the same here.
 export type DrinkWindowAlert = DrinkWindowAlertRow;
 
-export function BriefingAlertCard({
-  alert,
-  firstName,
-}: {
-  alert: DrinkWindowAlert;
-  firstName: string;
-}) {
+export function BriefingAlertCard({ alert }: { alert: DrinkWindowAlert }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   const yearsLeft = getYearsUntilWindowClose(alert.drink_window_end);
-  const yearsLabel =
+  // Whole clauses, not ledger fragments — "~— remaining of optimal" shipped
+  // to the screen (Kimi audit 2026-08-26). Null window end → say nothing.
+  const remainingLabel =
     yearsLeft == null
-      ? "—"
+      ? null
       : yearsLeft <= 0
-        ? "in final year"
-        : `${yearsLeft} yr${yearsLeft === 1 ? "" : "s"}`;
+        ? "Final year of the optimal window"
+        : `~${yearsLeft} yr${yearsLeft === 1 ? "" : "s"} of optimal window left`;
 
   const onSnooze = async () => {
     setBusy(true);
@@ -84,8 +80,11 @@ export function BriefingAlertCard({
     >
       <div className="flex flex-col gap-md md:flex-row md:items-start md:gap-lg">
         <div className="min-w-0 flex-1">
+          {/* Fact first — the salutation ("Hey Owner+local") both leaked the
+              email local-part and buried the actionable sentence
+              (Kimi audit 2026-08-26). */}
           <h3 className="font-serif text-[18px] text-ink md:text-[20px]">
-            Hey {firstName} — {alert.bottle_count} bottle{alert.bottle_count === 1 ? "" : "s"} of{" "}
+            <span className="tabular">{alert.bottle_count}</span> bottle{alert.bottle_count === 1 ? "" : "s"} of{" "}
             <em className="font-medium italic">
               {alert.producer}, {alert.name}
               {alert.vintage ? ` ${alert.vintage}` : ""}
@@ -93,10 +92,12 @@ export function BriefingAlertCard({
             {alert.bottle_count === 1 ? "is" : "are"} entering {alert.bottle_count === 1 ? "its" : "their"} final drinking window.
           </h3>
           <div className="mt-xs flex flex-wrap items-center gap-sm text-[12px] text-grey">
-            <span className="inline-flex items-center gap-2xs">
-              <Clock className="h-3 w-3" strokeWidth={2} aria-hidden />
-              <span className="tabular">~{yearsLabel}</span> remaining of optimal
-            </span>
+            {remainingLabel && (
+              <span className="inline-flex items-center gap-2xs">
+                <Clock className="h-3 w-3" strokeWidth={2} aria-hidden />
+                {remainingLabel}
+              </span>
+            )}
             {alert.rating != null && alert.rating_source && (
               <span>
                 · last reviewed <span className="tabular">{alert.rating} pts</span>
@@ -149,10 +150,14 @@ export function BriefingAlertCard({
             end={alert.drink_window_end}
             size="full"
           />
-          <p className="mt-xs text-[11px] italic text-grey">
-            Source: {formatRatingSourceLabel(alert.rating_source)}
-            {alert.rating_source === "claude_inference" && " (estimated)"}
-          </p>
+          {/* Only cite a source that exists — "Source: Unknown" printed on
+              every unattributed alert and eroded trust (Kimi audit). */}
+          {alert.rating_source != null && (
+            <p className="mt-xs text-[11px] italic text-grey">
+              Source: {formatRatingSourceLabel(alert.rating_source)}
+              {alert.rating_source === "claude_inference" && " (estimated)"}
+            </p>
+          )}
         </div>
       </div>
     </article>

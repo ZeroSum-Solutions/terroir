@@ -136,7 +136,7 @@ export function ReadyView({
         <p className="mt-xs text-[14px] text-grey md:text-[15px]">
           {isBottle
             ? "Photograph a wine label. We'll identify the wine in a few seconds."
-            : "Photograph a wine invoice with your phone. Parsed in about 20 seconds."}
+            : "Parsed into inventory in about 20 seconds."}
         </p>
       </header>
 
@@ -179,28 +179,32 @@ export function ReadyView({
         <h2 className="font-serif text-[20px] text-ink md:text-[22px]">
           {isBottle ? "Tap to photograph label" : "Tap to photograph"}
         </h2>
+        {/* The zone is a camera target — advertising PDF formats on it was
+            dishonest (a camera can't capture a PDF); file specs live on the
+            upload affordance below (Kimi audit 2026-08-26). */}
         <p className="mt-xs text-[13px] text-grey">
-          {isBottle ? "JPG or PNG · up to 20MB" : "JPG, PNG, or PDF · up to 10MB"}
+          {isBottle
+            ? "One label per photo"
+            : "You'll review parsed lines before they reach the cellar"}
         </p>
       </button>
 
-      <div className="mt-md grid grid-cols-2 gap-sm md:mt-lg md:gap-md">
-        <button
-          type="button"
-          onClick={() => beginCapture(cameraRef)}
-          className="flex h-12 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          <Camera className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-          Take photo
-        </button>
+      {/* One camera entrance (the zone above) + one upload entrance — the
+          old "Take photo" button duplicated the zone exactly. */}
+      <div className="mt-md md:mt-lg">
         <button
           type="button"
           onClick={() => beginCapture(fileRef)}
-          className="flex h-12 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="flex h-12 w-full items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           <FileUp className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           Upload file
         </button>
+        <p className="mt-xs text-center text-[12px] text-grey">
+          {isBottle
+            ? "JPG or PNG · up to 20MB"
+            : "JPG, PNG, or PDF · up to 10MB · multi-page invoices welcome"}
+        </p>
       </div>
 
       <input

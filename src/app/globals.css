@@ -31,6 +31,9 @@
   --t-grey: #666459;
   --t-hairline: #ded5c4;
   --t-hairline-strong: #d3c8b2;
+  --t-window-ramp-start: #d9d2c4; /* drink-window ramp start: warm neutral by day, candle gold by night */
+  --t-window-marker: #722f37; /* drink-window today marker: burgundy by day, gold by night */
+  --t-card-highlight: transparent; /* inner top light on raised cards — dark mode only */
   --t-gold: #786218;
   --t-sage: #5e6b4b;
   --t-sage-wash: #e7e6d6;
@@ -67,8 +70,14 @@
   --t-ink: #ede3ce;
   --t-ink-soft: #d8c9b0;
   --t-grey: #aea68f;
-  --t-hairline: #29271e;
-  --t-hairline-strong: #363428;
+  /* Champagne-alpha hairlines: opaque near-blacks (#29271e) vanished on the
+     lacquer ground (~1.1:1) — cards fused into one field. Alpha keeps the
+     gold undertone on any surface. (Kimi audit 2026-08-26.) */
+  --t-hairline: rgba(237, 227, 206, 0.1);
+  --t-hairline-strong: rgba(237, 227, 206, 0.16);
+  --t-window-ramp-start: #c7a165;
+  --t-window-marker: #c7a165;
+  --t-card-highlight: rgba(237, 227, 206, 0.05);
   --t-gold: #c7a165;
   --t-sage: #8fa06e;
   --t-sage-wash: #2c3325;
@@ -105,8 +114,11 @@
     --t-ink: #ede3ce;
     --t-ink-soft: #d8c9b0;
     --t-grey: #aea68f;
-    --t-hairline: #29271e;
-    --t-hairline-strong: #363428;
+    --t-hairline: rgba(237, 227, 206, 0.1);
+    --t-hairline-strong: rgba(237, 227, 206, 0.16);
+    --t-window-ramp-start: #c7a165;
+    --t-window-marker: #c7a165;
+    --t-card-highlight: rgba(237, 227, 206, 0.05);
     --t-gold: #c7a165;
     --t-sage: #8fa06e;
     --t-sage-wash: #2c3325;
@@ -262,7 +274,9 @@ body {
 .card-surface {
   background: var(--color-surface);
   border: 1px solid var(--color-hairline);
-  box-shadow: var(--shadow-card);
+  /* The inset line is the "raised lacquer" top light — transparent in the
+     Tasting Room, faint champagne in the Cellar (--t-card-highlight). */
+  box-shadow: inset 0 1px 0 var(--t-card-highlight), var(--shadow-card);
 }
 
 /*
@@ -289,11 +303,13 @@ body {
  * vignette on the room's own ground in both modes.
  */
 .dawn-gradient {
+  /* Flattened 2026-08-26: the sunken third stop read as a tan edge vignette
+     in the Tasting Room (brown-adjacent — hard law). Paper resolves to the
+     room's own canvas and stops there. */
   background: linear-gradient(
     172deg,
     var(--t-surface) 0%,
-    var(--t-canvas) 60%,
-    var(--t-surface-sunken) 100%
+    var(--t-canvas) 60%
   );
 }
 

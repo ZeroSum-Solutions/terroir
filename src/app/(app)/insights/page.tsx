@@ -31,7 +31,7 @@ import {
 } from "./insights-drilldown";
 import { metricHref } from "./metric-href";
 import { fetchYieldGroups, YieldReportSection } from "./yield-report-section";
-import { summarizeCellarHealth } from "@/lib/cellar-health/summary";
+import { summarizeCellarHealth, summarizeUnscoredStock } from "@/lib/cellar-health/summary";
 import { CellarHealthPanel } from "./cellar-health-panel";
 import { fetchPricingRecommendations } from "@/lib/pricing-recommendations/fetch";
 import { PricingPlaysSection } from "./pricing-plays-section";
@@ -303,7 +303,7 @@ export default async function DashboardPage({
 }) {
   const sp = await searchParams;
   const auth = (await getAuthContext())!;
-  const { supabase, restaurantId: rid, restaurantName, user, userRole } = auth;
+  const { supabase, restaurantId: rid, restaurantName, userRole } = auth;
 
   // ── Date range from URL search params ──────────────────────────────
   const { range, from, to } = normalizeInsightsRange(
@@ -332,7 +332,6 @@ export default async function DashboardPage({
       return null;
     }),
   ]);
-  const firstName = parseFirstName(user.email ?? "") || "there";
   const canEnrich = userRole === "owner" || userRole === "manager";
 
   // ── Build scan query, conditionally filtering by date range ─────────
@@ -393,6 +392,7 @@ export default async function DashboardPage({
   const items = inventoryItems ?? [];
   if (cellarHealthError) throw cellarHealthError;
   const cellarHealthSummary = summarizeCellarHealth(cellarHealthRows ?? [], items);
+  const cellarHealthUnscored = summarizeUnscoredStock(cellarHealthRows ?? [], items);
   const pastDrinkWindowWines: PastDrinkWindowRow[] = initPastDrinkWindow;
 
   const inventoryValue = items.reduce(function (s, i) { return s + i.quantity * i.unit_cost; }, 0);
@@ -472,7 +472,7 @@ export default async function DashboardPage({
             {restaurantName}
           </p>
           <h1 className="mt-xs font-serif text-heading font-normal text-ink">
-            Dashboard
+            Insights
           </h1>
         </header>
         <ReconcileQueueMetric />
@@ -514,13 +514,15 @@ export default async function DashboardPage({
               {restaurantName}
             </p>
             <h1 className="mt-xs font-serif text-heading font-normal text-ink">
-              Dashboard
+              Insights
             </h1>
           </div>
+          {/* Ghost, not filled burgundy — a back-office export must not be
+              the page's only accent-spending element (Kimi audit 2026-08-26). */}
           <a
             href="/api/insights/csv"
             download="insights-export.csv"
-            className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+            className="flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
           >
             <svg
               width="16"
@@ -571,17 +573,9 @@ export default async function DashboardPage({
       <TodayStrip exceptions={todayExceptions} />
       <ReconcileQueueMetric />
 
-      <YieldReportSection
-        groups={yieldGroups}
-        rangeLabel={selectedRangeLabel}
-      />
-      <CellarHealthPanel summary={cellarHealthSummary} canRecompute={canEnrich} />
-      {pricingRecommendations !== null && (
-        <PricingPlaysSection
-          recommendations={pricingRecommendations}
-          canRecompute={canEnrich}
-        />
-      )}
+      {/* Section order (Kimi audit 2026-08-26): the drink-window triage
+          queue — the most service-actionable module — leads; analysis
+          sections (yield, health, plays) follow it. */}
 
       {/* Drink-window watch */}
       {(drinkWindowAlerts.length > 0 || canEnrich) && (
@@ -593,21 +587,27 @@ export default async function DashboardPage({
             >
               Drink-window watch
             </h2>
-            <span className="text-[12px] text-ink-muted">
-              {drinkWindowAlerts.length === 0
-                ? "No alerts right now"
-                : `${drinkWindowAlerts.length} alert${drinkWindowAlerts.length === 1 ? "" : "s"}`}
-            </span>
+            {/* The count is a door, not a label — plain text gave 162
+                alerts no affordance at all (Kimi audit 2026-08-26). */}
+            {drinkWindowAlerts.length === 0 ? (
+              <span className="text-[12px] text-ink-muted">
+                No alerts right now
+              </span>
+            ) : (
+              <Link
+                href={metricHref("drink-now-count")}
+                className="text-[12px] font-medium text-ink underline decoration-hairline underline-offset-4 hover:text-accent"
+              >
+                All {drinkWindowAlerts.length} alert
+                {drinkWindowAlerts.length === 1 ? "" : "s"} →
+              </Link>
+            )}
           </div>
           {drinkWindowAlerts.length > 0 && (
             <div className="flex flex-col gap-md">
               {visibleDrinkWindowAlerts.map(function (alert) {
                 return (
-                  <BriefingAlertCard
-                    key={alert.wine_id}
-                    alert={alert}
-                    firstName={firstName}
-                  />
+                  <BriefingAlertCard key={alert.wine_id} alert={alert} />
                 );
               })}
               {drinkWindowAlerts.length > visibleDrinkWindowAlerts.length && (
@@ -703,6 +703,27 @@ export default async function DashboardPage({
         </section>
       )}
 
+      <YieldReportSection
+        groups={yieldGroups}
+        rangeLabel={selectedRangeLabel}
+      />
+      <CellarHealthPanel
+        summary={cellarHealthSummary}
+        unscored={cellarHealthUnscored}
+        canRecompute={canEnrich}
+      />
+      {pricingRecommendations !== null && (
+        <PricingPlaysSection
+          recommendations={pricingRecommendations}
+          canRecompute={canEnrich}
+          recomputeBlockedReason={
+            (cellarHealthRows ?? []).length === 0
+              ? "Needs cellar health data — recompute cellar health first."
+              : undefined
+          }
+        />
+      )}
+
       {/* Pricing review */}
       {pricingAlerts.length > 0 && (
         <section className="mb-lg md:mb-xl" aria-labelledby="pricing-review-heading">
@@ -717,7 +738,7 @@ export default async function DashboardPage({
               {pricingAlerts.length} alert{pricingAlerts.length === 1 ? "" : "s"}
             </span>
           </div>
-          <PricingReviewCard alerts={pricingAlerts} firstName={firstName} />
+          <PricingReviewCard alerts={pricingAlerts} />
         </section>
       )}
 
@@ -788,7 +809,7 @@ export default async function DashboardPage({
             <div>
               <div className="flex items-baseline gap-xs">
                 <span
-                  className={`font-serif text-[30px] font-normal leading-none tabular ${accuracyColor(extractionAccuracyPct)}`}
+                  className={`font-mono text-[28px] font-medium leading-none tabular ${accuracyColor(extractionAccuracyPct)}`}
                 >
                   {extractionAccuracyPct}%
                 </span>
@@ -836,7 +857,7 @@ export default async function DashboardPage({
           ) : (
             <div>
               <div className="flex items-baseline gap-xs">
-                <span className="font-serif text-[30px] font-normal leading-none tabular text-ink">
+                <span className="font-mono text-[28px] font-medium leading-none tabular text-ink">
                   {avgScansPerWeek}
                 </span>
                 <span className="text-[12px] text-grey">
@@ -1158,9 +1179,3 @@ async function fetchSnoozedAlerts(
   return rows;
 }
 
-function parseFirstName(email: string): string {
-  const local = email.split("@")[0] ?? "";
-  const cleaned = local.replace(/[._-]+/g, " ").split(" ")[0] ?? "";
-  if (!cleaned) return "";
-  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
-}

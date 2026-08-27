@@ -26,7 +26,10 @@ export function ShellContext({
       <span className="max-w-[112px] truncate text-[11px] font-medium text-ink md:max-w-[220px] md:text-[12px]">
         {restaurantName?.trim() || "Unnamed restaurant"}
       </span>
-      <span className="shrink-0 rounded-pill bg-beige px-sm py-2xs text-[10px] font-medium uppercase tracking-wide text-ink-soft">
+      {/* Neutral steps only — the bg-beige (surface-sunken) fill read
+          tan/khaki in the Tasting Room, the "browniest object on screen"
+          (Kimi audit 2026-08-26; brown is banned). */}
+      <span className="shrink-0 rounded-pill border border-hairline bg-surface px-sm py-2xs text-[10px] font-medium uppercase tracking-wide text-ink-soft">
         {roleLabel(role)}
       </span>
     </div>

@@ -41,7 +41,7 @@ describe("ShellContext", () => {
       "max-w-[112px] truncate text-[11px] font-medium text-ink md:max-w-[220px] md:text-[12px]",
     );
     expect(role.className).toBe(
-      "shrink-0 rounded-pill bg-beige px-sm py-2xs text-[10px] font-medium uppercase tracking-wide text-ink-soft",
+      "shrink-0 rounded-pill border border-hairline bg-surface px-sm py-2xs text-[10px] font-medium uppercase tracking-wide text-ink-soft",
     );
   });
 });

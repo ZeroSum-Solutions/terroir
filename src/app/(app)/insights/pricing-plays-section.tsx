@@ -17,9 +17,11 @@ const LABELS: Record<PricingRecommendationClass, string> = {
 export function PricingPlaysSection({
   recommendations,
   canRecompute,
+  recomputeBlockedReason,
 }: {
   recommendations: PricingPlay[];
   canRecompute: boolean;
+  recomputeBlockedReason?: string;
 }) {
   return (
     <section className="mb-lg md:mb-xl" aria-labelledby="pricing-plays-heading">
@@ -32,18 +34,23 @@ export function PricingPlaysSection({
             Pricing plays
           </h2>
           <p className="mt-2xs text-[12px] text-grey">
-            Wine-aware actions from margin, movement, market, and pour history
+            Price moves based on how your wines sell
           </p>
         </div>
-        {canRecompute && <RecomputePricingRecommendationsButton />}
+        {canRecompute && (
+          <RecomputePricingRecommendationsButton
+            blockedReason={recomputeBlockedReason}
+          />
+        )}
       </div>
 
       {recommendations.length === 0 ? (
-        <div className="rounded-card border border-dashed border-beige-deep bg-bridge-surface px-lg py-xl text-center">
-          <p className="text-[13px] text-grey">
-            No pricing plays yet. Recompute after cellar health and pour data are current.
-          </p>
-        </div>
+        /* Two quiet lines, not a full-height dashed box — an empty module
+           must never outweigh populated ones (Kimi audit 2026-08-26). */
+        <p className="rounded-card border border-hairline bg-bridge-surface px-md py-sm text-[13px] text-grey">
+          No pricing plays yet — they appear once cellar health and pour data
+          are current.
+        </p>
       ) : (
         <div className="overflow-hidden rounded-card card-surface">
           {PRICING_RECOMMENDATION_CLASSES.map((recommendationClass) => {

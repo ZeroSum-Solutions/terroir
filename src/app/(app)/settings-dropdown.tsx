@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Archive, ClipboardCheck, DollarSign, LogOut, Settings, Upload, Users } from "lucide-react";
+import { Archive, DollarSign, LogOut, Settings, Upload, Users } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 
 export function SettingsDropdown() {
@@ -65,6 +65,16 @@ export function SettingsDropdown() {
         <Settings className="h-5 w-5 md:h-4 md:w-4" strokeWidth={1.75} aria-hidden="true" />
       </button>
 
+      {/* Mobile scrim — the menu floated over a busy screen of chips and
+          CTAs with no separation (Kimi audit 2026-08-26). Desktop keeps
+          the lightweight dropdown convention. */}
+      {open && (
+        <div
+          className="fixed inset-0 z-20 bg-scrim md:hidden"
+          aria-hidden="true"
+          onClick={close}
+        />
+      )}
       {open && (
         <div className="absolute right-0 top-full z-30 mt-xs w-[180px] rounded-card card-surface" role="menu">
           <div className="flex flex-col py-xs">
@@ -90,19 +100,11 @@ export function SettingsDropdown() {
               <Archive className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Bins
             </Link>
+            {/* Reconcile lives on the dashboard as a live-count CTA; the
+                duplicate menu entry (without the count) is gone
+                (Kimi audit 2026-08-26). */}
             <Link
               ref={(el) => { itemsRef.current[2] = el; }}
-              href="/reconcile-queue"
-              onClick={close}
-              role="menuitem"
-              tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
-              <ClipboardCheck className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
-              Reconcile
-            </Link>
-            <Link
-              ref={(el) => { itemsRef.current[3] = el; }}
               href="/team"
               onClick={close}
               role="menuitem"
@@ -113,7 +115,7 @@ export function SettingsDropdown() {
               Team
             </Link>
             <Link
-              ref={(el) => { itemsRef.current[4] = el; }}
+              ref={(el) => { itemsRef.current[3] = el; }}
               href="/import"
               onClick={close}
               role="menuitem"
@@ -128,7 +130,7 @@ export function SettingsDropdown() {
             <div className="mx-md my-xs border-t border-hairline" role="separator" />
             <form action="/auth/signout" method="post">
               <button
-                ref={(el) => { itemsRef.current[5] = el; }}
+                ref={(el) => { itemsRef.current[4] = el; }}
                 type="submit"
                 role="menuitem"
                 tabIndex={-1}

@@ -35,12 +35,21 @@ export type CellarCounterDef = {
  * its count still appears twice on the page by design, not by omission.
  */
 export function buildCellarCounters(alerts: CellarCounterAlerts): CellarCounterDef[] {
+  // Zero-count counters are suppressed (Kimi audit 2026-08-26): they are
+  // filters, and a filter to nothing is noise — "LOW STOCK 0" was styled
+  // identically to the service-urgent counts. "All" always renders.
   const counters: CellarCounterDef[] = [
     { id: "all", label: "All", value: alerts.totalBottles.toLocaleString() },
-    { id: "open", label: "Open", value: alerts.openCount },
-    { id: "out", label: "86'd", value: alerts.outCount },
-    { id: "low", label: "Low stock", value: alerts.lowCount },
   ];
+  if (alerts.openCount > 0) {
+    counters.push({ id: "open", label: "Open", value: alerts.openCount });
+  }
+  if (alerts.outCount > 0) {
+    counters.push({ id: "out", label: "86'd", value: alerts.outCount });
+  }
+  if (alerts.lowCount > 0) {
+    counters.push({ id: "low", label: "Low stock", value: alerts.lowCount });
+  }
   if (alerts.drinkNowCount > 0) {
     counters.push({ id: "drink-now", label: "Drink now", value: alerts.drinkNowCount });
   }
@@ -93,7 +102,9 @@ export function CellarCounters({
             </span>
             <span
               className={cn(
-                "font-serif text-[17px] leading-none",
+                // Courier is the ledger voice — data speaks mono, Bodoni is
+                // reserved for display headlines (DESIGN.md type roles).
+                "font-mono text-[16px] font-medium leading-none tabular",
                 selected ? "text-beige" : "text-ink",
               )}
             >

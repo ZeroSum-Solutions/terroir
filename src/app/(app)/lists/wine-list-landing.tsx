@@ -271,7 +271,7 @@ export function WineListLanding({
                   type="button"
                   onClick={() => copyListLink(list)}
                   aria-label={`Copy public link for ${list.name}`}
-                  className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                  className="inline-flex min-h-11 items-center gap-xs whitespace-nowrap rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                 >
                   {justCopied ? (
                     <Check
@@ -359,9 +359,10 @@ export function WineListLanding({
       <header className="mb-lg flex flex-col gap-sm md:mb-xl md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="font-serif text-heading-sm text-ink">Wine Lists</h1>
+          {/* One line — the two-line onboarding pitch pushed the first card
+              below ~45% of the mobile viewport (Kimi audit 2026-08-26). */}
           <p className="mt-xs text-[15px] text-ink-muted">
-            Build, publish, and share your menus. Data entered here becomes your
-            inventory automatically.
+            Published menus sync to inventory automatically.
           </p>
         </div>
         <div className="flex items-center gap-sm">

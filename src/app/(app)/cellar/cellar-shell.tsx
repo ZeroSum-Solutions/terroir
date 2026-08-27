@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Search, Settings, LayoutGrid, List as ListIcon, X } from "lucide-react";
+import { Search, SlidersHorizontal, LayoutGrid, List as ListIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getDrinkWindowStatus, isHolding } from "@/lib/drink-window/status";
+import { isClosingWindow, isHolding } from "@/lib/drink-window/status";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
 import { CellarList } from "./cellar-list";
@@ -176,8 +176,11 @@ export function CellarShell({
       return totalMl < 2 * r.size_ml;
     }).length;
 
+    // Must match the "drink-now" list filter predicate (isClosingWindow) —
+    // it previously counted only past_peak, so the chip said 147 while the
+    // filter it opened showed 174 (Kimi audit 2026-08-26).
     const drinkNowCount = rows.filter(
-      (r) => !r.is_eightysixed && getDrinkWindowStatus(r.drink_window_start, r.drink_window_end) === "past_peak",
+      (r) => !r.is_eightysixed && isClosingWindow(r.drink_window_end),
     ).length;
     const holdCount = rows.filter(
       (r) => !r.is_eightysixed && isHolding(r.drink_window_start),
@@ -278,7 +281,10 @@ export function CellarShell({
               aria-label="Cellar settings"
               className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-soft hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
             >
-              <Settings className="h-5 w-5" strokeWidth={2} aria-hidden />
+              {/* Sliders, not a second gear — the header's gear is app
+                  settings; two identical gears on one screen were
+                  indistinguishable (Kimi audit 2026-08-26). */}
+              <SlidersHorizontal className="h-5 w-5" strokeWidth={2} aria-hidden />
             </button>
           )}
 

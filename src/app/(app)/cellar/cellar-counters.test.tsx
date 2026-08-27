@@ -30,11 +30,20 @@ const baseAlerts: CellarCounterAlerts = {
 };
 
 describe("buildCellarCounters", () => {
-  it("always includes All/Open/86'd/Low stock, formatting the bottle total", () => {
+  it("always includes All, formats the bottle total, and keeps non-zero counters", () => {
     const counters = buildCellarCounters(baseAlerts);
-    expect(counters.map((c) => c.id)).toEqual(["all", "open", "out", "low"]);
+    expect(counters.map((c) => c.id)).toEqual(["all", "open", "out"]);
     expect(counters[0]).toEqual({ id: "all", label: "All", value: "1,364" });
     expect(counters[1]).toEqual({ id: "open", label: "Open", value: 36 });
+  });
+
+  it("suppresses every zero-count counter — a filter to nothing is noise", () => {
+    const counters = buildCellarCounters({
+      ...baseAlerts,
+      openCount: 0,
+      outCount: 0,
+    });
+    expect(counters.map((c) => c.id)).toEqual(["all"]);
   });
 
   it("only adds Drink now / Hold when their counts are positive", () => {
@@ -44,6 +53,7 @@ describe("buildCellarCounters", () => {
 
     const withBoth = buildCellarCounters({
       ...baseAlerts,
+      lowCount: 2,
       drinkNowCount: 147,
       holdCount: 3,
     });
@@ -90,7 +100,7 @@ describe("CellarCounters", () => {
       "Cellar counters",
     );
     const tabs = [...container.querySelectorAll('[role="tab"]')];
-    expect(tabs).toHaveLength(5); // all, open, out, low, drink-now
+    expect(tabs).toHaveLength(4); // all, open, out, drink-now (low is 0 → hidden)
     for (const tab of tabs) {
       expect(tab.tagName).toBe("BUTTON");
       expect(tab.getAttribute("type")).toBe("button");
