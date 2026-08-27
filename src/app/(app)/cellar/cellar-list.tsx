@@ -328,14 +328,30 @@ export function CellarList({
       <div className="rounded-card card-surface px-md py-2xl text-center">
         <p className="font-serif text-[17px] font-medium text-ink">No wines in your cellar yet.</p>
         <p className="mt-xs text-[13px] text-grey">
-          Scan an invoice to start building your cellar.
+          Scan an invoice, photograph a bottle, or import a spreadsheet to start building your cellar.
         </p>
-        <Link
-          href="/scan"
-          className="mt-md inline-flex min-h-11 items-center justify-center rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
-        >
-          Scan an invoice →
-        </Link>
+        <div className="mt-md flex flex-col items-center gap-sm">
+          <Link
+            href="/scan"
+            className="inline-flex min-h-11 items-center justify-center rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
+          >
+            Scan an invoice →
+          </Link>
+          <div className="flex flex-wrap items-center justify-center gap-sm">
+            <Link
+              href="/scan?mode=bottle"
+              className="inline-flex min-h-11 items-center justify-center rounded-pill border border-ink/20 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+            >
+              Scan a bottle
+            </Link>
+            <Link
+              href="/import"
+              className="inline-flex min-h-11 items-center justify-center rounded-pill border border-ink/20 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+            >
+              Import a CSV
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }

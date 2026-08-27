@@ -1,11 +1,19 @@
 import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
 import { Scanner } from "./scanner";
-import type { RecentScan } from "@/lib/scanner/types";
+import type { RecentScan, ScanMode } from "@/lib/scanner/types";
 
 export const metadata: Metadata = { title: "Scan" };
 
-export default async function ScannerPage() {
+type SearchParams = Promise<{ mode?: string }>;
+
+export default async function ScannerPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const sp = await searchParams;
+  const initialMode: ScanMode = sp.mode === "bottle" ? "bottle" : "invoice";
   const auth = await getAuthContext();
 
   let recentScans: RecentScan[] = [];
@@ -42,5 +50,5 @@ export default async function ScannerPage() {
       });
   }
 
-  return <Scanner recentScans={recentScans} />;
+  return <Scanner recentScans={recentScans} initialMode={initialMode} />;
 }

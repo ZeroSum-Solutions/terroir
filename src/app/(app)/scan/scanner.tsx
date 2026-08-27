@@ -148,7 +148,13 @@ async function postScan(files: File[], signal: AbortSignal, key?: string | null)
   return result;
 }
 
-export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
+export function Scanner({
+  recentScans = [],
+  initialMode = "invoice",
+}: {
+  recentScans?: RecentScan[];
+  initialMode?: ScanMode;
+}) {
   const { restaurantId: _restaurantId } = useRestaurant();
   const [status, setStatus] = useState<Status>("ready");
   const [progress, setProgress] = useState(0);
@@ -194,7 +200,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   // preserved so a recoverable error's "Retry" resubmits everything the
   // user picked — not just the first file (see BND-089 retry gap).
   const [lastFiles, setLastFiles] = useState<File[]>([]);
-  const [mode, setMode] = useState<ScanMode>("invoice");
+  const [mode, setMode] = useState<ScanMode>(initialMode);
   const [bottleResult, setBottleResult] = useState<BottleScanResult | null>(null);
   // Immediate-acknowledgment preview (walkthrough §1.2, item 7): an object
   // URL for the just-picked label photo, set synchronously before the
