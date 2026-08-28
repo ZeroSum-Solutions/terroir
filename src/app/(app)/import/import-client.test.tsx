@@ -26,7 +26,12 @@ import {
   type BatchDetail,
 } from "./import-client";
 import { ZERO_SUMMARY, type ChunkUploadState, type ChunkedPlanState } from "./session-step";
-import { type CanonicalHeader } from "@/domains/import/constants";
+import {
+  CLIENT_CHUNK_TARGET_ROWS,
+  LWIN_MATCH_UX_CEILING_SECONDS,
+  MAX_ROWS,
+  type CanonicalHeader,
+} from "@/domains/import/constants";
 
 const reactTestEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -1955,6 +1960,159 @@ describe("BatchStep — applyAll stops immediately on a reverted batchStatus (ro
   async function click(element: HTMLElement) {
     await act(async () => element.click());
   }
+});
+
+// The round-11 fix (d6813cb, "show the expected matching wait before either
+// phase, on every path") is the ENTIRE justification for raising
+// LWIN_MATCH_UX_CEILING_SECONDS from 60s to 120s (see that constant's own
+// comment): the longer wait is only defensible because the operator sees an
+// honest estimate before committing to it, on both the single-file and
+// chunked paths, before Preview AND before Confirm. Nothing exercised
+// countPreviewUnits or this copy before this describe block — a regression
+// silently dropping the disclosure would have shipped green.
+describe("wait-estimate disclosure (justifies LWIN_MATCH_UX_CEILING_SECONDS, round-11 fix d6813cb)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    vi.unstubAllGlobals();
+    document.body.innerHTML = "";
+  });
+
+  // Reproduces import-client.tsx's own (unexported) formatRoughDuration
+  // rule — < 90s renders as "Ns", otherwise ceil(seconds / 60) minutes —
+  // against LWIN_MATCH_UX_CEILING_SECONDS itself, so the expected string is
+  // DERIVED from the constant rather than a hardcoded "2 minutes": a future
+  // change to the ceiling moves this expectation with it, and a component
+  // that hardcodes its own number instead of deriving it from the real
+  // unit count still gets caught.
+  function expectedDuration(units: number): string {
+    const seconds = units * LWIN_MATCH_UX_CEILING_SECONDS;
+    if (seconds < 90) return `${seconds}s`;
+    const minutes = Math.ceil(seconds / 60);
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+
+  function csvFile(name: string, dataRows: number): File {
+    const lines = ["name,quantity"];
+    for (let i = 1; i <= dataRows; i++) lines.push(`Wine ${i},1`);
+    return new File([lines.join("\n") + "\n"], name, { type: "text/csv" });
+  }
+
+  async function mountImportClient(): Promise<{ container: HTMLElement }> {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ batches: [] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+      ),
+    );
+    vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(<ImportClient />));
+    return { container };
+  }
+
+  // countPreviewUnits reads file.arrayBuffer() (a microtask) before its
+  // .then() sets previewUnits — flush enough ticks for that chain to settle
+  // before asserting on the render it produces.
+  async function selectFile(container: HTMLElement, file: File) {
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    Object.defineProperty(input, "files", { value: transfer.files, configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    });
+  }
+
+  async function mountPreviewStep(overrides: Partial<PreviewStepProps>): Promise<{ container: HTMLElement }> {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(<PreviewStep {...baseProps(overrides)} />));
+    return { container };
+  }
+
+  it("single-file path: shows the estimate in UploadStep before Preview is clicked", async () => {
+    const { container } = await mountImportClient();
+    await selectFile(container, csvFile("small.csv", 10));
+
+    expect(container.textContent).toContain("Previewing this file is estimated to take");
+    expect(container.textContent).toContain(expectedDuration(1));
+
+    // Not yet clicked: the button still reads "Preview import", never
+    // "Reading file…" (previewing=true) — proves the estimate showed up
+    // BEFORE the operator committed to the wait.
+    const previewButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+      b.textContent?.includes("Preview import"),
+    );
+    expect(previewButton).toBeTruthy();
+  });
+
+  it("chunked path: shows the estimate AND the chunk count in UploadStep before Preview is clicked", async () => {
+    const { container } = await mountImportClient();
+    const dataRows = MAX_ROWS + 1;
+    const expectedChunks = Math.ceil(dataRows / CLIENT_CHUNK_TARGET_ROWS);
+    await selectFile(container, csvFile("big.csv", dataRows));
+
+    expect(container.textContent).toContain(`This file needs ${expectedChunks} chunks`);
+    expect(container.textContent).toContain(expectedDuration(expectedChunks));
+
+    const previewButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+      b.textContent?.includes("Preview import"),
+    );
+    expect(previewButton).toBeTruthy();
+  });
+
+  it("plain path: shows the estimate again in PreviewStep before Confirm is clicked", async () => {
+    const { container } = await mountPreviewStep({});
+
+    expect(container.textContent).toContain("Confirming it is estimated to take up to");
+    expect(container.textContent).toContain(expectedDuration(1));
+
+    const confirmButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+      b.textContent?.includes("Confirm import"),
+    );
+    expect(confirmButton).toBeTruthy();
+  });
+
+  it("chunked path: shows the estimate again in PreviewStep before Confirm is clicked, naming the chunk count", async () => {
+    const { container } = await mountPreviewStep({ chunkTotal: 3 });
+
+    expect(container.textContent).toContain("split into 3 chunks");
+    expect(container.textContent).toContain("Confirming it is estimated to take up to");
+    expect(container.textContent).toContain(expectedDuration(3));
+  });
+
+  // Round-29 audit's old copy ("up to about Xs in the worst case") stated
+  // more certainty than the numbers behind it have — corrected in d6813cb.
+  // Asserts the honest replacement, not just its presence: an explicit
+  // "not a guaranteed cap" disclaimer, and none of the old bound-implying
+  // phrasing ("worst case", "maximum").
+  it("the wording is honest — an estimate, never a guaranteed/worst-case bound", async () => {
+    const single = await mountPreviewStep({});
+    const chunked = await mountPreviewStep({ chunkTotal: 2 });
+
+    for (const { container } of [single, chunked]) {
+      const text = (container.textContent ?? "").toLowerCase();
+      expect(text).toContain("not a guaranteed cap");
+      expect(text).toContain("estimate");
+      expect(text).not.toContain("worst case");
+      expect(text).not.toMatch(/\bmaximum\b/);
+    }
+  });
 });
 
 function rowItem(root: ParentNode, label: string): HTMLElement {
