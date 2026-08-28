@@ -98,7 +98,17 @@ async function postBatches(request: NextRequest) {
   // /apply on it" rather than treating this as an error.
   if (result.alreadyExists) {
     return NextResponse.json(
-      { batchId: result.batchId, alreadyExists: true, status: result.status, sessionId: result.sessionId, counts: result.counts },
+      {
+        batchId: result.batchId,
+        alreadyExists: true,
+        status: result.status,
+        sessionId: result.sessionId,
+        // Sol round-3 audit finding 3: carried alongside sessionId so the
+        // chunked-upload client can require BOTH to match the exact slot
+        // it's confirming before treating this as "this chunk is done."
+        chunkIndex: result.chunkIndex,
+        counts: result.counts,
+      },
       { status: 200 },
     );
   }

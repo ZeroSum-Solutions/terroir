@@ -104,7 +104,14 @@ export type ConfirmBatchResult =
    * session (null if it has none) — the caller must compare this against
    * whatever session it thinks it's uploading into, since a content-hash
    * match can point at a batch from a completely different session. */
-  | { ok: true; alreadyExists: true; batchId: string; status: string; sessionId: string | null; counts: BatchCounts }
+  /** Sol round-3 audit (2026-08-27) finding 3: chunkIndex is the EXISTING
+   * batch's own chunk slot (null if it has none) — the caller must compare
+   * this, together with sessionId, against the exact (session, chunkIndex)
+   * slot it is confirming, since a content-hash match can point at a
+   * different chunk of the SAME session (two sibling chunks with
+   * identical bytes are a legitimate duplicate segment, never each
+   * other's confirmation). */
+  | { ok: true; alreadyExists: true; batchId: string; status: string; sessionId: string | null; chunkIndex: number | null; counts: BatchCounts }
   | { ok: false; error: { code: string; message: string; missingHeaders?: string[] } };
 
 type RowPayload = {
@@ -204,16 +211,26 @@ export async function confirmImportBatch(
   // chunk's own retry loop), surfaced as chunk_content_mismatch by
   // findDuplicateBatch's 23505 fallback, never silently resumed here as
   // a plain duplicate.
-  const underlyingFileMatch = await findLiveBatchByUnderlyingFile(
-    supabase,
-    restaurantId,
-    fileDigestHex,
-    options.sessionId !== undefined && options.chunkIndex !== undefined
-      ? { sessionId: options.sessionId, chunkIndex: options.chunkIndex }
-      : undefined,
-  );
-  if (underlyingFileMatch) {
-    return toAlreadyExistsResult(supabase, underlyingFileMatch);
+  // Sol round-3 audit (2026-08-27) finding 3: a sibling chunk of the SAME
+  // session carrying identical bytes is a legitimate duplicate segment
+  // (e.g. a duplicated export range), never this confirm's own slot — the
+  // WHOLE session is excluded here, not just the exact (session,
+  // chunkIndex) slot the old code excluded. The exact-slot retry case
+  // (same chunk re-submitted, content changed or not) is still handled
+  // exactly as before: excluded here by the same session exclusion, then
+  // decided by the create RPC's own unique index + findDuplicateBatch's
+  // 23505 fallback below (idempotent resume, or chunk_content_mismatch).
+  const preCheck = await findLiveBatchByUnderlyingFile(supabase, restaurantId, fileDigestHex, {
+    excludeSessionId: options.sessionId,
+  });
+  if (!preCheck.ok) {
+    // Sol round-3 audit finding 4: fail CLOSED on a lookup error — never
+    // fall through to create_import_batch when we couldn't actually check
+    // for a duplicate.
+    return { ok: false, error: preCheck.error };
+  }
+  if (preCheck.match) {
+    return toAlreadyExistsResult(supabase, preCheck.match);
   }
 
   const rowsPayload: RowPayload[] = preview.rows.map((row) => ({
@@ -262,6 +279,80 @@ export async function confirmImportBatch(
   }
 
   const batchId = (data as { batchId: string }).batchId;
+
+  // Sol round-3 audit (2026-08-27) finding 2: decide-AFTER-write TOCTOU
+  // close. The pre-check above ran BEFORE this insert — two concurrent
+  // confirms for the same underlying file but different content_sha256
+  // FORMATS (one bare, one overrides-v1-namespaced; the unique index from
+  // 0103 is an exact content_sha256 match and can't catch this) can both
+  // pass their own pre-check and both reach create_import_batch. Re-run
+  // the identical lookup now, excluding our own just-created batch (and
+  // our own session, for the same reason as the pre-check), and apply a
+  // deterministic total order over (created_at, id) so at most one of the
+  // two racing confirms survives as a live batch.
+  //
+  // Why this always converges to exactly one survivor, never two and
+  // never zero: each request's post-check runs strictly AFTER its own
+  // insert has committed (this is the very next thing this function does,
+  // in the same request). For two racing confirms A and B, suppose (for
+  // contradiction) that NEITHER sees the other on its post-check — i.e.
+  // A's post-check ran before B's insert committed, AND B's post-check
+  // ran before A's insert committed. Then: A's own commit precedes A's
+  // post-check (by construction) precedes B's commit (by assumption) —
+  // so A's commit precedes B's commit. Symmetrically, B's commit precedes
+  // B's post-check precedes A's commit — so B's commit precedes A's
+  // commit. Both can't be true, so at least one of A/B necessarily sees
+  // the other's already-committed row on its own post-check ("whichever
+  // inserts second always sees the first"). When BOTH see each other
+  // (both post-checks run after both commits), the SAME deterministic
+  // comparator applied on both sides agrees on which is "later" — so
+  // exactly one self-reverts, never both, never neither. This holds
+  // recursively for any N-way race: a loser only ever reverts ITSELF, so
+  // the live set only shrinks, converging on the single oldest survivor.
+  const ownBatch = await readBatchTimestamp(supabase, batchId);
+  if (!ownBatch) {
+    // Can't happen in practice (RLS-visible, same restaurant, just
+    // created by this exact request) — fail closed rather than silently
+    // skip the race check.
+    return {
+      ok: false,
+      error: { code: "duplicate_check_failed", message: "Could not verify this import — please try confirming again." },
+    };
+  }
+
+  const postCheck = await findLiveBatchByUnderlyingFile(supabase, restaurantId, fileDigestHex, {
+    excludeSessionId: options.sessionId,
+    excludeBatchId: batchId,
+  });
+  if (!postCheck.ok) {
+    return { ok: false, error: postCheck.error };
+  }
+
+  if (postCheck.match && batchIsLaterThan(ownBatch, postCheck.match)) {
+    // We lose the race. Nothing has applied yet — apply only ever starts
+    // after this confirm call returns — so undoing our own batch is
+    // always safe. import_batches/import_batch_rows both have DELETE
+    // REVOKEd from `authenticated` (0076) and migrations are locked for
+    // this fix, so a literal DELETE is out of reach; revert_import_batch
+    // (already TS-layer-reachable) is the equivalent move here — it flips
+    // our batch to status='reverted' (0 rows to revert, since nothing was
+    // ever applied), which every live-batch lookup in this file already
+    // treats as gone via .neq("status","reverted"): functionally
+    // indistinguishable from deleted to every future confirm.
+    const revertResult = await revertImportBatch(supabase, batchId);
+    if (!revertResult.ok) {
+      return {
+        ok: false,
+        error: {
+          code: "duplicate_check_failed",
+          message:
+            "This import raced with another upload of the same file and could not be reconciled automatically — please try confirming again.",
+        },
+      };
+    }
+    return toAlreadyExistsResult(supabase, postCheck.match);
+  }
+
   return {
     ok: true,
     alreadyExists: false,
@@ -269,6 +360,29 @@ export async function confirmImportBatch(
     totalRows: preview.rows.length,
     summary: summarize(preview.rows),
   };
+}
+
+/** Reads back the created_at this confirm's own just-inserted batch got —
+ * create_import_batch's RPC return value is `{batchId}` only (see 0107),
+ * so the total-order comparison finding 2's post-check needs has to be
+ * read back explicitly, by primary key (at most one row, ever). */
+async function readBatchTimestamp(
+  supabase: SupabaseClient<Database>,
+  batchId: string,
+): Promise<{ id: string; created_at: string } | null> {
+  const { data } = await supabase.from("import_batches").select("id, created_at").eq("id", batchId).maybeSingle();
+  return (data as { id: string; created_at: string } | null) ?? null;
+}
+
+/** Total order over (created_at, id): true when `a` is strictly LATER
+ * than `b`, meaning `a` is the one that must yield. Deterministic for any
+ * two rows both sides of a race read — see confirmImportBatch's own
+ * comment for why both sides necessarily agree. */
+function batchIsLaterThan(a: { created_at: string; id: string }, b: { created_at: string; id: string }): boolean {
+  const ta = Date.parse(a.created_at);
+  const tb = Date.parse(b.created_at);
+  if (ta !== tb) return ta > tb;
+  return a.id > b.id;
 }
 
 /** Looks up the pre-existing live batch a 23505 from create_import_batch
@@ -296,24 +410,24 @@ async function findDuplicateBatch(
 ): Promise<ConfirmBatchResult | null> {
   const { data: byHash } = await supabase
     .from("import_batches")
-    .select("id, status, session_id")
+    .select("id, status, session_id, chunk_index")
     .eq("restaurant_id", restaurantId)
     .eq("content_sha256", contentSha256)
     .neq("status", "reverted")
     .maybeSingle();
 
-  let match = byHash as { id: string; status: string; session_id: string | null } | null;
+  let match = byHash as { id: string; status: string; session_id: string | null; chunk_index: number | null } | null;
 
   if (!match && options.sessionId && options.chunkIndex !== undefined) {
     const { data: byChunk } = await supabase
       .from("import_batches")
-      .select("id, status, session_id, content_sha256")
+      .select("id, status, session_id, chunk_index, content_sha256")
       .eq("session_id", options.sessionId)
       .eq("chunk_index", options.chunkIndex)
       .neq("status", "reverted")
       .maybeSingle();
     const chunkMatch = byChunk as
-      | { id: string; status: string; session_id: string | null; content_sha256: string | null }
+      | { id: string; status: string; session_id: string | null; chunk_index: number | null; content_sha256: string | null }
       | null;
 
     if (chunkMatch && chunkMatch.content_sha256 !== contentSha256) {
@@ -340,52 +454,119 @@ async function findDuplicateBatch(
  * check) converges on this exact result shape. */
 async function toAlreadyExistsResult(
   supabase: SupabaseClient<Database>,
-  match: { id: string; status: string; session_id: string | null },
+  match: { id: string; status: string; session_id: string | null; chunk_index: number | null },
 ): Promise<ConfirmBatchResult> {
   const counts = await countBatchRows(supabase, match.id);
-  return { ok: true, alreadyExists: true, batchId: match.id, status: match.status, sessionId: match.session_id, counts };
+  return {
+    ok: true,
+    alreadyExists: true,
+    batchId: match.id,
+    status: match.status,
+    sessionId: match.session_id,
+    chunkIndex: match.chunk_index,
+    counts,
+  };
 }
 
-/** Sol round-2 audit (2026-08-27) finding 2: finds a live (non-reverted) batch for
- * this restaurant whose content_sha256 refers to the SAME underlying file
- * as fileDigestHex — either the bare digest itself, or ANY overrides-v1
- * namespaced digest ending in it (the namespaced format always embeds the
- * bare file digest as its trailing segment — see confirmImportBatch's own
- * digest-construction comment). Hex digests contain no LIKE metacharacters,
- * so the pattern below is safe to build directly from fileDigestHex.
+type LiveBatchMatch = {
+  id: string;
+  status: string;
+  session_id: string | null;
+  chunk_index: number | null;
+  content_sha256: string | null;
+  created_at: string;
+};
+
+type FindLiveBatchResult =
+  | { ok: true; match: LiveBatchMatch | null }
+  | { ok: false; error: { code: string; message: string } };
+
+/** Sol round-3 audit (2026-08-27) finding 6: the DB query below can only
+ * express "contains fileDigestHex as a LIKE match," which also matches a
+ * malformed, multi-colon content_sha256 value engineered to contain the
+ * file's own digest as a trailing substring in the right position. Every
+ * candidate row is re-checked here against the two EXACT formats
+ * content_sha256 can ever legitimately hold (see confirmImportBatch's own
+ * digest-construction comment) before being treated as a real match. */
+function isWellFormedDigestForFile(contentSha256: string | null, fileDigestHex: string): boolean {
+  if (!contentSha256) return false;
+  if (contentSha256 === fileDigestHex) return true;
+  return new RegExp(`^${OVERRIDES_DIGEST_PREFIX}[0-9a-f]{64}:${fileDigestHex}$`).test(contentSha256);
+}
+
+/** Sol round-2/3 audit (2026-08-27) findings 2/3/4/6: finds the OLDEST live
+ * (non-reverted) batch for this restaurant whose content_sha256 refers to
+ * the SAME underlying file as fileDigestHex — either the bare digest
+ * itself, or ANY overrides-v1 namespaced digest ending in it (the
+ * namespaced format always embeds the bare file digest as its trailing
+ * segment). Hex digests contain no LIKE metacharacters, so the pattern is
+ * safe to build directly from fileDigestHex.
  *
- * `exclude` is the exact (session_id, chunk_index) slot THIS confirm is
- * targeting, when it has one — a match sitting in that exact slot is never
- * returned here, even if content_sha256 also happens to match; that
- * specific "same chunk slot, different content" case is finding 1's
- * territory (chunk_content_mismatch, decided by findDuplicateBatch once
- * the create RPC's own unique index actually rejects it). Every OTHER
- * live batch on the same underlying file — a different session, a
- * different chunk slot, or no session at all — IS a genuine duplicate the
- * operator must revert before importing this file again with different
- * (or no) fixes. */
+ * `excludeSessionId`, when given, excludes EVERY batch belonging to that
+ * whole session (finding 3) — not just one chunk slot. Two sibling chunks
+ * of the SAME session carrying identical bytes are a legitimate duplicate
+ * segment (e.g. a duplicated export range), never each other's
+ * confirmation; the exact-slot retry case (same chunk re-submitted) is
+ * still handled by the create RPC's own unique index + findDuplicateBatch's
+ * 23505 fallback, unaffected by this exclusion. `excludeBatchId`, when
+ * given, excludes one specific batch id — used by the finding-2 POST-write
+ * check to exclude the confirm's own just-created row, which obviously
+ * matches its own content_sha256.
+ *
+ * Finding 4: this used to be `.maybeSingle()`, which THROWS a PostgREST
+ * error (not "no match") when more than one row satisfies the filter —
+ * the old code discarded that error (destructured only `data`) and fell
+ * through to creating a THIRD live variant. Replaced with a deterministic
+ * ordered LIST read (oldest created_at, then oldest id, first) — errors
+ * are now propagated as a typed, retryable confirm error (fail CLOSED,
+ * never silently proceed to create on a lookup failure) rather than
+ * discarded. limit(2) is enough to distinguish "zero live matches" from
+ * "at least one," and per the oldest-survives rule finding 2's post-check
+ * applies, the first (oldest) row after the finding-6 format re-check is
+ * always the correct resume/comparison target. */
 async function findLiveBatchByUnderlyingFile(
   supabase: SupabaseClient<Database>,
   restaurantId: string,
   fileDigestHex: string,
-  exclude?: { sessionId: string; chunkIndex: number },
-): Promise<{ id: string; status: string; session_id: string | null } | null> {
-  const { data } = await supabase
+  options: { excludeSessionId?: string; excludeBatchId?: string } = {},
+): Promise<FindLiveBatchResult> {
+  let query = supabase
     .from("import_batches")
-    .select("id, status, session_id, chunk_index")
+    .select("id, status, session_id, chunk_index, content_sha256, created_at")
     .eq("restaurant_id", restaurantId)
     .neq("status", "reverted")
-    .or(`content_sha256.eq.${fileDigestHex},content_sha256.like.${OVERRIDES_DIGEST_PREFIX}%:${fileDigestHex}`)
-    .maybeSingle();
+    .or(`content_sha256.eq.${fileDigestHex},content_sha256.like.${OVERRIDES_DIGEST_PREFIX}%:${fileDigestHex}`);
 
-  const match = data as
-    | { id: string; status: string; session_id: string | null; chunk_index: number | null }
-    | null;
-  if (!match) return null;
-  if (exclude && match.session_id === exclude.sessionId && match.chunk_index === exclude.chunkIndex) {
-    return null;
+  if (options.excludeSessionId) {
+    // NULL-safe "not this session": a plain `.neq("session_id", id)` would
+    // silently drop every session_id IS NULL row too (`NULL <> id` is
+    // UNKNOWN, not TRUE, in SQL's three-valued WHERE logic) — those
+    // sessionless batches are never part of the session being excluded
+    // and must still count as genuine duplicates.
+    query = query.or(`session_id.is.null,session_id.neq.${options.excludeSessionId}`);
   }
-  return match;
+  if (options.excludeBatchId) {
+    query = query.neq("id", options.excludeBatchId);
+  }
+
+  const { data, error } = await query
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(2);
+
+  if (error) {
+    return {
+      ok: false,
+      error: {
+        code: "duplicate_check_failed",
+        message: "Could not verify this file wasn't already imported — please try confirming again.",
+      },
+    };
+  }
+
+  const rows = (data ?? []) as LiveBatchMatch[];
+  const match = rows.find((row) => isWellFormedDigestForFile(row.content_sha256 ?? null, fileDigestHex)) ?? null;
+  return { ok: true, match };
 }
 
 export type BatchCounts = {

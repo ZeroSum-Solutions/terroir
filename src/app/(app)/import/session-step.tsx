@@ -376,13 +376,26 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
       // content collided by hash with the OLD session's chunk. Adopting it
       // into this new session would split one file across two incomplete
       // sessions; stop and hand the original session back to the caller.
-      if (body.alreadyExists && body.sessionId !== activeSessionId) {
+      //
+      // Sol round-3 audit (2026-08-27) finding 3: a same-session match
+      // whose chunk_index does NOT equal the slot being confirmed right
+      // now is a SIBLING chunk carrying identical bytes (e.g. a duplicated
+      // export segment) — never this chunk's own confirmation. Requiring
+      // BOTH sessionId AND chunkIndex to match before treating the
+      // response as "this chunk is done" closes the gap where such a
+      // sibling match would otherwise mark this slot "confirmed" while no
+      // batch actually claims it, silently dropping this chunk's rows.
+      if (body.alreadyExists && (body.sessionId !== activeSessionId || body.chunkIndex !== chunk.index)) {
+        const sameSession = body.sessionId === activeSessionId;
         // Either conflict path stops the upload — reflect that on the
         // chunk itself so it never sits frozen at "uploading".
-        const conflictError =
-          !body.sessionId
-            ? `Chunk ${chunk.index} was already imported as a standalone batch. Revert that batch under ` +
-              "Recent imports before re-uploading this file."
+        const conflictError = !body.sessionId
+          ? `Chunk ${chunk.index} was already imported as a standalone batch. Revert that batch under ` +
+            "Recent imports before re-uploading this file."
+          : sameSession
+            ? `Chunk ${chunk.index}'s content matches a DIFFERENT chunk already confirmed in this same session — ` +
+              "duplicate segments must be imported separately, and can't be resolved automatically. Revert the " +
+              "conflicting chunk before re-uploading this one."
             : "This file was already partially uploaded as a different, unfinished import — resuming that import " +
               "instead of starting a second one.";
         results = results.map((c) =>
@@ -395,11 +408,18 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
         if (!body.sessionId) {
           return { ok: false, error: conflictError };
         }
+        // Same session but the WRONG chunk slot — there is no "other
+        // session" to resume, this is a hard stop the operator must
+        // resolve directly, never a conflictingSessionId redirect.
+        if (sameSession) {
+          return { ok: false, error: conflictError };
+        }
         return { ok: false, error: conflictError, conflictingSessionId: body.sessionId as string };
       }
 
-      // 201 (new) or 200 (alreadyExists: identical bytes already confirmed
-      // under THIS session) — either way this chunk is now live server-side.
+      // 201 (new), or 200 (alreadyExists: THIS exact chunk slot, in THIS
+      // session, was already confirmed) — either way this chunk is now
+      // live server-side.
       results = results.map((c) =>
         c.index === chunk.index ? { ...c, status: "confirmed", batchId: body.batchId as string, error: null, code: null } : c,
       );

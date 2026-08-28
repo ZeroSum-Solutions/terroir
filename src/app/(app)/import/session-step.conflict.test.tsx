@@ -72,12 +72,31 @@ describe("confirmChunkedSession duplicate-content conflicts", () => {
     expect(finalChunk?.status).toBe("failed");
   });
 
-  it("still confirms normally when the duplicate belongs to THIS session", async () => {
-    const { promise, progressStates } = run({ alreadyExists: true, sessionId: "session-new", batchId: "b-same" });
+  it("still confirms normally when the duplicate belongs to THIS session AND this exact chunk slot", async () => {
+    const { promise, progressStates } = run({ alreadyExists: true, sessionId: "session-new", chunkIndex: 1, batchId: "b-same" });
     const result = await promise;
     expect(result.ok).toBe(true);
     const finalChunk = progressStates.at(-1)?.find((c) => c.index === 1);
     expect(finalChunk?.status).toBe("confirmed");
     expect(finalChunk?.batchId).toBe("b-same");
+  });
+
+  // Sol round-3 audit (2026-08-27) finding 3: a sibling chunk of the SAME
+  // session carrying identical bytes must never be mistaken for THIS
+  // chunk's own confirmation — sessionId alone matching is not enough,
+  // chunkIndex must match too.
+  it("hard-stops (never a silent confirm) when the duplicate belongs to THIS session but a DIFFERENT chunk slot", async () => {
+    const { promise, progressStates } = run({ alreadyExists: true, sessionId: "session-new", chunkIndex: 2, batchId: "b-sibling" });
+    const result = await promise;
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/different chunk already confirmed/i);
+      // No "other session" to resume — this is a same-session, wrong-slot
+      // hard stop, not a cross-session redirect.
+      expect(result.conflictingSessionId).toBeUndefined();
+    }
+    const finalChunk = progressStates.at(-1)?.find((c) => c.index === 1);
+    expect(finalChunk?.status).toBe("failed");
+    expect(finalChunk?.batchId).toBeNull();
   });
 });

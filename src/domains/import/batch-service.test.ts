@@ -64,6 +64,7 @@ type FakeBatchRow = {
   chunk_index: number | null;
   content_sha256: string | null;
   restaurant_id: string;
+  created_at: string;
 };
 
 /** A minimal, QUERY-AWARE fake for `.from("import_batches")` — unlike a
@@ -74,11 +75,26 @@ type FakeBatchRow = {
  * to hand-tune a call-count-based mock for every new query shape. `rows`
  * is a live reference — a caller can push into it (e.g. from inside a
  * create_import_batch RPC handler) to simulate either a pre-existing
- * batch or a concurrent insert landing mid-request. */
-function fakeImportBatchesTable(rows: FakeBatchRow[]) {
+ * batch or a concurrent insert landing mid-request.
+ *
+ * Sol round-3 audit (2026-08-27) finding 4: two terminal shapes now exist,
+ * mirroring real postgrest-js semantics —
+ *   - `.maybeSingle()` ERRORS (never silently returns the first row) when
+ *     more than one row matches, exactly like real PGRST116.
+ *   - awaiting the builder directly (no `.maybeSingle()`), after
+ *     `.order()`/`.limit()`, resolves a real LIST — `{data: Row[], error}`
+ *     — sorted per every `.order()` call (in registration order, primary
+ *     key first) and sliced to `.limit()`. This is the shape
+ *     findLiveBatchByUnderlyingFile now reads.
+ * `injectError`, when set, makes the LIST path resolve `{data: null,
+ * error}` instead — simulating a genuine lookup failure so the fail-closed
+ * behavior (finding 4) can be pinned directly. */
+function fakeImportBatchesTable(rows: FakeBatchRow[], options: { injectError?: { code: string; message: string } } = {}) {
   return vi.fn((table: string) => {
     if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
     let predicate: (row: FakeBatchRow) => boolean = () => true;
+    const orderCols: { col: keyof FakeBatchRow; ascending: boolean }[] = [];
+    let limitN: number | null = null;
     const builder = {
       select: () => builder,
       eq: (col: keyof FakeBatchRow, val: unknown) => {
@@ -102,6 +118,8 @@ function fakeImportBatchesTable(rows: FakeBatchRow[]) {
           clauses.some(({ col, op, value }) => {
             const cell = row[col];
             if (op === "eq") return cell === value;
+            if (op === "neq") return cell !== value;
+            if (op === "is") return value === "null" ? cell === null : String(cell) === value;
             if (op === "like") {
               const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*");
               return typeof cell === "string" && new RegExp(`^${escaped}$`).test(cell);
@@ -110,7 +128,44 @@ function fakeImportBatchesTable(rows: FakeBatchRow[]) {
           });
         return builder;
       },
-      maybeSingle: async () => ({ data: rows.filter(predicate)[0] ?? null, error: null }),
+      order: (col: keyof FakeBatchRow, opts?: { ascending?: boolean }) => {
+        orderCols.push({ col, ascending: opts?.ascending ?? true });
+        return builder;
+      },
+      limit: (n: number) => {
+        limitN = n;
+        return builder;
+      },
+      maybeSingle: async () => {
+        const matches = rows.filter(predicate);
+        if (matches.length > 1) {
+          return { data: null, error: { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned" } };
+        }
+        return { data: matches[0] ?? null, error: null };
+      },
+      // Thenable — awaiting the builder directly (the list-read path,
+      // no terminal .maybeSingle()) resolves this.
+      then(resolve: (value: { data: FakeBatchRow[] | null; error: unknown }) => void) {
+        if (options.injectError) {
+          resolve({ data: null, error: options.injectError });
+          return;
+        }
+        let result = rows.filter(predicate);
+        // Apply sorts in REVERSE registration order — Array.prototype.sort
+        // is stable, so sorting least-significant-first and most-
+        // significant-last produces correct multi-key ordering exactly
+        // like PostgREST's own comma-separated `order=` param.
+        for (const { col, ascending } of [...orderCols].reverse()) {
+          result = [...result].sort((a, b) => {
+            const av = a[col];
+            const bv = b[col];
+            if (av === bv) return 0;
+            return (av! < bv! ? -1 : 1) * (ascending ? 1 : -1);
+          });
+        }
+        if (limitN !== null) result = result.slice(0, limitN);
+        resolve({ data: result, error: null });
+      },
     };
     return builder;
   });
@@ -119,15 +174,28 @@ function fakeImportBatchesTable(rows: FakeBatchRow[]) {
 describe("confirmImportBatch", () => {
   it("persists the batch via ONE create_import_batch RPC call (C09: batch+rows insert is now one atomic function call, not two client statements)", async () => {
     let createArgs: { p_rows: unknown[]; p_content_sha256: string } | undefined;
+    // Sol round-3 audit finding 2's post-write check reads the
+    // just-created batch back by id — the fake row list here mirrors
+    // that INSERT so the read-back finds it, matching real DB behavior.
+    const rows: FakeBatchRow[] = [];
     const supabase = {
       rpc: makeRpc({
         match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
         create_import_batch: (args) => {
           createArgs = args as typeof createArgs;
+          rows.push({
+            id: BATCH_ID,
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2026-08-27T00:00:00.000Z",
+          });
           return { data: { batchId: BATCH_ID }, error: null };
         },
       }),
-      from: fakeImportBatchesTable([]),
+      from: fakeImportBatchesTable(rows),
     };
 
     const result = await confirmImportBatch(
@@ -153,15 +221,25 @@ describe("confirmImportBatch", () => {
   // every such row at apply time.
   it("sends producer as empty string (never null) in the RPC payload for a producer-less file", async () => {
     let createArgs: { p_rows: Array<{ raw: Record<string, unknown>; row_state: string }> } | undefined;
+    const rows: FakeBatchRow[] = [];
     const supabase = {
       rpc: makeRpc({
         match_lwin_bulk: () => ({ data: [], error: null }),
         create_import_batch: (args) => {
           createArgs = args as typeof createArgs;
+          rows.push({
+            id: BATCH_ID,
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2026-08-27T00:00:00.000Z",
+          });
           return { data: { batchId: BATCH_ID }, error: null };
         },
       }),
-      from: fakeImportBatchesTable([]),
+      from: fakeImportBatchesTable(rows),
     };
 
     const result = await confirmImportBatch(
@@ -216,6 +294,7 @@ describe("confirmImportBatch", () => {
             chunk_index: null,
             content_sha256: bareHash,
             restaurant_id: RESTAURANT_ID,
+            created_at: "2026-08-27T00:00:00.000Z",
           });
           return {
             data: null,
@@ -252,15 +331,25 @@ describe("confirmImportBatch", () => {
   describe("rowOverrides", () => {
     it("applies an override before validation, flipping an error row to valid", async () => {
       let createArgs: { p_rows: Array<{ row_number: number; row_state: string; raw: Record<string, unknown> }> } | undefined;
+      const rows: FakeBatchRow[] = [];
       const supabase = {
         rpc: makeRpc({
           match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
           create_import_batch: (args) => {
             createArgs = args as typeof createArgs;
+            rows.push({
+              id: BATCH_ID,
+              status: "created",
+              session_id: null,
+              chunk_index: null,
+              content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+              restaurant_id: RESTAURANT_ID,
+              created_at: "2026-08-27T00:00:00.000Z",
+            });
             return { data: { batchId: BATCH_ID }, error: null };
           },
         }),
-        from: fakeImportBatchesTable([]),
+        from: fakeImportBatchesTable(rows),
       };
 
       // Fractional quantity 0.9 is STRICTLY rejected by the validator —
@@ -284,15 +373,25 @@ describe("confirmImportBatch", () => {
       let createArgs: {
         p_rows: Array<{ row_number: number; row_state: string; validation_errors: Array<{ field: string }> }>;
       } | undefined;
+      const rows: FakeBatchRow[] = [];
       const supabase = {
         rpc: makeRpc({
           match_lwin_bulk: () => ({ data: [], error: null }),
           create_import_batch: (args) => {
             createArgs = args as typeof createArgs;
+            rows.push({
+              id: BATCH_ID,
+              status: "created",
+              session_id: null,
+              chunk_index: null,
+              content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+              restaurant_id: RESTAURANT_ID,
+              created_at: "2026-08-27T00:00:00.000Z",
+            });
             return { data: { batchId: BATCH_ID }, error: null };
           },
         }),
-        from: fakeImportBatchesTable([]),
+        from: fakeImportBatchesTable(rows),
       };
 
       // The override itself is still fractional — server-side validation
@@ -462,7 +561,9 @@ describe("confirmImportBatch — underlying-file idempotency across override for
         if (name === "create_import_batch") {
           createCalls.push(args);
           const typedArgs = args as { p_session_id: string | null; p_chunk_index: number | null; p_content_sha256: string };
-          const id = `batch-${nextId++}`;
+          const seq = nextId;
+          nextId += 1;
+          const id = `batch-${seq}`;
           rows.push({
             id,
             status: "created",
@@ -470,6 +571,11 @@ describe("confirmImportBatch — underlying-file idempotency across override for
             chunk_index: typedArgs.p_chunk_index,
             content_sha256: typedArgs.p_content_sha256,
             restaurant_id: RESTAURANT_ID,
+            // Strictly increasing with insertion order — later confirms
+            // in a test always get a LATER created_at, matching real DB
+            // behavior and letting the oldest-survives rule (finding 2)
+            // be exercised deterministically.
+            created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, seq)).toISOString(),
           });
           return Promise.resolve({ data: { batchId: id }, error: null });
         }
@@ -540,6 +646,359 @@ describe("confirmImportBatch — underlying-file idempotency across override for
   });
 });
 
+// Sol round-3 audit (2026-08-27) finding 2: the pre-check above runs
+// BEFORE create_import_batch's own insert — two concurrent confirms for
+// the same underlying file but different content_sha256 FORMATS (one
+// bare, one overrides-v1-namespaced) can both pass their own pre-check
+// and both reach the RPC. confirmImportBatch now re-checks AFTER its own
+// insert commits and applies a deterministic (created_at, id) total order
+// so at most one of the two racing confirms survives as a live batch.
+describe("confirmImportBatch — decide-after-write TOCTOU close (Sol round-3 audit finding 2)", () => {
+  function raceSupabase(rivalCreatedAt: string, ownCreatedAt: string) {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [];
+    const revertedBatchIds: string[] = [];
+    const supabase = {
+      rpc: vi.fn((name: string, args: unknown) => {
+        if (name === "match_lwin_bulk") return Promise.resolve({ data: [], error: null });
+        if (name === "create_import_batch") {
+          // Simulates the race: by the time OUR insert lands, a RIVAL
+          // confirm for the same underlying file (a different
+          // content_sha256 FORMAT — bare vs overrides-v1 — so the DB's
+          // exact-match unique index never caught it) has ALSO committed.
+          // Our own pre-check (which ran before this RPC call) never saw
+          // it — both rows only exist from this instant on.
+          rows.push({
+            id: "rival-batch",
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: fileHex,
+            restaurant_id: RESTAURANT_ID,
+            created_at: rivalCreatedAt,
+          });
+          rows.push({
+            id: "own-batch",
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: `overrides-v1:${"a".repeat(64)}:${fileHex}`,
+            restaurant_id: RESTAURANT_ID,
+            created_at: ownCreatedAt,
+          });
+          return Promise.resolve({ data: { batchId: "own-batch" }, error: null });
+        }
+        if (name === "count_import_batch_rows") {
+          return Promise.resolve({
+            data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+            error: null,
+          });
+        }
+        if (name === "revert_import_batch") {
+          revertedBatchIds.push((args as { p_batch_id: string }).p_batch_id);
+          return Promise.resolve({ data: 0, error: null });
+        }
+        throw new Error(`unexpected rpc ${name}`);
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+    return { supabase, file, revertedBatchIds };
+  }
+
+  it("reverts our own batch and returns the OLDER rival's already-exists result when we lose the race", async () => {
+    const { supabase, file, revertedBatchIds } = raceSupabase(
+      "2020-01-01T00:00:00.000Z", // rival: older
+      "2030-01-01T00:00:00.000Z", // ours: later — we lose
+    );
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rowOverrides: { "1": { quantity: "12" } },
+    });
+
+    expect(revertedBatchIds).toEqual(["own-batch"]);
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: "rival-batch" });
+  });
+
+  it("proceeds and never reverts anything when we win the race (our own batch is OLDER)", async () => {
+    const { supabase, file, revertedBatchIds } = raceSupabase(
+      "2030-01-01T00:00:00.000Z", // rival: later
+      "2020-01-01T00:00:00.000Z", // ours: older — we win
+    );
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rowOverrides: { "1": { quantity: "12" } },
+    });
+
+    expect(revertedBatchIds).toEqual([]);
+    expect(result).toMatchObject({ ok: true, alreadyExists: false, batchId: "own-batch" });
+  });
+});
+
+// Sol round-3 audit (2026-08-27) finding 4: findLiveBatchByUnderlyingFile
+// used to be `.maybeSingle()`, which THROWS (not "no match") when more
+// than one row satisfies the filter — the old code discarded that error
+// and silently fell through to creating a THIRD live variant. It's now a
+// deterministic ordered LIST read: a lookup error fails the confirm
+// closed (never proceeds to create), and two-or-more live variants
+// resolve against the OLDEST one instead of erroring.
+describe("confirmImportBatch — underlying-file lookup failure semantics (Sol round-3 audit finding 4)", () => {
+  it("fails CLOSED with a retryable error when the underlying-file lookup itself errors — never creates a batch", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const createCalls: unknown[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: (args) => {
+          createCalls.push(args);
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable([], { injectError: { code: "XX000", message: "connection reset by peer" } }),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_check_failed" } });
+    expect(createCalls).toHaveLength(0);
+  });
+
+  it("resolves against the OLDEST live variant when TWO already exist for the same underlying file — never creates a third", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        id: "variant-newer",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:${"b".repeat(64)}:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2025-06-01T00:00:00.000Z",
+      },
+      {
+        id: "variant-older",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
+    ];
+    const createCalls: unknown[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: (args) => {
+          createCalls.push(args);
+          return { data: { batchId: "should-not-be-created" }, error: null };
+        },
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        }),
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rowOverrides: { "1": { quantity: "12" } },
+    });
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: "variant-older" });
+    expect(createCalls).toHaveLength(0);
+  });
+
+  // Sol round-3 audit finding 6: the LIKE pattern can also match a
+  // malformed, multi-colon content_sha256 that merely CONTAINS the file's
+  // digest as a trailing substring — never a real bare-file or
+  // overrides-v1 digest. Candidates are re-checked against the exact
+  // format before being treated as a match.
+  it("never treats a malformed multi-colon content_sha256 as a match, even though it satisfies the LIKE pattern", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        id: "malformed-batch",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        // Three colon-separated segments, not two — satisfies
+        // `content_sha256.like.overrides-v1:%:<fileHex>` (the `%` matches
+        // "extra:garbage") but is not a real digest this codebase ever
+        // writes.
+        content_sha256: `overrides-v1:extra:garbage:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
+    ];
+    const createCalls: unknown[] = [];
+    const rowsAfterCreate: FakeBatchRow[] = [...rows];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: (args) => {
+          createCalls.push(args);
+          rowsAfterCreate.push({
+            id: BATCH_ID,
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: fileHex,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2026-08-27T00:00:00.000Z",
+          });
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        }),
+      }),
+      from: fakeImportBatchesTable(rowsAfterCreate),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    // The malformed row is never treated as a rival — a fresh batch is
+    // created normally.
+    expect(result).toMatchObject({ ok: true, alreadyExists: false, batchId: BATCH_ID });
+    expect(createCalls).toHaveLength(1);
+  });
+});
+
+// Sol round-3 audit (2026-08-27) finding 3: a sibling chunk of the SAME
+// session carrying identical underlying-file bytes is a legitimate
+// duplicate segment (e.g. a duplicated export range) — it must never be
+// mistaken for the OTHER chunk that happens to share those bytes.
+//
+// Two distinct real-world cases, both pinned below:
+//   (a) the sibling chunk carries its OWN row-fix overrides, so its
+//       content_sha256 is a genuinely DIFFERENT string from the other
+//       chunk's (0103's unique index is an EXACT string match — it does
+//       not collide). Before this fix, findLiveBatchByUnderlyingFile's
+//       cross-format check (finding 2) would still wrongly short-circuit
+//       this as "already exists" pointing at the OTHER chunk, even though
+//       the DB itself would have allowed a genuinely distinct insert —
+//       excluding the whole session from that check lets it actually
+//       create its own batch.
+//   (b) the sibling chunk has NO overrides of its own, so its digest is
+//       BYTE-IDENTICAL to the other chunk's — 0103's (restaurant_id,
+//       content_sha256) unique index has no session/chunk_index
+//       dimension at all, so the DB itself genuinely 23505s this insert;
+//       there is no TS-layer way around that (migrations are locked).
+//       What the TS layer CAN and must guarantee is that the resulting
+//       already-exists result carries the OTHER chunk's real chunkIndex
+//       (not the target's) so the client (session-step.tsx) can detect
+//       the mismatch and hard-stop instead of silently marking this slot
+//       "confirmed".
+describe("confirmImportBatch — sibling chunk within the same session (Sol round-3 audit finding 3)", () => {
+  it("(a) creates its own batch for a sibling chunk sharing underlying bytes but carrying its OWN row-fix overrides (a genuinely different content_sha256 string)", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const SESSION_ID = "session-siblings";
+    // Chunk 1 of this session already confirmed with these exact bytes,
+    // no overrides — its digest is the bare file hash.
+    const rows: FakeBatchRow[] = [
+      {
+        id: "chunk-1-batch",
+        status: "created",
+        session_id: SESSION_ID,
+        chunk_index: 1,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
+    ];
+    const createCalls: unknown[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+        create_import_batch: (args) => {
+          createCalls.push(args);
+          rows.push({
+            id: "chunk-2-batch",
+            status: "created",
+            session_id: SESSION_ID,
+            chunk_index: 2,
+            content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2024-01-01T00:00:01.000Z",
+          });
+          return { data: { batchId: "chunk-2-batch" }, error: null };
+        },
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        }),
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    // Chunk 2 of the SAME session, same underlying bytes as chunk 1, but
+    // this confirm carries its own (no-op-content, still non-empty)
+    // row-fix override — its content_sha256 is the overrides-v1 format,
+    // a different STRING from chunk 1's bare digest.
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.part2.csv", file, {
+      sessionId: SESSION_ID,
+      chunkIndex: 2,
+      chunkTotal: 2,
+      rowOverrides: { "1": { quantity: "6" } },
+    });
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: false, batchId: "chunk-2-batch" });
+    expect(createCalls).toHaveLength(1);
+  });
+
+  it("(b) surfaces the OTHER chunk's real chunkIndex (never the target's) when a byte-identical sibling genuinely 23505s at the DB's own unique index", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const SESSION_ID = "session-siblings";
+    const rows: FakeBatchRow[] = [
+      {
+        id: "chunk-1-batch",
+        status: "created",
+        session_id: SESSION_ID,
+        chunk_index: 1,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
+    ];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+        // Chunk 2 carries no overrides, so its digest is the exact same
+        // bare fileHex chunk 1 already holds — the real DB unique index
+        // (restaurant_id, content_sha256) genuinely rejects this insert,
+        // exactly as it would in production.
+        create_import_batch: () => ({
+          data: null,
+          error: { code: "23505", message: 'duplicate key value violates unique constraint "import_batches_content_sha256_idx"' },
+        }),
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        }),
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.part2.csv", file, {
+      sessionId: SESSION_ID,
+      chunkIndex: 2,
+      chunkTotal: 2,
+    });
+
+    // alreadyExists is technically true, but chunkIndex (1) does NOT
+    // match the confirm target (2) — session-step.tsx's own finding-3 fix
+    // requires BOTH sessionId and chunkIndex to match before treating
+    // this as "this chunk is done" (see session-step.conflict.test.tsx).
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: "chunk-1-batch", sessionId: SESSION_ID, chunkIndex: 1 });
+  });
+});
+
 // Sol audit (2026-08-27) finding 1: the (session_id, chunk_index)
 // conflict fallback used to resume whatever batch already held that
 // chunk slot without ever checking its stored content_sha256 — so a
@@ -567,6 +1026,7 @@ describe("confirmImportBatch — session-chunk conflict path (Sol audit finding 
         chunk_index: 1,
         content_sha256: storedContentSha256,
         restaurant_id: RESTAURANT_ID,
+        created_at: "2026-08-27T00:00:00.000Z",
       },
     ];
     return {

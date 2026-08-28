@@ -149,6 +149,123 @@ describe("PreviewStep — locked rows in a confirmed chunk (Sol round-2 audit fi
   }
 });
 
+describe("PreviewStep — confirm-in-flight freeze (Sol round-3 audit finding 1)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+  });
+
+  it("freezes every row-fix input while a confirm attempt is in flight, then unlocks failed/unattempted rows once it settles", async () => {
+    const { container, root } = await mount(
+      <PreviewStep {...baseProps({ errorRows: [errorRow(1), errorRow(2)], confirming: true })} />,
+    );
+
+    expect(rowItem(container, "Row 1").querySelector("input")!.disabled).toBe(true);
+    expect(rowItem(container, "Row 2").querySelector("input")!.disabled).toBe(true);
+    expect(container.textContent).toContain("Import in progress — row edits are locked during upload.");
+
+    // The attempt settles: confirming flips back to false. Neither row
+    // belongs to a chunk that actually got confirmed (a failed or
+    // never-attempted chunk), so isRowLocked stays false for both —
+    // editing must be possible again immediately, not just eventually.
+    await act(async () =>
+      root.render(
+        <PreviewStep {...baseProps({ errorRows: [errorRow(1), errorRow(2)], confirming: false, isRowLocked: () => false })} />,
+      ),
+    );
+
+    expect(rowItem(container, "Row 1").querySelector("input")!.disabled).toBe(false);
+    expect(rowItem(container, "Row 2").querySelector("input")!.disabled).toBe(false);
+    expect(container.textContent).not.toContain("Import in progress — row edits are locked during upload.");
+  });
+
+  it("keeps a row PERMANENTLY locked once its own chunk is confirmed, even after the freeze lifts", async () => {
+    const { container, root } = await mount(
+      <PreviewStep {...baseProps({ errorRows: [errorRow(1)], confirming: true, isRowLocked: () => true })} />,
+    );
+    expect(rowItem(container, "Row 1").querySelector("input")!.disabled).toBe(true);
+
+    await act(async () =>
+      root.render(
+        <PreviewStep {...baseProps({ errorRows: [errorRow(1)], confirming: false, isRowLocked: () => true })} />,
+      ),
+    );
+    const afterInput = rowItem(container, "Row 1").querySelector("input")!;
+    expect(afterInput.disabled).toBe(true);
+    expect(rowItem(container, "Row 1").textContent).toContain("Row already imported with this chunk");
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+});
+
+describe("PreviewStep — revalidated summary counts (Sol round-3 audit finding 5)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+  });
+
+  it("moves a fixed row from Errors (excluded) into Ready to apply, and notes the projection", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          summary: { ...ZERO_SUMMARY, totalRows: 1, errorRows: 1, readyToApplyRows: 0 },
+          errorRows: [errorRow(1, { rawText: { ...EMPTY_RAW_TEXT, producer: "Domaine", name: "Wine 1", quantity: "0.9" } })],
+          rowOverrides: { 1: { quantity: "6" } },
+        })}
+      />,
+    );
+
+    const stats = new Map(
+      [...container.querySelectorAll("dt")].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]),
+    );
+    expect(stats.get("Ready to apply")).toBe("1");
+    expect(stats.get("Errors (excluded)")).toBe("0");
+    expect(container.textContent).toContain("Includes 1 row fixed above — re-checked when you confirm.");
+  });
+
+  it("leaves the counts untouched when nothing has been fixed yet", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          summary: { ...ZERO_SUMMARY, totalRows: 1, errorRows: 1, readyToApplyRows: 0 },
+          errorRows: [errorRow(1)],
+        })}
+      />,
+    );
+
+    const stats = new Map(
+      [...container.querySelectorAll("dt")].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]),
+    );
+    expect(stats.get("Ready to apply")).toBe("0");
+    expect(stats.get("Errors (excluded)")).toBe("1");
+    expect(container.textContent).not.toContain("re-checked when you confirm");
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+});
+
 describe("PreviewStep — honest chunk/data-row label (Sol round-2 audit finding 5)", () => {
   const mountedRoots: Root[] = [];
 
