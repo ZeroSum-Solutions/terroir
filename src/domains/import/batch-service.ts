@@ -1168,10 +1168,14 @@ async function reconcileLiveBatchesForFile(
       // Round-21 audit correction (block: the round-17/19 "parses to one
       // candidate is already resolved" premise was wrong — dropping a
       // malformed ENTRY never reverts the underlying batch it described).
-      // The client must decide resolution from what this function actually
-      // found, not from whatever survives its own parseConflictingBatches
-      // filtering — so the exact candidate count is carried as its own
-      // field, immune to that filtering by construction. Same
+      // Round-25 audit (SHARED ROOT CAUSE): the client no longer decides
+      // resolution from this count, or from anything else in this response
+      // — see import-client.tsx's visibleConflictCandidates comment; the
+      // only thing that decides a conflict is gone is the server's answer
+      // to a LATER confirm attempt. This field is carried purely for
+      // display, immune to parseConflictingBatches' own filtering by
+      // construction, so the client's "may be more than shown" note stays
+      // accurate even when a malformed entry is dropped. Same
       // truncated-lower-bound caveat as the message above.
       conflictingBatchesCount: candidates.length,
       // Round-23 audit: the client-side note about undisplayable candidates

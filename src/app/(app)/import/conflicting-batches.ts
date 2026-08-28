@@ -59,21 +59,46 @@ export function parseConflictingBatches(value: unknown): ConflictingBatchInfo[] 
  * handleRevertConflict drops a successfully-reverted candidate from the
  * panel and exposes a retry affordance instead of guessing "resolved." */
 
-/** Round-23 audit (BLOCK 2, round-22 audit): the old note pointed at
- * "Recent imports" and claimed exactly one candidate was missing —
- * wrong on both counts. "Recent imports" shows only the ten newest
- * batches (RecentImports, import-client.tsx), so a conflicting batch old
- * enough to have aged out is not actually reachable there; and the missing
- * count can be more than one, whether from the server's own
- * LIVE_BATCH_LOOKUP_LIMIT cap or from this client dropping more than one
- * malformed entry. This note makes neither claim: it says plainly that
- * some candidates aren't shown, and points at the one recovery that
- * actually works regardless of how many are missing or where they rank by
- * recency — revert what IS shown, then retry, since the server re-checks
- * fresh every time and will report whatever is still live. Shared between
- * import-client.tsx's handleConfirm (plain path) and session-step.tsx's
- * sendChunk (chunked path) so the two surfaces never say different things
+/** Round-25 audit (SHARED ROOT CAUSE): the STANDING on-screen instruction
+ * for a live multiple_live_batches conflict — recomputed from CURRENT
+ * client state on every render (displayed-candidate count, truncation
+ * flag), never baked once from the server's one-shot response and left to
+ * go stale as reverts land underneath it. The server's own message
+ * (rendered separately, verbatim, as the one-time reason THIS confirm
+ * attempt failed) is not touched by this function at all.
+ *
+ * Never names a specific count: BLOCK 1 (round-25 audit) was exactly a
+ * count/instruction that stayed on screen unchanged while the operator
+ * reverted candidates out from under it — a count is precisely the kind of
+ * detail that goes stale.
+ *
+ * `hasDisplayedCandidates` false is BLOCK 2 (round-25 audit): every
+ * candidate failed to parse (or the server reported none), so "revert
+ * what's shown above" is nonsensical — there is nothing shown. That case
+ * must say what the operator can actually do: retry (always available now
+ * — see PreviewStep's own hasTerminalReconciliationConflict comment) and
+ * where else to look, never repeat the old dead-end wording.
+ *
+ * `mayHaveMore` softens the guidance to a possibility, never a certainty —
+ * WARN (round-25 audit): batch-service.ts's own rawReadHitCap/
+ * conflictingBatchesTruncated means additional candidates MAY exist; an
+ * exact-at-the-cap read that happens to have nothing beyond it also sets
+ * the flag, so claiming categorically that some are missing would
+ * sometimes be false. "There may be more" is honest either way.
+ *
+ * Shared between import-client.tsx's PreviewStep (plain and chunked paths
+ * both render through it) so the two surfaces never say different things
  * about the identical situation. */
-export const CONFLICT_UNDISPLAYED_NOTE =
-  "Not every conflicting batch for this file could be displayed here. Revert what's shown above, then retry — " +
-  "the server will report any that remain.";
+export function conflictStandingInstruction(hasDisplayedCandidates: boolean, mayHaveMore: boolean): string {
+  if (!hasDisplayedCandidates) {
+    return (
+      "This file has another import in progress that couldn't be listed here. Retry — it re-checks with the " +
+      "server and will report what's still live — or look for the conflicting batch under Recent imports."
+    );
+  }
+  return mayHaveMore
+    ? "This file has other imports in progress, and there may be more than are listed below. Revert the ones " +
+      "shown, then retry — the retry re-checks with the server."
+    : "This file has other imports in progress. Revert the ones listed below, then retry — the retry re-checks " +
+      "with the server.";
+}

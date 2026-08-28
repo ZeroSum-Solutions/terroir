@@ -9,7 +9,6 @@ import {
   type ChunkedPlanState,
 } from "./session-step";
 import { buildImportAnywayOverride } from "./import-client";
-import { CONFLICT_UNDISPLAYED_NOTE } from "./conflicting-batches";
 import type { CanonicalHeader } from "@/domains/import/constants";
 import type { RowOverrides } from "@/domains/import/preview-service";
 
@@ -704,7 +703,7 @@ describe("confirmChunkedSession — captures conflictingBatches from a multiple_
 // candidate is simply undisplayable. Retrying without reverting anything
 // hits the identical conflict every time.
 describe("confirmChunkedSession — a conflict that PARSES to one candidate is NOT a resolved conflict (round-21 audit correction)", () => {
-  it("keeps the terminal multiple_live_batches code when a malformed sibling entry leaves only one displayable candidate, and states honestly that one could not be shown", async () => {
+  it("keeps the terminal multiple_live_batches code when a malformed sibling entry leaves only one displayable candidate, and stores the server's message verbatim (the undisplayed-candidate note is PreviewStep's job now)", async () => {
     // The SERVER emitted two real candidates (conflictingBatchesCount: 2 —
     // batch-service.ts's own count, immune to this client's parsing). One
     // entry is malformed (its created_at field is missing — the exact kind
@@ -749,21 +748,25 @@ describe("confirmChunkedSession — a conflict that PARSES to one candidate is N
     // payload — while the server's real count (2) survives untouched.
     expect(upload[0].conflictingBatches).toEqual([wireConflictingBatches[0]]);
     expect(upload[0].conflictingBatchesCount).toBe(2);
-    // The conflict is still real: the terminal code stays, blocking both
-    // Retry and Confirm until the operator has actually reverted something
-    // (import-client.tsx's hasRevertedAnyConflict) — this is a dead end
-    // only if no other affordance exists, which is exactly what the honest
-    // "not all could be shown" copy below fixes.
+    // The conflict is still real: this chunk's own attempt failed with the
+    // terminal multiple_live_batches code, and reconciliation touched
+    // nothing. Round-25 audit (SHARED ROOT CAUSE): Retry/Confirm itself is
+    // no longer gated on a revert having happened (import-client.tsx's
+    // PreviewStep, hasTerminalReconciliationConflict) — that gate is
+    // computed in the UI layer, not here; this driver only reports what
+    // the server said about THIS attempt.
     expect(upload[0].code).toBe("multiple_live_batches");
     expect(upload[0].status).toBe("failed");
     // STORED text (upload[0].error, what ChunkUploadProgress renders next
     // to the chunk) and RETURNED text (result.error) both carry the
-    // server's own message PLUS an honest note that not everything could
-    // be displayed — round-23 audit (SIMPLIFY): CONFLICT_UNDISPLAYED_NOTE
-    // names no specific count and never claims Recent imports can reach a
-    // batch outside its own ten-newest window (round-22 audit BLOCK 2) —
-    // never the false "already resolved" wording rounds 17-19 shipped.
-    const expectedMessage = `This file has 2 live import batches for the same underlying content. ${CONFLICT_UNDISPLAYED_NOTE}`;
+    // server's own message VERBATIM — round-25 audit (SHARED ROOT CAUSE):
+    // the undisplayed-candidate note used to be baked in here too, going
+    // stale the same way the standing instruction did; PreviewStep now
+    // renders that guidance itself, live, from conflictingBatches.length
+    // and conflictingBatchesTruncated (conflictStandingInstruction,
+    // import-client.tsx) — never the false "already resolved" wording
+    // rounds 17-19 shipped.
+    const expectedMessage = "This file has 2 live import batches for the same underlying content.";
     expect(result).toMatchObject({ ok: false, error: expectedMessage });
     expect(upload[0].error).toBe(expectedMessage);
     expect(upload[0].error).not.toMatch(/already (been )?resolved/i);
@@ -818,15 +821,18 @@ describe("confirmChunkedSession — a conflict that PARSES to one candidate is N
 
   // Round-23 audit (TESTS — round-22 audit WARN 4): the round-21 fixture
   // above only ever exercised exactly ONE missing candidate (a single
-  // malformed sibling). CONFLICT_UNDISPLAYED_NOTE names no specific count,
-  // so it's correct whether one OR several are missing — this fixture pins
-  // that against a SEVERAL-missing shape: the server's own
-  // conflictingBatchesTruncated flag true (the LIVE_BATCH_LOOKUP_LIMIT cap
-  // — batch-service.ts), with conflictingBatchesCount equal to the
-  // displayed array's length, which the OLD count-vs-array-length check
-  // alone (pre round-23) would have missed entirely (round-22 audit
-  // BLOCK 2).
-  it("states the same honest, count-free note for SEVERAL missing candidates (a capped read, not just a single parse-dropped entry)", async () => {
+  // malformed sibling). This fixture pins a SEVERAL-missing shape instead:
+  // the server's own conflictingBatchesTruncated flag true (the
+  // LIVE_BATCH_LOOKUP_LIMIT cap — batch-service.ts), with
+  // conflictingBatchesCount equal to the displayed array's length, which
+  // the OLD count-vs-array-length check alone (pre round-23) would have
+  // missed entirely (round-22 audit BLOCK 2). Round-25 audit (SHARED ROOT
+  // CAUSE): the STORED/RETURNED message carries the server's own text
+  // verbatim regardless — this driver no longer appends any note of its
+  // own — so this test now only pins that conflictingBatchesTruncated
+  // rides through untouched, for PreviewStep's own live standing
+  // instruction to pick up (conflictStandingInstruction, import-client.tsx).
+  it("carries the server's conflictingBatchesTruncated flag through untouched for SEVERAL missing candidates (a capped read, not just a single parse-dropped entry)", async () => {
     const conflictingBatches = Array.from({ length: 5 }, (_, i) => ({
       id: `batch-${i}`,
       filename: "cellar.csv",
@@ -866,8 +872,7 @@ describe("confirmChunkedSession — a conflict that PARSES to one candidate is N
     });
 
     expect(upload[0].conflictingBatchesTruncated).toBe(true);
-    const expectedMessage = `${serverMessage} ${CONFLICT_UNDISPLAYED_NOTE}`;
-    expect(result).toMatchObject({ ok: false, error: expectedMessage });
-    expect(upload[0].error).toBe(expectedMessage);
+    expect(result).toMatchObject({ ok: false, error: serverMessage });
+    expect(upload[0].error).toBe(serverMessage);
   });
 });

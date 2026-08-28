@@ -33,7 +33,7 @@ import {
   type ChunkedPreviewState,
   type ChunkUploadState,
 } from "./session-step";
-import { parseConflictingBatches, CONFLICT_UNDISPLAYED_NOTE, type ConflictingBatchInfo } from "./conflicting-batches";
+import { parseConflictingBatches, conflictStandingInstruction, type ConflictingBatchInfo } from "./conflicting-batches";
 
 /** One error row's worth of prefill text for the inline row-fix form —
  * the exact text the row was validated against, for every canonical
@@ -373,17 +373,22 @@ export function ImportClient() {
   // Round-23 audit: ids the operator has successfully reverted (2xx/404/409
   // from the revert endpoint — see handleRevertConflict) during THIS
   // conflict, across both the plain and chunked paths. Used only to drop a
-  // done candidate from the panel and to unlock a retry affordance
-  // (hasRevertedAnyConflict below) — never to decide the conflict itself is
+  // done candidate from the panel — never to decide the conflict itself is
   // resolved. Cleared by reset() so a later, unrelated conflict starts
   // clean.
+  //
+  // Round-25 audit (SHARED ROOT CAUSE): this used to also gate a
+  // hasRevertedAnyConflict flag that Retry/Confirm required before
+  // rendering at all — deleted. There is no reason to require a revert
+  // before allowing a re-check: the server re-evaluates on every confirm
+  // attempt, and a retry that changes nothing simply re-raises the same
+  // conflict with fresh data, harmless and repeatable. Gating it left a
+  // payload whose candidates ALL failed to parse (BLOCK 2) with no
+  // affordance in this panel able to ever become true — a genuine dead
+  // end — and made the buttons flip state after exactly one revert while
+  // the terminal copy stayed frozen (BLOCK 1). See PreviewStep's own
+  // hasTerminalReconciliationConflict comment.
   const [revertedConflictBatchIds, setRevertedConflictBatchIds] = useState<Set<string>>(new Set());
-  // Round-23 audit: true once at least one revert above has actually
-  // succeeded. A terminal multiple_live_batches state must always expose a
-  // way back to Confirm/Retry once the operator has done SOMETHING about
-  // it — this is that affordance. Clicking Confirm/Retry re-sends the
-  // request; the server, not this flag, decides whether it now succeeds.
-  const [hasRevertedAnyConflict, setHasRevertedAnyConflict] = useState(false);
   // Inline row-fix: rowNumber is GLOBAL (the number shown in the preview
   // UI) for both the plain and chunked paths — handleConfirmChunked
   // translates it back to each chunk's own local row numbers.
@@ -600,22 +605,19 @@ export function ImportClient() {
         // comment. The only thing that decides this conflict is gone is the
         // server reporting success on a LATER confirm attempt.
         const effectiveCode = exhausted ? "duplicate_race_retry_exhausted" : code;
-        // Some candidates can still fail to display even though the
-        // conflict itself is real and unresolved — the operator must never
-        // be left with nothing to act on. See CONFLICT_UNDISPLAYED_NOTE's
-        // own comment for why this note names no specific count or claims
-        // about where the missing candidate(s) can be found.
-        const hasUndisplayedCandidates =
-          code === "multiple_live_batches" &&
-          (conflictingBatchesTruncated ||
-            (typeof conflictingBatchesCount === "number" && conflictingBatches.length < conflictingBatchesCount));
+        // Round-25 audit (SHARED ROOT CAUSE): this used to append an
+        // undisplayed-candidates note onto `message` here, baking it into
+        // previewError once at confirm-failure time — exactly the kind of
+        // frozen standing instruction that goes stale as reverts land.
+        // PreviewStep now renders that guidance itself, live, from
+        // conflictingBatches.length and conflictingBatchesTruncated on
+        // every render (conflictStandingInstruction) — this is just the
+        // server's own one-shot reason for THIS attempt failing.
         const effectiveMessage = exhausted
           ? `This upload still conflicts with another live import for this file after ${priorRaceRetryCount} ` +
             "attempts — this needs a human to resolve. Revert the conflicting batch under Recent imports before " +
             "uploading this file again."
-          : hasUndisplayedCandidates
-            ? `${message} ${CONFLICT_UNDISPLAYED_NOTE}`
-            : message;
+          : message;
 
         setConfirmDuplicateRaceRetryCount(priorRaceRetryCount);
         setConfirmErrorCode(effectiveCode);
@@ -792,7 +794,6 @@ export function ImportClient() {
     // recorded against it, never inherit "the operator already reverted
     // something" from an unrelated, already-abandoned conflict.
     setRevertedConflictBatchIds(new Set());
-    setHasRevertedAnyConflict(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
@@ -851,12 +852,16 @@ export function ImportClient() {
    * was the recurring defect across rounds 18/20/22. All this does now is
    * (a) record that the revert actually happened (2xx/404/409 — the same
    * three outcomes BLOCK 1, round-13 audit, always treated as "the batch
-   * is gone"), which drops it from the panel and unlocks the Confirm/Retry
-   * button PreviewStep renders once hasRevertedAnyConflict is true, and
-   * (b) surface the cleanup outcome for a 2xx exactly like before. The
-   * terminal error/code and previewError message are left exactly as they
-   * were — clicking Confirm/Retry re-sends the request, and the SERVER's
-   * answer is what actually updates them. */
+   * is gone"), which drops it from the panel, and (b) surface the cleanup
+   * outcome for a 2xx exactly like before. The terminal error/code and
+   * previewError message are left exactly as they were — clicking
+   * Confirm/Retry re-sends the request, and the SERVER's answer is what
+   * actually updates them.
+   *
+   * Round-25 audit (SHARED ROOT CAUSE): Confirm/Retry is no longer gated
+   * on a revert having happened at all — see PreviewStep's own
+   * hasTerminalReconciliationConflict comment — so this no longer needs to
+   * "unlock" anything. */
   const handleRevertConflict = useCallback(async () => {
     const target = conflictRevertTarget;
     if (!target) return;
@@ -888,17 +893,16 @@ export function ImportClient() {
         setConflictRevertOutcomes((prev) => [...prev, { id: batchId, filename: target.filename, result }]);
       }
 
-      // This batch is done — drop it from the panel, and expose the way
-      // back to Confirm/Retry (PreviewStep's own hasRevertedAnyConflict
-      // gate). Whether the WHOLE conflict is actually gone is for the
-      // server to say on the next confirm attempt, not for this client to
+      // This batch is done — drop it from the panel. Whether the WHOLE
+      // conflict is actually gone is for the server to say on the next
+      // confirm attempt (always available — see PreviewStep's own
+      // hasTerminalReconciliationConflict comment), not for this client to
       // guess from what's left in the list.
       setRevertedConflictBatchIds((prev) => {
         const next = new Set(prev);
         next.add(batchId);
         return next;
       });
-      setHasRevertedAnyConflict(true);
       void loadRecent();
     } catch {
       setPreviewError("Revert failed. Check your connection and try again.");
@@ -958,7 +962,6 @@ export function ImportClient() {
           onRevertConflict={requestRevertConflict}
           revertingConflictId={revertingConflictId}
           conflictRevertOutcomes={conflictRevertOutcomes}
-          hasRevertedAnyConflict={hasRevertedAnyConflict}
         />
       )}
 
@@ -1109,7 +1112,6 @@ export function PreviewStep({
   onRevertConflict,
   revertingConflictId,
   conflictRevertOutcomes,
-  hasRevertedAnyConflict,
 }: {
   filename: string;
   summary: PreviewSummary;
@@ -1180,16 +1182,6 @@ export function PreviewStep({
    * this fix. Rendered with the SAME summarizeRevertResult copy BatchStep's
    * own success panel uses. */
   conflictRevertOutcomes?: { id: string; filename: string; result: RevertResult }[];
-  /** Round-23 audit (SIMPLIFY): true once the operator has successfully
-   * reverted at least one conflicting batch (ImportClient's own
-   * handleRevertConflict) — a terminal multiple_live_batches state must
-   * always expose a way back to Confirm/Retry once the operator has done
-   * SOMETHING about it, rather than a dead end whose only exit is a button
-   * that isn't there. Clicking Confirm/Retry re-sends the request; the
-   * SERVER decides whether it now succeeds, not this flag. Never affects
-   * duplicate_race_retry_exhausted, which has no revert affordance in this
-   * panel to begin with and stays hard-blocked. */
-  hasRevertedAnyConflict?: boolean;
 }) {
   // Sol round-2 audit (2026-08-27) finding 4: incremental disclosure
   // instead of a hard cap — starts at MAX_SHOWN_ERROR_ROWS and grows by
@@ -1296,18 +1288,28 @@ export function PreviewStep({
     // FINDING 3 (round-11 audit): the plain (non-chunked) path's own
     // terminal code — see plainConfirmErrorCode's own comment.
     plainConfirmErrorCode === "duplicate_race_retry_exhausted";
-  // Round-23 audit (SIMPLIFY): multiple_live_batches is DIFFERENT — this
-  // panel offers a real, in-place revert affordance for it (below), so it
-  // is terminal only until the operator has actually used that affordance
-  // at least once (hasRevertedAnyConflict). See that prop's own comment
-  // for why this must never stay a dead end once a revert has succeeded —
-  // clicking Confirm/Retry re-sends the request and lets the SERVER decide
-  // whether the conflict is actually gone, rather than this panel guessing.
+  // Round-25 audit (SHARED ROOT CAUSE, replaces round-23's SIMPLIFY here):
+  // multiple_live_batches used to block Confirm/Retry until the operator
+  // had reverted at least one candidate (hasRevertedAnyConflict) — deleted
+  // entirely. There is no reason to require a revert first: the server
+  // re-evaluates on every confirm attempt regardless of what this client
+  // has or hasn't reverted, so a retry that changes nothing simply
+  // re-raises the same conflict with fresh data, harmless and repeatable.
+  // Gating it produced two real defects: a payload whose candidates ALL
+  // failed to parse had no revert affordance to ever flip the gate, a
+  // genuine dead end (BLOCK 2); and after exactly one revert of many the
+  // button appeared while the terminal copy stayed frozen on the server's
+  // original, now-stale count (BLOCK 1). multiple_live_batches no longer
+  // contributes to hasTerminalReconciliationConflict at all — it is kept
+  // as its own flag only to drive the conflict panel and the live standing
+  // instruction below (conflictStandingInstruction), never to block a
+  // button. duplicate_race_retry_exhausted is unaffected: it has no revert
+  // affordance in this panel to begin with (its own resolution lives under
+  // Recent imports) and stays hard-blocked.
   const hasMultipleLiveBatchesConflict =
     (chunkUpload?.some((c) => c.status === "failed" && c.code === "multiple_live_batches") ?? false) ||
     plainConfirmErrorCode === "multiple_live_batches";
-  const hasTerminalReconciliationConflict =
-    hasExhaustedDuplicateRace || (hasMultipleLiveBatchesConflict && !hasRevertedAnyConflict);
+  const hasTerminalReconciliationConflict = hasExhaustedDuplicateRace;
   // Round-4 audit finding 2: duplicate_chunk_content is also terminal by
   // default — no "Retry upload" — since a blind retry re-sends the exact
   // same bytes and 23505s the same way every time. UNLIKE
@@ -1509,21 +1511,26 @@ export function PreviewStep({
         </div>
       )}
 
-      {/* Round-21 audit correction: rendered INDEPENDENTLY of the panel
-          above — a source can be genuinely unresolved with EVERY one of
-          its candidates undisplayable (conflictingBatches empty, panel not
-          shown at all), and the operator must still see an honest note and
-          a real way forward rather than a dead end. Round-23 audit (BLOCK
-          2, round-22 audit): copy is CONFLICT_UNDISPLAYED_NOTE — it names
-          no specific count (correct whether one or several are missing)
-          and never claims Recent imports can reach a batch outside its
-          own ten-newest window; "revert what's shown, then retry" is the
-          one recovery that actually works regardless of how many are
-          missing or where they rank by recency. */}
-      {conflictingBatchesTruncated && (
+      {/* Round-25 audit (SHARED ROOT CAUSE): the STANDING instruction for a
+          live multiple_live_batches conflict — rendered INDEPENDENTLY of
+          the server's one-shot `error` message above, and recomputed from
+          CURRENT props (conflictingBatches.length,
+          conflictingBatchesTruncated) on every render via
+          conflictStandingInstruction, rather than a count baked in once
+          when the confirm attempt failed. This is what actually fixes
+          BLOCK 1 (a stale "revert N more" instruction sitting next to a
+          button that no longer agrees with it — a count is exactly what
+          goes stale) and BLOCK 2 (a source can be genuinely unresolved
+          with EVERY one of its candidates undisplayable —
+          conflictingBatches empty, panel above not shown at all — and the
+          operator must still see a real way forward, never "revert what's
+          shown above" pointed at nothing). Retry/Confirm is always
+          available for this conflict now (hasTerminalReconciliationConflict
+          above), so this never claims otherwise. */}
+      {hasMultipleLiveBatchesConflict && (
         <p className="mt-md flex items-start gap-xs text-[13px] text-ink">
           <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
-          {CONFLICT_UNDISPLAYED_NOTE}
+          {conflictStandingInstruction((conflictingBatches?.length ?? 0) > 0, conflictingBatchesTruncated ?? false)}
         </p>
       )}
 

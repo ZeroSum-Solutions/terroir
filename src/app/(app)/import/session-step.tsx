@@ -25,7 +25,7 @@ import { ActionDialog } from "@/components/action-dialog";
 import { CLIENT_CHUNK_TARGET_ROWS, type CanonicalHeader } from "@/domains/import/constants";
 import { buildChunkPlan, serializeChunk, sha256HexOfBytes } from "@/domains/import/csv-splitter";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
-import { parseConflictingBatches, CONFLICT_UNDISPLAYED_NOTE, type ConflictingBatchInfo } from "./conflicting-batches";
+import { parseConflictingBatches, type ConflictingBatchInfo } from "./conflicting-batches";
 import type { BatchRow, ErrorRowEntry, RowOverrides } from "./import-client";
 
 // ---------------------------------------------------------------------------
@@ -510,22 +510,20 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
         // chunk's conflict is gone is the server reporting success on a
         // LATER confirm attempt.
         const effectiveCode = exhausted ? "duplicate_race_retry_exhausted" : code;
-        // Some candidates can still fail to display even though the
-        // conflict itself is real and unresolved — the operator must never
-        // be left with nothing to act on. See CONFLICT_UNDISPLAYED_NOTE's
-        // own comment for why this note names no specific count or claims
-        // about where the missing candidate(s) can be found.
-        const hasUndisplayedCandidates =
-          code === "multiple_live_batches" &&
-          (conflictingBatchesTruncated ||
-            (typeof conflictingBatchesCount === "number" && (conflictingBatches?.length ?? 0) < conflictingBatchesCount));
+        // Round-25 audit (SHARED ROOT CAUSE): this used to append an
+        // undisplayed-candidates note onto `message` here, baking it into
+        // the STORED chunk error once at request-failure time — exactly
+        // the kind of frozen standing instruction that goes stale as
+        // reverts land. PreviewStep now renders that guidance itself,
+        // live, from conflictingBatches.length and conflictingBatchesTruncated
+        // on every render (conflictStandingInstruction, import-client.tsx),
+        // so this is just the server's own one-shot reason for THIS
+        // attempt failing.
         const effectiveMessage = exhausted
           ? `Chunk ${chunk.index} of ${plan.chunkTotal} still conflicts with another live import for this file ` +
             `after ${priorRaceRetryCount} attempts — this needs a human to resolve. Revert the conflicting batch ` +
             "under Recent imports before uploading this file again."
-          : hasUndisplayedCandidates
-            ? `${message} ${CONFLICT_UNDISPLAYED_NOTE}`
-            : message;
+          : message;
 
         results = results.map((c) =>
           c.index === chunk.index

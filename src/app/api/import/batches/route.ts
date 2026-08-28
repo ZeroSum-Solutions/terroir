@@ -106,9 +106,11 @@ async function postBatches(request: NextRequest) {
     // still being in the ten-newest Recent imports list. Round-21 audit
     // correction: conflictingBatchesCount rides alongside it — the client's
     // own parseConflictingBatches can drop a malformed entry from the array
-    // above without the underlying conflict actually shrinking, so it must
-    // decide resolution from this count (batch-service.ts's own comment),
-    // never from the array's length.
+    // above without the underlying conflict actually shrinking. Round-25
+    // audit (SHARED ROOT CAUSE): the client no longer decides resolution
+    // from this count, or from anything in this response at all — it's
+    // carried only so the client's "may be more than shown" note stays
+    // accurate even when the array's own length undercounts.
     const details =
       result.error.missingHeaders || result.error.conflictingBatches
         ? {
