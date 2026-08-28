@@ -18,6 +18,7 @@ import { ActionDialog } from "@/components/action-dialog";
 import { CLIENT_CHUNK_TARGET_ROWS, type CanonicalHeader } from "@/domains/import/constants";
 import { buildChunkPlan, serializeChunk, sha256HexOfBytes } from "@/domains/import/csv-splitter";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
+import { parseConflictingBatches } from "./import-client";
 import type { BatchRow, ConflictingBatchInfo, ErrorRowEntry, RowOverrides } from "./import-client";
 
 // ---------------------------------------------------------------------------
@@ -456,7 +457,9 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
         const message: string = body?.error?.message ?? "Upload failed.";
         // FINDING 2 (round-11 audit): present only on multiple_live_batches
         // — see ConflictingBatchInfo's own comment.
-        const conflictingBatches: ConflictingBatchInfo[] | undefined = body?.error?.details?.conflictingBatches;
+        const conflictingBatches: ConflictingBatchInfo[] | undefined = parseConflictingBatches(
+          body?.error?.details?.conflictingBatches,
+        );
 
         // WARN 5 (round-9/10 audit): duplicate_race_retry is retryable BY
         // DESIGN — a genuinely transient race the next attempt normally
@@ -610,6 +613,17 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
                 // change" gate PreviewStep computes on retry.
                 sentOverridesSnapshot: conflictCode === "duplicate_chunk_content" ? chunkGlobalOverridesSlice : c.sentOverridesSnapshot,
                 duplicateOfChunkIndex: conflictCode === "duplicate_chunk_content" ? (body.chunkIndex as number) : c.duplicateOfChunkIndex,
+                // WARN 4 (round-13 audit): this 200 alreadyExists-for-the-
+                // wrong-session/chunk outcome is not a duplicate_race_retry
+                // failure — it must reset the counter exactly like the
+                // success transition and the network-error catch below
+                // already do (see duplicateRaceRetryCount's own contract).
+                // This branch used to spread `...c` unchanged, silently
+                // carrying forward whatever count the LAST
+                // duplicate_race_retry run on this chunk left behind, so
+                // `race, race, alreadyExists, race` wrongly counted the
+                // final race as attempt three instead of resetting first.
+                duplicateRaceRetryCount: 0,
               }
             : c,
         );

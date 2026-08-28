@@ -476,10 +476,13 @@ export async function confirmImportBatch(
  * reconcileLiveBatchesForFile's own comment: it now NEVER calls
  * revertImportBatch, only reads and reports. With 0 or 1 live candidates
  * it resumes the match; with 2 or more it returns a terminal
- * multiple_live_batches error naming every candidate and leaves ALL of
+ * multiple_live_batches error naming every candidate ITS OWN LOOKUP FOUND
+ * (findLiveBatchesByUnderlyingFile is capped at LIVE_BATCH_LOOKUP_LIMIT —
+ * WARN 5, round-13 audit — so this is "every candidate within that cap,"
+ * not a literal guarantee of completeness beyond it) and leaves ALL of
  * them live — recovery is an operator reverting by hand from Recent
- * imports (FINDING 2 makes every conflicting batch id reachable there,
- * not just the ten newest). So neither older claim holds any more: this
+ * imports (FINDING 2 makes every NAMED conflicting batch id reachable
+ * there, not just the ten newest). So neither older claim holds any more: this
  * file does not guarantee at most one live batch, and does not guarantee
  * at most one applied batch either — that would-be guarantee is what
  * findSiblingWithAppliedRows' own comment now documents as a NARROWED
@@ -491,23 +494,41 @@ export async function confirmImportBatch(
  *   1. Applying a batch requires a CLIENT holding that batch's own id (the
  *      apply endpoint is called with a specific batchId) — apply is never
  *      driven by a server-side scan that could stumble onto B on its own.
- *   2. B's own client never received a batchId to apply: every path that
- *      reaches this function returns an ERROR for B's request (never
- *      `{ ok: true, batchId: B }`), so no client anywhere holds a pointer
- *      to B. B can only ever be reached later via a DIFFERENT confirm's
- *      own pre-check (point 3, below) — never by the request that created it.
+ *   2. B's own client (the request that failed to create/self-revert it)
+ *      never received a batchId to apply: every path that reaches this
+ *      function returns an ERROR for that request (never
+ *      `{ ok: true, batchId: B }`). HONESTY-CORRECTED (round-13 audit,
+ *      BLOCK 3): earlier wording concluded from this that "no client
+ *      anywhere holds a pointer to B" — false. GET /api/import/batches
+ *      lists every live batch for the restaurant with no per-creator
+ *      filter (api/import/batches/route.ts's getBatches), and the import
+ *      UI's own Recent imports panel renders the newest ten of them with
+ *      an Open/Apply affordance (RecentImports, import-client.tsx) — any
+ *      authenticated member of this restaurant can reach and open B that
+ *      way, not only via a later confirm's own pre-check (point 3, below).
  *   3. A revert-failure here leaves B live alongside whatever rival (A)
  *      it lost to. The NEXT confirm attempt for the SAME underlying file,
  *      by any client, re-enters reconcileLiveBatchesForFile's pre-check,
  *      which now sees 2 (or more) live candidates for the file and
  *      returns the terminal multiple_live_batches conflict — it does NOT
  *      pick a survivor or revert anything automatically. B does not
- *      resolve itself; an operator has to revert it (or A) by hand.
- * A revert-failure orphan is still not, by itself, a data hazard: no
- * client anywhere holds a pointer to B (points 1-2), and reconciliation
- * only ever hands out a resume pointer when a single live candidate
- * remains, so a revert-failure alone cannot cause the same underlying
- * content to be applied twice. (The distinct hazard that CAN do that —
+ *      resolve itself; an operator has to revert it (or A) by hand —
+ *      whether they reach it through that conflict's own revert affordance
+ *      or by opening it directly from Recent imports (point 2).
+ * A revert-failure orphan is still not, by itself, a data hazard.
+ * HONESTY-CORRECTED (round-13 audit, BLOCK 3): this is NOT because B is
+ * unreachable — it is reachable (point 2) — it's because the safeguards
+ * that actually matter here don't depend on that. Reconciliation still
+ * never auto-picks a survivor once 2+ live candidates exist for the file
+ * (returns the terminal multiple_live_batches conflict instead, same as
+ * any other multi-candidate conflict), and findSiblingWithAppliedRows' own
+ * apply-time guard (see its own comment) refuses to apply ANY batch for a
+ * file — B included — once a sibling already has applied rows. A member
+ * who opens B from Recent imports and applies it either hits that guard or
+ * legitimately applies it as the surviving import for that file, exactly
+ * like resolving any other multiple_live_batches conflict by hand — never
+ * a distinct hazard unique to a revert-failure orphan. (The distinct
+ * hazard that CAN cause the same underlying content to be applied twice —
  * two sibling batches both applying concurrently — is the narrower race
  * findSiblingWithAppliedRows' own comment documents; it is unrelated to
  * whether a self-revert here succeeded.) That is what makes "retry once,
@@ -515,16 +536,19 @@ export async function confirmImportBatch(
  * shape for THIS function: unlike the old duplicate_check_failed branch
  * (which existed only because a live-but-unverified batch felt unsafe to
  * treat like an ordinary duplicate), there is no unsafe state left to
- * signal separately here — a failed revert produces an inert orphan
- * needing manual cleanup, same as a successful one produces nothing to
+ * signal separately here — a failed revert produces a leftover orphan
+ * batch needing manual cleanup, same as a successful one produces nothing to
  * clean up; the caller gets the same instruction either way: retry the
  * upload (and, if that now reports a conflict, revert the duplicate).
  *
  * Merge-integration note (item 5, PR #135): revertImportBatch grew a
  * required serviceClient parameter and its own orphan-wine/LWIN-stamp
  * cleanup phase after this function was written. This self-revert IS the
- * kind of debris item 5 targets in spirit — an operator never sees or acts
- * on batch B, so nothing else will ever clean up whatever it created — so
+ * kind of debris item 5 targets in spirit — HONESTY-CORRECTED (round-13
+ * audit, BLOCK 3): not because "an operator never sees or acts on batch B"
+ * (that was false — see point 2 above, B is reachable from Recent
+ * imports), but because nothing GUARANTEES a member ever will, and no
+ * other code path cleans up whatever B created if they don't — so
  * confirmImportBatch's own serviceClient (threaded from the route, exactly
  * like the /revert route's own createServiceRoleClient()) is passed through
  * here rather than hardcoding null. In practice this is a no-op today: per
@@ -571,8 +595,9 @@ async function selfRevertAndRetry(
       message: reverted
         ? "This upload raced with a duplicate confirm of the same file, and both attempts were withdrawn to avoid a conflict. Please retry the upload."
         : "This upload raced with a duplicate confirm of the same file and could not be fully withdrawn on this " +
-          "attempt. It is safely inert, but will not resolve itself — retrying may report a conflict with the " +
-          "other duplicate, which you can then revert from Recent imports. Please retry the upload.",
+          "attempt. It will not resolve itself, and any member of this restaurant can already open it from Recent " +
+          "imports — retrying may report a conflict with the other duplicate, which you can then revert from " +
+          "Recent imports. Please retry the upload.",
     },
   };
 }
@@ -1051,17 +1076,29 @@ async function reconcileLiveBatchesForFile(
     return { ok: true, match: candidates[0] ?? null };
   }
 
+  // WARN 5 (round-13 audit): findLiveBatchesByUnderlyingFile is capped at
+  // LIVE_BATCH_LOOKUP_LIMIT (its own comment) — if the read comes back
+  // exactly at that cap, there is no way to tell "exactly this many exist"
+  // from "more exist beyond the cap," so the count is stated as a lower
+  // bound rather than an exact, possibly-false "every conflicting batch"
+  // claim.
+  const candidateCountMayBeTruncated = candidates.length === LIVE_BATCH_LOOKUP_LIMIT;
+
   return {
     ok: false,
     error: {
       code: "multiple_live_batches",
       message:
-        `This file has ${candidates.length} live import batches for the same underlying content — this can't ` +
-        "be resolved automatically. Revert all but one of them below before resuming or re-uploading this file.",
+        `This file has ${candidateCountMayBeTruncated ? "at least " : ""}${candidates.length} live import ` +
+        "batches for the same underlying content — this can't be resolved automatically. Revert all but one of " +
+        "them below before resuming or re-uploading this file.",
       // FINDING 2 (round-11 audit): every candidate's id/filename/status/
-      // created_at, not just the count — see ConflictingBatchInfo's own
-      // comment for why this makes the conflict recoverable regardless of
-      // whether either batch is still in the ten-newest Recent imports list.
+      // created_at THIS LOOKUP FOUND, not just the count — see
+      // ConflictingBatchInfo's own comment for why this makes the conflict
+      // recoverable regardless of whether either batch is still in the
+      // ten-newest Recent imports list. WARN 5 (round-13 audit): "every
+      // candidate" is bounded by LIVE_BATCH_LOOKUP_LIMIT, same as the
+      // message above — not a literal guarantee beyond that cap.
       conflictingBatches: candidates.map((c) => ({
         id: c.id,
         filename: c.filename,

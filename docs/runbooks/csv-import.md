@@ -732,7 +732,28 @@ not only from the ten-newest "Recent imports" list — the error payload
 returns every conflicting batch's id, filename, `created_at`, and status,
 and the import client renders a revert affordance per batch directly in
 the conflict state, so a conflict whose batches have aged out of the
-ten-newest window is still fully recoverable.
+ten-newest window is still fully recoverable. Reverting the LAST named
+candidate now also clears the terminal `multiple_live_batches` code on
+both the plain and chunked paths (round-13 audit, BLOCK 1) — the panel
+used to remove the batch from the list but leave Confirm/Retry hidden and
+the stale error on screen, which was not a working recovery path.
+
+**The conflicting-batches list is capped, not exhaustive (WARN 5,
+round-13 audit).** `findLiveBatchesByUnderlyingFile`
+(`src/domains/import/batch-service.ts`) reads at most
+`LIVE_BATCH_LOOKUP_LIMIT` (20) candidate rows before format-filtering, and
+fails closed only when *none* of those 20 survive the filter. If more than
+20 legitimate live variants exist for the same underlying file — every one
+a well-formed `content_sha256` this product itself wrote, no contamination
+involved — the 21st and beyond are silently omitted from
+`multiple_live_batches`'s `conflictingBatches` payload; the conflict
+message states the count as "at least N" whenever the read comes back
+exactly at the cap, rather than asserting a possibly-false exact total.
+21+ simultaneous live conflicting batches for one file has never been
+observed in practice and would itself indicate something else has gone
+wrong upstream (nothing in this product's own paths creates that many
+live duplicates), so this is accepted rather than fixed by raising the
+cap or adding pagination.
 
 ## added_via provenance
 

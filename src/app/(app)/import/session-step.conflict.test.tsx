@@ -516,6 +516,54 @@ describe("confirmChunkedSession — bounded escalation for duplicate_race_retry 
     expect(upload[0]).toMatchObject({ code: "duplicate_race_retry", duplicateRaceRetryCount: 1 });
   });
 
+  // WARN 4 (round-13 audit): a 200 alreadyExists response for the WRONG
+  // session/chunk slot is a FOURTH transition that isn't a duplicate_race_
+  // retry failure either — it used to spread the prior chunk unchanged
+  // (`...c`), silently carrying the count forward, so
+  // `race, alreadyExists (wrong chunk), race` wrongly counted the second
+  // race as attempt two instead of resetting first, same bug as the
+  // network-error case below.
+  it("resets the count on a 200 alreadyExists response for the WRONG session/chunk slot too", async () => {
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) return jsonResponse(201, { sessionId: "session-new" });
+        call += 1;
+        // First attempt: duplicate_race_retry. Second: a 200 alreadyExists
+        // naming a DIFFERENT chunk slot in THIS SAME session — a sibling
+        // chunk carrying identical bytes, never this chunk's own
+        // confirmation (sameSession branch, hard stop with
+        // duplicate_chunk_content). Third: duplicate_race_retry again —
+        // count must have reset to 1, not continued to 2.
+        if (call === 2) {
+          return jsonResponse(200, { alreadyExists: true, sessionId: "session-new", chunkIndex: 2, batchId: "sibling-batch" });
+        }
+        return duplicateRaceRetryResponse();
+      }),
+    );
+
+    let upload: ChunkUploadState[] = [{ index: 1, status: "pending", batchId: null, error: null, code: null }];
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      await confirmChunkedSession({
+        plan: PLAN,
+        initialUpload: upload,
+        existingSessionId: "session-new",
+        fileLabel: "cellar.csv",
+        timestampsRef: { current: [] },
+        onSessionId: () => {},
+        onProgress: (u) => {
+          upload = u;
+        },
+      });
+    }
+
+    // duplicate_race_retry (1), alreadyExists/wrong chunk (reset to 0),
+    // duplicate_race_retry (1) — never continues to 2.
+    expect(upload[0]).toMatchObject({ code: "duplicate_race_retry", duplicateRaceRetryCount: 1 });
+  });
+
   // FINDING 4 (round-11 audit): the network-error catch block used to spread
   // the prior chunk unchanged, carrying duplicateRaceRetryCount forward
   // through a network error as if it were another duplicate_race_retry —

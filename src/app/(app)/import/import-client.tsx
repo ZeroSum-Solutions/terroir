@@ -174,6 +174,38 @@ export type BatchDetail = { batch: BatchSummary; rows: BatchRow[] };
  * still being in the ten-newest Recent imports list. */
 export type ConflictingBatchInfo = { id: string; filename: string; status: string; created_at: string };
 
+/** NIT 7 (round-13 audit): conflictingBatches arrives over the wire inside
+ * a 422 error body's `details` and used to be trusted through a bare `as`/
+ * type-annotation assertion — a malformed entry (any external response
+ * shape drift, a proxy/CDN rewriting the body, etc.) could crash the
+ * merge/dedup logic in ImportClient (the `.filter`/`.findIndex` calls
+ * building `conflictingBatches`) or the revert list's `key` prop. Validated
+ * at the boundary the same way this codebase validates other external
+ * input — a small hand-written type guard, matching batch-service.ts's own
+ * style (e.g. isWellFormedDigestForFile) rather than pulling a schema
+ * library into this client bundle for one shape. Malformed entries are
+ * dropped, never allowed to crash the UI. */
+function isConflictingBatchInfo(value: unknown): value is ConflictingBatchInfo {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.id === "string" &&
+    typeof v.filename === "string" &&
+    typeof v.status === "string" &&
+    typeof v.created_at === "string"
+  );
+}
+
+/** Returns `undefined` when `value` isn't an array at all (the field was
+ * simply absent — every non-multiple_live_batches error), matching the
+ * shape callers already expect for "no conflicting batches were reported."
+ * When it IS an array, malformed entries are filtered out rather than
+ * propagated. */
+export function parseConflictingBatches(value: unknown): ConflictingBatchInfo[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter(isConflictingBatchInfo);
+}
+
 type Step = "upload" | "preview" | "batch" | "session";
 
 const TEMPLATE_CSV = `${CANONICAL_HEADERS.join(",")}\nDomaine Example,Cuvee One,2020,Pinot Noir,Burgundy,France,750,,USD,6,24.50,,\n`;
@@ -522,7 +554,7 @@ export function ImportClient() {
       if (!response.ok) {
         const code: string | null = body?.error?.code ?? null;
         const message: string = body?.error?.message ?? "Import could not be created.";
-        const conflictingBatches: ConflictingBatchInfo[] = body?.error?.details?.conflictingBatches ?? [];
+        const conflictingBatches: ConflictingBatchInfo[] = parseConflictingBatches(body?.error?.details?.conflictingBatches) ?? [];
 
         // FINDING 3/4 (round-11 audit): the same bounded-escalation shape
         // ChunkUploadState's own duplicateRaceRetryCount uses (session-
@@ -696,35 +728,110 @@ export function ImportClient() {
     (b, index, all) => all.findIndex((other) => other.id === b.id) === index,
   );
 
-  const handleRevertConflict = useCallback(
-    async (batchId: string) => {
-      setRevertingConflictId(batchId);
-      try {
-        const response = await fetch(`/api/import/batches/${batchId}/revert`, { method: "POST" });
-        const body = await response.json();
-        if (!response.ok) {
-          setPreviewError(body?.error?.message ?? "Revert failed.");
-          return;
-        }
-        // Drop the now-reverted batch from wherever it's tracked so the
-        // affordance disappears the instant the revert succeeds — the
-        // operator can then retry the confirm/upload.
-        setConfirmConflictingBatches((prev) => prev.filter((b) => b.id !== batchId));
-        setChunkUpload(
-          (prev) =>
-            prev?.map((c) =>
-              c.conflictingBatches ? { ...c, conflictingBatches: c.conflictingBatches.filter((b) => b.id !== batchId) } : c,
-            ) ?? prev,
-        );
-        void loadRecent();
-      } catch {
-        setPreviewError("Revert failed. Check your connection and try again.");
-      } finally {
-        setRevertingConflictId(null);
+  // BLOCK 2 (round-13 audit): a conflict-panel candidate can be 'applying'
+  // or 'completed' (revert_import_batch, 0109, accepts any status <>
+  // 'reverted') — one click here can delete applied inventory, delete
+  // qualifying orphan wines, and clear LWIN stamps, exactly as destructive
+  // as BatchStep's own "Revert this import" button. Revert no longer fires
+  // immediately: clicking it only queues a target and opens the SAME
+  // ActionDialog confirmation (REVERT_CONFIRMATION, shared copy) BatchStep
+  // already uses — the actual network call is handleRevertConflict below,
+  // wired to the dialog's onConfirm.
+  const [conflictRevertTarget, setConflictRevertTarget] = useState<ConflictingBatchInfo | null>(null);
+  // BLOCK 2: the cleanup counts/warning flags a successful revert reports —
+  // discarded entirely before this fix. Keyed by insertion order (not just
+  // batch id) so reverting more than one conflicting batch in the same
+  // preview session shows every outcome, not just the latest; rendered with
+  // the SAME summarizeRevertResult copy BatchStep's own success panel uses.
+  const [conflictRevertOutcomes, setConflictRevertOutcomes] = useState<
+    { id: string; filename: string; result: RevertResult }[]
+  >([]);
+
+  const requestRevertConflict = useCallback((batch: ConflictingBatchInfo) => {
+    setConflictRevertTarget(batch);
+  }, []);
+
+  const handleRevertConflict = useCallback(async () => {
+    const target = conflictRevertTarget;
+    if (!target) return;
+    const batchId = target.id;
+    setRevertingConflictId(batchId);
+    try {
+      const response = await fetch(`/api/import/batches/${batchId}/revert`, { method: "POST" });
+      // BLOCK 1 (round-13 audit): a concurrent revert of the SAME batch
+      // (409 — batch-service.ts's revertImportBatch returns "not_completed"
+      // whenever the batch is already reverted, which the route maps to
+      // 409) or a 404 (batch no longer exists) both mean the desired end
+      // state — this batch is gone from the live set — was already
+      // reached, exactly as a 2xx from this same call would mean. Treating
+      // either as a failure left the stale conflict entry (and the
+      // terminal multiple_live_batches code below) stuck forever, since
+      // retrying this exact revert just repeats the same 409/404 endlessly.
+      const resolved = response.ok || response.status === 404 || response.status === 409;
+      if (!resolved) {
+        const body = await response.json().catch(() => null);
+        setPreviewError(body?.error?.message ?? "Revert failed.");
+        return;
       }
-    },
-    [loadRecent],
-  );
+      // BLOCK 2: consume and surface the cleanup result exactly like
+      // BatchStep's own doRevert does, instead of discarding it. Only a
+      // 2xx carries a body shaped like RevertResult — the 409/404
+      // "already resolved" cases above have nothing to report.
+      if (response.ok) {
+        const result = (await response.json()) as RevertResult;
+        setConflictRevertOutcomes((prev) => [...prev, { id: batchId, filename: target.filename, result }]);
+      }
+
+      // Drop the now-resolved batch from wherever it's tracked so the
+      // affordance disappears the instant the desired end state is
+      // confirmed — the operator can then retry the confirm/upload.
+      const nextConfirmConflicts = confirmConflictingBatches.filter((b) => b.id !== batchId);
+      const nextChunkUpload =
+        chunkUpload?.map((c) => {
+          if (!c.conflictingBatches) return c;
+          const remaining = c.conflictingBatches.filter((b) => b.id !== batchId);
+          // BLOCK 1: once THIS chunk's own conflict list is exhausted,
+          // clear its terminal multiple_live_batches code too — the chunk
+          // stays "failed" (so "Retry upload" is still the right label)
+          // but is no longer TERMINALLY failed, restoring Confirm/Retry.
+          // Only clears once this chunk's own candidate list is fully
+          // empty — a remaining candidate means this chunk's confirm would
+          // still hit the identical conflict.
+          return c.code === "multiple_live_batches" && remaining.length === 0
+            ? { ...c, conflictingBatches: remaining, code: null, error: null }
+            : { ...c, conflictingBatches: remaining };
+        }) ?? chunkUpload;
+
+      setConfirmConflictingBatches(nextConfirmConflicts);
+      setChunkUpload(nextChunkUpload);
+      // BLOCK 1: same clearing for the plain (non-chunked) path's own
+      // terminal code.
+      if (nextConfirmConflicts.length === 0 && confirmErrorCode === "multiple_live_batches") {
+        setConfirmErrorCode(null);
+        setConfirmDuplicateRaceRetryCount(0);
+      }
+      // BLOCK 1: dismiss the stale error message once every known conflict
+      // source is clear — leaving it on screen after Confirm/Retry has
+      // already come back would tell the operator they're still stuck when
+      // they aren't. Safe to clear unconditionally here: conflictingBatches
+      // is populated ONLY by a multiple_live_batches failure (see
+      // ConflictingBatchInfo's own comment), so previewError can only be
+      // holding THAT failure's own message while this panel is even
+      // rendered — never an unrelated error.
+      const stillBlocked =
+        nextConfirmConflicts.length > 0 ||
+        (nextChunkUpload?.some((c) => (c.conflictingBatches?.length ?? 0) > 0) ?? false);
+      if (!stillBlocked) {
+        setPreviewError(null);
+      }
+      void loadRecent();
+    } catch {
+      setPreviewError("Revert failed. Check your connection and try again.");
+    } finally {
+      setRevertingConflictId(null);
+      setConflictRevertTarget(null);
+    }
+  }, [conflictRevertTarget, confirmConflictingBatches, confirmErrorCode, chunkUpload, loadRecent]);
 
   return (
     <div className="mx-auto max-w-[640px] px-md py-lg">
@@ -772,8 +879,9 @@ export function ImportClient() {
           error={previewError}
           plainConfirmErrorCode={chunkedPreview ? null : confirmErrorCode}
           conflictingBatches={conflictingBatches}
-          onRevertConflict={handleRevertConflict}
+          onRevertConflict={requestRevertConflict}
           revertingConflictId={revertingConflictId}
+          conflictRevertOutcomes={conflictRevertOutcomes}
         />
       )}
 
@@ -802,6 +910,20 @@ export function ImportClient() {
         await loadBatchDetail(id, setBatch);
         setStep("batch");
       }} />
+
+      {/* BLOCK 2 (round-13 audit): the SAME ActionDialog confirmation
+          BatchStep's own "Revert this import" button uses — see
+          REVERT_CONFIRMATION's own comment for why a conflict-panel
+          candidate needs the identical warning. */}
+      <ActionDialog
+        open={conflictRevertTarget !== null}
+        title={REVERT_CONFIRMATION.title}
+        description={REVERT_CONFIRMATION.description}
+        confirmLabel={REVERT_CONFIRMATION.confirmLabel}
+        busy={revertingConflictId === conflictRevertTarget?.id}
+        onConfirm={() => void handleRevertConflict()}
+        onClose={() => setConflictRevertTarget(null)}
+      />
     </div>
   );
 }
@@ -908,6 +1030,7 @@ export function PreviewStep({
   conflictingBatches,
   onRevertConflict,
   revertingConflictId,
+  conflictRevertOutcomes,
 }: {
   filename: string;
   summary: PreviewSummary;
@@ -955,8 +1078,18 @@ export function PreviewStep({
    * per batch so recovery never depends on the batch still being in the
    * ten-newest Recent imports list. */
   conflictingBatches?: ConflictingBatchInfo[];
-  onRevertConflict?: (batchId: string) => void;
+  /** BLOCK 2 (round-13 audit): takes the whole candidate, not just its id —
+   * clicking Revert no longer fires the request directly; it hands the
+   * candidate to ImportClient, which opens the shared ActionDialog
+   * confirmation (REVERT_CONFIRMATION) and only calls the revert endpoint
+   * once the operator confirms. */
+  onRevertConflict?: (batch: ConflictingBatchInfo) => void;
   revertingConflictId?: string | null;
+  /** BLOCK 2 (round-13 audit): the cleanup counts/warning flags each
+   * completed conflict-panel revert reported — discarded entirely before
+   * this fix. Rendered with the SAME summarizeRevertResult copy BatchStep's
+   * own success panel uses. */
+  conflictRevertOutcomes?: { id: string; filename: string; result: RevertResult }[];
 }) {
   // Sol round-2 audit (2026-08-27) finding 4: incremental disclosure
   // instead of a hard cap — starts at MAX_SHOWN_ERROR_ROWS and grows by
@@ -1239,7 +1372,11 @@ export function PreviewStep({
           batch, rendered directly in the conflict — never dependent on
           the batch still being in the ten-newest Recent imports list.
           Reuses the same revert endpoint BatchStep's own "Revert this
-          import" button calls. */}
+          import" button calls. BLOCK 2 (round-13 audit): Revert no longer
+          fires that call directly — a candidate can be 'applying' or
+          'completed', so this is exactly as destructive as BatchStep's own
+          revert and must go through the same confirmation first (the
+          ActionDialog ImportClient renders, wired to onRevertConflict). */}
       {conflictingBatches && conflictingBatches.length > 0 && (
         <div className="mt-md rounded-lg border border-accent/30 bg-blush-wash/30 p-sm">
           <p className="text-[13px] font-medium text-ink">Conflicting live imports for this file</p>
@@ -1252,11 +1389,31 @@ export function PreviewStep({
                 <button
                   type="button"
                   disabled={revertingConflictId === b.id}
-                  onClick={() => onRevertConflict?.(b.id)}
+                  onClick={() => onRevertConflict?.(b)}
                   className="min-h-11 shrink-0 rounded-pill border border-ink/25 bg-surface px-sm text-caption font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {revertingConflictId === b.id ? "Reverting…" : "Revert"}
                 </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* BLOCK 2 (round-13 audit): the cleanup counts/warning flags a
+          completed conflict-panel revert reported — discarded entirely
+          before this fix. Same summarizeRevertResult copy BatchStep's own
+          success panel uses, so the two surfaces never say different
+          things about the identical action. */}
+      {conflictRevertOutcomes && conflictRevertOutcomes.length > 0 && (
+        <div className="mt-md rounded-lg border border-primary/30 bg-bridge-surface p-sm">
+          <ul className="space-y-2xs">
+            {conflictRevertOutcomes.map((outcome, index) => (
+              <li key={`${outcome.id}-${index}`} className="flex items-start gap-xs text-[13px] text-ink">
+                <CheckCircle2 className="mt-[2px] h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                <span>
+                  {outcome.filename}: {summarizeRevertResult(outcome.result)}
+                </span>
               </li>
             ))}
           </ul>
@@ -1399,6 +1556,20 @@ function SummaryStat({ label, value }: { label: string; value: number }) {
     </div>
   );
 }
+
+/** BLOCK 2 (round-13 audit): the SAME confirmation copy BatchStep's own
+ * "Revert this import" button uses, shared as a single source rather than
+ * duplicated — the conflict-panel Revert button (PreviewStep) is exactly as
+ * destructive as BatchStep's, since a conflict candidate can be 'applying'
+ * or 'completed' too (revert_import_batch, 0109, accepts any status <>
+ * 'reverted'). A one-off dialog/copy for the conflict panel was explicitly
+ * what the finding asked NOT to build. */
+const REVERT_CONFIRMATION = {
+  title: "Revert this import?",
+  description:
+    "Removes the inventory this import created. Where it can safely confirm it, it also deletes wines only this import added and clears the wine-catalog (LWIN) links it wrote — including a link identical to one that existed before the import. Cleanup is best-effort: it deletes only wines it can confirm are unreferenced at that moment, and reports what it did below.",
+  confirmLabel: "Revert import",
+};
 
 /** The revert route's response body (src/app/api/import/batches/[id]/revert/
  * route.ts) — consumed by BatchStep's success panel instead of being
@@ -1717,9 +1888,9 @@ export function BatchStep({
 
       <ActionDialog
         open={revertDialogOpen}
-        title="Revert this import?"
-        description="Removes the inventory this import created. Where it can safely confirm it, it also deletes wines only this import added and clears the wine-catalog (LWIN) links it wrote — including a link identical to one that existed before the import. Cleanup is best-effort: it deletes only wines it can confirm are unreferenced at that moment, and reports what it did below."
-        confirmLabel="Revert import"
+        title={REVERT_CONFIRMATION.title}
+        description={REVERT_CONFIRMATION.description}
+        confirmLabel={REVERT_CONFIRMATION.confirmLabel}
         busy={reverting}
         onConfirm={() => void doRevert()}
         onClose={() => setRevertDialogOpen(false)}

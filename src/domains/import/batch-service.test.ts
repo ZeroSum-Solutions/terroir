@@ -971,10 +971,13 @@ describe("confirmImportBatch — POST-check lookup failure is fail-closed, not f
   // Round-6 audit finding 1: selfRevertAndRetry now retries the revert
   // call once before giving up, so BOTH mock outcomes here fail TWICE
   // (revertedBatchIds carries two entries) before this function returns —
-  // and, per the finding's corrected invariant (a revert-failure orphan is
-  // inert garbage, never a duplicate-data hazard), the result is now the
-  // SAME retryable duplicate_race_retry a successful revert produces,
-  // never the old, distinct duplicate_check_failed code.
+  // and, per the finding's corrected invariant (HONESTY-CORRECTED round-13
+  // audit, BLOCK 3: a revert-failure orphan is reachable by any member of
+  // this restaurant via Recent imports, never an "inert" leftover — see
+  // selfRevertAndRetry's own comment for why it's still not, by itself, a
+  // duplicate-data hazard), the result is now the SAME retryable
+  // duplicate_race_retry a successful revert produces, never the old,
+  // distinct duplicate_check_failed code.
   it("retries the self-revert once, then returns the ordinary duplicate_race_retry (never duplicate_check_failed) when BOTH attempts return an error", async () => {
     const { rpc, from, revertedBatchIds } = postCheckErrorSupabase("returns-error");
     const supabase = { rpc, from };
@@ -1009,10 +1012,14 @@ describe("confirmImportBatch — POST-check lookup failure is fail-closed, not f
 });
 
 // Round-6 audit finding 1: selfRevertAndRetry retries a failed revert ONCE
-// immediately, and — because a lingering live-but-unapplied orphan can
-// never cause duplicate APPLIED data (see the proof on selfRevertAndRetry's
-// own comment) — converges on the SAME retryable duplicate_race_retry
-// outcome whether the revert eventually succeeds or not.
+// immediately, and — because a reachable-but-unapplied orphan (HONESTY-
+// CORRECTED round-13 audit, BLOCK 3: any member of this restaurant can open
+// and apply it from Recent imports — it is not "lingering" out of reach)
+// still can never cause duplicate APPLIED data, thanks to
+// findSiblingWithAppliedRows' own apply-time guard rather than any claim
+// about unreachability (see the proof on selfRevertAndRetry's own
+// comment) — converges on the SAME retryable duplicate_race_retry outcome
+// whether the revert eventually succeeds or not.
 describe("confirmImportBatch — self-revert retry-once (round-6 audit finding 1)", () => {
   /** Revert fails on the FIRST call, succeeds on the SECOND — models a
    * transient failure (dropped connection, momentary lock conflict) that

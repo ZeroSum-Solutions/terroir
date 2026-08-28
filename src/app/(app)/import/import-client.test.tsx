@@ -13,6 +13,7 @@ import { act, useState, type ComponentProps, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  ImportClient,
   PreviewStep,
   BatchStep,
   isRowInConfirmedChunk,
@@ -25,7 +26,7 @@ import {
   type BatchDetail,
 } from "./import-client";
 import { ZERO_SUMMARY, type ChunkUploadState, type ChunkedPlanState } from "./session-step";
-import type { CanonicalHeader } from "@/domains/import/constants";
+import { CANONICAL_HEADERS, type CanonicalHeader } from "@/domains/import/constants";
 
 const reactTestEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -812,13 +813,234 @@ describe("PreviewStep — multiple_live_batches conflict panel offers a revert a
     const revertButtons = [...container.querySelectorAll("button")].filter((b) => b.textContent?.includes("Revert"));
     expect(revertButtons).toHaveLength(2);
 
+    // BLOCK 2 (round-13 audit): Revert no longer fires the request
+    // directly — it hands the WHOLE candidate to the caller, which opens a
+    // confirmation dialog before anything destructive happens.
     await act(async () => revertButtons[0].click());
-    expect(onRevertConflict).toHaveBeenCalledWith("batch-aged-out");
+    expect(onRevertConflict).toHaveBeenCalledWith(conflictingBatches[0]);
   });
 
   it("renders nothing when there is no conflict", async () => {
     const { container } = await mount(<PreviewStep {...baseProps({ conflictingBatches: [] })} />);
     expect(container.textContent).not.toContain("Conflicting live imports");
+  });
+
+  // BLOCK 2 (round-13 audit): the cleanup counts/warning flags a completed
+  // conflict-panel revert reported used to be discarded entirely. Rendered
+  // with the SAME summarizeRevertResult copy BatchStep's own success panel
+  // uses (see the "revertedCount" text below).
+  it("renders the cleanup outcome, including a partial-cleanup warning, after a conflict revert completes", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          conflictRevertOutcomes: [
+            {
+              id: "batch-aged-out",
+              filename: "cellar-old.csv",
+              result: {
+                revertedCount: 4,
+                orphanWinesDeleted: 1,
+                lwinStampsCleared: 1,
+                cleanupTruncated: false,
+                orphanCleanupSkipped: false,
+                cleanupFailures: 0,
+              },
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(container.textContent).toContain("cellar-old.csv");
+    expect(container.textContent).toContain("Removed 4 inventory row(s)");
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+});
+
+// WARN 6 (round-13 audit): the old tests injected conflict data straight
+// into PreviewStep's props and asserted only that a callback received an
+// id — they never actually executed handleRevertConflict, never tested
+// 2xx/409/404 behaviour, never verified cleanup warnings, and never proved
+// Confirm/Retry becomes reachable again. This is the test that proves
+// BLOCK 1 (a resolved conflict actually clears the terminal
+// multiple_live_batches code) and BLOCK 2 (Revert routes through a real
+// confirmation and reports cleanup counts/warnings) are actually fixed —
+// driven through the real, mounted ImportClient, not a hand-built prop
+// fixture, with `fetch` stubbed exactly like BatchStep's own applyAll
+// tests above.
+describe("ImportClient — handleRevertConflict actually recovers (round-13 audit, BLOCK 1 & 2)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+    document.body.style.overflow = "";
+    vi.unstubAllGlobals();
+  });
+
+  const CSV_CONTENT = `${CANONICAL_HEADERS.join(",")}\nDomaine Example,Cuvee One,2020,Pinot Noir,Burgundy,France,750,,USD,6,24.50,,\n`;
+
+  const CONFLICT_ERROR_BODY = {
+    error: {
+      code: "multiple_live_batches",
+      message:
+        "This file has 2 live import batches for the same underlying content — this can't be resolved " +
+        "automatically. Revert all but one of them below before resuming or re-uploading this file.",
+      details: {
+        conflictingBatches: [
+          { id: "conflict-1", filename: "cellar-old.csv", status: "created", created_at: "2020-01-01T00:00:00.000Z" },
+        ],
+      },
+    },
+  };
+
+  function jsonResponse(status: number, body: unknown): Response {
+    return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  }
+
+  /** Drives a freshly-mounted ImportClient from the upload step through to
+   * the multiple_live_batches conflict panel: selects a valid one-row CSV,
+   * clicks Preview, then Confirm — the stubbed confirm endpoint always
+   * returns the SAME 422 conflict naming "conflict-1". */
+  async function reachConflictPanel(container: HTMLElement) {
+    const file = new File([CSV_CONTENT], "cellar.csv", { type: "text/csv" });
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("Could not find the file input");
+    Object.defineProperty(input, "files", { configurable: true, value: [file] });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+
+    const previewButton = findButton(container, "Preview import");
+    if (!previewButton) throw new Error("Could not find Preview import button");
+    await act(async () => previewButton.click());
+
+    const confirmButton = findButton(container, "Confirm import");
+    if (!confirmButton) throw new Error("Could not find Confirm import button");
+    await act(async () => confirmButton.click());
+  }
+
+  function stubFetch(revertHandler: (url: string, init?: RequestInit) => Promise<Response>) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        if (url === "/api/import/batches" && method === "GET") return jsonResponse(200, { batches: [] });
+        if (url === "/api/import/preview" && method === "POST") {
+          return jsonResponse(200, {
+            rows: [],
+            summary: {
+              totalRows: 1,
+              validRows: 1,
+              errorRows: 0,
+              matchedRows: 1,
+              unmatchedRows: 0,
+              missingCostRows: 0,
+              readyToApplyRows: 1,
+              pendingResolutionRows: 0,
+            },
+          });
+        }
+        if (url === "/api/import/batches" && method === "POST") return jsonResponse(422, CONFLICT_ERROR_BODY);
+        if (url === "/api/import/batches/conflict-1/revert" && method === "POST") return revertHandler(url, init);
+        throw new Error(`unexpected fetch ${method} ${url}`);
+      }),
+    );
+  }
+
+  it("a 2xx revert clears the conflict, restores Confirm import, and renders the cleanup outcome", async () => {
+    stubFetch(async () =>
+      jsonResponse(200, {
+        revertedCount: 4,
+        orphanWinesDeleted: 1,
+        lwinStampsCleared: 1,
+        cleanupTruncated: false,
+        orphanCleanupSkipped: false,
+        cleanupFailures: 0,
+      }),
+    );
+
+    const { container } = await mount(<ImportClient />);
+    await reachConflictPanel(container);
+
+    // Terminal conflict: Confirm import is gone, the conflict panel is up.
+    expect(findButton(container, "Confirm import")).toBeFalsy();
+    expect(container.textContent).toContain("Conflicting live imports for this file");
+
+    await act(async () => findButton(container, /^Revert$/)!.click());
+    // BLOCK 2: no request goes out until the confirmation dialog is
+    // confirmed — the dialog's own button, not the panel's "Revert".
+    expect(container.textContent).toContain("Revert this import?");
+    await act(async () => findButton(container, /^Revert import$/)!.click());
+
+    // BLOCK 1: the conflict is gone AND Confirm import is reachable again —
+    // not just removed from the list while still terminally blocked.
+    expect(container.textContent).not.toContain("Conflicting live imports for this file");
+    expect(findButton(container, "Confirm import")).toBeTruthy();
+    // BLOCK 2: the cleanup counts/warnings a 2xx reports are surfaced, not
+    // discarded — same copy BatchStep's own success panel uses.
+    expect(container.textContent).toContain("Removed 4 inventory row(s)");
+  });
+
+  it("a 409 (already reverted) clears the conflict and restores Confirm import, with no cleanup outcome to show", async () => {
+    stubFetch(async () => jsonResponse(409, { error: { code: "not_completed", message: "Import batch is already reverted." } }));
+
+    const { container } = await mount(<ImportClient />);
+    await reachConflictPanel(container);
+    expect(findButton(container, "Confirm import")).toBeFalsy();
+
+    await act(async () => findButton(container, /^Revert$/)!.click());
+    await act(async () => findButton(container, /^Revert import$/)!.click());
+
+    // BLOCK 1: a 409 from THIS endpoint only ever means "already reverted"
+    // — the desired end state was already reached — so it clears the
+    // conflict exactly like a 2xx would, instead of leaving the stale
+    // entry (and Confirm import hidden) stuck forever.
+    expect(container.textContent).not.toContain("Conflicting live imports for this file");
+    expect(findButton(container, "Confirm import")).toBeTruthy();
+    expect(container.textContent).not.toContain("Removed");
+  });
+
+  it("a 404 (already gone) clears the conflict and restores Confirm import, with no cleanup outcome to show", async () => {
+    stubFetch(async () => jsonResponse(404, { error: { code: "not_found", message: "Import batch not found." } }));
+
+    const { container } = await mount(<ImportClient />);
+    await reachConflictPanel(container);
+    expect(findButton(container, "Confirm import")).toBeFalsy();
+
+    await act(async () => findButton(container, /^Revert$/)!.click());
+    await act(async () => findButton(container, /^Revert import$/)!.click());
+
+    // BLOCK 1: a 404 means the batch no longer exists — also the desired
+    // end state — so it clears the conflict too.
+    expect(container.textContent).not.toContain("Conflicting live imports for this file");
+    expect(findButton(container, "Confirm import")).toBeTruthy();
+    expect(container.textContent).not.toContain("Removed");
+  });
+
+  it("a genuine revert failure (500) keeps the conflict entry and never opens the way back to Confirm import", async () => {
+    stubFetch(async () => jsonResponse(500, { error: { code: "internal_error", message: "Something went wrong." } }));
+
+    const { container } = await mount(<ImportClient />);
+    await reachConflictPanel(container);
+
+    await act(async () => findButton(container, /^Revert$/)!.click());
+    await act(async () => findButton(container, /^Revert import$/)!.click());
+
+    // An actual failure (not 409/404) must NOT be treated as resolved —
+    // the conflict entry, and the block on Confirm import, both survive.
+    expect(container.textContent).toContain("Conflicting live imports for this file");
+    expect(findButton(container, "Confirm import")).toBeFalsy();
+    expect(container.textContent).toContain("Something went wrong.");
   });
 
   async function mount(element: ReactElement) {
