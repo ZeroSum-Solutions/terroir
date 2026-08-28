@@ -1,6 +1,7 @@
 // Sol round-3/4 regression: a duplicate-content conflict during a chunked
 // confirm must (a) hard-stop instead of adopting the chunk, and (b) mark
 // the chunk itself "failed" — never leave it frozen at "uploading".
+import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   confirmChunkedSession,
@@ -9,6 +10,7 @@ import {
 } from "./session-step";
 import { buildImportAnywayOverride } from "./import-client";
 import type { CanonicalHeader } from "@/domains/import/constants";
+import type { RowOverrides } from "@/domains/import/preview-service";
 
 const PLAN: ChunkedPlanState = {
   headerRecord: "producer,name,quantity",
@@ -272,7 +274,22 @@ describe("confirmChunkedSession — Retry only reaches create when the override 
   // two siblings with different chunkIndex values land on DIFFERENT
   // subset sizes — distinct overrides, distinct digests — and BOTH reach
   // create, never just the first one.
-  it("two identical sibling chunks' own 'Import anyway' overrides are DISTINCT — both reach create, not just the first", async () => {
+  //
+  // Round-8 audit finding 5: the version of this test that used to live
+  // here was canned — a single chunk at index 1, run through TWICE in a
+  // `for` loop, each iteration getting its OWN fresh mock with no shared
+  // uniqueness state between the two passes. It never actually proved two
+  // SIBLING chunks can both reach create in the SAME run without
+  // colliding with each other — it only proved each override, taken in
+  // isolation, would satisfy a mock that always treated ANY differing
+  // JSON as success. Rewritten as a real two-chunk run: a plan with
+  // chunks at index 1 and 2 sharing an IDENTICAL grid (same producer/name/
+  // quantity), driven through ONE confirmChunkedSession call, against a
+  // server mock that tracks every content_sha256-equivalent digest
+  // (file text + this request's own localized overrides JSON) it has
+  // seen and returns a 23505-style sibling conflict on a repeat — exactly
+  // the invariant the real create_import_batch RPC's unique index enforces.
+  it("two sibling chunks with an IDENTICAL grid, both going through Import-anyway in one run, generate DISTINCT overrides and both reach create with distinct digests", async () => {
     const firstRowRawText: Record<CanonicalHeader, string> = {
       producer: "A",
       name: "B",
@@ -288,35 +305,95 @@ describe("confirmChunkedSession — Retry only reaches create when the override 
       bin: "",
       section: "",
     };
-    const chunkOneOverride = buildImportAnywayOverride(1, { rowNumber: 1, rawText: firstRowRawText }, []);
-    const chunkTwoOverride = buildImportAnywayOverride(2, { rowNumber: 1, rawText: firstRowRawText }, []);
-    expect(chunkOneOverride).toMatchObject({ ok: true });
-    expect(chunkTwoOverride).toMatchObject({ ok: true });
-    // Distinct overrides for the IDENTICAL underlying row — chunkIndex 1
-    // takes 1 cell (producer only); chunkIndex 2 takes 2 cells (producer +
-    // the next non-blank field, name).
-    expect(chunkOneOverride).not.toEqual(chunkTwoOverride);
-    expect(chunkOneOverride).toMatchObject({ overridePatch: { 1: { producer: "A" } } });
-    expect(chunkTwoOverride).toMatchObject({ overridePatch: { 1: { producer: "A", name: "B" } } });
+    // Two chunks, identical bytes (a genuine repeated segment), disjoint
+    // global row ranges (chunk 2 starts where chunk 1 ends).
+    const SIBLING_PLAN: ChunkedPlanState = {
+      headerRecord: "producer,name,quantity",
+      chunkTotal: 2,
+      chunks: [
+        { index: 1, startRow: 1, endRow: 1, text: "producer,name,quantity\nA,B,1\n" },
+        { index: 2, startRow: 2, endRow: 2, text: "producer,name,quantity\nA,B,1\n" },
+      ],
+      sourceSha256: "b".repeat(64),
+    };
 
-    // Both, sent independently as this-chunk's own confirm, reach create —
-    // neither collides with the OTHER sibling's own SIBLING_OVERRIDES_JSON
-    // collision baseline, and (more importantly) they don't collide with
-    // EACH OTHER either, since their own canonical JSON differs.
-    for (const built of [chunkOneOverride, chunkTwoOverride]) {
-      const seenOverridesJson: string[] = [];
-      vi.stubGlobal("fetch", digestAwareFetch(seenOverridesJson));
-      const result = await confirmChunkedSession({
-        plan: PLAN,
-        initialUpload: [{ index: 1, status: "failed", batchId: null, error: "conflict", code: "duplicate_chunk_content" }],
-        existingSessionId: "session-new",
-        fileLabel: "cellar.csv",
-        timestampsRef: { current: [] },
-        rowOverrides: built?.ok ? built.overridePatch : {},
-        onSessionId: () => {},
-        onProgress: () => {},
-      });
-      expect(result).toMatchObject({ ok: true });
-    }
+    // Each chunk's own "Import anyway" click, exactly as import-client.tsx's
+    // handleImportAnyway builds it — keyed by that chunk's own GLOBAL
+    // startRow, not a hardcoded row 1.
+    const chunkOneOverride = buildImportAnywayOverride(
+      1,
+      { rowNumber: SIBLING_PLAN.chunks[0].startRow, rawText: firstRowRawText },
+      [],
+    );
+    const chunkTwoOverride = buildImportAnywayOverride(
+      2,
+      { rowNumber: SIBLING_PLAN.chunks[1].startRow, rawText: firstRowRawText },
+      [],
+    );
+    expect(chunkOneOverride).toMatchObject({ ok: true, overridePatch: { 1: { producer: "A" } } });
+    // Distinct subset size for chunkIndex 2 (producer + the next non-blank
+    // field, name) — the same variation this mechanism has always relied
+    // on, now proven across two chunks driven together instead of two
+    // isolated single-chunk runs.
+    expect(chunkTwoOverride).toMatchObject({ overridePatch: { 2: { producer: "A", name: "B" } } });
+    expect(chunkOneOverride).not.toEqual(chunkTwoOverride);
+
+    const combinedOverrides: RowOverrides = {
+      ...(chunkOneOverride?.ok ? chunkOneOverride.overridePatch : {}),
+      ...(chunkTwoOverride?.ok ? chunkTwoOverride.overridePatch : {}),
+    };
+
+    // Tracks every digest it has ever seen (file text + this request's own
+    // localized overrides JSON) — a repeat digest is exactly what a real
+    // 23505 on (restaurant_id, content_sha256) would report as a sibling.
+    const seenDigests = new Map<string, number>();
+    const digestsRecorded: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) return jsonResponse(201, { sessionId: "session-new" });
+        const form = init?.body as FormData;
+        const chunkIndex = Number(form.get("chunkIndex"));
+        const chunkText = SIBLING_PLAN.chunks.find((c) => c.index === chunkIndex)!.text;
+        const overridesRaw = form.get("rowOverrides");
+        const overridesJson = typeof overridesRaw === "string" ? overridesRaw : "";
+        const digest = createHash("sha256").update(`${chunkText}|${overridesJson}`).digest("hex");
+        digestsRecorded.push(digest);
+        const firstSeenChunkIndex = seenDigests.get(digest);
+        if (firstSeenChunkIndex !== undefined) {
+          return jsonResponse(200, {
+            alreadyExists: true,
+            sessionId: "session-new",
+            chunkIndex: firstSeenChunkIndex,
+            batchId: `b-sibling-${firstSeenChunkIndex}`,
+          });
+        }
+        seenDigests.set(digest, chunkIndex);
+        return jsonResponse(201, { alreadyExists: false, batchId: `b-chunk-${chunkIndex}` });
+      }),
+    );
+
+    const result = await confirmChunkedSession({
+      plan: SIBLING_PLAN,
+      initialUpload: SIBLING_PLAN.chunks.map((c) => ({
+        index: c.index,
+        status: "pending" as const,
+        batchId: null,
+        error: null,
+        code: null,
+      })),
+      existingSessionId: "session-new",
+      fileLabel: "cellar.csv",
+      timestampsRef: { current: [] },
+      rowOverrides: combinedOverrides,
+      onSessionId: () => {},
+      onProgress: () => {},
+    });
+
+    // Neither chunk collided with the other — both reached create.
+    expect(result).toMatchObject({ ok: true });
+    expect(digestsRecorded).toHaveLength(2);
+    expect(new Set(digestsRecorded).size).toBe(2);
   });
 });

@@ -255,6 +255,90 @@ describe("confirmChunkedSessionWithResume — adopt-and-continue (round-6 audit 
     expect(batchCalls.filter((c) => c.chunkIndex === "1" && c.sessionId === "session-old")).toHaveLength(1);
   });
 
+  // Round-8 audit finding 4: the revert call above used to be awaited
+  // without ever checking `response.ok` — an HTTP-level failure (a 4xx/5xx
+  // from the revert endpoint) was silently treated as success, so the
+  // batch confirmed under the abandoned session was left live, resurfacing
+  // as a cross-session duplicate once its chunk was re-driven. The fix
+  // checks response.ok explicitly and ABORTS the whole adoption re-drive
+  // (never resets/re-drives any chunk) when any revert fails, surfacing a
+  // retryable error instead.
+  it("aborts the adoption re-drive — never resetting or re-driving any chunk — when a cleanup revert returns a non-OK response", async () => {
+    const revertAttempts: string[] = [];
+    const batchCalls: Array<{ sessionId: string; chunkIndex: string }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) {
+          return jsonResponse(201, { sessionId: "session-fresh" });
+        }
+        if (url === "/api/import/sessions/session-old") {
+          return jsonResponse(200, { status: "in_progress", sourceSha256: SOURCE_SHA });
+        }
+        if (url.endsWith("/revert") && init?.method === "POST") {
+          const batchId = url.split("/").at(-2)!;
+          revertAttempts.push(batchId);
+          // HTTP-level failure — e.g. the batch was already gone, or the
+          // request timed out — distinct from a network-level throw.
+          return jsonResponse(500, { error: { code: "internal_error", message: "Revert failed." } });
+        }
+        if (url.endsWith("/api/import/batches")) {
+          const form = init?.body as FormData;
+          const sessionId = form.get("sessionId") as string;
+          const chunkIndex = form.get("chunkIndex") as string;
+          batchCalls.push({ sessionId, chunkIndex });
+
+          if (chunkIndex === "1" && sessionId === "session-fresh") {
+            // Chunk 1 confirms cleanly under the fresh session — the
+            // batch that must be reconciled once chunk 2 reveals the
+            // pre-existing session.
+            return jsonResponse(201, { alreadyExists: false, batchId: "b-fresh-1" });
+          }
+          if (chunkIndex === "2" && sessionId === "session-fresh") {
+            // Chunk 2's content already belongs to session-old, chunk
+            // slot 2 — the adoption trigger.
+            return jsonResponse(200, { alreadyExists: true, sessionId: "session-old", chunkIndex: 2, batchId: "b-old-2" });
+          }
+          throw new Error(`unexpected batch call: session=${sessionId} chunk=${chunkIndex} (adoption must never re-drive)`);
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      }),
+    );
+
+    const progressStates: ChunkUploadState[][] = [];
+    const sessionIds: string[] = [];
+    const result = await confirmChunkedSessionWithResume({
+      plan: PLAN,
+      initialUpload: PLAN.chunks.map((c) => ({ index: c.index, status: "pending" as const, batchId: null, error: null, code: null })),
+      existingSessionId: null,
+      fileLabel: "cellar.csv",
+      timestampsRef: { current: [] },
+      onSessionId: (id) => sessionIds.push(id),
+      onProgress: (upload) => progressStates.push(upload),
+    });
+
+    // The cleanup revert was attempted, but its failure aborts the whole
+    // adoption — never a partial cleanup silently treated as success.
+    expect(revertAttempts).toEqual(["b-fresh-1"]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/couldn't clean up|retry the upload/i);
+    }
+
+    // No chunk was ever reset back to "pending" or re-driven under the
+    // adopted session — chunk 1 stays exactly where confirmChunkedSession
+    // last left it (confirmed, under the abandoned session), never
+    // touched by a re-drive that never happened.
+    const finalUpload = progressStates.at(-1)!;
+    expect(finalUpload.find((c) => c.index === 1)).toMatchObject({ status: "confirmed", batchId: "b-fresh-1" });
+    expect(batchCalls.filter((c) => c.sessionId === "session-old")).toHaveLength(0);
+    // onSessionId was only ever called once, for the ORIGINAL fresh
+    // session — the adopted session-old is never reported, since the
+    // adoption itself was aborted before getting that far.
+    expect(sessionIds).toEqual(["session-fresh"]);
+  });
+
   it("passes through an ordinary (non-conflict) failure unchanged", async () => {
     vi.stubGlobal(
       "fetch",

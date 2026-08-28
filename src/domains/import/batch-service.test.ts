@@ -1242,6 +1242,206 @@ describe("confirmImportBatch — self-revert retry-once (round-6 audit finding 1
   });
 });
 
+// Round-8 audit finding 1 (BLOCK): the old best-effort revert loop swallowed
+// a rival's revert failure and still returned `target` as a resume pointer
+// — a client resuming this file could then apply `target` while the
+// unresolved rival's OWN original client independently applies it too, a
+// real duplicate. reconcileLiveBatchesForFile must now fail CLOSED: a
+// rival's revert is only "resolved" when the revert call itself succeeds,
+// or a post-failure status re-read confirms status='reverted' by some
+// other means. Any unresolved rival means NO resume pointer at all — the
+// same retryable duplicate_race_retry shape every other reconciliation
+// failure already uses.
+describe("confirmImportBatch — reconciliation fails CLOSED on an unresolved rival revert (round-8 audit finding 1)", () => {
+  function unresolvedRivalSupabase(revertOutcome: "throws" | "succeeds-on-second-call") {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        id: "oldest-target",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2020-01-01T00:00:00.000Z",
+      },
+      {
+        id: "rival-unresolved",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:${"e".repeat(64)}:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2021-01-01T00:00:00.000Z",
+      },
+    ];
+    const revertAttempts: string[] = [];
+    let revertCallCount = 0;
+    const supabase = {
+      // create_import_batch is deliberately absent — a fail-closed
+      // reconciliation (or a resolved one that finds the oldest target)
+      // must never reach it.
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        // Reached once the rival is resolved and toAlreadyExistsResult
+        // re-verifies the target before handing it out.
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        }),
+        revert_import_batch: (args) => {
+          revertCallCount += 1;
+          const targetId = (args as { p_batch_id: string }).p_batch_id;
+          revertAttempts.push(targetId);
+          if (revertOutcome === "throws" || revertCallCount === 1) {
+            // An unrecognized PostgREST error — revertImportBatch
+            // re-throws this verbatim, exactly like the existing
+            // selfRevertAndRetry fixtures above.
+            return { data: null, error: { code: "XX000", message: "connection reset by peer" } };
+          }
+          const row = rows.find((r) => r.id === targetId);
+          if (row) row.status = "reverted";
+          return { data: 0, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable(rows, { appliedBatchIds: [] }),
+    };
+    return { supabase, file, revertAttempts };
+  }
+
+  it("returns NO resume pointer — a retryable duplicate_race_retry — when a rival's revert throws and a post-revert status re-read still shows it live", async () => {
+    const { supabase, file, revertAttempts } = unresolvedRivalSupabase("throws");
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
+    // Only the rival was ever attempted — the target is never touched.
+    expect(revertAttempts).toEqual(["rival-unresolved"]);
+  });
+
+  it("returns the resume pointer on the NEXT attempt once the previously-failed rival revert succeeds", async () => {
+    const { supabase, file, revertAttempts } = unresolvedRivalSupabase("succeeds-on-second-call");
+
+    const first = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+    expect(first).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
+    expect(revertAttempts).toEqual(["rival-unresolved"]);
+
+    // A fresh attempt re-enters reconciliation from scratch — this time
+    // the rival's revert succeeds, so it's resolved and the target is
+    // handed out.
+    const second = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+    expect(second).toMatchObject({ ok: true, alreadyExists: true, batchId: "oldest-target" });
+    expect(revertAttempts).toEqual(["rival-unresolved", "rival-unresolved"]);
+  });
+});
+
+// Round-8 audit finding 2 (BLOCK): the old code targeted whichever
+// candidate had applied rows and swallowed EVERY OTHER candidate — including
+// a SECOND applied one — into the same best-effort revert loop, silently
+// deleting a second batch's already-applied inventory. reconcileLiveBatchesForFile
+// must never revert an applied batch: two or more applied candidates is now
+// a distinct, non-retryable conflict that touches nothing.
+describe("confirmImportBatch — reconciliation never reverts an applied batch (round-8 audit finding 2)", () => {
+  it("returns the non-retryable multiple_applied_batches conflict and reverts NOTHING when two candidates already have applied rows", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        id: "applied-one",
+        status: "applying",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2020-01-01T00:00:00.000Z",
+      },
+      {
+        id: "applied-two",
+        status: "applying",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:${"f".repeat(64)}:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2021-01-01T00:00:00.000Z",
+      },
+    ];
+    const supabase = {
+      // revert_import_batch and create_import_batch are deliberately
+      // absent — neither may ever be called once two applied candidates
+      // are seen; calling either throws "unexpected rpc" and fails this
+      // test.
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+      }),
+      from: fakeImportBatchesTable(rows, { appliedBatchIds: ["applied-one", "applied-two"] }),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "multiple_applied_batches" } });
+  });
+
+  it("reverts only the unapplied rivals — never the applied target — when exactly one candidate among several live ones is applied", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        id: "orphan-a",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2019-01-01T00:00:00.000Z",
+      },
+      {
+        id: "applied-target",
+        status: "applying",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:${"1".repeat(64)}:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2020-01-01T00:00:00.000Z",
+      },
+      {
+        id: "orphan-b",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:${"2".repeat(64)}:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2021-01-01T00:00:00.000Z",
+      },
+    ];
+    const revertedBatchIds: string[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 1, excluded: 0, pending: 0, eligible_not_applied: 0 }],
+          error: null,
+        }),
+        revert_import_batch: (args) => {
+          const targetId = (args as { p_batch_id: string }).p_batch_id;
+          revertedBatchIds.push(targetId);
+          const row = rows.find((r) => r.id === targetId);
+          if (row) row.status = "reverted";
+          return { data: 0, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable(rows, { appliedBatchIds: ["applied-target"] }),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: "applied-target" });
+    // Both unapplied rivals reverted, oldest-first — the applied target is
+    // never among them.
+    expect(revertedBatchIds).toEqual(["orphan-a", "orphan-b"]);
+  });
+});
+
 // Round-5 audit finding 2(b): every already-exists result funnels through
 // toAlreadyExistsResult, which now re-reads the target's CURRENT status
 // immediately before returning it — closing the gap where a batch found

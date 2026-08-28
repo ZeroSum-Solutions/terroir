@@ -83,4 +83,27 @@ describe("POST /api/import/batches/[id]/apply", () => {
     const body = await response.json();
     expect(body.done).toBe(true);
   });
+
+  // Round-8 audit finding 3: apply_import_batch_chunk_v2 (0108) already
+  // no-ops on a reverted batch, but the not-yet-applied rows it leaves
+  // alone keep eligibleNotApplied > 0 forever — recomputeBatchStatus's
+  // own derived `status` can never report "reverted" either (its update
+  // is `.neq("status","reverted")`). Without reading the batch's ACTUAL
+  // status, `done` would never flip true and a client would keep polling
+  // apply futilely. The batch fetch already reads `status` for exactly
+  // this — surfaced as `batchStatus`, and folded into `done` directly.
+  it("reports done:true and batchStatus 'reverted' when the batch itself was reverted, even though eligibleNotApplied is still nonzero", async () => {
+    allow(makeSupabase({ id: BATCH_ID, status: "reverted" }));
+    mockApplyImportBatchChunk.mockResolvedValue({
+      processed: [],
+      // apply_import_batch_chunk_v2 no-ops on a reverted batch — its own
+      // derived status stays whatever it was before the revert.
+      status: "created",
+      counts: { total: 10, applied: 0, excluded: 0, pending: 0, eligibleNotApplied: 10 },
+    });
+    const response = await POST(request(), { params: params() });
+    const body = await response.json();
+    expect(body.batchStatus).toBe("reverted");
+    expect(body.done).toBe(true);
+  });
 });

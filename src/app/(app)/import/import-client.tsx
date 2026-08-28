@@ -1332,7 +1332,14 @@ export function BatchStep({
           setActionError(body?.error?.message ?? "Apply failed.");
           break;
         }
-        done = body.done;
+        // Round-8 audit finding 3: a batch reverted mid-apply (e.g. by a
+        // concurrent reconciliation cleanup) already makes `done` true via
+        // the apply route's own batchStatus check — checked again here
+        // directly so this loop stops the instant it sees "reverted" even
+        // if `done`'s own derivation ever changes. `refresh()` below then
+        // pulls the batch's real status, surfacing the existing
+        // reverted-batch banner.
+        done = body.done || body.batchStatus === "reverted";
         await refresh();
       }
     } catch {

@@ -433,10 +433,18 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
         // "you can retry it below" wording is actively wrong for this one
         // code, so it's used only for every other (genuinely retryable)
         // failure.
+        //
+        // Round-8 audit finding 2: multiple_applied_batches is the same
+        // kind of dead end — reconcileLiveBatchesForFile refuses to touch
+        // either applied batch, so retrying this upload hits the identical
+        // conflict every time until an operator manually reverts one of
+        // them from Recent imports. The server's own message already says
+        // so; showing it verbatim here instead of "you can retry it below"
+        // matters for the same reason it does for chunk_content_mismatch.
         return {
           ok: false,
           error:
-            code === "chunk_content_mismatch"
+            code === "chunk_content_mismatch" || code === "multiple_applied_batches"
               ? message
               : `Chunk ${chunk.index} of ${plan.chunkTotal} failed to upload — you can retry it below.`,
         };
@@ -667,15 +675,23 @@ export type ConfirmChunkedSessionWithResumeResult = { ok: true } | { ok: false; 
  * from a session two-or-more hops back. That's what makes "revert every
  * currently-confirmed entry" correct at every hop, not just the first one.
  *
- * Residual: a revert call above can itself fail (network error, etc.) —
- * tolerated here exactly like selfRevertAndRetry's own FAILURE-ATOMICITY
- * residual (batch-service.ts): the chunk stays live under the abandoned
- * session, unapplied, and re-driving it under the adopted session below
- * routes through confirmImportBatch's own reconcile-on-resume logic
- * (round-7 audit finding 1) — which will find BOTH the orphan and the
- * fresh confirm as live candidates for the same underlying chunk content
- * and resolve them itself (at worst, one more bounded adoption hop, never
- * a duplicate). */
+ * Round-8 audit finding 4, corrected: the residual paragraph this used to
+ * end on ("a revert call above can itself fail ... tolerated here") relied
+ * on re-driving under the adopted session to reconcile the orphan away —
+ * but the code below only ever checked whether the `fetch` itself
+ * resolved, never `response.ok`, so an HTTP-level revert failure (a 4xx/5xx
+ * from the revert endpoint) was silently treated as success. The lingering
+ * un-reverted batch then resurfaces as a cross-session duplicate once its
+ * chunk is re-driven, bouncing adoption toward another hop instead of the
+ * one reconcile pass the old comment promised — worst case, riding the
+ * MAX_SESSION_ADOPTION_HOPS ceiling to a hard stop with no clear reason
+ * why. Fixed: every revert's `response.ok` is checked explicitly. If ANY
+ * fails, this ABORTS the adoption re-drive entirely — chunks are never
+ * reset/re-driven — and surfaces a retryable error instead, so the
+ * operator's next attempt starts clean rather than compounding a partial
+ * cleanup. A revert that resolves with response.ok is still exactly as
+ * safe as before (this function's own apply-timing verification above);
+ * only an unconfirmed one now stops the whole adoption. */
 export async function confirmChunkedSessionWithResume(
   params: ConfirmChunkedSessionParams,
   depth = 0,
@@ -709,15 +725,25 @@ export async function confirmChunkedSessionWithResume(
         const confirmedUnderAbandonedSession = latestUpload.filter(
           (c) => c.status === "confirmed" && c.batchId,
         );
-        await Promise.all(
+        // Round-8 audit finding 4: check response.ok on every revert — see
+        // this function's own comment above for why an unconfirmed revert
+        // must abort the adoption rather than being treated as success.
+        const revertOutcomes = await Promise.all(
           confirmedUnderAbandonedSession.map(async (c) => {
             try {
-              await fetch(`/api/import/batches/${c.batchId}/revert`, { method: "POST" });
+              const response = await fetch(`/api/import/batches/${c.batchId}/revert`, { method: "POST" });
+              return response.ok;
             } catch {
-              // Best-effort — see this function's own comment above.
+              return false;
             }
           }),
         );
+        if (revertOutcomes.some((ok) => !ok)) {
+          return {
+            ok: false,
+            error: "Couldn't clean up a previous attempt at this import — please retry the upload.",
+          };
+        }
 
         writeStoredSession({
           sessionId: result.conflictingSessionId,
@@ -1041,7 +1067,11 @@ export function SessionStep({
             setActionError(body?.error?.message ?? `Apply failed on chunk ${chunk.chunkIndex ?? chunk.batchId}.`);
             return;
           }
-          done = body.done;
+          // Round-8 audit finding 3: see import-client.tsx's applyAll for
+          // why this is checked directly rather than trusting `done`
+          // alone — `refresh()` in the `finally` below then pulls this
+          // chunk's real status, surfacing ChunkStatusChip's "Reverted".
+          done = body.done || body.batchStatus === "reverted";
         }
       }
     } catch {

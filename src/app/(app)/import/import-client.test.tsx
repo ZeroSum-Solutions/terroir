@@ -11,7 +11,7 @@
 //     honest, chunk-scoped claim), never "Row {pseudo-global number}".
 import { act, useState, type ComponentProps, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   PreviewStep,
   BatchStep,
@@ -1229,6 +1229,117 @@ describe("BatchStep — a resumed batch that reads as reverted is surfaced hones
     mountedRoots.push(root);
     await act(async () => root.render(element));
     return { container, root };
+  }
+});
+
+// Round-8 audit finding 3: apply_import_batch_chunk_v2 (0108) already
+// no-ops on a reverted batch, but the not-yet-applied rows it leaves alone
+// keep eligibleNotApplied > 0 forever, so the old `done = body.done` (with
+// `done` derived purely from that count) never flipped true — a batch
+// reverted mid-apply left this loop retrying futilely up to its own
+// 200-call guard. The apply route now also reports the batch's real
+// status (batchStatus), and applyAll checks it directly.
+describe("BatchStep — applyAll stops immediately on a reverted batchStatus (round-8 audit finding 3)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+    vi.unstubAllGlobals();
+  });
+
+  function detail(status: BatchDetail["batch"]["status"]): BatchDetail {
+    return {
+      batch: {
+        id: "batch-1",
+        filename: "cellar.csv",
+        status,
+        total_rows: 1,
+        created_at: "2026-08-27T00:00:00.000Z",
+        reverted_at: status === "reverted" ? "2026-08-27T00:00:01.000Z" : null,
+      },
+      rows: [
+        {
+          id: "row-1",
+          row_number: 1,
+          raw: { producer: "Domaine A", name: "Cuvee 1" },
+          row_state: "valid",
+          validation_errors: [],
+          lwin_status: "matched",
+          lwin_id: "lwin-1",
+          cost_status: "present",
+          resolution: "auto",
+          manual_unit_cost: null,
+          apply_status: "not_applied",
+        },
+      ],
+    };
+  }
+
+  function jsonResponse(status: number, body: unknown): Response {
+    return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  }
+
+  it("makes exactly ONE apply call, stops the loop, and surfaces the reverted banner via the next refresh — never a futile retry loop", async () => {
+    const applyCalls: string[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/apply") && init?.method === "POST") {
+          applyCalls.push(url);
+          return jsonResponse(200, {
+            processed: [],
+            status: "created",
+            // The batch was reverted (e.g. by a concurrent reconciliation
+            // cleanup) before this apply chunk ever ran — eligibleNotApplied
+            // is still 1, exactly the case that used to loop forever.
+            batchStatus: "reverted",
+            counts: { total: 1, applied: 0, excluded: 0, pending: 0, eligibleNotApplied: 1 },
+            done: true,
+          });
+        }
+        if (url === "/api/import/batches/batch-1") {
+          return jsonResponse(200, detail("reverted"));
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      }),
+    );
+
+    function Harness() {
+      const [batch, setBatch] = useState<BatchDetail>(detail("created"));
+      return <BatchStep batch={batch} setBatch={setBatch} onDone={() => {}} />;
+    }
+
+    const { container } = await mount(<Harness />);
+    const applyButton = findButton(container, /Apply \d+ row/);
+    expect(applyButton).toBeTruthy();
+
+    await click(applyButton!);
+
+    // Exactly one apply call — the loop stopped the instant it saw
+    // batchStatus "reverted", never retrying up to its own 200-call guard.
+    expect(applyCalls).toHaveLength(1);
+    // The refresh after the loop pulled the batch's real (reverted) state,
+    // so the existing reverted-batch banner now renders and Apply is gone.
+    expect(container.textContent).toContain("This import batch was reverted. Its rows were not imported");
+    expect(findButton(container, /Apply \d+ row/)).toBeFalsy();
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+
+  async function click(element: HTMLElement) {
+    await act(async () => element.click());
   }
 });
 

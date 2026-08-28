@@ -1033,9 +1033,43 @@ async function findLiveBatchByUnderlyingFile(
  *    resume (which would have caught it) landing in between. This is
  *    narrow — apply only ever starts after an operator's own explicit
  *    click reaches a batch/session step, never automatically — and, unlike
- *    a silent duplicate, is repairable after the fact via an ordinary
- *    revert of the extra batch. Stated here honestly as the residual, not
- *    hidden as "proven impossible." */
+ *    a silent duplicate, is NEVER silently repaired by a later reconcile
+ *    pass (round-8 audit finding 2, below) — it stops and asks a human to
+ *    pick which one to keep.
+ *
+ * Round-8 audit finding 1 (BLOCK), corrected: an earlier version of this
+ * function reverted every rival BEST-EFFORT — a per-candidate try/catch
+ * that swallowed a failed revert and returned `target` regardless. That is
+ * NOT safe here the way it is in selfRevertAndRetry's own residual: this
+ * function hands `target` out as a RESUME POINTER a brand-new client is
+ * about to start applying, while an unresolved rival may be the batch the
+ * FILE'S ORIGINAL client still holds and is independently applying right
+ * now — two live, appliable batches for one file, exactly the duplicate
+ * this whole file exists to prevent. Fixed to fail CLOSED: every rival
+ * revert's outcome is tracked, and a rival counts as "resolved" only when
+ * its own revertImportBatch call returned ok:true, OR — a failure there
+ * (a thrown error, or an ok:false the revert RPC itself reported, e.g. the
+ * "already reverted" P0001 a concurrent revert can produce) — a follow-up
+ * status re-read (readBatchLiveState) confirms it is status='reverted' by
+ * some other means. If ANY rival is still unresolved after that, this
+ * returns NO match at all — the same retryable conflict shape
+ * duplicate_race_retry already gives callers, so the next attempt simply
+ * re-enters this function from scratch and re-reconciles.
+ *
+ * Round-8 audit finding 2 (BLOCK), corrected: when MULTIPLE candidates
+ * already have applied rows (the documented tiebreak above — itself
+ * already flagged as needing "manual data repair," not an automatic fix),
+ * the old code still targeted one and swallowed the other(s) into the
+ * SAME best-effort revert loop as every unapplied rival — silently
+ * DELETING a second batch's already-applied inventory rows
+ * (revert_import_batch's own deletion scope) during what the caller sees
+ * as an ordinary confirm/resume request. This function must never revert
+ * an APPLIED batch. Candidates are partitioned into applied/unapplied
+ * before any revert is even considered: two or more applied candidates is
+ * now a distinct, NON-retryable conflict (multiple_applied_batches) that
+ * reverts nothing and tells the operator to resolve it by hand from batch
+ * history; exactly one applied candidate is the target, and only the
+ * UNAPPLIED rivals are ever passed to the fail-closed revert above. */
 async function reconcileLiveBatchesForFile(
   supabase: SupabaseClient<Database>,
   restaurantId: string,
@@ -1070,24 +1104,68 @@ async function reconcileLiveBatchesForFile(
   const appliedBatchIds = new Set(((appliedRows ?? []) as { batch_id: string }[]).map((r) => r.batch_id));
 
   // `candidates` is already ordered oldest created_at, then oldest id
-  // (findLiveBatchesByUnderlyingFile's own ordering) — the first applied
-  // one in that order is the documented tiebreak above; falling through to
-  // candidates[0] is the ordinary nothing-applied-yet case.
-  const target = candidates.find((c) => appliedBatchIds.has(c.id)) ?? candidates[0];
+  // (findLiveBatchesByUnderlyingFile's own ordering).
+  const appliedCandidates = candidates.filter((c) => appliedBatchIds.has(c.id));
 
-  await Promise.all(
-    candidates
-      .filter((c) => c.id !== target.id)
-      .map(async (orphan) => {
-        try {
-          await revertImportBatch(supabase, orphan.id);
-        } catch {
-          // Best-effort — see this function's own comment above.
-        }
-      }),
+  // Round-8 audit finding 2: two or more already-applied candidates is a
+  // real duplicate that has ALREADY landed — never something this function
+  // can safely resolve by picking one and reverting the other(s). Stop,
+  // touch nothing, and say so plainly.
+  if (appliedCandidates.length >= 2) {
+    return {
+      ok: false,
+      error: {
+        code: "multiple_applied_batches",
+        message:
+          "This file already has two applied imports — this can't be resolved automatically. Revert one of " +
+          "them from Recent imports before resuming or re-uploading this file.",
+      },
+    };
+  }
+
+  // Exactly one applied candidate is the target (the documented tiebreak);
+  // otherwise fall back to oldest-first, the ordinary nothing-applied-yet
+  // case. Either way `target` is never a candidate this function is about
+  // to revert.
+  const target = appliedCandidates[0] ?? candidates[0];
+  const rivals = candidates.filter((c) => c.id !== target.id);
+
+  // Round-8 audit finding 1: fail-closed revert — every rival must be
+  // CONFIRMED gone (not merely "we tried") before target is handed out.
+  const outcomes = await Promise.all(
+    rivals.map(async (rival) => ({ id: rival.id, resolved: await revertRivalAndConfirm(supabase, rival.id) })),
   );
+  if (outcomes.some((o) => !o.resolved)) {
+    return {
+      ok: false,
+      error: {
+        code: "duplicate_race_retry",
+        message: "Another import attempt for this file is being cleaned up — please retry the upload.",
+      },
+    };
+  }
 
   return { ok: true, match: target };
+}
+
+/** Round-8 audit finding 1: reverts one rival and reports whether it is
+ * now CONFIRMED gone — never merely "the call didn't throw." A successful
+ * revertImportBatch call is sufficient proof on its own. Anything else (a
+ * thrown error, or an ok:false the RPC itself reported — e.g. the
+ * "already reverted" P0001 a concurrent revert on the same rival can
+ * produce) falls back to a direct status re-read: if some other path has
+ * already put this rival at status='reverted', that is just as valid a
+ * resolution as our own call succeeding. Only a rival that is neither is
+ * reported unresolved. */
+async function revertRivalAndConfirm(supabase: SupabaseClient<Database>, rivalId: string): Promise<boolean> {
+  try {
+    const result = await revertImportBatch(supabase, rivalId);
+    if (result.ok) return true;
+  } catch {
+    // fall through to the re-read below
+  }
+  const current = await readBatchLiveState(supabase, rivalId);
+  return current?.status === "reverted";
 }
 
 export type BatchCounts = {
