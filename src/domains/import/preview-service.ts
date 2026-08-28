@@ -14,7 +14,7 @@ import { decodeCsvBuffer, parseCsv } from "./csv-parser";
 import { mapHeader, validateRow, type FieldError, type FieldsInput, type RawRowFields } from "./row-validator";
 import { matchLwinBulk, buildLwinQueryVariants, type LwinMatch } from "./lwin-matching";
 import { mergeIntraBatchDuplicates, type IntraBatchDuplicateReason } from "./dedup-key";
-import type { CanonicalHeader } from "./constants";
+import { PRODUCER_LESS_MAX_ROWS, type CanonicalHeader } from "./constants";
 
 const CATALOG_LOOKUP_PAGE_SIZE = 1000;
 
@@ -26,7 +26,31 @@ const CATALOG_LOOKUP_PAGE_SIZE = 1000;
  * src/app/api/member-analytics/route.ts, except this one degrades rather
  * than throws on a page error — preserving the lookup's existing
  * "a display-name lookup failure never fails the whole preview" contract
- * (see the call site below) while still reading every page it can. */
+ * (see the call site below) while still reading every page it can.
+ *
+ * WARN (round 5 fix) — this is OFFSET pagination, not keyset/seek
+ * pagination, ordered uniquely by lwin_id (the call site's own
+ * `.order("lwin_id")`) so it can never MIS-associate a row with the wrong
+ * id. It is NOT snapshot-stable across the multiple requests one call
+ * makes, though: `scripts/seed-lwin.ts` upserts live against this same
+ * table, so if a row matching this call's own `.in(distinctLwinIds)`
+ * filter is inserted or deleted between two page reads, later offsets can
+ * shift — skipping a row that was never read, or (far less likely, since
+ * `.in()` is a closed, fixed id list computed once before this call
+ * starts) re-reading one already seen. Documented here rather than fixed
+ * with keyset pagination because the failure mode this can ever produce is
+ * strictly bounded and already-handled: a SKIPPED row degrades to
+ * `lwinDisplayName: null` for that one row (see the "no catalog row" case
+ * this function's caller already handles identically), never a WRONG name
+ * — the raw `lwinId`/`lwinScore` this product actually writes are
+ * computed entirely independently of this lookup and are never affected.
+ * A theoretical re-read (a row reappearing in a later page after already
+ * being read) is harmless too: the caller folds results into a `Map`
+ * keyed by `lwin_id`, so a duplicate entry is just an overwrite with the
+ * same value. If this residual is ever worth closing outright, keyset
+ * pagination (seek on `lwin_id > <last id read>` instead of a numeric
+ * offset) would remove it; not done here since the accepted failure mode
+ * is "an occasional missing display name," never a correctness bug. */
 async function fetchAll<T>(
   makeQuery: (from: number, to: number) => PromiseLike<{
     data: T[] | null;
@@ -145,6 +169,29 @@ export async function buildImportPreview(
   }
 
   const validated = parsed.rows.map((cells, idx) => validateRow(cells, columnToField, rowOverrides?.[String(idx + 1)]));
+
+  // BLOCK 2 (round 5 fix) — a producer-less row fans out to up to 3 LWIN
+  // query variants (buildLwinQueryVariants below), vs 1 for a row with a
+  // real producer. Checked BEFORE any LWIN RPC call is made (this counts,
+  // it doesn't query) — see PRODUCER_LESS_MAX_ROWS' own comment
+  // (constants.ts) for the worst-case wall-clock arithmetic this bound is
+  // derived from. A row that failed validation never reaches matching at
+  // all (see the `row.state === "error"` branch below), so only VALID,
+  // producer-less rows count.
+  const producerLessRowCount = validated.filter((row) => row.state === "valid" && row.producer === "").length;
+  if (producerLessRowCount > PRODUCER_LESS_MAX_ROWS) {
+    return {
+      ok: false,
+      error: {
+        code: "too_many_producerless_rows",
+        message:
+          `This file has ${producerLessRowCount} row(s) with no producer — each one is matched against the ` +
+          `wine catalog with several queries, and matching that many at once cannot complete reliably. Add a ` +
+          `producer/winery value to more rows, or split this file so no single upload has more than ` +
+          `${PRODUCER_LESS_MAX_ROWS} producer-less rows.`,
+      },
+    };
+  }
 
   // Producer-less rows (real-world single-"Wine Name"-column exports) are
   // matched with several query variants — full name in both legs, plus the

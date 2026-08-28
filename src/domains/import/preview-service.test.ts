@@ -333,6 +333,69 @@ describe("buildImportPreview", () => {
       // just a single unpaged call happening to return everything.
       expect(supabase._catalogRanges.length).toBeGreaterThan(1);
     });
+
+    // WARN (round 5 fix) — fetchAll's own "degrades rather than throws on a
+    // page error" contract (preview-service.ts), specifically for a page
+    // AFTER the first: proves the rows already read from earlier pages
+    // survive a later page's failure, rather than the whole lookup
+    // discarding everything it already had. This is what makes the
+    // documented offset-pagination residual (fetchAll's own comment) safe
+    // in practice — a skipped/failed page degrades exactly the rows on
+    // that page to lwinDisplayName: null, never the ones already read.
+    it("keeps the display names already read from earlier pages when a LATER page errors, rather than losing them all", async () => {
+      const rowCount = 1200; // two pages: [0,999] then [1000,1199]
+      const csvBody = Array.from({ length: rowCount }, (_, i) => `Domaine ${i},Wine ${i},2020,1,10.00`).join("\n");
+      const matchRows = Array.from({ length: rowCount }, (_, i) => ({
+        idx: i,
+        lwin_id: `LWIN${String(i).padStart(5, "0")}`,
+        score: 0.95,
+      }));
+      const catalogRows = Array.from({ length: rowCount }, (_, i) => ({
+        lwin_id: `LWIN${String(i).padStart(5, "0")}`,
+        display_name: `Domaine ${i} Wine ${i} 2020`,
+      }));
+      const sorted = [...catalogRows].sort((a, b) => a.lwin_id.localeCompare(b.lwin_id));
+      const rpc = vi.fn().mockResolvedValue({ data: matchRows, error: null });
+      const supabase = {
+        from: (table: string) => {
+          if (table === "lwin_catalog") {
+            return {
+              select: () => ({
+                in: () => ({
+                  order: () => ({
+                    range: (from2: number, to2: number) => {
+                      // The first page (offset 0) succeeds; every later
+                      // page fails — simulating a transient failure that
+                      // hits partway through a multi-page read.
+                      if (from2 > 0) return Promise.resolve({ data: null, error: { message: "connection reset" } });
+                      return Promise.resolve({ data: sorted.slice(from2, to2 + 1), error: null });
+                    },
+                  }),
+                }),
+              }),
+            };
+          }
+          return { insert: vi.fn(), update: vi.fn() };
+        },
+        rpc,
+      } as unknown as Parameters<typeof buildImportPreview>[0];
+
+      const result = await buildImportPreview(supabase, csv(`${csvBody}\n`));
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // First page's 1,000 rows still resolved their real display names.
+      expect(result.rows[0].lwinDisplayName).toBe("Domaine 0 Wine 0 2020");
+      expect(result.rows[999].lwinDisplayName).toBe("Domaine 999 Wine 999 2020");
+      // The second (failed) page's rows degrade to null — never a wrong
+      // name, and never fails the whole preview.
+      expect(result.rows[1000].lwinDisplayName).toBeNull();
+      expect(result.rows[1199].lwinDisplayName).toBeNull();
+      // Every row's own lwinId/lwinScore (the values actually written) are
+      // completely unaffected by the display-name lookup's own failure.
+      expect(result.rows[1199].lwinId).toBe("LWIN01199");
+      expect(result.rows[1199].lwinScore).toBe(0.95);
+    });
   });
 
   describe("rowOverrides — inline row-fix", () => {
@@ -373,5 +436,62 @@ describe("buildImportPreview", () => {
       if (result.ok) return;
       expect(result.error.code).toBe("invalid_row_override");
     });
+  });
+});
+
+// BLOCK 2 (round 5 fix) — PRODUCER_LESS_MAX_ROWS: a producer-less row fans
+// out to up to 3 LWIN query variants (buildLwinQueryVariants), so
+// MAX_ROWS' worth of them can't be matched inside a reasonable UX budget
+// (see that constant's own comment, constants.ts, for the worst-case
+// wall-clock arithmetic). Checked BEFORE any match_lwin_bulk RPC call.
+describe("buildImportPreview — PRODUCER_LESS_MAX_ROWS (BLOCK 2, round 5 fix)", () => {
+  it("rejects a file with more producer-less VALID rows than PRODUCER_LESS_MAX_ROWS, before issuing any LWIN RPC call", async () => {
+    const rowCount = 1501; // PRODUCER_LESS_MAX_ROWS (1,500) + 1
+    // Producer column left empty on every row (producer-less).
+    const csvBody = Array.from({ length: rowCount }, (_, i) => `,Wine ${i},2020,1,10.00`).join("\n");
+    const supabase = makeSupabase([]);
+
+    const result = await buildImportPreview(supabase, csv(`${csvBody}\n`));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("too_many_producerless_rows");
+    expect(result.error.message).toContain("1501");
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("accepts a file with EXACTLY PRODUCER_LESS_MAX_ROWS producer-less rows — the bound is inclusive", async () => {
+    const rowCount = 1500;
+    const csvBody = Array.from({ length: rowCount }, (_, i) => `,Wine ${i},2020,1,10.00`).join("\n");
+    const matchRows = Array.from({ length: rowCount }, (_, i) => ({ idx: i, lwin_id: null, score: null }));
+    const supabase = makeSupabase(matchRows);
+
+    const result = await buildImportPreview(supabase, csv(`${csvBody}\n`));
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("does NOT count rows that already have a producer against the cap — only the fan-out-eligible subset matters", async () => {
+    const rowCount = 2000; // over PRODUCER_LESS_MAX_ROWS, but every row HAS a producer
+    const csvBody = Array.from({ length: rowCount }, (_, i) => `Domaine ${i},Wine ${i},2020,1,10.00`).join("\n");
+    const matchRows = Array.from({ length: rowCount }, (_, i) => ({ idx: i, lwin_id: null, score: null }));
+    const supabase = makeSupabase(matchRows);
+
+    const result = await buildImportPreview(supabase, csv(`${csvBody}\n`));
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("does NOT count an invalid (error) row toward the cap — an unmatchable row never reaches LWIN matching at all", async () => {
+    const rowCount = 1501;
+    // Every row producer-less AND missing quantity (required), so every
+    // one is an error row, not a valid one — none of them is eligible for
+    // LWIN matching, so none should count against the cap.
+    const csvBody = Array.from({ length: rowCount }, (_, i) => `,Wine ${i},2020,,10.00`).join("\n");
+    const supabase = makeSupabase([]);
+
+    const result = await buildImportPreview(supabase, csv(`${csvBody}\n`));
+
+    expect(result.ok).toBe(true);
   });
 });

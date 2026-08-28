@@ -27,11 +27,25 @@
  * bucketed at LWIN_APPLY_MIN_SCORE (the apply bar), plus a sample of
  * best-scoring near-misses for eyeballing precision.
  *
- * This is the checked-in version of the 2026-08-27 offline harness whose
- * numbers (29.6% → 77.0% on a real 1,306-row producer-less export against
- * the production 211k-row catalog) are cited in lwin-matching.ts and the
- * variant-matching PR (Sol audit 2026-08-27 finding 4: claims must be
- * reproducible from the repo).
+ * This is the checked-in version of the 2026-08-27 offline harness that
+ * originally produced the 29.6% → 77.0% figure cited in lwin-matching.ts
+ * and the variant-matching PR (Sol audit 2026-08-27 finding 4: claims must
+ * be backed by a real, runnable tool, not a one-off number with nothing
+ * behind it).
+ *
+ * NIT (Sol audit round 3) — correcting the word this comment used to use:
+ * this script is RERUNNABLE from the repo, not REPRODUCIBLE. Neither the
+ * original 1,306-row partner CSV nor a snapshot/hash of the production
+ * catalog it was measured against is checked in here (the partner file is
+ * a client's real data and was never committed; the catalog is a live,
+ * mutable table, not a fixed artifact) — so re-running this script today,
+ * even against the same production database, is not guaranteed to
+ * reproduce 29.6%/77.0% exactly: the catalog may have grown or changed
+ * since, and no other CSV will exercise the identical set of rows the
+ * original measurement did. What IS reproducible: the MECHANISM (this
+ * tool, run against ANY producer-less CSV and ANY reachable lwin_catalog,
+ * reports a real baseline-vs-variant comparison through the actual
+ * production code paths) — not the specific historical numbers.
  *
  * Usage:
  *   NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=... \

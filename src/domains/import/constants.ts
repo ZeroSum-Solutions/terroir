@@ -73,13 +73,54 @@ export const LWIN_MATCH_BATCH_SIZE = 100;
 /** Concurrent match_lwin_bulk RPC calls in flight (Sol audit 2026-08-27
  * finding 1). Producer-less variant queries (buildLwinQueryVariants)
  * amplify query count up to 3× — sequential chunks would triple the
- * matching wall-clock and threaten the preview/confirm routes' 60s
- * budget at the 5,000-row cap. At concurrency 4, worst-case wall-clock
- * for 3N variant queries is ceil(3N/100/4) waves ≈ 0.75× the OLD
- * sequential time for N single queries — i.e. the variant path is
- * strictly faster than the pre-variant contract for every file size.
- * Kept small so at most 4 trigram scans hit the catalog at once. */
+ * matching wall-clock. At concurrency 4, worst-case wall-clock for 3N
+ * variant queries is ceil(3N/100/4) waves of the per-call worst-case time.
+ *
+ * BLOCK 2 (round 5 fix) — the "≈0.75× the OLD sequential time... strictly
+ * faster for every file size" claim this comment used to make was never
+ * measured under concurrent load, only asserted from the sequential-call
+ * arithmetic. Measured this round (scratchpad benchmark against a
+ * synthetic 130,000-row catalog, worst-case all-common-producer-prefix
+ * queries, 4× concurrent `Promise.all` vs sequential): concurrency 4
+ * delivered a 3.61× wall-clock speedup over sequential (ideal 4×) with
+ * only a ~9% per-call latency increase from contention — the concurrency
+ * assumption holds qualitatively, at least against that environment.
+ * What did NOT hold is the "still fits one request" conclusion: at
+ * MAX_ROWS (5,000) fully producer-less, worst case is 150 chunks -> 38
+ * waves -> ~167s even taking the historical ~4.4s/100-row figure at face
+ * value (0078_match_lwin_trgm_fastpath.sql) — several times over a
+ * reasonable UX budget. See PRODUCER_LESS_MAX_ROWS below for the actual
+ * fix (a lower, enforced cap for producer-less input, not a concurrency
+ * increase this pass had no safe way to validate against the shared
+ * production database) and docs/runbooks/csv-import.md for the corrected
+ * budget analysis. Kept at 4 so at most 4 trigram scans hit the catalog
+ * at once — raising it further was considered but not made without a
+ * production-scale measurement this pass could not safely perform. */
 export const LWIN_MATCH_CONCURRENCY = 4;
+
+/** BLOCK 2 (round 5 fix) — producer-less rows fan out to up to 3 LWIN
+ * query variants each (buildLwinQueryVariants), vs 1 for a row with a real
+ * producer (see that function's own comment). MAX_ROWS (5,000) was sized
+ * around the 1× fan-out case; at 3× fan-out, the documented worst-case
+ * per-call cost (~4.4s/100-query call, 0078_match_lwin_trgm_fastpath.sql)
+ * combined with LWIN_MATCH_CONCURRENCY (4) gives a worst-case wall-clock of
+ * ceil(3·rows/100/4) waves × 4.4s. Solving for a 60s ceiling (the
+ * preview/confirm routes' own documented, if platform-inert on this app's
+ * Railway deployment — see CLEANUP_BUDGET_FROM_ENTRY_MS's own comment —
+ * `maxDuration`, kept as the UX-latency target regardless) gives
+ * ceil(3·rows/400) ≤ 13.6, i.e. rows ≲ 1,733; this is set to a round
+ * number safely under that. Enforced in buildImportPreview
+ * (preview-service.ts) against the count of VALID, producer-less rows in
+ * ONE preview/confirm unit (a whole small file, or one chunk of an
+ * auto-split large file) — a file/chunk over this bound fails fast,
+ * BEFORE any LWIN RPC call is made, with a message telling the operator to
+ * add producer data or reduce the chunk size, rather than risking a
+ * multi-minute matching pass that times out (or simply strands the
+ * operator) partway through. A file mixing producer-having and
+ * producer-less rows is unaffected up to this many producer-less rows —
+ * only the fan-out-eligible subset counts against this cap, never
+ * MAX_ROWS itself. */
+export const PRODUCER_LESS_MAX_ROWS = 1500;
 
 /** Canonical CSV column names, in the order the downloadable template uses. */
 export const CANONICAL_HEADERS = [

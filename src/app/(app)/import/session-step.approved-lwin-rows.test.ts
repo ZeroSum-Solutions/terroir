@@ -64,7 +64,16 @@ describe("confirmChunkedSession — approvedLwinRows wiring", () => {
     expect(sentApprovedLwinRows[1]).toBe(JSON.stringify({ "2": "LWIN004" }));
   });
 
-  it("omits the approvedLwinRows field entirely for a chunk with no relevant approvals", async () => {
+  // BLOCK 1 (round 5 fix): this used to omit the field entirely for a
+  // chunk with no relevant approvals — but an omitted field is
+  // indistinguishable, server-side, from an older client that never sends
+  // approvedLwinRows at all, which is exactly the ambiguity that let a row
+  // re-scoring above the apply threshold between preview and confirm sail
+  // through unvetoed (applyLwinApprovalVeto, batch-service.ts). Now sends
+  // `{}` — PRESENCE (not non-emptiness) is what tells confirm this chunk's
+  // full linking picture was communicated, so it can fail closed on any
+  // row absent from it.
+  it("sends `{}` (not an omitted field) for a chunk with no relevant approvals — presence alone signals full-picture mode to confirm", async () => {
     const chunks: ChunkPlanItem[] = [{ index: 1, startRow: 1, endRow: 2, text: "producer,name,quantity\nA,B,1\nA,C,1\n" }];
     const plan: ChunkedPlanState = { headerRecord: "producer,name,quantity", chunkTotal: 1, chunks, sourceSha256: "a".repeat(64) };
     let sentApprovedLwinRows: string | null = "unset";
@@ -91,7 +100,7 @@ describe("confirmChunkedSession — approvedLwinRows wiring", () => {
       onProgress: () => {},
     });
 
-    expect(sentApprovedLwinRows).toBeNull();
+    expect(sentApprovedLwinRows).toBe(JSON.stringify({}));
   });
 
   it("omits the field entirely when approvedLwinRows is not provided at all (plain overrides-only callers keep working)", async () => {

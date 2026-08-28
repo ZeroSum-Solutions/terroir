@@ -541,8 +541,12 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
           chunkGlobalApprovedSlice[globalRowNumber] = lwinId;
         }
       }
+      // BLOCK 1 (round 5 fix): always send, even `{}` when this chunk has
+      // zero linking matches of its own — see handleConfirm's own comment
+      // in import-client.tsx for why presence (not non-emptiness) is what
+      // confirm needs to fail closed correctly for THIS chunk's rows.
       const localApproved = localizeApprovedLwinRows(approvedLwinRows, chunk);
-      if (Object.keys(localApproved).length > 0) form.append("approvedLwinRows", JSON.stringify(localApproved));
+      form.append("approvedLwinRows", JSON.stringify(localApproved));
     }
 
     try {

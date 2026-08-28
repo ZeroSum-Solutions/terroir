@@ -235,38 +235,75 @@ export function applyLwinRejections(rows: PreviewRow[], rejectedRowNumbers: Set<
  * are locked for this change (see docs/runbooks/csv-import.md for the
  * residual this leaves).
  *
- * This is the fail-safe instead: the client sends, per row it saw as
- * matched, the lwin_id it actually displayed and the operator implicitly
- * or explicitly accepted (ConfirmBatchOptions.approvedLwinRows). Confirm
- * still ALWAYS re-derives the match itself and NEVER trusts the client's
- * id as a source of truth for what to WRITE — approvedByRowNumber is used
- * ONLY as a VETO: when a row the operator approved re-matches here to a
- * DIFFERENT lwin_id, this row is stamped exactly like a rejected row (no
- * LWIN link at all — see applyLwinRejections above) rather than silently
- * persisting whichever wine the tie happens to resolve to on this
- * particular call. A row with NO entry in approvedByRowNumber (an older
- * client, or a row the operator's client never showed as matched) is left
- * completely untouched — this mechanism can only ever cause LESS to be
- * written than the server's own re-match alone would, never more or
- * different, which is what preserves confirmImportBatch's existing
- * "never trust a client-supplied preview" property (see this file's own
- * header comment).
+ * BLOCK 1 (round 5 fix) — this used to be a PARTIAL fail-safe: a row with
+ * NO entry in approvedByRowNumber was left completely untouched, on the
+ * theory that "no entry" only ever meant "an older client, or a row the
+ * operator's client never showed as matched." That reasoning was wrong for
+ * the real client: buildApprovedLwinRows (import-client.tsx) only ever
+ * includes a row that was shown as LINKING (score >= LWIN_APPLY_MIN_SCORE)
+ * at preview — a row that was unmatched or below-threshold at preview has
+ * NO entry either, for exactly the same "no entry" shape, even though the
+ * operator explicitly did NOT see it as linking. If that row re-scores >=
+ * LWIN_APPLY_MIN_SCORE at confirm (a catalogue update between preview and
+ * confirm, or match_lwin's own non-deterministic tie-break landing on a
+ * candidate this time), the old code stamped it — a catalogue link the
+ * operator never saw, contradicting the UI's own promise that a
+ * below-threshold/unmatched row imports with no link "no matter what you
+ * do here" (import-client.tsx).
+ *
+ * Fixed by making "no entry" fail CLOSED instead of open, but only when the
+ * client has actually communicated the full picture — `hasFullPicture`
+ * (confirmImportBatch's own `options.approvedLwinRows !== undefined`,
+ * threaded straight through, never re-derived from approvedByRowNumber's
+ * size) is true whenever approvedLwinRows was sent AT ALL, even as `{}` for
+ * a file with zero linking matches — see buildApprovedLwinRows'/
+ * handleConfirm's own comment in import-client.tsx for why the client now
+ * always sends it. When `hasFullPicture` is false (the field was never sent
+ * — a genuinely older client, a bare API caller with no preview UI to show
+ * anything through), the veto is a complete no-op, unchanged from before:
+ * there is no signal to fail closed WITH, and "no data" must never be
+ * treated as "operator saw this and rejected it."
+ *
+ * When `hasFullPicture` is true, EVERY row that would actually be stamped
+ * (lwinStatus 'matched' AND score >= LWIN_APPLY_MIN_SCORE — a below-
+ * threshold match is excluded from this gate entirely, since 0108's own SQL
+ * already refuses to write one regardless, and vetoing it here would wrongly
+ * flip its resolution from 'auto' to 'pending', a BLOCK-3 contract this fix
+ * has no business touching) must have a MATCHING entry in
+ * approvedByRowNumber to survive: no entry, or a disagreeing one, both
+ * veto identically (stamped exactly like a rejected row — see
+ * applyLwinRejections above). Only a row the operator saw as linking, whose
+ * re-derived id still agrees, keeps its link.
+ *
+ * The client's data is still only ever a comparison target, never a
+ * written value — confirm re-derives every match itself, exactly as
+ * before — and this mechanism still can only ever cause LESS to be written
+ * than the server's own re-match alone would, never more or different:
+ * `hasFullPicture=false` reproduces the exact prior behavior, and
+ * `hasFullPicture=true` can only turn an already-computed match INTO
+ * "unmatched," never the reverse.
  *
  * Applied AFTER applyLwinRejections (confirmImportBatch's own call order)
  * — a row already nulled out by an explicit rejection has lwinStatus
  * 'unmatched' by the time this runs, so any approvedLwinRows entry for it
  * is naturally a no-op here, never double-processed.
  *
- * Pure — same immutability/no-op-cheap contract as applyLwinRejections:
- * returns a NEW array, and returns the SAME array reference when there is
- * nothing to veto. Exported so batch-service.test.ts can pin this
+ * Pure — same immutability contract as applyLwinRejections: returns a NEW
+ * array, and returns the SAME array reference when `hasFullPicture` is
+ * false (the one case cheap enough, and common enough for a bare API
+ * caller, to special-case). Exported so batch-service.test.ts can pin this
  * transformation directly. */
-export function applyLwinApprovalVeto(rows: PreviewRow[], approvedByRowNumber: Map<number, string>): PreviewRow[] {
-  if (approvedByRowNumber.size === 0) return rows;
+export function applyLwinApprovalVeto(
+  rows: PreviewRow[],
+  approvedByRowNumber: Map<number, string>,
+  hasFullPicture: boolean,
+): PreviewRow[] {
+  if (!hasFullPicture) return rows;
   return rows.map((row) => {
     if (row.lwinStatus !== "matched") return row;
+    if (row.lwinScore === null || row.lwinScore < LWIN_APPLY_MIN_SCORE) return row;
     const approvedLwinId = approvedByRowNumber.get(row.rowNumber);
-    if (approvedLwinId === undefined || approvedLwinId === row.lwinId) return row;
+    if (approvedLwinId === row.lwinId) return row;
     return {
       ...row,
       lwinStatus: "unmatched",
@@ -397,8 +434,19 @@ export type ConfirmBatchOptions = {
    * applyLwinRejections — see that function's own comment for the full
    * veto mechanics and why this can never cause MORE (or different) to be
    * written than confirm's own from-scratch re-match already decided.
-   * Also folded into content_sha256 below, in its own v3 namespace — see
-   * the digest-construction comment for why. */
+   *
+   * BLOCK 1 (round 5 fix) — PRESENCE of this key (checked via
+   * `!== undefined`, distinct from whether it canonicalizes to anything)
+   * is itself meaningful now: it tells applyLwinApprovalVeto the client
+   * showed the operator its FULL linking picture for this confirm, so any
+   * currently-matched, apply-eligible row absent from it must fail closed
+   * (dropped to unmatched) rather than being silently stamped — see that
+   * function's own comment. The real client (import-client.tsx) always
+   * sends this field now, even as `{}` for a file with zero linking
+   * matches, for exactly this reason. Folded into content_sha256 below, in
+   * its own v3 namespace when non-empty, or a NEW v4 namespace when present
+   * but empty (a state the pre-fix client could never produce) — see the
+   * digest-construction comment for why the two need to stay distinct. */
   approvedLwinRows?: Record<string, string>;
   /** Merge-integration note (item 5, PR #135): revertImportBatch now takes
    * a service-role client to run its orphan-wine/LWIN cleanup, and
@@ -515,9 +563,20 @@ export async function confirmImportBatch(
   if (!approvedCheck.ok) {
     return { ok: false, error: approvedCheck.error };
   }
+  // BLOCK 1 (round 5 fix): presence, not non-emptiness, is what tells
+  // applyLwinApprovalVeto whether this confirm carries the operator's full
+  // linking picture — see that function's own comment for why. Computed
+  // from options.approvedLwinRows directly (never from
+  // approvedCheck.approvedByRowNumber.size), because an explicitly empty
+  // `{}` payload — "the operator's preview showed zero linking matches" —
+  // must engage the fail-closed veto exactly like a non-empty one does,
+  // and a Map built from `{}` has size 0 indistinguishable from one built
+  // from `undefined`.
+  const hasLwinFullPicture = options.approvedLwinRows !== undefined;
   const rows = applyLwinApprovalVeto(
     applyLwinRejections(preview.rows, rejectedCheck.rowNumbers),
     approvedCheck.approvedByRowNumber,
+    hasLwinFullPicture,
   );
 
   // content_sha256 identity, extended for inline row-fix overrides: an
@@ -588,25 +647,56 @@ export async function confirmImportBatch(
   //     exactly as it always has — see canonicalizeConfirmExtrasV3's own
   //     comment for why it's a separate function, not a 3rd argument
   //     bolted onto canonicalizeConfirmExtras.
+  //   - BLOCK 1 (round 5 fix): an approved-match set present but EMPTY (or
+  //     every entry malformed — impossible in practice, since
+  //     checkApprovedLwinRows above already rejects the whole confirm on a
+  //     malformed entry, but canonicalizeApprovedLwinRows' own null-collapse
+  //     is written to treat it identically to `{}` regardless) -> a FOURTH,
+  //     previously-unwritten `overrides-v4:<sha256(combinedJson)>:<fileDigestHex>`
+  //     namespace. This state — hasLwinFullPicture true, yet
+  //     approvedLwinRowsCanonicalJson null — could never occur before this
+  //     round: the pre-fix client only ever sent approvedLwinRows when
+  //     non-empty (buildApprovedLwinRows' own `if (Object.keys(...).length >
+  //     0)` guard, since removed — see import-client.tsx). It now means
+  //     something the v1/v2 tiers' own "no approvedLwinRows" null-collapse
+  //     never had to mean: "the operator's preview showed zero linking
+  //     matches, and applyLwinApprovalVeto's fail-closed veto is engaged for
+  //     this confirm" — a REAL difference in what gets WRITTEN relative to a
+  //     v1/v2/bare confirm of the identical file/overrides/rejections (where
+  //     hasLwinFullPicture is false and the veto never runs at all). Folding
+  //     it into v1/v2's own bytes would let a full-picture-but-nothing-
+  //     approved confirm dedupe-collide with an old-style permissive one —
+  //     resolving to whichever batch was created FIRST via the
+  //     (restaurant_id, content_sha256) lookup, silently skipping this
+  //     confirm's own veto. v4 reuses canonicalizeConfirmExtras (v2's own
+  //     2-key blob), not a new 3-key function: approvedLwinRowsCanonicalJson
+  //     is always null on this branch, so a 3rd "approvedLwinRows: null" key
+  //     would add nothing beyond what the STEM DIGIT ALONE ("4" vs "2")
+  //     already guarantees — the digit sits outside the hashed bytes, so v2
+  //     and v4 can share an identical combinedCanonicalJson for the same
+  //     overrides/rejections and still never collide.
   const overridesCanonicalJson = canonicalizeRowOverrides(options.rowOverrides);
   const rejectedLwinRowsCanonicalJson = canonicalizeRejectedLwinRows(options.rejectedLwinRows);
   const approvedLwinRowsCanonicalJson = canonicalizeApprovedLwinRows(options.approvedLwinRows);
   const fileDigestHex = createHash("sha256").update(fileBuffer).digest("hex");
   let contentSha256: string;
-  if (overridesCanonicalJson === null && rejectedLwinRowsCanonicalJson === null && approvedLwinRowsCanonicalJson === null) {
+  if (overridesCanonicalJson === null && rejectedLwinRowsCanonicalJson === null && !hasLwinFullPicture) {
     contentSha256 = fileDigestHex;
-  } else if (rejectedLwinRowsCanonicalJson === null && approvedLwinRowsCanonicalJson === null) {
+  } else if (rejectedLwinRowsCanonicalJson === null && !hasLwinFullPicture) {
     contentSha256 = `${OVERRIDES_DIGEST_STEM}1:${createHash("sha256").update(overridesCanonicalJson!).digest("hex")}:${fileDigestHex}`;
-  } else if (approvedLwinRowsCanonicalJson === null) {
+  } else if (!hasLwinFullPicture) {
     const combinedCanonicalJson = canonicalizeConfirmExtras(overridesCanonicalJson, rejectedLwinRowsCanonicalJson);
     contentSha256 = `${OVERRIDES_DIGEST_STEM}2:${createHash("sha256").update(combinedCanonicalJson).digest("hex")}:${fileDigestHex}`;
-  } else {
+  } else if (approvedLwinRowsCanonicalJson !== null) {
     const combinedCanonicalJson = canonicalizeConfirmExtrasV3(
       overridesCanonicalJson,
       rejectedLwinRowsCanonicalJson,
       approvedLwinRowsCanonicalJson,
     );
     contentSha256 = `${OVERRIDES_DIGEST_STEM}3:${createHash("sha256").update(combinedCanonicalJson).digest("hex")}:${fileDigestHex}`;
+  } else {
+    const combinedCanonicalJson = canonicalizeConfirmExtras(overridesCanonicalJson, rejectedLwinRowsCanonicalJson);
+    contentSha256 = `${OVERRIDES_DIGEST_STEM}4:${createHash("sha256").update(combinedCanonicalJson).digest("hex")}:${fileDigestHex}`;
   }
 
   // Sol round-2 audit (2026-08-27) finding 2: overrides (or the lack of them)

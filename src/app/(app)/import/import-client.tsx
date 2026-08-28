@@ -633,11 +633,19 @@ export function ImportClient() {
       // shown for every currently-linking matched row, so confirm's own
       // re-match can veto a disagreeing catalogue tie instead of silently
       // persisting it — see buildApprovedLwinRows' own comment.
+      //
+      // BLOCK 1 (round 5 fix): ALWAYS send this field, even as `{}` for a
+      // file with zero linking matches — its mere PRESENCE tells confirm
+      // this client showed the operator its full linking picture, so
+      // applyLwinApprovalVeto (batch-service.ts) can fail closed on any
+      // row absent from it. Gating this on non-emptiness (the old
+      // behavior) made an all-non-linking file's confirm indistinguishable
+      // from an older client that never sends this at all — exactly the
+      // ambiguity that let a row re-scoring above the apply threshold
+      // between preview and confirm sail through unvetoed.
       if (preview) {
         const approvedLwinRows = buildApprovedLwinRows(matchedRowsFromPreviewRows(preview.rows));
-        if (Object.keys(approvedLwinRows).length > 0) {
-          form.append("approvedLwinRows", JSON.stringify(approvedLwinRows));
-        }
+        form.append("approvedLwinRows", JSON.stringify(approvedLwinRows));
       }
       const response = await fetch("/api/import/batches", { method: "POST", body: form });
       const body = await response.json();

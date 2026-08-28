@@ -44,9 +44,41 @@ sub-chunks via repeated `POST /apply` calls, unchanged by chunking.
   work synchronously, bounded by `LWIN_MATCH_BATCH_SIZE` rows per RPC
   call, per chunk. Producer-less rows now issue up to 3 query variants
   each (`buildLwinQueryVariants`), and `matchLwinBulk` runs chunks at
-  `LWIN_MATCH_CONCURRENCY` (4) in flight — worst-case wall-clock for the
-  3× variant load is ≈0.75× the old sequential single-query time, so the
-  5,000-row cap still fits one request with more margin than before.
+  `LWIN_MATCH_CONCURRENCY` (4) in flight.
+  **Correction (BLOCK 2, round 5 fix) — the "still fits one request with
+  more margin than before" claim above was wrong, and has been removed
+  from the arithmetic it was based on.** Taking the documented worst-case
+  per-call cost at face value (~4.4s/100-query call,
+  `0078_match_lwin_trgm_fastpath.sql`), a fully producer-less file at
+  `MAX_ROWS` (5,000) issues 15,000 queries -> 150 chunks -> `ceil(150/4)`
+  = 38 waves at `LWIN_MATCH_CONCURRENCY` (4) -> **~167s worst-case wall
+  clock**, several times over the routes' own 60s design target — not
+  "more margin than before." The "≈0.75× the old sequential time"
+  arithmetic itself was directionally correct (verified this round: see
+  `LWIN_MATCH_CONCURRENCY`'s own comment, `constants.ts`, for a real
+  measurement showing concurrency 4 achieves a 3.61× wall-clock speedup
+  over sequential with only ~9% per-call slowdown from contention) — the
+  error was concluding that a 0.75×-of-a-too-slow-number result is itself
+  fast enough, when the un-multiplied baseline (5,000 single-variant
+  queries, sequential) was never actually the thing being compared
+  against for the 3×-fanned-out case. The actual fix: `buildImportPreview`
+  (`preview-service.ts`) now enforces `PRODUCER_LESS_MAX_ROWS` (1,500,
+  `constants.ts`) — a lower, hard cap on producer-less rows specifically,
+  checked before any LWIN RPC call is issued at all. A file/chunk over
+  that bound fails fast with a clear message (add producer data, or split
+  the file so no single upload has more than 1,500 producer-less rows),
+  rather than risking a multi-minute matching pass. This app's
+  `maxDuration = 60` route exports are Next.js/Vercel serverless metadata
+  and are inert on this app's actual Railway deployment (`railway.toml`,
+  a plain long-running `pnpm start` process — see
+  `CLEANUP_BUDGET_FROM_ENTRY_MS`'s own comment for the same point made
+  about the revert route), so 167s would not have hard-failed the
+  request the way it would on Vercel — but it remains a UX failure an
+  operator should never be left to discover by waiting it out, which is
+  what `PRODUCER_LESS_MAX_ROWS` now prevents predictably instead.
+  `MAX_ROWS` itself (5,000) is unaffected — a file mixing producer-having
+  and producer-less rows is fine up to 1,500 producer-less rows, same as
+  always for the rest.
 
 **What chunking actually needed, that a single-batch design didn't:**
 inventory-level duplicate prevention (§1 — effectively unimplemented
@@ -820,6 +852,45 @@ by the RPC, so an operator can occasionally see a row silently drop to
 value-level "wrong wine" ever persisted — annoying, not unsafe. Closing
 that properly (the RPC itself returning the SAME candidate every time)
 still needs the migration described above.
+
+**BLOCK 1 (round 5 audit): the veto above was fail-OPEN for a row the
+operator never saw as linking at all — corrected, now fail-closed.**
+`buildApprovedLwinRows` (`import-client.tsx`) only ever includes a row that
+was shown as LINKING (score >= `LWIN_APPLY_MIN_SCORE`) at preview — a row
+that was unmatched, or matched below that bar, has no entry either way, for
+the exact same "no entry" shape. Before this round, `applyLwinApprovalVeto`
+left ANY row with no entry completely untouched, on the theory that "no
+entry" only ever meant "an older client, or a row never shown as matched."
+That reasoning missed a real case: if a row that was unmatched or
+below-threshold at PREVIEW re-scores >= `LWIN_APPLY_MIN_SCORE` by the time
+confirm re-derives it from scratch (a catalogue update between the two
+calls, or `match_lwin`'s own non-deterministic tie-break landing on a
+candidate this time), the old veto stamped it — a catalogue link the
+operator never saw, contradicting this same UI's own promise that a
+below-threshold/unmatched row imports with no link "no matter what you do
+here" (`import-client.tsx`'s `PreviewStep`).
+
+The fix: `ConfirmBatchOptions.approvedLwinRows`'s mere PRESENCE (checked via
+`!== undefined`, independent of whether it canonicalizes to anything) now
+tells `applyLwinApprovalVeto` the client showed the operator its full
+linking picture for this confirm. `import-client.tsx` (both the plain and
+chunked confirm paths) now ALWAYS sends this field, even as `{}` for a file
+whose preview showed zero linking matches — omitting it for an
+all-non-linking file used to be indistinguishable from an older, non-UI
+client that never sends it at all, which was exactly the ambiguity behind
+the bug. When the field is present, every row that would actually be
+stamped (matched, score >= `LWIN_APPLY_MIN_SCORE`) now needs a MATCHING
+entry to survive — no entry, same as a disagreeing one, both veto. When the
+field is genuinely absent (a bare API caller with no preview UI to show
+anything through), the veto is unchanged from before: there is no signal to
+fail closed with, and absence of data is never treated as evidence of
+rejection. The "never trust the client, can only cause LESS to be written"
+property is unchanged either way. This changed the digest input shape for
+one previously-impossible state (`approvedLwinRows` sent but empty) — see
+`confirmImportBatch`'s own digest-construction comment for the new v4
+namespace this required, kept fully separate from v1/v2/v3 so the new
+full-picture-veto semantics can never collide, digest-wise, with an
+old-style permissive confirm of the same file/overrides/rejections.
 
 ## added_via provenance
 
