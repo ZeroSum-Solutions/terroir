@@ -10,7 +10,14 @@ import {
 } from "lucide-react";
 import { ActionDialog } from "@/components/action-dialog";
 import { cn } from "@/lib/utils";
-import { CANONICAL_HEADERS, CLIENT_CHUNK_TARGET_ROWS, MAX_FIELD_LENGTH, MAX_ROWS, type CanonicalHeader } from "@/domains/import/constants";
+import {
+  CANONICAL_HEADERS,
+  CLIENT_CHUNK_TARGET_ROWS,
+  LWIN_APPLY_MIN_SCORE,
+  MAX_FIELD_LENGTH,
+  MAX_ROWS,
+  type CanonicalHeader,
+} from "@/domains/import/constants";
 import { validateFields } from "@/domains/import/row-validator";
 import {
   AmbiguousRecordSplitError,
@@ -76,6 +83,52 @@ export type MatchedLwinRowEntry = {
  * is simply a harmless no-op there — see applyLwinRejections'
  * (batch-service.ts) own comment). */
 export type RejectedLwinRows = Set<number>;
+
+/** BLOCK 2 (Sol audit round 3, finding 2) — GLOBAL row number -> the
+ * lwin_id the operator saw and accepted for that row in preview. Built
+ * fresh at confirm time from the CURRENT matched-rows list (never a
+ * separate piece of user-editable state — there is nothing for the
+ * operator to "set" here beyond what preview already showed), and sent as
+ * an explicit approvedLwinRows payload so confirm's own from-scratch
+ * re-match can VETO a disagreeing result instead of silently persisting
+ * it — see applyLwinApprovalVeto's (batch-service.ts) own comment for the
+ * full mechanics and why this can never let confirm write MORE or
+ * DIFFERENT than its own re-match already decided. */
+export type ApprovedLwinRows = Record<number, string>;
+
+/** BLOCK 2 — builds the approvedLwinRows payload for one confirm attempt
+ * from the matched rows currently shown to the operator: every row at or
+ * above the apply threshold (LWIN_APPLY_MIN_SCORE) gets its currently
+ * shown lwin_id echoed back. Below-threshold matches are excluded — apply
+ * never stamps those regardless of agreement (BLOCK 3), so there is
+ * nothing for the veto to ever protect there. Included even for a row the
+ * operator has separately rejected (rejectedLwinRows) — applyLwinApprovalVeto
+ * runs AFTER rejections are applied server-side, so an approved entry for
+ * an already-rejected row is a harmless no-op, never double-processed. */
+export function buildApprovedLwinRows(matchedRows: MatchedLwinRowEntry[]): ApprovedLwinRows {
+  const approved: ApprovedLwinRows = {};
+  for (const row of matchedRows) {
+    if (row.lwinScore >= LWIN_APPLY_MIN_SCORE) approved[row.rowNumber] = row.lwinId;
+  }
+  return approved;
+}
+
+/** Builds the MatchedLwinRowEntry[] shape PreviewStep (and, via
+ * buildApprovedLwinRows, handleConfirm) both need, from the plain
+ * (non-chunked) preview's own rows — extracted so the two call sites can
+ * never drift on what counts as "matched" for the single-file path. The
+ * chunked path already gets this shape directly from planChunkedPreview
+ * (session-step.tsx's ChunkedPreviewState.matchedRows). */
+function matchedRowsFromPreviewRows(rows: PreviewRow[]): MatchedLwinRowEntry[] {
+  return rows
+    .filter((r): r is PreviewRow & { lwinId: string; lwinScore: number } => r.lwinStatus === "matched" && r.lwinId !== null)
+    .map((r) => ({
+      rowNumber: r.rowNumber,
+      lwinId: r.lwinId,
+      lwinDisplayName: r.lwinDisplayName,
+      lwinScore: r.lwinScore,
+    }));
+}
 
 /** rowNumber -> canonical field -> the operator's edited replacement
  * text. Sent to confirm as an explicit overrides payload — server-side
@@ -246,6 +299,26 @@ function overridesSliceEqual(
           .sort(([fieldA], [fieldB]) => fieldA.localeCompare(fieldB)),
       ] as const)
       .filter(([, fields]) => fields.length > 0)
+      .sort(([rowA], [rowB]) => rowA - rowB);
+  return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
+}
+
+/** WARN 5 (Sol audit round 3) — the rejectedLwinRows counterpart to
+ * overridesSliceEqual above: an order-independent, dedup-aware comparison
+ * of two row-number slices, for the identical "did this genuinely change"
+ * retry gate. */
+function numberSliceEqual(a: number[], b: number[]): boolean {
+  const normalize = (rows: number[]) => Array.from(new Set(rows)).sort((x, y) => x - y);
+  return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
+}
+
+/** WARN 5 / BLOCK 2 (Sol audit round 3) — the approvedLwinRows counterpart
+ * to overridesSliceEqual above: an order-independent comparison of two
+ * (row number -> lwin_id) slices. */
+function approvedSliceEqual(a: ApprovedLwinRows, b: ApprovedLwinRows): boolean {
+  const normalize = (rec: ApprovedLwinRows) =>
+    Object.entries(rec)
+      .map(([rowNumber, lwinId]) => [Number(rowNumber), lwinId] as const)
       .sort(([rowA], [rowB]) => rowA - rowB);
   return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
 }
@@ -556,6 +629,16 @@ export function ImportClient() {
       if (rejectedLwinRows.size > 0) {
         form.append("rejectedLwinRows", JSON.stringify(Array.from(rejectedLwinRows)));
       }
+      // BLOCK 2 (Sol audit round 3, finding 2): echo back the lwin_id
+      // shown for every currently-linking matched row, so confirm's own
+      // re-match can veto a disagreeing catalogue tie instead of silently
+      // persisting it — see buildApprovedLwinRows' own comment.
+      if (preview) {
+        const approvedLwinRows = buildApprovedLwinRows(matchedRowsFromPreviewRows(preview.rows));
+        if (Object.keys(approvedLwinRows).length > 0) {
+          form.append("approvedLwinRows", JSON.stringify(approvedLwinRows));
+        }
+      }
       const response = await fetch("/api/import/batches", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) {
@@ -577,7 +660,7 @@ export function ImportClient() {
     } finally {
       setConfirming(false);
     }
-  }, [file, rowOverrides, rejectedLwinRows, loadRecent]);
+  }, [file, preview, rowOverrides, rejectedLwinRows, loadRecent]);
 
   /** Skips any chunk `chunkUpload` already marks "confirmed" — the
    * retry-after-failure path reruns confirmChunkedSession (via
@@ -603,6 +686,11 @@ export function ImportClient() {
         timestampsRef: requestTimestampsRef,
         rowOverrides,
         rejectedLwinRows,
+        // BLOCK 2 (Sol audit round 3, finding 2): same reasoning as
+        // handleConfirm's own approvedLwinRows — echo back the lwin_id
+        // shown for every currently-linking matched row across every
+        // chunk, from the aggregated chunked preview's own matchedRows.
+        approvedLwinRows: buildApprovedLwinRows(chunkedPreview?.matchedRows ?? []),
         onSessionId: (id) => {
           setSessionId(id);
           setSessionLabel(file?.name ?? sessionLabel);
@@ -621,7 +709,7 @@ export function ImportClient() {
     } finally {
       setConfirmingChunked(false);
     }
-  }, [chunkedPlan, chunkUpload, sessionId, file, sessionLabel, rowOverrides, rejectedLwinRows, loadRecent]);
+  }, [chunkedPlan, chunkUpload, sessionId, file, sessionLabel, rowOverrides, rejectedLwinRows, chunkedPreview, loadRecent]);
 
   const isRowLocked = useCallback(
     (rowNumber: number) => isRowInConfirmedChunk(rowNumber, chunkedPlan, chunkUpload),
@@ -731,17 +819,7 @@ export function ImportClient() {
               .filter((r) => r.rowState === "error")
               .map((r) => ({ rowNumber: r.rowNumber, errors: r.errors, rawText: r.rawText })) ?? [])
           }
-          matchedRows={
-            chunkedPreview?.matchedRows ??
-            (preview?.rows
-              .filter((r): r is PreviewRow & { lwinId: string; lwinScore: number } => r.lwinStatus === "matched" && r.lwinId !== null)
-              .map((r) => ({
-                rowNumber: r.rowNumber,
-                lwinId: r.lwinId,
-                lwinDisplayName: r.lwinDisplayName,
-                lwinScore: r.lwinScore,
-              })) ?? [])
-          }
+          matchedRows={chunkedPreview?.matchedRows ?? (preview ? matchedRowsFromPreviewRows(preview.rows) : [])}
           rejectedLwinRows={rejectedLwinRows}
           onToggleLwinReject={onToggleLwinReject}
           rowOverrides={rowOverrides}
@@ -951,9 +1029,22 @@ export function PreviewStep({
   // Item 2: same incremental-disclosure pattern, for matchedRows.
   const effectiveMatchedRows = matchedRows ?? EMPTY_MATCHED_ROWS;
   const effectiveRejectedLwinRows = rejectedLwinRows ?? EMPTY_REJECTED_LWIN_ROWS;
+  // BLOCK 3 (Sol audit round 3, finding 3): preview classifies a match at
+  // score >= LWIN_MATCH_THRESHOLD (0.3, constants.ts), but apply only
+  // stamps wines.lwin_id at score >= LWIN_APPLY_MIN_SCORE (0.6,
+  // 0108_apply_import_batch_chunk_v2.sql) — a row below that bar imports
+  // with no catalog link no matter what the operator does with it. Split
+  // here so "Matched wines" only ever claims rows that will actually
+  // link, and a sub-threshold candidate gets its own honestly-labeled band
+  // instead of a reject control that would do nothing.
+  const linkingMatchedRows = effectiveMatchedRows.filter((r) => r.lwinScore >= LWIN_APPLY_MIN_SCORE);
+  const belowThresholdMatchedRows = effectiveMatchedRows.filter((r) => r.lwinScore < LWIN_APPLY_MIN_SCORE);
   const [shownMatchedCount, setShownMatchedCount] = useState(MAX_SHOWN_MATCHED_ROWS);
-  const shownMatchedRows = effectiveMatchedRows.slice(0, shownMatchedCount);
-  const hiddenMatchedCount = effectiveMatchedRows.length - shownMatchedRows.length;
+  const shownMatchedRows = linkingMatchedRows.slice(0, shownMatchedCount);
+  const hiddenMatchedCount = linkingMatchedRows.length - shownMatchedRows.length;
+  const [shownBelowThresholdCount, setShownBelowThresholdCount] = useState(MAX_SHOWN_MATCHED_ROWS);
+  const shownBelowThresholdRows = belowThresholdMatchedRows.slice(0, shownBelowThresholdCount);
+  const hiddenBelowThresholdCount = belowThresholdMatchedRows.length - shownBelowThresholdRows.length;
   const shownErrorRows = errorRows.slice(0, shownCount);
   const hiddenCount = errorRows.length - shownErrorRows.length;
   // A row the operator has edited into passing validation counts toward
@@ -1081,20 +1172,42 @@ export function PreviewStep({
   // errorRows). Rebuilt from chunkBreakdown's own [startRow, endRow] range
   // for this chunk instead — every override that actually belongs to this
   // chunk, whether or not its row happens to be an error row.
+  // WARN 5 (Sol audit round 3): the gate used to compare ONLY the override
+  // slice — so rejecting a match (or accepting a re-matched candidate,
+  // BLOCK 2) after a duplicate_chunk_content collision changed the v2/v3
+  // content_sha256 namespace server-side (confirmImportBatch's own
+  // digest-construction comment) while this gate kept Confirm/Retry
+  // hidden, since neither change was ever compared against anything. Now
+  // compares all THREE slices this chunk's content_sha256 actually folds
+  // in — a chunk only stays "unresolved" (Retry hidden) while EVERY ONE of
+  // them still exactly matches what was sent with the failed attempt.
   const unresolvedDuplicateChunkContentIndexes = new Set(
     (chunkUpload ?? [])
       .filter((c) => c.status === "failed" && c.code === "duplicate_chunk_content")
       .filter((c) => {
         const bounds = chunkBreakdown?.find((cb) => cb.index === c.index);
-        const currentSlice: RowOverrides = {};
+        const currentOverridesSlice: RowOverrides = {};
+        const currentRejectedSlice: number[] = [];
+        const currentApprovedSlice: ApprovedLwinRows = {};
         if (bounds) {
           for (const [key, fields] of Object.entries(rowOverrides)) {
             const rowNumber = Number(key);
             if (rowNumber < bounds.startRow || rowNumber > bounds.endRow) continue;
-            if (fields && Object.keys(fields).length > 0) currentSlice[rowNumber] = fields;
+            if (fields && Object.keys(fields).length > 0) currentOverridesSlice[rowNumber] = fields;
+          }
+          for (const rowNumber of effectiveRejectedLwinRows) {
+            if (rowNumber >= bounds.startRow && rowNumber <= bounds.endRow) currentRejectedSlice.push(rowNumber);
+          }
+          for (const row of effectiveMatchedRows) {
+            if (row.rowNumber < bounds.startRow || row.rowNumber > bounds.endRow) continue;
+            if (row.lwinScore >= LWIN_APPLY_MIN_SCORE) currentApprovedSlice[row.rowNumber] = row.lwinId;
           }
         }
-        return overridesSliceEqual(currentSlice, c.sentOverridesSnapshot ?? {});
+        return (
+          overridesSliceEqual(currentOverridesSlice, c.sentOverridesSnapshot ?? {}) &&
+          numberSliceEqual(currentRejectedSlice, c.sentRejectedLwinRowsSnapshot ?? []) &&
+          approvedSliceEqual(currentApprovedSlice, c.sentApprovedLwinRowsSnapshot ?? {})
+        );
       })
       .map((c) => c.index),
   );
@@ -1199,11 +1312,11 @@ export function PreviewStep({
       {shownMatchedRows.length > 0 && (
         <div className="mt-lg">
           <h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
-            Matched wines ({effectiveMatchedRows.length})
+            Matched wines ({linkingMatchedRows.length})
           </h3>
           <p className="mt-2xs text-caption text-grey">
-            Each row below matched a wine in the catalog — reject a match you don&rsquo;t trust and it imports with
-            no catalog link, exactly like a row that never matched.
+            Each row below matched a wine in the catalog and will link it on import — reject a match you
+            don&rsquo;t trust and it imports with no catalog link, exactly like a row that never matched.
           </p>
           <ul className="mt-xs space-y-2xs">
             {shownMatchedRows.map((row) => (
@@ -1230,6 +1343,38 @@ export function PreviewStep({
               className="mt-xs min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
             >
               Show {Math.min(hiddenMatchedCount, MAX_SHOWN_MATCHED_ROWS)} more matched row(s)
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* BLOCK 3 (Sol audit round 3, finding 3): a candidate scoring below
+          LWIN_APPLY_MIN_SCORE is never stamped by apply regardless of
+          operator action (0108's own lwin_score >= LWIN_APPLY_MIN_SCORE
+          gate) — shown honestly, in its own band, with NO reject control:
+          rejecting something that was never going to be applied is
+          meaningless (this brief's own wording). */}
+      {shownBelowThresholdRows.length > 0 && (
+        <div className="mt-lg">
+          <h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
+            Below match threshold ({belowThresholdMatchedRows.length})
+          </h3>
+          <p className="mt-2xs text-caption text-grey">
+            These scored below the {LWIN_APPLY_MIN_SCORE.toFixed(2)} confidence bar apply requires to link a
+            catalog entry — they&rsquo;ll import with no wine-catalog link no matter what you do here.
+          </p>
+          <ul className="mt-xs space-y-2xs">
+            {shownBelowThresholdRows.map((row) => (
+              <BelowThresholdLwinRowItem key={row.rowNumber} row={row} />
+            ))}
+          </ul>
+          {hiddenBelowThresholdCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShownBelowThresholdCount((count) => count + MAX_SHOWN_MATCHED_ROWS)}
+              className="mt-xs min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+            >
+              Show {Math.min(hiddenBelowThresholdCount, MAX_SHOWN_MATCHED_ROWS)} more row(s)
             </button>
           )}
         </div>
@@ -1455,6 +1600,27 @@ function MatchedLwinRowItem({
           {rejected ? "Undo reject" : "Reject match"}
         </button>
       </div>
+    </li>
+  );
+}
+
+/** BLOCK 3 (Sol audit round 3, finding 3) — one below-apply-threshold
+ * candidate: the catalog's own display name and match score, exactly like
+ * MatchedLwinRowItem's own display line, but deliberately with NO reject
+ * control — apply's own lwin_score >= LWIN_APPLY_MIN_SCORE gate (0108)
+ * already guarantees this row imports with no wine-catalog link, so a
+ * reject toggle here would be a control that changes nothing. */
+function BelowThresholdLwinRowItem({ row }: { row: MatchedLwinRowEntry }) {
+  const label = row.chunkIndex !== undefined && row.chunkRowNumber !== undefined
+    ? `Chunk ${row.chunkIndex}, data row ${row.chunkRowNumber}`
+    : `Row ${row.rowNumber}`;
+  return (
+    <li className="rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink">
+      <span>{label}</span>
+      <p className="mt-2xs text-caption text-grey">
+        {row.lwinDisplayName ?? "Catalog entry (name unavailable)"} — match score {row.lwinScore.toFixed(2)}, will
+        import with no catalog link.
+      </p>
     </li>
   );
 }

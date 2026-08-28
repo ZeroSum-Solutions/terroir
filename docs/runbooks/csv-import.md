@@ -786,6 +786,41 @@ asserting a possibly-false exact total — but the per-candidate list, count,
 and truncation flag are no longer carried on the error payload at all
 (round-27 audit), since nothing client-side renders them any more.
 
+**BLOCK 2 (Sol audit round 3, finding 2): `match_lwin`'s catalogue
+tie-break is still non-deterministic — this makes a disagreement safe, it
+does not close it.** `match_lwin` (`0078_match_lwin_trgm_fastpath.sql`)
+resolves candidates with `order by score desc limit 1` and no stable
+secondary key. Preview and confirm (`confirmImportBatch`,
+`src/domains/import/batch-service.ts`) each call it independently — preview
+when the operator loads the page, confirm again from scratch when they
+click Confirm, never trusting the client's own preview payload. When two
+catalogue rows genuinely tie on score, the RPC can legitimately return a
+DIFFERENT `lwin_id` on the second call than it returned on the first,
+purely from Postgres's own row-visitation order for that query, with
+nothing in the ORDER BY to break the tie consistently. The correct fix is a
+deterministic secondary `ORDER BY` key inside `match_lwin` itself — i.e. a
+migration. Migrations are locked for this change.
+
+What ships instead (`approvedLwinRows`, threaded from `PreviewStep`'s
+matched-row list through `ConfirmBatchOptions.approvedLwinRows` to
+`applyLwinApprovalVeto`, `batch-service.ts`): the client echoes back, per
+row it showed as a linking match (score >= `LWIN_APPLY_MIN_SCORE`), the
+exact `lwin_id` the operator saw and accepted. Confirm still ALWAYS
+re-derives the match itself and never trusts that value as anything but a
+comparison target — when the re-derived match disagrees with what the
+operator approved, the row is stamped exactly like a rejected row (no LWIN
+link at all) instead of silently persisting whichever candidate the tie
+happened to resolve to on that particular call. This can only ever cause
+LESS to be written than an untrusted client value could, never more or
+different — the same "confirm never trusts a client-supplied preview"
+property every other field in `ConfirmBatchOptions` already holds. The
+residual this leaves: a genuine tie is still resolved non-deterministically
+by the RPC, so an operator can occasionally see a row silently drop to
+"unmatched, needs resolution" between preview and confirm with no
+value-level "wrong wine" ever persisted — annoying, not unsafe. Closing
+that properly (the RPC itself returning the SAME candidate every time)
+still needs the migration described above.
+
 ## added_via provenance
 
 CSV-imported `inventory_items` rows keep `added_via = 'manual'` rather than

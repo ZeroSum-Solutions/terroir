@@ -1,8 +1,23 @@
 /**
  * Measure LWIN match coverage for a real CSV against a live lwin_catalog,
- * through the repo's OWN production code paths (csv-parser, row-validator,
- * buildLwinQueryVariants, match_lwin_bulk) — so the reported numbers can
- * never drift from what buildImportPreview would actually do.
+ * through the repo's OWN production code paths for parsing, validation,
+ * and matching (csv-parser, row-validator, buildLwinQueryVariants,
+ * matchLwinBulk/match_lwin_bulk).
+ *
+ * NIT 7 (Sol audit round 3), correcting an earlier claim on this same
+ * comment: this does NOT call buildImportPreview (preview-service.ts)
+ * itself, and the numbers below are NOT guaranteed to "never drift" from
+ * what it would report. Variant ownership (which query variant belongs to
+ * which row) and the best-score-per-row reduction are REIMPLEMENTED here
+ * (see variantOwners/bestPerRow below), matching buildImportPreview's own
+ * construction and tie-break (ascending flat query index, strict `>`) as
+ * of this writing — but as a hand-maintained copy, not a shared call, so a
+ * future change to that reduction in preview-service.ts would not
+ * automatically propagate here. If this harness's numbers and a real
+ * preview's ever disagree, check this reduction against buildImportPreview's
+ * own first — that is the actual drift risk this script carries, and
+ * fully closing it would mean exporting and reusing preview-service.ts's
+ * private reduction step, which this script does not currently do.
  *
  * Reports, side by side:
  *   - baseline: one query per row (producer || name in both legs — the

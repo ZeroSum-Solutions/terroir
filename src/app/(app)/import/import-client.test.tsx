@@ -993,6 +993,129 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
     expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
   });
 
+  // WARN 5 (Sol audit round 3): a rejection or an approved-match change
+  // also namespaces content_sha256 (the v2/v3 tiers — see
+  // confirmImportBatch's own digest-construction comment), exactly like an
+  // override does — but the gate used to compare ONLY the override slice,
+  // so rejecting (or un-rejecting) a match after a duplicate_chunk_content
+  // collision left Confirm/Retry hidden even though the next attempt would
+  // genuinely hash differently. These mirror the override-differs/
+  // override-unchanged pair above, for the two new slices.
+  it("keeps Retry HIDDEN when the current rejected-match set is UNCHANGED from what was sent and failed", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      {
+        index: 1,
+        status: "failed",
+        batchId: null,
+        error: "Chunk 1's content is identical to chunk 2.",
+        code: "duplicate_chunk_content",
+        sentRejectedLwinRowsSnapshot: [1],
+      },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          chunkUpload,
+          chunkTotal: 2,
+          chunkBreakdown: [{ index: 1, startRow: 1, endRow: 1, summary: ZERO_SUMMARY }],
+          error: chunkUpload[0].error,
+          // Same rejected set the failed attempt already sent.
+          rejectedLwinRows: new Set([1]),
+        })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
+  });
+
+  it("shows Retry once a match is rejected that WASN'T rejected in the failed attempt", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      {
+        index: 1,
+        status: "failed",
+        batchId: null,
+        error: "Chunk 1's content is identical to chunk 2.",
+        code: "duplicate_chunk_content",
+        sentRejectedLwinRowsSnapshot: [],
+      },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          chunkUpload,
+          chunkTotal: 2,
+          chunkBreakdown: [{ index: 1, startRow: 1, endRow: 1, summary: ZERO_SUMMARY }],
+          error: chunkUpload[0].error,
+          // A genuinely new rejection, not present in the sent snapshot.
+          rejectedLwinRows: new Set([1]),
+        })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
+  });
+
+  it("keeps Retry HIDDEN when the current linking-matched set is UNCHANGED from the approved-match snapshot sent and failed", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      {
+        index: 1,
+        status: "failed",
+        batchId: null,
+        error: "Chunk 1's content is identical to chunk 2.",
+        code: "duplicate_chunk_content",
+        sentApprovedLwinRowsSnapshot: { 1: "LWIN001" },
+      },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          chunkUpload,
+          chunkTotal: 2,
+          chunkBreakdown: [{ index: 1, startRow: 1, endRow: 1, summary: ZERO_SUMMARY }],
+          error: chunkUpload[0].error,
+          matchedRows: [{ rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A", lwinScore: 0.9 }],
+        })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
+  });
+
+  it("shows Retry once the linking-matched lwin_id DIFFERS from the approved-match snapshot that was sent and failed", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      {
+        index: 1,
+        status: "failed",
+        batchId: null,
+        error: "Chunk 1's content is identical to chunk 2.",
+        code: "duplicate_chunk_content",
+        sentApprovedLwinRowsSnapshot: { 1: "LWIN001" },
+      },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          chunkUpload,
+          chunkTotal: 2,
+          chunkBreakdown: [{ index: 1, startRow: 1, endRow: 1, summary: ZERO_SUMMARY }],
+          error: chunkUpload[0].error,
+          // A genuinely different re-match than the one that was sent.
+          matchedRows: [{ rowNumber: 1, lwinId: "LWIN002", lwinDisplayName: "Domaine B", lwinScore: 0.9 }],
+        })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
+  });
+
   it("does NOT re-enable the button for an override on a DIFFERENT row than the failed chunk's own", async () => {
     const chunkUpload: ChunkUploadState[] = [
       { index: 1, status: "failed", batchId: null, error: "Chunk 1's content is identical to chunk 2.", code: "duplicate_chunk_content" },
@@ -1420,10 +1543,19 @@ describe("PreviewStep — matched-row visibility and rejection (item 2)", () => 
     expect(findButton(item, "Reject match")).toBeTruthy();
   });
 
+  // BLOCK 3 (Sol audit round 3, finding 3): this used to use lwinScore: 0.5
+  // — BELOW LWIN_APPLY_MIN_SCORE (0.6), so apply would never have stamped
+  // it regardless of operator action. Rendering it under "Matched wines"
+  // with a live "Reject match" control was exactly the misleading
+  // presentation the finding flagged. Bumped to 0.65 (still >=
+  // LWIN_APPLY_MIN_SCORE) so this test keeps pinning what it actually
+  // means to pin — the honest-placeholder fallback — inside the band
+  // where a reject control is coherent. The below-threshold band's own
+  // honest presentation is pinned separately below.
   it("falls back to an honest placeholder when the catalog row has since disappeared (lwinDisplayName null)", async () => {
     const { container } = await mount(
       <PreviewStep
-        {...baseProps({ matchedRows: [{ rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: null, lwinScore: 0.5 }] })}
+        {...baseProps({ matchedRows: [{ rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: null, lwinScore: 0.65 }] })}
       />,
     );
 
@@ -1465,6 +1597,54 @@ describe("PreviewStep — matched-row visibility and rejection (item 2)", () => 
   it("renders nothing when matchedRows is omitted — every pre-existing caller keeps working unchanged", async () => {
     const { container } = await mount(<PreviewStep {...baseProps()} />);
     expect(container.textContent).not.toContain("Matched wines");
+  });
+
+  // BLOCK 3 (Sol audit round 3, finding 3): preview classifies a match at
+  // score >= 0.3 (LWIN_MATCH_THRESHOLD), but apply only stamps at score >=
+  // 0.6 (LWIN_APPLY_MIN_SCORE) — a sub-threshold row was previously listed
+  // under "Matched wines" with a live reject control even though rejecting
+  // it (or not) could never change what apply actually writes. These pin
+  // the fix: a sub-threshold candidate renders in its own honestly-labeled
+  // band, with no reject control, and the "Matched wines" count/list only
+  // ever includes rows that will actually link.
+  it("separates a below-apply-threshold candidate into its own band, with no reject control", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          matchedRows: [
+            { rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A", lwinScore: 0.9 },
+            { rowNumber: 2, lwinId: "LWIN002", lwinDisplayName: "Domaine B", lwinScore: 0.45 },
+          ],
+        })}
+      />,
+    );
+
+    // "Matched wines" only counts/lists the linking row.
+    expect(container.textContent).toContain("Matched wines (1)");
+    expect(rowItem(container, "Row 1").textContent).toContain("Domaine A");
+    expect(findButton(rowItem(container, "Row 1"), "Reject match")).toBeTruthy();
+
+    // The sub-threshold row gets its own band, its own honest copy, and no
+    // reject control at all.
+    expect(container.textContent).toContain("Below match threshold (1)");
+    const belowThresholdItem = rowItem(container, "Row 2");
+    expect(belowThresholdItem.textContent).toContain("Domaine B");
+    expect(belowThresholdItem.textContent).toContain("will import with no catalog link");
+    expect(findButton(belowThresholdItem, "Reject match")).toBeFalsy();
+    expect(findButton(belowThresholdItem, /reject/i)).toBeFalsy();
+  });
+
+  it("renders no 'Matched wines' section when every candidate is below the apply threshold", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          matchedRows: [{ rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A", lwinScore: 0.4 }],
+        })}
+      />,
+    );
+
+    expect(container.textContent).not.toContain("Matched wines (");
+    expect(container.textContent).toContain("Below match threshold (1)");
   });
 
   it("disables the reject toggle for a row whose chunk is already confirmed, with the same explanatory copy RowFixItem uses (Sol round-2 audit finding 1's reasoning)", async () => {

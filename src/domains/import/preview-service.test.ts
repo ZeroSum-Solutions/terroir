@@ -13,14 +13,37 @@ function makeSupabase(
   const insert = vi.fn();
   const update = vi.fn();
   const rpc = vi.fn().mockResolvedValue({ data: matchRows, error: null });
+  // Sol audit round 3, finding 1: every page request this test's own
+  // catalog lookup issues — asserted by the pagination test below to
+  // prove the lookup pages to exhaustion instead of a single unpaged
+  // read (which PostgREST would silently cap at db.max_rows, 1000).
+  const catalogRanges: Array<[number, number]> = [];
   return {
     from: (table: string, ...args: unknown[]) => {
       from(table, ...args);
       // Item 2: the display-name lookup's own table — a plain
-      // select().in() read, distinct from the insert/update-shaped stub
-      // every other table gets (this preview endpoint never writes).
+      // select().in().order().range() read, distinct from the
+      // insert/update-shaped stub every other table gets (this preview
+      // endpoint never writes). Sol audit round 3, finding 1: sorted by
+      // lwin_id (the real query's own tiebreaker) and sliced by [from,
+      // to] — mirrors PostgREST's own page-based pagination, so a
+      // catalogRows list beyond one page genuinely proves the fetchAll
+      // loop, rather than just returning everything from a single call
+      // regardless of range.
       if (table === "lwin_catalog") {
-        return { select: () => ({ in: () => Promise.resolve({ data: catalogRows, error: null }) }) };
+        const sorted = [...catalogRows].sort((a, b) => a.lwin_id.localeCompare(b.lwin_id));
+        return {
+          select: () => ({
+            in: () => ({
+              order: () => ({
+                range: (from2: number, to2: number) => {
+                  catalogRanges.push([from2, to2]);
+                  return Promise.resolve({ data: sorted.slice(from2, to2 + 1), error: null });
+                },
+              }),
+            }),
+          }),
+        };
       }
       return { insert, update, select: () => ({ insert, update }) };
     },
@@ -28,10 +51,12 @@ function makeSupabase(
     _from: from,
     _insert: insert,
     _update: update,
+    _catalogRanges: catalogRanges,
   } as unknown as Parameters<typeof buildImportPreview>[0] & {
     _from: typeof from;
     _insert: typeof insert;
     _update: typeof update;
+    _catalogRanges: typeof catalogRanges;
   };
 }
 
@@ -267,6 +292,46 @@ describe("buildImportPreview", () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.rows[0]).toMatchObject({ lwinStatus: "unmatched", lwinDisplayName: null });
+    });
+
+    // Sol audit round 3, finding 1: MAX_ROWS allows 5,000 matched rows,
+    // but PostgREST caps a single response at db.max_rows (1,000 —
+    // supabase/config.toml). The catalog display-name lookup used to be
+    // one unpaged .in() query, so beyond 1,000 distinct matched lwin_ids,
+    // every later row's lwinDisplayName silently degraded to "Catalog
+    // entry (name unavailable)" — defeating the per-row visibility
+    // feature at exactly the scale it's supposed to hold up at. This
+    // proves the lookup now pages to exhaustion: 1,200 distinct matched
+    // ids, every one of them still resolving its real display_name, and
+    // the mock's own range calls showing more than one page was issued.
+    it("resolves every matched row's display name past the 1,000-row PostgREST page cap", async () => {
+      const rowCount = 1200;
+      const csvBody = Array.from({ length: rowCount }, (_, i) => `Domaine ${i},Wine ${i},2020,1,10.00`).join("\n");
+      const matchRows = Array.from({ length: rowCount }, (_, i) => ({
+        idx: i,
+        lwin_id: `LWIN${String(i).padStart(5, "0")}`,
+        score: 0.95,
+      }));
+      const catalogRows = Array.from({ length: rowCount }, (_, i) => ({
+        lwin_id: `LWIN${String(i).padStart(5, "0")}`,
+        display_name: `Domaine ${i} Wine ${i} 2020`,
+      }));
+      const supabase = makeSupabase(matchRows, catalogRows);
+
+      const result = await buildImportPreview(supabase, csv(`${csvBody}\n`));
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.rows).toHaveLength(rowCount);
+      for (let i = 0; i < rowCount; i++) {
+        expect(result.rows[i]).toMatchObject({
+          lwinId: `LWIN${String(i).padStart(5, "0")}`,
+          lwinDisplayName: `Domaine ${i} Wine ${i} 2020`,
+        });
+      }
+      // More than one page was genuinely requested — proves this isn't
+      // just a single unpaged call happening to return everything.
+      expect(supabase._catalogRanges.length).toBeGreaterThan(1);
     });
   });
 

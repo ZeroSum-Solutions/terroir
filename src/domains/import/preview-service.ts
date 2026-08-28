@@ -16,6 +16,33 @@ import { matchLwinBulk, buildLwinQueryVariants, type LwinMatch } from "./lwin-ma
 import { mergeIntraBatchDuplicates, type IntraBatchDuplicateReason } from "./dedup-key";
 import type { CanonicalHeader } from "./constants";
 
+const CATALOG_LOOKUP_PAGE_SIZE = 1000;
+
+/** Sol audit round 3, finding 1: PostgREST caps a single response at
+ * db.max_rows (1,000 — supabase/config.toml), but MAX_ROWS (constants.ts)
+ * allows up to 5,000 matched rows per import, so the lwin_catalog display
+ * name lookup below can't be a single unpaged query. Same fetchAll shape
+ * as src/lib/cellar-health/recompute.ts and
+ * src/app/api/member-analytics/route.ts, except this one degrades rather
+ * than throws on a page error — preserving the lookup's existing
+ * "a display-name lookup failure never fails the whole preview" contract
+ * (see the call site below) while still reading every page it can. */
+async function fetchAll<T>(
+  makeQuery: (from: number, to: number) => PromiseLike<{
+    data: T[] | null;
+    error: { message: string } | null;
+  }>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += CATALOG_LOOKUP_PAGE_SIZE) {
+    const { data, error } = await makeQuery(from, from + CATALOG_LOOKUP_PAGE_SIZE - 1);
+    if (error) return rows;
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < CATALOG_LOOKUP_PAGE_SIZE) return rows;
+  }
+}
+
 /** Inline row-fix overrides (see ConfirmBatchOptions.rowOverrides in
  * batch-service.ts), keyed by the 1-indexed data row number a caller
  * would have seen in this exact file's own preview — the same numbering
@@ -160,14 +187,27 @@ export async function buildImportPreview(
   // degrades that row's display name to null — the raw lwinId/lwinScore
   // this product actually writes are unaffected either way, so a lookup
   // failure never fails the whole preview.
+  //
+  // Sol audit round 3, finding 1: MAX_ROWS (constants.ts) allows 5,000
+  // matched rows, so distinctLwinIds can exceed PostgREST's db.max_rows
+  // cap (1,000 — supabase/config.toml). Paginates to exhaustion via the
+  // same fetchAll pattern already used in src/lib/cellar-health/
+  // recompute.ts, src/app/api/member-analytics/route.ts, and the cellar
+  // page (src/app/(app)/cellar/page.tsx) for the identical PostgREST cap.
+  // `.order("lwin_id")` is the tiebreaker so offset-based pagination can't
+  // skip/duplicate rows on a tied sort key.
   const distinctLwinIds = Array.from(new Set(Array.from(matches.values(), (m) => m.lwinId)));
   const displayNames = new Map<string, string>();
   if (distinctLwinIds.length > 0) {
-    const { data: catalogRows } = await supabase
-      .from("lwin_catalog")
-      .select("lwin_id, display_name")
-      .in("lwin_id", distinctLwinIds);
-    for (const row of (catalogRows ?? []) as { lwin_id: string; display_name: string }[]) {
+    const catalogRows = await fetchAll<{ lwin_id: string; display_name: string }>((from, to) =>
+      supabase
+        .from("lwin_catalog")
+        .select("lwin_id, display_name")
+        .in("lwin_id", distinctLwinIds)
+        .order("lwin_id")
+        .range(from, to),
+    );
+    for (const row of catalogRows) {
       displayNames.set(row.lwin_id, row.display_name);
     }
   }

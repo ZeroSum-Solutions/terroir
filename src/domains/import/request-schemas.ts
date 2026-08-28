@@ -178,3 +178,57 @@ export const RejectedLwinRowsFieldSchema = z
     return parsed;
   })
   .pipe(RejectedLwinRowsSchema.optional());
+
+// Sol audit round 3, finding 2 (BLOCK 2) — per matched row, the lwin_id the
+// operator actually saw and accepted in preview (see ConfirmBatchOptions.
+// approvedLwinRows in batch-service.ts and applyLwinApprovalVeto's own
+// comment for the full veto mechanics). Same index shape/bounds as
+// RowOverridesSchema (a record keyed by canonical positive-integer row
+// index, no leading zeros — same reasoning as RowOverridesSchema's own
+// comment), but the VALUE is a bare lwin_id string rather than a field-set
+// object — never trusted as anything but a comparison target server-side,
+// so only shape-checked here (non-empty, generously bounded).
+export const ApprovedLwinRowsSchema = z
+  .record(
+    z.string().regex(/^[1-9][0-9]*$/, "Row index must be a canonical positive whole number (no leading zeros)."),
+    z.string().min(1).max(200),
+  )
+  .superRefine((obj, ctx) => {
+    const keys = Object.keys(obj);
+    if (keys.length > MAX_ROWS) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Cannot approve more than ${MAX_ROWS} rows.` });
+      return;
+    }
+    for (const key of keys) {
+      const n = Number(key);
+      if (!Number.isSafeInteger(n) || n < 1 || n > MAX_ROWS) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Row index ${key} is out of bounds.`, path: [key] });
+      }
+    }
+  });
+
+// Mirrors RowOverridesFieldSchema exactly, including the __proto__
+// hardening — this IS an object keyed by row index (unlike
+// RejectedLwinRowsFieldSchema's plain array), so the same
+// prototype-own-property gap RowOverridesFieldSchema's own comment
+// describes applies here too.
+export const ApprovedLwinRowsFieldSchema = z
+  .string()
+  .max(1_000_000)
+  .optional()
+  .transform((val, ctx) => {
+    if (val === undefined) return undefined;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(val);
+    } catch {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "approvedLwinRows must be valid JSON." });
+      return z.NEVER;
+    }
+    if (parsed !== null && typeof parsed === "object" && Object.prototype.hasOwnProperty.call(parsed, "__proto__")) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Row index "__proto__" is not a valid row index.' });
+      return z.NEVER;
+    }
+    return parsed;
+  })
+  .pipe(ApprovedLwinRowsSchema.optional());

@@ -2,8 +2,11 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
   applyImportBatchChunk,
+  applyLwinApprovalVeto,
   applyLwinRejections,
+  canonicalizeApprovedLwinRows,
   canonicalizeConfirmExtras,
+  canonicalizeConfirmExtrasV3,
   canonicalizeRejectedLwinRows,
   canonicalizeRowOverrides,
   confirmImportBatch,
@@ -128,9 +131,14 @@ function fakeImportBatchesTable(
     // whose match_lwin_bulk mock returns a real (non-null) lwin_id reaches
     // this table. No test in this file asserts on display names (that's
     // preview-service.test.ts's job); an empty catalog is enough to let
-    // the lookup degrade to null and move on.
+    // the lookup degrade to null and move on. Sol audit round 3, finding
+    // 1: preview-service.ts's lookup now pages via .order().range() (see
+    // preview-service.test.ts's own makeSupabase for the full pagination
+    // fake) — this table stays a fixed empty-page stub since no test here
+    // exercises pagination itself, but the CHAIN SHAPE must still match or
+    // every confirm with a real lwin_id match throws.
     if (table === "lwin_catalog") {
-      return { select: () => ({ in: () => Promise.resolve({ data: [], error: null }) }) };
+      return { select: () => ({ in: () => ({ order: () => ({ range: () => Promise.resolve({ data: [], error: null }) }) }) }) };
     }
     if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
     let predicate: (row: FakeBatchRow) => boolean = () => true;
@@ -1610,6 +1618,51 @@ describe("confirmImportBatch — underlying-file lookup failure semantics (Sol r
     expect(createCalls).toHaveLength(0);
   });
 
+  // Sol audit round 3, WARN 6: the conflict test above only ever exercised
+  // an overrides-v1 sibling — findLiveBatchesByUnderlyingFile's own `.or()`
+  // LIKE pattern and isWellFormedDigestForFile's regex are both meant to
+  // recognize ANY namespace version, not just "1" (see OVERRIDES_DIGEST_STEM's
+  // own comment), but nothing here actually proved a v2/v3 sibling is
+  // still found as a live conflict — a regression that hardcoded "1"
+  // again would silently create a genuine duplicate batch instead of
+  // reporting multiple_live_batches, and nothing here would catch it.
+  it("also recognizes a v2 (rejections-bearing) sibling for the SAME underlying file as a live conflict", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        id: "variant-v2",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v2:${"e".repeat(64)}:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2025-06-01T00:00:00.000Z",
+      },
+      {
+        id: "variant-bare",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
+    ];
+    const createCalls: unknown[] = [];
+    const supabase = {
+      rpc: makeRpc({ match_lwin_bulk: () => ({ data: [], error: null }) }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rowOverrides: { "1": { quantity: "12" } },
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "multiple_live_batches" } });
+    expect(createCalls).toHaveLength(0);
+  });
+
   // Sol round-3 audit finding 6: the LIKE pattern can also match a
   // malformed, multi-colon content_sha256 that merely CONTAINS the file's
   // digest as a trailing substring — never a real bare-file or
@@ -2296,54 +2349,297 @@ describe("confirmImportBatch — rejectedLwinRows behavior (item 2)", () => {
   });
 });
 
-describe("applyLwinRejections", () => {
-  function matchedRow(overrides: Partial<PreviewRow> = {}): PreviewRow {
-    return {
-      rowNumber: 1,
-      raw: {
-        producer: "Domaine A",
-        name: "Cuvee 1",
-        vintage: "2020",
-        varietal: null,
-        region: null,
-        country: null,
-        size_ml: null,
-        format: null,
-        currency: null,
-        quantity: "6",
-        unit_cost: "24.50",
-        bin: null,
-        section: null,
-      },
-      rawText: {
-        producer: "Domaine A",
-        name: "Cuvee 1",
-        vintage: "2020",
-        varietal: "",
-        region: "",
-        country: "",
-        size_ml: "",
-        format: "",
-        currency: "",
-        quantity: "6",
-        unit_cost: "24.50",
-        bin: "",
-        section: "",
-      },
-      rowState: "valid",
-      errors: [],
-      lwinStatus: "matched",
-      lwinId: "LWIN001",
-      lwinScore: 0.9,
-      lwinDisplayName: "Domaine A Cuvee One 2020",
-      costStatus: "present",
-      resolution: "auto",
-      mergedFromRowNumbers: [],
-      duplicateReason: null,
-      ...overrides,
+// BLOCK 2 (Sol audit round 3, finding 2) — end-to-end through
+// confirmImportBatch: confirm ALWAYS re-derives the match itself
+// (match_lwin_bulk here), and approvedLwinRows can only ever cause LESS to
+// be persisted than that re-match alone would — never more, never
+// different. This is the property that matters most: a client claiming an
+// approval for a lwin_id the server's own re-match does NOT independently
+// agree with can never get it written.
+describe("confirmImportBatch — approvedLwinRows behavior (BLOCK 2)", () => {
+  it("rejects an out-of-bounds approved-row index without ever calling create_import_batch", async () => {
+    const rpc = makeRpc({
+      match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: "LWIN001", score: 0.9 }], error: null }),
+      create_import_batch: () => ({ data: { batchId: BATCH_ID }, error: null }),
+    });
+    const supabase = { rpc, from: fakeImportBatchesTable([]) };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+      { approvedLwinRows: { "2": "LWIN001" } },
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: "invalid_approved_lwin_row" } });
+    expect(rpc).not.toHaveBeenCalledWith("create_import_batch", expect.anything());
+  });
+
+  it("rejects a non-string/empty approved lwin_id value", async () => {
+    const rpc = makeRpc({
+      match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: "LWIN001", score: 0.9 }], error: null }),
+      create_import_batch: () => ({ data: { batchId: BATCH_ID }, error: null }),
+    });
+    const supabase = { rpc, from: fakeImportBatchesTable([]) };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+      { approvedLwinRows: { "1": "" } },
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: "invalid_approved_lwin_row" } });
+    expect(rpc).not.toHaveBeenCalledWith("create_import_batch", expect.anything());
+  });
+
+  it("persists the match normally when the approved id AGREES with the server's own re-match", async () => {
+    let createArgs:
+      | { p_rows: Array<{ row_number: number; lwin_status: string; lwin_id: string | null; resolution: string }> }
+      | undefined;
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: "LWIN001", score: 0.9 }], error: null }),
+        create_import_batch: (args) => {
+          createArgs = args as typeof createArgs;
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable([]),
     };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+      { approvedLwinRows: { "1": "LWIN001" } },
+    );
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: false });
+    expect(createArgs?.p_rows[0]).toMatchObject({ row_number: 1, lwin_status: "matched", lwin_id: "LWIN001" });
+  });
+
+  // The core fail-safe: the server's own match_lwin_bulk mock returns a
+  // DIFFERENT lwin_id than what the operator approved — simulating
+  // match_lwin's non-deterministic catalogue tie-break resolving
+  // differently between preview and confirm. The disagreeing match must
+  // NEVER be persisted.
+  it("vetoes the row (no LWIN link, pending resolution) when the server's own re-match DISAGREES with the approved id, even though the re-match is itself a real, scoring-fine match", async () => {
+    let createArgs:
+      | {
+          p_rows: Array<{
+            row_number: number;
+            lwin_status: string;
+            lwin_id: string | null;
+            lwin_score: number | null;
+            resolution: string;
+          }>;
+        }
+      | undefined;
+    const supabase = {
+      rpc: makeRpc({
+        // The server's own from-scratch re-match resolves to LWIN_TIE_B —
+        // a DIFFERENT catalogue row than the operator approved.
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: "LWIN_TIE_B", score: 0.9 }], error: null }),
+        create_import_batch: (args) => {
+          createArgs = args as typeof createArgs;
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable([]),
+    };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+      // The operator approved LWIN_TIE_A in preview — the tie's OTHER
+      // equally-scoring candidate.
+      { approvedLwinRows: { "1": "LWIN_TIE_A" } },
+    );
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: false });
+    expect(createArgs?.p_rows[0]).toMatchObject({
+      row_number: 1,
+      lwin_status: "unmatched",
+      lwin_id: null,
+      lwin_score: null,
+      resolution: "pending",
+    });
+    // The summary the caller sees must agree with what was persisted.
+    if (result.ok && !result.alreadyExists) {
+      expect(result.summary.matchedRows).toBe(0);
+      expect(result.summary.pendingResolutionRows).toBe(1);
+    }
+  });
+
+  it("a row with no approvedLwinRows entry at all is persisted exactly as the server's own re-match decided — never trusts the client for anything it didn't send", async () => {
+    let createArgs: { p_rows: Array<{ row_number: number; lwin_status: string; lwin_id: string | null }> } | undefined;
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: "LWIN001", score: 0.9 }], error: null }),
+        create_import_batch: (args) => {
+          createArgs = args as typeof createArgs;
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable([]),
+    };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+      // approvedLwinRows omitted entirely — an older client, or one that
+      // never showed this row as matched.
+      {},
+    );
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: false });
+    expect(createArgs?.p_rows[0]).toMatchObject({ row_number: 1, lwin_status: "matched", lwin_id: "LWIN001" });
+  });
+});
+
+// BLOCK 2 — content_sha256 v3 namespace (approvedLwinRows-bearing).
+// Mirrors the "content_sha256 digest — rejectedLwinRows (item 2, new v2
+// namespace)" describe block above exactly, one namespace version up.
+describe("content_sha256 digest — approvedLwinRows (BLOCK 2, new v3 namespace)", () => {
+  function captureDigestSupabase(matchRows: Array<{ idx: number; lwin_id: string | null; score: number | null }>) {
+    const captured: string[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: matchRows, error: null }),
+        create_import_batch: (args) => {
+          captured.push((args as { p_content_sha256: string }).p_content_sha256);
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable([]),
+    };
+    return { supabase, captured };
   }
 
+  it("an approved-match set alone produces a NEW overrides-v3 digest, distinct from the bare digest", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const { supabase, captured } = captureDigestSupabase([{ idx: 0, lwin_id: "LWIN001", score: 0.9 }]);
+
+    await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      approvedLwinRows: { "1": "LWIN001" },
+    });
+
+    expect(captured[0]).not.toBe(fileHex);
+    expect(captured[0]).toMatch(/^overrides-v3:[0-9a-f]{64}:[0-9a-f]{64}$/);
+    expect(captured[0].endsWith(`:${fileHex}`)).toBe(true);
+  });
+
+  it("an approved-match set alongside rejections also uses v3, distinct from a rejections-only v2 digest of the same rejections", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const matchRows = [{ idx: 0, lwin_id: "LWIN001", score: 0.9 }];
+    const { supabase: v2Supabase, captured: v2Captured } = captureDigestSupabase(matchRows);
+    await confirmImportBatch(v2Supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rejectedLwinRows: ["1"],
+    });
+
+    const { supabase: v3Supabase, captured: v3Captured } = captureDigestSupabase(matchRows);
+    await confirmImportBatch(v3Supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rejectedLwinRows: ["1"],
+      approvedLwinRows: { "1": "LWIN001" },
+    });
+
+    expect(v2Captured[0]).toMatch(/^overrides-v2:/);
+    expect(v3Captured[0]).toMatch(/^overrides-v3:/);
+    expect(v3Captured[0]).not.toBe(v2Captured[0]);
+  });
+
+  it("a confirm with neither overrides, rejections, nor an approved-match set still hashes to the bare fileDigestHex — v3 never applies when nothing new is present (backward compat, mirrors the item-2 regression gate)", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const { supabase, captured } = captureDigestSupabase([{ idx: 0, lwin_id: null, score: null }]);
+
+    await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {});
+
+    expect(captured[0]).toBe(fileHex);
+  });
+
+  it("a different approved-match set hashes differently — not treated as a duplicate of the first", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const matchRows = [{ idx: 0, lwin_id: "LWIN001", score: 0.9 }];
+    const { supabase: a, captured: capturedA } = captureDigestSupabase(matchRows);
+    await confirmImportBatch(a as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      approvedLwinRows: { "1": "LWIN001" },
+    });
+    const { supabase: b, captured: capturedB } = captureDigestSupabase(matchRows);
+    await confirmImportBatch(b as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      approvedLwinRows: { "1": "LWIN002" },
+    });
+
+    expect(capturedA[0]).not.toBe(capturedB[0]);
+  });
+});
+
+// Shared by applyLwinRejections' own tests below and applyLwinApprovalVeto's
+// (BLOCK 2, Sol audit round 3 finding 2) — a single matched-row fixture
+// builder so the two describe blocks can never drift on what a "matched
+// row" fixture actually looks like.
+function matchedRow(overrides: Partial<PreviewRow> = {}): PreviewRow {
+  return {
+    rowNumber: 1,
+    raw: {
+      producer: "Domaine A",
+      name: "Cuvee 1",
+      vintage: "2020",
+      varietal: null,
+      region: null,
+      country: null,
+      size_ml: null,
+      format: null,
+      currency: null,
+      quantity: "6",
+      unit_cost: "24.50",
+      bin: null,
+      section: null,
+    },
+    rawText: {
+      producer: "Domaine A",
+      name: "Cuvee 1",
+      vintage: "2020",
+      varietal: "",
+      region: "",
+      country: "",
+      size_ml: "",
+      format: "",
+      currency: "",
+      quantity: "6",
+      unit_cost: "24.50",
+      bin: "",
+      section: "",
+    },
+    rowState: "valid",
+    errors: [],
+    lwinStatus: "matched",
+    lwinId: "LWIN001",
+    lwinScore: 0.9,
+    lwinDisplayName: "Domaine A Cuvee One 2020",
+    costStatus: "present",
+    resolution: "auto",
+    mergedFromRowNumbers: [],
+    duplicateReason: null,
+    ...overrides,
+  };
+}
+
+describe("applyLwinRejections", () => {
   it("returns the SAME array reference for an empty rejection set", () => {
     const rows = [matchedRow()];
     expect(applyLwinRejections(rows, new Set())).toBe(rows);
@@ -2419,6 +2715,118 @@ describe("canonicalizeConfirmExtras", () => {
     expect(canonicalizeConfirmExtras(null, rejectedJson)).toBe(
       JSON.stringify({ overrides: null, rejectedLwinRows: [3] }),
     );
+  });
+});
+
+// BLOCK 2 (Sol audit round 3, finding 2) — canonicalizeApprovedLwinRows.
+describe("canonicalizeApprovedLwinRows", () => {
+  it("returns null for undefined", () => {
+    expect(canonicalizeApprovedLwinRows(undefined)).toBeNull();
+  });
+
+  it("returns null for an empty object", () => {
+    expect(canonicalizeApprovedLwinRows({})).toBeNull();
+  });
+
+  it("sorts by row number regardless of input key order", () => {
+    const a = canonicalizeApprovedLwinRows({ "10": "LWIN010", "2": "LWIN002" });
+    const b = canonicalizeApprovedLwinRows({ "2": "LWIN002", "10": "LWIN010" });
+    expect(a).toBe(b);
+    expect(a).toBe(JSON.stringify([[2, "LWIN002"], [10, "LWIN010"]]));
+  });
+
+  it("drops a malformed row key (non-positive-integer) rather than throwing", () => {
+    expect(canonicalizeApprovedLwinRows({ "0": "LWIN000", "-1": "LWIN-1", "1": "LWIN001" })).toBe(
+      JSON.stringify([[1, "LWIN001"]]),
+    );
+  });
+
+  it("drops an empty-string lwin_id value", () => {
+    expect(canonicalizeApprovedLwinRows({ "1": "" })).toBeNull();
+  });
+
+  it("last-write-wins for a duplicate numeric row key (e.g. '1' and '01' both present)", () => {
+    // Object literals can't actually carry both "1" and "01" as distinct
+    // keys pointing at the SAME numeric row number in normal JS — this
+    // pins the documented behavior via Object.fromEntries, which preserves
+    // insertion order the same way a parsed JSON object would.
+    const input = Object.fromEntries([["1", "LWIN-FIRST"], ["01", "LWIN-SECOND"]]);
+    expect(canonicalizeApprovedLwinRows(input)).toBe(JSON.stringify([[1, "LWIN-SECOND"]]));
+  });
+});
+
+// BLOCK 2 — canonicalizeConfirmExtrasV3, the 3-key (overrides,
+// rejectedLwinRows, approvedLwinRows) sibling of canonicalizeConfirmExtras.
+describe("canonicalizeConfirmExtrasV3", () => {
+  it("folds all three extras into one deterministic blob, with a fixed key order", () => {
+    const overridesJson = canonicalizeRowOverrides({ "1": { quantity: "6" } });
+    const rejectedJson = canonicalizeRejectedLwinRows(["2"]);
+    const approvedJson = canonicalizeApprovedLwinRows({ "3": "LWIN003" });
+    expect(canonicalizeConfirmExtrasV3(overridesJson, rejectedJson, approvedJson)).toBe(
+      JSON.stringify({
+        overrides: [[1, [["quantity", "6"]]]],
+        rejectedLwinRows: [2],
+        approvedLwinRows: [[3, "LWIN003"]],
+      }),
+    );
+  });
+
+  it("represents a missing extra as null, not an absent key", () => {
+    const approvedJson = canonicalizeApprovedLwinRows({ "1": "LWIN001" });
+    expect(canonicalizeConfirmExtrasV3(null, null, approvedJson)).toBe(
+      JSON.stringify({ overrides: null, rejectedLwinRows: null, approvedLwinRows: [[1, "LWIN001"]] }),
+    );
+  });
+});
+
+// BLOCK 2 — applyLwinApprovalVeto: the fail-safe against match_lwin's
+// non-deterministic tie-break (0078_match_lwin_trgm_fastpath.sql). Confirm
+// re-derives every row's match from scratch; this pins that a DISAGREEING
+// re-match is stamped exactly like a rejection (never persisted), while an
+// AGREEING one, or a row with no approval entry at all, is left untouched.
+describe("applyLwinApprovalVeto", () => {
+  it("returns the SAME array reference for an empty approval map", () => {
+    const rows = [matchedRow()];
+    expect(applyLwinApprovalVeto(rows, new Map())).toBe(rows);
+  });
+
+  it("leaves a row untouched when the approved id AGREES with the re-derived match", () => {
+    const rows = [matchedRow({ lwinId: "LWIN001" })];
+    const result = applyLwinApprovalVeto(rows, new Map([[1, "LWIN001"]]));
+    expect(result[0]).toEqual(rows[0]);
+  });
+
+  it("vetoes (nulls the LWIN link, pending resolution) when the approved id DISAGREES with the re-derived match — a non-deterministic tie resolved differently", () => {
+    const rows = [matchedRow({ lwinId: "LWIN999" })];
+    const result = applyLwinApprovalVeto(rows, new Map([[1, "LWIN001"]]));
+    expect(result[0]).toMatchObject({
+      lwinStatus: "unmatched",
+      lwinId: null,
+      lwinScore: null,
+      lwinDisplayName: null,
+      resolution: "pending",
+    });
+    // Never mutates the input.
+    expect(rows[0].lwinId).toBe("LWIN999");
+  });
+
+  it("leaves a row with NO approval entry untouched — an older client, or a row never shown as matched", () => {
+    const rows = [matchedRow({ rowNumber: 1, lwinId: "LWIN001" }), matchedRow({ rowNumber: 2, lwinId: "LWIN002" })];
+    const result = applyLwinApprovalVeto(rows, new Map([[1, "LWIN001"]]));
+    expect(result[0]).toEqual(rows[0]);
+    expect(result[1]).toEqual(rows[1]);
+  });
+
+  it("is a no-op on an already-unmatched row (e.g. one a rejection already nulled out) — never double-processed", () => {
+    const alreadyUnmatched = matchedRow({
+      lwinStatus: "unmatched",
+      lwinId: null,
+      lwinScore: null,
+      lwinDisplayName: null,
+      resolution: "pending",
+    });
+    const result = applyLwinApprovalVeto([alreadyUnmatched], new Map([[1, "LWIN001"]]));
+    expect(result[0]).toEqual(alreadyUnmatched);
   });
 });
 
@@ -2537,6 +2945,31 @@ describe("findSiblingWithAppliedRows", () => {
     expect(result).toEqual({ ok: true, conflictBatchId: "sibling-overridden" });
   });
 
+  // Sol audit round 3, WARN 6: the sibling-reader test above only ever
+  // exercised a v1 (overrides-only) namespaced digest — an isWellFormedDigestForFile
+  // regression that stopped recognizing v2 (rejections-bearing) or v3
+  // (approved-match-bearing, BLOCK 2) digests as this same underlying file
+  // would silently defeat the apply-time sibling-conflict guard for
+  // exactly the confirms these two features add, with nothing here to
+  // catch it. Pinned for both namespaces this codebase actually writes.
+  it("returns the sibling's id when a v2 (rejections-bearing) namespaced sibling for the SAME underlying file has an applied row", async () => {
+    const fileHex = "a".repeat(64);
+    const { from } = fakeSiblingAppliedTable([
+      { id: "sibling-rejected", content_sha256: `overrides-v2:${"c".repeat(64)}:${fileHex}` },
+    ]);
+    const result = await findSiblingWithAppliedRows({ from } as never, RESTAURANT_ID, BATCH_ID, fileHex);
+    expect(result).toEqual({ ok: true, conflictBatchId: "sibling-rejected" });
+  });
+
+  it("returns the sibling's id when a v3 (approved-match-bearing, BLOCK 2) namespaced sibling for the SAME underlying file has an applied row", async () => {
+    const fileHex = "a".repeat(64);
+    const { from } = fakeSiblingAppliedTable([
+      { id: "sibling-approved", content_sha256: `overrides-v3:${"d".repeat(64)}:${fileHex}` },
+    ]);
+    const result = await findSiblingWithAppliedRows({ from } as never, RESTAURANT_ID, BATCH_ID, fileHex);
+    expect(result).toEqual({ ok: true, conflictBatchId: "sibling-approved" });
+  });
+
   // Mirrors isWellFormedDigestForFile's own malformed-content_sha256 test —
   // a value that merely satisfies the LIKE pattern as a substring is never
   // treated as a real match.
@@ -2547,6 +2980,24 @@ describe("findSiblingWithAppliedRows", () => {
     ]);
     const result = await findSiblingWithAppliedRows({ from } as never, RESTAURANT_ID, BATCH_ID, fileHex);
     expect(result).toEqual({ ok: true, conflictBatchId: null });
+  });
+
+  // Sol audit round 3, WARN 6: the tests above all pass a BARE fileHex as
+  // findSiblingWithAppliedRows' own contentSha256 parameter — none ever
+  // exercised extractFileDigestHex's NAMESPACED-parsing branch (the one a
+  // real caller hits whenever THIS confirm itself carries overrides/
+  // rejections/an approved-match set, so its own just-computed
+  // content_sha256 is v1/v2/v3-namespaced, not bare). A regression that
+  // stopped extracting the trailing file digest from a v2/v3 value would
+  // make this whole check silently no-op (fileDigestHex ends up null,
+  // "conflictBatchId: null" — see the early-return test above) for every
+  // confirm that isn't a bare re-upload, with nothing here to catch it.
+  it("still finds a bare-digest sibling when THIS confirm's own contentSha256 is itself v2-namespaced (extractFileDigestHex's namespaced-parsing branch)", async () => {
+    const fileHex = "a".repeat(64);
+    const namespacedContentSha256 = `overrides-v2:${"c".repeat(64)}:${fileHex}`;
+    const { from } = fakeSiblingAppliedTable([{ id: "sibling-1", content_sha256: fileHex }]);
+    const result = await findSiblingWithAppliedRows({ from } as never, RESTAURANT_ID, BATCH_ID, namespacedContentSha256);
+    expect(result).toEqual({ ok: true, conflictBatchId: "sibling-1" });
   });
 
   it("excludes this batch's own id from the lookup", async () => {
