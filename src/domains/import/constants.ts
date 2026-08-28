@@ -88,8 +88,9 @@ export const LWIN_MATCH_BATCH_SIZE = 100;
  * What did NOT hold is the "still fits one request" conclusion: at
  * MAX_ROWS (5,000) fully producer-less, worst case is 150 chunks -> 38
  * waves -> ~167s even taking the historical ~4.4s/100-row figure at face
- * value (0078_match_lwin_trgm_fastpath.sql) — several times over a
- * reasonable UX budget. See LWIN_MATCH_MAX_QUERIES below for the actual
+ * value (0078_match_lwin_trgm_fastpath.sql) — still well over the UX
+ * budget (LWIN_MATCH_UX_CEILING_SECONDS, round-10 fix: 120s). See
+ * LWIN_MATCH_MAX_QUERIES below for the actual
  * fix (a lower, enforced cap on the TOTAL generated query count — round-7
  * fix, corrected from an earlier version of this cap that only counted
  * producer-less rows — not a concurrency increase this pass had no safe
@@ -155,8 +156,37 @@ export const LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY =
  * file, or one auto-split chunk of a larger one). This is the preview/
  * confirm routes' own documented target (see CLEANUP_BUDGET_FROM_ENTRY_MS's
  * own comment for why `maxDuration` itself is inert on this app's Railway
- * deployment and the real ceiling is a UX one, not a platform one). */
-export const LWIN_MATCH_UX_CEILING_SECONDS = 60;
+ * deployment and the real ceiling is a UX one, not a platform one).
+ *
+ * Round-10 fix — RAISED from 60 to 120: 60 was inherited from the routes'
+ * (now-confirmed-inert) `maxDuration = 60` metadata, not derived from any
+ * real constraint — and once LWIN_MATCH_MAX_QUERIES' own arithmetic was
+ * corrected (round-29 audit) to use the concurrency-inflated per-call time,
+ * 60s could no longer authorize even a plain MAX_ROWS (5,000) file where
+ * every row carries a producer (1 query/row = 5,000 queries), the single
+ * most common large-import shape. That is a capability regression, not a
+ * safety win, and the 60s number had no platform basis to defend it.
+ *
+ * Chosen instead by solving forward from two real constraints: (1) the
+ * documented capability the product actually offers — MAX_ROWS (5,000)
+ * rows — should pass with REAL margin, not sit right at the boundary, so
+ * the target is a query capacity of at least 2 x MAX_ROWS (10,000) —
+ * enough for the pure producer-bearing case (5,000 queries, 2x headroom)
+ * AND a meaningfully mixed file (e.g. up to 2,500 producer-less rows at
+ * the 3x variant fan-out, still exactly 10,000); (2) the ceiling must stay
+ * comfortably inside Railway's real, documented constraint — its HTTP
+ * proxy's ~5-minute (300s) no-data timeout, not the inert `maxDuration`.
+ * Solving `floor(ceiling / LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY) *
+ * LWIN_MATCH_CONCURRENCY * LWIN_MATCH_BATCH_SIZE >= 10,000` for `ceiling`
+ * needs `floor(ceiling / 4.796) >= 25`, i.e. `ceiling >= 25 * 4.796 ≈
+ * 119.9s`. 120s (2 minutes) is the clean round number just above that —
+ * only 40% of Railway's 300s timeout, leaving 60% (180s) of margin for
+ * response marshaling, network overhead, and the rest of the request
+ * lifecycle beyond the matching phase itself. The operator now sees a
+ * live wait estimate before the wait begins (estimateChunkedPhaseWaitSeconds,
+ * session-step.tsx) — a longer bounded wait with an honest estimate is a
+ * fair trade for not rejecting the product's own documented capability. */
+export const LWIN_MATCH_UX_CEILING_SECONDS = 120;
 
 /** BLOCK 2 (round 7 fix) — the maximum number of match_lwin_bulk QUERIES
  * (not rows) a single preview/confirm unit may generate, derived — not
@@ -190,10 +220,29 @@ export const LWIN_MATCH_UX_CEILING_SECONDS = 60;
  * cap exists to enforce. Recomputed against
  * LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY — the single source of truth
  * for both this budget and LWIN_MATCH_CONCURRENCY's own contention note —
- * instead: `floor(60 / 4.796)` = 12 waves -> `12 * 4 * 100` = **4,800
- * queries max**. 12 waves at ≈4.796s/wave ≈ 57.6s, inside budget with
+ * instead: `floor(60 / 4.796)` = 12 waves -> `12 * 4 * 100` = 4,800 queries
+ * max. 12 waves at ≈4.796s/wave ≈ 57.6s, inside the then-60s budget with
  * margin; the excluded 13th wave would be ≈62.3s, over it — exactly the
  * boundary `floor` exists to enforce.
+ *
+ * Round-10 fix — RECONCILED against the product's documented capability:
+ * the 4,800 figure above is arithmetically correct for a 60s ceiling, but
+ * it exposed a genuine contradiction — a plain MAX_ROWS (5,000) file where
+ * every row carries a producer generates exactly 5,000 queries, which
+ * EXCEEDS 4,800. The ordinary, most common large import was rejected
+ * before any matching ran. The 60s ceiling was never a platform limit (it
+ * was inherited from the routes' inert `maxDuration` metadata — see
+ * LWIN_MATCH_UX_CEILING_SECONDS' own comment) and had no basis to
+ * override the product's own stated row limit, so the ceiling moved
+ * instead of MAX_ROWS: with LWIN_MATCH_UX_CEILING_SECONDS now 120,
+ * `floor(120 / 4.796)` = 25 waves -> `25 * 4 * 100` = **10,000 queries
+ * max**. 25 waves at ≈4.796s/wave ≈ 119.9s, inside the 120s budget; the
+ * excluded 26th wave would be ≈124.7s, correctly over it. 10,000 gives a
+ * plain MAX_ROWS all-producer-bearing file (5,000 queries) 2x headroom,
+ * and still correctly rejects the producer-less worst case at MAX_ROWS
+ * (5,000 rows x up to 3 queries each = 15,000 > 10,000) — the budget still
+ * does its job of preventing a genuinely unbounded wait, it just no
+ * longer rejects the product's own documented capability to do so.
  *
  * enforceLwinMatchQueryBudget (preview-service.ts) checks the file/chunk's
  * ACTUAL generated query count (buildLwinQueryVariants already run, before

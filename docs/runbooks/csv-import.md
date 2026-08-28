@@ -122,20 +122,37 @@ sub-chunks via repeated `POST /apply` calls, unchanged by chunking.
   per-call latency inflation this budget now applies. The 4.4s baseline
   itself was never re-measured or reproduced this round or last.
 
-  **A consequence worth stating plainly: `MAX_ROWS` (5,000) is NO LONGER
-  guaranteed to fit under this budget on its own.** The old text here
-  claimed "a file entirely of producer-bearing rows can never hit this
-  budget on its own" (5,000 rows × 1 query each = 5,000, under the old
-  5,200 cap). With the corrected 4,800-query cap, that arithmetic no
-  longer holds: 5,000 queries > 4,800. A single-chunk upload at `MAX_ROWS`
-  where every row carries a producer (the common case) can now be rejected
-  by this budget before any LWIN RPC call is issued, purely on row count —
-  something the pre-round-29 design explicitly assumed could never happen.
-  This is a direct, unavoidable consequence of no longer authorizing a
-  plan that measures out to ~62.3s; no change to `MAX_ROWS` or this budget
-  was made to paper over it, since neither was in scope for the finding
-  that prompted this fix — it is flagged here for whoever revisits this
-  cap next.
+  **Corrected a fourth time (round-10 fix) — the contradiction the round-29
+  note above flagged has been resolved, not merely documented.** The
+  round-29 note claimed `MAX_ROWS` (5,000) was "no longer guaranteed to
+  fit under this budget on its own": a plain 5,000-row file where every
+  row carries a producer generates exactly 5,000 queries, which exceeded
+  the then-current 4,800-query cap. That is a capability regression, not a
+  safety win — the ordinary, most common shape of a large import (every
+  row has a producer) was being rejected before any LWIN RPC call ran, and
+  the 60s ceiling that produced the 4,800 figure was never a real platform
+  limit. Two independent audits this session confirmed `maxDuration` is
+  inert on this app's Railway deployment (`railway.toml` runs a
+  long-lived `pnpm start` server, not a per-invocation serverless
+  function) — Railway's real constraint is its HTTP proxy's ~5-minute
+  no-data timeout, which 60s was nowhere near. `LWIN_MATCH_UX_CEILING_SECONDS`
+  moved from 60 to 120 (constants.ts has the full derivation): solving for
+  a query capacity of at least 2× `MAX_ROWS` (10,000 — enough for the pure
+  producer-bearing case with 2x headroom, and for a meaningfully mixed
+  file too) needs `floor(ceiling / 4.796) >= 25`, i.e. `ceiling >= 119.9s`
+  — 120s is the clean round number just above that, and only 40% of
+  Railway's 300s timeout. Recomputed: `floor(120 / 4.796)` = 25 waves ->
+  `25 * 4 * 100` = **10,000 queries max**. A plain `MAX_ROWS`
+  all-producer-bearing file (5,000 queries) now passes with 2x headroom.
+  The producer-less worst case at `MAX_ROWS` (5,000 rows × up to 3 queries
+  = 15,000) still correctly exceeds 10,000 and is still rejected — the
+  budget still prevents a genuinely unbounded wait, it just no longer
+  rejects the product's own documented row-limit capability to do so. The
+  operator sees a live wait estimate before either phase's wait begins
+  (`estimateChunkedPhaseWaitSeconds`, `session-step.tsx`), which derives
+  from this same `LWIN_MATCH_UX_CEILING_SECONDS` — so a longer, honestly
+  estimated bounded wait is the trade for not silently rejecting a normal
+  file.
 
 **What chunking actually needed, that a single-batch design didn't:**
 inventory-level duplicate prevention (§1 — effectively unimplemented

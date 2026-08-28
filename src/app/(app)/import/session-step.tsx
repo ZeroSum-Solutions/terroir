@@ -196,14 +196,15 @@ const PREVIEW_MAX_RETRIES_PER_CHUNK = 5;
 
 /** WARN 4 (round-29 audit) — LWIN_MATCH_MAX_QUERIES (constants.ts) bounds
  * each INDIVIDUAL chunk's own LWIN-matching wall clock to
- * LWIN_MATCH_UX_CEILING_SECONDS (60s), but a multi-chunk file is previewed
- * — and later confirmed — one chunk at a time, sequentially (the loops in
- * planChunkedPreview and confirmChunkedSession above), never in parallel.
- * Every chunk passing its own per-chunk budget says nothing about the
- * TOTAL wait for the whole operation: a 5-chunk file can cost up to
- * 5 x 60s = 300s of preview, then up to another 300s to confirm — with no
- * per-chunk check ever failing. This is the honest worst-case total for
- * ONE phase (preview OR confirm) of a `chunkTotal`-chunk operation, reusing
+ * LWIN_MATCH_UX_CEILING_SECONDS (round-10 fix: 120s), but a multi-chunk
+ * file is previewed — and later confirmed — one chunk at a time,
+ * sequentially (the loops in planChunkedPreview and confirmChunkedSession
+ * above), never in parallel. Every chunk passing its own per-chunk budget
+ * says nothing about the TOTAL wait for the whole operation: a 5-chunk
+ * file can cost up to 5 x 120s = 600s of preview, then up to another 600s
+ * to confirm — with no per-chunk check ever failing. This is the honest
+ * worst-case total for ONE phase (preview OR confirm) of a
+ * `chunkTotal`-chunk operation, reusing
  * the exact same per-chunk ceiling every chunk is already individually
  * bounded by — never a new, separately-tunable number that could drift
  * from it. Surfaced to the operator BEFORE each phase's own wait begins
