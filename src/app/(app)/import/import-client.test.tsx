@@ -1,0 +1,301 @@
+// Sol round-2 audit (2026-08-27) — pins four findings against the shared
+// PreviewStep/RowFixItem UI:
+//   finding 1 — a row belonging to an already-CONFIRMED chunk renders its
+//     inline-fix inputs read-only, with explanatory copy, instead of
+//     silently accepting edits that could never actually be resent.
+//   finding 3 — chunk_content_mismatch is terminal: no "Retry upload"
+//     button, and the server's own (already-explanatory) message renders.
+//   finding 4 — the error-row cap is incremental disclosure, not a hard
+//     cutoff: "Show N more" reveals the next page, repeatable.
+//   finding 5 — a chunked error row's label is "Chunk N, data row M" (an
+//     honest, chunk-scoped claim), never "Row {pseudo-global number}".
+import { act, type ComponentProps, type ReactElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { PreviewStep, isRowInConfirmedChunk, MAX_SHOWN_ERROR_ROWS, type ErrorRowEntry } from "./import-client";
+import { ZERO_SUMMARY, type ChunkUploadState, type ChunkedPlanState } from "./session-step";
+import type { CanonicalHeader } from "@/domains/import/constants";
+
+const reactTestEnvironment = globalThis as typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT?: boolean;
+};
+const previousActEnvironment = reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT;
+
+beforeAll(() => {
+  reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+});
+
+afterAll(() => {
+  reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+});
+
+const EMPTY_RAW_TEXT: Record<CanonicalHeader, string> = {
+  producer: "",
+  name: "",
+  vintage: "",
+  varietal: "",
+  region: "",
+  country: "",
+  size_ml: "",
+  format: "",
+  currency: "",
+  quantity: "",
+  unit_cost: "",
+  bin: "",
+  section: "",
+};
+
+function errorRow(rowNumber: number, extra: Partial<ErrorRowEntry> = {}): ErrorRowEntry {
+  return {
+    rowNumber,
+    errors: [{ field: "quantity", message: "Quantity is required." }],
+    rawText: { ...EMPTY_RAW_TEXT, producer: "Domaine", name: `Wine ${rowNumber}` },
+    ...extra,
+  };
+}
+
+type PreviewStepProps = ComponentProps<typeof PreviewStep>;
+
+function baseProps(overrides: Partial<PreviewStepProps> = {}): PreviewStepProps {
+  return {
+    filename: "cellar.csv",
+    summary: { ...ZERO_SUMMARY },
+    errorRows: [],
+    rowOverrides: {},
+    onRowFieldChange: () => {},
+    isRowLocked: () => false,
+    chunkUpload: null,
+    onConfirm: () => {},
+    confirming: false,
+    onBack: () => {},
+    error: null,
+    ...overrides,
+  };
+}
+
+describe("isRowInConfirmedChunk (Sol round-2 audit finding 1)", () => {
+  const PLAN: ChunkedPlanState = {
+    headerRecord: "producer,name,quantity",
+    chunkTotal: 2,
+    chunks: [
+      { index: 1, startRow: 1, endRow: 2, text: "" },
+      { index: 2, startRow: 3, endRow: 4, text: "" },
+    ],
+    sourceSha256: "a".repeat(64),
+  };
+  const UPLOAD: ChunkUploadState[] = [
+    { index: 1, status: "confirmed", batchId: "b1", error: null, code: null },
+    { index: 2, status: "pending", batchId: null, error: null, code: null },
+  ];
+
+  it("is false on the plain (non-chunked) path", () => {
+    expect(isRowInConfirmedChunk(1, null, null)).toBe(false);
+  });
+
+  it("is true for a row inside a CONFIRMED chunk's [startRow, endRow] range", () => {
+    expect(isRowInConfirmedChunk(1, PLAN, UPLOAD)).toBe(true);
+    expect(isRowInConfirmedChunk(2, PLAN, UPLOAD)).toBe(true);
+  });
+
+  it("is false for a row inside an UNCONFIRMED chunk's range", () => {
+    expect(isRowInConfirmedChunk(3, PLAN, UPLOAD)).toBe(false);
+    expect(isRowInConfirmedChunk(4, PLAN, UPLOAD)).toBe(false);
+  });
+
+  it("is false for a row number outside every chunk's range", () => {
+    expect(isRowInConfirmedChunk(99, PLAN, UPLOAD)).toBe(false);
+  });
+});
+
+describe("PreviewStep — locked rows in a confirmed chunk (Sol round-2 audit finding 1)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+  });
+
+  it("renders a locked row's inputs disabled with explanatory copy, and leaves an unlocked row editable", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          errorRows: [errorRow(1), errorRow(3)],
+          isRowLocked: (rowNumber) => rowNumber === 1,
+        })}
+      />,
+    );
+
+    const lockedItem = rowItem(container, "Row 1");
+    const unlockedItem = rowItem(container, "Row 3");
+
+    const lockedInput = lockedItem.querySelector("input")!;
+    expect(lockedInput.disabled).toBe(true);
+    expect(lockedItem.textContent).toContain("Row already imported with this chunk — revert the import to change it.");
+
+    const unlockedInput = unlockedItem.querySelector("input")!;
+    expect(unlockedInput.disabled).toBe(false);
+    expect(unlockedItem.textContent).not.toContain("Row already imported with this chunk");
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+});
+
+describe("PreviewStep — honest chunk/data-row label (Sol round-2 audit finding 5)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+  });
+
+  it("labels a chunked row 'Chunk N, data row M', and a plain row 'Row N'", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          errorRows: [
+            errorRow(105, { chunkIndex: 2, chunkRowNumber: 1 }),
+            errorRow(7),
+          ],
+        })}
+      />,
+    );
+
+    expect(container.textContent).toContain("Chunk 2, data row 1");
+    expect(container.textContent).not.toContain("Row 105");
+    expect(rowItem(container, "Row 7")).toBeTruthy();
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+});
+
+describe("PreviewStep — chunk_content_mismatch is terminal (Sol round-2 audit finding 3)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+  });
+
+  it("hides the Retry button and renders the server's own message for chunk_content_mismatch", async () => {
+    const serverMessage =
+      "Chunk 1 of this import session was already confirmed with different content or row fixes. " +
+      "Revert that import before re-uploading a corrected version of this chunk.";
+    const chunkUpload: ChunkUploadState[] = [
+      { index: 1, status: "failed", batchId: null, error: serverMessage, code: "chunk_content_mismatch" },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep {...baseProps({ chunkUpload, chunkTotal: 1, error: serverMessage })} />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
+    expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
+    expect(container.textContent).toContain(serverMessage);
+  });
+
+  it("still offers Retry for every OTHER (genuinely retryable) chunk failure", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      { index: 1, status: "failed", batchId: null, error: "Network error.", code: null },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep {...baseProps({ chunkUpload, chunkTotal: 1, error: "Chunk 1 of 1 failed to upload — you can retry it below." })} />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+});
+
+describe("PreviewStep — incremental error-row disclosure (Sol round-2 audit finding 4)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+  });
+
+  it("shows the first page, then reveals more on each click until every row is shown", async () => {
+    const errorRows = Array.from({ length: 250 }, (_, i) => errorRow(i + 1));
+    const { container } = await mount(<PreviewStep {...baseProps({ errorRows })} />);
+
+    expect(rowErrorItems(container)).toHaveLength(MAX_SHOWN_ERROR_ROWS);
+    expect(container.textContent).toContain("150 more row(s) with errors are not shown yet.");
+    let showMore = findButton(container, "Show 100 more row(s) with errors");
+    expect(showMore).toBeTruthy();
+
+    await click(showMore!);
+    expect(rowErrorItems(container)).toHaveLength(200);
+    expect(container.textContent).toContain("50 more row(s) with errors are not shown yet.");
+    showMore = findButton(container, "Show 50 more row(s) with errors");
+    expect(showMore).toBeTruthy();
+
+    await click(showMore!);
+    expect(rowErrorItems(container)).toHaveLength(250);
+    expect(container.textContent).not.toContain("more row(s) with errors are not shown yet.");
+    expect(findButton(container, /Show \d+ more row\(s\) with errors/)).toBeFalsy();
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+
+  async function click(element: HTMLElement) {
+    await act(async () => element.click());
+  }
+});
+
+function rowItem(root: ParentNode, label: string): HTMLElement {
+  const item = [...root.querySelectorAll<HTMLElement>("li")].find(
+    (li) => li.querySelector("span")?.textContent?.trim() === label,
+  );
+  if (!item) throw new Error(`no row item found for label "${label}"`);
+  return item;
+}
+
+function rowErrorItems(root: ParentNode): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>("li")].filter((li) => li.querySelector("input") !== null);
+}
+
+function findButton(root: ParentNode, text: string | RegExp): HTMLButtonElement | undefined {
+  return [...root.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+    typeof text === "string" ? b.textContent?.includes(text) : text.test(b.textContent ?? ""),
+  );
+}

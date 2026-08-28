@@ -49,7 +49,18 @@ export type ChunkedPreviewState = {
 };
 
 export type ChunkUploadStatus = "pending" | "waiting" | "uploading" | "confirmed" | "failed";
-export type ChunkUploadState = { index: number; status: ChunkUploadStatus; batchId: string | null; error: string | null };
+export type ChunkUploadState = {
+  index: number;
+  status: ChunkUploadStatus;
+  batchId: string | null;
+  error: string | null;
+  /** Sol round-2 audit (2026-08-27) finding 3: the server's error CODE for a
+   * "failed" chunk, when there is one — e.g. "chunk_content_mismatch",
+   * which is TERMINAL (retrying re-sends the exact same content and will
+   * fail again the same way). null for every non-error state, and for a
+   * failure with no typed code (network error, generic upload failure). */
+  code: string | null;
+};
 
 export const ZERO_SUMMARY: PreviewSummary = {
   totalRows: 0,
@@ -204,9 +215,26 @@ export async function planChunkedPreview(
       // localizeRowOverrides back to this same dense local row number
       // (`globalRowNumber - chunk.startRow + 1 === row.rowNumber`, which
       // holds regardless of blanks) — that's the only property an inline
-      // fix actually depends on to land on the right row.
+      // fix actually depends on to land on the right row. `rowNumber`
+      // itself is therefore NEVER changed for display — it stays exactly
+      // this override-targeting value.
+      //
+      // Sol round-2 audit (2026-08-27) finding 5: chunkIndex/chunkRowNumber carry
+      // the HONEST label instead — row.rowNumber, unmodified, IS already
+      // this chunk's own dense data-row count (that's what the comment
+      // above is describing), so no extra arithmetic is needed to surface
+      // it. import-client.tsx's RowFixItem renders "Chunk N, data row M"
+      // from these two fields when present, rather than presenting
+      // `rowNumber` (a startRow-adjusted number that can look like — but
+      // is not — a true physical spreadsheet row) as if it were one.
       if (row.rowState === "error") {
-        errorRows.push({ rowNumber: chunkEntry.startRow - 1 + row.rowNumber, errors: row.errors, rawText: row.rawText });
+        errorRows.push({
+          rowNumber: chunkEntry.startRow - 1 + row.rowNumber,
+          chunkIndex: chunkEntry.index,
+          chunkRowNumber: row.rowNumber,
+          errors: row.errors,
+          rawText: row.rawText,
+        });
       }
     }
   }
@@ -323,11 +351,24 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
       const response = await fetch("/api/import/batches", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) {
-        results = results.map((c) =>
-          c.index === chunk.index ? { ...c, status: "failed", error: body?.error?.message ?? "Upload failed." } : c,
-        );
+        const code: string | null = body?.error?.code ?? null;
+        const message: string = body?.error?.message ?? "Upload failed.";
+        results = results.map((c) => (c.index === chunk.index ? { ...c, status: "failed", error: message, code } : c));
         onProgress(results);
-        return { ok: false, error: `Chunk ${chunk.index} of ${plan.chunkTotal} failed to upload — you can retry it below.` };
+        // Sol round-2 audit (2026-08-27) finding 3: chunk_content_mismatch is
+        // TERMINAL — retrying re-sends this exact chunk's content and
+        // digest, so it fails the exact same way every time. The server's
+        // own message already explains the revert path; the generic
+        // "you can retry it below" wording is actively wrong for this one
+        // code, so it's used only for every other (genuinely retryable)
+        // failure.
+        return {
+          ok: false,
+          error:
+            code === "chunk_content_mismatch"
+              ? message
+              : `Chunk ${chunk.index} of ${plan.chunkTotal} failed to upload — you can retry it below.`,
+        };
       }
       // 200 (alreadyExists) can point at a batch that belongs to a
       // DIFFERENT session than the one being uploaded here — this file's
@@ -345,7 +386,7 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
             : "This file was already partially uploaded as a different, unfinished import — resuming that import " +
               "instead of starting a second one.";
         results = results.map((c) =>
-          c.index === chunk.index ? { ...c, status: "failed", error: conflictError } : c,
+          c.index === chunk.index ? { ...c, status: "failed", error: conflictError, code: null } : c,
         );
         onProgress(results);
         // sessionId null = the identical bytes were confirmed earlier as a
@@ -360,11 +401,13 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
       // 201 (new) or 200 (alreadyExists: identical bytes already confirmed
       // under THIS session) — either way this chunk is now live server-side.
       results = results.map((c) =>
-        c.index === chunk.index ? { ...c, status: "confirmed", batchId: body.batchId as string, error: null } : c,
+        c.index === chunk.index ? { ...c, status: "confirmed", batchId: body.batchId as string, error: null, code: null } : c,
       );
       onProgress(results);
     } catch {
-      results = results.map((c) => (c.index === chunk.index ? { ...c, status: "failed", error: "Network error." } : c));
+      results = results.map((c) =>
+        c.index === chunk.index ? { ...c, status: "failed", error: "Network error.", code: null } : c,
+      );
       onProgress(results);
       return {
         ok: false,

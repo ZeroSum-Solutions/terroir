@@ -67,7 +67,7 @@ describe("confirmChunkedSession — rowOverrides wiring", () => {
     const progressStates: ChunkUploadState[][] = [];
     const result = await confirmChunkedSession({
       plan,
-      initialUpload: chunks.map((c) => ({ index: c.index, status: "pending" as const, batchId: null, error: null })),
+      initialUpload: chunks.map((c) => ({ index: c.index, status: "pending" as const, batchId: null, error: null, code: null })),
       existingSessionId: null,
       fileLabel: "cellar.csv",
       timestampsRef: { current: [] },
@@ -101,7 +101,7 @@ describe("confirmChunkedSession — rowOverrides wiring", () => {
 
     await confirmChunkedSession({
       plan,
-      initialUpload: [{ index: 1, status: "pending", batchId: null, error: null }],
+      initialUpload: [{ index: 1, status: "pending", batchId: null, error: null, code: null }],
       existingSessionId: null,
       fileLabel: "cellar.csv",
       timestampsRef: { current: [] },
@@ -119,14 +119,24 @@ describe("confirmChunkedSession — rowOverrides wiring", () => {
 // from the server's own DENSE row numbering (which drops blank lines
 // before counting) — see the comment on errorRows.push in
 // planChunkedPreview (session-step.tsx) for exactly what the resulting
-// label means. This pins that meaning: "row N of this chunk's own data
-// rows," not this row's true physical line number in the original file.
-describe("planChunkedPreview — error-row labeling across a blank record (Sol audit finding 6)", () => {
-  it("labels an error row by this chunk's dense data-row count, not its physical position among blank lines", async () => {
+// rowNumber means. rowNumber itself is the override-targeting key and is
+// NEVER changed for display — round-2 finding 5 below is what changed.
+//
+// Sol round-2 audit (2026-08-27) finding 5: rowNumber ("1" here) LOOKS
+// like a physical file position but isn't one — this record is actually
+// the file's 3rd row (two blanks precede it), which is exactly why the
+// UI no longer labels a chunked error row "Row {rowNumber}". Instead it
+// carries chunkIndex + chunkRowNumber — an honest, chunk-scoped claim
+// ("chunk 1, data row 1") that import-client.tsx's RowFixItem renders
+// directly. chunkRowNumber is exactly the server's own dense count
+// (row.rowNumber before the startRow offset is folded in) — no new
+// arithmetic, just carrying a value already computed.
+describe("planChunkedPreview — error-row labeling across a blank record (Sol audit finding 6, round-2 finding 5)", () => {
+  it("keeps rowNumber as the override-targeting value, and carries chunkIndex/chunkRowNumber as the honest display label", async () => {
     // Two blank records precede the one real (erroring) record in this
     // single chunk. Physically this record is the file's 3rd row; the
     // server's own parser drops the two blanks before numbering, so it
-    // reports this row as dense row 1 — the label below is 1, not 3.
+    // reports this row as dense row 1 — chunkRowNumber below is 1, not 3.
     const dataRecords = ["", "", "P,,1"]; // blank name -> error
     const bytes = new TextEncoder().encode("producer,name,quantity\n\n\nP,,1\n");
     const file = new File(["producer,name,quantity\n\n\nP,,1\n"], "cellar.csv", { type: "text/csv" });
@@ -154,6 +164,8 @@ describe("planChunkedPreview — error-row labeling across a blank record (Sol a
     expect(result.preview.errorRows).toEqual([
       {
         rowNumber: 1,
+        chunkIndex: 1,
+        chunkRowNumber: 1,
         errors: [{ field: "name", message: "Wine name is required." }],
         rawText: { producer: "P", name: "", quantity: "1" },
       },

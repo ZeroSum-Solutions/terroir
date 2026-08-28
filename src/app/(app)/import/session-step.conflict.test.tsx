@@ -33,7 +33,7 @@ function run(confirmBody: Record<string, unknown>) {
   const progressStates: ChunkUploadState[][] = [];
   const promise = confirmChunkedSession({
     plan: PLAN,
-    initialUpload: [{ index: 1, status: "pending", batchId: null, error: null }],
+    initialUpload: [{ index: 1, status: "pending", batchId: null, error: null, code: null }],
     existingSessionId: null,
     fileLabel: "cellar.csv",
     timestampsRef: { current: [] },

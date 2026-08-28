@@ -35,9 +35,19 @@ import {
 
 /** One error row's worth of prefill text for the inline row-fix form —
  * the exact text the row was validated against, for every canonical
- * field (see row-validator.ts's ValidatedRow.rawText). */
+ * field (see row-validator.ts's ValidatedRow.rawText). rowNumber is the
+ * override-targeting key (see RowOverrides below) — for the chunked path
+ * it's a startRow-adjusted pseudo-global number that must NEVER be
+ * changed (session-step.tsx's localizeRowOverrides depends on its exact
+ * arithmetic). chunkIndex/chunkRowNumber are set ONLY for the chunked
+ * path and carry the HONEST display label instead (Sol round-2 audit
+ * (2026-08-27) finding 5) — RowFixItem renders "Chunk N, data row M"
+ * from these two when present, never a claim that rowNumber is this
+ * row's true physical position in the original file. */
 export type ErrorRowEntry = {
   rowNumber: number;
+  chunkIndex?: number;
+  chunkRowNumber?: number;
   errors: { field: string; message: string }[];
   rawText: Record<CanonicalHeader, string>;
 };
@@ -47,6 +57,26 @@ export type ErrorRowEntry = {
  * validation stays the sole authority (see request-schemas.ts's
  * RowOverridesSchema and batch-service.ts's confirmImportBatch). */
 export type RowOverrides = Record<number, Partial<Record<CanonicalHeader, string>>>;
+
+/** Sol round-2 audit (2026-08-27) finding 1: which GLOBAL row numbers
+ * currently belong to an already-CONFIRMED chunk. confirmChunkedSession's
+ * retry loop skips a chunk once it's "confirmed" (session-step.tsx) —
+ * further edits to that chunk's rows can never actually be resent, so
+ * leaving their inputs enabled would silently discard the operator's
+ * fix with no signal at all. Exported as a pure function so its boundary
+ * behavior can be pinned directly, without rendering the full component
+ * tree. Always false for the plain (non-chunked) path. */
+export function isRowInConfirmedChunk(
+  rowNumber: number,
+  chunkedPlan: ChunkedPlanState | null,
+  chunkUpload: ChunkUploadState[] | null,
+): boolean {
+  if (!chunkedPlan || !chunkUpload) return false;
+  return chunkedPlan.chunks.some((chunk) => {
+    if (rowNumber < chunk.startRow || rowNumber > chunk.endRow) return false;
+    return chunkUpload.find((u) => u.index === chunk.index)?.status === "confirmed";
+  });
+}
 
 const FIELD_LABELS: Record<CanonicalHeader, string> = {
   producer: "Producer",
@@ -93,13 +123,14 @@ type Step = "upload" | "preview" | "batch" | "session";
 
 const TEMPLATE_CSV = `${CANONICAL_HEADERS.join(",")}\nDomaine Example,Cuvee One,2020,Pinot Noir,Burgundy,France,750,,USD,6,24.50,,\n`;
 
-// Sol audit (2026-08-27) finding 5: only the first N error rows are ever
-// shown and editable — any beyond this cap are excluded on confirm with
-// no inline-fix chance. 100 (raised from 20) covers the overwhelming
-// majority of real-world error counts; anything past it still gets an
-// explicit warning below (never a silent drop) rather than virtualizing
-// the whole list.
-const MAX_SHOWN_ERROR_ROWS = 100;
+// Round-1 fix: only the first N error rows were ever shown/editable, with
+// any beyond this hard cap silently excluded from an inline fix — no
+// second chance, and the overflow warning never went away. Sol round-2
+// audit (2026-08-27) finding 4: PreviewStep now uses this as the initial
+// PAGE size instead of a hard cap — "Show N more" reveals the next
+// MAX_SHOWN_ERROR_ROWS rows, repeatable until every error row is shown,
+// and the overflow warning disappears once nothing is left hidden.
+export const MAX_SHOWN_ERROR_ROWS = 100;
 
 export function ImportClient() {
   const [step, setStep] = useState<Step>("upload");
@@ -296,7 +327,8 @@ export function ImportClient() {
     setPreviewError(null);
     try {
       const initial: ChunkUploadState[] =
-        chunkUpload ?? chunkedPlan.chunks.map((c) => ({ index: c.index, status: "pending" as const, batchId: null, error: null }));
+        chunkUpload ??
+        chunkedPlan.chunks.map((c) => ({ index: c.index, status: "pending" as const, batchId: null, error: null, code: null }));
 
       const result = await confirmChunkedSession({
         plan: chunkedPlan,
@@ -361,6 +393,11 @@ export function ImportClient() {
     }
   }, [chunkedPlan, chunkUpload, sessionId, file, sessionLabel, rowOverrides, loadRecent]);
 
+  const isRowLocked = useCallback(
+    (rowNumber: number) => isRowInConfirmedChunk(rowNumber, chunkedPlan, chunkUpload),
+    [chunkedPlan, chunkUpload],
+  );
+
   const reset = useCallback(() => {
     setStep("upload");
     setFile(null);
@@ -408,6 +445,7 @@ export function ImportClient() {
           }
           rowOverrides={rowOverrides}
           onRowFieldChange={onRowFieldChange}
+          isRowLocked={isRowLocked}
           chunkBreakdown={chunkedPreview?.perChunk}
           chunkTotal={chunkedPlan?.chunkTotal}
           chunkUpload={chunkUpload}
@@ -518,13 +556,17 @@ function UploadStep({
 
 /** Renders either the plain (<= MAX_ROWS) preview or the aggregated,
  * chunked (> MAX_ROWS) preview — chunkBreakdown/chunkTotal/chunkUpload are
- * only ever set for the latter. */
-function PreviewStep({
+ * only ever set for the latter. Exported so it can be pinned directly by
+ * import-client.test.tsx (locked-row rendering, the honest chunk/data-row
+ * label, incremental error-row disclosure, and the chunk_content_mismatch
+ * terminal state — Sol round-2 audit findings 1, 3, 4, 5). */
+export function PreviewStep({
   filename,
   summary,
   errorRows,
   rowOverrides,
   onRowFieldChange,
+  isRowLocked,
   chunkBreakdown,
   chunkTotal,
   chunkUpload,
@@ -538,6 +580,10 @@ function PreviewStep({
   errorRows: ErrorRowEntry[];
   rowOverrides: RowOverrides;
   onRowFieldChange: (rowNumber: number, field: CanonicalHeader, value: string) => void;
+  /** Sol round-2 audit finding 1: true for a row whose chunk is already
+   * confirmed — its inline-fix inputs render read-only. Always returns
+   * false on the plain (non-chunked) path. */
+  isRowLocked: (rowNumber: number) => boolean;
   chunkBreakdown?: { index: number; startRow: number; endRow: number; summary: PreviewSummary }[];
   chunkTotal?: number;
   chunkUpload: ChunkUploadState[] | null;
@@ -546,7 +592,16 @@ function PreviewStep({
   onBack: () => void;
   error: string | null;
 }) {
-  const shownErrorRows = errorRows.slice(0, MAX_SHOWN_ERROR_ROWS);
+  // Sol round-2 audit (2026-08-27) finding 4: incremental disclosure
+  // instead of a hard cap — starts at MAX_SHOWN_ERROR_ROWS and grows by
+  // the same page size each time "Show more" is clicked, repeatable
+  // until every error row is shown. Safe as plain useState: PreviewStep
+  // unmounts (step leaves "preview") before a genuinely new errorRows
+  // list can ever replace this one, so there's no stale-count case to
+  // reset for.
+  const [shownCount, setShownCount] = useState(MAX_SHOWN_ERROR_ROWS);
+  const shownErrorRows = errorRows.slice(0, shownCount);
+  const hiddenCount = errorRows.length - shownErrorRows.length;
   // A row the operator has edited into passing validation counts toward
   // "ready to confirm" too, even though summary (computed server-side
   // from the ORIGINAL file) has no way to know about it yet — confirm
@@ -557,6 +612,11 @@ function PreviewStep({
   ).length;
   const canConfirm = summary.validRows > 0 || fixedCount > 0;
   const hasFailedChunk = chunkUpload?.some((c) => c.status === "failed") ?? false;
+  // Sol round-2 audit finding 3: chunk_content_mismatch is TERMINAL —
+  // retrying re-sends this exact chunk's content and fails the same way
+  // every time. Never offer "Retry upload" for it; the server's own
+  // message (surfaced via `error` above) already explains the revert path.
+  const hasChunkContentMismatch = chunkUpload?.some((c) => c.status === "failed" && c.code === "chunk_content_mismatch") ?? false;
 
   return (
     <div className="rounded-card card-surface p-lg">
@@ -606,15 +666,24 @@ function PreviewStep({
                 row={row}
                 override={rowOverrides[row.rowNumber]}
                 onFieldChange={onRowFieldChange}
+                locked={isRowLocked(row.rowNumber)}
               />
             ))}
           </ul>
-          {summary.errorRows > shownErrorRows.length && (
-            <p role="alert" className="mt-2xs flex items-start gap-xs text-caption text-accent">
-              <AlertTriangle className="mt-[2px] h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              {summary.errorRows - shownErrorRows.length} more row(s) with errors are not shown — they will be
-              excluded unless fixed in the source file and re-uploaded.
-            </p>
+          {hiddenCount > 0 && (
+            <>
+              <p role="alert" className="mt-2xs flex items-start gap-xs text-caption text-accent">
+                <AlertTriangle className="mt-[2px] h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                {hiddenCount} more row(s) with errors are not shown yet.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShownCount((count) => count + MAX_SHOWN_ERROR_ROWS)}
+                className="mt-xs min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+              >
+                Show {Math.min(hiddenCount, MAX_SHOWN_ERROR_ROWS)} more row(s) with errors
+              </button>
+            </>
           )}
         </div>
       )}
@@ -637,17 +706,19 @@ function PreviewStep({
         >
           Choose a different file
         </button>
-        <button
-          type="button"
-          disabled={!canConfirm || confirming}
-          onClick={onConfirm}
-          className="flex min-h-11 flex-1 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {confirming ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-          {confirming ? "Creating import…" : hasFailedChunk ? "Retry upload" : "Confirm import"}
-        </button>
+        {!hasChunkContentMismatch && (
+          <button
+            type="button"
+            disabled={!canConfirm || confirming}
+            onClick={onConfirm}
+            className="flex min-h-11 flex-1 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {confirming ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+            {confirming ? "Creating import…" : hasFailedChunk ? "Retry upload" : "Confirm import"}
+          </button>
+        )}
       </div>
-      {!canConfirm && (
+      {!hasChunkContentMismatch && !canConfirm && (
         <p className="mt-sm text-caption text-grey">No valid rows to import yet — fix a row below, or choose a different file.</p>
       )}
     </div>
@@ -657,27 +728,46 @@ function PreviewStep({
 /** One error row's inline fix form: an input per field the row actually
  * failed on, prefilled with the exact text that failed (rawText), live
  * re-validated through the SAME row-validator.ts logic the server uses —
- * so "this row will now import" is never a guess. */
+ * so "this row will now import" is never a guess.
+ *
+ * Sol round-2 audit (2026-08-27) finding 1: once `locked` (this row's
+ * chunk is already confirmed), further edits could never actually be
+ * resent — confirmChunkedSession's retry loop skips a confirmed chunk
+ * entirely — so the inputs render read-only/disabled instead of silently
+ * accepting edits that would go nowhere.
+ *
+ * finding 5: the LABEL is "Chunk N, data row M" when row carries
+ * chunkIndex/chunkRowNumber (the chunked path) — an honest, chunk-scoped
+ * claim — never "Row {row.rowNumber}" for that path, since rowNumber
+ * there is a startRow-adjusted number that can look like, but is not, a
+ * true physical spreadsheet row (see ErrorRowEntry's own comment). The
+ * plain (non-chunked) path has no chunk concept, so it keeps "Row N". */
 function RowFixItem({
   row,
   override,
   onFieldChange,
+  locked,
 }: {
   row: ErrorRowEntry;
   override: Partial<Record<CanonicalHeader, string>> | undefined;
   onFieldChange: (rowNumber: number, field: CanonicalHeader, value: string) => void;
+  locked: boolean;
 }) {
   const effective: Record<CanonicalHeader, string> = { ...row.rawText, ...override };
   const live = validateFields(effective);
   const editableFields = Array.from(new Set(row.errors.map((e) => e.field))).filter(
     (field): field is CanonicalHeader => (CANONICAL_HEADERS as readonly string[]).includes(field),
   );
+  const label =
+    row.chunkIndex !== undefined && row.chunkRowNumber !== undefined
+      ? `Chunk ${row.chunkIndex}, data row ${row.chunkRowNumber}`
+      : `Row ${row.rowNumber}`;
 
   return (
     <li className="rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink">
       <div className="flex items-center gap-xs">
-        <span>Row {row.rowNumber}</span>
-        {live.state === "valid" && (
+        <span>{label}</span>
+        {!locked && live.state === "valid" && (
           <span className="inline-flex items-center gap-2xs text-primary">
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
             Fixed
@@ -685,7 +775,11 @@ function RowFixItem({
         )}
       </div>
       <p className="mt-2xs text-caption text-grey">
-        {live.state === "error" ? live.errors.map((e) => e.message).join(" ") : "This row will be imported once you confirm."}
+        {locked
+          ? "Row already imported with this chunk — revert the import to change it."
+          : live.state === "error"
+            ? live.errors.map((e) => e.message).join(" ")
+            : "This row will be imported once you confirm."}
       </p>
       <div className="mt-xs flex flex-wrap gap-sm">
         {editableFields.map((field) => (
@@ -696,7 +790,12 @@ function RowFixItem({
               value={effective[field] ?? ""}
               onChange={(e) => onFieldChange(row.rowNumber, field, e.target.value)}
               maxLength={MAX_FIELD_LENGTH}
-              className="min-h-11 w-32 rounded-pill border border-hairline bg-surface px-sm text-[13px] text-ink focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
+              disabled={locked}
+              readOnly={locked}
+              className={cn(
+                "min-h-11 w-32 rounded-pill border border-hairline bg-surface px-sm text-[13px] text-ink focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/25",
+                locked && "cursor-not-allowed opacity-60",
+              )}
             />
           </label>
         ))}

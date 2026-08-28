@@ -189,6 +189,33 @@ export async function confirmImportBatch(
       ? fileDigestHex
       : `${OVERRIDES_DIGEST_PREFIX}${createHash("sha256").update(overridesCanonicalJson).digest("hex")}:${fileDigestHex}`;
 
+  // Sol round-2 audit (2026-08-27) finding 2: overrides (or the lack of them)
+  // namespace a confirm's content_sha256, so the DB's own (restaurant_id,
+  // content_sha256) unique index can never catch "same file, different —
+  // or no — fixes" as a duplicate; each combination hashes differently
+  // and would otherwise create its own live batch, importing the same
+  // valid rows again. Checked proactively, BEFORE the create RPC, because
+  // the unique index has no way to express this cross-format identity at
+  // all — a genuine race (another request's insert lands between this
+  // check and the RPC call) still 23505s on an EXACT content_sha256
+  // match, handled separately by findDuplicateBatch below. The exact
+  // (session, chunkIndex) slot this confirm targets is excluded here —
+  // that is finding 1's territory (a real content change within one
+  // chunk's own retry loop), surfaced as chunk_content_mismatch by
+  // findDuplicateBatch's 23505 fallback, never silently resumed here as
+  // a plain duplicate.
+  const underlyingFileMatch = await findLiveBatchByUnderlyingFile(
+    supabase,
+    restaurantId,
+    fileDigestHex,
+    options.sessionId !== undefined && options.chunkIndex !== undefined
+      ? { sessionId: options.sessionId, chunkIndex: options.chunkIndex }
+      : undefined,
+  );
+  if (underlyingFileMatch) {
+    return toAlreadyExistsResult(supabase, underlyingFileMatch);
+  }
+
   const rowsPayload: RowPayload[] = preview.rows.map((row) => ({
     row_number: row.rowNumber,
     raw: row.raw as unknown as Json,
@@ -305,8 +332,60 @@ async function findDuplicateBatch(
 
   if (!match) return null;
 
+  return toAlreadyExistsResult(supabase, match);
+}
+
+/** Shared "resume pointer" projection — every existing-batch lookup below
+ * (byHash, the session+chunk fallback, and the finding-2 underlying-file
+ * check) converges on this exact result shape. */
+async function toAlreadyExistsResult(
+  supabase: SupabaseClient<Database>,
+  match: { id: string; status: string; session_id: string | null },
+): Promise<ConfirmBatchResult> {
   const counts = await countBatchRows(supabase, match.id);
   return { ok: true, alreadyExists: true, batchId: match.id, status: match.status, sessionId: match.session_id, counts };
+}
+
+/** Sol round-2 audit (2026-08-27) finding 2: finds a live (non-reverted) batch for
+ * this restaurant whose content_sha256 refers to the SAME underlying file
+ * as fileDigestHex — either the bare digest itself, or ANY overrides-v1
+ * namespaced digest ending in it (the namespaced format always embeds the
+ * bare file digest as its trailing segment — see confirmImportBatch's own
+ * digest-construction comment). Hex digests contain no LIKE metacharacters,
+ * so the pattern below is safe to build directly from fileDigestHex.
+ *
+ * `exclude` is the exact (session_id, chunk_index) slot THIS confirm is
+ * targeting, when it has one — a match sitting in that exact slot is never
+ * returned here, even if content_sha256 also happens to match; that
+ * specific "same chunk slot, different content" case is finding 1's
+ * territory (chunk_content_mismatch, decided by findDuplicateBatch once
+ * the create RPC's own unique index actually rejects it). Every OTHER
+ * live batch on the same underlying file — a different session, a
+ * different chunk slot, or no session at all — IS a genuine duplicate the
+ * operator must revert before importing this file again with different
+ * (or no) fixes. */
+async function findLiveBatchByUnderlyingFile(
+  supabase: SupabaseClient<Database>,
+  restaurantId: string,
+  fileDigestHex: string,
+  exclude?: { sessionId: string; chunkIndex: number },
+): Promise<{ id: string; status: string; session_id: string | null } | null> {
+  const { data } = await supabase
+    .from("import_batches")
+    .select("id, status, session_id, chunk_index")
+    .eq("restaurant_id", restaurantId)
+    .neq("status", "reverted")
+    .or(`content_sha256.eq.${fileDigestHex},content_sha256.like.${OVERRIDES_DIGEST_PREFIX}%:${fileDigestHex}`)
+    .maybeSingle();
+
+  const match = data as
+    | { id: string; status: string; session_id: string | null; chunk_index: number | null }
+    | null;
+  if (!match) return null;
+  if (exclude && match.session_id === exclude.sessionId && match.chunk_index === exclude.chunkIndex) {
+    return null;
+  }
+  return match;
 }
 
 export type BatchCounts = {
