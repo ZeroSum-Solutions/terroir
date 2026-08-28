@@ -148,7 +148,13 @@ async function postScan(files: File[], signal: AbortSignal, key?: string | null)
   return result;
 }
 
-export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
+export function Scanner({
+  recentScans = [],
+  initialMode = "invoice",
+}: {
+  recentScans?: RecentScan[];
+  initialMode?: ScanMode;
+}) {
   const { restaurantId: _restaurantId } = useRestaurant();
   const [status, setStatus] = useState<Status>("ready");
   const [progress, setProgress] = useState(0);
@@ -194,7 +200,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   // preserved so a recoverable error's "Retry" resubmits everything the
   // user picked — not just the first file (see BND-089 retry gap).
   const [lastFiles, setLastFiles] = useState<File[]>([]);
-  const [mode, setMode] = useState<ScanMode>("invoice");
+  const [mode, setMode] = useState<ScanMode>(initialMode);
   const [bottleResult, setBottleResult] = useState<BottleScanResult | null>(null);
   // Immediate-acknowledgment preview (walkthrough §1.2, item 7): an object
   // URL for the just-picked label photo, set synchronously before the
@@ -205,6 +211,26 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   const abortRef = useRef<AbortController | null>(null);
   const scanTimeoutRef = useRef<number | null>(null);
   const timedOutRef = useRef(false);
+
+  // Arriving via /scan?mode=bottle skips the persisted-invoice restore (the
+  // mount effect below), which leaves an unfinished invoice draft hidden in
+  // localStorage — completing a NEW invoice scan from that state would
+  // silently overwrite it (Sol audit 2026-08-27 round 4, finding 4). Toggling
+  // back to Invoice therefore re-runs the restore the bottle entry skipped,
+  // so the user lands on their draft exactly as a plain /scan visit would.
+  const handleModeChange = useCallback(
+    (next: ScanMode) => {
+      setMode(next);
+      if (next === "invoice" && initialMode === "bottle" && scan === null) {
+        const saved = loadScan();
+        if (saved) {
+          setScan(saved);
+          setStatus("results");
+        }
+      }
+    },
+    [initialMode, scan],
+  );
 
   const setBottlePreview = useCallback((file: File | null) => {
     if (bottlePreviewUrlRef.current) URL.revokeObjectURL(bottlePreviewUrlRef.current);
@@ -221,6 +247,13 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
   }, []);
 
   useEffect(() => {
+    // A user who arrived via /scan?mode=bottle explicitly asked for
+    // bottle capture — restoring a persisted, unfinished INVOICE result
+    // here would override that choice and land them on invoice results
+    // instead (Sol audit 2026-08-27 round 2, finding 3). The persisted
+    // scan stays in localStorage untouched; a plain /scan visit still
+    // restores it exactly as before.
+    if (initialMode === "bottle") return;
     queueMicrotask(() => {
       const saved = loadScan();
       if (saved) {
@@ -228,7 +261,7 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
         setStatus("results");
       }
     });
-  }, []);
+  }, [initialMode]);
 
   useEffect(
     () => () => {
@@ -435,14 +468,19 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
     abortRef.current?.abort();
     clearScanTimeout();
     scanKeyRef.current = null;
-    saveScan(null);
+    // Only an INVOICE-flow restart discards the persisted invoice scan.
+    // Bottle-flow restarts ("Scan another", the bottle error's "New
+    // photo") share this reset but must not silently delete an
+    // unfinished invoice hiding in localStorage (Sol audit 2026-08-27
+    // round 3, finding 3).
+    if (mode === "invoice") saveScan(null);
     setScan(null);
     setBottleResult(null);
     setBottlePreview(null);
     setError(null);
     setRawText(null);
     setStatus("ready");
-  }, [clearScanTimeout, setBottlePreview]);
+  }, [clearScanTimeout, setBottlePreview, mode]);
 
   const cancelScan = useCallback(() => {
     abortRef.current?.abort();
@@ -760,11 +798,11 @@ export function Scanner({ recentScans = [] }: { recentScans?: RecentScan[] }) {
 
   const hasRetryableFile = mode === "bottle" ? !!lastFile : lastFiles.length > 0;
 
-  if (!hydrated) return <ReadyView onStart={handleStart} mode={mode} onModeChange={setMode} recentScans={recentScans} savedResult={null} onDismissSaved={() => {}} />;
+  if (!hydrated) return <ReadyView onStart={handleStart} mode={mode} onModeChange={handleModeChange} recentScans={recentScans} savedResult={null} onDismissSaved={() => {}} />;
 
   return (
     <>
-      {status === "ready" && <ReadyView onStart={handleStart} mode={mode} onModeChange={setMode} recentScans={recentScans} savedResult={savedResult} onDismissSaved={() => setSavedResult(null)} />}
+      {status === "ready" && <ReadyView onStart={handleStart} mode={mode} onModeChange={handleModeChange} recentScans={recentScans} savedResult={savedResult} onDismissSaved={() => setSavedResult(null)} />}
       {status === "processing" && (
         <ProcessingView
           progress={progress}

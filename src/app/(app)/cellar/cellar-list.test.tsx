@@ -27,6 +27,19 @@ function renderList(rows: CellarWineRow[]) {
   );
 }
 
+describe("CellarList empty state", () => {
+  it("offers all three onboarding entry points when the cellar has no wines", () => {
+    const markup = renderList([]);
+
+    expect(markup).toContain('href="/scan"');
+    expect(markup).toContain("Scan an invoice");
+    expect(markup).toContain('href="/scan?mode=bottle"');
+    expect(markup).toContain("Scan a bottle");
+    expect(markup).toContain('href="/import"');
+    expect(markup).toContain("Import a CSV");
+  });
+});
+
 describe("CellarList row thumbnails", () => {
   it("renders a label thumbnail for a row with hero_image_url", () => {
     const markup = renderList([

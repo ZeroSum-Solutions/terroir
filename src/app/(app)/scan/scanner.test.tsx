@@ -390,6 +390,99 @@ describe("Scanner progress reset", () => {
   });
 });
 
+describe("Scanner initialMode", () => {
+  it("starts in bottle mode when initialMode=\"bottle\" (the /scan?mode=bottle path)", async () => {
+    // initialMode seeds useState, so it only matters at MOUNT — re-rendering
+    // the beforeEach root would keep invoice mode. Mount fresh.
+    act(() => root?.unmount());
+    root = createRoot(container);
+    await act(async () => root?.render(<Scanner initialMode="bottle" />));
+    expect(container.textContent).toContain("Scan a bottle label");
+    expect(container.textContent).not.toContain("Scan an invoice");
+  });
+
+  it("defaults to invoice mode without the prop", () => {
+    expect(container.textContent).toContain("Scan an invoice");
+  });
+
+  it("does not let a persisted invoice result override an explicit bottle-mode entry", async () => {
+    // Sol audit 2026-08-27 round 2, finding 3: the mount effect used to
+    // unconditionally restore a saved invoice scan and flip to invoice
+    // results — so /scan?mode=bottle with an unfinished invoice in
+    // localStorage landed on the invoice instead of bottle capture.
+    const { rawText: _rawText, ...persistable } = invoiceResult;
+    localStorage.setItem(
+      "terroir:current-scan",
+      JSON.stringify({ version: 2, data: persistable }),
+    );
+    act(() => root?.unmount());
+    root = createRoot(container);
+    await act(async () => root?.render(<Scanner initialMode="bottle" />));
+    expect(container.textContent).toContain("Scan a bottle label");
+    expect(container.textContent).not.toContain("Invoice scan results");
+    // The persisted scan is preserved, not deleted — a plain /scan visit
+    // still restores it.
+    expect(localStorage.getItem("terroir:current-scan")).not.toBeNull();
+  });
+
+  it("bottle-flow 'Scan another' does not delete the hidden persisted invoice", async () => {
+    // Sol audit 2026-08-27 round 3, finding 3: startOver() used to call
+    // saveScan(null) unconditionally, so completing a bottle scan and
+    // tapping "Scan another" permanently deleted an unfinished invoice
+    // hiding in localStorage. Only invoice-flow restarts may clear it.
+    const { rawText: _rawText, ...persistable } = invoiceResult;
+    localStorage.setItem(
+      "terroir:current-scan",
+      JSON.stringify({ version: 2, data: persistable }),
+    );
+    act(() => root?.unmount());
+    root = createRoot(container);
+    await act(async () => root?.render(<Scanner initialMode="bottle" />));
+
+    vi.stubGlobal("fetch", vi.fn(() =>
+      Promise.resolve(responseWithJson(Promise.resolve(bottleResult))),
+    ));
+    await selectReadyFile(new File(["label"], "label.jpg", { type: "image/jpeg" }));
+    expect(container.textContent).toContain("Test Pinot Noir");
+    await clickButton("Scan another");
+
+    expect(container.textContent).toContain("Scan a bottle label");
+    expect(localStorage.getItem("terroir:current-scan")).not.toBeNull();
+  });
+
+  it("toggling back to Invoice from a bottle-mode entry restores the persisted draft", async () => {
+    // Sol audit 2026-08-27 round 4, finding 4: bottle-mode entry skips the
+    // persisted-invoice restore, but switching the toggle back to Invoice
+    // used to only flip the mode — the hidden draft stayed invisible and a
+    // newly completed invoice scan would then overwrite it in localStorage.
+    // The toggle now re-runs the restore the bottle entry skipped.
+    const { rawText: _rawText, ...persistable } = invoiceResult;
+    localStorage.setItem(
+      "terroir:current-scan",
+      JSON.stringify({ version: 2, data: persistable }),
+    );
+    act(() => root?.unmount());
+    root = createRoot(container);
+    await act(async () => root?.render(<Scanner initialMode="bottle" />));
+    expect(container.textContent).toContain("Scan a bottle label");
+
+    await clickButton("Invoice");
+    expect(container.textContent).toContain("Invoice scan results");
+  });
+
+  it("still restores a persisted invoice result on a plain mount", async () => {
+    const { rawText: _rawText, ...persistable } = invoiceResult;
+    localStorage.setItem(
+      "terroir:current-scan",
+      JSON.stringify({ version: 2, data: persistable }),
+    );
+    act(() => root?.unmount());
+    root = createRoot(container);
+    await act(async () => root?.render(<Scanner />));
+    expect(container.textContent).toContain("Invoice scan results");
+  });
+});
+
 describe("Scanner mode-specific retry", () => {
   it("retries an invoice failure only through the invoice endpoint", async () => {
     const retry = deferred<Response>();
