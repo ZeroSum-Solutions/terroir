@@ -141,7 +141,9 @@ frozen to the partner cellar's own editions.* Proper licensing happens before re
       mapping D8; 13 verifiable acceptance criteria). Awaiting owner approval.
 - [x] Spec list per feature slice — 2026-08-24:
       `docs/plans/2026-08-24-visual-wine-platform-spec-list.md` (24 spec slices; the
-      normative migration manifest 0112–0126 + 0127-reserved published per VWP-FR-005 —
+      normative VWP migration manifest 0112–0126 published per VWP-FR-005,
+      order-independent import hardening allocated at 0127–0128, and future decisions
+      reserved from 0129+ —
       P4 renamed 0113–0120, containers/slots/placements 0121–0123, ratings 0124–0126;
       spike register 1–11 mapped to the specs/decisions each gates). Pending PRD approval.
 - [ ] Run spikes 1–3, 5–10; record verdicts against VWP-D-02/06/07 and fold into specs

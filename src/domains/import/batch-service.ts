@@ -230,10 +230,17 @@ export function applyLwinRejections(rows: PreviewRow[], rejectedRowNumbers: Set<
  * equally-scoring catalogue rows can legitimately resolve to a DIFFERENT
  * lwin_id between the preview the operator looked at and confirm's own
  * from-scratch re-match (buildImportPreview is called again, above, from
- * the raw file — it never trusts a client-supplied preview). A real fix
- * needs a deterministic ORDER BY in the RPC, i.e. a migration; migrations
- * are locked for this change (see docs/runbooks/csv-import.md for the
- * residual this leaves).
+ * the raw file — it never trusts a client-supplied preview).
+ *
+ * That catalogue tie is now fixed at the source: migration 0127 adds
+ * `order by score desc, lc.lwin_id asc`, and match_lwin_bulk inherits it by
+ * delegation. This veto is NOT thereby redundant, and must not be deleted on
+ * the strength of that migration — it defends against a strictly larger set
+ * of causes than tie ordering. The catalogue itself can change between
+ * preview and confirm (a row added, edited, removed, or newly crossing the
+ * threshold), and the operator's approval is a statement about the specific
+ * wine they were shown, not about whichever wine the RPC ranks first at
+ * confirm time.
  *
  * BLOCK 1 (round 5 fix) — this used to be a PARTIAL fail-safe: a row with
  * NO entry in approvedByRowNumber was left completely untouched, on the
@@ -1858,12 +1865,19 @@ export type SiblingAppliedConflictCheck =
  * without ever going through this route, so this guard is not a security
  * boundary either, only a best-effort check the route happens to run.
  *
- * Fully closing this requires an atomic claim, unique constraint, or
- * shared advisory lock taken INSIDE the apply transaction (0108) — i.e. a
- * migration. Migrations were locked for this change, so that fix is not
- * made here; this guard is kept because it is a pure read that can only
- * ever refuse, and it is a real improvement for the realistic sequential
- * case even though it leaves the simultaneous race open.
+ * Migration 0128 CLOSES the race properly: apply_import_batch_chunk now takes
+ * a transaction-scoped advisory lock keyed by (restaurant, underlying file)
+ * and re-checks for an applied sibling under that lock, raising P0004. That
+ * is the enforcement point; this function is not.
+ *
+ * This guard is nonetheless RETAINED, deliberately. Migrations reach
+ * production out-of-band rather than from CI, so a build carrying this code
+ * can be live before 0128 is applied — deleting the guard on the assumption
+ * the barrier is already there would leave production with no protection at
+ * all in that window. Once 0128 is confirmed applied in production this
+ * function and its call site can be deleted, leaving the route with only the
+ * P0004 -> 409 mapping. docs/runbooks/csv-import.md carries the SQL to verify
+ * the barrier is live before doing that.
  *
  * A sibling counts as a conflict only once it has an ACTUAL applied row —
  * the same "applied rows are the strongest signal a client is/was really

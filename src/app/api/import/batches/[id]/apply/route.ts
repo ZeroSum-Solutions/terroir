@@ -19,6 +19,15 @@ export const maxDuration = 30;
 
 type Params = Promise<{ id: string }>;
 
+/**
+ * One message for BOTH sibling-conflict paths — the pre-flight guard below and
+ * the database barrier's P0004. They describe the same situation to the
+ * operator and must never drift into two different explanations of one refusal.
+ */
+const SIBLING_ALREADY_APPLIED_MESSAGE =
+  "Another live import batch for this same file already has applied rows. Revert the duplicate under " +
+  "Recent imports before applying this one.";
+
 export async function POST(_request: NextRequest, { params }: { params: Params }) {
   return withApiHandler(() => postApply(params));
 }
@@ -42,32 +51,45 @@ async function postApply(params: Params) {
   if (!batch) return Errors.notFound("Import batch");
   const contentSha256 = (batch as { id: string; content_sha256: string | null }).content_sha256;
 
-  // Round-10 audit, HONESTY-CORRECTED round-11: apply-time guard, NOT
-  // enforcement — reconciliation (reconcileLiveBatchesForFile,
-  // batch-service.ts) no longer has any authority to revert a rival, so
-  // this read-only check runs HERE, immediately before this chunk is
-  // allowed to apply, as the best available narrowing of the "at most one
-  // applied batch per underlying file" invariant. It is NOT a closure of
-  // that invariant: this guard and applyImportBatchChunk below are
-  // separate awaits over separate transactions, so two concurrent applies
-  // to sibling batches can both pass this check and both persist
-  // inventory — see findSiblingWithAppliedRows' own comment for the full
-  // proof and for why closing it needs a migration (locked for this
-  // change). What this DOES guarantee, because it is read-only: it can
-  // only ever REFUSE an apply, never destroy a concurrent writer's data,
-  // unlike the revert-based enforcement it replaces.
+  // Pre-flight guard. This is NOT the enforcement point — migration 0128 put
+  // that inside apply_import_batch_chunk itself (advisory lock + under-lock
+  // recheck, raising P0004), which is the only place it can be atomic. This
+  // read-only check survives for two reasons:
+  //
+  //   1. DEPLOYMENT ORDER. Migrations reach production out-of-band, not from
+  //      CI, so a build carrying this route can be live before 0128 is applied.
+  //      Deleting the guard on that assumption would leave production with NO
+  //      protection at all in the window between the two. Remove it only once
+  //      0128 is confirmed applied in production — see the "cross-batch apply
+  //      race" section of docs/runbooks/csv-import.md.
+  //   2. It refuses earlier and more cheaply than letting the RPC raise.
+  //
+  // On its own it is only a TOCTOU narrowing — it and applyImportBatchChunk
+  // below are separate awaits over separate transactions, and the RPC is
+  // granted directly to `authenticated`, so a direct RPC call skips it
+  // entirely. Being read-only, it can only ever REFUSE an apply, never destroy
+  // a concurrent writer's data.
   const conflict = await findSiblingWithAppliedRows(supabase, restaurantId, id, contentSha256);
   if (!conflict.ok) return apiError(409, conflict.error.code, conflict.error.message);
   if (conflict.conflictBatchId) {
-    return apiError(
-      409,
-      "sibling_already_applied",
-      "Another live import batch for this same file already has applied rows. Revert the duplicate under " +
-        "Recent imports before applying this one.",
-    );
+    return apiError(409, "sibling_already_applied", SIBLING_ALREADY_APPLIED_MESSAGE);
   }
 
-  const result = await applyImportBatchChunk(supabase, id);
+  let result;
+  try {
+    result = await applyImportBatchChunk(supabase, id);
+  } catch (error) {
+    // P0004 — 0128's barrier refused this apply because a sibling batch for the
+    // same underlying file already has applied rows. Unlike the guard above
+    // this is authoritative: it was evaluated under the advisory lock, inside
+    // the same transaction that would have written the rows. Same 409 body, so
+    // the client cannot tell (or need to tell) which layer refused.
+    const pgError = error as { code?: string } | null;
+    if (pgError?.code === "P0004") {
+      return apiError(409, "sibling_already_applied", SIBLING_ALREADY_APPLIED_MESSAGE);
+    }
+    throw error;
+  }
 
   // WARN 4 (round-9/10 audit): the batch's ACTUAL current status is now
   // read AFTER the apply attempt, not before — a revert landing mid-call
