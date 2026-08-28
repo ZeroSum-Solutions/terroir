@@ -89,38 +89,67 @@ export const LWIN_MATCH_BATCH_SIZE = 100;
  * MAX_ROWS (5,000) fully producer-less, worst case is 150 chunks -> 38
  * waves -> ~167s even taking the historical ~4.4s/100-row figure at face
  * value (0078_match_lwin_trgm_fastpath.sql) — several times over a
- * reasonable UX budget. See PRODUCER_LESS_MAX_ROWS below for the actual
- * fix (a lower, enforced cap for producer-less input, not a concurrency
- * increase this pass had no safe way to validate against the shared
- * production database) and docs/runbooks/csv-import.md for the corrected
- * budget analysis. Kept at 4 so at most 4 trigram scans hit the catalog
- * at once — raising it further was considered but not made without a
- * production-scale measurement this pass could not safely perform. */
+ * reasonable UX budget. See LWIN_MATCH_MAX_QUERIES below for the actual
+ * fix (a lower, enforced cap on the TOTAL generated query count — round-7
+ * fix, corrected from an earlier version of this cap that only counted
+ * producer-less rows — not a concurrency increase this pass had no safe
+ * way to validate against the shared production database) and
+ * docs/runbooks/csv-import.md for the corrected budget analysis. Kept at 4
+ * so at most 4 trigram scans hit the catalog at once — raising it further
+ * was considered but not made without a production-scale measurement this
+ * pass could not safely perform. */
 export const LWIN_MATCH_CONCURRENCY = 4;
 
-/** BLOCK 2 (round 5 fix) — producer-less rows fan out to up to 3 LWIN
- * query variants each (buildLwinQueryVariants), vs 1 for a row with a real
- * producer (see that function's own comment). MAX_ROWS (5,000) was sized
- * around the 1× fan-out case; at 3× fan-out, the documented worst-case
- * per-call cost (~4.4s/100-query call, 0078_match_lwin_trgm_fastpath.sql)
- * combined with LWIN_MATCH_CONCURRENCY (4) gives a worst-case wall-clock of
- * ceil(3·rows/100/4) waves × 4.4s. Solving for a 60s ceiling (the
- * preview/confirm routes' own documented, if platform-inert on this app's
- * Railway deployment — see CLEANUP_BUDGET_FROM_ENTRY_MS's own comment —
- * `maxDuration`, kept as the UX-latency target regardless) gives
- * ceil(3·rows/400) ≤ 13.6, i.e. rows ≲ 1,733; this is set to a round
- * number safely under that. Enforced in buildImportPreview
- * (preview-service.ts) against the count of VALID, producer-less rows in
- * ONE preview/confirm unit (a whole small file, or one chunk of an
- * auto-split large file) — a file/chunk over this bound fails fast,
- * BEFORE any LWIN RPC call is made, with a message telling the operator to
- * add producer data or reduce the chunk size, rather than risking a
- * multi-minute matching pass that times out (or simply strands the
- * operator) partway through. A file mixing producer-having and
- * producer-less rows is unaffected up to this many producer-less rows —
- * only the fan-out-eligible subset counts against this cap, never
- * MAX_ROWS itself. */
-export const PRODUCER_LESS_MAX_ROWS = 1500;
+/** BLOCK 2 (round 7 fix, Sol round-3 audit finding 2 follow-up) — the
+ * worst-case wall-clock measured for ONE match_lwin_bulk RPC call, at
+ * LWIN_MATCH_BATCH_SIZE (100) rows, against the worst-case
+ * all-common-producer-prefix query shape (0078_match_lwin_trgm_fastpath.sql's
+ * own comment). Same ~4.4s figure LWIN_MATCH_BATCH_SIZE's own comment
+ * already documents — pulled into its own constant so that comment and the
+ * budget derivation below can never state two different numbers for the
+ * same measured fact. */
+export const LWIN_MATCH_PER_CALL_SECONDS = 4.4;
+
+/** BLOCK 2 (round 7 fix) — the UX-latency ceiling the query budget below is
+ * solved for: how long an operator should ever have to watch a spinner for
+ * LWIN matching, previewing or confirming ONE import unit (a whole small
+ * file, or one auto-split chunk of a larger one). This is the preview/
+ * confirm routes' own documented target (see CLEANUP_BUDGET_FROM_ENTRY_MS's
+ * own comment for why `maxDuration` itself is inert on this app's Railway
+ * deployment and the real ceiling is a UX one, not a platform one). */
+export const LWIN_MATCH_UX_CEILING_SECONDS = 60;
+
+/** BLOCK 2 (round 7 fix) — the maximum number of match_lwin_bulk QUERIES
+ * (not rows) a single preview/confirm unit may generate, derived — not
+ * merely asserted — from the same chain docs/runbooks/csv-import.md
+ * documents: queries -> RPC calls at LWIN_MATCH_BATCH_SIZE -> waves at
+ * LWIN_MATCH_CONCURRENCY -> seconds at LWIN_MATCH_PER_CALL_SECONDS, solved
+ * for LWIN_MATCH_UX_CEILING_SECONDS.
+ *
+ * Round-7 audit finding (this round): a producer-BEARING row generates
+ * exactly 1 query; a producer-LESS row generates up to 3
+ * (buildLwinQueryVariants, lwin-matching.ts) — so the TOTAL query count one
+ * preview/confirm unit can generate is `validRows + 2 * producerLessRows`,
+ * never just the producer-less subset alone. The prior version of this
+ * budget (PRODUCER_LESS_MAX_ROWS, 1,500) counted only producer-less rows —
+ * a valid 5,000-row upload with 1,500 producer-less rows and 3,500
+ * producer-bearing ones still generated up to 3,500 + 3·1,500 = 8,000
+ * queries (80 RPC calls, 20 waves at concurrency 4, ~88s at the 4.4s/call
+ * estimate — already over this same ceiling), because the old cap never
+ * looked at the producer-bearing rows' own queries at all.
+ *
+ * enforceLwinMatchQueryBudget (preview-service.ts) checks the file/chunk's
+ * ACTUAL generated query count (buildLwinQueryVariants already run, before
+ * matchLwinBulk's first RPC call) against this number — the real count, not
+ * a worst-case estimate, so a file that happens to have shorter
+ * producer-less names (fewer than the worst-case 3 variants each) is never
+ * rejected more conservatively than its real query cost warrants. Both
+ * buildImportPreview call sites (the preview route, and confirm's own
+ * re-derivation — see confirmImportBatch's header) share this one function
+ * and one cap, so a file can never pass preview and then fail confirm (or
+ * vice versa) on this budget. */
+const LWIN_MATCH_MAX_WAVES = Math.floor(LWIN_MATCH_UX_CEILING_SECONDS / LWIN_MATCH_PER_CALL_SECONDS);
+export const LWIN_MATCH_MAX_QUERIES = LWIN_MATCH_MAX_WAVES * LWIN_MATCH_CONCURRENCY * LWIN_MATCH_BATCH_SIZE;
 
 /** Canonical CSV column names, in the order the downloadable template uses. */
 export const CANONICAL_HEADERS = [

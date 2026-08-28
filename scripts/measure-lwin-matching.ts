@@ -52,12 +52,15 @@
  *   SUPABASE_SERVICE_ROLE_KEY=... LWIN_MEASURE_EMAIL=<existing user email> \
  *     npx tsx scripts/measure-lwin-matching.ts <csv-path>
  *
- * Read-only: match_lwin_bulk only SELECTs from lwin_catalog. Point it at
- * local or production by env. EXECUTE on the RPC is granted to
- * `authenticated` only (0076), so the script mints a real session for
- * LWIN_MEASURE_EMAIL (falling back to DEV_BYPASS_EMAIL) via the admin
- * generate-link + verifyOtp flow — the same pattern as e2e/pour-flow's
- * userClient. The service-role key is used only to mint that link.
+ * Catalogue read-only: match_lwin_bulk only SELECTs from lwin_catalog, and
+ * this script never writes cellar/import data. It is NOT read-only overall,
+ * though — EXECUTE on the RPC is granted to `authenticated` only (0076), so
+ * the script mints a real session for LWIN_MEASURE_EMAIL (falling back to
+ * DEV_BYPASS_EMAIL) via the admin generate-link + verifyOtp flow (below) —
+ * the same pattern as e2e/pour-flow's userClient — which does change
+ * Supabase Auth/session state (creates a magic link, verifies an OTP).
+ * Point it at local or production by env. The service-role key is used
+ * only to mint that link.
  */
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";

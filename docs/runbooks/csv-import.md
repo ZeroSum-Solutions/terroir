@@ -61,24 +61,44 @@ sub-chunks via repeated `POST /apply` calls, unchanged by chunking.
   error was concluding that a 0.75×-of-a-too-slow-number result is itself
   fast enough, when the un-multiplied baseline (5,000 single-variant
   queries, sequential) was never actually the thing being compared
-  against for the 3×-fanned-out case. The actual fix: `buildImportPreview`
-  (`preview-service.ts`) now enforces `PRODUCER_LESS_MAX_ROWS` (1,500,
-  `constants.ts`) — a lower, hard cap on producer-less rows specifically,
-  checked before any LWIN RPC call is issued at all. A file/chunk over
-  that bound fails fast with a clear message (add producer data, or split
-  the file so no single upload has more than 1,500 producer-less rows),
-  rather than risking a multi-minute matching pass. This app's
-  `maxDuration = 60` route exports are Next.js/Vercel serverless metadata
-  and are inert on this app's actual Railway deployment (`railway.toml`,
-  a plain long-running `pnpm start` process — see
-  `CLEANUP_BUDGET_FROM_ENTRY_MS`'s own comment for the same point made
-  about the revert route), so 167s would not have hard-failed the
-  request the way it would on Vercel — but it remains a UX failure an
-  operator should never be left to discover by waiting it out, which is
-  what `PRODUCER_LESS_MAX_ROWS` now prevents predictably instead.
-  `MAX_ROWS` itself (5,000) is unaffected — a file mixing producer-having
-  and producer-less rows is fine up to 1,500 producer-less rows, same as
-  always for the rest.
+  against for the 3×-fanned-out case.
+
+  **Corrected again (BLOCK 2, round 7 fix) — the round-5 fix's own cap
+  budgeted the wrong quantity.** `buildImportPreview` enforced
+  `PRODUCER_LESS_MAX_ROWS` (1,500) against the count of producer-less rows
+  ONLY — but a producer-BEARING row still issues one query each, and those
+  queries were never counted against anything. A producer-bearing row
+  generates exactly 1 query; a producer-less row generates up to 3
+  (`buildLwinQueryVariants`) — so the TOTAL query count one preview/confirm
+  unit generates is `validRows + 2 * producerLessRows`, not
+  `producerLessRows` alone. Concretely: a valid 5,000-row upload with
+  1,500 producer-less rows and 3,500 producer-bearing ones passed the old
+  cap outright (1,500 is exactly at the limit) while still issuing
+  3,500 + 3·1,500 = 8,000 queries -> 80 RPC calls -> `ceil(80/4)` = 20
+  waves -> **~88s at the same 4.4s/call estimate** — already well over the
+  60s target the cap exists to enforce.
+
+  The actual fix: `buildImportPreview` (`preview-service.ts`) now checks
+  the file/chunk's ACTUAL generated query count (`lwinQueries.length` —
+  already built, before `matchLwinBulk`'s first RPC call) against
+  `LWIN_MATCH_MAX_QUERIES` (`constants.ts`) — one number derived from the
+  same chain this section documents: queries -> RPC calls at
+  `LWIN_MATCH_BATCH_SIZE` (100) -> waves at `LWIN_MATCH_CONCURRENCY` (4) ->
+  seconds at `LWIN_MATCH_PER_CALL_SECONDS` (4.4), solved for a 60s UX
+  ceiling (`LWIN_MATCH_UX_CEILING_SECONDS`): `floor(60 / 4.4)` = 13 waves
+  max -> `13 * 4 * 100` = **5,200 queries max**. Both `buildImportPreview`
+  call sites (the preview route, and confirm's own re-derivation) share
+  this exact function and constant, so a file can never pass preview and
+  then fail confirm (or the reverse) on this budget. A file/chunk whose
+  real query count would exceed 5,200 fails fast, before any LWIN RPC call
+  is issued, with a message stating the actual generated query count and
+  the remedy (add producer data to more rows, or split the file into
+  smaller chunks) — not a producer-less-only row count that, on a mixed
+  file, no longer describes what actually needs to shrink. `MAX_ROWS`
+  itself (5,000) is unaffected, and a file entirely of producer-bearing
+  rows can never hit this budget on its own — 5,000 rows × 1 query each =
+  5,000 queries, under the 5,200 cap — the budget only binds once
+  producer-less fan-out is involved, same as before.
 
 **What chunking actually needed, that a single-batch design didn't:**
 inventory-level duplicate prevention (§1 — effectively unimplemented

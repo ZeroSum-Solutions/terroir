@@ -427,6 +427,118 @@ describe("confirmImportBatch", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "multiple_live_batches" } });
   });
 
+  // Round-28 audit, BLOCK 1 — the pre-check's underlying-file lookup
+  // (reconcileLiveBatchesForFile) matches ACROSS every content_sha256
+  // namespace on purpose, to detect siblings/races — but it used to be
+  // handed straight to toAlreadyExistsResult with no check that the
+  // candidate it found was confirmed under the SAME approval state as this
+  // request. Approvals/rejections/overrides all participate in
+  // content_sha256, so a live batch minted under a DIFFERENT approval state
+  // is a DIFFERENT import (see confirmImportBatch's own digest-construction
+  // comment) — resuming it would let a batch whose persisted rows carry a
+  // high-confidence LWIN link survive into THIS confirm's response even
+  // though this operator's own preview rejected it or never approved it.
+  // Uses a REAL, populated fake batch table (not an empty one) — the hole
+  // is specifically about a live sibling existing with disagreeing content,
+  // never reachable against an empty table.
+  describe("pre-check resume pointer requires an EXACT content_sha256 match (round-28 audit, BLOCK 1)", () => {
+    it("does NOT resume a live sibling batch minted under a DIFFERENT approval state — a confirm sending `{}` cannot inherit a prior high-confidence LWIN stamp", async () => {
+      const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+      const fileHex = createHash("sha256").update(file).digest("hex");
+      // A live batch already exists for this exact underlying file,
+      // confirmed earlier with approvedLwinRows = { "1": "LWIN001" } (a
+      // real overrides-v3 digest — the approval-bearing namespace). Its
+      // persisted row_number=1 was stamped with LWIN001 under THAT
+      // approval state.
+      const staleApprovalDigest = `overrides-v3:${"a".repeat(64)}:${fileHex}`;
+      const rows: FakeBatchRow[] = [
+        {
+          id: "stale-approved-batch",
+          status: "completed",
+          session_id: null,
+          chunk_index: null,
+          content_sha256: staleApprovalDigest,
+          restaurant_id: RESTAURANT_ID,
+          created_at: "2026-08-01T00:00:00.000Z",
+        },
+      ];
+      const supabase = {
+        // create_import_batch and count_import_batch_rows are deliberately
+        // absent — if this confirm ever reaches either (i.e. resumes the
+        // stale batch, or creates a new one), makeRpc throws "unexpected
+        // rpc" and fails this test outright.
+        rpc: makeRpc({
+          // The row still re-matches LWIN001 at high confidence on THIS
+          // confirm's own from-scratch re-derivation — proving a real
+          // matched candidate exists is what makes this exploit worth
+          // testing: the veto (applyLwinApprovalVeto) would already
+          // refuse to WRITE it if this confirm proceeded, but that
+          // protection is moot if the pre-check hands back the OLD
+          // batch's id as a resume pointer before ever reaching it.
+          match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: "LWIN001", score: 0.9 }], error: null }),
+        }),
+        from: fakeImportBatchesTable(rows),
+      };
+
+      // This operator's OWN preview showed zero linking matches (or
+      // rejected/disagreed with LWIN001) — sent as the full-picture `{}`.
+      const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+        approvedLwinRows: {},
+      });
+
+      // Never an alreadyExists pointer at the stale batch — that would let
+      // the caller "resume" (apply) rows stamped under approvals this
+      // operator never gave.
+      expect(result).toMatchObject({ ok: false, error: { code: "multiple_live_batches" } });
+      if (!result.ok) {
+        expect(result.error.message).not.toContain("stale-approved-batch");
+      }
+      // No new batch was created, and the stale batch was never touched —
+      // reused, or otherwise — by this confirm attempt.
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ id: "stale-approved-batch", content_sha256: staleApprovalDigest });
+    });
+
+    it("STILL resumes normally when the digest EXACTLY matches — a genuine same-request retry (identical approvals) is unaffected", async () => {
+      const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+      const fileHex = createHash("sha256").update(file).digest("hex");
+      // The SAME v3 digest this exact request will independently mint
+      // below (approvedLwinRows: { "1": "LWIN001" }, no overrides/
+      // rejections) — computed via the same canonicalization the
+      // production code uses, so this is a REAL byte-identical retry, not
+      // a hand-picked placeholder.
+      const combined = canonicalizeConfirmExtrasV3(null, null, canonicalizeApprovedLwinRows({ "1": "LWIN001" }));
+      const matchingDigest = `overrides-v3:${createHash("sha256").update(combined).digest("hex")}:${fileHex}`;
+      const rows: FakeBatchRow[] = [
+        {
+          id: "existing-batch",
+          status: "completed",
+          session_id: null,
+          chunk_index: null,
+          content_sha256: matchingDigest,
+          restaurant_id: RESTAURANT_ID,
+          created_at: "2026-08-01T00:00:00.000Z",
+        },
+      ];
+      const supabase = {
+        rpc: makeRpc({
+          match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: "LWIN001", score: 0.9 }], error: null }),
+          count_import_batch_rows: () => ({
+            data: [{ total: 1, applied: 1, excluded: 0, pending: 0, eligible_not_applied: 0 }],
+            error: null,
+          }),
+        }),
+        from: fakeImportBatchesTable(rows),
+      };
+
+      const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+        approvedLwinRows: { "1": "LWIN001" },
+      });
+
+      expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: "existing-batch" });
+    });
+  });
+
   it("rejects an empty CSV without ever calling create_import_batch", async () => {
     const rpc = vi.fn();
     const supabase = { rpc, from: vi.fn() };

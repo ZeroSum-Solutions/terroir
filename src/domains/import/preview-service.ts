@@ -14,7 +14,7 @@ import { decodeCsvBuffer, parseCsv } from "./csv-parser";
 import { mapHeader, validateRow, type FieldError, type FieldsInput, type RawRowFields } from "./row-validator";
 import { matchLwinBulk, buildLwinQueryVariants, type LwinMatch } from "./lwin-matching";
 import { mergeIntraBatchDuplicates, type IntraBatchDuplicateReason } from "./dedup-key";
-import { PRODUCER_LESS_MAX_ROWS, type CanonicalHeader } from "./constants";
+import { LWIN_MATCH_MAX_QUERIES, type CanonicalHeader } from "./constants";
 
 const CATALOG_LOOKUP_PAGE_SIZE = 1000;
 
@@ -170,35 +170,14 @@ export async function buildImportPreview(
 
   const validated = parsed.rows.map((cells, idx) => validateRow(cells, columnToField, rowOverrides?.[String(idx + 1)]));
 
-  // BLOCK 2 (round 5 fix) — a producer-less row fans out to up to 3 LWIN
-  // query variants (buildLwinQueryVariants below), vs 1 for a row with a
-  // real producer. Checked BEFORE any LWIN RPC call is made (this counts,
-  // it doesn't query) — see PRODUCER_LESS_MAX_ROWS' own comment
-  // (constants.ts) for the worst-case wall-clock arithmetic this bound is
-  // derived from. A row that failed validation never reaches matching at
-  // all (see the `row.state === "error"` branch below), so only VALID,
-  // producer-less rows count.
-  const producerLessRowCount = validated.filter((row) => row.state === "valid" && row.producer === "").length;
-  if (producerLessRowCount > PRODUCER_LESS_MAX_ROWS) {
-    return {
-      ok: false,
-      error: {
-        code: "too_many_producerless_rows",
-        message:
-          `This file has ${producerLessRowCount} row(s) with no producer — each one is matched against the ` +
-          `wine catalog with several queries, and matching that many at once cannot complete reliably. Add a ` +
-          `producer/winery value to more rows, or split this file so no single upload has more than ` +
-          `${PRODUCER_LESS_MAX_ROWS} producer-less rows.`,
-      },
-    };
-  }
-
   // Producer-less rows (real-world single-"Wine Name"-column exports) are
   // matched with several query variants — full name in both legs, plus the
   // leading 2/3 name tokens as the producer leg (see buildLwinQueryVariants
   // for the measured rationale) — and each row keeps its best-scoring
   // match. Weak candidates are still held to apply's own 0.6 confidence
-  // bar (0108) before any lwin_id is written.
+  // bar (0108) before any lwin_id is written. A row that failed validation
+  // never reaches matching at all (filtered out below), so only VALID rows
+  // ever generate a query.
   const variantOwners: number[] = [];
   const lwinQueries = validated
     .map((row, idx) => ({ row, idx }))
@@ -210,6 +189,31 @@ export async function buildImportPreview(
         return { idx: variantOwners.length - 1, ...variant };
       });
     });
+
+  // BLOCK 2 (round 7 fix) — budgets the file/chunk's ACTUAL total generated
+  // query count (a producer-bearing row contributes 1, a producer-less row
+  // up to 3 — buildLwinQueryVariants above), never just the producer-less
+  // subset alone. Checked BEFORE any LWIN RPC call is made (lwinQueries is
+  // already fully built above, but matchLwinBulk hasn't been called yet) —
+  // see LWIN_MATCH_MAX_QUERIES' own comment (constants.ts) for the
+  // derivation this bound comes from, and why the previous version of this
+  // check (PRODUCER_LESS_MAX_ROWS, counting only producer-less rows) let a
+  // mixed file's real query count exceed the same budget it was meant to
+  // enforce.
+  if (lwinQueries.length > LWIN_MATCH_MAX_QUERIES) {
+    return {
+      ok: false,
+      error: {
+        code: "too_many_lwin_match_queries",
+        message:
+          `This file would generate ${lwinQueries.length} wine-catalog match queries — a producer-less row ` +
+          `("Wine Name" only, no producer/winery) needs up to 3 queries, a row with a producer needs 1 — and ` +
+          `matching that many at once cannot complete reliably. Add a producer/winery value to more rows, or ` +
+          `split this file into smaller chunks so no single upload generates more than ` +
+          `${LWIN_MATCH_MAX_QUERIES} match queries.`,
+      },
+    };
+  }
 
   const variantMatches = await matchLwinBulk(supabase, lwinQueries);
   // Reduce best-per-row over ASCENDING flat index, not Map iteration

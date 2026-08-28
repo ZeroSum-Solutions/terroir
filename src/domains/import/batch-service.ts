@@ -739,6 +739,76 @@ export async function confirmImportBatch(
     return { ok: false, error: preCheck.error };
   }
   if (preCheck.match) {
+    // Round-28 audit, BLOCK 1: the underlying-file lookup that produced
+    // preCheck.match matches ACROSS every content_sha256 namespace on
+    // purpose (see reconcileLiveBatchesForFile's and
+    // findLiveBatchesByUnderlyingFile's own comments) — it exists to
+    // detect siblings/races for the SAME file, not to prove the candidate
+    // it finds was confirmed under THIS request's own approvals. When a
+    // candidate's content_sha256 disagrees with what THIS confirm just
+    // minted, it was persisted under different effective content — but
+    // "different effective content" has TWO, differently-risky causes
+    // (see the digest-construction comment above): different rowOverrides
+    // (row-fix TEXT — bounded by row-validator.ts's own validation either
+    // way, and idempotently resuming across override formats is a
+    // pre-existing, deliberately-designed feature — see "underlying-file
+    // idempotency across override formats", Sol audit finding 2, and its
+    // own pinned tests below), or a different LWIN approval/rejection
+    // decision (rejectedLwinRows / approvedLwinRows — which rows get a
+    // catalogue LINK WRITTEN AT ALL). Only the second is the hazard this
+    // round's audit reported: resuming a sibling whose rows were stamped
+    // under someone ELSE's approval decision lets THIS confirm's own
+    // rejection, or its `{}` "nothing approved" full picture, be silently
+    // bypassed by an older/rival batch's already-persisted stamps. This
+    // was reachable with an EMPTY fake batch table in the pre-fix test
+    // suite because the hole is specifically about a live SIBLING existing
+    // with disagreeing content, never exercised by a table with nothing
+    // in it.
+    //
+    // The narrowest fix that closes the reported hole without breaking the
+    // override-idempotency feature: only refuse the resume when THIS
+    // confirm itself carries an LWIN approval/rejection decision that a
+    // mismatched digest can't be proven to already satisfy —
+    // `hasLwinApprovalSignal` below, true whenever this confirm's own
+    // options include a rejected-match set OR the full-picture approved-
+    // match field (present, even as `{}` — the exact BLOCK-1-round-5
+    // signal `hasLwinFullPicture` above already tracks). A confirm with
+    // NEITHER carries no operator decision that a stale sibling could
+    // possibly be silently overriding — any digest mismatch in that case
+    // can only stem from rowOverrides (the only thing that changes a bare/
+    // v1-namespaced digest), the exact case the idempotency feature exists
+    // for, so resume proceeds exactly as before. When `hasLwinApprovalSignal`
+    // IS true and the digest still disagrees, this confirm's own decision
+    // cannot be verified against the candidate's persisted rows from the
+    // digest alone (v2/v3/v4 hash overrides and LWIN state together), so
+    // it fails closed — never "sometimes more strict, sometimes not"
+    // depending on unverifiable hash internals.
+    //
+    // Refused as the SAME conflict shape reconcileLiveBatchesForFile itself
+    // already returns for 2+ live candidates: a terminal, non-retryable
+    // error naming the condition, resolved by the operator reverting the
+    // stale batch from Recent imports before confirming this version —
+    // never a silent reuse, and never an attempt to create a second live
+    // batch here (which would only chase the exact same conflict through
+    // the POST-check SEER-YIELDS path below, at the cost of a wasted
+    // insert+revert round trip). A genuine same-request retry (identical
+    // file, identical overrides/rejections/approvals) still mints the
+    // identical contentSha256 and resumes exactly as before, regardless of
+    // `hasLwinApprovalSignal` — this only narrows which MISMATCHED
+    // siblings count as a resume target, never a real retry's own digest
+    // match.
+    const hasLwinApprovalSignal = hasLwinFullPicture || rejectedLwinRowsCanonicalJson !== null;
+    if (preCheck.match.content_sha256 !== contentSha256 && hasLwinApprovalSignal) {
+      return {
+        ok: false,
+        error: {
+          code: "multiple_live_batches",
+          message:
+            "This file already has a live import confirmed with different LWIN match approvals or rejections — " +
+            "this can't be resumed automatically. Revert it from Recent imports before confirming this version.",
+        },
+      };
+    }
     return toAlreadyExistsResult(supabase, preCheck.match);
   }
 
@@ -1159,6 +1229,22 @@ async function findDuplicateBatch(
       // content_sha256 satisfies the underlying-file query by
       // construction), so this can only ever REPLACE match with the
       // reconciled target — never drop it to null.
+      //
+      // Round-28 audit, BLOCK 1: this replacement can never silently swap
+      // in a DIFFERENT-digest sibling either, unlike the bare
+      // reconcileLiveBatchesForFile pre-check above (which needed its own
+      // exact-digest guard). Proof: `excludeSessionId: options.sessionId`
+      // only removes rows in THIS confirm's own session, and this branch
+      // only runs when `match` (byHash) is NOT itself in that session
+      // (`isOwnSessionSibling` above) — so `match`'s own row is never
+      // excluded from `reconciled`'s candidate set. If reconcile finds 2+
+      // candidates it returns the terminal conflict above instead of a
+      // match; if it finds exactly 0 or 1, and `match`'s own row is
+      // guaranteed a member of that set, the sole surviving candidate MUST
+      // be `match` itself — same id, same exact content_sha256. This
+      // reassignment therefore only ever narrows byHash's own row through
+      // reconcile's fresher live-status read, never substitutes a
+      // different-approval sibling in its place.
       match = reconciled.match;
     }
   }
