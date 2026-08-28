@@ -44,3 +44,28 @@ export function parseConflictingBatches(value: unknown): ConflictingBatchInfo[] 
   if (!Array.isArray(value)) return undefined;
   return value.filter(isConflictingBatchInfo);
 }
+
+/** FINDING 1 (round-15 audit), moved here round-17: the server's own resolved
+ * threshold — reconcileLiveBatchesForFile (batch-service.ts) treats
+ * `candidates.length <= 1` as nothing left to reconcile, not `=== 0`. With
+ * two real candidates, reverting ONE already resolves the conflict
+ * server-side. A single source (one chunk's own conflictingBatches, or the
+ * plain path's confirmConflictingBatches) is "resolved" the moment it's
+ * down to at most one candidate — mirrored here exactly, including for a
+ * list that somehow arrives already at length <= 1 (the server never emits
+ * multiple_live_batches for that case, but a malformed entry dropped by
+ * parseConflictingBatches above can produce exactly that on the CLIENT; if
+ * it ever did, this stays coherent rather than blocking on a conflict that
+ * has nothing left to resolve).
+ *
+ * Round-17 audit: moved from import-client.tsx (which re-exports it for
+ * backward compatibility) into this neutral module so session-step.tsx's
+ * chunk confirm driver can reuse the same threshold without importing a
+ * runtime value back from import-client.tsx — that would recreate the
+ * import cycle round-15 deliberately broke (see this file's own header
+ * comment). import-client.tsx's unresolvedConflictCandidates/
+ * applyRevertToChunkUpload still live there since they're plain-path/panel
+ * concerns, not shared with session-step.tsx. */
+export function isConflictSourceResolved(conflictingBatches: ConflictingBatchInfo[] | undefined | null): boolean {
+  return (conflictingBatches?.length ?? 0) <= 1;
+}

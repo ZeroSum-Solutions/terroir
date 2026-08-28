@@ -25,7 +25,7 @@ import { ActionDialog } from "@/components/action-dialog";
 import { CLIENT_CHUNK_TARGET_ROWS, type CanonicalHeader } from "@/domains/import/constants";
 import { buildChunkPlan, serializeChunk, sha256HexOfBytes } from "@/domains/import/csv-splitter";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
-import { parseConflictingBatches, type ConflictingBatchInfo } from "./conflicting-batches";
+import { parseConflictingBatches, isConflictSourceResolved, type ConflictingBatchInfo } from "./conflicting-batches";
 import type { BatchRow, ErrorRowEntry, RowOverrides } from "./import-client";
 
 // ---------------------------------------------------------------------------
@@ -481,7 +481,23 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
         // it only ever tracks a run of the SAME code in a row.
         const priorRaceRetryCount = code === "duplicate_race_retry" ? (current?.duplicateRaceRetryCount ?? 0) + 1 : 0;
         const exhausted = code === "duplicate_race_retry" && priorRaceRetryCount >= DUPLICATE_RACE_RETRY_LIMIT;
-        const effectiveCode = exhausted ? "duplicate_race_retry_exhausted" : code;
+        // FINDING (round-17 audit): mirrors import-client.tsx's own
+        // conflictAlreadyResolved normalization in handleConfirm (the plain
+        // path) — a malformed entry dropped by parseConflictingBatches
+        // (conflicting-batches.ts) can reduce a genuine two-candidate
+        // multiple_live_batches payload to one candidate on THIS client
+        // alone, same as the plain path. isConflictSourceResolved is the
+        // same <=1 threshold the conflict panel already uses to decide
+        // whether a source still has a candidate worth a revert button
+        // (import-client.tsx's unresolvedConflictCandidates). Without this,
+        // a chunk reduced to one candidate kept the terminal
+        // multiple_live_batches code — which suppresses Retry/Confirm
+        // (hasTerminalReconciliationConflict) — while the panel already had
+        // nothing left to show for it (isConflictSourceResolved's own <=1
+        // threshold hides a lone candidate): blocked, with no revert
+        // affordance offered either.
+        const conflictAlreadyResolved = code === "multiple_live_batches" && isConflictSourceResolved(conflictingBatches);
+        const effectiveCode = exhausted ? "duplicate_race_retry_exhausted" : conflictAlreadyResolved ? null : code;
         const effectiveMessage = exhausted
           ? `Chunk ${chunk.index} of ${plan.chunkTotal} still conflicts with another live import for this file ` +
             `after ${priorRaceRetryCount} attempts — this needs a human to resolve. Revert the conflicting batch ` +

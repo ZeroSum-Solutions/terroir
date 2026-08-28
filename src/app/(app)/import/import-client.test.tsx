@@ -29,7 +29,7 @@ import {
   type BatchDetail,
 } from "./import-client";
 import type { ConflictingBatchInfo } from "./conflicting-batches";
-import { ZERO_SUMMARY, type ChunkUploadState, type ChunkedPlanState } from "./session-step";
+import { ZERO_SUMMARY, confirmChunkedSession, type ChunkUploadState, type ChunkedPlanState } from "./session-step";
 import { CANONICAL_HEADERS, type CanonicalHeader } from "@/domains/import/constants";
 
 const reactTestEnvironment = globalThis as typeof globalThis & {
@@ -831,6 +831,105 @@ describe("PreviewStep — multiple_live_batches and duplicate_race_retry_exhaust
     const buttons = [...container.querySelectorAll("button")];
     expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
     expect(container.textContent).toContain(escalationMessage);
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+});
+
+// FINDING (round-17 audit): a chunk's multiple_live_batches conflict that
+// parses down to one candidate (a malformed sibling entry dropped by
+// parseConflictingBatches, conflicting-batches.ts) used to leave the chunk
+// carrying the terminal code forever — hasTerminalReconciliationConflict
+// blocked both "Retry upload" AND "Confirm import" — even though the panel
+// already had nothing left to offer a revert on for that same lone
+// candidate (isConflictSourceResolved's own <=1 threshold). Drives the REAL
+// confirmChunkedSession mechanism (a mocked fetch response with an actual
+// malformed sibling entry, exactly like session-step.conflict.test.tsx's
+// own round-17 coverage) rather than hand-building an already-resolved
+// ChunkUploadState, then renders PreviewStep with the exact resulting state
+// to prove the deadlock is gone.
+describe("PreviewStep — a chunk conflict resolved down to one candidate by a malformed entry is not blocked (round-17 audit)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+    vi.unstubAllGlobals();
+  });
+
+  it("offers Retry upload once the malformed-entry mechanism reduces the conflict to one candidate", async () => {
+    const PLAN: ChunkedPlanState = {
+      headerRecord: "producer,name,quantity",
+      chunkTotal: 1,
+      chunks: [{ index: 1, startRow: 1, endRow: 2, text: "producer,name,quantity\nA,B,1\n" }],
+      sourceSha256: "c".repeat(64),
+    };
+    // The SERVER emitted two real candidates; one entry is malformed (no
+    // created_at) — the exact response-shape-drift case
+    // isConflictingBatchInfo's own comment describes.
+    const wireConflictingBatches = [
+      { id: "batch-a", filename: "cellar.csv", status: "created", created_at: "2026-01-01T00:00:00Z" },
+      { id: "batch-b", filename: "cellar.csv", status: "applying" }, // malformed: no created_at
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) {
+          return new Response(JSON.stringify({ sessionId: "session-new" }), {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "multiple_live_batches",
+              message: "This file has 2 live import batches for the same underlying content.",
+              details: { conflictingBatches: wireConflictingBatches },
+            },
+          }),
+          { status: 422, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+
+    let chunkUpload: ChunkUploadState[] = [{ index: 1, status: "pending", batchId: null, error: null, code: null }];
+    const result = await confirmChunkedSession({
+      plan: PLAN,
+      initialUpload: chunkUpload,
+      existingSessionId: null,
+      fileLabel: "cellar.csv",
+      timestampsRef: { current: [] },
+      onSessionId: () => {},
+      onProgress: (u) => {
+        chunkUpload = u;
+      },
+    });
+
+    // Sanity: the real mechanism actually produced a one-candidate list and
+    // a coherent (non-terminal) chunk state before we ever render anything.
+    expect(chunkUpload[0].conflictingBatches).toEqual([wireConflictingBatches[0]]);
+    expect(chunkUpload[0].code).toBeNull();
+    expect(chunkUpload[0].status).toBe("failed");
+    expect(result).toMatchObject({ ok: false });
+
+    const { container } = await mount(
+      <PreviewStep {...baseProps({ chunkUpload, chunkTotal: 1, error: result.ok ? null : result.error })} />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
+    expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
   });
 
   async function mount(element: ReactElement) {

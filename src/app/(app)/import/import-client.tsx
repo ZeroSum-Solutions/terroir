@@ -33,7 +33,12 @@ import {
   type ChunkedPreviewState,
   type ChunkUploadState,
 } from "./session-step";
-import { parseConflictingBatches, type ConflictingBatchInfo } from "./conflicting-batches";
+import { parseConflictingBatches, isConflictSourceResolved, type ConflictingBatchInfo } from "./conflicting-batches";
+
+/** Round-17 audit: isConflictSourceResolved now lives in ./conflicting-batches
+ * (see that file's own comment) — re-exported here so existing imports of it
+ * from "./import-client" (this component's own tests) keep working. */
+export { isConflictSourceResolved };
 
 /** One error row's worth of prefill text for the inline row-fix form —
  * the exact text the row was validated against, for every canonical
@@ -125,20 +130,6 @@ export function skipChunk(upload: ChunkUploadState[], index: number): ChunkUploa
  * for the same reason as skipChunk above. */
 export function undoSkipChunk(upload: ChunkUploadState[], index: number): ChunkUploadState[] {
   return upload.map((c) => (c.index === index && c.status === "skipped" ? { ...c, status: "failed" } : c));
-}
-
-/** FINDING 1 (round-15 audit): the server's own resolved threshold —
- * reconcileLiveBatchesForFile (batch-service.ts) treats `candidates.length
- * <= 1` as nothing left to reconcile, not `=== 0`. With two real
- * candidates, reverting ONE already resolves the conflict server-side. A
- * single source (one chunk's own conflictingBatches, or the plain path's
- * confirmConflictingBatches) is "resolved" the moment it's down to at most
- * one candidate — mirrored here exactly, including for a list that somehow
- * arrives already at length <= 1 (the server never emits multiple_live_batches
- * for that case, but if it ever did, this stays coherent rather than
- * blocking on a conflict that has nothing left to resolve). */
-export function isConflictSourceResolved(conflictingBatches: ConflictingBatchInfo[] | undefined | null): boolean {
-  return (conflictingBatches?.length ?? 0) <= 1;
 }
 
 /** FINDING 1 (round-15 audit): the candidates from ONE source (a chunk's own

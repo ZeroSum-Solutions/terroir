@@ -690,3 +690,109 @@ describe("confirmChunkedSession — captures conflictingBatches from a multiple_
     expect(upload[0].conflictingBatches).toEqual(conflictingBatches);
   });
 });
+
+// FINDING (round-17 audit): parseConflictingBatches (conflicting-batches.ts)
+// drops any malformed entry rather than propagating it (NIT 7, round-13
+// audit) — a genuine two-candidate server payload can therefore arrive at
+// THIS client already down to one well-formed candidate, e.g. because a
+// proxy/CDN rewrite or a response-shape drift dropped a field off one entry.
+// The plain (non-chunked) path already normalizes an at-or-below-threshold
+// list at ingestion (import-client.tsx's handleConfirm, round-15 audit
+// finding 1) — the chunk driver did not, so it retained the terminal
+// multiple_live_batches code (suppressing Retry/Confirm via
+// hasTerminalReconciliationConflict) even though isConflictSourceResolved's
+// own <=1 threshold already hid the lone candidate from the conflict panel,
+// deadlocking the operator with no affordance at all.
+describe("confirmChunkedSession — a conflict that parses down to one candidate is already resolved (round-17 audit)", () => {
+  it("drops the terminal multiple_live_batches code when a malformed sibling entry leaves only one well-formed candidate — the malformed-entry mechanism, not a hand-built already-resolved payload", async () => {
+    // The SERVER emitted two real candidates. One entry is malformed (its
+    // created_at field is missing — the exact kind of response-shape drift
+    // isConflictingBatchInfo's own comment describes) — parseConflictingBatches
+    // drops it, so THIS client's parsed list is down to one candidate before
+    // isConflictSourceResolved ever sees it.
+    const wireConflictingBatches = [
+      { id: "batch-a", filename: "cellar.csv", status: "created", created_at: "2026-01-01T00:00:00Z" },
+      { id: "batch-b", filename: "cellar.csv", status: "applying" }, // malformed: no created_at
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) return jsonResponse(201, { sessionId: "session-new" });
+        return jsonResponse(422, {
+          error: {
+            code: "multiple_live_batches",
+            message: "This file has 2 live import batches for the same underlying content.",
+            details: { conflictingBatches: wireConflictingBatches },
+          },
+        });
+      }),
+    );
+
+    let upload: ChunkUploadState[] = [{ index: 1, status: "pending", batchId: null, error: null, code: null }];
+    const result = await confirmChunkedSession({
+      plan: PLAN,
+      initialUpload: upload,
+      existingSessionId: "session-new",
+      fileLabel: "cellar.csv",
+      timestampsRef: { current: [] },
+      onSessionId: () => {},
+      onProgress: (u) => {
+        upload = u;
+      },
+    });
+
+    // The malformed entry was actually dropped — proves the one-candidate
+    // list came from the real filtering mechanism, not a fabricated payload.
+    expect(upload[0].conflictingBatches).toEqual([wireConflictingBatches[0]]);
+    // No orphaned conflict code: the terminal code is cleared even though
+    // the chunk stays "failed" (an operator-visible retry point, not a
+    // silent success).
+    expect(upload[0].code).toBeNull();
+    expect(upload[0].status).toBe("failed");
+    // The generic, retryable message renders instead of the terminal
+    // multiple_live_batches wording — "Retry upload" is reachable.
+    expect(result).toMatchObject({ ok: false, error: "Chunk 1 of 1 failed to upload — you can retry it below." });
+  });
+
+  it("still blocks with the terminal multiple_live_batches code for a genuine two-candidate list (guards against over-correcting)", async () => {
+    const conflictingBatches = [
+      { id: "batch-a", filename: "cellar.csv", status: "created", created_at: "2026-01-01T00:00:00Z" },
+      { id: "batch-b", filename: "cellar.csv", status: "applying", created_at: "2026-01-02T00:00:00Z" },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) return jsonResponse(201, { sessionId: "session-new" });
+        return jsonResponse(422, {
+          error: {
+            code: "multiple_live_batches",
+            message: "This file has 2 live import batches for the same underlying content.",
+            details: { conflictingBatches },
+          },
+        });
+      }),
+    );
+
+    let upload: ChunkUploadState[] = [{ index: 1, status: "pending", batchId: null, error: null, code: null }];
+    const result = await confirmChunkedSession({
+      plan: PLAN,
+      initialUpload: upload,
+      existingSessionId: "session-new",
+      fileLabel: "cellar.csv",
+      timestampsRef: { current: [] },
+      onSessionId: () => {},
+      onProgress: (u) => {
+        upload = u;
+      },
+    });
+
+    expect(upload[0].code).toBe("multiple_live_batches");
+    expect(upload[0].conflictingBatches).toEqual(conflictingBatches);
+    expect(result).toMatchObject({
+      ok: false,
+      error: "This file has 2 live import batches for the same underlying content.",
+    });
+  });
+});
