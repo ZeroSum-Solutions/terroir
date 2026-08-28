@@ -727,63 +727,61 @@ or a shared advisory lock taken *inside* the apply transaction — i.e. a
 migration. Migrations are locked for this change, so the residual is
 accepted rather than fixed here.
 
-**`multiple_live_batches` conflicts are recoverable from the conflict UI**,
-not only from the ten-newest "Recent imports" list — the error payload
-returns each conflicting batch's id, filename, `created_at`, and status (up
-to the cap described below), and the import client renders a revert
-affordance per batch directly in the conflict state, so a conflict whose
-batches have aged out of the ten-newest window is still recoverable, up to
-that cap.
+**Round-27 audit: the in-preview conflict-recovery panel is removed —
+`multiple_live_batches` and `duplicate_race_retry` are reported, not
+resolved, from inside the import UI.** The panel (added round-11 to make a
+live-batch conflict recoverable without leaving the flow) failed five
+consecutive audit rounds (18, 20, 22, 24, 26) for the same underlying
+reason each time: two or more sources of guidance on screen that disagreed
+with each other and with the buttons. Round 25's fix produced a new
+contradiction of its own within one round. The panel, its per-candidate
+revert affordance, its "standing instruction" text
+(`conflictStandingInstruction`), and everything that existed only to serve
+them (`visibleConflictCandidates`, `revertedConflictBatchIds`,
+`conflicting-batches.ts`, the `conflictingBatches`/`conflictingBatchesCount`/
+`conflictingBatchesTruncated` fields on both the client and the
+`multiple_live_batches` error payload) are deleted outright rather than
+patched again.
 
-**Round-23 audit (SIMPLIFY): the client no longer decides when this
-conflict is resolved — the server does, by re-checking on every confirm
-attempt.** Rounds 18, 20, and 22 each found a different way the client's
-own local "is this resolved" inference got the wrong answer — stale copy
-left after clearing the terminal code (round-18), a payload this client
-merely failed to parse in full mistaken for a reverted batch (rounds
-17/19/20), and a capped `LIVE_BATCH_LOOKUP_LIMIT` count decremented as if
-it were exact, prematurely unblocking Confirm/Retry while 20+ live batches
-were still shown as 21 minus 19 reverts (round-22). The count/threshold
-machinery (`isConflictSourceResolved`, `unresolvedConflictCandidates`,
-`applyRevertToChunkUpload`) is gone. What replaced it: a successful revert
-(`visibleConflictCandidates`, `import-client.tsx`) only drops that ONE
-candidate from the panel and unlocks a Confirm/Retry affordance
-(`hasRevertedAnyConflict`) — it never infers the whole conflict is gone.
-Clicking Confirm/Retry re-sends the request, and `reconcileLiveBatchesForFile`
-decides fresh, exactly as it always has for a first attempt. A source's
-lone remaining candidate is never suppressed either (WARN 3, round-22
-audit) — nothing client-side treats "one left" as special anymore.
+What replaced it: `PreviewStep` renders exactly ONE piece of guidance for a
+conflict — the server's own `message` (built by
+`reconcileLiveBatchesForFile`, `batch-service.ts`), verbatim, with no
+competing standing text. Confirm/Retry stays available for both
+`multiple_live_batches` and `duplicate_race_retry` (neither blocks the
+button any more) — the server re-checks fresh on every confirm attempt, so
+a retry that changes nothing simply re-raises the same conflict; this was
+already proven safe (confirmation reconciles before `create_import_batch`,
+2+ live matches return immediately, and an unchanged retry creates no
+batch/rows/apply/inventory write). Recovery for `multiple_live_batches` is
+through **Recent imports**, which now lists every non-reverted batch for the
+restaurant (`import-client.tsx`'s `RecentImports` — no longer capped at the
+newest ten), and `BatchStep`'s own "Revert this import" already accepts any
+non-reverted status (round-13 audit).
 
-**The conflicting-batches list is capped, not exhaustive (WARN 5,
-round-13 audit).** `findLiveBatchesByUnderlyingFile`
-(`src/domains/import/batch-service.ts`) reads at most
-`LIVE_BATCH_LOOKUP_LIMIT` (20) candidate rows before format-filtering, and
-fails closed only when *none* of those 20 survive the filter. If more than
-20 legitimate live variants exist for the same underlying file — every one
-a well-formed `content_sha256` this product itself wrote, no contamination
-involved — the 21st and beyond are silently omitted from
-`multiple_live_batches`'s `conflictingBatches` payload; the conflict
-message states the count as "at least N" whenever the read comes back
-exactly at the cap, rather than asserting a possibly-false exact total.
-21+ simultaneous live conflicting batches for one file has never been
-observed in practice and would itself indicate something else has gone
-wrong upstream (nothing in this product's own paths creates that many
-live duplicates), so this is accepted rather than fixed by raising the
-cap or adding pagination. Round-23 audit: this cap is now carried as its
-own explicit `conflictingBatchesTruncated` boolean (`batch-service.ts`,
-`reconcileLiveBatchesForFile`'s own `candidateCountMayBeTruncated`) rather
-than only being inferrable from the message text — before this, the
-client's own "not everything could be displayed" note compared
-`conflictingBatches.length` against `conflictingBatchesCount`, which are
-EQUAL whenever the raw read hits the cap (both are the same capped
-`candidates.length`), so the note silently never fired for the one case it
-existed for (round-22 audit BLOCK 2). The note's copy
-(`CONFLICT_UNDISPLAYED_NOTE`, `conflicting-batches.ts`) also no longer
-claims a specific missing count or that "Recent imports" can reach the
-missing candidate — that list shows only the ten newest batches, so a
-conflicting batch old enough to have aged out is not actually reachable
-there. The copy says instead to revert whatever IS shown and retry, since
-the server re-checks fresh every time.
+**BLOCK 2 (round-25/26/27 audits): `duplicate_race_retry` no longer
+escalates to an invented terminal state.** The client used to count
+consecutive `duplicate_race_retry` failures and, past a fixed limit,
+synthesize a distinct `duplicate_race_retry_exhausted` code that hard-blocked
+Confirm/Retry and asserted "still conflicts with another live import" —
+but the server defines `duplicate_race_retry` as retryable by design (a
+self-revert race that may fully resolve on the very next attempt), and can
+emit it with **zero** live batches for the file (`selfRevertAndRetry`,
+`batch-service.ts` — both self-revert attempts failed, but nothing rival is
+necessarily still live). The escalation asserted a live batch and a
+recovery location (the removed panel) that might not exist. It's deleted:
+the code, message, and retryability stay exactly as the server reported
+them, no matter how many times it recurs.
+
+**The `multiple_live_batches` candidate list itself was capped, not
+exhaustive (WARN 5, round-13 audit) — this is now purely a
+message-wording detail, not a client-visible payload.**
+`findLiveBatchesByUnderlyingFile` (`src/domains/import/batch-service.ts`)
+still reads at most `LIVE_BATCH_LOOKUP_LIMIT` (20) candidate rows before
+format-filtering, and the conflict message still states the count as "at
+least N" whenever the raw read comes back exactly at the cap, rather than
+asserting a possibly-false exact total — but the per-candidate list, count,
+and truncation flag are no longer carried on the error payload at all
+(round-27 audit), since nothing client-side renders them any more.
 
 ## added_via provenance
 

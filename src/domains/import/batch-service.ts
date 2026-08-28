@@ -117,16 +117,6 @@ export type ConfirmBatchOptions = {
   serviceClient?: SupabaseClient<Database> | null;
 };
 
-/** FINDING 2 (round-11 audit): a multiple_live_batches conflict used to
- * report only a candidate COUNT — the operator's only way to act on it was
- * finding every conflicting batch by hand in "Recent imports," which shows
- * just the ten newest. If both conflicting batches had aged out of that
- * window, the conflict was permanent and unrecoverable. Carried on the
- * error itself so the UI can render a revert affordance directly per
- * conflicting batch, regardless of how far it's aged out of Recent
- * imports. */
-export type ConflictingBatchInfo = { id: string; filename: string; status: string; created_at: string };
-
 export type ConfirmBatchResult =
   | { ok: true; alreadyExists: false; batchId: string; totalRows: number; summary: ReturnType<typeof summarize> }
   /** P3 §2.2 (C09): the exact bytes (or the same session+chunk_index)
@@ -145,31 +135,21 @@ export type ConfirmBatchResult =
    * identical bytes are a legitimate duplicate segment, never each
    * other's confirmation). */
   | { ok: true; alreadyExists: true; batchId: string; status: string; sessionId: string | null; chunkIndex: number | null; counts: BatchCounts }
-  /** Round-21 audit correction: conflictingBatchesCount is the server's own
-   * candidate COUNT (reconcileLiveBatchesForFile's `candidates.length`),
-   * present whenever conflictingBatches is.
-   *
-   * Round-23 audit (SIMPLIFY): the client no longer tries to decide
-   * resolution from this count at all — three straight audits (rounds 18,
-   * 20, 22) found a different way the client's own local inference got that
-   * wrong. The server re-checks on every confirm attempt and is the only
-   * thing that actually knows whether the conflict is gone; this count is
-   * kept only for honest DISPLAY ("N conflicting batches" text), never as a
-   * threshold to gate anything client-side. conflictingBatchesTruncated
-   * carries the one signal display actually needs: whether MORE candidates
-   * exist than conflictingBatches could show (either the raw DB read hit
-   * LIVE_BATCH_LOOKUP_LIMIT — reconcileLiveBatchesForFile's own comment —
-   * or, once round-11's malformed-entry-dropping is done client-side,
-   * fewer entries than this count parsed). */
+  /** Round-27 audit (removes the in-preview conflict-recovery panel, which
+   * failed five straight audits — see docs/runbooks/csv-import.md): a
+   * multiple_live_batches conflict used to also carry every conflicting
+   * batch's id/filename/status/created_at, plus a count and a
+   * truncated-lower-bound flag, so the client could render a revert
+   * affordance per candidate directly. That panel is gone; `message` (built
+   * by reconcileLiveBatchesForFile) is now the only thing the client shows
+   * for this conflict, and recovery is through Recent imports, which lists
+   * every non-reverted batch. */
   | {
       ok: false;
       error: {
         code: string;
         message: string;
         missingHeaders?: string[];
-        conflictingBatches?: ConflictingBatchInfo[];
-        conflictingBatchesCount?: number;
-        conflictingBatchesTruncated?: boolean;
       };
     };
 
@@ -507,8 +487,8 @@ export async function confirmImportBatch(
  * WARN 5, round-13 audit — so this is "every candidate within that cap,"
  * not a literal guarantee of completeness beyond it) and leaves ALL of
  * them live — recovery is an operator reverting by hand from Recent
- * imports (FINDING 2 makes every NAMED conflicting batch id reachable
- * there, not just the ten newest). So neither older claim holds any more: this
+ * imports (round-27 audit: it lists every non-reverted batch for the
+ * restaurant, not just the ten newest). So neither older claim holds any more: this
  * file does not guarantee at most one live batch, and does not guarantee
  * at most one applied batch either — that would-be guarantee is what
  * findSiblingWithAppliedRows' own comment now documents as a NARROWED
@@ -528,19 +508,19 @@ export async function confirmImportBatch(
  *      anywhere holds a pointer to B" — false. GET /api/import/batches
  *      lists every live batch for the restaurant with no per-creator
  *      filter (api/import/batches/route.ts's getBatches), and the import
- *      UI's own Recent imports panel renders the newest ten of them with
- *      an Open/Apply affordance (RecentImports, import-client.tsx) — any
- *      authenticated member of this restaurant can reach and open B that
- *      way, not only via a later confirm's own pre-check (point 3, below).
+ *      UI's own Recent imports section renders every one of them (round-27
+ *      audit: no longer capped at the newest ten) with an Open/Apply
+ *      affordance (RecentImports, import-client.tsx) — any authenticated
+ *      member of this restaurant can reach and open B that way, not only
+ *      via a later confirm's own pre-check (point 3, below).
  *   3. A revert-failure here leaves B live alongside whatever rival (A)
  *      it lost to. The NEXT confirm attempt for the SAME underlying file,
  *      by any client, re-enters reconcileLiveBatchesForFile's pre-check,
  *      which now sees 2 (or more) live candidates for the file and
  *      returns the terminal multiple_live_batches conflict — it does NOT
  *      pick a survivor or revert anything automatically. B does not
- *      resolve itself; an operator has to revert it (or A) by hand —
- *      whether they reach it through that conflict's own revert affordance
- *      or by opening it directly from Recent imports (point 2).
+ *      resolve itself; an operator has to revert it (or A) by hand from
+ *      Recent imports (point 2).
  * A revert-failure orphan is still not, by itself, a data hazard.
  * HONESTY-CORRECTED (round-13 audit, BLOCK 3): this is NOT because B is
  * unreachable — it is reachable (point 2) — it's because the safeguards
@@ -620,18 +600,15 @@ async function selfRevertAndRetry(
       code: "duplicate_race_retry",
       message: reverted
         ? "This upload raced with a duplicate confirm of the same file, and both attempts were withdrawn to avoid a conflict. Please retry the upload."
-        // FINDING 5 (round-15 audit): the old wording claimed any member of
-        // this restaurant can "already open" the orphan from Recent
-        // imports — but that list is a client-cached ten-newest window
-        // (import-client.tsx's RecentImports) that is NOT refreshed on
-        // this confirm-error path, so the orphan may not be showing there
-        // at all yet, or ever, if it's aged out. What's actually true and
-        // reachable: retrying surfaces the conflict panel directly (round-
-        // 11 audit finding 2), which offers a Revert button for the named
-        // batch regardless of Recent imports.
+        // Round-27 audit (removes the in-preview conflict-recovery panel,
+        // which failed five straight audits — see docs/runbooks/
+        // csv-import.md): the old wording pointed at that panel. Recovery
+        // is now Recent imports, which lists every non-reverted batch for
+        // this restaurant (no ten-newest cap), so the orphan this call
+        // failed to withdraw is always reachable there once it exists.
         : "This upload raced with a duplicate confirm of the same file and could not be fully withdrawn on this " +
-          "attempt. It will not resolve itself — retrying will report a conflict with the other duplicate, and the " +
-          "conflict panel that appears offers a Revert button for it directly. Please retry the upload.",
+          "attempt. It will not resolve itself — retrying will report a conflict naming the other duplicate, which " +
+          "you can revert under Recent imports. Please retry the upload.",
     },
   };
 }
@@ -830,16 +807,7 @@ type LiveBatchMatch = {
 
 type FindLiveBatchResult =
   | { ok: true; match: LiveBatchMatch | null }
-  | {
-      ok: false;
-      error: {
-        code: string;
-        message: string;
-        conflictingBatches?: ConflictingBatchInfo[];
-        conflictingBatchesCount?: number;
-        conflictingBatchesTruncated?: boolean;
-      };
-    };
+  | { ok: false; error: { code: string; message: string } };
 
 /** Sol round-3 audit (2026-08-27) finding 6: the DB query below can only
  * express "contains fileDigestHex as a LIKE match," which also matches a
@@ -918,7 +886,7 @@ function extractFileDigestHex(contentSha256: string): string | null {
  * was wrong). */
 type FindLiveBatchesResult =
   | { ok: true; matches: LiveBatchMatch[]; rawReadHitCap: boolean }
-  | { ok: false; error: { code: string; message: string; conflictingBatches?: ConflictingBatchInfo[] } };
+  | { ok: false; error: { code: string; message: string } };
 
 /** Round-7 audit finding 1: the plural form — every well-formed live
  * candidate for the file, oldest-first, not just the first one. Split out
@@ -1151,43 +1119,7 @@ async function reconcileLiveBatchesForFile(
       message:
         `This file has ${candidateCountMayBeTruncated ? "at least " : ""}${candidates.length} live import ` +
         "batches for the same underlying content — this can't be resolved automatically. Revert all but one of " +
-        "them below before resuming or re-uploading this file.",
-      // FINDING 2 (round-11 audit): every candidate's id/filename/status/
-      // created_at THIS LOOKUP FOUND, not just the count — see
-      // ConflictingBatchInfo's own comment for why this makes the conflict
-      // recoverable regardless of whether either batch is still in the
-      // ten-newest Recent imports list. WARN 5 (round-13 audit): "every
-      // candidate" is bounded by LIVE_BATCH_LOOKUP_LIMIT, same as the
-      // message above — not a literal guarantee beyond that cap.
-      conflictingBatches: candidates.map((c) => ({
-        id: c.id,
-        filename: c.filename,
-        status: c.status,
-        created_at: c.created_at,
-      })),
-      // Round-21 audit correction (block: the round-17/19 "parses to one
-      // candidate is already resolved" premise was wrong — dropping a
-      // malformed ENTRY never reverts the underlying batch it described).
-      // Round-25 audit (SHARED ROOT CAUSE): the client no longer decides
-      // resolution from this count, or from anything else in this response
-      // — see import-client.tsx's visibleConflictCandidates comment; the
-      // only thing that decides a conflict is gone is the server's answer
-      // to a LATER confirm attempt. This field is carried purely for
-      // display, immune to parseConflictingBatches' own filtering by
-      // construction, so the client's "may be more than shown" note stays
-      // accurate even when a malformed entry is dropped. Same
-      // truncated-lower-bound caveat as the message above.
-      conflictingBatchesCount: candidates.length,
-      // Round-23 audit: the client-side note about undisplayable candidates
-      // (import-client.tsx) used to be derived only from comparing its OWN
-      // parsed array length against conflictingBatchesCount above — which
-      // can never fire for the case that actually matters most, a raw read
-      // that hit LIVE_BATCH_LOOKUP_LIMIT, since conflictingBatchesCount IS
-      // candidates.length (already capped) in that case too. This field
-      // carries the server's own truncation knowledge directly, so the
-      // note fires whenever it should — capped read, client-side parse
-      // loss, or (in principle) both at once.
-      conflictingBatchesTruncated: candidateCountMayBeTruncated,
+        "them from Recent imports before resuming or re-uploading this file.",
     },
   };
 }

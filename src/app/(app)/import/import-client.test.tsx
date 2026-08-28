@@ -21,14 +21,12 @@ import {
   buildImportAnywayOverride,
   skipChunk,
   undoSkipChunk,
-  visibleConflictCandidates,
   MAX_SHOWN_ERROR_ROWS,
   type ErrorRowEntry,
   type BatchDetail,
 } from "./import-client";
-import { conflictStandingInstruction, type ConflictingBatchInfo } from "./conflicting-batches";
-import { ZERO_SUMMARY, confirmChunkedSession, type ChunkUploadState, type ChunkedPlanState } from "./session-step";
-import { CANONICAL_HEADERS, type CanonicalHeader } from "@/domains/import/constants";
+import { ZERO_SUMMARY, type ChunkUploadState, type ChunkedPlanState } from "./session-step";
+import { type CanonicalHeader } from "@/domains/import/constants";
 
 const reactTestEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -156,45 +154,6 @@ describe("isRowInSkippedChunk (round-6 audit finding 5)", () => {
 
   it("is false for a row number outside every chunk's range", () => {
     expect(isRowInSkippedChunk(99, PLAN, UPLOAD)).toBe(false);
-  });
-});
-
-// Round-23 audit (SIMPLIFY): three straight audits (rounds 18, 20, 22)
-// found a different way this codebase's LOCAL "is this multiple_live_batches
-// conflict resolved" inference got the answer wrong. isConflictSourceResolved,
-// unresolvedConflictCandidates, and applyRevertToChunkUpload are gone —
-// nothing client-side decides "resolved" anymore; the server does, by
-// re-checking on every confirm attempt. All that's left to pin directly is
-// the trivial, honest bit: visibleConflictCandidates drops a candidate ONLY
-// once THIS client has actually confirmed reverting it — never by any
-// count/threshold guess. WARN 3 (round-22 audit) is fixed by construction
-// here: a source's lone remaining candidate is never suppressed.
-describe("visibleConflictCandidates (round-23 audit — SIMPLIFY)", () => {
-  const TWO: ConflictingBatchInfo[] = [
-    { id: "a", filename: "cellar.csv", status: "created", created_at: "2020-01-01T00:00:00Z" },
-    { id: "b", filename: "cellar.csv", status: "applying", created_at: "2021-01-01T00:00:00Z" },
-  ];
-
-  it("offers every candidate when nothing has been reverted yet", () => {
-    expect(visibleConflictCandidates(TWO, new Set())).toEqual(TWO);
-  });
-
-  it("drops only a candidate whose id is in revertedIds, keeping every other one — including a lone survivor", () => {
-    expect(visibleConflictCandidates(TWO, new Set(["a"]))).toEqual([TWO[1]]);
-    // WARN 3 (round-22 audit): a source down to ONE remaining candidate
-    // must still offer it — the old isConflictSourceResolved fallback
-    // could suppress exactly this candidate when no count was carried.
-    // Nothing here treats "one left" as special at all.
-    expect(visibleConflictCandidates([TWO[1]], new Set())).toEqual([TWO[1]]);
-  });
-
-  it("drops every candidate once every id has been reverted", () => {
-    expect(visibleConflictCandidates(TWO, new Set(["a", "b"]))).toEqual([]);
-  });
-
-  it("returns an empty list for an undefined source (never had a conflict)", () => {
-    expect(visibleConflictCandidates(undefined, new Set())).toEqual([]);
-    expect(visibleConflictCandidates(undefined, new Set(["a"]))).toEqual([]);
   });
 });
 
@@ -682,13 +641,20 @@ describe("PreviewStep — chunk_content_mismatch is terminal (Sol round-2 audit 
   }
 });
 
-// Round-10 audit BLOCK 3(a): multiple_live_batches (reconciliation's own
-// non-destructive conflict) and duplicate_race_retry_exhausted (WARN 5's
-// bounded escalation) are the same kind of dead end as chunk_content_
-// mismatch — retrying resends the exact same request and fails the exact
-// same way every time. Neither used to be in the blocked-retry set, so
-// PreviewStep still rendered "Retry upload" as if it might work.
-describe("PreviewStep — multiple_live_batches always exposes Retry, duplicate_race_retry_exhausted stays terminal (round-25 audit — SHARED ROOT CAUSE, replaces round-10 audit BLOCK 3's multiple_live_batches case)", () => {
+// Round-27 audit: removes the in-preview conflict-recovery panel, which
+// failed five straight audits (rounds 18, 20, 22, 24, 26) for the same
+// reason each time — two or more sources of guidance on screen that
+// disagreed with each other and with the buttons (BLOCK 1), and a
+// client-invented duplicate_race_retry_exhausted terminal state built from
+// a server response the service defines as retryable, asserting a live
+// rival batch that might not exist (BLOCK 2). See docs/runbooks/
+// csv-import.md for the full history. The panel, its standing instruction,
+// the per-candidate revert affordance, and the escalation are all deleted.
+// What remains: the server's own message is the ONLY guidance shown for a
+// conflict, and Confirm/Retry stays available for both multiple_live_batches
+// and duplicate_race_retry — the server re-checks on every attempt, so a
+// retry that changes nothing simply re-raises the same conflict.
+describe("PreviewStep — a multiple_live_batches conflict shows the server's message and leaves Confirm/Retry available (round-27 audit)", () => {
   const mountedRoots: Root[] = [];
 
   afterEach(async () => {
@@ -698,15 +664,7 @@ describe("PreviewStep — multiple_live_batches always exposes Retry, duplicate_
     document.body.innerHTML = "";
   });
 
-  // Round-25 audit (SHARED ROOT CAUSE, BLOCK 1/BLOCK 2): the
-  // hasRevertedAnyConflict gate that used to hide Retry upload here until
-  // the operator had reverted something is deleted — the server
-  // re-evaluates every confirm attempt regardless, so gating it only
-  // produced a dead end (nothing displayable to revert) or a stale-looking
-  // button (buttons flip after one revert, copy frozen). Retry upload is
-  // now ALWAYS present for a multiple_live_batches conflict, from the very
-  // first failure, with zero reverts performed.
-  it("keeps Retry upload available for multiple_live_batches, renders the server's own message, and adds its own live standing instruction (no candidates displayed here)", async () => {
+  it("chunked path: renders the server's message verbatim, keeps Retry upload available, and shows no separate conflict panel or standing instruction", async () => {
     const serverMessage =
       "This file has 2 live import batches for the same underlying content — this can't be resolved " +
       "automatically. Revert all but one of them from Recent imports before resuming or re-uploading this file.";
@@ -720,371 +678,20 @@ describe("PreviewStep — multiple_live_batches always exposes Retry, duplicate_
 
     const buttons = [...container.querySelectorAll("button")];
     expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
-    // The server's own message is still rendered as the one-time reason
-    // this attempt failed.
+    // The server's message is the only guidance rendered — no separate
+    // panel listing candidates, and no competing standing instruction.
     expect(container.textContent).toContain(serverMessage);
-    // No conflictingBatches prop was supplied here (nothing displayable) —
-    // the live standing instruction must say something actionable, never
-    // the old "revert what's shown above" wording pointed at nothing.
-    expect(container.textContent).toContain(conflictStandingInstruction(false, false));
-  });
-
-  it("hides Retry upload and renders the escalation message for duplicate_race_retry_exhausted", async () => {
-    const escalationMessage =
-      "Chunk 1 of 1 still conflicts with another live import for this file after 3 attempts — this needs a " +
-      "human to resolve. Revert the conflicting batch under Recent imports before uploading this file again.";
-    const chunkUpload: ChunkUploadState[] = [
-      { index: 1, status: "failed", batchId: null, error: escalationMessage, code: "duplicate_race_retry_exhausted", duplicateRaceRetryCount: 3 },
-    ];
-
-    const { container } = await mount(
-      <PreviewStep {...baseProps({ chunkUpload, chunkTotal: 1, error: escalationMessage })} />,
-    );
-
-    const buttons = [...container.querySelectorAll("button")];
-    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
-    expect(container.textContent).toContain(escalationMessage);
-  });
-
-  async function mount(element: ReactElement) {
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
-    mountedRoots.push(root);
-    await act(async () => root.render(element));
-    return { container, root };
-  }
-});
-
-// Round-23 audit (SIMPLIFY, replaces the round-21 correction here): a chunk
-// conflict PARSED down to one candidate (a malformed sibling entry dropped
-// by parseConflictingBatches) is not treated as resolved OR unresolved —
-// this client no longer decides either way. The one parseable candidate is
-// shown with a revert affordance, and — round-22 audit BLOCK 2's own
-// finding — the honest note fires from the count vs. the parsed array (or
-// the server's own conflictingBatchesTruncated flag) rather than naming a
-// specific missing count. Drives the REAL confirmChunkedSession mechanism,
-// not a hand-built ChunkUploadState.
-// Round-25 audit (SHARED ROOT CAUSE): Retry upload is no longer gated on a
-// revert having happened — the whole point of this fixture (every
-// candidate but one fails to parse) is that a count-based/revert-based
-// gate can leave the operator with literally nothing that can ever flip
-// it. Retry stays available from the first failure.
-describe("PreviewStep — a chunk conflict that PARSES to one candidate keeps Retry available, with an honest live standing instruction (round-25 audit — SHARED ROOT CAUSE, replaces round-23's SIMPLIFY here)", () => {
-  const mountedRoots: Root[] = [];
-
-  afterEach(async () => {
-    for (const root of mountedRoots.splice(0)) {
-      await act(async () => root.unmount());
-    }
-    document.body.innerHTML = "";
-    vi.unstubAllGlobals();
-  });
-
-  it("keeps Retry upload available, shows the one parseable candidate, and states honestly — with no baked-in count — that there may be more", async () => {
-    const PLAN: ChunkedPlanState = {
-      headerRecord: "producer,name,quantity",
-      chunkTotal: 1,
-      chunks: [{ index: 1, startRow: 1, endRow: 2, text: "producer,name,quantity\nA,B,1\n" }],
-      sourceSha256: "c".repeat(64),
-    };
-    // The SERVER emitted two real candidates (conflictingBatchesCount: 2);
-    // one entry is malformed (no created_at) — the exact response-shape-drift
-    // case isConflictingBatchInfo's own comment describes.
-    const wireConflictingBatches = [
-      { id: "batch-a", filename: "cellar.csv", status: "created", created_at: "2026-01-01T00:00:00Z" },
-      { id: "batch-b", filename: "cellar.csv", status: "applying" }, // malformed: no created_at
-    ];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url.endsWith("/api/import/sessions")) {
-          return new Response(JSON.stringify({ sessionId: "session-new" }), {
-            status: 201,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-        return new Response(
-          JSON.stringify({
-            error: {
-              code: "multiple_live_batches",
-              message: "This file has 2 live import batches for the same underlying content.",
-              details: { conflictingBatches: wireConflictingBatches, conflictingBatchesCount: 2 },
-            },
-          }),
-          { status: 422, headers: { "Content-Type": "application/json" } },
-        );
-      }),
-    );
-
-    let chunkUpload: ChunkUploadState[] = [{ index: 1, status: "pending", batchId: null, error: null, code: null }];
-    const result = await confirmChunkedSession({
-      plan: PLAN,
-      initialUpload: chunkUpload,
-      existingSessionId: null,
-      fileLabel: "cellar.csv",
-      timestampsRef: { current: [] },
-      onSessionId: () => {},
-      onProgress: (u) => {
-        chunkUpload = u;
-      },
-    });
-
-    // Sanity: the real mechanism actually produced a one-candidate DISPLAY
-    // list while the real count (2) survives, and the chunk stays terminal.
-    expect(chunkUpload[0].conflictingBatches).toEqual([wireConflictingBatches[0]]);
-    expect(chunkUpload[0].conflictingBatchesCount).toBe(2);
-    expect(chunkUpload[0].code).toBe("multiple_live_batches");
-    expect(chunkUpload[0].status).toBe("failed");
-    expect(result).toMatchObject({ ok: false });
-    const serverMessage = "This file has 2 live import batches for the same underlying content.";
-    // STORED chunk error (what ChunkUploadProgress renders) carries the
-    // server's own message VERBATIM — round-25 audit (SHARED ROOT CAUSE):
-    // the undisplayed-candidate note is no longer baked in here; it's
-    // PreviewStep's own LIVE standing instruction now (asserted below).
-    expect(chunkUpload[0].error).toBe(serverMessage);
-    expect(chunkUpload[0].error).not.toMatch(/already (been )?resolved/i);
-
-    // Mirrors exactly what ImportClient itself computes from chunkUpload —
-    // visibleConflictCandidates drops only a REVERTED id (none here), so
-    // the one parseable candidate is still offered a revert button.
-    const conflictingBatches = visibleConflictCandidates(chunkUpload[0].conflictingBatches, new Set());
-    const conflictingBatchesTruncated =
-      (chunkUpload[0].conflictingBatchesTruncated ?? false) ||
-      (typeof chunkUpload[0].conflictingBatchesCount === "number" &&
-        (chunkUpload[0].conflictingBatches?.length ?? 0) < chunkUpload[0].conflictingBatchesCount);
-
-    const { container } = await mount(
-      <PreviewStep
-        {...baseProps({
-          chunkUpload,
-          chunkTotal: 1,
-          error: result.ok ? null : result.error,
-          conflictingBatches,
-          conflictingBatchesTruncated,
-        })}
-      />,
-    );
-
-    const buttons = [...container.querySelectorAll("button")];
-    // Round-25 audit (SHARED ROOT CAUSE): Retry upload is available from
-    // the first failure — the conflict this chunk reported is still real,
-    // but no revert is required before the operator can ask the server to
-    // re-check.
-    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
-    // The one parseable candidate IS shown with a revert affordance.
-    expect(container.textContent).toContain("Conflicting live imports for this file");
-    expect(container.textContent).toContain("cellar.csv");
-    expect(buttons.some((b) => /^Revert$/.test(b.textContent ?? ""))).toBe(true);
-    // The server's message renders verbatim (one-time reason for THIS
-    // failure), and PreviewStep's own LIVE standing instruction — derived
-    // from the current conflictingBatches/conflictingBatchesTruncated
-    // props, not baked into the error string — honestly says there may be
-    // more without naming a count. Never the false "already resolved"
-    // wording, never a Recent-imports promise it can't keep.
-    expect(container.textContent).toContain(serverMessage);
-    expect(container.textContent).toContain(conflictStandingInstruction(true, true));
-    expect(container.textContent).not.toMatch(/already (been )?resolved/i);
-  });
-
-  async function mount(element: ReactElement) {
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
-    mountedRoots.push(root);
-    await act(async () => root.render(element));
-    return { container, root };
-  }
-});
-
-// FINDING 3 (round-11 audit): the plain (non-chunked) confirm path used to
-// discard the server error CODE entirely (only the message survived), so
-// hasTerminalReconciliationConflict — derived only from chunkUpload — could
-// never see a plain-path multiple_live_batches or duplicate_race_retry_
-// exhausted failure. plainConfirmErrorCode carries that code through for
-// chunkUpload === null exactly the way ChunkUploadState.code already does
-// per-chunk.
-// Round-25 audit (SHARED ROOT CAUSE): duplicate_race_retry_exhausted still
-// hard-blocks Confirm import (no revert affordance in this panel reaches
-// it), but multiple_live_batches no longer does — see this describe's
-// title.
-describe("PreviewStep — plain (non-chunked) path: duplicate_race_retry_exhausted still blocks Confirm import, multiple_live_batches no longer does (round-25 audit — SHARED ROOT CAUSE, replaces round-11 audit finding 3's multiple_live_batches case)", () => {
-  const mountedRoots: Root[] = [];
-
-  afterEach(async () => {
-    for (const root of mountedRoots.splice(0)) {
-      await act(async () => root.unmount());
-    }
-    document.body.innerHTML = "";
-  });
-
-  it("keeps Confirm import available for a plain-path multiple_live_batches conflict, alongside the server's own message and a live standing instruction", async () => {
-    const serverMessage = "This file has 2 live import batches for the same underlying content.";
-    const { container } = await mount(
-      <PreviewStep
-        {...baseProps({ chunkUpload: null, error: serverMessage, plainConfirmErrorCode: "multiple_live_batches" })}
-      />,
-    );
-
-    const buttons = [...container.querySelectorAll("button")];
-    expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(true);
-    expect(container.textContent).toContain(serverMessage);
-    // No conflictingBatches prop supplied — nothing displayed here.
-    expect(container.textContent).toContain(conflictStandingInstruction(false, false));
-  });
-
-  it("hides Confirm import for a plain-path duplicate_race_retry_exhausted conflict", async () => {
-    const escalationMessage =
-      "This upload still conflicts with another live import for this file after 3 attempts — this needs a " +
-      "human to resolve. Revert the conflicting batch under Recent imports before uploading this file again.";
-    const { container } = await mount(
-      <PreviewStep
-        {...baseProps({
-          chunkUpload: null,
-          error: escalationMessage,
-          plainConfirmErrorCode: "duplicate_race_retry_exhausted",
-        })}
-      />,
-    );
-
-    const buttons = [...container.querySelectorAll("button")];
-    expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
-    expect(container.textContent).toContain(escalationMessage);
-  });
-
-  it("still shows Confirm import for an ordinary retryable plain-path failure (e.g. duplicate_race_retry itself)", async () => {
-    const { container } = await mount(
-      <PreviewStep
-        {...baseProps({ chunkUpload: null, error: "Another import attempt is being cleaned up.", plainConfirmErrorCode: "duplicate_race_retry" })}
-      />,
-    );
-
-    const buttons = [...container.querySelectorAll("button")];
-    expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(true);
-  });
-
-  async function mount(element: ReactElement) {
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
-    mountedRoots.push(root);
-    await act(async () => root.render(element));
-    return { container, root };
-  }
-});
-
-// FINDING 2 (round-11 audit): a multiple_live_batches conflict used to name
-// only a candidate COUNT, so the operator's only recourse was finding both
-// conflicting batches by hand in Recent imports — which shows only the ten
-// newest. If both had aged out of that window, the conflict was permanent.
-// The conflict panel renders directly from the `conflictingBatches` prop,
-// entirely independent of any Recent-imports list, so a batch that has aged
-// out of the ten-newest is still fully recoverable here.
-describe("PreviewStep — multiple_live_batches conflict panel offers a revert affordance per batch, not tied to Recent imports (round-11 audit finding 2)", () => {
-  const mountedRoots: Root[] = [];
-
-  afterEach(async () => {
-    for (const root of mountedRoots.splice(0)) {
-      await act(async () => root.unmount());
-    }
-    document.body.innerHTML = "";
-  });
-
-  it("renders a Revert button per conflicting batch and calls onRevertConflict with the right id", async () => {
-    const conflictingBatches = [
-      { id: "batch-aged-out", filename: "cellar-old.csv", status: "created", created_at: "2020-01-01T00:00:00Z" },
-      { id: "batch-recent", filename: "cellar-old.csv", status: "applying", created_at: "2026-01-01T00:00:00Z" },
-    ];
-    const onRevertConflict = vi.fn();
-
-    const { container } = await mount(
-      <PreviewStep
-        {...baseProps({
-          error: "This file has 2 live import batches for the same underlying content.",
-          plainConfirmErrorCode: "multiple_live_batches",
-          conflictingBatches,
-          onRevertConflict,
-        })}
-      />,
-    );
-
-    // Neither batch needs to appear in any "recent" list for this panel to
-    // render them — it is built entirely from the conflictingBatches prop.
-    expect(container.textContent).toContain("cellar-old.csv");
-    const revertButtons = [...container.querySelectorAll("button")].filter((b) => b.textContent?.includes("Revert"));
-    expect(revertButtons).toHaveLength(2);
-
-    // BLOCK 2 (round-13 audit): Revert no longer fires the request
-    // directly — it hands the WHOLE candidate to the caller, which opens a
-    // confirmation dialog before anything destructive happens.
-    await act(async () => revertButtons[0].click());
-    expect(onRevertConflict).toHaveBeenCalledWith(conflictingBatches[0]);
-  });
-
-  it("renders nothing when there is no conflict", async () => {
-    const { container } = await mount(<PreviewStep {...baseProps({ conflictingBatches: [] })} />);
     expect(container.textContent).not.toContain("Conflicting live imports");
   });
 
-  // BLOCK 2 (round-13 audit): the cleanup counts/warning flags a completed
-  // conflict-panel revert reported used to be discarded entirely. Rendered
-  // with the SAME summarizeRevertResult copy BatchStep's own success panel
-  // uses (see the "revertedCount" text below).
-  it("renders the cleanup outcome, including a partial-cleanup warning, after a conflict revert completes", async () => {
-    const { container } = await mount(
-      <PreviewStep
-        {...baseProps({
-          conflictRevertOutcomes: [
-            {
-              id: "batch-aged-out",
-              filename: "cellar-old.csv",
-              result: {
-                revertedCount: 4,
-                orphanWinesDeleted: 1,
-                lwinStampsCleared: 1,
-                cleanupTruncated: false,
-                orphanCleanupSkipped: false,
-                cleanupFailures: 0,
-              },
-            },
-          ],
-        })}
-      />,
-    );
+  it("plain (non-chunked) path: keeps Confirm import available alongside the server's message", async () => {
+    const serverMessage = "This file has 2 live import batches for the same underlying content.";
+    const { container } = await mount(<PreviewStep {...baseProps({ chunkUpload: null, error: serverMessage })} />);
 
-    expect(container.textContent).toContain("cellar-old.csv");
-    expect(container.textContent).toContain("Removed 4 inventory row(s)");
-  });
-
-  // FINDING 2 (round-15 audit): the existing test above sets every warning
-  // flag to false, so it never actually exercises summarizeRevertResult's
-  // warning branches — it would pass identically even if those branches
-  // were deleted. This one sets a flag TRUE and pins the specific warning
-  // copy that must appear because of it.
-  it("renders the catalog-cleanup-didn't-finish warning when cleanupTruncated is actually true", async () => {
-    const { container } = await mount(
-      <PreviewStep
-        {...baseProps({
-          conflictRevertOutcomes: [
-            {
-              id: "batch-aged-out",
-              filename: "cellar-old.csv",
-              result: {
-                revertedCount: 4,
-                orphanWinesDeleted: 1,
-                lwinStampsCleared: 1,
-                cleanupTruncated: true,
-                orphanCleanupSkipped: false,
-                cleanupFailures: 0,
-              },
-            },
-          ],
-        })}
-      />,
-    );
-
-    expect(container.textContent).toContain("Catalog cleanup didn't finish in time and was left partial");
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(true);
+    expect(container.textContent).toContain(serverMessage);
+    expect(container.textContent).not.toContain("Conflicting live imports");
   });
 
   async function mount(element: ReactElement) {
@@ -1097,36 +704,16 @@ describe("PreviewStep — multiple_live_batches conflict panel offers a revert a
   }
 });
 
-// WARN 6 (round-13 audit): the old tests injected conflict data straight
-// into PreviewStep's props and asserted only that a callback received an
-// id — they never actually executed handleRevertConflict, never tested
-// 2xx/409/404 behaviour, never verified cleanup warnings, and never proved
-// Confirm/Retry becomes reachable again. This is the test that proves
-// BLOCK 1 (a resolved conflict actually clears the terminal
-// multiple_live_batches code) and BLOCK 2 (Revert routes through a real
-// confirmation and reports cleanup counts/warnings) are actually fixed —
-// driven through the real, mounted ImportClient, not a hand-built prop
-// fixture, with `fetch` stubbed exactly like BatchStep's own applyAll
-// tests above.
-// Round-23 audit (SIMPLIFY): rewritten from the ground up. The old round-13
-// suite proved a revert LOCALLY clears the conflict once the count hits its
-// threshold — exactly the mechanism three later audits (rounds 18, 20, 22)
-// each found a fresh way to get wrong. The new contract: a successful
-// revert drops that candidate from the panel, but never by itself grants
-// success — only the SERVER'S next response decides whether Confirm/Retry
-// actually succeeds.
-// Round-25 audit (SHARED ROOT CAUSE): round-23's own contract still gated
-// Confirm/Retry BEHIND a successful revert (hasRevertedAnyConflict) — a
-// payload whose candidates ALL fail to parse could never flip that gate
-// (BLOCK 2, a genuine dead end), and the button appearing after exactly
-// one revert of many while the terminal copy stayed frozen on the
-// server's original count was itself a state/copy/action contradiction
-// (BLOCK 1). The gate is deleted: Confirm/Retry is available from the
-// FIRST failure, with zero reverts performed, and stays available exactly
-// the same way after any number of reverts — the buttons never change
-// shape based on revert history, only the live standing instruction text
-// does.
-describe("ImportClient — Retry is always available for a conflict, and only the SERVER decides when it's gone (round-25 audit — SHARED ROOT CAUSE, replaces round-23's SIMPLIFY here)", () => {
+// Round-27 audit (BLOCK 2): duplicate_race_retry is retryable BY DESIGN —
+// batch-service.ts's own reconcileLiveBatchesForFile can emit it with ZERO
+// live batches (a self-revert race that failed to fully withdraw). The
+// client used to count consecutive occurrences and, after a fixed limit,
+// synthesize a distinct terminal duplicate_race_retry_exhausted code that
+// hid Confirm/Retry and asserted a live conflicting batch and a Recent-
+// imports recovery location that might not exist. That escalation is
+// deleted: this code never blocks the button, no matter how many times it
+// recurs, in either the chunked or the plain path.
+describe("PreviewStep — duplicate_race_retry stays retryable no matter how many times it occurs (round-27 audit)", () => {
   const mountedRoots: Root[] = [];
 
   afterEach(async () => {
@@ -1134,583 +721,148 @@ describe("ImportClient — Retry is always available for a conflict, and only th
       await act(async () => root.unmount());
     }
     document.body.innerHTML = "";
-    document.body.style.overflow = "";
-    vi.unstubAllGlobals();
   });
 
-  const CSV_CONTENT = `${CANONICAL_HEADERS.join(",")}\nDomaine Example,Cuvee One,2020,Pinot Noir,Burgundy,France,750,,USD,6,24.50,,\n`;
-
-  const CONFLICT_ERROR_BODY = {
-    error: {
-      code: "multiple_live_batches",
-      message:
-        "This file has 2 live import batches for the same underlying content — this can't be resolved " +
-        "automatically. Revert all but one of them below before resuming or re-uploading this file.",
-      details: {
-        conflictingBatches: [
-          { id: "conflict-1", filename: "cellar-old.csv", status: "created", created_at: "2020-01-01T00:00:00.000Z" },
-          { id: "conflict-2", filename: "cellar-old.csv", status: "applying", created_at: "2021-01-01T00:00:00.000Z" },
-        ],
-        conflictingBatchesCount: 2,
-      },
-    },
-  };
-
-  const PREVIEW_SUCCESS_BODY = {
-    rows: [],
-    summary: {
-      totalRows: 1,
-      validRows: 1,
-      errorRows: 0,
-      matchedRows: 1,
-      unmatchedRows: 0,
-      missingCostRows: 0,
-      readyToApplyRows: 1,
-      pendingResolutionRows: 0,
-    },
-  };
-
-  function jsonResponse(status: number, body: unknown): Response {
-    return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-  }
-
-  /** Drives a freshly-mounted ImportClient from the upload step through to
-   * the multiple_live_batches conflict panel: selects a valid one-row CSV,
-   * clicks Preview, then Confirm. */
-  async function reachConflictPanel(container: HTMLElement, filename = "cellar.csv") {
-    const file = new File([CSV_CONTENT], filename, { type: "text/csv" });
-    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
-    if (!input) throw new Error("Could not find the file input");
-    Object.defineProperty(input, "files", { configurable: true, value: [file] });
-    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
-
-    const previewButton = findButton(container, "Preview import");
-    if (!previewButton) throw new Error("Could not find Preview import button");
-    await act(async () => previewButton.click());
-
-    const confirmButton = findButton(container, "Confirm import");
-    if (!confirmButton) throw new Error("Could not find Confirm import button");
-    await act(async () => confirmButton.click());
-  }
-
-  /** Returns the stubbed fetch mock so a test can inspect exactly which
-   * requests were actually sent. `confirmResponses` is consumed in order by
-   * successive POST /api/import/batches calls (repeated indefinitely once
-   * exhausted, using the last entry) — letting a test script "still
-   * conflicting" vs. "now succeeds" across a revert-then-retry sequence.
-   * `revertHandler` answers every `/api/import/batches/<id>/revert` call. */
-  function stubFetch(
-    confirmResponses: Response[],
-    revertHandler: (url: string, init?: RequestInit) => Promise<Response>,
-  ) {
-    let confirmCallIndex = 0;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-      if (url === "/api/import/batches" && method === "GET") return jsonResponse(200, { batches: [] });
-      if (url === "/api/import/preview" && method === "POST") return jsonResponse(200, PREVIEW_SUCCESS_BODY);
-      if (url === "/api/import/batches" && method === "POST") {
-        const response = confirmResponses[Math.min(confirmCallIndex, confirmResponses.length - 1)];
-        confirmCallIndex += 1;
-        return response;
-      }
-      if (/^\/api\/import\/batches\/[^/]+\/revert$/.test(url) && method === "POST") return revertHandler(url, init);
-      if (/^\/api\/import\/batches\/[^/]+$/.test(url) && method === "GET") {
-        return jsonResponse(200, {
-          batch: {
-            id: "new-batch",
-            filename: "cellar.csv",
-            status: "created",
-            total_rows: 1,
-            created_at: "2026-01-01T00:00:00.000Z",
-            reverted_at: null,
-          },
-          rows: [],
-        });
-      }
-      throw new Error(`unexpected fetch ${method} ${url}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    return fetchMock;
-  }
-
-  it("a 2xx revert drops that candidate, keeps a still-live survivor listed, and Retry stays exactly as available as before — the import proceeds only once the server actually reports success", async () => {
-    const fetchMock = stubFetch(
-      [jsonResponse(422, CONFLICT_ERROR_BODY), jsonResponse(201, { batchId: "new-batch", alreadyExists: false, totalRows: 1, summary: PREVIEW_SUCCESS_BODY.summary })],
-      async () =>
-        jsonResponse(200, {
-          revertedCount: 4,
-          orphanWinesDeleted: 1,
-          lwinStampsCleared: 1,
-          cleanupTruncated: false,
-          orphanCleanupSkipped: false,
-          cleanupFailures: 0,
-        }),
-    );
-
-    const { container } = await mount(<ImportClient />);
-    await reachConflictPanel(container);
-
-    // Round-25 audit (SHARED ROOT CAUSE): Retry is available from the
-    // FIRST failure, zero reverts performed — no dead end, no gate. The
-    // conflict panel shows BOTH real candidates, and the live standing
-    // instruction (not the frozen server prose) tells the operator what
-    // to do, without naming a count.
-    expect(findButton(container, "Confirm import")).toBeTruthy();
-    expect(container.textContent).toContain("Conflicting live imports for this file");
-    expect(container.textContent).toContain(conflictStandingInstruction(true, false));
-    let revertButtons = [...container.querySelectorAll("button")].filter((b) => /^Revert$/.test(b.textContent ?? ""));
-    expect(revertButtons).toHaveLength(2);
-
-    await act(async () => revertButtons[0].click());
-    // BLOCK 2 (round-13 audit): no request goes out until the confirmation
-    // dialog is confirmed — the dialog's own button, not the panel's
-    // "Revert".
-    expect(container.textContent).toContain("Revert this import?");
-    expect(fetchMock.mock.calls.some(([u]) => /\/revert$/.test(String(u)))).toBe(false);
-    await act(async () => findButton(container, /^Revert import$/)!.click());
-    expect(fetchMock.mock.calls.filter(([u]) => /\/revert$/.test(String(u)))).toHaveLength(1);
-
-    // Round-23 audit (SIMPLIFY): reverting conflict-1 does NOT clear the
-    // conflict locally — conflict-2 is STILL a live, unresolved candidate
-    // as far as this client knows, so the panel still names it and still
-    // offers it a Revert button.
-    // Round-25 audit (SHARED ROOT CAUSE): Retry does NOT newly appear here
-    // — it was already there before this revert, and stays there,
-    // unchanged in shape, after it. The only thing that changes is the
-    // live standing instruction (still no baked-in count) and the
-    // cleanup outcome below — never the button's own presence.
-    expect(container.textContent).toContain("Conflicting live imports for this file");
-    expect(container.textContent).toContain("cellar-old.csv");
-    revertButtons = [...container.querySelectorAll("button")].filter((b) => /^Revert$/.test(b.textContent ?? ""));
-    expect(revertButtons).toHaveLength(1);
-    const retryButton = findButton(container, "Confirm import");
-    expect(retryButton).toBeTruthy();
-    // BLOCK 2: the cleanup counts/warnings a 2xx reports are surfaced, not
-    // discarded — same copy BatchStep's own success panel uses.
-    expect(container.textContent).toContain("Removed 4 inventory row(s)");
-
-    // Clicking Retry re-sends the confirm request — the SECOND stubbed
-    // response is a real 201, proving the import only proceeds because the
-    // SERVER said so, not because of anything counted or decremented here.
-    await act(async () => retryButton!.click());
-    expect(fetchMock.mock.calls.filter(([u, i]) => String(u) === "/api/import/batches" && (i as RequestInit)?.method === "POST")).toHaveLength(2);
-    expect(container.textContent).not.toContain("Conflicting live imports for this file");
-    // Reached the batch step — BatchStep's own "Revert this import" control
-    // only renders there.
-    expect(container.textContent).toContain("Revert this import");
-  });
-
-  it("a 409 (already reverted) drops the candidate, with Retry unaffected (already available) and no cleanup outcome to show", async () => {
-    stubFetch(
-      [jsonResponse(422, CONFLICT_ERROR_BODY)],
-      async () => jsonResponse(409, { error: { code: "not_completed", message: "Import batch is already reverted." } }),
-    );
-
-    const { container } = await mount(<ImportClient />);
-    await reachConflictPanel(container);
-    // Round-25 audit (SHARED ROOT CAUSE): already available before this
-    // revert — not something the revert unlocks.
-    expect(findButton(container, "Confirm import")).toBeTruthy();
-
-    await act(async () => findButton(container, /^Revert$/)!.click());
-    await act(async () => findButton(container, /^Revert import$/)!.click());
-
-    // BLOCK 1 (round-13 audit): a 409 from THIS endpoint only ever means
-    // "already reverted" — the desired end state was already reached —
-    // so it counts as a completed revert exactly like a 2xx would: the
-    // candidate drops out of the panel. The terminal conflict message/code
-    // themselves are untouched (still real as far as this client knows) —
-    // retrying is what actually checks.
-    expect(container.textContent).toContain("Conflicting live imports for this file");
-    expect([...container.querySelectorAll("button")].filter((b) => /^Revert$/.test(b.textContent ?? ""))).toHaveLength(1);
-    expect(findButton(container, "Confirm import")).toBeTruthy();
-    expect(container.textContent).not.toContain("Removed");
-  });
-
-  it("a 404 (already gone) drops the candidate, with Retry unaffected (already available) and no cleanup outcome to show", async () => {
-    stubFetch(
-      [jsonResponse(422, CONFLICT_ERROR_BODY)],
-      async () => jsonResponse(404, { error: { code: "not_found", message: "Import batch not found." } }),
-    );
-
-    const { container } = await mount(<ImportClient />);
-    await reachConflictPanel(container);
-    expect(findButton(container, "Confirm import")).toBeTruthy();
-
-    await act(async () => findButton(container, /^Revert$/)!.click());
-    await act(async () => findButton(container, /^Revert import$/)!.click());
-
-    // BLOCK 1: a 404 means the batch no longer exists — also the desired
-    // end state — so it counts as a completed revert too.
-    expect([...container.querySelectorAll("button")].filter((b) => /^Revert$/.test(b.textContent ?? ""))).toHaveLength(1);
-    expect(findButton(container, "Confirm import")).toBeTruthy();
-    expect(container.textContent).not.toContain("Removed");
-  });
-
-  it("a genuine revert failure (500) keeps the candidate listed, and Retry stays exactly as available as it always was (never gated on a revert succeeding)", async () => {
-    stubFetch(
-      [jsonResponse(422, CONFLICT_ERROR_BODY)],
-      async () => jsonResponse(500, { error: { code: "internal_error", message: "Something went wrong." } }),
-    );
-
-    const { container } = await mount(<ImportClient />);
-    await reachConflictPanel(container);
-    expect(findButton(container, "Confirm import")).toBeTruthy();
-
-    await act(async () => findButton(container, /^Revert$/)!.click());
-    await act(async () => findButton(container, /^Revert import$/)!.click());
-
-    // An actual failure (not 409/404) never counts as a completed revert —
-    // the candidate stays listed. Round-25 audit (SHARED ROOT CAUSE):
-    // Retry was NEVER gated on a revert succeeding, so it stays exactly as
-    // available as it was before this failed attempt — the failure just
-    // never got the chance to drop anything from the panel.
-    expect(container.textContent).toContain("Conflicting live imports for this file");
-    expect([...container.querySelectorAll("button")].filter((b) => /^Revert$/.test(b.textContent ?? ""))).toHaveLength(2);
-    expect(findButton(container, "Confirm import")).toBeTruthy();
-    expect(container.textContent).toContain("Something went wrong.");
-  });
-
-  // FINDING 3 (round-15 audit), extended round-23, extended round-25
-  // (SHARED ROOT CAUSE): reset() must clear every piece of conflict-revert
-  // state — not just conflictRevertOutcomes, but also
-  // revertedConflictBatchIds — or a NEXT, wholly unrelated file's fresh
-  // conflict would wrongly exclude a candidate that was reverted against
-  // the PREVIOUS, unrelated conflict (same server-assigned id reused
-  // across two different files in this fixture). Retry itself is no
-  // longer part of what reset() needs to reason about — round-25 deleted
-  // the gate entirely, so it is available identically for both the old
-  // and the new conflict, before and after any revert.
-  it("starting a new import (Choose a different file) clears the previous conflict's revert-tracking state — the NEXT file's conflict shows every candidate again", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-      if (url === "/api/import/batches" && method === "GET") return jsonResponse(200, { batches: [] });
-      if (url === "/api/import/preview" && method === "POST") return jsonResponse(200, PREVIEW_SUCCESS_BODY);
-      if (url === "/api/import/batches" && method === "POST") {
-        // Every confirm attempt, for EITHER file, hits the same conflict —
-        // this test is about the client's own revert-tracking state, not
-        // about ever reaching success.
-        return jsonResponse(422, CONFLICT_ERROR_BODY);
-      }
-      if (/^\/api\/import\/batches\/[^/]+\/revert$/.test(url) && method === "POST") {
-        return jsonResponse(200, {
-          revertedCount: 4,
-          orphanWinesDeleted: 1,
-          lwinStampsCleared: 1,
-          cleanupTruncated: false,
-          orphanCleanupSkipped: false,
-          cleanupFailures: 0,
-        });
-      }
-      throw new Error(`unexpected fetch ${method} ${url}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { container } = await mount(<ImportClient />);
-    await reachConflictPanel(container);
-    await act(async () => findButton(container, /^Revert$/)!.click());
-    await act(async () => findButton(container, /^Revert import$/)!.click());
-    expect(container.textContent).toContain("Removed 4 inventory row(s)");
-    expect(findButton(container, "Confirm import")).toBeTruthy();
-
-    // "Choose a different file" is PreviewStep's onBack, wired to reset().
-    await act(async () => findButton(container, "Choose a different file")!.click());
-
-    await reachConflictPanel(container, "cellar-2.csv");
-
-    // The NEW file's preview must not still show the PREVIOUS file's
-    // cleanup result, and — round-25 audit (SHARED ROOT CAUSE) — must not
-    // have inherited the PREVIOUS conflict's revertedConflictBatchIds:
-    // both candidates render again (conflict-1 was only reverted against
-    // the OLD conflict). Retry is truthy here exactly as it always is for
-    // this conflict — never something reset() needs to re-lock.
-    expect(container.textContent).not.toContain("Removed 4 inventory row(s)");
-    expect(findButton(container, "Confirm import")).toBeTruthy();
-    expect(container.textContent).toContain("Conflicting live imports for this file");
-    expect([...container.querySelectorAll("button")].filter((b) => /^Revert$/.test(b.textContent ?? ""))).toHaveLength(2);
-  });
-
-  // Round-23 audit (TESTS — round-22 audit WARN 4), rewritten round-25
-  // audit (ALSO FIX — the prior version was CANNED: it built 20 client
-  // candidates, manually set conflictingBatchesTruncated, and had the mock
-  // server return the IDENTICAL 422 after every one of twenty mocked
-  // reverts — it never actually exercised a lookup beyond
-  // LIVE_BATCH_LOOKUP_LIMIT, and its comments claimed to prove something
-  // the fixture couldn't demonstrate (server state that never changed
-  // can't prove anything DID or didn't resolve). This version runs a
-  // small STATEFUL mock server: 22 genuinely live batches for this file,
-  // capped at 20 per read exactly like reconcileLiveBatchesForFile's own
-  // LIVE_BATCH_LOOKUP_LIMIT, with each successful revert actually removing
-  // that batch from the server's own live set. Reverting all 20 initially
-  // DISPLAYED candidates leaves 2 REAL survivors that were never shown
-  // before (the ones the cap hid) — retrying surfaces them for the first
-  // time, proving the server's own re-check, not this client's revert
-  // bookkeeping, is what determines the next response.
-  it("reverting every displayed candidate of a capped 22-live-batches conflict surfaces the previously-hidden survivors on retry — driven by a stateful mock server, never a canned repeat", async () => {
-    const LIVE_BATCH_LOOKUP_LIMIT = 20;
-    const liveIds = new Set(Array.from({ length: 22 }, (_, i) => `conflict-${i}`));
-    const batchInfo = (id: string) => {
-      const i = Number(id.split("-")[1]);
-      return { id, filename: "cellar-old.csv", status: "created", created_at: `2020-01-${String(i + 1).padStart(2, "0")}T00:00:00.000Z` };
-    };
-    function serverConfirmResponse(): Response {
-      const sortedIds = [...liveIds].sort();
-      if (sortedIds.length <= 1) {
-        return jsonResponse(201, { batchId: "new-batch", alreadyExists: false, totalRows: 1, summary: PREVIEW_SUCCESS_BODY.summary });
-      }
-      const shown = sortedIds.slice(0, LIVE_BATCH_LOOKUP_LIMIT);
-      return jsonResponse(422, {
-        error: {
-          code: "multiple_live_batches",
-          message: `This file has ${sortedIds.length > LIVE_BATCH_LOOKUP_LIMIT ? "at least " : ""}${shown.length} live import batches for the same underlying content.`,
-          details: {
-            conflictingBatches: shown.map(batchInfo),
-            conflictingBatchesCount: shown.length,
-            conflictingBatchesTruncated: sortedIds.length > LIVE_BATCH_LOOKUP_LIMIT,
-          },
-        },
-      });
-    }
-
-    let confirmCallCount = 0;
-    const revertedIds: string[] = [];
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-      if (url === "/api/import/batches" && method === "GET") return jsonResponse(200, { batches: [] });
-      if (url === "/api/import/preview" && method === "POST") return jsonResponse(200, PREVIEW_SUCCESS_BODY);
-      if (url === "/api/import/batches" && method === "POST") {
-        confirmCallCount += 1;
-        return serverConfirmResponse();
-      }
-      const revertMatch = url.match(/^\/api\/import\/batches\/([^/]+)\/revert$/);
-      if (revertMatch && method === "POST") {
-        const id = revertMatch[1];
-        // Genuinely mutates server state — the whole point of this
-        // fixture: a later confirm call reflects this removal for real,
-        // rather than replaying a fixed response.
-        liveIds.delete(id);
-        revertedIds.push(id);
-        return jsonResponse(200, {
-          revertedCount: 1,
-          orphanWinesDeleted: 0,
-          lwinStampsCleared: 0,
-          cleanupTruncated: false,
-          orphanCleanupSkipped: false,
-          cleanupFailures: 0,
-        });
-      }
-      throw new Error(`unexpected fetch ${method} ${url}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { container } = await mount(<ImportClient />);
-    await reachConflictPanel(container);
-
-    // Round-22 audit BLOCK 2: the honest "there may be more" note fires
-    // purely from the server's own conflictingBatchesTruncated flag —
-    // candidates.length (20) equals conflictingBatchesCount (20) here, so
-    // the OLD count-vs-array-length check alone would have missed this
-    // entirely. Round-25 audit: names no specific count.
-    expect(container.textContent).toContain(conflictStandingInstruction(true, true));
-    let revertButtons = [...container.querySelectorAll("button")].filter((b) => /^Revert$/.test(b.textContent ?? ""));
-    expect(revertButtons).toHaveLength(20);
-
-    // Revert every displayed candidate, one at a time, through the real
-    // confirmation-dialog flow. Retry (Confirm import) is available the
-    // entire time — round-25 audit (SHARED ROOT CAUSE) deleted the
-    // revert-gated blocker — this loop never checks for it disappearing
-    // or reappearing because it never does either.
-    for (let i = 0; i < 20; i++) {
-      expect(findButton(container, "Confirm import")).toBeTruthy();
-      revertButtons = [...container.querySelectorAll("button")].filter((b) => /^Revert$/.test(b.textContent ?? ""));
-      expect(revertButtons.length).toBeGreaterThan(0);
-      await act(async () => revertButtons[0].click());
-      await act(async () => findButton(container, /^Revert import$/)!.click());
-    }
-    expect(revertedIds).toHaveLength(20);
-    expect(liveIds.size).toBe(2);
-
-    // Every displayed candidate is gone from the LOCAL panel — but this
-    // client still has no idea the server's live set is down to 2 (it
-    // never inferred that; only a fresh confirm can say so).
-    expect([...container.querySelectorAll("button")].filter((b) => /^Revert$/.test(b.textContent ?? ""))).toHaveLength(0);
-    const retryButton = findButton(container, "Confirm import");
-    expect(retryButton).toBeTruthy();
-
-    // Clicking Retry re-sends to the server, which now genuinely reports a
-    // DIFFERENT, smaller conflict — the 2 survivors that were hidden by
-    // the cap the whole time, never previously shown or reverted by this
-    // client. This is what actually proves the server's own state, not
-    // client-side revert bookkeeping, decides the next response.
-    await act(async () => retryButton!.click());
-    expect(confirmCallCount).toBe(2);
-    expect(container.textContent).toContain("This file has 2 live import batches");
-    expect(container.textContent).not.toContain("at least");
-    revertButtons = [...container.querySelectorAll("button")].filter((b) => /^Revert$/.test(b.textContent ?? ""));
-    expect(revertButtons).toHaveLength(2);
-    expect(findButton(container, "Confirm import")).toBeTruthy();
-  });
-
-  // ROUND-21 AUDIT CORRECTION, carried forward round-23 (SIMPLIFY): a
-  // multiple_live_batches conflict PARSED down to one candidate via a
-  // malformed sibling entry is not "resolved" — nothing decrements or
-  // infers from it.
-  // Round-25 audit (SHARED ROOT CAUSE): "stays blocked... until the
-  // operator actually reverts something" is exactly the dead end BLOCK 2
-  // fixed — this fixture is the textbook case (every OTHER candidate can
-  // fail to parse; here just one of two survives). Retry is available
-  // from the first failure, same as any other multiple_live_batches
-  // conflict.
-  it("a conflict that parses down to one candidate via a malformed sibling entry keeps Retry available, shows the one parseable candidate, and states honestly — with no baked-in count — that there may be more", async () => {
-    const wireConflictingBatches = [
-      { id: "conflict-1", filename: "cellar-old.csv", status: "created", created_at: "2020-01-01T00:00:00.000Z" },
-      { id: "conflict-2", filename: "cellar-old.csv", status: "applying" }, // malformed: no created_at
+  it("chunked path: Retry upload stays available for a chunk failing with duplicate_race_retry", async () => {
+    const serverMessage = "Another import attempt for this file is being cleaned up — please retry the upload.";
+    const chunkUpload: ChunkUploadState[] = [
+      { index: 1, status: "failed", batchId: null, error: serverMessage, code: "duplicate_race_retry" },
     ];
-    const serverMessage =
-      "This file has 2 live import batches for the same underlying content — this can't be resolved " +
-      "automatically. Revert all but one of them below before resuming or re-uploading this file.";
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        const method = init?.method ?? "GET";
-        if (url === "/api/import/batches" && method === "GET") return jsonResponse(200, { batches: [] });
-        if (url === "/api/import/preview" && method === "POST") return jsonResponse(200, PREVIEW_SUCCESS_BODY);
-        if (url === "/api/import/batches" && method === "POST") {
-          return jsonResponse(422, {
-            error: {
-              code: "multiple_live_batches",
-              message: serverMessage,
-              details: { conflictingBatches: wireConflictingBatches, conflictingBatchesCount: 2 },
-            },
-          });
-        }
-        throw new Error(`unexpected fetch ${method} ${url}`);
-      }),
+
+    const { container } = await mount(
+      <PreviewStep {...baseProps({ chunkUpload, chunkTotal: 1, error: serverMessage })} />,
     );
 
-    const { container } = await mount(<ImportClient />);
-    await reachConflictPanel(container);
-
-    // The conflict is still real, and the panel shows the ONE candidate
-    // that could be parsed, with a revert affordance — the malformed
-    // second entry never reverted anything. Round-25 audit (SHARED ROOT
-    // CAUSE): Confirm import (Retry) is available regardless — the
-    // malformed entry means this client can offer a revert button for
-    // only ONE of the two real candidates, and a revert-gated Retry would
-    // have no way to ever become true if BOTH had failed to parse.
-    expect(findButton(container, "Confirm import")).toBeTruthy();
-    expect(container.textContent).toContain("Conflicting live imports for this file");
-    expect(container.textContent).toContain("cellar-old.csv");
-    const revertButtons = [...container.querySelectorAll("button")].filter((b) => /^Revert$/.test(b.textContent ?? ""));
-    expect(revertButtons).toHaveLength(1);
-    // The server's message renders verbatim (one-time reason for THIS
-    // failure). PreviewStep's own LIVE standing instruction — derived from
-    // conflictingBatches.length (1 shown) vs. conflictingBatchesCount (2)
-    // on every render, never baked into the error string — honestly says
-    // there may be more, without naming a count. Never the false "already
-    // resolved" wording rounds 17-19 shipped.
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
     expect(container.textContent).toContain(serverMessage);
-    expect(container.textContent).toContain(conflictStandingInstruction(true, true));
-    expect(container.textContent).not.toMatch(/already (been )?resolved/i);
   });
 
-  // TESTS (round-25 audit brief): "After one revert of twenty, the copy
-  // does not instruct the operator to do something the buttons
-  // contradict, and no stale count is shown." This is BLOCK 1 verbatim —
-  // 20 candidates, one revert, and the old code would have shown Confirm
-  // import newly enabled beside copy still saying "at least 20" and
-  // instructing nineteen more reverts.
-  it("BLOCK 1: with 20 candidates, one revert changes nothing about whether Confirm import is offered, and the live standing instruction never bakes in a count that would go stale", async () => {
-    const candidates = Array.from({ length: 20 }, (_, i) => ({
-      id: `conflict-${i}`,
-      filename: "cellar-old.csv",
-      status: "created",
-      created_at: `2020-01-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`,
+  it("plain path: Confirm import stays available for a duplicate_race_retry failure", async () => {
+    const serverMessage = "Another import attempt for this file is being cleaned up — please retry the upload.";
+    const { container } = await mount(<PreviewStep {...baseProps({ chunkUpload: null, error: serverMessage })} />);
+
+    expect(findButton(container, "Confirm import")).toBeTruthy();
+    expect(container.textContent).toContain(serverMessage);
+  });
+
+  // There is no longer any client-side notion of "duplicate_race_retry_exhausted"
+  // to escalate to — but if a caller somehow supplied that code (a stale
+  // server, a hand-built fixture), PreviewStep must not treat it as special
+  // either: only chunk_content_mismatch and duplicate_chunk_content remain
+  // terminal in this panel.
+  it("does not block Confirm/Retry even for the old, now-meaningless duplicate_race_retry_exhausted code string", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      { index: 1, status: "failed", batchId: null, error: "stale code", code: "duplicate_race_retry_exhausted" },
+    ];
+    const { container } = await mount(<PreviewStep {...baseProps({ chunkUpload, chunkTotal: 1 })} />);
+    expect(findButton(container, "Retry upload")).toBeTruthy();
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+});
+
+// Round-27 audit: with the in-preview conflict panel gone, Recent imports
+// is the only place left to revert a conflicting batch. It used to render
+// only the ten newest, so a conflicting batch old enough to have aged out
+// was unreachable — GET /api/import/batches has never had a server-side
+// cap (route.ts's getBatches), and BatchStep's own Revert already accepts
+// any non-reverted status (round-13 audit), so raising the client-side
+// display limit is the smallest change that makes every non-reverted batch
+// findable and revertable again.
+describe("ImportClient — Recent imports lists and can revert a batch that is not among the ten newest (round-27 audit)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    vi.unstubAllGlobals();
+    document.body.innerHTML = "";
+  });
+
+  it("renders an 11th batch (older than the ten-newest window) and reverts it", async () => {
+    // Newest-first, exactly as the real GET /api/import/batches route
+    // returns them (order("created_at", { ascending: false })). "batch-10"
+    // is the OLDEST — the one an old ten-item cap would have dropped.
+    const batches = Array.from({ length: 11 }, (_, i) => ({
+      id: `batch-${i}`,
+      filename: `cellar-${i}.csv`,
+      status: "completed" as const,
+      total_rows: 3,
+      created_at: new Date(2026, 0, 11 - i).toISOString(),
+      reverted_at: null,
     }));
-    const TWENTY_CONFLICT_BODY = {
-      error: {
-        code: "multiple_live_batches",
-        message: "This file has at least 20 live import batches for the same underlying content.",
-        details: { conflictingBatches: candidates, conflictingBatchesCount: 20, conflictingBatchesTruncated: true },
-      },
-    };
-    stubFetch(
-      [jsonResponse(422, TWENTY_CONFLICT_BODY)],
-      async () =>
-        jsonResponse(200, {
-          revertedCount: 1,
-          orphanWinesDeleted: 0,
-          lwinStampsCleared: 0,
-          cleanupTruncated: false,
-          orphanCleanupSkipped: false,
-          cleanupFailures: 0,
-        }),
-    );
+    const oldest = batches[batches.length - 1];
 
-    const { container } = await mount(<ImportClient />);
-    await reachConflictPanel(container);
-
-    // BEFORE any revert: Confirm import is already present, and the live
-    // standing instruction says there may be more, with no number in it.
-    expect(findButton(container, "Confirm import")).toBeTruthy();
-    const standingInstruction = conflictStandingInstruction(true, true);
-    expect(container.textContent).toContain(standingInstruction);
-    expect(standingInstruction).not.toMatch(/\d/);
-
-    await act(async () => {
-      const revertButtons = [...container.querySelectorAll("button")].filter((b) => /^Revert$/.test(b.textContent ?? ""));
-      revertButtons[0].click();
+    let revertCalled = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url === "/api/import/batches" && method === "GET") {
+        return new Response(JSON.stringify({ batches }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url === `/api/import/batches/${oldest.id}` && method === "GET") {
+        return new Response(JSON.stringify({ batch: oldest, rows: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url === `/api/import/batches/${oldest.id}/revert` && method === "POST") {
+        revertCalled = true;
+        return new Response(
+          JSON.stringify({
+            revertedCount: 3,
+            orphanWinesDeleted: 0,
+            lwinStampsCleared: 0,
+            cleanupTruncated: false,
+            orphanCleanupSkipped: false,
+            cleanupFailures: 0,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected fetch ${method} ${url}`);
     });
-    await act(async () => findButton(container, /^Revert import$/)!.click());
-
-    // AFTER exactly one of twenty reverts: Confirm import's presence is
-    // UNCHANGED (it was there before, it's there now — never a button
-    // that flips state on revert count), and the live standing
-    // instruction is IDENTICAL — never decremented to "19", never
-    // switched to a different shape because one candidate happened to
-    // drop out of a 20-candidate list.
-    expect(findButton(container, "Confirm import")).toBeTruthy();
-    expect(container.textContent).toContain(standingInstruction);
-    expect(container.textContent).not.toContain("19");
-    expect(container.textContent).not.toMatch(/revert (the|)\s*(remaining|other)?\s*19/i);
-    const revertButtons = [...container.querySelectorAll("button")].filter((b) => /^Revert$/.test(b.textContent ?? ""));
-    expect(revertButtons).toHaveLength(19);
-  });
-
-  // TESTS (round-25 audit brief): "Retry with zero reverts performed is
-  // available and simply re-raises the conflict." This is BLOCK 2's fix
-  // stated positively — the operator need not revert anything before
-  // asking the server to re-check.
-  it("Retry with zero reverts performed is available, and simply re-raises the identical conflict the server still reports", async () => {
-    const fetchMock = stubFetch(
-      [jsonResponse(422, CONFLICT_ERROR_BODY)],
-      async () => {
-        throw new Error("no revert should have been attempted in this test");
-      },
-    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("localStorage", {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    });
 
     const { container } = await mount(<ImportClient />);
-    await reachConflictPanel(container);
+    // loadRecent's effect resolves asynchronously.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
-    expect(fetchMock.mock.calls.some(([u]) => /\/revert$/.test(String(u)))).toBe(false);
+    // Every batch renders, including the oldest — not just the ten newest.
+    expect(container.textContent).toContain(oldest.filename);
 
-    const retryButton = findButton(container, "Confirm import");
-    expect(retryButton).toBeTruthy();
-    await act(async () => retryButton!.click());
+    const openButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+      b.textContent?.includes(oldest.filename),
+    );
+    expect(openButton).toBeTruthy();
+    await act(async () => openButton!.click());
 
-    // Zero reverts were ever performed, yet Retry worked exactly as
-    // designed: it re-sent the confirm request, and the server (still
-    // genuinely conflicted, since nothing was reverted) reported the same
-    // conflict again — never a client-side dead end, never a fabricated
-    // "already resolved."
-    expect(fetchMock.mock.calls.filter(([u, i]) => String(u) === "/api/import/batches" && (i as RequestInit)?.method === "POST")).toHaveLength(2);
-    expect(fetchMock.mock.calls.some(([u]) => /\/revert$/.test(String(u)))).toBe(false);
-    expect(container.textContent).toContain("Conflicting live imports for this file");
-    expect(findButton(container, "Confirm import")).toBeTruthy();
+    const revertButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (b) => b.textContent?.trim() === "Revert this import",
+    );
+    expect(revertButton).toBeTruthy();
+    await act(async () => revertButton!.click());
+    const confirmButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (b) => b.textContent?.trim() === "Revert import",
+    );
+    expect(confirmButton).toBeTruthy();
+    await act(async () => confirmButton!.click());
+
+    expect(revertCalled).toBe(true);
   });
 
   async function mount(element: ReactElement) {

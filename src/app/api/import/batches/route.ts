@@ -100,33 +100,14 @@ async function postBatches(request: NextRequest) {
   });
 
   if (!result.ok) {
-    // FINDING 2 (round-11 audit): conflictingBatches (present only on
-    // multiple_live_batches) lets the client render a revert affordance
-    // per conflicting batch directly, rather than relying on the batch
-    // still being in the ten-newest Recent imports list. Round-21 audit
-    // correction: conflictingBatchesCount rides alongside it — the client's
-    // own parseConflictingBatches can drop a malformed entry from the array
-    // above without the underlying conflict actually shrinking. Round-25
-    // audit (SHARED ROOT CAUSE): the client no longer decides resolution
-    // from this count, or from anything in this response at all — it's
-    // carried only so the client's "may be more than shown" note stays
-    // accurate even when the array's own length undercounts.
-    const details =
-      result.error.missingHeaders || result.error.conflictingBatches
-        ? {
-            ...(result.error.missingHeaders ? { missingHeaders: result.error.missingHeaders } : {}),
-            ...(result.error.conflictingBatches ? { conflictingBatches: result.error.conflictingBatches } : {}),
-            ...(result.error.conflictingBatchesCount !== undefined
-              ? { conflictingBatchesCount: result.error.conflictingBatchesCount }
-              : {}),
-            // Round-23 audit: rides alongside conflictingBatchesCount — see
-            // batch-service.ts's own comment for why the client needs this
-            // distinct signal to know when its display list is incomplete.
-            ...(result.error.conflictingBatchesTruncated !== undefined
-              ? { conflictingBatchesTruncated: result.error.conflictingBatchesTruncated }
-              : {}),
-          }
-        : undefined;
+    // Round-27 audit (removes the in-preview conflict-recovery panel, which
+    // failed five straight audits — see docs/runbooks/csv-import.md): this
+    // used to also carry conflictingBatches/conflictingBatchesCount/
+    // conflictingBatchesTruncated so the client could render a revert
+    // affordance per candidate. That panel is gone; batch-service.ts's own
+    // `message` (the only field left on a multiple_live_batches error
+    // besides `code`) is the sole guidance the client shows for a conflict.
+    const details = result.error.missingHeaders ? { missingHeaders: result.error.missingHeaders } : undefined;
     return apiError(422, result.error.code, result.error.message, details);
   }
 

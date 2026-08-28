@@ -28,12 +28,10 @@ import {
   readStoredSession,
   writeStoredSession,
   ZERO_SUMMARY,
-  DUPLICATE_RACE_RETRY_LIMIT,
   type ChunkedPlanState,
   type ChunkedPreviewState,
   type ChunkUploadState,
 } from "./session-step";
-import { parseConflictingBatches, conflictStandingInstruction, type ConflictingBatchInfo } from "./conflicting-batches";
 
 /** One error row's worth of prefill text for the inline row-fix form —
  * the exact text the row was validated against, for every canonical
@@ -127,34 +125,6 @@ export function undoSkipChunk(upload: ChunkUploadState[], index: number): ChunkU
   return upload.map((c) => (c.index === index && c.status === "skipped" ? { ...c, status: "failed" } : c));
 }
 
-/** Round-23 audit (SIMPLIFY): three straight audits (rounds 18, 20, 22)
- * found a different way this codebase's LOCAL inference of "is this
- * multiple_live_batches conflict resolved" got the answer wrong — stale
- * copy left behind, a parse failure mistaken for a reverted batch, and a
- * capped lower-bound count decremented as if it were exact. The fix is to
- * stop inferring resolution client-side at all:
- * reconcileLiveBatchesForFile (batch-service.ts) already re-checks the live
- * count on every confirm attempt, so retrying the confirm is the only thing
- * that decides whether the conflict is actually gone.
- *
- * What remains is just enough to RENDER the candidate list honestly: a
- * candidate the operator has already reverted (revertedIds, tracked by
- * handleRevertConflict below) is dropped from the panel — that revert
- * definitely happened, confirmed by a 2xx/404/409 from the revert endpoint
- * itself, not inferred from anything about the conflict's overall shape.
- * Every OTHER candidate stays offered a Revert button for as long as the
- * server keeps reporting this conflict, including a source's own lone
- * remaining candidate — WARN 3 (round-22 audit): the old threshold logic
- * could suppress exactly that candidate's Revert button whenever a count
- * was absent, leaving terminal copy with no way to act on it. Nothing here
- * suppresses a candidate anymore; only a confirmed revert does. */
-export function visibleConflictCandidates(
-  list: ConflictingBatchInfo[] | undefined,
-  revertedIds: ReadonlySet<string>,
-): ConflictingBatchInfo[] {
-  return (list ?? []).filter((b) => !revertedIds.has(b.id));
-}
-
 const FIELD_LABELS: Record<CanonicalHeader, string> = {
   producer: "Producer",
   name: "Name",
@@ -195,14 +165,6 @@ export type BatchRow = {
 };
 
 export type BatchDetail = { batch: BatchSummary; rows: BatchRow[] };
-
-// FINDING 7 (round-15 audit): ConflictingBatchInfo and parseConflictingBatches
-// now live in ./conflicting-batches, a neutral module — session-step.tsx
-// needs parseConflictingBatches as a runtime value too, and importing it
-// back from here (as it used to) was a real import cycle. Re-exported so
-// every existing caller of "./import-client" keeps working unchanged.
-export type { ConflictingBatchInfo } from "./conflicting-batches";
-export { parseConflictingBatches } from "./conflicting-batches";
 
 type Step = "upload" | "preview" | "batch" | "session";
 
@@ -350,45 +312,6 @@ export function ImportClient() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ rows: PreviewRow[]; summary: PreviewSummary } | null>(null);
   const [confirming, setConfirming] = useState(false);
-  // FINDING 3 (round-11 audit): the plain (non-chunked) confirm path used
-  // to discard the server error CODE and keep only the message — a
-  // terminal conflict (multiple_live_batches) or a duplicate_race_retry
-  // race therefore rendered "Confirm import" forever, retryable with no
-  // bound, unlike the chunked path's own ChunkUploadState.code /
-  // duplicateRaceRetryCount. Mirrors that same shape for the plain path.
-  const [confirmErrorCode, setConfirmErrorCode] = useState<string | null>(null);
-  const [confirmDuplicateRaceRetryCount, setConfirmDuplicateRaceRetryCount] = useState(0);
-  const [confirmConflictingBatches, setConfirmConflictingBatches] = useState<ConflictingBatchInfo[]>([]);
-  // Round-23 audit (SIMPLIFY): the server's own candidate count for the
-  // plain path's own multiple_live_batches conflict — display-only now (see
-  // visibleConflictCandidates' own comment for why nothing client-side
-  // decides "resolved" from it anymore).
-  const [confirmConflictingBatchesCount, setConfirmConflictingBatchesCount] = useState<number | undefined>(undefined);
-  // Round-23 audit: whether the SERVER told us this count/list is itself a
-  // lower bound (reconcileLiveBatchesForFile's own LIVE_BATCH_LOOKUP_LIMIT
-  // cap) — see batch-service.ts's conflictingBatchesTruncated comment. Used
-  // only for the honest "not everything could be shown" note below, never
-  // to gate anything.
-  const [confirmConflictingBatchesTruncated, setConfirmConflictingBatchesTruncated] = useState(false);
-  // Round-23 audit: ids the operator has successfully reverted (2xx/404/409
-  // from the revert endpoint — see handleRevertConflict) during THIS
-  // conflict, across both the plain and chunked paths. Used only to drop a
-  // done candidate from the panel — never to decide the conflict itself is
-  // resolved. Cleared by reset() so a later, unrelated conflict starts
-  // clean.
-  //
-  // Round-25 audit (SHARED ROOT CAUSE): this used to also gate a
-  // hasRevertedAnyConflict flag that Retry/Confirm required before
-  // rendering at all — deleted. There is no reason to require a revert
-  // before allowing a re-check: the server re-evaluates on every confirm
-  // attempt, and a retry that changes nothing simply re-raises the same
-  // conflict with fresh data, harmless and repeatable. Gating it left a
-  // payload whose candidates ALL failed to parse (BLOCK 2) with no
-  // affordance in this panel able to ever become true — a genuine dead
-  // end — and made the buttons flip state after exactly one revert while
-  // the terminal copy stayed frozen (BLOCK 1). See PreviewStep's own
-  // hasTerminalReconciliationConflict comment.
-  const [revertedConflictBatchIds, setRevertedConflictBatchIds] = useState<Set<string>>(new Set());
   // Inline row-fix: rowNumber is GLOBAL (the number shown in the preview
   // UI) for both the plain and chunked paths — handleConfirmChunked
   // translates it back to each chunk's own local row numbers.
@@ -523,9 +446,6 @@ export function ImportClient() {
     if (!file) return;
     setPreviewing(true);
     setPreviewError(null);
-    setConfirmErrorCode(null);
-    setConfirmDuplicateRaceRetryCount(0);
-    setConfirmConflictingBatches([]);
     setRowOverrides({});
     try {
       const buffer = await file.arrayBuffer();
@@ -580,72 +500,25 @@ export function ImportClient() {
       const response = await fetch("/api/import/batches", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) {
-        const code: string | null = body?.error?.code ?? null;
+        // Round-27 audit (removes the in-preview conflict-recovery panel):
+        // the server's own message is the only guidance shown for a
+        // conflict — no client-side escalation, no invented terminal state.
+        // A multiple_live_batches conflict or a duplicate_race_retry stays
+        // retryable exactly like any other failure; recovery for the
+        // former is through Recent imports.
         const message: string = body?.error?.message ?? "Import could not be created.";
-        const conflictingBatches: ConflictingBatchInfo[] = parseConflictingBatches(body?.error?.details?.conflictingBatches) ?? [];
-        // Round-23 audit (SIMPLIFY): the server's own candidate count —
-        // display-only now (see visibleConflictCandidates' own comment).
-        const conflictingBatchesCount: number | undefined =
-          typeof body?.error?.details?.conflictingBatchesCount === "number"
-            ? body.error.details.conflictingBatchesCount
-            : undefined;
-        // Round-23 audit: whether the server itself says this list/count is
-        // a lower bound — see batch-service.ts's own comment.
-        const conflictingBatchesTruncated: boolean = body?.error?.details?.conflictingBatchesTruncated === true;
-
-        // FINDING 3/4 (round-11 audit): the same bounded-escalation shape
-        // ChunkUploadState's own duplicateRaceRetryCount uses (session-
-        // step.tsx) — counts ONLY consecutive duplicate_race_retry
-        // failures; any other code resets it to 0.
-        const priorRaceRetryCount = code === "duplicate_race_retry" ? confirmDuplicateRaceRetryCount + 1 : 0;
-        const exhausted = code === "duplicate_race_retry" && priorRaceRetryCount >= DUPLICATE_RACE_RETRY_LIMIT;
-        // Round-23 audit (SIMPLIFY): this client no longer infers
-        // resolution from anything in a response it just received, or from
-        // any local count math at all — see visibleConflictCandidates' own
-        // comment. The only thing that decides this conflict is gone is the
-        // server reporting success on a LATER confirm attempt.
-        const effectiveCode = exhausted ? "duplicate_race_retry_exhausted" : code;
-        // Round-25 audit (SHARED ROOT CAUSE): this used to append an
-        // undisplayed-candidates note onto `message` here, baking it into
-        // previewError once at confirm-failure time — exactly the kind of
-        // frozen standing instruction that goes stale as reverts land.
-        // PreviewStep now renders that guidance itself, live, from
-        // conflictingBatches.length and conflictingBatchesTruncated on
-        // every render (conflictStandingInstruction) — this is just the
-        // server's own one-shot reason for THIS attempt failing.
-        const effectiveMessage = exhausted
-          ? `This upload still conflicts with another live import for this file after ${priorRaceRetryCount} ` +
-            "attempts — this needs a human to resolve. Revert the conflicting batch under Recent imports before " +
-            "uploading this file again."
-          : message;
-
-        setConfirmDuplicateRaceRetryCount(priorRaceRetryCount);
-        setConfirmErrorCode(effectiveCode);
-        setConfirmConflictingBatches(conflictingBatches);
-        setConfirmConflictingBatchesCount(conflictingBatchesCount);
-        setConfirmConflictingBatchesTruncated(conflictingBatchesTruncated);
-        setPreviewError(effectiveMessage);
+        setPreviewError(message);
         return;
       }
-      setConfirmErrorCode(null);
-      setConfirmDuplicateRaceRetryCount(0);
-      setConfirmConflictingBatches([]);
-      setConfirmConflictingBatchesCount(undefined);
-      setConfirmConflictingBatchesTruncated(false);
       await loadBatchDetail(body.batchId, setBatch);
       setStep("batch");
       void loadRecent();
     } catch {
-      // A network error is not a duplicate_race_retry failure — resets the
-      // count exactly like any other non-matching code would (see the
-      // bounded-escalation comment above).
-      setConfirmDuplicateRaceRetryCount(0);
-      setConfirmErrorCode(null);
       setPreviewError("Import could not be created. Check your connection and try again.");
     } finally {
       setConfirming(false);
     }
-  }, [file, rowOverrides, loadRecent, confirmDuplicateRaceRetryCount]);
+  }, [file, rowOverrides, loadRecent]);
 
   /** Skips any chunk `chunkUpload` already marks "confirmed" — the
    * retry-after-failure path reruns confirmChunkedSession (via
@@ -752,29 +625,11 @@ export function ImportClient() {
     [chunkedPreview],
   );
 
-  // BLOCK 2 (round-13 audit): the cleanup counts/warning flags a successful
-  // conflict-panel revert reports — discarded entirely before that fix.
-  // Keyed by insertion order (not just batch id) so reverting more than one
-  // conflicting batch in the same preview session shows every outcome, not
-  // just the latest; rendered with the SAME summarizeRevertResult copy
-  // BatchStep's own success panel uses. Declared here (ahead of reset,
-  // which clears it — FINDING 3, round-15 audit) rather than down with the
-  // rest of the conflict-revert state below, purely so reset's own
-  // useCallback can reference its setter without a forward reference.
-  const [conflictRevertOutcomes, setConflictRevertOutcomes] = useState<
-    { id: string; filename: string; result: RevertResult }[]
-  >([]);
-
   const reset = useCallback(() => {
     setStep("upload");
     setFile(null);
     setPreview(null);
     setPreviewError(null);
-    setConfirmErrorCode(null);
-    setConfirmDuplicateRaceRetryCount(0);
-    setConfirmConflictingBatches([]);
-    setConfirmConflictingBatchesCount(undefined);
-    setConfirmConflictingBatchesTruncated(false);
     setBatch(null);
     setChunkedPlan(null);
     setChunkedPreview(null);
@@ -782,135 +637,8 @@ export function ImportClient() {
     setSessionId(null);
     setSessionLabel("cellar.csv");
     setRowOverrides({});
-    // FINDING 3 (round-15 audit): reset() cleared every other piece of
-    // conflict state (confirmConflictingBatches above) but never this one
-    // — a successful conflict-panel revert's cleanup outcome would survive
-    // into the NEXT file's preview, rendering the PREVIOUS file's cleanup
-    // result (conflictRevertOutcomes renders independently of an active
-    // conflict, so nothing else was clearing it).
-    setConflictRevertOutcomes([]);
-    // Round-23 audit: same reasoning extends to the new revert-tracking
-    // state — a NEXT file's fresh conflict must start with zero reverts
-    // recorded against it, never inherit "the operator already reverted
-    // something" from an unrelated, already-abandoned conflict.
-    setRevertedConflictBatchIds(new Set());
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
-
-  // FINDING 2 (round-11 audit): a multiple_live_batches conflict can be
-  // reported by the plain confirm path (confirmConflictingBatches) or by
-  // any chunk of a chunked upload (ChunkUploadState.conflictingBatches) —
-  // merged and de-duplicated by id so the conflict panel below always
-  // shows every distinct candidate exactly once, regardless of which path
-  // reported it.
-  //
-  // Round-23 audit (SIMPLIFY): a candidate is excluded only once THIS
-  // client has confirmed reverting it (visibleConflictCandidates,
-  // revertedConflictBatchIds) — never by any "resolved" threshold guess.
-  // See that function's own comment, including the WARN 3 (round-22 audit)
-  // fix this achieves: nothing suppresses a source's lone remaining
-  // candidate anymore.
-  const [revertingConflictId, setRevertingConflictId] = useState<string | null>(null);
-  const chunkConflictingBatches = (chunkUpload ?? []).flatMap((c) =>
-    visibleConflictCandidates(c.conflictingBatches, revertedConflictBatchIds),
-  );
-  const conflictingBatches = [
-    ...visibleConflictCandidates(confirmConflictingBatches, revertedConflictBatchIds),
-    ...chunkConflictingBatches,
-  ].filter((b, index, all) => all.findIndex((other) => other.id === b.id) === index);
-  // Round-23 audit (SIMPLIFY): whether the SERVER itself says a source's
-  // list/count is a lower bound (conflictingBatchesTruncated) — or, as a
-  // fallback for a legacy/parse-loss shape that never carried that flag,
-  // whether fewer entries parsed than the count claims. Either way this is
-  // purely a display note now, independent of revertedConflictBatchIds —
-  // reverting a candidate doesn't change whether OTHER, undisplayable
-  // candidates might still exist.
-  const sourceTruncated = (list: ConflictingBatchInfo[] | undefined, count: number | undefined, truncated: boolean) =>
-    truncated || (typeof count === "number" && (list?.length ?? 0) < count);
-  const conflictingBatchesTruncated =
-    sourceTruncated(confirmConflictingBatches, confirmConflictingBatchesCount, confirmConflictingBatchesTruncated) ||
-    (chunkUpload ?? []).some((c) => sourceTruncated(c.conflictingBatches, c.conflictingBatchesCount, c.conflictingBatchesTruncated ?? false));
-
-  // BLOCK 2 (round-13 audit): a conflict-panel candidate can be 'applying'
-  // or 'completed' (revert_import_batch, 0109, accepts any status <>
-  // 'reverted') — one click here can delete applied inventory, delete
-  // qualifying orphan wines, and clear LWIN stamps, exactly as destructive
-  // as BatchStep's own "Revert this import" button. Revert no longer fires
-  // immediately: clicking it only queues a target and opens the SAME
-  // ActionDialog confirmation (REVERT_CONFIRMATION, shared copy) BatchStep
-  // already uses — the actual network call is handleRevertConflict below,
-  // wired to the dialog's onConfirm.
-  const [conflictRevertTarget, setConflictRevertTarget] = useState<ConflictingBatchInfo | null>(null);
-
-  const requestRevertConflict = useCallback((batch: ConflictingBatchInfo) => {
-    setConflictRevertTarget(batch);
-  }, []);
-
-  /** Round-23 audit (SIMPLIFY): a successful revert no longer tries to
-   * clear the terminal multiple_live_batches state — see
-   * visibleConflictCandidates' own comment for why that local inference
-   * was the recurring defect across rounds 18/20/22. All this does now is
-   * (a) record that the revert actually happened (2xx/404/409 — the same
-   * three outcomes BLOCK 1, round-13 audit, always treated as "the batch
-   * is gone"), which drops it from the panel, and (b) surface the cleanup
-   * outcome for a 2xx exactly like before. The terminal error/code and
-   * previewError message are left exactly as they were — clicking
-   * Confirm/Retry re-sends the request, and the SERVER's answer is what
-   * actually updates them.
-   *
-   * Round-25 audit (SHARED ROOT CAUSE): Confirm/Retry is no longer gated
-   * on a revert having happened at all — see PreviewStep's own
-   * hasTerminalReconciliationConflict comment — so this no longer needs to
-   * "unlock" anything. */
-  const handleRevertConflict = useCallback(async () => {
-    const target = conflictRevertTarget;
-    if (!target) return;
-    const batchId = target.id;
-    setRevertingConflictId(batchId);
-    try {
-      const response = await fetch(`/api/import/batches/${batchId}/revert`, { method: "POST" });
-      // BLOCK 1 (round-13 audit): a concurrent revert of the SAME batch
-      // (409 — batch-service.ts's revertImportBatch returns "not_completed"
-      // whenever the batch is already reverted, which the route maps to
-      // 409) or a 404 (batch no longer exists) both mean the desired end
-      // state — this batch is gone from the live set — was already
-      // reached, exactly as a 2xx from this same call would mean. Treating
-      // either as a failure left the stale conflict entry stuck forever,
-      // since retrying this exact revert just repeats the same 409/404
-      // endlessly.
-      const resolved = response.ok || response.status === 404 || response.status === 409;
-      if (!resolved) {
-        const body = await response.json().catch(() => null);
-        setPreviewError(body?.error?.message ?? "Revert failed.");
-        return;
-      }
-      // BLOCK 2: consume and surface the cleanup result exactly like
-      // BatchStep's own doRevert does, instead of discarding it. Only a
-      // 2xx carries a body shaped like RevertResult — the 409/404
-      // "already resolved" cases above have nothing to report.
-      if (response.ok) {
-        const result = (await response.json()) as RevertResult;
-        setConflictRevertOutcomes((prev) => [...prev, { id: batchId, filename: target.filename, result }]);
-      }
-
-      // This batch is done — drop it from the panel. Whether the WHOLE
-      // conflict is actually gone is for the server to say on the next
-      // confirm attempt (always available — see PreviewStep's own
-      // hasTerminalReconciliationConflict comment), not for this client to
-      // guess from what's left in the list.
-      setRevertedConflictBatchIds((prev) => {
-        const next = new Set(prev);
-        next.add(batchId);
-        return next;
-      });
-      void loadRecent();
-    } catch {
-      setPreviewError("Revert failed. Check your connection and try again.");
-    } finally {
-      setRevertingConflictId(null);
-      setConflictRevertTarget(null);
-    }
-  }, [conflictRevertTarget, loadRecent]);
 
   return (
     <div className="mx-auto max-w-[640px] px-md py-lg">
@@ -956,12 +684,6 @@ export function ImportClient() {
           confirming={chunkedPreview ? confirmingChunked : confirming}
           onBack={reset}
           error={previewError}
-          plainConfirmErrorCode={chunkedPreview ? null : confirmErrorCode}
-          conflictingBatches={conflictingBatches}
-          conflictingBatchesTruncated={conflictingBatchesTruncated}
-          onRevertConflict={requestRevertConflict}
-          revertingConflictId={revertingConflictId}
-          conflictRevertOutcomes={conflictRevertOutcomes}
         />
       )}
 
@@ -990,20 +712,6 @@ export function ImportClient() {
         await loadBatchDetail(id, setBatch);
         setStep("batch");
       }} />
-
-      {/* BLOCK 2 (round-13 audit): the SAME ActionDialog confirmation
-          BatchStep's own "Revert this import" button uses — see
-          REVERT_CONFIRMATION's own comment for why a conflict-panel
-          candidate needs the identical warning. */}
-      <ActionDialog
-        open={conflictRevertTarget !== null}
-        title={REVERT_CONFIRMATION.title}
-        description={REVERT_CONFIRMATION.description}
-        confirmLabel={REVERT_CONFIRMATION.confirmLabel}
-        busy={revertingConflictId === conflictRevertTarget?.id}
-        onConfirm={() => void handleRevertConflict()}
-        onClose={() => setConflictRevertTarget(null)}
-      />
     </div>
   );
 }
@@ -1106,12 +814,6 @@ export function PreviewStep({
   confirming,
   onBack,
   error,
-  plainConfirmErrorCode,
-  conflictingBatches,
-  conflictingBatchesTruncated,
-  onRevertConflict,
-  revertingConflictId,
-  conflictRevertOutcomes,
 }: {
   filename: string;
   summary: PreviewSummary;
@@ -1145,43 +847,13 @@ export function PreviewStep({
   onConfirm: () => void;
   confirming: boolean;
   onBack: () => void;
+  /** The server's own message for the most recent failure — including a
+   * multiple_live_batches or duplicate_race_retry conflict. This is the
+   * ONLY guidance this panel shows for a conflict (round-27 audit — see
+   * docs/runbooks/csv-import.md): no separate standing instruction, no
+   * client-invented terminal state. Recovery for multiple_live_batches is
+   * through Recent imports, which lists every non-reverted batch. */
   error: string | null;
-  /** FINDING 3 (round-11 audit): the plain (non-chunked) confirm path's own
-   * error code — mirrors ChunkUploadState.code for the chunked path, so a
-   * terminal conflict (multiple_live_batches, or duplicate_race_retry_
-   * exhausted once WARN 5's bound trips) blocks "Confirm import" here the
-   * same way it already does for a chunked upload. null/undefined for the
-   * chunked path, which tracks its own code per-chunk instead. */
-  plainConfirmErrorCode?: string | null;
-  /** FINDING 2 (round-11 audit): each live batch a multiple_live_batches
-   * conflict named, from either path, merged and de-duplicated by id — see
-   * ConflictingBatchInfo's own comment. Bounded by the server's own lookup
-   * cap (WARN 5, round-13 audit), never a literal "every" beyond it.
-   * Round-23 audit (SIMPLIFY): excludes only a candidate this client has
-   * actually confirmed reverting (visibleConflictCandidates) — never a
-   * "resolved" guess. Rendered with a revert affordance per batch so
-   * recovery never depends on the batch still being in the ten-newest
-   * Recent imports list. */
-  conflictingBatches?: ConflictingBatchInfo[];
-  /** Round-23 audit: true when the server itself says more candidates
-   * exist than could be shown above — i.e. a genuinely live conflicting
-   * batch exists that this panel has no revert button for. Rendered as its
-   * own honest note, independent of whether `conflictingBatches` above is
-   * empty, so the operator is never left with a terminal conflict and
-   * nothing to act on. */
-  conflictingBatchesTruncated?: boolean;
-  /** BLOCK 2 (round-13 audit): takes the whole candidate, not just its id —
-   * clicking Revert no longer fires the request directly; it hands the
-   * candidate to ImportClient, which opens the shared ActionDialog
-   * confirmation (REVERT_CONFIRMATION) and only calls the revert endpoint
-   * once the operator confirms. */
-  onRevertConflict?: (batch: ConflictingBatchInfo) => void;
-  revertingConflictId?: string | null;
-  /** BLOCK 2 (round-13 audit): the cleanup counts/warning flags each
-   * completed conflict-panel revert reported — discarded entirely before
-   * this fix. Rendered with the SAME summarizeRevertResult copy BatchStep's
-   * own success panel uses. */
-  conflictRevertOutcomes?: { id: string; filename: string; result: RevertResult }[];
 }) {
   // Sol round-2 audit (2026-08-27) finding 4: incremental disclosure
   // instead of a hard cap — starts at MAX_SHOWN_ERROR_ROWS and grows by
@@ -1276,40 +948,17 @@ export function PreviewStep({
   // server's own message (surfaced via `error` above) already explains
   // the revert path.
   const hasChunkContentMismatch = chunkUpload?.some((c) => c.status === "failed" && c.code === "chunk_content_mismatch") ?? false;
-  // Round-10 audit (BLOCK 3(a)): duplicate_race_retry_exhausted (WARN 5's
-  // bounded escalation, session-step.tsx) is the same kind of dead end as
-  // chunk_content_mismatch — retrying re-sends the exact same request and
-  // fails the exact same way every time, with no fix reachable from inside
-  // this UI (its own revert path is BatchStep's "Revert this import" under
-  // Recent imports, not this panel). Genuinely terminal: never offer
-  // "Retry upload"/"Confirm import" for it.
-  const hasExhaustedDuplicateRace =
-    (chunkUpload?.some((c) => c.status === "failed" && c.code === "duplicate_race_retry_exhausted") ?? false) ||
-    // FINDING 3 (round-11 audit): the plain (non-chunked) path's own
-    // terminal code — see plainConfirmErrorCode's own comment.
-    plainConfirmErrorCode === "duplicate_race_retry_exhausted";
-  // Round-25 audit (SHARED ROOT CAUSE, replaces round-23's SIMPLIFY here):
-  // multiple_live_batches used to block Confirm/Retry until the operator
-  // had reverted at least one candidate (hasRevertedAnyConflict) — deleted
-  // entirely. There is no reason to require a revert first: the server
-  // re-evaluates on every confirm attempt regardless of what this client
-  // has or hasn't reverted, so a retry that changes nothing simply
-  // re-raises the same conflict with fresh data, harmless and repeatable.
-  // Gating it produced two real defects: a payload whose candidates ALL
-  // failed to parse had no revert affordance to ever flip the gate, a
-  // genuine dead end (BLOCK 2); and after exactly one revert of many the
-  // button appeared while the terminal copy stayed frozen on the server's
-  // original, now-stale count (BLOCK 1). multiple_live_batches no longer
-  // contributes to hasTerminalReconciliationConflict at all — it is kept
-  // as its own flag only to drive the conflict panel and the live standing
-  // instruction below (conflictStandingInstruction), never to block a
-  // button. duplicate_race_retry_exhausted is unaffected: it has no revert
-  // affordance in this panel to begin with (its own resolution lives under
-  // Recent imports) and stays hard-blocked.
-  const hasMultipleLiveBatchesConflict =
-    (chunkUpload?.some((c) => c.status === "failed" && c.code === "multiple_live_batches") ?? false) ||
-    plainConfirmErrorCode === "multiple_live_batches";
-  const hasTerminalReconciliationConflict = hasExhaustedDuplicateRace;
+  // Round-27 audit (removes the in-preview conflict-recovery panel, which
+  // failed five straight audits — see docs/runbooks/csv-import.md):
+  // multiple_live_batches and duplicate_race_retry no longer block
+  // Confirm/Retry, and neither invents a terminal state after repeated
+  // attempts. The server re-evaluates on every confirm attempt regardless
+  // of what happened before, so a retry that changes nothing simply
+  // re-raises the same conflict with fresh data, harmless and repeatable —
+  // recovery for multiple_live_batches is through Recent imports, which no
+  // longer hides an aged-out batch. Only chunk_content_mismatch and
+  // duplicate_chunk_content stay terminal here — both have no fix a blind
+  // retry could ever produce, unlike these two.
   // Round-4 audit finding 2: duplicate_chunk_content is also terminal by
   // default — no "Retry upload" — since a blind retry re-sends the exact
   // same bytes and 23505s the same way every time. UNLIKE
@@ -1359,7 +1008,7 @@ export function PreviewStep({
       .map((c) => c.index),
   );
   const hasUnresolvedDuplicateChunkContent = unresolvedDuplicateChunkContentIndexes.size > 0;
-  const blocksConfirmButton = hasChunkContentMismatch || hasUnresolvedDuplicateChunkContent || hasTerminalReconciliationConflict;
+  const blocksConfirmButton = hasChunkContentMismatch || hasUnresolvedDuplicateChunkContent;
 
   return (
     <div className="rounded-card card-surface p-lg">
@@ -1472,86 +1121,19 @@ export function PreviewStep({
         />
       )}
 
+      {/* Round-27 audit (removes the in-preview conflict-recovery panel,
+          which failed five straight audits — see docs/runbooks/
+          csv-import.md): this is now the ONLY guidance shown for a
+          conflict, including multiple_live_batches and duplicate_race_retry
+          — the server's own message, verbatim, with no separate standing
+          instruction competing with it. Confirm/Retry stays available below
+          (blocksConfirmButton no longer treats either code as terminal);
+          recovery for multiple_live_batches is under Recent imports. */}
       {error && (
         <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-accent">
           <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
           {error}
         </p>
-      )}
-
-      {/* FINDING 2 (round-11 audit): a revert affordance per conflicting
-          batch, rendered directly in the conflict — never dependent on
-          the batch still being in the ten-newest Recent imports list.
-          Reuses the same revert endpoint BatchStep's own "Revert this
-          import" button calls. BLOCK 2 (round-13 audit): Revert no longer
-          fires that call directly — a candidate can be 'applying' or
-          'completed', so this is exactly as destructive as BatchStep's own
-          revert and must go through the same confirmation first (the
-          ActionDialog ImportClient renders, wired to onRevertConflict). */}
-      {conflictingBatches && conflictingBatches.length > 0 && (
-        <div className="mt-md rounded-lg border border-accent/30 bg-blush-wash/30 p-sm">
-          <p className="text-[13px] font-medium text-ink">Conflicting live imports for this file</p>
-          <ul className="mt-xs space-y-2xs">
-            {conflictingBatches.map((b) => (
-              <li key={b.id} className="flex items-center justify-between gap-sm rounded-md bg-surface px-sm py-2xs text-[13px] text-ink">
-                <span className="min-w-0 truncate">
-                  {b.filename} <span className="text-caption text-grey">({b.status})</span>
-                </span>
-                <button
-                  type="button"
-                  disabled={revertingConflictId === b.id}
-                  onClick={() => onRevertConflict?.(b)}
-                  className="min-h-11 shrink-0 rounded-pill border border-ink/25 bg-surface px-sm text-caption font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {revertingConflictId === b.id ? "Reverting…" : "Revert"}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Round-25 audit (SHARED ROOT CAUSE): the STANDING instruction for a
-          live multiple_live_batches conflict — rendered INDEPENDENTLY of
-          the server's one-shot `error` message above, and recomputed from
-          CURRENT props (conflictingBatches.length,
-          conflictingBatchesTruncated) on every render via
-          conflictStandingInstruction, rather than a count baked in once
-          when the confirm attempt failed. This is what actually fixes
-          BLOCK 1 (a stale "revert N more" instruction sitting next to a
-          button that no longer agrees with it — a count is exactly what
-          goes stale) and BLOCK 2 (a source can be genuinely unresolved
-          with EVERY one of its candidates undisplayable —
-          conflictingBatches empty, panel above not shown at all — and the
-          operator must still see a real way forward, never "revert what's
-          shown above" pointed at nothing). Retry/Confirm is always
-          available for this conflict now (hasTerminalReconciliationConflict
-          above), so this never claims otherwise. */}
-      {hasMultipleLiveBatchesConflict && (
-        <p className="mt-md flex items-start gap-xs text-[13px] text-ink">
-          <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
-          {conflictStandingInstruction((conflictingBatches?.length ?? 0) > 0, conflictingBatchesTruncated ?? false)}
-        </p>
-      )}
-
-      {/* BLOCK 2 (round-13 audit): the cleanup counts/warning flags a
-          completed conflict-panel revert reported — discarded entirely
-          before this fix. Same summarizeRevertResult copy BatchStep's own
-          success panel uses, so the two surfaces never say different
-          things about the identical action. */}
-      {conflictRevertOutcomes && conflictRevertOutcomes.length > 0 && (
-        <div className="mt-md rounded-lg border border-primary/30 bg-bridge-surface p-sm">
-          <ul className="space-y-2xs">
-            {conflictRevertOutcomes.map((outcome, index) => (
-              <li key={`${outcome.id}-${index}`} className="flex items-start gap-xs text-[13px] text-ink">
-                <CheckCircle2 className="mt-[2px] h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-                <span>
-                  {outcome.filename}: {summarizeRevertResult(outcome.result)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
       )}
 
       <div className="mt-lg flex flex-col-reverse gap-sm sm:flex-row">
@@ -2059,8 +1641,16 @@ function RecentImports({
   return (
     <section className="mt-lg">
       <h2 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">Recent imports</h2>
+      {/* Round-27 audit: this used to show only the ten newest, which made
+          the in-preview conflict panel the only way to reach an aged-out
+          conflicting batch (that panel is now removed — see docs/runbooks/
+          csv-import.md). GET /api/import/batches already returns every
+          batch for this restaurant, newest first, with no server-side cap
+          — showing all of them (rather than adding a new search UI) is the
+          smallest change that keeps every non-reverted batch reachable and
+          revertable from here. */}
       <ul className="mt-xs space-y-2xs">
-        {batches.slice(0, 10).map((b) => (
+        {batches.map((b) => (
           <li key={b.id}>
             <button
               type="button"

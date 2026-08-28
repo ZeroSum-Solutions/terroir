@@ -10,12 +10,7 @@
 // Deliberately duplicates import-client.tsx's tiny SummaryStat/status-chip
 // markup (identical classes — see DESIGN.md's "one StatusChip pattern"
 // contract) rather than importing them, so this file never has a RUNTIME
-// import edge back to import-client.tsx. FINDING 7 (round-15 audit):
-// ConflictingBatchInfo and parseConflictingBatches — needed by both files —
-// live in ./conflicting-batches, a neutral module neither owns; importing
-// parseConflictingBatches back from import-client.tsx (as this file used to)
-// was a genuine cycle, not merely a stylistic one, since import-client.tsx
-// itself imports several values from here. The BatchRow/ErrorRowEntry/
+// import edge back to import-client.tsx. The BatchRow/ErrorRowEntry/
 // RowOverrides imports below are `import type` only — erased before either
 // file's module graph exists at runtime — so they create no cycle.
 
@@ -25,7 +20,6 @@ import { ActionDialog } from "@/components/action-dialog";
 import { CLIENT_CHUNK_TARGET_ROWS, type CanonicalHeader } from "@/domains/import/constants";
 import { buildChunkPlan, serializeChunk, sha256HexOfBytes } from "@/domains/import/csv-splitter";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
-import { parseConflictingBatches, type ConflictingBatchInfo } from "./conflicting-batches";
 import type { BatchRow, ErrorRowEntry, RowOverrides } from "./import-client";
 
 // ---------------------------------------------------------------------------
@@ -114,41 +108,6 @@ export type ChunkUploadState = {
    * — or, once the operator skips it, the same value carried onto
    * "skipped" so the session summary can name it. undefined otherwise. */
   duplicateOfChunkIndex?: number;
-  /** WARN 5 (round-9/10 audit), corrected round-11: consecutive
-   * `duplicate_race_retry` failures THIS chunk has hit IN A ROW, across
-   * manual retries — `duplicate_race_retry` is retryable by design (a
-   * genuinely transient race the next attempt normally resolves), but
-   * nothing used to bound how many times in a row it could recur for the
-   * same chunk. Incremented each time this chunk fails with that code
-   * again immediately after the last one; means EXACTLY "consecutive
-   * duplicate_race_retry failures" — reset to 0 on ANY other outcome: a
-   * different error code, a network error (no code at all), or a success.
-   * Round-11 fixed two places that broke this: the network-error catch
-   * block used to spread the prior chunk unchanged, carrying the count
-   * forward through a network error as if it were another
-   * duplicate_race_retry; the success transition used to leave the stale
-   * count in place instead of clearing it. Once it reaches
-   * DUPLICATE_RACE_RETRY_LIMIT the driver escalates to the distinct
-   * terminal `duplicate_race_retry_exhausted` code instead of leaving
-   * "Retry upload" as an endlessly-failing affordance. undefined (treated
-   * as 0) for a chunk that has never failed on this code. */
-  duplicateRaceRetryCount?: number;
-  /** FINDING 2 (round-11 audit): every live candidate this chunk's confirm
-   * collided with, when status is "failed" with code "multiple_live_batches"
-   * — see ConflictingBatchInfo's own comment. undefined otherwise. */
-  conflictingBatches?: ConflictingBatchInfo[];
-  /** Round-23 audit (SIMPLIFY): the server's own candidate COUNT for this
-   * chunk's own multiple_live_batches conflict (batch-service.ts's
-   * conflictingBatchesCount) — never affected by conflictingBatches above
-   * losing an entry to parseConflictingBatches. Display-only now — see
-   * import-client.tsx's visibleConflictCandidates for why nothing decides
-   * "resolved" from it anymore. undefined otherwise. */
-  conflictingBatchesCount?: number;
-  /** Round-23 audit: whether the server itself says conflictingBatches/
-   * conflictingBatchesCount above are a lower bound (batch-service.ts's
-   * conflictingBatchesTruncated). Feeds PreviewStep's own
-   * conflictingBatchesTruncated note. undefined otherwise. */
-  conflictingBatchesTruncated?: boolean;
 };
 
 export const ZERO_SUMMARY: PreviewSummary = {
@@ -199,13 +158,6 @@ export function writeStoredSession(value: StoredSession | null) {
 // so a same-tab retry never itself trips the server's limiter.
 const CONFIRM_RATE_LIMIT_MARGIN = 9;
 const CONFIRM_RATE_WINDOW_MS = 60 * 1000;
-
-// WARN 5 (round-9/10 audit): how many CONSECUTIVE duplicate_race_retry
-// failures a single chunk tolerates before the driver escalates to a
-// terminal, actionable state instead of leaving "Retry upload" as an
-// endless, always-retryable prompt — see ChunkUploadState.
-// duplicateRaceRetryCount's own comment.
-export const DUPLICATE_RACE_RETRY_LIMIT = 3;
 
 // /api/import/preview's own PREVIEW_RATE_WINDOW_MS (src/app/api/import/
 // preview/route.ts) — used as the wait fallback on a 429 that arrives
@@ -474,71 +426,8 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
       if (!response.ok) {
         const code: string | null = body?.error?.code ?? null;
         const message: string = body?.error?.message ?? "Upload failed.";
-        // FINDING 2 (round-11 audit): present only on multiple_live_batches
-        // — see ConflictingBatchInfo's own comment.
-        const conflictingBatches: ConflictingBatchInfo[] | undefined = parseConflictingBatches(
-          body?.error?.details?.conflictingBatches,
-        );
-        // Round-23 audit (SIMPLIFY): the server's own candidate count —
-        // display-only now (see import-client.tsx's
-        // visibleConflictCandidates comment).
-        const conflictingBatchesCount: number | undefined =
-          typeof body?.error?.details?.conflictingBatchesCount === "number"
-            ? body.error.details.conflictingBatchesCount
-            : undefined;
-        // Round-23 audit: whether the server itself says this list/count
-        // is a lower bound — see batch-service.ts's own comment.
-        const conflictingBatchesTruncated: boolean = body?.error?.details?.conflictingBatchesTruncated === true;
 
-        // WARN 5 (round-9/10 audit): duplicate_race_retry is retryable BY
-        // DESIGN — a genuinely transient race the next attempt normally
-        // resolves — but nothing used to bound how many times in a row it
-        // can recur for the SAME chunk. Count consecutive occurrences
-        // (persisted on the chunk itself, so it survives across manual
-        // retries via `initialUpload`); once it reaches
-        // DUPLICATE_RACE_RETRY_LIMIT, treat it as durably unresolvable and
-        // escalate to a distinct TERMINAL code naming the chunk and the
-        // attempt count, instead of leaving "Retry upload" as the only,
-        // endlessly-failing affordance. Any OTHER code resets the count —
-        // it only ever tracks a run of the SAME code in a row.
-        const priorRaceRetryCount = code === "duplicate_race_retry" ? (current?.duplicateRaceRetryCount ?? 0) + 1 : 0;
-        const exhausted = code === "duplicate_race_retry" && priorRaceRetryCount >= DUPLICATE_RACE_RETRY_LIMIT;
-        // Round-23 audit (SIMPLIFY): this driver no longer infers
-        // resolution from anything in a response it just received, or from
-        // any local count math at all — see import-client.tsx's
-        // visibleConflictCandidates comment. The only thing that decides a
-        // chunk's conflict is gone is the server reporting success on a
-        // LATER confirm attempt.
-        const effectiveCode = exhausted ? "duplicate_race_retry_exhausted" : code;
-        // Round-25 audit (SHARED ROOT CAUSE): this used to append an
-        // undisplayed-candidates note onto `message` here, baking it into
-        // the STORED chunk error once at request-failure time — exactly
-        // the kind of frozen standing instruction that goes stale as
-        // reverts land. PreviewStep now renders that guidance itself,
-        // live, from conflictingBatches.length and conflictingBatchesTruncated
-        // on every render (conflictStandingInstruction, import-client.tsx),
-        // so this is just the server's own one-shot reason for THIS
-        // attempt failing.
-        const effectiveMessage = exhausted
-          ? `Chunk ${chunk.index} of ${plan.chunkTotal} still conflicts with another live import for this file ` +
-            `after ${priorRaceRetryCount} attempts — this needs a human to resolve. Revert the conflicting batch ` +
-            "under Recent imports before uploading this file again."
-          : message;
-
-        results = results.map((c) =>
-          c.index === chunk.index
-            ? {
-                ...c,
-                status: "failed",
-                error: effectiveMessage,
-                code: effectiveCode,
-                duplicateRaceRetryCount: priorRaceRetryCount,
-                conflictingBatches,
-                conflictingBatchesCount,
-                conflictingBatchesTruncated,
-              }
-            : c,
-        );
+        results = results.map((c) => (c.index === chunk.index ? { ...c, status: "failed", error: message, code } : c));
         onProgress(results);
         // Sol round-2 audit (2026-08-27) finding 3: chunk_content_mismatch is
         // TERMINAL — retrying re-sends this exact chunk's content and
@@ -548,23 +437,24 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
         // code, so it's used only for every other (genuinely retryable)
         // failure.
         //
-        // Round-10 audit (BLOCK 3): multiple_live_batches is the same kind
-        // of dead end — reconciliation never resolves it automatically (it
-        // touches nothing — see reconcileLiveBatchesForFile's own comment),
-        // so retrying this upload hits the identical conflict every time
-        // until an operator manually reverts all but one of the live
-        // batches from Recent imports. duplicate_race_retry_exhausted
-        // (above) is the same shape once WARN 5's bound trips. The server's
-        // own message already says so for the first two; showing it
-        // verbatim here instead of "you can retry it below" matters for the
-        // same reason it does for chunk_content_mismatch.
+        // Round-27 audit (removes the in-preview conflict-recovery panel,
+        // which failed five straight audits — see docs/runbooks/
+        // csv-import.md): multiple_live_batches and duplicate_race_retry are
+        // both reported here, never resolved from inside this UI —
+        // PreviewStep keeps Confirm/Retry available for both (the server
+        // re-checks on every attempt; a retry that changes nothing simply
+        // re-raises the same conflict), and recovery for multiple_live_batches
+        // is through Recent imports, which no longer hides an aged-out
+        // batch. duplicate_race_retry no longer escalates to an invented
+        // terminal state after repeated attempts — the server defines it as
+        // retryable, and the client no longer overrides that. Both codes'
+        // own messages already explain the situation, so they're shown
+        // verbatim here instead of the generic "you can retry it below".
         return {
           ok: false,
           error:
-            effectiveCode === "chunk_content_mismatch" ||
-            effectiveCode === "multiple_live_batches" ||
-            effectiveCode === "duplicate_race_retry_exhausted"
-              ? effectiveMessage
+            code === "chunk_content_mismatch" || code === "multiple_live_batches"
+              ? message
               : `Chunk ${chunk.index} of ${plan.chunkTotal} failed to upload — you can retry it below.`,
         };
       }
@@ -659,17 +549,6 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
                 // change" gate PreviewStep computes on retry.
                 sentOverridesSnapshot: conflictCode === "duplicate_chunk_content" ? chunkGlobalOverridesSlice : c.sentOverridesSnapshot,
                 duplicateOfChunkIndex: conflictCode === "duplicate_chunk_content" ? (body.chunkIndex as number) : c.duplicateOfChunkIndex,
-                // WARN 4 (round-13 audit): this 200 alreadyExists-for-the-
-                // wrong-session/chunk outcome is not a duplicate_race_retry
-                // failure — it must reset the counter exactly like the
-                // success transition and the network-error catch below
-                // already do (see duplicateRaceRetryCount's own contract).
-                // This branch used to spread `...c` unchanged, silently
-                // carrying forward whatever count the LAST
-                // duplicate_race_retry run on this chunk left behind, so
-                // `race, race, alreadyExists, race` wrongly counted the
-                // final race as attempt three instead of resetting first.
-                duplicateRaceRetryCount: 0,
               }
             : c,
         );
@@ -697,13 +576,6 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
       // now-irrelevant conflict snapshot survive into the confirmed state,
       // for no purpose (both fields are read only while status is
       // "failed"/"skipped").
-      //
-      // FINDING 4 (round-11 audit): duplicateRaceRetryCount/conflictingBatches
-      // are reset here too — the field's own contract (see its comment) is
-      // "cleared to 0 whenever it... succeeds," which this used to leave
-      // unfulfilled: a success left the stale count in place, so a LATER
-      // unrelated duplicate_race_retry run on this chunk would start from
-      // whatever count survived the last success instead of 1.
       results = results.map((c) =>
         c.index === chunk.index
           ? {
@@ -714,28 +586,12 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
               code: null,
               sentOverridesSnapshot: undefined,
               duplicateOfChunkIndex: undefined,
-              duplicateRaceRetryCount: 0,
-              conflictingBatches: undefined,
-              conflictingBatchesCount: undefined,
-              conflictingBatchesTruncated: undefined,
             }
           : c,
       );
       onProgress(results);
     } catch {
-      // FINDING 4 (round-11 audit): a network error is not a
-      // duplicate_race_retry failure — it must reset the counter exactly
-      // like any other non-matching code does (see the priorRaceRetryCount
-      // computation above). This used to spread `...c` unchanged, silently
-      // carrying forward whatever count the LAST duplicate_race_retry run
-      // left behind, so `duplicate_race_retry, duplicate_race_retry,
-      // network error, duplicate_race_retry` wrongly counted as three
-      // consecutive failures instead of resetting after the network error.
-      results = results.map((c) =>
-        c.index === chunk.index
-          ? { ...c, status: "failed", error: "Network error.", code: null, duplicateRaceRetryCount: 0 }
-          : c,
-      );
+      results = results.map((c) => (c.index === chunk.index ? { ...c, status: "failed", error: "Network error.", code: null } : c));
       onProgress(results);
       return {
         ok: false,
