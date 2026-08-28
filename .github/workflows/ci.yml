@@ -144,7 +144,11 @@ jobs:
         # chunked import) previously skipped silently in CI because this
         # step had no stack. They now run for real, and each suite throws
         # outright if the env is missing while CI=true instead of skipping.
-        run: pnpm run test
+        # Runs with --coverage (same full suite, instrumented) rather than
+        # a separate step, so the reconcile-ledger/cellar/pours coverage
+        # gate (vitest.config.ts) rides along instead of re-running the
+        # whole suite a second time.
+        run: pnpm run coverage
 
       - name: Build
         # Catches build-only failures that typecheck/lint/tests don't:

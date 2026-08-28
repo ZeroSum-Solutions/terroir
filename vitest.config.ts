@@ -42,5 +42,45 @@ export default defineConfig({
     // in well under a second when the stack is idle.
     testTimeout: 30_000,
     hookTimeout: 30_000,
+    // Coverage is opt-in (only computed when `vitest run --coverage` is
+    // invoked, e.g. via `pnpm coverage`) so it doesn't slow down the
+    // default `pnpm test`/CI test step. Scoped to the modules this loop
+    // added mutation-proven characterization tests for — the largest
+    // previously-untested logic in the repo — rather than the whole repo,
+    // so the gate stays meaningful (green today) instead of either being
+    // repo-wide-red or a no-op 0% floor.
+    coverage: {
+      provider: "v8",
+      include: [
+        "src/lib/reconcile-ledger/**",
+        "src/domains/cellar/**",
+        "src/domains/pours/**",
+      ],
+      exclude: ["**/*.test.ts", "**/*.test.tsx"],
+      reporter: ["text", "text-summary"],
+      // Set at/just below what the suite actually achieves today (see
+      // docs/plans/*-untested-mutation-logic.md), so this gate is a real
+      // floor, not a target the repo already fails or a no-op ceiling.
+      thresholds: {
+        "src/lib/reconcile-ledger/**": {
+          statements: 94,
+          branches: 84,
+          functions: 100,
+          lines: 98,
+        },
+        "src/domains/cellar/**": {
+          statements: 100,
+          branches: 90,
+          functions: 100,
+          lines: 100,
+        },
+        "src/domains/pours/**": {
+          statements: 100,
+          branches: 95,
+          functions: 100,
+          lines: 100,
+        },
+      },
+    },
   },
 });
