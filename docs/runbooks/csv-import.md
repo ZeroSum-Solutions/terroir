@@ -733,15 +733,26 @@ returns each conflicting batch's id, filename, `created_at`, and status (up
 to the cap described below), and the import client renders a revert
 affordance per batch directly in the conflict state, so a conflict whose
 batches have aged out of the ten-newest window is still recoverable, up to
-that cap. Reverting down to ONE remaining candidate clears the terminal
-`multiple_live_batches` code on both the plain and chunked paths (round-15
-audit, finding 1) — mirroring `reconcileLiveBatchesForFile`'s own resolved
-threshold (`candidates.length <= 1`, not `=== 0`): with two real
-candidates, reverting one already resolves the server-side conflict, so the
-panel stops offering a revert button for the last-standing candidate — it's
-the batch the operator is meant to keep. Before this fix, the panel
-required the list to be fully empty before restoring Confirm/Retry, which
-pushed the operator to needlessly revert the survivor too.
+that cap.
+
+**Round-23 audit (SIMPLIFY): the client no longer decides when this
+conflict is resolved — the server does, by re-checking on every confirm
+attempt.** Rounds 18, 20, and 22 each found a different way the client's
+own local "is this resolved" inference got the wrong answer — stale copy
+left after clearing the terminal code (round-18), a payload this client
+merely failed to parse in full mistaken for a reverted batch (rounds
+17/19/20), and a capped `LIVE_BATCH_LOOKUP_LIMIT` count decremented as if
+it were exact, prematurely unblocking Confirm/Retry while 20+ live batches
+were still shown as 21 minus 19 reverts (round-22). The count/threshold
+machinery (`isConflictSourceResolved`, `unresolvedConflictCandidates`,
+`applyRevertToChunkUpload`) is gone. What replaced it: a successful revert
+(`visibleConflictCandidates`, `import-client.tsx`) only drops that ONE
+candidate from the panel and unlocks a Confirm/Retry affordance
+(`hasRevertedAnyConflict`) — it never infers the whole conflict is gone.
+Clicking Confirm/Retry re-sends the request, and `reconcileLiveBatchesForFile`
+decides fresh, exactly as it always has for a first attempt. A source's
+lone remaining candidate is never suppressed either (WARN 3, round-22
+audit) — nothing client-side treats "one left" as special anymore.
 
 **The conflicting-batches list is capped, not exhaustive (WARN 5,
 round-13 audit).** `findLiveBatchesByUnderlyingFile`
@@ -758,7 +769,21 @@ exactly at the cap, rather than asserting a possibly-false exact total.
 observed in practice and would itself indicate something else has gone
 wrong upstream (nothing in this product's own paths creates that many
 live duplicates), so this is accepted rather than fixed by raising the
-cap or adding pagination.
+cap or adding pagination. Round-23 audit: this cap is now carried as its
+own explicit `conflictingBatchesTruncated` boolean (`batch-service.ts`,
+`reconcileLiveBatchesForFile`'s own `candidateCountMayBeTruncated`) rather
+than only being inferrable from the message text — before this, the
+client's own "not everything could be displayed" note compared
+`conflictingBatches.length` against `conflictingBatchesCount`, which are
+EQUAL whenever the raw read hits the cap (both are the same capped
+`candidates.length`), so the note silently never fired for the one case it
+existed for (round-22 audit BLOCK 2). The note's copy
+(`CONFLICT_UNDISPLAYED_NOTE`, `conflicting-batches.ts`) also no longer
+claims a specific missing count or that "Recent imports" can reach the
+missing candidate — that list shows only the ten newest batches, so a
+conflicting batch old enough to have aged out is not actually reachable
+there. The copy says instead to revert whatever IS shown and retry, since
+the server re-checks fresh every time.
 
 ## added_via provenance
 

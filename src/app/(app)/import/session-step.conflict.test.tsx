@@ -9,6 +9,7 @@ import {
   type ChunkedPlanState,
 } from "./session-step";
 import { buildImportAnywayOverride } from "./import-client";
+import { CONFLICT_UNDISPLAYED_NOTE } from "./conflicting-batches";
 import type { CanonicalHeader } from "@/domains/import/constants";
 import type { RowOverrides } from "@/domains/import/preview-service";
 
@@ -749,20 +750,20 @@ describe("confirmChunkedSession — a conflict that PARSES to one candidate is N
     expect(upload[0].conflictingBatches).toEqual([wireConflictingBatches[0]]);
     expect(upload[0].conflictingBatchesCount).toBe(2);
     // The conflict is still real: the terminal code stays, blocking both
-    // Retry and Confirm (hasTerminalReconciliationConflict) — this is a
-    // dead end only if no other affordance exists, which is exactly what
-    // the honest "not all could be shown" copy below fixes.
+    // Retry and Confirm until the operator has actually reverted something
+    // (import-client.tsx's hasRevertedAnyConflict) — this is a dead end
+    // only if no other affordance exists, which is exactly what the honest
+    // "not all could be shown" copy below fixes.
     expect(upload[0].code).toBe("multiple_live_batches");
     expect(upload[0].status).toBe("failed");
     // STORED text (upload[0].error, what ChunkUploadProgress renders next
     // to the chunk) and RETURNED text (result.error) both carry the
-    // server's own message PLUS an honest note that one candidate could
-    // not be displayed, pointing at the recovery that still exists
-    // (Recent imports permits revert for any non-reverted status) — never
-    // the false "already resolved" wording rounds 17-19 shipped.
-    const expectedMessage =
-      "This file has 2 live import batches for the same underlying content. Not every conflicting batch for " +
-      "this file could be displayed here — revert the remaining one under Recent imports before retrying.";
+    // server's own message PLUS an honest note that not everything could
+    // be displayed — round-23 audit (SIMPLIFY): CONFLICT_UNDISPLAYED_NOTE
+    // names no specific count and never claims Recent imports can reach a
+    // batch outside its own ten-newest window (round-22 audit BLOCK 2) —
+    // never the false "already resolved" wording rounds 17-19 shipped.
+    const expectedMessage = `This file has 2 live import batches for the same underlying content. ${CONFLICT_UNDISPLAYED_NOTE}`;
     expect(result).toMatchObject({ ok: false, error: expectedMessage });
     expect(upload[0].error).toBe(expectedMessage);
     expect(upload[0].error).not.toMatch(/already (been )?resolved/i);
@@ -813,5 +814,60 @@ describe("confirmChunkedSession — a conflict that PARSES to one candidate is N
     // undisplayed-candidate caveat here — both candidates parsed cleanly).
     expect(upload[0].error).toBe(serverMessage);
     expect(result).toMatchObject({ ok: false, error: serverMessage });
+  });
+
+  // Round-23 audit (TESTS — round-22 audit WARN 4): the round-21 fixture
+  // above only ever exercised exactly ONE missing candidate (a single
+  // malformed sibling). CONFLICT_UNDISPLAYED_NOTE names no specific count,
+  // so it's correct whether one OR several are missing — this fixture pins
+  // that against a SEVERAL-missing shape: the server's own
+  // conflictingBatchesTruncated flag true (the LIVE_BATCH_LOOKUP_LIMIT cap
+  // — batch-service.ts), with conflictingBatchesCount equal to the
+  // displayed array's length, which the OLD count-vs-array-length check
+  // alone (pre round-23) would have missed entirely (round-22 audit
+  // BLOCK 2).
+  it("states the same honest, count-free note for SEVERAL missing candidates (a capped read, not just a single parse-dropped entry)", async () => {
+    const conflictingBatches = Array.from({ length: 5 }, (_, i) => ({
+      id: `batch-${i}`,
+      filename: "cellar.csv",
+      status: "created",
+      created_at: `2026-01-0${i + 1}T00:00:00Z`,
+    }));
+    const serverMessage = "This file has at least 5 live import batches for the same underlying content.";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) return jsonResponse(201, { sessionId: "session-new" });
+        return jsonResponse(422, {
+          error: {
+            code: "multiple_live_batches",
+            message: serverMessage,
+            // conflictingBatchesCount (5) equals conflictingBatches.length
+            // (5) — several MORE live candidates exist beyond this read,
+            // signaled only by conflictingBatchesTruncated.
+            details: { conflictingBatches, conflictingBatchesCount: 5, conflictingBatchesTruncated: true },
+          },
+        });
+      }),
+    );
+
+    let upload: ChunkUploadState[] = [{ index: 1, status: "pending", batchId: null, error: null, code: null }];
+    const result = await confirmChunkedSession({
+      plan: PLAN,
+      initialUpload: upload,
+      existingSessionId: "session-new",
+      fileLabel: "cellar.csv",
+      timestampsRef: { current: [] },
+      onSessionId: () => {},
+      onProgress: (u) => {
+        upload = u;
+      },
+    });
+
+    expect(upload[0].conflictingBatchesTruncated).toBe(true);
+    const expectedMessage = `${serverMessage} ${CONFLICT_UNDISPLAYED_NOTE}`;
+    expect(result).toMatchObject({ ok: false, error: expectedMessage });
+    expect(upload[0].error).toBe(expectedMessage);
   });
 });

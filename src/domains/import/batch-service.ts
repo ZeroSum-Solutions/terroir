@@ -147,12 +147,31 @@ export type ConfirmBatchResult =
   | { ok: true; alreadyExists: true; batchId: string; status: string; sessionId: string | null; chunkIndex: number | null; counts: BatchCounts }
   /** Round-21 audit correction: conflictingBatchesCount is the server's own
    * candidate COUNT (reconcileLiveBatchesForFile's `candidates.length`),
-   * present whenever conflictingBatches is — see that field's own comment
-   * for why the array alone is not a safe ground truth for the CLIENT to
-   * decide resolution from (a malformed entry parseConflictingBatches drops
-   * can shrink the array without the underlying conflict having changed at
-   * all). This count is never affected by that client-side parsing. */
-  | { ok: false; error: { code: string; message: string; missingHeaders?: string[]; conflictingBatches?: ConflictingBatchInfo[]; conflictingBatchesCount?: number } };
+   * present whenever conflictingBatches is.
+   *
+   * Round-23 audit (SIMPLIFY): the client no longer tries to decide
+   * resolution from this count at all — three straight audits (rounds 18,
+   * 20, 22) found a different way the client's own local inference got that
+   * wrong. The server re-checks on every confirm attempt and is the only
+   * thing that actually knows whether the conflict is gone; this count is
+   * kept only for honest DISPLAY ("N conflicting batches" text), never as a
+   * threshold to gate anything client-side. conflictingBatchesTruncated
+   * carries the one signal display actually needs: whether MORE candidates
+   * exist than conflictingBatches could show (either the raw DB read hit
+   * LIVE_BATCH_LOOKUP_LIMIT — reconcileLiveBatchesForFile's own comment —
+   * or, once round-11's malformed-entry-dropping is done client-side,
+   * fewer entries than this count parsed). */
+  | {
+      ok: false;
+      error: {
+        code: string;
+        message: string;
+        missingHeaders?: string[];
+        conflictingBatches?: ConflictingBatchInfo[];
+        conflictingBatchesCount?: number;
+        conflictingBatchesTruncated?: boolean;
+      };
+    };
 
 type RowPayload = {
   row_number: number;
@@ -811,7 +830,16 @@ type LiveBatchMatch = {
 
 type FindLiveBatchResult =
   | { ok: true; match: LiveBatchMatch | null }
-  | { ok: false; error: { code: string; message: string; conflictingBatches?: ConflictingBatchInfo[]; conflictingBatchesCount?: number } };
+  | {
+      ok: false;
+      error: {
+        code: string;
+        message: string;
+        conflictingBatches?: ConflictingBatchInfo[];
+        conflictingBatchesCount?: number;
+        conflictingBatchesTruncated?: boolean;
+      };
+    };
 
 /** Sol round-3 audit (2026-08-27) finding 6: the DB query below can only
  * express "contains fileDigestHex as a LIKE match," which also matches a
@@ -1146,6 +1174,16 @@ async function reconcileLiveBatchesForFile(
       // field, immune to that filtering by construction. Same
       // truncated-lower-bound caveat as the message above.
       conflictingBatchesCount: candidates.length,
+      // Round-23 audit: the client-side note about undisplayable candidates
+      // (import-client.tsx) used to be derived only from comparing its OWN
+      // parsed array length against conflictingBatchesCount above — which
+      // can never fire for the case that actually matters most, a raw read
+      // that hit LIVE_BATCH_LOOKUP_LIMIT, since conflictingBatchesCount IS
+      // candidates.length (already capped) in that case too. This field
+      // carries the server's own truncation knowledge directly, so the
+      // note fires whenever it should — capped read, client-side parse
+      // loss, or (in principle) both at once.
+      conflictingBatchesTruncated: candidateCountMayBeTruncated,
     },
   };
 }

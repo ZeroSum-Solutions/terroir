@@ -25,7 +25,7 @@ import { ActionDialog } from "@/components/action-dialog";
 import { CLIENT_CHUNK_TARGET_ROWS, type CanonicalHeader } from "@/domains/import/constants";
 import { buildChunkPlan, serializeChunk, sha256HexOfBytes } from "@/domains/import/csv-splitter";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
-import { parseConflictingBatches, type ConflictingBatchInfo } from "./conflicting-batches";
+import { parseConflictingBatches, CONFLICT_UNDISPLAYED_NOTE, type ConflictingBatchInfo } from "./conflicting-batches";
 import type { BatchRow, ErrorRowEntry, RowOverrides } from "./import-client";
 
 // ---------------------------------------------------------------------------
@@ -137,13 +137,18 @@ export type ChunkUploadState = {
    * collided with, when status is "failed" with code "multiple_live_batches"
    * — see ConflictingBatchInfo's own comment. undefined otherwise. */
   conflictingBatches?: ConflictingBatchInfo[];
-  /** Round-21 audit correction: the server's own candidate COUNT for this
+  /** Round-23 audit (SIMPLIFY): the server's own candidate COUNT for this
    * chunk's own multiple_live_batches conflict (batch-service.ts's
    * conflictingBatchesCount) — never affected by conflictingBatches above
-   * losing an entry to parseConflictingBatches. isConflictSourceResolved
-   * decides resolution from this, not from conflictingBatches.length.
-   * undefined otherwise. */
+   * losing an entry to parseConflictingBatches. Display-only now — see
+   * import-client.tsx's visibleConflictCandidates for why nothing decides
+   * "resolved" from it anymore. undefined otherwise. */
   conflictingBatchesCount?: number;
+  /** Round-23 audit: whether the server itself says conflictingBatches/
+   * conflictingBatchesCount above are a lower bound (batch-service.ts's
+   * conflictingBatchesTruncated). Feeds PreviewStep's own
+   * conflictingBatchesTruncated note. undefined otherwise. */
+  conflictingBatchesTruncated?: boolean;
 };
 
 export const ZERO_SUMMARY: PreviewSummary = {
@@ -474,13 +479,16 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
         const conflictingBatches: ConflictingBatchInfo[] | undefined = parseConflictingBatches(
           body?.error?.details?.conflictingBatches,
         );
-        // Round-21 audit correction: the server's own candidate count —
-        // see batch-service.ts's conflictingBatchesCount comment for why
-        // this, and never conflictingBatches.length, decides resolution.
+        // Round-23 audit (SIMPLIFY): the server's own candidate count —
+        // display-only now (see import-client.tsx's
+        // visibleConflictCandidates comment).
         const conflictingBatchesCount: number | undefined =
           typeof body?.error?.details?.conflictingBatchesCount === "number"
             ? body.error.details.conflictingBatchesCount
             : undefined;
+        // Round-23 audit: whether the server itself says this list/count
+        // is a lower bound — see batch-service.ts's own comment.
+        const conflictingBatchesTruncated: boolean = body?.error?.details?.conflictingBatchesTruncated === true;
 
         // WARN 5 (round-9/10 audit): duplicate_race_retry is retryable BY
         // DESIGN — a genuinely transient race the next attempt normally
@@ -495,38 +503,28 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
         // it only ever tracks a run of the SAME code in a row.
         const priorRaceRetryCount = code === "duplicate_race_retry" ? (current?.duplicateRaceRetryCount ?? 0) + 1 : 0;
         const exhausted = code === "duplicate_race_retry" && priorRaceRetryCount >= DUPLICATE_RACE_RETRY_LIMIT;
-        // BLOCK (round-20 audit): round-17's "conflictAlreadyResolved"
-        // normalization was a WRONG PREMISE, carried forward by round-19 —
-        // dropping a malformed ENTRY (a description of a batch) never
-        // reverts the batch that entry described, and
-        // reconcileLiveBatchesForFile (batch-service.ts) only ever emits
-        // multiple_live_batches when it found a genuine 2+-candidate
-        // conflict server-side. A freshly-received multiple_live_batches
-        // error can therefore never legitimately be "already resolved" —
-        // this driver no longer infers that from the array it just parsed.
-        // The only ways this chunk's conflict actually clears are the
-        // server reporting a lower count on a LATER attempt, or a revert
-        // this client itself confirmed succeeded (import-client.tsx's
-        // handleRevertConflict, which decrements conflictingBatchesCount
-        // directly rather than re-deriving it from the array).
+        // Round-23 audit (SIMPLIFY): this driver no longer infers
+        // resolution from anything in a response it just received, or from
+        // any local count math at all — see import-client.tsx's
+        // visibleConflictCandidates comment. The only thing that decides a
+        // chunk's conflict is gone is the server reporting success on a
+        // LATER confirm attempt.
         const effectiveCode = exhausted ? "duplicate_race_retry_exhausted" : code;
-        // Some candidates can still fail to parse even though the conflict
-        // itself is real and unresolved — the operator must never be left
-        // with nothing to act on. When the server's count says more exist
-        // than this chunk could display, say so plainly and point at the
-        // recovery that always exists regardless of parsing: Recent
-        // imports permits revert for any non-reverted status.
+        // Some candidates can still fail to display even though the
+        // conflict itself is real and unresolved — the operator must never
+        // be left with nothing to act on. See CONFLICT_UNDISPLAYED_NOTE's
+        // own comment for why this note names no specific count or claims
+        // about where the missing candidate(s) can be found.
         const hasUndisplayedCandidates =
           code === "multiple_live_batches" &&
-          typeof conflictingBatchesCount === "number" &&
-          (conflictingBatches?.length ?? 0) < conflictingBatchesCount;
+          (conflictingBatchesTruncated ||
+            (typeof conflictingBatchesCount === "number" && (conflictingBatches?.length ?? 0) < conflictingBatchesCount));
         const effectiveMessage = exhausted
           ? `Chunk ${chunk.index} of ${plan.chunkTotal} still conflicts with another live import for this file ` +
             `after ${priorRaceRetryCount} attempts — this needs a human to resolve. Revert the conflicting batch ` +
             "under Recent imports before uploading this file again."
           : hasUndisplayedCandidates
-            ? `${message} Not every conflicting batch for this file could be displayed here — revert the ` +
-              "remaining one under Recent imports before retrying."
+            ? `${message} ${CONFLICT_UNDISPLAYED_NOTE}`
             : message;
 
         results = results.map((c) =>
@@ -539,6 +537,7 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
                 duplicateRaceRetryCount: priorRaceRetryCount,
                 conflictingBatches,
                 conflictingBatchesCount,
+                conflictingBatchesTruncated,
               }
             : c,
         );
@@ -720,6 +719,7 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
               duplicateRaceRetryCount: 0,
               conflictingBatches: undefined,
               conflictingBatchesCount: undefined,
+              conflictingBatchesTruncated: undefined,
             }
           : c,
       );

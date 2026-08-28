@@ -45,41 +45,35 @@ export function parseConflictingBatches(value: unknown): ConflictingBatchInfo[] 
   return value.filter(isConflictingBatchInfo);
 }
 
-/** FINDING 1 (round-15 audit), moved here round-17, CORRECTED round-21: the
- * server's own resolved threshold — reconcileLiveBatchesForFile
- * (batch-service.ts) treats `candidates.length <= 1` as nothing left to
- * reconcile, not `=== 0`. With two real candidates, reverting ONE already
- * resolves the conflict server-side.
- *
- * Round-17/19 audit (WRONG PREMISE, corrected round-21): this used to take
- * ONLY the parsed `conflictingBatches` array and apply the <=1 threshold to
- * its `.length` directly — reasoning that a list which somehow arrived
- * already at length <= 1 must mean "nothing left to resolve," since the
- * server itself never emits multiple_live_batches for that case. That
- * reasoning is correct about what the SERVER sends, but wrong about what
- * this function was actually being handed: parseConflictingBatches
- * (above) can drop a malformed ENTRY from a genuine two-candidate payload,
- * shrinking the ARRAY to one candidate on THIS client alone. Dropping a
- * malformed description of a batch does not revert that batch — the
- * conflict the server reported is still real. Treating the parse-reduced
- * array as "resolved" cleared the terminal code and (on the plain path)
- * told the operator the conflict had "already been resolved," which was
- * false: retrying hit the identical conflict every time.
- *
- * Corrected: resolution is now decided from `count` — the server's own
- * `conflictingBatchesCount` (batch-service.ts), which is never touched by
- * this client's own parsing — with the array's length used only as a
- * fallback for callers (unit tests, and any legacy caller) that never had
- * a count to carry in the first place, where the array WAS already known
- * to be the complete, authoritative set (e.g. the revert-driven callers
- * below, decrementing from a count this module itself stored at receipt
- * time). It is never used to manufacture "resolved" out of a response this
- * client merely failed to parse in full — see import-client.tsx's
- * handleConfirm and session-step.tsx's sendChunk, which no longer infer
- * resolution from a freshly-received payload's array at all. */
-export function isConflictSourceResolved(
-  conflictingBatches: ConflictingBatchInfo[] | undefined | null,
-  count?: number | null,
-): boolean {
-  return (count ?? conflictingBatches?.length ?? 0) <= 1;
-}
+/** Round-23 audit (SIMPLIFY): this module used to also export
+ * isConflictSourceResolved — a client-side "is this multiple_live_batches
+ * conflict resolved" threshold, mirroring reconcileLiveBatchesForFile's own
+ * `candidates.length <= 1`. Three straight audits (rounds 18, 20, 22) found
+ * a different way that local inference got the answer wrong: stale copy
+ * left after clearing the code, a parse failure mistaken for a reverted
+ * batch, and a capped lower-bound count decremented as if it were exact.
+ * The client no longer tries to know whether the conflict is resolved at
+ * all — reconcileLiveBatchesForFile (batch-service.ts) already re-checks
+ * the live count on every confirm attempt, so that's the only thing this
+ * codebase trusts to answer the question now. import-client.tsx's
+ * handleRevertConflict drops a successfully-reverted candidate from the
+ * panel and exposes a retry affordance instead of guessing "resolved." */
+
+/** Round-23 audit (BLOCK 2, round-22 audit): the old note pointed at
+ * "Recent imports" and claimed exactly one candidate was missing —
+ * wrong on both counts. "Recent imports" shows only the ten newest
+ * batches (RecentImports, import-client.tsx), so a conflicting batch old
+ * enough to have aged out is not actually reachable there; and the missing
+ * count can be more than one, whether from the server's own
+ * LIVE_BATCH_LOOKUP_LIMIT cap or from this client dropping more than one
+ * malformed entry. This note makes neither claim: it says plainly that
+ * some candidates aren't shown, and points at the one recovery that
+ * actually works regardless of how many are missing or where they rank by
+ * recency — revert what IS shown, then retry, since the server re-checks
+ * fresh every time and will report whatever is still live. Shared between
+ * import-client.tsx's handleConfirm (plain path) and session-step.tsx's
+ * sendChunk (chunked path) so the two surfaces never say different things
+ * about the identical situation. */
+export const CONFLICT_UNDISPLAYED_NOTE =
+  "Not every conflicting batch for this file could be displayed here. Revert what's shown above, then retry — " +
+  "the server will report any that remain.";

@@ -1346,6 +1346,14 @@ describe("reconcileLiveBatchesForFile — truncation signal comes from the raw r
       // cap (20) and reported a bare, false-precision "19" here instead.
       expect(result.error.message).toMatch(/at least 19 live import batches/);
       expect(result.error.conflictingBatches).toHaveLength(19);
+      // Round-23 audit: this is exactly the shape conflictingBatchesTruncated
+      // exists for — conflictingBatchesCount (19, the well-formed count)
+      // equals conflictingBatches.length here, so a client comparing count
+      // vs. array length alone would conclude nothing is missing even
+      // though the raw read hit the cap and a 20th candidate could be
+      // sitting just past it, unseen (round-22 audit BLOCK 2).
+      expect(result.error.conflictingBatchesCount).toBe(19);
+      expect(result.error.conflictingBatchesTruncated).toBe(true);
     }
   });
 
@@ -1384,6 +1392,12 @@ describe("reconcileLiveBatchesForFile — truncation signal comes from the raw r
     if (!result.ok) {
       expect(result.error.message).toMatch(/^This file has 18 live import batches/);
       expect(result.error.message).not.toMatch(/at least/);
+      // Round-23 audit: below the cap — nothing is truncated, even though
+      // one row was malformed and dropped by the format filter. This is
+      // NOT the same signal as "some entries were undisplayable"; it means
+      // the raw read itself never hit LIVE_BATCH_LOOKUP_LIMIT, so there is
+      // no reason to believe a 19th+ candidate exists beyond this read.
+      expect(result.error.conflictingBatchesTruncated).toBe(false);
     }
   });
 });

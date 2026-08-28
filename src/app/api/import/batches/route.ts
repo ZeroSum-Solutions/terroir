@@ -117,6 +117,12 @@ async function postBatches(request: NextRequest) {
             ...(result.error.conflictingBatchesCount !== undefined
               ? { conflictingBatchesCount: result.error.conflictingBatchesCount }
               : {}),
+            // Round-23 audit: rides alongside conflictingBatchesCount — see
+            // batch-service.ts's own comment for why the client needs this
+            // distinct signal to know when its display list is incomplete.
+            ...(result.error.conflictingBatchesTruncated !== undefined
+              ? { conflictingBatchesTruncated: result.error.conflictingBatchesTruncated }
+              : {}),
           }
         : undefined;
     return apiError(422, result.error.code, result.error.message, details);
