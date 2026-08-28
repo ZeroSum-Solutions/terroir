@@ -448,14 +448,19 @@ export function Scanner({
     abortRef.current?.abort();
     clearScanTimeout();
     scanKeyRef.current = null;
-    saveScan(null);
+    // Only an INVOICE-flow restart discards the persisted invoice scan.
+    // Bottle-flow restarts ("Scan another", the bottle error's "New
+    // photo") share this reset but must not silently delete an
+    // unfinished invoice hiding in localStorage (Sol audit 2026-08-27
+    // round 3, finding 3).
+    if (mode === "invoice") saveScan(null);
     setScan(null);
     setBottleResult(null);
     setBottlePreview(null);
     setError(null);
     setRawText(null);
     setStatus("ready");
-  }, [clearScanTimeout, setBottlePreview]);
+  }, [clearScanTimeout, setBottlePreview, mode]);
 
   const cancelScan = useCallback(() => {
     abortRef.current?.abort();

@@ -425,6 +425,31 @@ describe("Scanner initialMode", () => {
     expect(localStorage.getItem("terroir:current-scan")).not.toBeNull();
   });
 
+  it("bottle-flow 'Scan another' does not delete the hidden persisted invoice", async () => {
+    // Sol audit 2026-08-27 round 3, finding 3: startOver() used to call
+    // saveScan(null) unconditionally, so completing a bottle scan and
+    // tapping "Scan another" permanently deleted an unfinished invoice
+    // hiding in localStorage. Only invoice-flow restarts may clear it.
+    const { rawText: _rawText, ...persistable } = invoiceResult;
+    localStorage.setItem(
+      "terroir:current-scan",
+      JSON.stringify({ version: 2, data: persistable }),
+    );
+    act(() => root?.unmount());
+    root = createRoot(container);
+    await act(async () => root?.render(<Scanner initialMode="bottle" />));
+
+    vi.stubGlobal("fetch", vi.fn(() =>
+      Promise.resolve(responseWithJson(Promise.resolve(bottleResult))),
+    ));
+    await selectReadyFile(new File(["label"], "label.jpg", { type: "image/jpeg" }));
+    expect(container.textContent).toContain("Test Pinot Noir");
+    await clickButton("Scan another");
+
+    expect(container.textContent).toContain("Scan a bottle label");
+    expect(localStorage.getItem("terroir:current-scan")).not.toBeNull();
+  });
+
   it("still restores a persisted invoice result on a plain mount", async () => {
     const { rawText: _rawText, ...persistable } = invoiceResult;
     localStorage.setItem(
