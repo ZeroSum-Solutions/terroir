@@ -404,6 +404,38 @@ describe("Scanner initialMode", () => {
   it("defaults to invoice mode without the prop", () => {
     expect(container.textContent).toContain("Scan an invoice");
   });
+
+  it("does not let a persisted invoice result override an explicit bottle-mode entry", async () => {
+    // Sol audit 2026-08-27 round 2, finding 3: the mount effect used to
+    // unconditionally restore a saved invoice scan and flip to invoice
+    // results — so /scan?mode=bottle with an unfinished invoice in
+    // localStorage landed on the invoice instead of bottle capture.
+    const { rawText: _rawText, ...persistable } = invoiceResult;
+    localStorage.setItem(
+      "terroir:current-scan",
+      JSON.stringify({ version: 2, data: persistable }),
+    );
+    act(() => root?.unmount());
+    root = createRoot(container);
+    await act(async () => root?.render(<Scanner initialMode="bottle" />));
+    expect(container.textContent).toContain("Scan a bottle label");
+    expect(container.textContent).not.toContain("Invoice scan results");
+    // The persisted scan is preserved, not deleted — a plain /scan visit
+    // still restores it.
+    expect(localStorage.getItem("terroir:current-scan")).not.toBeNull();
+  });
+
+  it("still restores a persisted invoice result on a plain mount", async () => {
+    const { rawText: _rawText, ...persistable } = invoiceResult;
+    localStorage.setItem(
+      "terroir:current-scan",
+      JSON.stringify({ version: 2, data: persistable }),
+    );
+    act(() => root?.unmount());
+    root = createRoot(container);
+    await act(async () => root?.render(<Scanner />));
+    expect(container.textContent).toContain("Invoice scan results");
+  });
 });
 
 describe("Scanner mode-specific retry", () => {

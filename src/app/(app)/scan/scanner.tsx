@@ -227,6 +227,13 @@ export function Scanner({
   }, []);
 
   useEffect(() => {
+    // A user who arrived via /scan?mode=bottle explicitly asked for
+    // bottle capture — restoring a persisted, unfinished INVOICE result
+    // here would override that choice and land them on invoice results
+    // instead (Sol audit 2026-08-27 round 2, finding 3). The persisted
+    // scan stays in localStorage untouched; a plain /scan visit still
+    // restores it exactly as before.
+    if (initialMode === "bottle") return;
     queueMicrotask(() => {
       const saved = loadScan();
       if (saved) {
@@ -234,7 +241,7 @@ export function Scanner({
         setStatus("results");
       }
     });
-  }, []);
+  }, [initialMode]);
 
   useEffect(
     () => () => {
