@@ -174,7 +174,7 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
     // User B cannot revert it either — the batch is invisible to them,
     // so revert_import_batch's own lookup reports "not found", not
     // "not completed" (which would leak that the batch exists).
-    const revertAsB = await revertImportBatch(userBClient, restaurantB, batchId);
+    const revertAsB = await revertImportBatch(userBClient, restaurantB, batchId, admin);
     expect(revertAsB).toMatchObject({ ok: false, error: { code: "not_found" } });
 
     // The batch is untouched by user B's attempt — still completed, not reverted.
@@ -187,8 +187,8 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
     // inventory is gone, so orphan cleanup removes it too — see "bar 4"
     // below, which relies on that (it inserts its own pre-existing wine
     // fixture rather than reusing this one for exactly that reason).
-    const revertAsA = await revertImportBatch(userAClient, restaurantA, batchId);
-    expect(revertAsA).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 1, lwinStampsCleared: 0 });
+    const revertAsA = await revertImportBatch(userAClient, restaurantA, batchId, admin);
+    expect(revertAsA).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 1, lwinStampsCleared: 0, cleanupTruncated: false });
 
     const { data: inventoryAfterRevert } = await admin
       .from("inventory_items")
@@ -266,7 +266,7 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
     const importedInventoryId = applied.processed[0].inventoryItemId!;
     expect(importedInventoryId).not.toBe(preExistingId);
 
-    const reverted = await revertImportBatch(userAClient, restaurantA, confirmed.batchId);
+    const reverted = await revertImportBatch(userAClient, restaurantA, confirmed.batchId, admin);
     // The wine is spared twice over: the pre-existing inventory row still
     // references it, AND it predates this batch (created_at guard). Its
     // LWIN stamp, however, IS cleared: the local seed's G14-TENANT-TEST
@@ -274,7 +274,7 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
     // batch's apply stamped the pre-existing wine (its lwin was null),
     // and revert must undo exactly that write — live proof of
     // clearBatchLwinStamps against real Postgres.
-    expect(reverted).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1 });
+    expect(reverted).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1, cleanupTruncated: false });
 
     const { data: wineAfterRevert } = await admin
       .from("wines")
@@ -296,5 +296,105 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
       .eq("id", importedInventoryId)
       .maybeSingle();
     expect(importedAfter).toBeNull();
+  });
+
+  it("bar 5: a tenant-B stock_adjustments row naming tenant A's applied wine survives A's revert, and the wine itself is spared (Sol audit 2026-08-27 round 3, finding 3 — the cross-tenant cascade-destruction fix)", async () => {
+    // A fresh, unmatched-LWIN producer/name so this wine is genuinely new
+    // (not the "Cross Tenant Wine" fixture the earlier tests in this file
+    // already consumed) — apply requires an explicit resolve first since
+    // the local lwin_catalog has no entry for it.
+    const confirmed = await confirmImportBatch(
+      userAClient,
+      restaurantA,
+      userAId,
+      "cross-tenant-cascade.csv",
+      Buffer.from("producer,name,vintage,quantity,unit_cost\nCascade Producer,Cascade Wine,2021,4,30.00\n"),
+    );
+    expect(confirmed.ok).toBe(true);
+    if (!confirmed.ok || confirmed.alreadyExists) return;
+
+    // "Cascade Producer" / "Cascade Wine" isn't a deliberate LWIN fixture
+    // like "Cross Tenant Wine" above — whether it lands resolution='auto'
+    // or 'pending' depends on trigram-similarity noise against whatever
+    // the local lwin_catalog happens to hold, which this test doesn't
+    // control. Resolve only if the row actually needs it, matching
+    // whichever path a real unmatched vs. matched row would take.
+    const { data: pendingRow, error: pendingErr } = await userAClient
+      .from("import_batch_rows")
+      .select("id, resolution")
+      .eq("batch_id", confirmed.batchId)
+      .single();
+    if (pendingErr || !pendingRow) throw pendingErr ?? new Error("expected exactly one row");
+    const row = pendingRow as { id: string; resolution: string };
+
+    if (row.resolution === "pending") {
+      const resolved = await resolveImportBatchRow(userAClient, restaurantA, userAId, row.id, "include");
+      expect(resolved).toEqual({ ok: true });
+    }
+
+    const applied = await applyImportBatchChunk(userAClient, confirmed.batchId);
+    expect(applied.processed).toEqual([expect.objectContaining({ outcome: "applied" })]);
+
+    const { data: appliedRow, error: appliedRowErr } = await admin
+      .from("import_batch_rows")
+      .select("applied_wine_id")
+      .eq("batch_id", confirmed.batchId)
+      .single();
+    if (appliedRowErr || !appliedRow) throw appliedRowErr ?? new Error("expected the applied row");
+    const wineId = (appliedRow as { applied_wine_id: string }).applied_wine_id;
+    expect(wineId).toBeTruthy();
+
+    // reason_codes isn't auto-seeded for restaurantB — this suite inserts
+    // restaurants directly (admin.from("restaurants").insert), bypassing
+    // the handle_new_user signup trigger that normally calls
+    // seed_reason_codes. stock_adjustments requires a reason_code_id.
+    const { data: reasonCode, error: reasonError } = await admin
+      .from("reason_codes")
+      .insert({ restaurant_id: restaurantB, code: "g1-4-cascade-test", label: "G1-4 cascade test", category: "other" } as never)
+      .select("id")
+      .single();
+    if (reasonError || !reasonCode) throw reasonError ?? new Error("failed to seed a reason code for restaurant B");
+
+    // Tenant B — a member with NO membership in restaurant A, and whose
+    // own RLS-scoped client can never see restaurant A's wine at all —
+    // inserts a stock_adjustments row directly naming A's wine_id. This
+    // is legal per stock_adjustments' own INSERT RLS policy ("members
+    // insert own stock_adjustments"): the check is only
+    // is_member(restaurant_id) [[here, B's own membership]] and
+    // acting_user_id = auth.uid() — it never verifies wine_id belongs to
+    // that same restaurant_id. wine_id is ON DELETE CASCADE.
+    const { error: adjustmentError } = await userBClient.from("stock_adjustments").insert({
+      restaurant_id: restaurantB,
+      wine_id: wineId,
+      kind: "adjustment",
+      bottles: 1,
+      ml: 0,
+      reason_code_id: (reasonCode as { id: string }).id,
+      acting_user_id: userBId,
+    } as never);
+    expect(adjustmentError).toBeNull();
+
+    // User A reverts their own batch. A's own RLS-scoped client can never
+    // see tenant B's stock_adjustments row (RLS hides it) — without the
+    // service-role reference sweep, the wine would look unreferenced and
+    // get deleted, and Postgres' ON DELETE CASCADE (which bypasses row
+    // security when it fires) would destroy B's row along with it. With
+    // the service-role client passed through, the sweep sees B's row and
+    // spares the wine.
+    const reverted = await revertImportBatch(userAClient, restaurantA, confirmed.batchId, admin);
+    expect(reverted.ok).toBe(true);
+    if (!reverted.ok) return;
+    expect(reverted.orphanWinesDeleted).toBe(0);
+
+    const { data: wineAfter } = await admin.from("wines").select("id").eq("id", wineId).maybeSingle();
+    expect(wineAfter).not.toBeNull();
+
+    const { data: adjustmentAfter } = await admin
+      .from("stock_adjustments")
+      .select("id")
+      .eq("wine_id", wineId)
+      .eq("restaurant_id", restaurantB)
+      .maybeSingle();
+    expect(adjustmentAfter).not.toBeNull();
   });
 });

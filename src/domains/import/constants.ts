@@ -202,3 +202,23 @@ export const ALLOWED_CURRENCIES = new Set([
  * count still tolerates one genuinely transient error before giving up.
  * Hardcoded identically in apply_import_batch_chunk_v2's SQL (0108). */
 export const MAX_ROW_APPLY_ATTEMPTS = 3;
+
+/** Sol audit 2026-08-27 round 3, finding 5 — a soft wall-clock deadline for
+ * revertImportBatch's TS-layer cleanup phase (cleanupOrphanWines +
+ * clearBatchLwinStamps combined), checked before starting each new
+ * per-candidate iteration. At MAX_ROWS = 5,000 applied rows, a fresh
+ * per-wine re-check alone issues ~10 sequential requests (9
+ * WINE_REFERENCING_TABLES + 1 cross-batch import_batch_rows check) — with
+ * no bound, that scales unboundedly against the revert route's 30s
+ * `maxDuration`.
+ *
+ * Arithmetic behind 15,000ms: the route budget is 30,000ms;
+ * revert_import_batch itself (the RPC the cleanup phase's deadline starts
+ * AFTER) can take a few seconds on a large batch; leaving cleanup a 15s
+ * budget still leaves ~10s of headroom for the RPC, request/response
+ * overhead, and PostgREST/network latency before the route's own timeout
+ * would fire. Exceeding it never fails the revert — it stops starting new
+ * per-candidate work, reports the accurate partial counts already earned,
+ * and flags `cleanupTruncated: true` so the operator knows to re-run
+ * cleanup later (see docs/runbooks/csv-import.md). */
+export const CLEANUP_SOFT_BUDGET_MS = 15_000;

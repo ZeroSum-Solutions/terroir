@@ -120,33 +120,48 @@ against a restaurant with pre-existing inventory for the same wine.
 both best-effort (a failure is logged and never fails the revert, and a
 per-wine failure never discards counts already earned by wines processed
 earlier in the same call): `cleanupOrphanWines` deletes wines this
-batch's apply *provably* created, and `clearBatchLwinStamps` clears
-`wines.lwin_id`/`lwin_match_score` stamps this batch's apply *provably*
-wrote onto surviving wines. The route response reports both counts.
+batch's apply created, and `clearBatchLwinStamps` clears
+`wines.lwin_id`/`lwin_match_score` stamps this batch's apply left live.
+The route response reports both counts, plus a `cleanupTruncated` flag
+(see "Cleanup is bounded" below).
+
+The snapshot read that both steps depend on (`import_batch_rows`, this
+batch's applied rows, taken **before** `revert_import_batch` runs) is
+itself wrapped in try/catch: it exists to support best-effort cleanup
+ONLY, so a failure reading it never blocks the revert RPC itself — the
+inventory revert is what the caller actually asked for. On a snapshot
+read failure, both cleanup steps are skipped entirely (reported as zero)
+and the RPC still runs and its result is still returned.
 
 Both steps rest on one fact, verified against `apply_import_batch_chunk`
 (0108) and the `wines_set_updated_at` trigger (0002): one apply-chunk RPC
 *call* is one Postgres transaction, so every row it touches in that call
 — the wine it upserts AND the `import_batch_rows` row it marks applied —
-shares exactly one `now()`. `revertImportBatch` reads a snapshot of this
-batch's applied rows (id, `applied_wine_id`, `updated_at`, `lwin_id`,
+shares exactly one `now()`. `revertImportBatch` reads the snapshot of
+this batch's applied rows (id, `applied_wine_id`, `updated_at`, `lwin_id`,
 `lwin_score`) **before** calling `revert_import_batch`, because that RPC
 itself sets `updated_at = now()` on every row it reverts — reading after
 would destroy the evidence.
 
 - **`cleanupOrphanWines`** deletes a wine only when some snapshot row's
-  own `updated_at` exactly equals that wine's `created_at` — proof the
-  wine was created in that row's own apply-chunk transaction, not a
-  guess about a time window. (This replaces an earlier, incorrect
-  `wines.created_at >= batch.created_at` heuristic, whose write-up wrongly
-  claimed every product write path that creates a wine also creates a
-  referencing row in the same operation; real bare-wine paths exist —
-  `src/app/api/cellar/route.ts`, `src/app/api/inventory/save-scan/
-  route.ts`, and `src/app/api/wines/create-from-lwin/route.ts`, the last
-  of which gets a `wine_list_items` reference only from a later, separate
-  user action.) Reference checks (the 9-table sweep plus other batches'
-  `applied_wine_id` claims) run once in bulk and then again, single-wine,
-  immediately before each delete.
+  own `updated_at` exactly equals that wine's `created_at`, AND the wine
+  has zero references anywhere else (see "Cross-tenant reference checks"
+  below). The timestamp equality holds for every NON-MALICIOUS writer —
+  no product code path ever writes `created_at` directly, so this is
+  reliable evidence the wine was created in that row's own apply-chunk
+  transaction, not a guess about a time window. (This replaces an
+  earlier, incorrect `wines.created_at >= batch.created_at` heuristic,
+  whose write-up wrongly claimed every product write path that creates a
+  wine also creates a referencing row in the same operation; real
+  bare-wine paths exist — `src/app/api/cellar/route.ts`,
+  `src/app/api/inventory/save-scan/route.ts`, and `src/app/api/wines/
+  create-from-lwin/route.ts`, the last of which gets a `wine_list_items`
+  reference only from a later, separate user action.) It is deliberately
+  NOT treated as proof against a malicious same-tenant writer — see
+  "What the timestamp equality does and does not prove" below. Reference
+  checks (the 9-table sweep plus other batches' `applied_wine_id` claims)
+  run once in bulk and then again, single-wine, immediately before each
+  delete.
 - **`clearBatchLwinStamps`** clears a wine's stamp only when, for one of
   this batch's own qualifying rows (score ≥ `LWIN_APPLY_MIN_SCORE`), BOTH
   the wine's current `updated_at` equals that row's own `updated_at` AND
@@ -159,25 +174,173 @@ would destroy the evidence.
   the exact-pair check is still needed alongside it, since any row that
   merely dedup-matches an existing wine bumps that wine's `updated_at`
   regardless of whether its own LWIN match actually won apply's
-  "prefers higher score" upsert logic.)
+  "prefers higher score" upsert logic.) See "The unstamp contract" below
+  for exactly what "cleared" means when a wine already carried this pair
+  before apply ran.
+
+### What the timestamp equality does and does not prove
+
+(Sol audit 2026-08-27 round 3, finding 1 — replaces an earlier
+"provable authorship" framing that overclaimed this.) `cleanupOrphanWines`'
+`created_at == snapshot row's updated_at` check is proof against every
+NON-MALICIOUS writer: no product code path ever writes `created_at`
+directly. It is **not** proof against a malicious one. `wines` RLS grants
+members unrestricted UPDATE with no column-level restriction on
+`created_at` ("members can update their wines",
+`supabase/schema.snapshot.sql`), and `import_batch_rows` is
+member-readable ("members can read import batch rows") — so a same-tenant
+member could read a snapshot row's `updated_at` and deliberately rewrite
+some other, pre-existing bare wine's `created_at` to match it, forging
+this guard into deleting that wine.
+
+This is deliberately **not treated as a hole to close**: `wines` RLS also
+grants members unrestricted DELETE on their own restaurant's wines
+("members can delete their wines") — a member willing to forge
+`created_at` already holds the DELETE right directly, so the forgery buys
+them nothing they didn't already have. Adding new TS-layer mechanism here
+would defend a privilege boundary that doesn't actually move. If a future
+audit finds members do NOT hold direct DELETE on wines, this reasoning
+would need to be revisited and the guard tightened.
+
+### Cross-tenant reference checks run on the service-role client
+
+(Sol audit 2026-08-27 round 3, finding 3 — the serious one.)
+`cleanupOrphanWines`' reference-existence checks (the bulk sweep AND the
+fresh pre-delete re-check) run on a **service-role** client, passed into
+`revertImportBatch` as a 4th parameter by the revert route
+(`src/app/api/import/batches/[id]/revert/route.ts`, via
+`createServiceRoleClient()` from `src/lib/supabase/service-role.ts`) —
+never on the caller's RLS-scoped client. The snapshot read, the
+`revert_import_batch` RPC call, and the wine `DELETE` itself all stay on
+the caller's RLS-scoped client (tenant-scoped, so the `DELETE` can never
+itself cross tenants).
+
+This is load-bearing, not a style preference: `stock_adjustments`' INSERT
+RLS policy ("members insert own stock_adjustments") checks only
+`is_member(restaurant_id) and acting_user_id = auth.uid()` — never that
+`wine_id` belongs to that same `restaurant_id` — and `wine_id` is `ON
+DELETE CASCADE`. So a tenant-B member can insert a `stock_adjustments`
+row naming tenant A's `wine_id`. Tenant A's reference sweep, run on A's
+own RLS-scoped client, can never see that tenant-B row (RLS hides it) —
+and Postgres referential-integrity actions (the cascade) bypass row
+security entirely when they fire. Without a service-role sweep, A's wine
+`DELETE` would destroy B's row. `bottle_closeouts` has the identical
+shape (member insert, `restaurant_id`-only check, `wine_id` cascade —
+see the next section). A service-role client sees every tenant's rows,
+closing this regardless of which tenant wrote the referencing row.
+
+If the service-role client is unavailable (misconfigured environment),
+`cleanupOrphanWines` skips deletion entirely for that revert (logs and
+returns zero) rather than falling back to the RLS-scoped client —
+falling back would silently reintroduce the exact risk above. Live proof:
+`src/domains/import/tenant-isolation.test.ts`, "bar 5" — a tenant-B
+`stock_adjustments` row naming tenant A's applied wine, seeded through
+tenant B's own RLS-scoped client exactly as a real attacker would, must
+survive tenant A's revert, and the wine must survive too.
+
+### The unstamp contract
+
+(Sol audit 2026-08-27 round 3, finding 2.) `clearBatchLwinStamps` clears
+the LWIN linkage this batch's apply **left live** on a wine — that is the
+contract, and it covers two cases equally: apply's conflict UPDATE either
+wrote the `(lwin_id, lwin_match_score)` pair fresh, OR it re-affirmed an
+identical pre-existing value. Both count as "left live," and both are
+intended behavior, not merely tolerated.
+
+Concretely: when a row's apply-time dedup match hits a wine that already
+carries the exact pair this row's own match would also write (a
+re-imported file, or a coincidental earlier stamp), `apply_import_batch_
+chunk_v2`'s `ON CONFLICT DO UPDATE` still runs — its `CASE` expressions
+leave the values unchanged (this row's score doesn't beat the existing
+one), but the `UPDATE` statement itself still executes, and
+`wines_set_updated_at` still bumps `updated_at` in that row's own
+apply-chunk transaction. That transaction genuinely touched the wine and
+left exactly this row's own values live, whether or not any byte actually
+changed — so `clearBatchLwinStamps` clearing it on revert is correct
+under the contract, not a bug. (An earlier "authorship proof" framing of
+this same mechanism was FALSE and has been dropped — round 2 already
+showed `wines` RLS lets any member pre-write an identical pair, so
+"non-null implies apply wrote it" never held; the mechanism itself is
+unchanged from round 2, only the claim about what it proves.)
+
+**Recovery path** for the identical-pre-existing-pair corner: if a stamp
+gets cleared that some OTHER source (not this batch) actually wanted
+live, re-running LWIN matching against the wine restores it — the match
+computation is idempotent and does not depend on import history. Live
+proof of the contract: `src/domains/import/p3-live.test.ts`, "clears a
+stamp apply's conflict UPDATE left live, whether it wrote it fresh or
+re-affirmed an identical pre-existing value."
+
+### Cleanup is bounded
+
+(Sol audit 2026-08-27 round 3, finding 5.) Batches support up to 5,000
+applied rows (`MAX_ROWS`, `src/domains/import/constants.ts`). Two bounds
+keep cleanup from blowing the revert route's 30s `maxDuration`:
+
+- **Chunked `.in()` queries.** Every reference-existence or wine-lookup
+  query built from a candidate-id array chunks the ids to at most 100 per
+  request (`IN_CLAUSE_CHUNK_SIZE`, `batch-service.ts`) — at 5,000
+  candidates, one unchunked `.in()` could carry ~156,000 characters in a
+  single request URL.
+- **A soft wall-clock deadline** (`CLEANUP_SOFT_BUDGET_MS`, 15,000ms —
+  see its own comment in `src/domains/import/constants.ts` for the exact
+  arithmetic against the 30s route budget) shared across BOTH cleanup
+  steps combined. Once elapsed exceeds it, neither step starts any NEW
+  per-candidate work — a fresh per-wine reference re-check alone issues
+  ~10 sequential requests (9 `WINE_REFERENCING_TABLES` + 1 cross-batch
+  `import_batch_rows` check), so at scale that's the dominant cost. The
+  counts returned are always exactly what genuinely ran — never padded
+  or estimated — and the response carries `cleanupTruncated: true` plus a
+  log line so the operator knows more candidates were left untouched.
+
+**Re-run path when cleanup is truncated:** re-running revert itself is
+not meaningful (the batch is already reverted) — the recovery is the
+same as any other cleanup shortfall: a manual cleanup pass, or (for a
+truncated LWIN unstamp) re-running LWIN matching against the affected
+wines.
 
 **Residuals that remain, honestly, rather than being claimed away:**
 (a) two distinct apply-chunk transactions landing on the exact same
 microsecond timestamp would be indistinguishable — negligible, accepted;
-(b) the reference re-check and the DELETE are still separate requests, so
-`stock_adjustments` (`src/app/api/stock-adjustments/route.ts`) or
-`availability_events` (`src/app/api/wines/[id]/availability/route.ts`) —
-neither of which requires live inventory to write a cascade-linked row —
-can insert in that gap and get destroyed by the `ON DELETE CASCADE` on
-`wine_id`; `inventory_items.wine_id` is `ON DELETE RESTRICT`, so a
-concurrent inventory insert in that same gap makes the DELETE fail
-outright instead, caught per-wine and skipped, never silently pretended
-to have succeeded; (c) for the LWIN unstamp, a third party writing the
-exact `(lwin_id, lwin_match_score)` pair a row's own LWIN match would
+(b) the reference re-check and the `DELETE` are still separate requests,
+so `stock_adjustments` (`src/app/api/stock-adjustments/route.ts`) or
+`bottle_closeouts` (RLS-insertable directly, even though the app's own
+`close_open_bottle` RPC path, `src/app/api/open-bottles/close/route.ts`,
+IS tenant-safe and requires a live open bottle) — neither of which
+requires live inventory to write via a direct RLS insert — can insert a
+fresh, cascade-linked row in the gap between this re-check and the
+`DELETE` statement actually committing, and that row would be destroyed
+by the cascade; `availability_events` writes only go through the
+SECURITY DEFINER `set_wine_availability` RPC, which derives its own
+`restaurant_id` from the wine and requires an owner/manager of THAT
+restaurant, so its residual is same-tenant-only, not cross-tenant.
+`inventory_items.wine_id` is `ON DELETE RESTRICT`, so a concurrent
+inventory insert in that same gap makes the `DELETE` fail outright
+instead, caught per-wine and skipped, never silently pretended to have
+succeeded; (c) for the LWIN unstamp, a third party writing the exact
+`(lwin_id, lwin_match_score)` pair a row's own LWIN match would
 independently compute, before apply ran, on a wine that row also
 dedup-matches, passes both checks by coincidence — this requires guessing
 a specific trigram-similarity float to exact precision ahead of time,
-the same order of residual as (a).
+the same order of residual as (a); (d) the snapshot read happens before
+`revert_import_batch` runs, but an apply holding the batch's advisory
+lock can still commit MORE rows after the snapshot and before the RPC —
+revert then reverts rows the snapshot never captured, and their wines/
+stamps are never cleaned by this call. This is the conservative
+direction (nothing gets wrongly deleted), and a subsequent cleanup pass
+against those specific rows is the recovery, same as (a)–(c).
+
+Every `wines(id) ON DELETE CASCADE` table was re-checked against
+`supabase/schema.snapshot.sql` for this audit round. Besides
+`stock_adjustments` and `bottle_closeouts` (both member-insertable
+without live inventory, both named above), the only other CASCADE tables
+are `open_bottles`, `cellar_health`, and `pricing_recommendations` — all
+three `revoke insert, update, delete ... from authenticated`, so no
+member can write to them at all (service-role/job-only). `availability_
+events` is CASCADE but RPC-gated as described above. `wine_list_items`,
+`inventory_items`, and `pour_events` are `ON DELETE RESTRICT`, not
+CASCADE, so a concurrent insert there makes the `DELETE` fail loudly
+instead of silently losing data.
 
 **Known gap — session-level reverts get NEITHER step:**
 `revert_import_session` (0110) loops batches entirely inside Postgres,
