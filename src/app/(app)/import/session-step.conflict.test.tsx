@@ -7,6 +7,8 @@ import {
   type ChunkUploadState,
   type ChunkedPlanState,
 } from "./session-step";
+import { buildImportAnywayOverride } from "./import-client";
+import type { CanonicalHeader } from "@/domains/import/constants";
 
 const PLAN: ChunkedPlanState = {
   headerRecord: "producer,name,quantity",
@@ -91,21 +93,29 @@ describe("confirmChunkedSession duplicate-content conflicts", () => {
   // deterministically fail the same way forever). It's now tagged with a
   // distinct TERMINAL code — duplicate_chunk_content — with guidance that
   // names the OTHER chunk (from body.chunkIndex, never the target's own
-  // index) and explains the actual way forward: edit a row so the chunk's
-  // content_sha256 is no longer identical.
+  // index) and explains the actual way forward.
   //
   // Round-5 audit finding 3: the guidance used to say "edit any row below
   // (even re-entering the same value)" — WRONG, since re-entering the
   // identical value reproduces the identical digest and the identical
-  // collision forever. It now names the requirement explicitly: the fix
+  // collision forever. It then named the requirement explicitly: the fix
   // must DIFFER from the sibling's own value.
+  //
+  // Round-6 audit finding 3: round-5's "the fix must differ" framing was
+  // ITSELF wrong — the DB's unique index forbids identical bare content
+  // per restaurant (migrations locked), so a genuine repeated segment can
+  // ONLY EVER import via a distinct digest, which makes "invent an edit
+  // that differs" backwards: the real, deterministic mechanism is "Import
+  // anyway" (a canonical no-op override PreviewStep generates), not an
+  // operator-authored edit. Guidance now names that path instead.
   it("hard-stops with a typed duplicate_chunk_content code (never a silent confirm) when the duplicate belongs to THIS session but a DIFFERENT chunk slot, capturing this attempt's own (empty) override slice", async () => {
     const { promise, progressStates } = run({ alreadyExists: true, sessionId: "session-new", chunkIndex: 2, batchId: "b-sibling" });
     const result = await promise;
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toMatch(/identical to chunk 2/i);
-      expect(result.error).toMatch(/actually differs/i);
+      expect(result.error).toMatch(/import anyway/i);
+      expect(result.error).not.toMatch(/actually differs/i);
       expect(result.error).not.toMatch(/edit any row/i);
       // No "other session" to resume — this is a same-session, wrong-slot
       // hard stop, not a cross-session redirect.
@@ -198,6 +208,58 @@ describe("confirmChunkedSession — Retry only reaches create when the override 
 
     expect(result).toMatchObject({ ok: true });
     expect(seenOverridesJson).toEqual([JSON.stringify({ "1": { quantity: "100" } })]);
+    expect(seenOverridesJson[0]).not.toEqual(SIBLING_OVERRIDES_JSON);
+  });
+
+  // Round-6 audit finding 3: "Import anyway" builds a canonical no-op
+  // override (buildImportAnywayOverride, import-client.tsx) from the
+  // chunk's own first data row's EXISTING value — unlike the operator-
+  // authored fixes above, its value need not differ from the raw file at
+  // all. It still reaches create, because the server namespaces on the
+  // PRESENCE of an override, never on whether its text differs from the
+  // original — this is the mechanism the whole "Import anyway" feature
+  // depends on for a fully-valid duplicate chunk with no other row data to
+  // edit.
+  it("'Import anyway's own no-op override reaches the create path — an override need not differ from the raw file's own value to namespace the digest", async () => {
+    const seenOverridesJson: string[] = [];
+    vi.stubGlobal("fetch", digestAwareFetch(seenOverridesJson));
+
+    // The chunk's own first data row is "producer=A" — buildImportAnywayOverride
+    // reproduces that EXACT value, a genuine no-op relative to the file.
+    const firstRowRawText: Record<CanonicalHeader, string> = {
+      producer: "A",
+      name: "B",
+      vintage: "",
+      varietal: "",
+      region: "",
+      country: "",
+      size_ml: "",
+      format: "",
+      currency: "",
+      quantity: "1",
+      unit_cost: "",
+      bin: "",
+      section: "",
+    };
+    const built = buildImportAnywayOverride({ startRow: PLAN.chunks[0].startRow }, firstRowRawText);
+    expect(built).toEqual({ rowNumber: 1, field: "producer", value: "A" });
+
+    const result = await confirmChunkedSession({
+      plan: PLAN,
+      initialUpload: [{ index: 1, status: "failed", batchId: null, error: "conflict", code: "duplicate_chunk_content" }],
+      existingSessionId: "session-new",
+      fileLabel: "cellar.csv",
+      timestampsRef: { current: [] },
+      rowOverrides: { [built!.rowNumber]: { [built!.field]: built!.value } },
+      onSessionId: () => {},
+      onProgress: () => {},
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    // A NO-OP value (identical to the raw file's own "producer" text) is
+    // still sent, and still reaches create — the server hashes raw
+    // overrides regardless of whether they change anything textually.
+    expect(seenOverridesJson).toEqual([JSON.stringify({ "1": { producer: "A" } })]);
     expect(seenOverridesJson[0]).not.toEqual(SIBLING_OVERRIDES_JSON);
   });
 });

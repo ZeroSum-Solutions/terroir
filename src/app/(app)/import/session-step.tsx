@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
 import { ActionDialog } from "@/components/action-dialog";
-import { CLIENT_CHUNK_TARGET_ROWS } from "@/domains/import/constants";
+import { CLIENT_CHUNK_TARGET_ROWS, type CanonicalHeader } from "@/domains/import/constants";
 import { buildChunkPlan, serializeChunk, sha256HexOfBytes } from "@/domains/import/csv-splitter";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
 import type { BatchRow, ErrorRowEntry, RowOverrides } from "./import-client";
@@ -40,7 +40,20 @@ export type ChunkedPlanState = {
   sourceSha256: string;
 };
 
-export type ChunkPreviewEntry = { index: number; startRow: number; endRow: number; summary: PreviewSummary };
+export type ChunkPreviewEntry = {
+  index: number;
+  startRow: number;
+  endRow: number;
+  summary: PreviewSummary;
+  /** Round-6 audit finding 3: this chunk's own first data row, exactly as
+   * parsed server-side, regardless of that row's validity — sourced so
+   * "Import anyway" (see ChunkUploadProgress) can build a deterministic
+   * no-op override even for a fully-VALID duplicate chunk with no error
+   * rows to ever edit. null only if the chunk somehow reports zero rows
+   * (never happens in practice — every chunk has at least one data row by
+   * construction). */
+  firstRowRawText: Record<CanonicalHeader, string> | null;
+};
 
 export type ChunkedPreviewState = {
   summary: PreviewSummary;
@@ -219,7 +232,17 @@ export async function planChunkedPreview(
 
     const chunkSummary = body.summary;
     const chunkRows = body.rows;
-    perChunk.push({ index: chunkEntry.index, startRow: chunkEntry.startRow, endRow: chunkEntry.endRow, summary: chunkSummary });
+    perChunk.push({
+      index: chunkEntry.index,
+      startRow: chunkEntry.startRow,
+      endRow: chunkEntry.endRow,
+      summary: chunkSummary,
+      // Round-6 audit finding 3: captured regardless of this row's own
+      // validity — "Import anyway" needs a real, existing field value to
+      // build a deterministic no-op override from, even for a chunk with
+      // zero error rows.
+      firstRowRawText: chunkRows[0]?.rawText ?? null,
+    });
     for (const key of Object.keys(summary) as (keyof PreviewSummary)[]) summary[key] += chunkSummary[key];
     for (const row of chunkRows) {
       // Sol audit (2026-08-27) finding 6: row.rowNumber is this chunk's
@@ -454,23 +477,33 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
         // findLiveBatchByUnderlyingFile already keeps this sibling from
         // short-circuiting that retry as a false duplicate).
         //
-        // Round-5 audit finding 3: the guidance used to say "edit any row
-        // below (even re-entering the same value)" — that is actively
-        // WRONG: re-entering the identical text produces the identical
-        // canonical overrides JSON, hence the identical namespaced digest,
-        // hence the identical collision, forever. Named explicitly below:
-        // the fix must DIFFER from the sibling's own value for that row.
+        // Round-6 audit finding 3: round-5's guidance ("edit a row so its
+        // fix actually DIFFERS from the sibling's own value") was itself
+        // wrong in a deeper way than just its wording — the DB's unique
+        // index forbids identical bare content per restaurant (migrations
+        // are locked), so a GENUINE repeated segment can only EVER import
+        // via a distinct digest at all, and the round-5 guidance never
+        // named the one deterministic, always-available way to produce
+        // one: "Import anyway" below (ChunkUploadProgress) generates a
+        // canonical no-op override from this chunk's own first data row,
+        // which namespaces the digest without requiring the operator to
+        // invent an edit — the only mechanism that also works for a fully
+        // VALID duplicate chunk with no error row to ever edit in the
+        // first place. A genuine row-level fix (an actual validation
+        // error, unrelated to this collision) still works exactly as
+        // before and also changes the digest; this guidance no longer
+        // claims editing is the only path, or that re-entering identical
+        // text can never work — "Import anyway" IS re-sending this exact
+        // content, deliberately, through a namespaced digest.
         const conflictError = !body.sessionId
           ? `Chunk ${chunk.index} was already imported as a standalone batch. Revert that batch under ` +
             "Recent imports before re-uploading this file."
           : sameSession
             ? `Chunk ${chunk.index}'s content is identical to chunk ${body.chunkIndex}, already imported in this ` +
-              `session — the database can't hold two imports with identical content, so this can't be resolved by ` +
-              "retrying unchanged. If this is a genuine repeated segment that needs to import again, edit a row " +
-              `below so its fix actually DIFFERS from chunk ${body.chunkIndex}'s own value for that row — ` +
-              "re-entering the identical text won't change anything — then confirm again. If it was an accidental " +
-              `duplicate, no action is needed, or skip this chunk below — chunk ${body.chunkIndex} already imported ` +
-              "these rows."
+              "session — the database can't hold two imports with identical content. If this is a genuine " +
+              `repeated segment that needs to import again, use "Import anyway" below to import it as a separate ` +
+              "tracked upload. If the duplication was accidental, no action is needed, or use \"Skip this chunk\" " +
+              `below — chunk ${body.chunkIndex} already imported these rows.`
             : "This file was already partially uploaded as a different, unfinished import — resuming that import " +
               "instead of starting a second one.";
         const conflictCode = sameSession ? "duplicate_chunk_content" : null;
@@ -508,9 +541,24 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
 
       // 201 (new), or 200 (alreadyExists: THIS exact chunk slot, in THIS
       // session, was already confirmed) — either way this chunk is now
-      // live server-side.
+      // live server-side. Round-6 audit finding 7: also clears
+      // sentOverridesSnapshot/duplicateOfChunkIndex, which a PRIOR failed
+      // attempt on this same chunk may have set — leaving them would let a
+      // now-irrelevant conflict snapshot survive into the confirmed state,
+      // for no purpose (both fields are read only while status is
+      // "failed"/"skipped").
       results = results.map((c) =>
-        c.index === chunk.index ? { ...c, status: "confirmed", batchId: body.batchId as string, error: null, code: null } : c,
+        c.index === chunk.index
+          ? {
+              ...c,
+              status: "confirmed",
+              batchId: body.batchId as string,
+              error: null,
+              code: null,
+              sentOverridesSnapshot: undefined,
+              duplicateOfChunkIndex: undefined,
+            }
+          : c,
       );
       onProgress(results);
     } catch {
@@ -526,6 +574,93 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
   }
 
   return { ok: true };
+}
+
+// Round-6 audit finding 4(c): bounds confirmChunkedSessionWithResume's own
+// conflicting-session adoption retry (see its own comment) — a defensive
+// ceiling against unbounded recursion, never expected to bind in ordinary
+// use (a single hop resolves the normal "resumed the wrong-but-adjacent
+// session" case).
+const MAX_SESSION_ADOPTION_HOPS = 3;
+
+export type ConfirmChunkedSessionWithResumeResult = { ok: true } | { ok: false; error: string };
+
+/** Round-6 audit finding 4(c): wraps confirmChunkedSession with the
+ * conflicting-session handling import-client.tsx used to do inline.
+ *
+ * A fresh re-upload attempt (the ONLY "resume" mechanism this UI has — a
+ * page reload discards chunkedPlan/chunkUpload entirely, so re-selecting
+ * the same file and clicking Confirm again is how an operator "continues"
+ * an interrupted or duplicate-content-stuck session) used to hard-stop the
+ * instant ANY already-confirmed chunk's bytes collided with the resumed
+ * session — jumping straight to SessionStep and silently abandoning every
+ * chunk after it, including one stuck on duplicate_chunk_content whose
+ * Skip/Import-anyway choice the operator still needs to see. Once the
+ * conflicting session is verified as this same file's own resumable
+ * session (same source hash, still in progress — anything else is a hard
+ * stop the operator must resolve, not a silent redirect), this now RETRIES
+ * the remaining chunks under that session id instead of giving up — so a
+ * genuinely unresolved chunk gets its own fresh confirm attempt, and its
+ * failure (and the choice UI) resurfaces back in PreviewStep, rather than
+ * the operator being bounced into an incomplete SessionStep with no way to
+ * act on it. `depth` is a defensive bound (MAX_SESSION_ADOPTION_HOPS)
+ * against unbounded recursion; ordinary usage never needs more than one
+ * hop. */
+export async function confirmChunkedSessionWithResume(
+  params: ConfirmChunkedSessionParams,
+  depth = 0,
+): Promise<ConfirmChunkedSessionWithResumeResult> {
+  let latestUpload = params.initialUpload;
+  const result = await confirmChunkedSession({
+    ...params,
+    onProgress: (upload) => {
+      latestUpload = upload;
+      params.onProgress(upload);
+    },
+  });
+
+  if (result.ok) return { ok: true };
+
+  if (result.conflictingSessionId && depth < MAX_SESSION_ADOPTION_HOPS) {
+    try {
+      const check = await fetch(`/api/import/sessions/${result.conflictingSessionId}`, { cache: "no-store" });
+      const progress = check.ok
+        ? ((await check.json()) as { status?: string; sourceSha256?: string | null })
+        : null;
+      if (
+        progress?.status === "in_progress" &&
+        progress.sourceSha256 != null &&
+        progress.sourceSha256 === params.plan.sourceSha256
+      ) {
+        writeStoredSession({
+          sessionId: result.conflictingSessionId,
+          sourceSha256: params.plan.sourceSha256,
+          label: params.fileLabel,
+        });
+        params.onSessionId(result.conflictingSessionId);
+        // Retry the REMAINING chunks under the now-verified session —
+        // latestUpload already marks the conflicting chunk "failed"
+        // (confirmChunkedSession's own onProgress ran before it returned),
+        // so the retry re-attempts exactly that chunk (and everything
+        // after it) under the adopted session id, never the ones already
+        // "confirmed"/"skipped".
+        return confirmChunkedSessionWithResume(
+          { ...params, initialUpload: latestUpload, existingSessionId: result.conflictingSessionId },
+          depth + 1,
+        );
+      }
+    } catch {
+      // fall through to the hard stop below
+    }
+    return {
+      ok: false,
+      error:
+        "A chunk of this file matches content from another import that can't be resumed for this file " +
+        "(different source file, or already completed/reverted). Revert that import before re-uploading.",
+    };
+  }
+
+  return { ok: false, error: result.error };
 }
 
 function chunkUploadStatusLabel(status: ChunkUploadStatus): string {
@@ -552,15 +687,34 @@ function chunkUploadStatusLabel(status: ChunkUploadStatus): string {
  * to ever make its content_sha256 differ). Skipping is client-side only:
  * it marks the chunk "skipped" so confirmChunkedSession never re-attempts
  * it and PreviewStep's Confirm/Retry button is no longer blocked by it —
- * it does not create, delete, or touch anything server-side. */
+ * it does not create, delete, or touch anything server-side.
+ *
+ * Round-6 audit finding 3: `onImportAnyway`, when given, renders "Import
+ * anyway" alongside Skip — the mechanism for a GENUINE repeated segment,
+ * as opposed to Skip's "this was accidental." It deterministically
+ * generates a canonical no-op override (import-client.tsx's own
+ * handleImportAnyway) from this chunk's own first data row, namespacing
+ * the digest so a subsequent confirm reaches create instead of colliding
+ * again — the only path that also works for a fully valid duplicate chunk
+ * with no error row to ever edit.
+ *
+ * Round-6 audit finding 5: `onUndoSkip`, when given, renders "Undo skip"
+ * on a chunk already marked "skipped" — restores it to its prior failed
+ * duplicate_chunk_content state, with both Import anyway and Skip
+ * available again. Skip is purely client state (import-client.tsx's own
+ * comment), so undoing it touches nothing server-side either. */
 export function ChunkUploadProgress({
   chunks,
   chunkTotal,
   onSkipChunk,
+  onImportAnyway,
+  onUndoSkip,
 }: {
   chunks: ChunkUploadState[];
   chunkTotal: number;
   onSkipChunk?: (index: number) => void;
+  onImportAnyway?: (index: number) => void;
+  onUndoSkip?: (index: number) => void;
 }) {
   const confirmedCount = chunks.filter((c) => c.status === "confirmed" || c.status === "skipped").length;
   return (
@@ -583,6 +737,16 @@ export function ChunkUploadProgress({
                   : chunkUploadStatusLabel(c.status)
                 : chunkUploadStatusLabel(c.status)}
               {c.status === "failed" && c.error ? `: ${c.error}` : ""}
+              {c.status === "failed" && c.code === "duplicate_chunk_content" && onImportAnyway && (
+                <button
+                  type="button"
+                  onClick={() => onImportAnyway(c.index)}
+                  title="Imports this chunk's identical rows as a separate tracked upload."
+                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                >
+                  Import anyway
+                </button>
+              )}
               {c.status === "failed" && c.code === "duplicate_chunk_content" && onSkipChunk && (
                 <button
                   type="button"
@@ -590,6 +754,19 @@ export function ChunkUploadProgress({
                   className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                 >
                   Skip this chunk
+                </button>
+              )}
+              {/* Round-6 audit finding 5: skip is trivially reversible —
+                  client-side state only, nothing server-side was ever
+                  touched — so undoing it just restores the failed state
+                  with both actions available again. */}
+              {c.status === "skipped" && onUndoSkip && (
+                <button
+                  type="button"
+                  onClick={() => onUndoSkip(c.index)}
+                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                >
+                  Undo skip
                 </button>
               )}
             </span>
@@ -931,7 +1108,20 @@ export function SessionStep({
         {/* Round-5 audit finding 4: reports honestly WHY a skipped chunk's
             rows never arrived, distinct from the generic "interrupted
             upload" message above — client-side only, so this list is
-            empty (and this block renders nothing) after a page reload. */}
+            empty (and this block renders nothing) after a page reload.
+
+            Round-6 audit finding 4(a): a skipped chunk means this session
+            can NEVER reach status='completed' — skip has no server
+            record at all (import_sessions has no client-writable column
+            to persist it — migrations are locked), so getImportSessionProgress's
+            allChunksPresent stays permanently false for this session's
+            declared_chunk_total. Reaching this block at all guarantees
+            every OTHER chunk already got a server-confirmed batch (the
+            confirm loop this session was created from only ever reaches
+            "session" once every chunk in the plan is confirmed or
+            skipped) — so the honest, always-true summary is "all other
+            chunks are in; this one specific chunk isn't, on purpose; the
+            session stays in progress forever, and that's fine." */}
         {skippedChunks && skippedChunks.length > 0 && (
           <p className="mt-xs text-caption text-grey">
             {skippedChunks
@@ -940,7 +1130,10 @@ export function SessionStep({
                   ? `Chunk ${s.index} skipped — byte-identical to chunk ${s.duplicateOfChunkIndex}, whose rows are already imported.`
                   : `Chunk ${s.index} skipped.`,
               )
-              .join(" ")}
+              .join(" ")}{" "}
+            Every other chunk was imported. Because skipping happens only in your browser, with no record on the
+            server, this session stays marked &ldquo;In progress&rdquo; here permanently — that is expected and
+            safe, and there is nothing further to do.
           </p>
         )}
       </div>

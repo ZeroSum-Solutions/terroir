@@ -24,7 +24,7 @@ import {
   SessionStep,
   ChunkUploadProgress,
   planChunkedPreview,
-  confirmChunkedSession,
+  confirmChunkedSessionWithResume,
   readStoredSession,
   writeStoredSession,
   ZERO_SUMMARY,
@@ -75,6 +75,24 @@ export function isRowInConfirmedChunk(
   return chunkedPlan.chunks.some((chunk) => {
     if (rowNumber < chunk.startRow || rowNumber > chunk.endRow) return false;
     return chunkUpload.find((u) => u.index === chunk.index)?.status === "confirmed";
+  });
+}
+
+/** Round-6 audit finding 5: the skipped-chunk counterpart of
+ * isRowInConfirmedChunk — a skipped chunk's rows were never sent to the
+ * server at all, so an edit here is just as impossible to ever resend as
+ * one on a confirmed chunk's rows. Kept as a SEPARATE predicate (rather
+ * than folding into isRowInConfirmedChunk) because RowFixItem needs to
+ * render a distinct, honest message for each case. */
+export function isRowInSkippedChunk(
+  rowNumber: number,
+  chunkedPlan: ChunkedPlanState | null,
+  chunkUpload: ChunkUploadState[] | null,
+): boolean {
+  if (!chunkedPlan || !chunkUpload) return false;
+  return chunkedPlan.chunks.some((chunk) => {
+    if (rowNumber < chunk.startRow || rowNumber > chunk.endRow) return false;
+    return chunkUpload.find((u) => u.index === chunk.index)?.status === "skipped";
   });
 }
 
@@ -160,6 +178,29 @@ function overridesSliceEqual(
   return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
 }
 
+/** Round-6 audit finding 3: the pure logic behind "Import anyway" — builds
+ * a canonical no-op override from a chunk's own first data row (global row
+ * number = chunk.startRow) using the FIRST CANONICAL_HEADERS field and its
+ * existing, already-parsed value (never a fabricated one). Deterministic
+ * by construction: the same chunk + preview always produces the identical
+ * override, regardless of anything the operator has separately edited —
+ * which is what lets a subsequent "Import anyway" click always resolve
+ * the same way, and is exactly what makes it work even for a chunk with
+ * ZERO error rows (a fully valid duplicate chunk has no other row data to
+ * build an override from at all). Returns null only when there's no first
+ * row to build from — not expected in practice, since every real chunk has
+ * at least one data row (see ChunkPreviewEntry.firstRowRawText's own
+ * comment in session-step.tsx). Exported so this determinism can be pinned
+ * directly, without exercising the full ImportClient component tree. */
+export function buildImportAnywayOverride(
+  chunk: { startRow: number },
+  firstRowRawText: Record<CanonicalHeader, string> | null,
+): { rowNumber: number; field: CanonicalHeader; value: string } | null {
+  if (!firstRowRawText) return null;
+  const field = CANONICAL_HEADERS[0];
+  return { rowNumber: chunk.startRow, field, value: firstRowRawText[field] };
+}
+
 export function ImportClient() {
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
@@ -210,6 +251,30 @@ export function ImportClient() {
   // Resume: if a prior session is still in progress (per this browser's
   // localStorage), jump straight to its SessionStep — reconciled against
   // the server's own progress, never trusted on its own.
+  //
+  // Round-6 audit finding 4(b): a session with a client-side-skipped chunk
+  // (SessionStep's own comment) can NEVER derive status='completed'
+  // (getImportSessionProgress, session-service.ts) — it stays "in_progress"
+  // on the server forever. VERIFIED every other reader of this status,
+  // grepping across src/ for every place progress.status (or the raw
+  // import_sessions.status column) is read:
+  //   - THIS effect: the early return above only fires for "reverted"/
+  //     "completed", so a permanently-"in_progress" session keeps landing
+  //     the operator back on its own SessionStep on every reload — until
+  //     they explicitly click "Start a new import" (writeStoredSession(null),
+  //     the SessionStep/BatchStep onDone handlers below).
+  //   - SessionStep's own status pill (session-step.tsx): renders "In
+  //     progress" forever instead of "Completed" — a cosmetic difference
+  //     only, not a functional gate.
+  //   - SessionStep's pending-resolution and revert-button gates
+  //     (`progress.status !== "reverted"`): both treat "in_progress" and
+  //     "completed" IDENTICALLY — a stuck-at-in_progress session behaves
+  //     exactly like a completed one for apply/resolve/revert.
+  //   - No cron/cleanup job, no other UI surface, and no other file reads
+  //     this status at all. A permanently in_progress session is therefore
+  //     benign everywhere: at worst a stale status LABEL and a reload that
+  //     returns you to the same place, never a hard error, a blocked
+  //     action, or a resource leak.
   useEffect(() => {
     const stored = readStoredSession();
     if (!stored) return;
@@ -345,10 +410,12 @@ export function ImportClient() {
   }, [file, rowOverrides, loadRecent]);
 
   /** Skips any chunk `chunkUpload` already marks "confirmed" — the
-   * retry-after-failure path reruns confirmChunkedSession with the prior
-   * chunkUpload state as initialUpload, so only the failed/unsent chunks
-   * are actually re-sent. See session-step.tsx for the sequential driver
-   * itself. */
+   * retry-after-failure path reruns confirmChunkedSession (via
+   * confirmChunkedSessionWithResume, round-6 audit finding 4(c)) with the
+   * prior chunkUpload state as initialUpload, so only the failed/unsent
+   * chunks are actually re-sent. See session-step.tsx for the sequential
+   * driver itself, and confirmChunkedSessionWithResume's own comment for
+   * why a cross-session conflict now RETRIES instead of hard-stopping. */
   const handleConfirmChunked = useCallback(async () => {
     if (!chunkedPlan) return;
     setConfirmingChunked(true);
@@ -358,7 +425,7 @@ export function ImportClient() {
         chunkUpload ??
         chunkedPlan.chunks.map((c) => ({ index: c.index, status: "pending" as const, batchId: null, error: null, code: null }));
 
-      const result = await confirmChunkedSession({
+      const result = await confirmChunkedSessionWithResume({
         plan: chunkedPlan,
         initialUpload: initial,
         existingSessionId: sessionId,
@@ -373,42 +440,6 @@ export function ImportClient() {
       });
 
       if (!result.ok) {
-        if (result.conflictingSessionId) {
-          // This chunk's content already belongs to a DIFFERENT session —
-          // never adopt it into this one (that would split the file across
-          // two sessions). Resume the original session instead, but only
-          // after verifying it really is THIS file's own unfinished
-          // session: same source hash, still in progress. Anything else
-          // (different file sharing one identical chunk, already-completed
-          // or reverted session, unreachable progress) is a hard stop the
-          // operator must resolve, not a silent redirect.
-          try {
-            const check = await fetch(`/api/import/sessions/${result.conflictingSessionId}`, { cache: "no-store" });
-            const progress = check.ok
-              ? ((await check.json()) as { status?: string; sourceSha256?: string | null })
-              : null;
-            if (
-              progress?.status === "in_progress" &&
-              progress.sourceSha256 != null &&
-              progress.sourceSha256 === chunkedPlan.sourceSha256
-            ) {
-              const label = file?.name ?? sessionLabel;
-              writeStoredSession({ sessionId: result.conflictingSessionId, sourceSha256: chunkedPlan.sourceSha256, label });
-              setSessionId(result.conflictingSessionId);
-              setSessionLabel(label);
-              setPreviewError(result.error);
-              setStep("session");
-              return;
-            }
-          } catch {
-            // fall through to the hard stop below
-          }
-          setPreviewError(
-            "A chunk of this file matches content from another import that can't be resumed for this file " +
-              "(different source file, or already completed/reverted). Revert that import before re-uploading.",
-          );
-          return;
-        }
         setPreviewError(result.error);
         return;
       }
@@ -425,20 +456,61 @@ export function ImportClient() {
     (rowNumber: number) => isRowInConfirmedChunk(rowNumber, chunkedPlan, chunkUpload),
     [chunkedPlan, chunkUpload],
   );
+  // Round-6 audit finding 5: the skipped-chunk counterpart — see
+  // isRowInSkippedChunk's own comment for why it's a separate predicate.
+  const isRowSkipped = useCallback(
+    (rowNumber: number) => isRowInSkippedChunk(rowNumber, chunkedPlan, chunkUpload),
+    [chunkedPlan, chunkUpload],
+  );
 
   /** Round-5 audit finding 4: marks a chunk stuck on duplicate_chunk_content
    * "skipped" — client-side only (see ChunkUploadState's own comment).
    * confirmChunkedSession never re-attempts a "skipped" chunk, and it no
    * longer counts toward PreviewStep's blocksConfirmButton, so the
    * operator can proceed with every OTHER chunk instead of being stuck
-   * forever on one they've decided not to import. */
+   * forever on one they've decided not to import.
+   *
+   * Round-6 audit finding 5: error/code are no longer nulled out on skip —
+   * both are only ever read while a chunk's status is "failed" (the
+   * unresolvedDuplicateChunkContentIndexes gate, and ChunkUploadProgress's
+   * own error-line rendering), so keeping them costs nothing and is what
+   * lets handleUndoSkip below restore the exact failed state below,
+   * without reconstructing anything. */
   const handleSkipChunk = useCallback((index: number) => {
     setChunkUpload((prev) =>
-      (prev ?? []).map((c) =>
-        c.index === index ? { ...c, status: "skipped", error: null, code: null } : c,
-      ),
+      (prev ?? []).map((c) => (c.index === index ? { ...c, status: "skipped" } : c)),
     );
   }, []);
+
+  /** Round-6 audit finding 5: the inverse of handleSkipChunk — restores a
+   * skipped chunk to its prior failed/duplicate_chunk_content state, with
+   * both "Import anyway" and "Skip this chunk" available again. Skip is
+   * purely client-side state (see ChunkUploadState's own comment), so
+   * undoing it is too: nothing server-side was ever touched. */
+  const handleUndoSkip = useCallback((index: number) => {
+    setChunkUpload((prev) =>
+      (prev ?? []).map((c) => (c.index === index && c.status === "skipped" ? { ...c, status: "failed" } : c)),
+    );
+  }, []);
+
+  /** Round-6 audit finding 3: "Import anyway" for a chunk stuck on
+   * duplicate_chunk_content — deterministically generates a canonical
+   * no-op override from this chunk's own first data row so the confirm's
+   * content_sha256 is namespaced away from the sibling it collided with.
+   * Uses buildImportAnywayOverride (below) for the actual, testable logic. */
+  const handleImportAnyway = useCallback(
+    (chunkIndex: number) => {
+      const chunk = chunkedPlan?.chunks.find((c) => c.index === chunkIndex);
+      const firstRowRawText = chunkedPreview?.perChunk.find((c) => c.index === chunkIndex)?.firstRowRawText ?? null;
+      const built = chunk ? buildImportAnywayOverride(chunk, firstRowRawText) : null;
+      if (!built) return;
+      setRowOverrides((prev) => ({
+        ...prev,
+        [built.rowNumber]: { ...prev[built.rowNumber], [built.field]: built.value },
+      }));
+    },
+    [chunkedPlan, chunkedPreview],
+  );
 
   const reset = useCallback(() => {
     setStep("upload");
@@ -488,10 +560,13 @@ export function ImportClient() {
           rowOverrides={rowOverrides}
           onRowFieldChange={onRowFieldChange}
           isRowLocked={isRowLocked}
+          isRowSkipped={isRowSkipped}
           chunkBreakdown={chunkedPreview?.perChunk}
           chunkTotal={chunkedPlan?.chunkTotal}
           chunkUpload={chunkUpload}
           onSkipChunk={chunkedPreview ? handleSkipChunk : undefined}
+          onImportAnyway={chunkedPreview ? handleImportAnyway : undefined}
+          onUndoSkip={chunkedPreview ? handleUndoSkip : undefined}
           onConfirm={chunkedPreview ? () => void handleConfirmChunked() : () => void handleConfirm()}
           confirming={chunkedPreview ? confirmingChunked : confirming}
           onBack={reset}
@@ -615,10 +690,13 @@ export function PreviewStep({
   rowOverrides,
   onRowFieldChange,
   isRowLocked,
+  isRowSkipped,
   chunkBreakdown,
   chunkTotal,
   chunkUpload,
   onSkipChunk,
+  onImportAnyway,
+  onUndoSkip,
   onConfirm,
   confirming,
   onBack,
@@ -633,6 +711,11 @@ export function PreviewStep({
    * confirmed — its inline-fix inputs render read-only. Always returns
    * false on the plain (non-chunked) path. */
   isRowLocked: (rowNumber: number) => boolean;
+  /** Round-6 audit finding 5: true for a row whose chunk has been
+   * client-side skipped — see isRowInSkippedChunk's own comment. Optional
+   * (defaults to "never skipped") so every pre-existing caller/test that
+   * doesn't know about skip keeps working unchanged. */
+  isRowSkipped?: (rowNumber: number) => boolean;
   chunkBreakdown?: { index: number; startRow: number; endRow: number; summary: PreviewSummary }[];
   chunkTotal?: number;
   chunkUpload: ChunkUploadState[] | null;
@@ -640,6 +723,14 @@ export function PreviewStep({
    * chunk — see ChunkUploadProgress's own comment. Omitted on the plain
    * (non-chunked) path, where the concept doesn't apply. */
   onSkipChunk?: (index: number) => void;
+  /** Round-6 audit finding 3: "Import anyway" for a duplicate_chunk_content
+   * chunk — see ChunkUploadProgress's own comment. Omitted on the plain
+   * (non-chunked) path. */
+  onImportAnyway?: (index: number) => void;
+  /** Round-6 audit finding 5: restores a skipped chunk to its failed
+   * duplicate_chunk_content state, with both actions available again.
+   * Omitted on the plain (non-chunked) path. */
+  onUndoSkip?: (index: number) => void;
   onConfirm: () => void;
   confirming: boolean;
   onBack: () => void;
@@ -668,8 +759,15 @@ export function PreviewStep({
   // was rendered at some point, and shownCount only ever grows (see this
   // component's own comment on `shownCount`), so every fixed row is
   // already included regardless of the current disclosure page.
+  //
+  // Round-6 audit finding 5: a row belonging to a SKIPPED chunk is
+  // excluded here even if its override would otherwise validate — that
+  // chunk's rows were never sent, and never will be, so counting a
+  // client-side "fix" toward "Passing validation"/the "row(s) fixed"
+  // caption below would inflate what's actually going to import.
   const fixedRowNumbers = new Set(
     errorRows
+      .filter((row) => !isRowSkipped?.(row.rowNumber))
       .filter((row) => validateFields({ ...row.rawText, ...rowOverrides[row.rowNumber] }).state === "valid")
       .map((row) => row.rowNumber),
   );
@@ -735,15 +833,27 @@ export function PreviewStep({
   // (ChunkUploadState.sentOverridesSnapshot, captured in
   // session-step.tsx) — only a slice that has genuinely CHANGED can
   // plausibly produce a different digest and resolve the collision.
+  //
+  // Round-6 audit finding 3: the slice used to be built by filtering
+  // errorRows down to this chunk's own — which MISSES an override on a
+  // row that isn't an error row at all, exactly what "Import anyway"
+  // produces for a fully-valid duplicate chunk (its no-op override targets
+  // the chunk's first data row, which has no error and so never appears in
+  // errorRows). Rebuilt from chunkBreakdown's own [startRow, endRow] range
+  // for this chunk instead — every override that actually belongs to this
+  // chunk, whether or not its row happens to be an error row.
   const unresolvedDuplicateChunkContentIndexes = new Set(
     (chunkUpload ?? [])
       .filter((c) => c.status === "failed" && c.code === "duplicate_chunk_content")
       .filter((c) => {
+        const bounds = chunkBreakdown?.find((cb) => cb.index === c.index);
         const currentSlice: RowOverrides = {};
-        for (const row of errorRows) {
-          if (row.chunkIndex !== c.index) continue;
-          const override = rowOverrides[row.rowNumber];
-          if (override && Object.keys(override).length > 0) currentSlice[row.rowNumber] = override;
+        if (bounds) {
+          for (const [key, fields] of Object.entries(rowOverrides)) {
+            const rowNumber = Number(key);
+            if (rowNumber < bounds.startRow || rowNumber > bounds.endRow) continue;
+            if (fields && Object.keys(fields).length > 0) currentSlice[rowNumber] = fields;
+          }
         }
         return overridesSliceEqual(currentSlice, c.sentOverridesSnapshot ?? {});
       })
@@ -824,6 +934,7 @@ export function PreviewStep({
                 override={rowOverrides[row.rowNumber]}
                 onFieldChange={onRowFieldChange}
                 locked={isRowLocked(row.rowNumber)}
+                skipped={isRowSkipped?.(row.rowNumber) ?? false}
                 frozen={confirming}
               />
             ))}
@@ -847,7 +958,13 @@ export function PreviewStep({
       )}
 
       {chunkUpload && (
-        <ChunkUploadProgress chunks={chunkUpload} chunkTotal={chunkTotal ?? chunkUpload.length} onSkipChunk={onSkipChunk} />
+        <ChunkUploadProgress
+          chunks={chunkUpload}
+          chunkTotal={chunkTotal ?? chunkUpload.length}
+          onSkipChunk={onSkipChunk}
+          onImportAnyway={onImportAnyway}
+          onUndoSkip={onUndoSkip}
+        />
       )}
 
       {error && (
@@ -915,15 +1032,21 @@ function RowFixItem({
   override,
   onFieldChange,
   locked,
+  skipped,
   frozen,
 }: {
   row: ErrorRowEntry;
   override: Partial<Record<CanonicalHeader, string>> | undefined;
   onFieldChange: (rowNumber: number, field: CanonicalHeader, value: string) => void;
   locked: boolean;
+  /** Round-6 audit finding 5: true for a row belonging to a client-side
+   * skipped chunk — its edits are exactly as impossible to ever resend as
+   * a `locked` row's, but the reason (and the way back — "Undo skip") is
+   * different, so it renders a distinct message. */
+  skipped: boolean;
   frozen: boolean;
 }) {
-  const disabled = locked || frozen;
+  const disabled = locked || skipped || frozen;
   const effective: Record<CanonicalHeader, string> = { ...row.rawText, ...override };
   const live = validateFields(effective);
   const editableFields = Array.from(new Set(row.errors.map((e) => e.field))).filter(
@@ -948,11 +1071,13 @@ function RowFixItem({
       <p className="mt-2xs text-caption text-grey">
         {locked
           ? "Row already imported with this chunk — revert the import to change it."
-          : frozen
-            ? "Import in progress — this row is locked until the upload finishes."
-            : live.state === "error"
-              ? live.errors.map((e) => e.message).join(" ")
-              : "This row will be imported once you confirm."}
+          : skipped
+            ? "Row belongs to a skipped chunk."
+            : frozen
+              ? "Import in progress — this row is locked until the upload finishes."
+              : live.state === "error"
+                ? live.errors.map((e) => e.message).join(" ")
+                : "This row will be imported once you confirm."}
       </p>
       <div className="mt-xs flex flex-wrap gap-sm">
         {editableFields.map((field) => (
@@ -1235,10 +1360,20 @@ export function BatchStep({
           cheaply, reliably detectable — the operator gets an honest
           explanation instead of a confusing no-op button. Data-safe either
           way: apply only ever selects apply_status='not_applied' rows, and
-          this is refused for clarity, not because resuming would be unsafe. */}
+          this is refused for clarity, not because resuming would be unsafe.
+
+          Round-6 audit finding 6: the earlier copy ("superseded by a
+          duplicate import") ASSERTED a specific cause this component has
+          no way to actually know — a batch reaches status='reverted' for
+          any reason a revert can happen, including the operator's OWN
+          deliberate revert (same "Revert this import" button, same
+          resulting shape: reverted with rows still not_applied whenever
+          the revert landed before Apply was ever clicked). Reworded to the
+          neutral, always-true fact: it was reverted, its rows were never
+          applied, re-upload to try again — no claim about why. */}
       {batch.batch.status === "reverted" && eligibleNotApplied.length > 0 && (
         <p role="status" className="mt-md text-[13px] text-grey">
-          This upload was superseded by a duplicate import and was withdrawn — these rows were never applied. Re-upload the file if you still need to import it.
+          This import batch was reverted. Its rows were not imported; upload the file again to re-import.
         </p>
       )}
 

@@ -879,7 +879,14 @@ describe("confirmImportBatch — POST-check lookup failure is fail-closed, not f
     expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
   });
 
-  it("still returns a retryable error (never throws, never a bare unverified success) when the self-revert itself ALSO returns an error", async () => {
+  // Round-6 audit finding 1: selfRevertAndRetry now retries the revert
+  // call once before giving up, so BOTH mock outcomes here fail TWICE
+  // (revertedBatchIds carries two entries) before this function returns —
+  // and, per the finding's corrected invariant (a revert-failure orphan is
+  // inert garbage, never a duplicate-data hazard), the result is now the
+  // SAME retryable duplicate_race_retry a successful revert produces,
+  // never the old, distinct duplicate_check_failed code.
+  it("retries the self-revert once, then returns the ordinary duplicate_race_retry (never duplicate_check_failed) when BOTH attempts return an error", async () => {
     const { rpc, from, revertedBatchIds } = postCheckErrorSupabase("returns-error");
     const supabase = { rpc, from };
 
@@ -891,15 +898,11 @@ describe("confirmImportBatch — POST-check lookup failure is fail-closed, not f
       csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
     );
 
-    expect(revertedBatchIds).toEqual(["own-batch"]);
-    // duplicate_check_failed (not duplicate_race_retry): the residual
-    // documented on selfRevertAndRetry — our own batch stays live from
-    // here, but not silently: the very next confirm's PRE-check will find
-    // and resume it as an ordinary already-exists.
-    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_check_failed" } });
+    expect(revertedBatchIds).toEqual(["own-batch", "own-batch"]);
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
   });
 
-  it("still returns a retryable error, never an uncaught throw, when the self-revert call itself throws", async () => {
+  it("retries the self-revert once, then returns duplicate_race_retry, never an uncaught throw, when BOTH self-revert attempts throw", async () => {
     const { rpc, from, revertedBatchIds } = postCheckErrorSupabase("throws");
     const supabase = { rpc, from };
 
@@ -911,8 +914,148 @@ describe("confirmImportBatch — POST-check lookup failure is fail-closed, not f
       csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
     );
 
-    expect(revertedBatchIds).toEqual(["own-batch"]);
-    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_check_failed" } });
+    expect(revertedBatchIds).toEqual(["own-batch", "own-batch"]);
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
+  });
+});
+
+// Round-6 audit finding 1: selfRevertAndRetry retries a failed revert ONCE
+// immediately, and — because a lingering live-but-unapplied orphan can
+// never cause duplicate APPLIED data (see the proof on selfRevertAndRetry's
+// own comment) — converges on the SAME retryable duplicate_race_retry
+// outcome whether the revert eventually succeeds or not.
+describe("confirmImportBatch — self-revert retry-once (round-6 audit finding 1)", () => {
+  /** Revert fails on the FIRST call, succeeds on the SECOND — models a
+   * transient failure (dropped connection, momentary lock conflict) that
+   * the one built-in retry is meant to paper over. */
+  function retrySucceedsSupabase() {
+    const rows: FakeBatchRow[] = [];
+    const revertedBatchIds: string[] = [];
+    let revertCallCount = 0;
+    let listCallCount = 0;
+    const rpc = vi.fn((name: string, args: unknown) => {
+      if (name === "match_lwin_bulk") return Promise.resolve({ data: [], error: null });
+      if (name === "create_import_batch") {
+        rows.push({
+          id: "own-batch",
+          status: "created",
+          session_id: null,
+          chunk_index: null,
+          content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+          restaurant_id: RESTAURANT_ID,
+          created_at: "2026-01-01T00:00:00.000Z",
+        });
+        return Promise.resolve({ data: { batchId: "own-batch" }, error: null });
+      }
+      if (name === "revert_import_batch") {
+        revertCallCount += 1;
+        const targetId = (args as { p_batch_id: string }).p_batch_id;
+        revertedBatchIds.push(targetId);
+        if (revertCallCount === 1) {
+          // First attempt: an unrecognized PostgREST error — revertImportBatch
+          // re-throws this verbatim rather than returning { ok: false }.
+          return Promise.resolve({ data: null, error: { code: "XX000", message: "connection reset by peer" } });
+        }
+        const row = rows.find((r) => r.id === targetId);
+        if (row) row.status = "reverted";
+        return Promise.resolve({ data: 0, error: null });
+      }
+      throw new Error(`unexpected rpc ${name}`);
+    });
+    const from = vi.fn((table: string) => {
+      if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
+      listCallCount += 1;
+      const thisCall = listCallCount;
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        neq: () => builder,
+        or: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        then: (resolve: (value: { data: unknown; error: unknown }) => void) => {
+          if (thisCall === 1) {
+            resolve({ data: [], error: null }); // PRE-check: nothing live yet.
+          } else {
+            resolve({ data: null, error: { code: "XX000", message: "connection reset by peer" } }); // POST-check fails, triggering selfRevertAndRetry.
+          }
+        },
+      };
+      return builder;
+    });
+    return { rpc, from, revertedBatchIds };
+  }
+
+  it("succeeds on the retried second attempt and reports the ordinary duplicate_race_retry outcome", async () => {
+    const { rpc, from, revertedBatchIds } = retrySucceedsSupabase();
+    const supabase = { rpc, from };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+    );
+
+    // Exactly two revert attempts — the one built-in retry, no more.
+    expect(revertedBatchIds).toEqual(["own-batch", "own-batch"]);
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
+  });
+
+  // Documents the resume-oldest behavior a revert-failure orphan actually
+  // relies on for safety (see selfRevertAndRetry's own proof, point 3): any
+  // future confirm for the SAME underlying file resumes the OLDEST live
+  // batch, so an orphan left behind by a failed self-revert sits dormant —
+  // ordinary resumes keep landing on its older, surviving rival — rather
+  // than ever being handed out to a client on its own.
+  it("documents resume-oldest: a subsequent confirm for the same file resumes the OLDER of two live batches, never the newer one", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    // Simulates the orphan left behind by a double revert-failure: TWO
+    // live batches for the same underlying file, the rival (older,
+    // survived the original race) and the orphan (newer, our own batch
+    // whose self-revert never succeeded).
+    const rows: FakeBatchRow[] = [
+      {
+        id: "rival-older",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2020-01-01T00:00:00.000Z",
+      },
+      {
+        id: "orphan-newer",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:${"c".repeat(64)}:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2021-01-01T00:00:00.000Z",
+      },
+    ];
+    const createCalls: unknown[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: (args) => {
+          createCalls.push(args);
+          return { data: { batchId: "should-not-be-created" }, error: null };
+        },
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        }),
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: "rival-older" });
+    expect(createCalls).toHaveLength(0);
   });
 });
 
@@ -927,7 +1070,17 @@ describe("confirmImportBatch — resume pointer re-verifies liveness before retu
   it("returns duplicate_race_retry instead of already-exists when the PRE-check's match has been reverted by the time of the final re-read", async () => {
     const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
     const fileHex = createHash("sha256").update(file).digest("hex");
-    const rpc = makeRpc({ match_lwin_bulk: () => ({ data: [], error: null }) });
+    // Round-6 audit finding 2: toAlreadyExistsResult now runs countBatchRows
+    // BEFORE the status re-read (reordered so the status read is the FINAL
+    // await before returning) — count_import_batch_rows must now be
+    // reachable in this scenario too, not just the status query.
+    const rpc = makeRpc({
+      match_lwin_bulk: () => ({ data: [], error: null }),
+      count_import_batch_rows: () => ({
+        data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+        error: null,
+      }),
+    });
     const from = vi.fn((table: string) => {
       if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
       const builder = {
@@ -970,6 +1123,74 @@ describe("confirmImportBatch — resume pointer re-verifies liveness before retu
     // the PRE-check finds a match, so it must never be reached.
     const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
 
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
+  });
+
+  // Round-6 audit finding 2: pins the reordering itself — the count RPC
+  // call succeeds (the revert has NOT landed yet when count runs), and the
+  // revert is only observed on the status re-read that immediately
+  // follows it, with no other await in between. Before the fix, the status
+  // read ran FIRST and the count ran after, so a revert landing in that
+  // later window went undetected; this test fails against that ordering
+  // (count would never even be called, since the old code returned early
+  // on the status check before ever reaching count) and passes against the
+  // reordered one.
+  it("refuses a resume pointer when the batch reverts in the window between the count read and the (now-final) status read", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const callOrder: string[] = [];
+    const rpc = vi.fn((name: string, _args: unknown) => {
+      if (name === "match_lwin_bulk") return Promise.resolve({ data: [], error: null });
+      if (name === "count_import_batch_rows") {
+        callOrder.push("count");
+        return Promise.resolve({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        });
+      }
+      throw new Error(`unexpected rpc ${name}`);
+    });
+    const from = vi.fn((table: string) => {
+      if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        neq: () => builder,
+        or: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        maybeSingle: async () => {
+          callOrder.push("status");
+          // Reverted BY THE TIME this (now-final) read runs — simulating a
+          // revert that landed after count but before this call.
+          return { data: { id: "existing-batch", status: "reverted", session_id: null, chunk_index: null }, error: null };
+        },
+        then: (resolve: (value: { data: unknown; error: unknown }) => void) => {
+          resolve({
+            data: [
+              {
+                id: "existing-batch",
+                status: "created",
+                session_id: null,
+                chunk_index: null,
+                content_sha256: fileHex,
+                created_at: "2026-01-01T00:00:00.000Z",
+              },
+            ],
+            error: null,
+          });
+        },
+      };
+      return builder;
+    });
+    const supabase = { rpc, from };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    // count ran BEFORE status — the reordered sequence this finding
+    // requires — and the (now-last) status read is what actually catches
+    // the revert.
+    expect(callOrder).toEqual(["count", "status"]);
     expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
   });
 });

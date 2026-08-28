@@ -12,7 +12,16 @@
 import { act, type ComponentProps, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { PreviewStep, BatchStep, isRowInConfirmedChunk, MAX_SHOWN_ERROR_ROWS, type ErrorRowEntry, type BatchDetail } from "./import-client";
+import {
+  PreviewStep,
+  BatchStep,
+  isRowInConfirmedChunk,
+  isRowInSkippedChunk,
+  buildImportAnywayOverride,
+  MAX_SHOWN_ERROR_ROWS,
+  type ErrorRowEntry,
+  type BatchDetail,
+} from "./import-client";
 import { ZERO_SUMMARY, type ChunkUploadState, type ChunkedPlanState } from "./session-step";
 import type { CanonicalHeader } from "@/domains/import/constants";
 
@@ -64,6 +73,7 @@ function baseProps(overrides: Partial<PreviewStepProps> = {}): PreviewStepProps 
     rowOverrides: {},
     onRowFieldChange: () => {},
     isRowLocked: () => false,
+    isRowSkipped: () => false,
     chunkUpload: null,
     onConfirm: () => {},
     confirming: false,
@@ -107,6 +117,65 @@ describe("isRowInConfirmedChunk (Sol round-2 audit finding 1)", () => {
   });
 });
 
+// Round-6 audit finding 5: the skipped-chunk counterpart of
+// isRowInConfirmedChunk — a skipped chunk's rows were never sent to the
+// server either, so they're just as locked, for a distinct reason.
+describe("isRowInSkippedChunk (round-6 audit finding 5)", () => {
+  const PLAN: ChunkedPlanState = {
+    headerRecord: "producer,name,quantity",
+    chunkTotal: 2,
+    chunks: [
+      { index: 1, startRow: 1, endRow: 2, text: "" },
+      { index: 2, startRow: 3, endRow: 4, text: "" },
+    ],
+    sourceSha256: "a".repeat(64),
+  };
+  const UPLOAD: ChunkUploadState[] = [
+    { index: 1, status: "skipped", batchId: null, error: null, code: null },
+    { index: 2, status: "confirmed", batchId: "b2", error: null, code: null },
+  ];
+
+  it("is false on the plain (non-chunked) path", () => {
+    expect(isRowInSkippedChunk(1, null, null)).toBe(false);
+  });
+
+  it("is true for a row inside a SKIPPED chunk's [startRow, endRow] range", () => {
+    expect(isRowInSkippedChunk(1, PLAN, UPLOAD)).toBe(true);
+    expect(isRowInSkippedChunk(2, PLAN, UPLOAD)).toBe(true);
+  });
+
+  it("is false for a row inside a CONFIRMED chunk's range", () => {
+    expect(isRowInSkippedChunk(3, PLAN, UPLOAD)).toBe(false);
+    expect(isRowInSkippedChunk(4, PLAN, UPLOAD)).toBe(false);
+  });
+
+  it("is false for a row number outside every chunk's range", () => {
+    expect(isRowInSkippedChunk(99, PLAN, UPLOAD)).toBe(false);
+  });
+});
+
+// Round-6 audit finding 3: the deterministic, pure logic behind "Import
+// anyway" — building the canonical no-op override from a chunk's own
+// first data row.
+describe("buildImportAnywayOverride (round-6 audit finding 3)", () => {
+  const RAW_TEXT: Record<CanonicalHeader, string> = { ...EMPTY_RAW_TEXT, producer: "Domaine Example", name: "Cuvee One" };
+
+  it("builds an override on the chunk's first data row, using the FIRST canonical field's existing value", () => {
+    const built = buildImportAnywayOverride({ startRow: 5 }, RAW_TEXT);
+    expect(built).toEqual({ rowNumber: 5, field: "producer", value: "Domaine Example" });
+  });
+
+  it("is deterministic — the same chunk + preview always produces the identical override", () => {
+    const a = buildImportAnywayOverride({ startRow: 5 }, RAW_TEXT);
+    const b = buildImportAnywayOverride({ startRow: 5 }, RAW_TEXT);
+    expect(a).toEqual(b);
+  });
+
+  it("returns null when there is no first-row data to build from", () => {
+    expect(buildImportAnywayOverride({ startRow: 1 }, null)).toBeNull();
+  });
+});
+
 describe("PreviewStep — locked rows in a confirmed chunk (Sol round-2 audit finding 1)", () => {
   const mountedRoots: Root[] = [];
 
@@ -137,6 +206,32 @@ describe("PreviewStep — locked rows in a confirmed chunk (Sol round-2 audit fi
     const unlockedInput = unlockedItem.querySelector("input")!;
     expect(unlockedInput.disabled).toBe(false);
     expect(unlockedItem.textContent).not.toContain("Row already imported with this chunk");
+  });
+
+  // Round-6 audit finding 5: a skipped chunk's rows are just as locked as
+  // a confirmed chunk's, but for a DISTINCT reason, so they render a
+  // distinct message.
+  it("renders a skipped-chunk row's inputs disabled with the distinct 'skipped chunk' message", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          errorRows: [errorRow(1), errorRow(3)],
+          isRowSkipped: (rowNumber) => rowNumber === 1,
+        })}
+      />,
+    );
+
+    const skippedItem = rowItem(container, "Row 1");
+    const otherItem = rowItem(container, "Row 3");
+
+    const skippedInput = skippedItem.querySelector("input")!;
+    expect(skippedInput.disabled).toBe(true);
+    expect(skippedItem.textContent).toContain("Row belongs to a skipped chunk.");
+    expect(skippedItem.textContent).not.toContain("Row already imported with this chunk");
+
+    const otherInput = otherItem.querySelector("input")!;
+    expect(otherInput.disabled).toBe(false);
+    expect(otherItem.textContent).not.toContain("skipped chunk");
   });
 
   async function mount(element: ReactElement) {
@@ -294,6 +389,31 @@ describe("PreviewStep — revalidated summary counts (Sol round-3 audit finding 
     expect(stats.get("Needs resolution")).toBe("1");
   });
 
+  // Round-6 audit finding 5: a row belonging to a SKIPPED chunk is
+  // excluded from Passing validation / the "row(s) fixed" caption even
+  // when its override would otherwise validate — that chunk's rows were
+  // never sent, and never will be, so counting it would inflate what's
+  // actually going to import.
+  it("excludes a fixed row belonging to a SKIPPED chunk from Passing validation and the 'row(s) fixed' caption", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          summary: { ...ZERO_SUMMARY, totalRows: 1, errorRows: 1, readyToApplyRows: 0 },
+          errorRows: [errorRow(1, { rawText: { ...EMPTY_RAW_TEXT, producer: "Domaine", name: "Wine 1", quantity: "0.9" } })],
+          rowOverrides: { 1: { quantity: "6" } },
+          isRowSkipped: (rowNumber) => rowNumber === 1,
+        })}
+      />,
+    );
+
+    const stats = new Map(
+      [...container.querySelectorAll("dt")].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]),
+    );
+    expect(stats.get("Passing validation")).toBe("0");
+    expect(stats.get("Errors (excluded)")).toBe("1");
+    expect(container.textContent).not.toContain("row(s) fixed above");
+  });
+
   async function mount(element: ReactElement) {
     const container = document.createElement("div");
     document.body.append(container);
@@ -402,7 +522,11 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
     document.body.innerHTML = "";
   });
 
-  it("hides the Confirm/Retry button and renders honest guidance naming the other chunk, before anything is fixed", async () => {
+  // Round-6 audit finding 3: the guidance text was reworded — a genuine
+  // repeated segment routes through "Import anyway" (the deterministic
+  // no-op override), not through inventing a row edit that "actually
+  // DIFFERS" from the sibling's own value.
+  it("hides the Confirm/Retry button and renders honest guidance naming the other chunk and Import anyway, before anything is fixed", async () => {
     const chunkUpload: ChunkUploadState[] = [
       {
         index: 1,
@@ -410,11 +534,9 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
         batchId: null,
         error:
           "Chunk 1's content is identical to chunk 2, already imported in this session — the database can't hold " +
-          "two imports with identical content, so this can't be resolved by retrying unchanged. If this is a " +
-          "genuine repeated segment that needs to import again, edit a row below so its fix actually DIFFERS from " +
-          "chunk 2's own value for that row — re-entering the identical text won't change anything — then confirm " +
-          "again. If it was an accidental duplicate, no action is needed, or skip this chunk below — chunk 2 " +
-          "already imported these rows.",
+          "two imports with identical content. If this is a genuine repeated segment that needs to import again, " +
+          'use "Import anyway" below to import it as a separate tracked upload. If the duplication was accidental, ' +
+          'no action is needed, or use "Skip this chunk" below — chunk 2 already imported these rows.',
         code: "duplicate_chunk_content",
       },
     ];
@@ -434,7 +556,8 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
     expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
     expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
     expect(container.textContent).toContain("identical to chunk 2");
-    expect(container.textContent).toContain("actually DIFFERS");
+    expect(container.textContent).toContain("Import anyway");
+    expect(container.textContent).not.toContain("actually DIFFERS");
   });
 
   // Round-5 audit finding 3: the gate used to check only that an override
@@ -461,6 +584,7 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
         {...baseProps({
           chunkUpload,
           chunkTotal: 2,
+          chunkBreakdown: [{ index: 1, startRow: 1, endRow: 1, summary: ZERO_SUMMARY }],
           error: chunkUpload[0].error,
           errorRows: [errorRow(1, { chunkIndex: 1, chunkRowNumber: 1 })],
           // Same value the failed attempt already sent — the SAME
@@ -493,6 +617,7 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
         {...baseProps({
           chunkUpload,
           chunkTotal: 2,
+          chunkBreakdown: [{ index: 1, startRow: 1, endRow: 1, summary: ZERO_SUMMARY }],
           error: chunkUpload[0].error,
           errorRows: [errorRow(1, { chunkIndex: 1, chunkRowNumber: 1 })],
           // A genuinely different value from what was already sent.
@@ -515,6 +640,10 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
         {...baseProps({
           chunkUpload,
           chunkTotal: 2,
+          chunkBreakdown: [
+            { index: 1, startRow: 1, endRow: 1, summary: ZERO_SUMMARY },
+            { index: 3, startRow: 5, endRow: 5, summary: ZERO_SUMMARY },
+          ],
           error: chunkUpload[0].error,
           // Row 5 belongs to a DIFFERENT chunk (chunkIndex 3) — fixing it
           // says nothing about chunk 1's own content.
@@ -527,6 +656,35 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
     const buttons = [...container.querySelectorAll("button")];
     expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
     expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
+  });
+
+  // Round-6 audit finding 3: "Import anyway" produces a no-op override on
+  // the chunk's FIRST data row, which for a fully-valid duplicate chunk is
+  // not an error row at all — it would never appear in errorRows, so the
+  // gate above must find it via chunkBreakdown's own row range, not by
+  // matching against errorRows.
+  it("re-enables the button for a no-op override on a row that ISN'T an error row (the 'Import anyway' shape)", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      { index: 1, status: "failed", batchId: null, error: "Chunk 1's content is identical to chunk 2.", code: "duplicate_chunk_content" },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          chunkUpload,
+          chunkTotal: 2,
+          chunkBreakdown: [{ index: 1, startRow: 1, endRow: 2, summary: ZERO_SUMMARY }],
+          error: chunkUpload[0].error,
+          errorRows: [], // fully valid chunk — no error row at all
+          // "Import anyway"'s own shape: an override on the chunk's first
+          // data row (global row 1), which has no entry in errorRows.
+          rowOverrides: { 1: { producer: "Domaine" } },
+        })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
   });
 
   // Round-5 audit finding 4: a fully VALID duplicate chunk (no error rows
@@ -586,6 +744,108 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
       const buttons = [...container.querySelectorAll("button")];
       expect(buttons.some((b) => b.textContent?.includes("Confirm import") || b.textContent?.includes("Retry upload"))).toBe(true);
       expect(container.textContent).toContain("Skipped");
+    });
+  });
+
+  // Round-6 audit finding 3: "Import anyway" — the other action offered
+  // alongside Skip on a duplicate_chunk_content chunk.
+  describe("Import anyway (round-6 audit finding 3)", () => {
+    it("offers an Import anyway control for a duplicate_chunk_content chunk and reports the right index when clicked", async () => {
+      const chunkUpload: ChunkUploadState[] = [
+        { index: 1, status: "failed", batchId: null, error: "Chunk 1's content is identical to chunk 2.", code: "duplicate_chunk_content" },
+        { index: 2, status: "confirmed", batchId: "b2", error: null, code: null },
+      ];
+      let importedAnywayIndex: number | null = null;
+
+      const { container } = await mount(
+        <PreviewStep
+          {...baseProps({
+            chunkUpload,
+            chunkTotal: 2,
+            error: chunkUpload[0].error,
+            errorRows: [], // fully valid chunk — Import anyway is the ONLY escape hatch
+            onImportAnyway: (index) => {
+              importedAnywayIndex = index;
+            },
+          })}
+        />,
+      );
+
+      const importAnywayButton = findButton(container, "Import anyway");
+      expect(importAnywayButton).toBeTruthy();
+      await click(importAnywayButton!);
+      expect(importedAnywayIndex).toBe(1);
+    });
+
+    it("offers BOTH Import anyway and Skip on the same duplicate_chunk_content chunk", async () => {
+      const chunkUpload: ChunkUploadState[] = [
+        { index: 1, status: "failed", batchId: null, error: "Chunk 1's content is identical to chunk 2.", code: "duplicate_chunk_content" },
+      ];
+
+      const { container } = await mount(
+        <PreviewStep
+          {...baseProps({
+            chunkUpload,
+            chunkTotal: 1,
+            error: chunkUpload[0].error,
+            errorRows: [],
+            onImportAnyway: () => {},
+            onSkipChunk: () => {},
+          })}
+        />,
+      );
+
+      expect(findButton(container, "Import anyway")).toBeTruthy();
+      expect(findButton(container, "Skip this chunk")).toBeTruthy();
+    });
+  });
+
+  // Round-6 audit finding 5: "Undo skip" — skip is trivially reversible
+  // client-side state, restoring the failed state with both actions back.
+  describe("Undo skip (round-6 audit finding 5)", () => {
+    it("offers an Undo skip control on a skipped chunk and reports the right index when clicked", async () => {
+      const chunkUpload: ChunkUploadState[] = [
+        { index: 1, status: "skipped", batchId: null, error: null, code: null, duplicateOfChunkIndex: 2 },
+      ];
+      let undoneIndex: number | null = null;
+
+      const { container } = await mount(
+        <PreviewStep
+          {...baseProps({
+            chunkUpload,
+            chunkTotal: 1,
+            errorRows: [],
+            onUndoSkip: (index) => {
+              undoneIndex = index;
+            },
+          })}
+        />,
+      );
+
+      const undoButton = findButton(container, "Undo skip");
+      expect(undoButton).toBeTruthy();
+      await click(undoButton!);
+      expect(undoneIndex).toBe(1);
+    });
+
+    it("never renders Undo skip for a chunk that isn't skipped", async () => {
+      const chunkUpload: ChunkUploadState[] = [
+        { index: 1, status: "failed", batchId: null, error: "Chunk 1's content is identical to chunk 2.", code: "duplicate_chunk_content" },
+      ];
+
+      const { container } = await mount(
+        <PreviewStep
+          {...baseProps({
+            chunkUpload,
+            chunkTotal: 1,
+            error: chunkUpload[0].error,
+            errorRows: [],
+            onUndoSkip: () => {},
+          })}
+        />,
+      );
+
+      expect(findButton(container, "Undo skip")).toBeFalsy();
     });
   });
 
@@ -695,13 +955,19 @@ describe("BatchStep — a resumed batch that reads as reverted is surfaced hones
     };
   }
 
-  it("hides the Apply button and shows a superseded-import banner when the batch reads as reverted with rows still not_applied", async () => {
+  // Round-6 audit finding 6: the banner used to assert a specific cause
+  // ("superseded by a duplicate import") that this component has no way to
+  // actually know — a batch reaches status='reverted' for ANY reason a
+  // revert can happen, including the operator's own deliberate revert.
+  // Reworded to a neutral, always-true statement of fact.
+  it("hides the Apply button and shows a neutral reverted-batch banner when the batch reads as reverted with rows still not_applied", async () => {
     const { container } = await mount(
       <BatchStep batch={batchDetail("reverted")} setBatch={() => {}} onDone={() => {}} />,
     );
 
     expect(findButton(container, /Apply \d+ row/)).toBeFalsy();
-    expect(container.textContent).toContain("superseded by a duplicate import");
+    expect(container.textContent).toContain("This import batch was reverted. Its rows were not imported");
+    expect(container.textContent).not.toContain("superseded by a duplicate import");
   });
 
   it("shows the Apply button normally, and no banner, for a live (non-reverted) batch with the same row shape", async () => {
@@ -710,7 +976,7 @@ describe("BatchStep — a resumed batch that reads as reverted is surfaced hones
     );
 
     expect(findButton(container, /Apply \d+ row/)).toBeTruthy();
-    expect(container.textContent).not.toContain("superseded by a duplicate import");
+    expect(container.textContent).not.toContain("This import batch was reverted");
   });
 
   async function mount(element: ReactElement) {

@@ -423,49 +423,92 @@ export async function confirmImportBatch(
  * already treats as gone via .neq("status","reverted"): functionally
  * indistinguishable from deleted to every future confirm.
  *
- * Best-effort: if the revert call ITSELF also fails, this batch stays
- * live — but not silently or unboundedly so. From that point on it is a
- * completely ordinary live batch: the very next confirm's PRE-check
- * (findLiveBatchByUnderlyingFile) will find it and resume it via
- * toAlreadyExistsResult, exactly like any other live batch — the operator
- * never loses their import, they just get a "this already exists" resume
- * pointer on retry rather than an immediate success. A genuine duplicate
- * LIVE batch can only result from two independent failures (this
- * function's own trigger — a postCheck lookup error or an observed rival —
- * AND the revert call it triggers) landing together with a real concurrent
- * same-file confirm in between; that combination is deliberately not
- * engineered around further here. */
+ * Round-6 audit finding 1: retries the revert call ONCE, immediately, if
+ * the first attempt fails — a transient failure (a dropped connection, a
+ * momentary lock conflict) is far more likely than a durable one, and a
+ * successful second attempt fully closes the orphan instead of leaving it
+ * for a later confirm to stumble onto. If BOTH attempts fail, this now
+ * returns the SAME retryable duplicate_race_retry a successful revert
+ * does, never the old, distinct duplicate_check_failed code — see the
+ * proof below for why that convergence is correct, not merely convenient.
+ *
+ * FAILURE-ATOMICITY, corrected (round-6 finding 1): an earlier version of
+ * this comment (and confirmImportBatch's own) claimed the invariant this
+ * file maintains is "at most one live batch [for a given underlying file]
+ * at any time." That claim is FALSE once a revert can itself fail — a
+ * double revert-failure here leaves BOTH our own just-created batch (B)
+ * and the rival it lost to (A) live simultaneously, and there is no
+ * further retry budget past the one above to close that gap. The TRUE
+ * invariant this file actually guarantees — the only one that ever
+ * mattered — is narrower: at most one live batch is ever APPLIED per
+ * underlying file. A revert-failure can orphan an unapplied live batch,
+ * but that orphan is inert garbage, not a correctness hazard, and it is
+ * resumable only after its survivor is reverted. Proof:
+ *   1. Applying a batch requires a CLIENT holding that batch's own id (the
+ *      apply endpoint is called with a specific batchId) — apply is never
+ *      driven by a server-side scan that could stumble onto B on its own.
+ *   2. B's own client never received a batchId to apply: every path that
+ *      reaches this function returns an ERROR for B's request (never
+ *      `{ ok: true, batchId: B }`), so no client anywhere holds a pointer
+ *      to B. B can only ever be reached later via a DIFFERENT confirm's
+ *      own pre-check (point 3, below) — never by the request that created it.
+ *   3. Any future upload of the SAME underlying file resumes the OLDEST
+ *      live batch for it (findLiveBatchByUnderlyingFile's own ordering),
+ *      never "whichever batch a client happens to name." With both A and
+ *      B live, A — already committed by the time B's post-check ran and
+ *      lost — is essentially always the older of the two, so an ordinary
+ *      resume keeps landing on A; B stays untouched and dormant.
+ *   4. The only way B is EVER resumed is if A is reverted first (from A's
+ *      own batch view) — at which point A's rows are gone (revert_import_
+ *      batch's own deletion scope), so a client that subsequently resumes
+ *      and applies B is importing data that exists nowhere else. That is
+ *      B's own, never-previously-applied rows landing exactly once, after
+ *      their only competitor was explicitly withdrawn — not a duplicate.
+ * A revert-failure orphan can therefore, at worst, sit inert until its
+ * survivor is reverted; it can never cause the same underlying content to
+ * be APPLIED twice. That is what makes "retry once, then report the same
+ * retryable outcome either way" the correct fix rather than a compromise:
+ * unlike the old duplicate_check_failed branch (which existed only because
+ * a live-but-unverified batch felt unsafe to treat like an ordinary
+ * duplicate), there is no unsafe state left to signal separately — a
+ * failed revert produces exactly the same class of outcome (an inert,
+ * resumable orphan) as a successful one, so the caller gets exactly the
+ * same instruction either way: retry the upload. */
 async function selfRevertAndRetry(
   supabase: SupabaseClient<Database>,
   batchId: string,
 ): Promise<ConfirmBatchResult> {
   // revertImportBatch only returns { ok: false } for the two named PostgREST
   // error codes it recognizes (P0002/P0001) — anything else it re-throws
-  // verbatim. "Best-effort" here means an unrecognized revert failure must
-  // never escape as an uncaught exception either; both outcomes collapse to
-  // the same "revert did not succeed" branch below.
-  let reverted: boolean;
-  try {
-    reverted = (await revertImportBatch(supabase, batchId)).ok;
-  } catch {
-    reverted = false;
-  }
+  // verbatim. Collapsing both into a plain boolean here means an
+  // unrecognized revert failure can never escape as an uncaught exception
+  // either — this is called from confirmImportBatch's own success path,
+  // where a stray throw would be a regression, not an improvement.
+  const tryRevertOnce = async (): Promise<boolean> => {
+    try {
+      return (await revertImportBatch(supabase, batchId)).ok;
+    } catch {
+      return false;
+    }
+  };
+
+  let reverted = await tryRevertOnce();
   if (!reverted) {
-    return {
-      ok: false,
-      error: {
-        code: "duplicate_check_failed",
-        message:
-          "This import raced with another upload of the same file and could not be reconciled automatically — please try confirming again.",
-      },
-    };
+    // Round-6 audit finding 1: one immediate retry. See this function's
+    // own comment above for why a second failure is still safe to report
+    // as the ordinary retryable outcome below, rather than a distinct
+    // "unsafe, can't verify" error.
+    reverted = await tryRevertOnce();
   }
+
   return {
     ok: false,
     error: {
       code: "duplicate_race_retry",
-      message:
-        "This upload raced with a duplicate confirm of the same file, and both attempts were withdrawn to avoid a conflict. Please retry the upload.",
+      message: reverted
+        ? "This upload raced with a duplicate confirm of the same file, and both attempts were withdrawn to avoid a conflict. Please retry the upload."
+        : "This upload raced with a duplicate confirm of the same file and could not be fully withdrawn on this " +
+          "attempt — it is safely inert and will be resumed automatically on your next retry. Please retry the upload.",
     },
   };
 }
@@ -571,13 +614,36 @@ async function findDuplicateBatch(
  * entirely on this one. (Resuming a reverted batch would be DATA-safe
  * regardless — apply only ever selects apply_status='not_applied' rows,
  * and a revert never leaves any row in that state — but it's a confusing
- * dead end for the operator: refused here rather than merely tolerated.) */
+ * dead end for the operator: refused here rather than merely tolerated.)
+ *
+ * Round-6 audit finding 2: the status re-read above used to run FIRST,
+ * with countBatchRows' own await sitting AFTER it, between the read and
+ * the return — so a revert landing in that count-await window produced a
+ * resume pointer whose status field this function had already decided was
+ * live, built from a status value that was stale by the time the caller
+ * ever saw it. Reordered so COUNT runs first and the status re-read is the
+ * LAST await before this function returns — nothing (no further await, no
+ * branch back to the network) sits between reading `current` and either
+ * refusing or constructing the result below. A revert can still land in
+ * the sub-millisecond gap between that final read returning and this
+ * function's own return statement executing — no synchronous function can
+ * close a window that isn't itself synchronous — but that residual is
+ * about as tight as a single extra round trip can make it, and it is
+ * DATA-safe regardless: apply only ever selects apply_status='not_applied'
+ * rows, and apply_import_batch_chunk_v2 (0108) already no-ops on a
+ * reverted batch, so a client acting on a pointer that reverted a moment
+ * after this call returned simply finds nothing to apply, not a duplicate. */
 async function toAlreadyExistsResult(
   supabase: SupabaseClient<Database>,
   match: { id: string; status: string; session_id: string | null; chunk_index: number | null },
 ): Promise<ConfirmBatchResult> {
+  const counts = await countBatchRows(supabase, match.id);
   const current = await readBatchLiveState(supabase, match.id);
   if (!current || current.status === "reverted") {
+    // Fail closed: a status-read ERROR (readBatchLiveState returns null for
+    // either a missing row or a lookup failure — see its own comment) is
+    // treated identically to an observed revert, never as "probably still
+    // live, hand out the pointer anyway."
     return {
       ok: false,
       error: {
@@ -587,7 +653,6 @@ async function toAlreadyExistsResult(
       },
     };
   }
-  const counts = await countBatchRows(supabase, current.id);
   return {
     ok: true,
     alreadyExists: true,
