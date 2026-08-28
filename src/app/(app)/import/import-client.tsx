@@ -23,6 +23,7 @@ import {
   AmbiguousRecordSplitError,
   UnsupportedEncodingError,
   UnsupportedLineEndingError,
+  buildChunkPlan,
   decodeCsvBytesStrict,
   splitLogicalRecords,
 } from "@/domains/import/csv-splitter";
@@ -30,6 +31,7 @@ import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-servic
 import {
   SessionStep,
   ChunkUploadProgress,
+  estimateChunkedPhaseWaitSeconds,
   planChunkedPreview,
   confirmChunkedSessionWithResume,
   readStoredSession,
@@ -455,6 +457,13 @@ export function ImportClient() {
   const [chunkedPlan, setChunkedPlan] = useState<ChunkedPlanState | null>(null);
   const [chunkedPreview, setChunkedPreview] = useState<ChunkedPreviewState | null>(null);
   const [chunkUpload, setChunkUpload] = useState<ChunkUploadState[] | null>(null);
+  // WARN 4 (round-29 audit): the worst-case wait, in seconds, for ONE
+  // sequential chunked phase (preview OR confirm) of THIS file — set as
+  // soon as the chunk count is known (before the chunked preview wait
+  // starts), so the operator sees an honest cost estimate up front rather
+  // than a bare spinner that says nothing about a multi-chunk file's real
+  // total latency.
+  const [chunkedPhaseWaitEstimateSeconds, setChunkedPhaseWaitEstimateSeconds] = useState<number | null>(null);
   const [confirmingChunked, setConfirmingChunked] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionLabel, setSessionLabel] = useState<string>("cellar.csv");
@@ -576,6 +585,7 @@ export function ImportClient() {
     setPreviewError(null);
     setRowOverrides({});
     setRejectedLwinRows(new Set());
+    setChunkedPhaseWaitEstimateSeconds(null);
     try {
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
@@ -608,6 +618,13 @@ export function ImportClient() {
       if (dataRecords.length <= MAX_ROWS) {
         await runSingleFilePreview(file);
       } else {
+        // WARN 4 (round-29 audit): set the worst-case per-phase wait
+        // estimate BEFORE starting the (sequential, one-chunk-at-a-time)
+        // preview wait below — UploadStep renders it immediately while
+        // "previewing" is true, so the operator sees an honest cost
+        // estimate before/as the wait begins, not only after it ends.
+        const chunkCount = buildChunkPlan(dataRecords, CLIENT_CHUNK_TARGET_ROWS).length;
+        setChunkedPhaseWaitEstimateSeconds(estimateChunkedPhaseWaitSeconds(chunkCount));
         await runChunkedPreview(file, headerRecord, dataRecords, bytes);
       }
     } catch {
@@ -813,6 +830,7 @@ export function ImportClient() {
           fileInputRef={fileInputRef}
           onPreview={handlePreview}
           previewing={previewing}
+          chunkedPhaseWaitEstimateSeconds={chunkedPhaseWaitEstimateSeconds}
           error={previewError}
         />
       )}
@@ -882,12 +900,24 @@ async function loadBatchDetail(id: string, setBatch: (b: BatchDetail) => void) {
   setBatch(await response.json());
 }
 
+/** WARN 4 (round-29 audit) — plain-language rendering of a worst-case
+ * seconds estimate (estimateChunkedPhaseWaitSeconds, session-step.tsx) for
+ * the operator-facing cost messages below. Minutes past 90s, otherwise
+ * seconds — never false precision (this is a worst-case bound, not a
+ * measured duration). */
+function formatRoughDuration(seconds: number): string {
+  if (seconds < 90) return `${seconds}s`;
+  const minutes = Math.ceil(seconds / 60);
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
+
 function UploadStep({
   file,
   setFile,
   fileInputRef,
   onPreview,
   previewing,
+  chunkedPhaseWaitEstimateSeconds,
   error,
 }: {
   file: File | null;
@@ -895,6 +925,7 @@ function UploadStep({
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onPreview: () => void;
   previewing: boolean;
+  chunkedPhaseWaitEstimateSeconds: number | null;
   error: string | null;
 }) {
   return (
@@ -926,6 +957,20 @@ function UploadStep({
         <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-accent">
           <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
           {error}
+        </p>
+      )}
+
+      {/* WARN 4 (round-29 audit): a multi-chunk file is previewed one chunk
+          at a time, so passing every chunk's own per-chunk time budget says
+          nothing about the total wait — surfaced here, while "previewing"
+          is true, so the operator sees an honest worst-case estimate for
+          THIS phase as soon as the chunk count is known, not only after the
+          wait already ended. */}
+      {previewing && chunkedPhaseWaitEstimateSeconds !== null && (
+        <p className="mt-md text-[13px] text-grey">
+          This file needs multiple chunks — previewing it may take up to about{" "}
+          {formatRoughDuration(chunkedPhaseWaitEstimateSeconds)} in the worst case, uploaded one chunk at a time.
+          Confirming afterward repeats a similar, chunk-by-chunk process.
         </p>
       )}
 
@@ -1228,7 +1273,14 @@ export function PreviewStep({
       {chunkTotal !== undefined && (
         <p className="mt-2xs text-[13px] text-grey">
           This file will be split into {chunkTotal} chunk{chunkTotal === 1 ? "" : "s"} of up to{" "}
-          {CLIENT_CHUNK_TARGET_ROWS} rows, uploaded one at a time under a single import session.
+          {CLIENT_CHUNK_TARGET_ROWS} rows, uploaded one at a time under a single import session.{" "}
+          {/* WARN 4 (round-29 audit): each chunk passing its own per-chunk
+              time budget says nothing about the total wait for a
+              multi-chunk file — stated honestly here, before the operator
+              clicks Confirm and starts the (also sequential, also
+              per-chunk-bounded) confirm phase. */}
+          Confirming it will take up to about {formatRoughDuration(estimateChunkedPhaseWaitSeconds(chunkTotal))} in
+          the worst case, uploaded one chunk at a time — the same as preview.
         </p>
       )}
 

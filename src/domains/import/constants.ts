@@ -100,6 +100,15 @@ export const LWIN_MATCH_BATCH_SIZE = 100;
  * pass could not safely perform. */
 export const LWIN_MATCH_CONCURRENCY = 4;
 
+/** Round-29 audit, BLOCK 3 — the per-call latency INFLATION measured at
+ * LWIN_MATCH_CONCURRENCY (4) by the same round-5 scratchpad benchmark
+ * LWIN_MATCH_CONCURRENCY's own comment above documents: a ~9% per-call
+ * slowdown from contention vs. running one call in isolation. Pulled into
+ * its own constant, rather than left as a number only mentioned in prose,
+ * so it has exactly one place to be changed if ever re-measured — see
+ * LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY below, its only consumer. */
+export const LWIN_MATCH_CONCURRENCY_LATENCY_INFLATION = 1.09;
+
 /** BLOCK 2 (round 7 fix, Sol round-3 audit finding 2 follow-up) — the
  * worst-case wall-clock measured for ONE match_lwin_bulk RPC call, at
  * LWIN_MATCH_BATCH_SIZE (100) rows, against the worst-case
@@ -107,8 +116,38 @@ export const LWIN_MATCH_CONCURRENCY = 4;
  * own comment). Same ~4.4s figure LWIN_MATCH_BATCH_SIZE's own comment
  * already documents — pulled into its own constant so that comment and the
  * budget derivation below can never state two different numbers for the
- * same measured fact. */
+ * same measured fact.
+ *
+ * Round-29 audit, BLOCK 3 — PROVENANCE, CORRECTED: this is an INHERITED
+ * estimate, not a reproduced one. LWIN_MATCH_CONCURRENCY's own comment
+ * above documents a round-5 scratchpad benchmark that re-measured this
+ * same worst-case query shape under concurrent load — but against a
+ * DIFFERENT synthetic catalog (130,000 rows) on different hardware than
+ * whatever produced this 4.4s figure at 0078's original migration time,
+ * and that round-5 benchmark came back with a DIFFERENT absolute per-call
+ * time of its own, not 4.4s — it could NOT independently reproduce this
+ * number. What it DID confirm is the RELATIVE behavior at concurrency 4:
+ * a 3.61× wall-clock speedup vs. sequential, and the ~9% per-call latency
+ * inflation captured in LWIN_MATCH_CONCURRENCY_LATENCY_INFLATION above —
+ * both scale-invariant ratios, unlike the absolute 4.4s baseline they were
+ * measured against. This constant is kept as the best available
+ * single-call baseline (0078's own worst-case measurement, the one closest
+ * to a real production catalog scale), but the query budget below no
+ * longer solves for it un-inflated — see
+ * LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY, which applies the measured
+ * contention inflation on top of it. */
 export const LWIN_MATCH_PER_CALL_SECONDS = 4.4;
+
+/** Round-29 audit, BLOCK 3 — the per-call time that actually applies once
+ * LWIN_MATCH_CONCURRENCY (4) calls are in flight together, not the
+ * single-call figure above. The query budget below solves for THIS
+ * number: using the un-inflated single-call time understated real
+ * wall-clock at the configured concurrency and let the old cap authorize
+ * a plan that measured out to ~62.3s — over LWIN_MATCH_UX_CEILING_SECONDS
+ * (60). See LWIN_MATCH_MAX_QUERIES' own comment for the corrected
+ * arithmetic. */
+export const LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY =
+  LWIN_MATCH_PER_CALL_SECONDS * LWIN_MATCH_CONCURRENCY_LATENCY_INFLATION;
 
 /** BLOCK 2 (round 7 fix) — the UX-latency ceiling the query budget below is
  * solved for: how long an operator should ever have to watch a spinner for
@@ -123,20 +162,38 @@ export const LWIN_MATCH_UX_CEILING_SECONDS = 60;
  * (not rows) a single preview/confirm unit may generate, derived — not
  * merely asserted — from the same chain docs/runbooks/csv-import.md
  * documents: queries -> RPC calls at LWIN_MATCH_BATCH_SIZE -> waves at
- * LWIN_MATCH_CONCURRENCY -> seconds at LWIN_MATCH_PER_CALL_SECONDS, solved
- * for LWIN_MATCH_UX_CEILING_SECONDS.
+ * LWIN_MATCH_CONCURRENCY -> seconds at
+ * LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY, solved for
+ * LWIN_MATCH_UX_CEILING_SECONDS.
  *
- * Round-7 audit finding (this round): a producer-BEARING row generates
- * exactly 1 query; a producer-LESS row generates up to 3
- * (buildLwinQueryVariants, lwin-matching.ts) — so the TOTAL query count one
- * preview/confirm unit can generate is `validRows + 2 * producerLessRows`,
- * never just the producer-less subset alone. The prior version of this
- * budget (PRODUCER_LESS_MAX_ROWS, 1,500) counted only producer-less rows —
- * a valid 5,000-row upload with 1,500 producer-less rows and 3,500
- * producer-bearing ones still generated up to 3,500 + 3·1,500 = 8,000
- * queries (80 RPC calls, 20 waves at concurrency 4, ~88s at the 4.4s/call
- * estimate — already over this same ceiling), because the old cap never
- * looked at the producer-bearing rows' own queries at all.
+ * Round-7 audit finding: a producer-BEARING row generates exactly 1 query;
+ * a producer-LESS row generates up to 3 (buildLwinQueryVariants,
+ * lwin-matching.ts) — so the TOTAL query count one preview/confirm unit can
+ * generate is `validRows + 2 * producerLessRows`, never just the
+ * producer-less subset alone. The prior version of this budget
+ * (PRODUCER_LESS_MAX_ROWS, 1,500) counted only producer-less rows — a valid
+ * 5,000-row upload with 1,500 producer-less rows and 3,500 producer-bearing
+ * ones still generated up to 3,500 + 3·1,500 = 8,000 queries (80 RPC calls,
+ * 20 waves at concurrency 4, well over this ceiling either way), because
+ * the old cap never looked at the producer-bearing rows' own queries at
+ * all.
+ *
+ * Round-29 audit, BLOCK 3 — INTERNALLY INCONSISTENT ARITHMETIC, CORRECTED:
+ * the round-7 version of this derivation solved
+ * `floor(LWIN_MATCH_UX_CEILING_SECONDS / LWIN_MATCH_PER_CALL_SECONDS)` =
+ * `floor(60 / 4.4)` = 13 waves -> `13 * 4 * 100` = 5,200 queries — using the
+ * single-call 4.4s figure directly, while LWIN_MATCH_CONCURRENCY's own
+ * comment (above) records a ~9% per-call latency INCREASE from contention
+ * at that same concurrency. 13 waves at the actually-applicable per-call
+ * time (4.4 * 1.09 ≈ 4.796s) is 13 * 4.796 ≈ 62.3s — over
+ * LWIN_MATCH_UX_CEILING_SECONDS (60), contradicting the very ceiling this
+ * cap exists to enforce. Recomputed against
+ * LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY — the single source of truth
+ * for both this budget and LWIN_MATCH_CONCURRENCY's own contention note —
+ * instead: `floor(60 / 4.796)` = 12 waves -> `12 * 4 * 100` = **4,800
+ * queries max**. 12 waves at ≈4.796s/wave ≈ 57.6s, inside budget with
+ * margin; the excluded 13th wave would be ≈62.3s, over it — exactly the
+ * boundary `floor` exists to enforce.
  *
  * enforceLwinMatchQueryBudget (preview-service.ts) checks the file/chunk's
  * ACTUAL generated query count (buildLwinQueryVariants already run, before
@@ -146,9 +203,28 @@ export const LWIN_MATCH_UX_CEILING_SECONDS = 60;
  * rejected more conservatively than its real query cost warrants. Both
  * buildImportPreview call sites (the preview route, and confirm's own
  * re-derivation — see confirmImportBatch's header) share this one function
- * and one cap, so a file can never pass preview and then fail confirm (or
- * vice versa) on this budget. */
-const LWIN_MATCH_MAX_WAVES = Math.floor(LWIN_MATCH_UX_CEILING_SECONDS / LWIN_MATCH_PER_CALL_SECONDS);
+ * and one cap.
+ *
+ * WARN 5 (round-29 audit) — CORRECTED: the claim that used to sit here,
+ * "a file can never pass preview and then fail confirm (or vice versa) on
+ * this budget," is FALSE whenever row overrides are involved. The preview
+ * route calls buildImportPreview with no rowOverrides at all (there is
+ * nothing to override yet — this IS the first look at the file); confirm
+ * calls it with the operator's overrides applied (confirmImportBatch's own
+ * header). A row this function counts as "error" (missing/invalid
+ * required field) is filtered out of lwinQueries entirely — it contributes
+ * ZERO queries at preview. If an override fixes exactly the field that was
+ * failing, the SAME row counts as valid at confirm and contributes up to 3
+ * queries (producer-less) or 1 (producer-bearing) — a query count that did
+ * not exist when preview computed its own total against this same cap. A
+ * file sitting just under the cap at preview, with enough producer-less
+ * error rows subsequently fixed, can therefore legitimately EXCEED it only
+ * at confirm — preview and confirm share one cap, but not one input, so
+ * they are not guaranteed to share one verdict. See buildImportPreview's
+ * own budget-check comment (preview-service.ts) for how confirm's error
+ * message states this honestly when it happens, rather than leaving the
+ * operator to wonder why an already-previewed file suddenly failed. */
+const LWIN_MATCH_MAX_WAVES = Math.floor(LWIN_MATCH_UX_CEILING_SECONDS / LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY);
 export const LWIN_MATCH_MAX_QUERIES = LWIN_MATCH_MAX_WAVES * LWIN_MATCH_CONCURRENCY * LWIN_MATCH_BATCH_SIZE;
 
 /** Canonical CSV column names, in the order the downloadable template uses. */

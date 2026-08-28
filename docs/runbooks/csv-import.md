@@ -84,21 +84,58 @@ sub-chunks via repeated `POST /apply` calls, unchanged by chunking.
   `LWIN_MATCH_MAX_QUERIES` (`constants.ts`) — one number derived from the
   same chain this section documents: queries -> RPC calls at
   `LWIN_MATCH_BATCH_SIZE` (100) -> waves at `LWIN_MATCH_CONCURRENCY` (4) ->
-  seconds at `LWIN_MATCH_PER_CALL_SECONDS` (4.4), solved for a 60s UX
-  ceiling (`LWIN_MATCH_UX_CEILING_SECONDS`): `floor(60 / 4.4)` = 13 waves
-  max -> `13 * 4 * 100` = **5,200 queries max**. Both `buildImportPreview`
+  seconds at `LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY`, solved for a 60s
+  UX ceiling (`LWIN_MATCH_UX_CEILING_SECONDS`). Both `buildImportPreview`
   call sites (the preview route, and confirm's own re-derivation) share
   this exact function and constant, so a file can never pass preview and
   then fail confirm (or the reverse) on this budget. A file/chunk whose
-  real query count would exceed 5,200 fails fast, before any LWIN RPC call
-  is issued, with a message stating the actual generated query count and
-  the remedy (add producer data to more rows, or split the file into
+  real query count would exceed the cap fails fast, before any LWIN RPC
+  call is issued, with a message stating the actual generated query count
+  and the remedy (add producer data to more rows, or split the file into
   smaller chunks) — not a producer-less-only row count that, on a mixed
-  file, no longer describes what actually needs to shrink. `MAX_ROWS`
-  itself (5,000) is unaffected, and a file entirely of producer-bearing
-  rows can never hit this budget on its own — 5,000 rows × 1 query each =
-  5,000 queries, under the 5,200 cap — the budget only binds once
-  producer-less fan-out is involved, same as before.
+  file, no longer describes what actually needs to shrink.
+
+  **Corrected a third time (round-29 audit, BLOCK 3) — the round-7
+  arithmetic above was internally inconsistent with `LWIN_MATCH_CONCURRENCY`'s
+  own comment.** It solved `floor(60 / 4.4)` = 13 waves -> `13 * 4 * 100` =
+  5,200 queries max, using the single-call 4.4s figure directly — but
+  `LWIN_MATCH_CONCURRENCY`'s own comment (`constants.ts`) records a ~9%
+  per-call latency INCREASE from contention at that same concurrency (the
+  same round-5 benchmark this section already cites). 13 waves at the
+  actually-applicable per-call time (4.4 × 1.09 ≈ 4.796s) is
+  13 × 4.796 ≈ **62.3s — over the 60s ceiling** the cap exists to enforce.
+  Recomputed against `LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY`
+  (`constants.ts`, `LWIN_MATCH_PER_CALL_SECONDS × LWIN_MATCH_CONCURRENCY_LATENCY_INFLATION`
+  — the single source of truth for both this budget and the concurrency
+  comment's own contention note): `floor(60 / 4.796)` = 12 waves ->
+  `12 * 4 * 100` = **4,800 queries max**. 12 waves at ≈4.796s/wave ≈ 57.6s,
+  inside budget; the excluded 13th wave would be ≈62.3s, correctly over
+  it.
+
+  **Also corrected: the `LWIN_MATCH_PER_CALL_SECONDS` (4.4) provenance
+  claim.** This is an INHERITED estimate (0078's own migration-time
+  measurement), not one the round-5 benchmark reproduced. That benchmark
+  ran against a different synthetic catalog (130,000 rows) on different
+  hardware and measured a different absolute per-call time of its own —
+  what it DID independently confirm is the RELATIVE behavior: a 3.61×
+  wall-clock speedup at concurrency 4 (vs. sequential) and the ~9%
+  per-call latency inflation this budget now applies. The 4.4s baseline
+  itself was never re-measured or reproduced this round or last.
+
+  **A consequence worth stating plainly: `MAX_ROWS` (5,000) is NO LONGER
+  guaranteed to fit under this budget on its own.** The old text here
+  claimed "a file entirely of producer-bearing rows can never hit this
+  budget on its own" (5,000 rows × 1 query each = 5,000, under the old
+  5,200 cap). With the corrected 4,800-query cap, that arithmetic no
+  longer holds: 5,000 queries > 4,800. A single-chunk upload at `MAX_ROWS`
+  where every row carries a producer (the common case) can now be rejected
+  by this budget before any LWIN RPC call is issued, purely on row count —
+  something the pre-round-29 design explicitly assumed could never happen.
+  This is a direct, unavoidable consequence of no longer authorizing a
+  plan that measures out to ~62.3s; no change to `MAX_ROWS` or this budget
+  was made to paper over it, since neither was in scope for the finding
+  that prompted this fix — it is flagged here for whoever revisits this
+  cap next.
 
 **What chunking actually needed, that a single-batch design didn't:**
 inventory-level duplicate prevention (§1 — effectively unimplemented

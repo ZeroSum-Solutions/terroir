@@ -448,13 +448,29 @@ describe("buildImportPreview", () => {
 // match_lwin_bulk RPC call. A 4+-token producer-less name always generates
 // exactly 3 variants (buildLwinQueryVariants); every producer-less row
 // below uses one so its query contribution is exact and deterministic.
+//
+// NIT 7 (round-29 audit) — CORRECTED: not every test in this block is a
+// red-before/green-after proof of the round-7 fix. The "MIXED file" test
+// right below, and the exact/one-over boundary tests further down,
+// genuinely were red against the pre-round-7 cap (PRODUCER_LESS_MAX_ROWS,
+// which counted only producer-less rows) — that is what the round-7 audit
+// actually reported. The "producer-bearing row now genuinely counts"
+// test and the "does NOT count an invalid row" test below assert
+// properties that already held against the PARENT code before round 7's
+// fix (an all-producer-bearing file trivially passes any reasonable cap
+// either way; an all-invalid-row file was never counted as producer-less
+// rows worth rejecting under the old cap either) — they were never red,
+// and were never claimed to prove the round-7 fix specifically. They are
+// kept as general regression coverage for those two properties, not as
+// evidence of what round 7 changed.
 describe("buildImportPreview — LWIN_MATCH_MAX_QUERIES (BLOCK 2, round 7 fix)", () => {
   it("rejects a MIXED file whose TOTAL generated query count exceeds the budget, even though producer-less rows alone are within the old (producer-less-only) cap — the round-7 audit's own reported hole", async () => {
     // 3,500 producer-bearing rows (1 query each) + 1,500 producer-less
     // rows (3 variants each, exactly the old PRODUCER_LESS_MAX_ROWS cap)
     // = 3,500 + 4,500 = 8,000 queries — well over LWIN_MATCH_MAX_QUERIES
-    // (5,200) — even though 1,500 producer-less rows alone would have
-    // passed the OLD, producer-less-only cap outright.
+    // (4,800, round-29 audit BLOCK 3) — even though 1,500 producer-less
+    // rows alone would have passed the OLD, producer-less-only cap
+    // outright.
     const producerRows = Array.from({ length: 3500 }, (_, i) => `Domaine ${i},Wine ${i},2020,1,10.00`);
     const producerLessRows = Array.from(
       { length: 1500 },
@@ -473,14 +489,21 @@ describe("buildImportPreview — LWIN_MATCH_MAX_QUERIES (BLOCK 2, round 7 fix)",
   });
 
   it("accepts a file whose TOTAL generated query count is EXACTLY LWIN_MATCH_MAX_QUERIES — the bound is inclusive", async () => {
-    // 1,733 producer-less rows (4+-token names, 3 variants each) = 5,199
-    // queries, plus 1 producer-bearing row (1 query) = 5,200 total,
+    // Round-29 audit, BLOCK 3: LWIN_MATCH_MAX_QUERIES is now 4,800 (was
+    // 5,200 — see constants.ts for the corrected derivation). 1,599
+    // producer-less rows (4+-token names, 3 variants each) = 4,797
+    // queries, plus 3 producer-bearing rows (1 query each) = 4,800 total,
     // exactly LWIN_MATCH_MAX_QUERIES.
     const producerLessRows = Array.from(
-      { length: 1733 },
+      { length: 1599 },
       (_, i) => `,Wine Four Token Name ${i},2020,1,10.00`,
     );
-    const csvBody = [...producerLessRows, `Domaine 0,Wine 0,2020,1,10.00`].join("\n");
+    const csvBody = [
+      ...producerLessRows,
+      `Domaine 0,Wine 0,2020,1,10.00`,
+      `Domaine 1,Wine 1,2020,1,10.00`,
+      `Domaine 2,Wine 2,2020,1,10.00`,
+    ].join("\n");
     const supabase = makeSupabase([]);
 
     const result = await buildImportPreview(supabase, csv(`${csvBody}\n`));
@@ -490,15 +513,20 @@ describe("buildImportPreview — LWIN_MATCH_MAX_QUERIES (BLOCK 2, round 7 fix)",
   });
 
   it("rejects a file whose TOTAL generated query count is one over LWIN_MATCH_MAX_QUERIES", async () => {
-    // Same 1,733 producer-less rows (5,199 queries) plus 2 producer-bearing
-    // rows (2 queries) = 5,201 total, one over LWIN_MATCH_MAX_QUERIES.
+    // Same 1,599 producer-less rows (4,797 queries) plus 4 producer-bearing
+    // rows (4 queries) = 4,801 total, one over LWIN_MATCH_MAX_QUERIES
+    // (4,800, round-29 audit BLOCK 3).
     const producerLessRows = Array.from(
-      { length: 1733 },
+      { length: 1599 },
       (_, i) => `,Wine Four Token Name ${i},2020,1,10.00`,
     );
-    const csvBody = [...producerLessRows, `Domaine 0,Wine 0,2020,1,10.00`, `Domaine 1,Wine 1,2020,1,10.00`].join(
-      "\n",
-    );
+    const csvBody = [
+      ...producerLessRows,
+      `Domaine 0,Wine 0,2020,1,10.00`,
+      `Domaine 1,Wine 1,2020,1,10.00`,
+      `Domaine 2,Wine 2,2020,1,10.00`,
+      `Domaine 3,Wine 3,2020,1,10.00`,
+    ].join("\n");
     const supabase = makeSupabase([]);
 
     const result = await buildImportPreview(supabase, csv(`${csvBody}\n`));
@@ -506,11 +534,19 @@ describe("buildImportPreview — LWIN_MATCH_MAX_QUERIES (BLOCK 2, round 7 fix)",
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe("too_many_lwin_match_queries");
-    expect(result.error.message).toContain("5201");
+    expect(result.error.message).toContain("4801");
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
-  it("a producer-bearing row now genuinely counts toward the budget (1 query each) — a file entirely of them stays within budget only because MAX_ROWS (5,000) times 1 query/row never reaches LWIN_MATCH_MAX_QUERIES (5,200)", async () => {
+  it("a producer-bearing row now genuinely counts toward the budget (1 query each) — 2,000 of them stays well within LWIN_MATCH_MAX_QUERIES (4,800)", async () => {
+    // Round-29 audit, BLOCK 3: the old title/comment here claimed "a file
+    // entirely of producer-bearing rows can never hit this budget on its
+    // own" because MAX_ROWS (5,000) × 1 query/row (5,000) was under the
+    // then-current cap (5,200). That is no longer true — the corrected cap
+    // is 4,800 (constants.ts), so an all-producer-bearing file AT MAX_ROWS
+    // (5,000 queries) now DOES exceed it. This test only proves the
+    // narrower, still-true fact: a producer-bearing row counts 1 query
+    // each, and 2,000 of them (well under 4,800) passes.
     const rowCount = 2000; // every row HAS a producer -> 1 query each -> 2000 total, well under budget
     const csvBody = Array.from({ length: rowCount }, (_, i) => `Domaine ${i},Wine ${i},2020,1,10.00`).join("\n");
     const matchRows = Array.from({ length: rowCount }, (_, i) => ({ idx: i, lwin_id: null, score: null }));
@@ -532,5 +568,47 @@ describe("buildImportPreview — LWIN_MATCH_MAX_QUERIES (BLOCK 2, round 7 fix)",
     const result = await buildImportPreview(supabase, csv(`${csvBody}\n`));
 
     expect(result.ok).toBe(true);
+  });
+
+  // WARN 5 (round-29 audit): preview (no rowOverrides) and confirm (with
+  // rowOverrides) run this exact same budget check but can legitimately
+  // disagree — a row an override fixes from invalid to valid starts
+  // contributing queries confirm's own count includes, that preview's own
+  // count never could have. This proves BOTH halves of that behavior: the
+  // same file passes with no overrides (preview), then fails once an
+  // override makes its one currently-invalid row valid (confirm) — and the
+  // failure message says so explicitly, rather than looking like an
+  // unexplained regression from an already-passed preview.
+  it("a row fixed by an override can push a file that passed preview over the budget at confirm — the message says why", async () => {
+    // 1,600 already-valid producer-less rows (4+-token names, 3 variants
+    // each) = 4,800 queries, exactly LWIN_MATCH_MAX_QUERIES — plus ONE
+    // producer-less row missing quantity (invalid, contributes 0 queries
+    // as-is).
+    const validProducerLessRows = Array.from(
+      { length: 1600 },
+      (_, i) => `,Wine Four Token Name ${i},2020,1,10.00`,
+    );
+    const brokenRow = ",Wine Four Token Fixable,2020,,10.00"; // missing quantity -> invalid, 0 queries
+    const csvBody = [...validProducerLessRows, brokenRow].join("\n");
+    const supabase = makeSupabase([]);
+
+    // No overrides: the broken row stays invalid and contributes nothing,
+    // so the total is exactly 4,800 — at the cap, still passes (inclusive
+    // bound, same as the "EXACTLY LWIN_MATCH_MAX_QUERIES" test above).
+    const previewResult = await buildImportPreview(supabase, csv(`${csvBody}\n`));
+    expect(previewResult.ok).toBe(true);
+
+    // Same file, with an override fixing the broken row's quantity: it is
+    // now valid AND producer-less, contributing 3 more queries — 4,803
+    // total, over the cap. This is what confirmImportBatch's own
+    // re-derivation would see with the operator's row fix applied.
+    const confirmResult = await buildImportPreview(supabase, csv(`${csvBody}\n`), {
+      [String(validProducerLessRows.length + 1)]: { quantity: "6" },
+    });
+    expect(confirmResult.ok).toBe(false);
+    if (confirmResult.ok) return;
+    expect(confirmResult.error.code).toBe("too_many_lwin_match_queries");
+    expect(confirmResult.error.message).toContain("4803");
+    expect(confirmResult.error.message).toContain("1 row fix applied since preview");
   });
 });

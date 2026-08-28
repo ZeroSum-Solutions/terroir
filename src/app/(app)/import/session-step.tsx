@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
 import { ActionDialog } from "@/components/action-dialog";
-import { CLIENT_CHUNK_TARGET_ROWS, type CanonicalHeader } from "@/domains/import/constants";
+import { CLIENT_CHUNK_TARGET_ROWS, LWIN_MATCH_UX_CEILING_SECONDS, type CanonicalHeader } from "@/domains/import/constants";
 import { buildChunkPlan, serializeChunk, sha256HexOfBytes } from "@/domains/import/csv-splitter";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
 import type { ApprovedLwinRows, BatchRow, ErrorRowEntry, MatchedLwinRowEntry, RejectedLwinRows, RowOverrides } from "./import-client";
@@ -193,6 +193,26 @@ const CONFIRM_RATE_WINDOW_MS = 60 * 1000;
 // discarding every chunk previewed so far.
 const PREVIEW_RATE_WINDOW_MS = 60 * 1000;
 const PREVIEW_MAX_RETRIES_PER_CHUNK = 5;
+
+/** WARN 4 (round-29 audit) — LWIN_MATCH_MAX_QUERIES (constants.ts) bounds
+ * each INDIVIDUAL chunk's own LWIN-matching wall clock to
+ * LWIN_MATCH_UX_CEILING_SECONDS (60s), but a multi-chunk file is previewed
+ * — and later confirmed — one chunk at a time, sequentially (the loops in
+ * planChunkedPreview and confirmChunkedSession above), never in parallel.
+ * Every chunk passing its own per-chunk budget says nothing about the
+ * TOTAL wait for the whole operation: a 5-chunk file can cost up to
+ * 5 x 60s = 300s of preview, then up to another 300s to confirm — with no
+ * per-chunk check ever failing. This is the honest worst-case total for
+ * ONE phase (preview OR confirm) of a `chunkTotal`-chunk operation, reusing
+ * the exact same per-chunk ceiling every chunk is already individually
+ * bounded by — never a new, separately-tunable number that could drift
+ * from it. Surfaced to the operator BEFORE each phase's own wait begins
+ * (import-client.tsx's UploadStep/PreviewStep, and SessionStep below) so
+ * "every chunk passes" is never silently read as "the whole operation is
+ * fast." */
+export function estimateChunkedPhaseWaitSeconds(chunkTotal: number): number {
+  return chunkTotal * LWIN_MATCH_UX_CEILING_SECONDS;
+}
 
 export type ChunkedPreviewResult = { ok: true; plan: ChunkedPlanState; preview: ChunkedPreviewState } | { ok: false; error: string };
 

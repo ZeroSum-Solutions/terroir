@@ -200,7 +200,25 @@ export async function buildImportPreview(
   // check (PRODUCER_LESS_MAX_ROWS, counting only producer-less rows) let a
   // mixed file's real query count exceed the same budget it was meant to
   // enforce.
+  //
+  // WARN 5 (round-29 audit) — this same check runs at both call sites
+  // (preview: no rowOverrides; confirm: with them — see
+  // LWIN_MATCH_MAX_QUERIES' own comment, constants.ts, for why that means
+  // preview and confirm are NOT guaranteed to agree). A row an override
+  // fixed from invalid to valid contributes queries here that preview's
+  // own count never included, since preview never saw the fix. When
+  // rowOverrides is present and non-empty, the message below says so
+  // explicitly, so a file that passed preview and then fails here reads as
+  // an explained consequence of the fixes just applied, never an
+  // unexplained regression.
   if (lwinQueries.length > LWIN_MATCH_MAX_QUERIES) {
+    const overrideCount = rowOverrides ? Object.keys(rowOverrides).length : 0;
+    const overrideNote =
+      overrideCount > 0
+        ? ` This count reflects the ${overrideCount} row fix${overrideCount === 1 ? "" : "es"} applied since ` +
+          `preview — preview only counts a row toward this budget once it is valid, so fixing a row here can ` +
+          `raise the total beyond what preview showed.`
+        : "";
     return {
       ok: false,
       error: {
@@ -208,8 +226,8 @@ export async function buildImportPreview(
         message:
           `This file would generate ${lwinQueries.length} wine-catalog match queries — a producer-less row ` +
           `("Wine Name" only, no producer/winery) needs up to 3 queries, a row with a producer needs 1 — and ` +
-          `matching that many at once cannot complete reliably. Add a producer/winery value to more rows, or ` +
-          `split this file into smaller chunks so no single upload generates more than ` +
+          `matching that many at once cannot complete reliably.${overrideNote} Add a producer/winery value to ` +
+          `more rows, or split this file into smaller chunks so no single upload generates more than ` +
           `${LWIN_MATCH_MAX_QUERIES} match queries.`,
       },
     };
