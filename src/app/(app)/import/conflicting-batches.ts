@@ -45,27 +45,41 @@ export function parseConflictingBatches(value: unknown): ConflictingBatchInfo[] 
   return value.filter(isConflictingBatchInfo);
 }
 
-/** FINDING 1 (round-15 audit), moved here round-17: the server's own resolved
- * threshold — reconcileLiveBatchesForFile (batch-service.ts) treats
- * `candidates.length <= 1` as nothing left to reconcile, not `=== 0`. With
- * two real candidates, reverting ONE already resolves the conflict
- * server-side. A single source (one chunk's own conflictingBatches, or the
- * plain path's confirmConflictingBatches) is "resolved" the moment it's
- * down to at most one candidate — mirrored here exactly, including for a
- * list that somehow arrives already at length <= 1 (the server never emits
- * multiple_live_batches for that case, but a malformed entry dropped by
- * parseConflictingBatches above can produce exactly that on the CLIENT; if
- * it ever did, this stays coherent rather than blocking on a conflict that
- * has nothing left to resolve).
+/** FINDING 1 (round-15 audit), moved here round-17, CORRECTED round-21: the
+ * server's own resolved threshold — reconcileLiveBatchesForFile
+ * (batch-service.ts) treats `candidates.length <= 1` as nothing left to
+ * reconcile, not `=== 0`. With two real candidates, reverting ONE already
+ * resolves the conflict server-side.
  *
- * Round-17 audit: moved from import-client.tsx (which re-exports it for
- * backward compatibility) into this neutral module so session-step.tsx's
- * chunk confirm driver can reuse the same threshold without importing a
- * runtime value back from import-client.tsx — that would recreate the
- * import cycle round-15 deliberately broke (see this file's own header
- * comment). import-client.tsx's unresolvedConflictCandidates/
- * applyRevertToChunkUpload still live there since they're plain-path/panel
- * concerns, not shared with session-step.tsx. */
-export function isConflictSourceResolved(conflictingBatches: ConflictingBatchInfo[] | undefined | null): boolean {
-  return (conflictingBatches?.length ?? 0) <= 1;
+ * Round-17/19 audit (WRONG PREMISE, corrected round-21): this used to take
+ * ONLY the parsed `conflictingBatches` array and apply the <=1 threshold to
+ * its `.length` directly — reasoning that a list which somehow arrived
+ * already at length <= 1 must mean "nothing left to resolve," since the
+ * server itself never emits multiple_live_batches for that case. That
+ * reasoning is correct about what the SERVER sends, but wrong about what
+ * this function was actually being handed: parseConflictingBatches
+ * (above) can drop a malformed ENTRY from a genuine two-candidate payload,
+ * shrinking the ARRAY to one candidate on THIS client alone. Dropping a
+ * malformed description of a batch does not revert that batch — the
+ * conflict the server reported is still real. Treating the parse-reduced
+ * array as "resolved" cleared the terminal code and (on the plain path)
+ * told the operator the conflict had "already been resolved," which was
+ * false: retrying hit the identical conflict every time.
+ *
+ * Corrected: resolution is now decided from `count` — the server's own
+ * `conflictingBatchesCount` (batch-service.ts), which is never touched by
+ * this client's own parsing — with the array's length used only as a
+ * fallback for callers (unit tests, and any legacy caller) that never had
+ * a count to carry in the first place, where the array WAS already known
+ * to be the complete, authoritative set (e.g. the revert-driven callers
+ * below, decrementing from a count this module itself stored at receipt
+ * time). It is never used to manufacture "resolved" out of a response this
+ * client merely failed to parse in full — see import-client.tsx's
+ * handleConfirm and session-step.tsx's sendChunk, which no longer infer
+ * resolution from a freshly-received payload's array at all. */
+export function isConflictSourceResolved(
+  conflictingBatches: ConflictingBatchInfo[] | undefined | null,
+  count?: number | null,
+): boolean {
+  return (count ?? conflictingBatches?.length ?? 0) <= 1;
 }

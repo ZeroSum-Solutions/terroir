@@ -103,12 +103,20 @@ async function postBatches(request: NextRequest) {
     // FINDING 2 (round-11 audit): conflictingBatches (present only on
     // multiple_live_batches) lets the client render a revert affordance
     // per conflicting batch directly, rather than relying on the batch
-    // still being in the ten-newest Recent imports list.
+    // still being in the ten-newest Recent imports list. Round-21 audit
+    // correction: conflictingBatchesCount rides alongside it — the client's
+    // own parseConflictingBatches can drop a malformed entry from the array
+    // above without the underlying conflict actually shrinking, so it must
+    // decide resolution from this count (batch-service.ts's own comment),
+    // never from the array's length.
     const details =
       result.error.missingHeaders || result.error.conflictingBatches
         ? {
             ...(result.error.missingHeaders ? { missingHeaders: result.error.missingHeaders } : {}),
             ...(result.error.conflictingBatches ? { conflictingBatches: result.error.conflictingBatches } : {}),
+            ...(result.error.conflictingBatchesCount !== undefined
+              ? { conflictingBatchesCount: result.error.conflictingBatchesCount }
+              : {}),
           }
         : undefined;
     return apiError(422, result.error.code, result.error.message, details);

@@ -145,7 +145,14 @@ export type ConfirmBatchResult =
    * identical bytes are a legitimate duplicate segment, never each
    * other's confirmation). */
   | { ok: true; alreadyExists: true; batchId: string; status: string; sessionId: string | null; chunkIndex: number | null; counts: BatchCounts }
-  | { ok: false; error: { code: string; message: string; missingHeaders?: string[]; conflictingBatches?: ConflictingBatchInfo[] } };
+  /** Round-21 audit correction: conflictingBatchesCount is the server's own
+   * candidate COUNT (reconcileLiveBatchesForFile's `candidates.length`),
+   * present whenever conflictingBatches is — see that field's own comment
+   * for why the array alone is not a safe ground truth for the CLIENT to
+   * decide resolution from (a malformed entry parseConflictingBatches drops
+   * can shrink the array without the underlying conflict having changed at
+   * all). This count is never affected by that client-side parsing. */
+  | { ok: false; error: { code: string; message: string; missingHeaders?: string[]; conflictingBatches?: ConflictingBatchInfo[]; conflictingBatchesCount?: number } };
 
 type RowPayload = {
   row_number: number;
@@ -804,7 +811,7 @@ type LiveBatchMatch = {
 
 type FindLiveBatchResult =
   | { ok: true; match: LiveBatchMatch | null }
-  | { ok: false; error: { code: string; message: string; conflictingBatches?: ConflictingBatchInfo[] } };
+  | { ok: false; error: { code: string; message: string; conflictingBatches?: ConflictingBatchInfo[]; conflictingBatchesCount?: number } };
 
 /** Sol round-3 audit (2026-08-27) finding 6: the DB query below can only
  * express "contains fileDigestHex as a LIKE match," which also matches a
@@ -1130,6 +1137,15 @@ async function reconcileLiveBatchesForFile(
         status: c.status,
         created_at: c.created_at,
       })),
+      // Round-21 audit correction (block: the round-17/19 "parses to one
+      // candidate is already resolved" premise was wrong — dropping a
+      // malformed ENTRY never reverts the underlying batch it described).
+      // The client must decide resolution from what this function actually
+      // found, not from whatever survives its own parseConflictingBatches
+      // filtering — so the exact candidate count is carried as its own
+      // field, immune to that filtering by construction. Same
+      // truncated-lower-bound caveat as the message above.
+      conflictingBatchesCount: candidates.length,
     },
   };
 }

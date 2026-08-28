@@ -691,25 +691,26 @@ describe("confirmChunkedSession — captures conflictingBatches from a multiple_
   });
 });
 
-// FINDING (round-17 audit): parseConflictingBatches (conflicting-batches.ts)
-// drops any malformed entry rather than propagating it (NIT 7, round-13
-// audit) — a genuine two-candidate server payload can therefore arrive at
-// THIS client already down to one well-formed candidate, e.g. because a
-// proxy/CDN rewrite or a response-shape drift dropped a field off one entry.
-// The plain (non-chunked) path already normalizes an at-or-below-threshold
-// list at ingestion (import-client.tsx's handleConfirm, round-15 audit
-// finding 1) — the chunk driver did not, so it retained the terminal
-// multiple_live_batches code (suppressing Retry/Confirm via
-// hasTerminalReconciliationConflict) even though isConflictSourceResolved's
-// own <=1 threshold already hid the lone candidate from the conflict panel,
-// deadlocking the operator with no affordance at all.
-describe("confirmChunkedSession — a conflict that parses down to one candidate is already resolved (round-17 audit)", () => {
-  it("drops the terminal multiple_live_batches code when a malformed sibling entry leaves only one well-formed candidate — the malformed-entry mechanism, not a hand-built already-resolved payload", async () => {
-    // The SERVER emitted two real candidates. One entry is malformed (its
-    // created_at field is missing — the exact kind of response-shape drift
-    // isConflictingBatchInfo's own comment describes) — parseConflictingBatches
-    // drops it, so THIS client's parsed list is down to one candidate before
-    // isConflictSourceResolved ever sees it.
+// ROUND-21 AUDIT CORRECTION (BLOCK, round-20 audit): round-17's premise —
+// that a multiple_live_batches payload PARSED down to one candidate is
+// "already resolved" — was wrong, and round-19 built on it. parseConflictingBatches
+// (conflicting-batches.ts) drops a malformed ENTRY, a description of a
+// batch; dropping that description never reverts the batch it described.
+// reconcileLiveBatchesForFile (batch-service.ts) only ever emits
+// multiple_live_batches when it found a genuine 2+-candidate conflict
+// server-side, so a payload that parses down to one candidate on THIS
+// client still names a real, unresolved conflict — the second, malformed
+// candidate is simply undisplayable. Retrying without reverting anything
+// hits the identical conflict every time.
+describe("confirmChunkedSession — a conflict that PARSES to one candidate is NOT a resolved conflict (round-21 audit correction)", () => {
+  it("keeps the terminal multiple_live_batches code when a malformed sibling entry leaves only one displayable candidate, and states honestly that one could not be shown", async () => {
+    // The SERVER emitted two real candidates (conflictingBatchesCount: 2 —
+    // batch-service.ts's own count, immune to this client's parsing). One
+    // entry is malformed (its created_at field is missing — the exact kind
+    // of response-shape drift isConflictingBatchInfo's own comment
+    // describes) — parseConflictingBatches drops it, so this client's
+    // DISPLAY list is down to one candidate even though the conflict itself
+    // is still exactly as real as the server's count says.
     const wireConflictingBatches = [
       { id: "batch-a", filename: "cellar.csv", status: "created", created_at: "2026-01-01T00:00:00Z" },
       { id: "batch-b", filename: "cellar.csv", status: "applying" }, // malformed: no created_at
@@ -723,7 +724,7 @@ describe("confirmChunkedSession — a conflict that parses down to one candidate
           error: {
             code: "multiple_live_batches",
             message: "This file has 2 live import batches for the same underlying content.",
-            details: { conflictingBatches: wireConflictingBatches },
+            details: { conflictingBatches: wireConflictingBatches, conflictingBatchesCount: 2 },
           },
         });
       }),
@@ -743,31 +744,36 @@ describe("confirmChunkedSession — a conflict that parses down to one candidate
     });
 
     // The malformed entry was actually dropped — proves the one-candidate
-    // list came from the real filtering mechanism, not a fabricated payload.
+    // DISPLAY list came from the real filtering mechanism, not a fabricated
+    // payload — while the server's real count (2) survives untouched.
     expect(upload[0].conflictingBatches).toEqual([wireConflictingBatches[0]]);
-    // No orphaned conflict code: the terminal code is cleared even though
-    // the chunk stays "failed" (an operator-visible retry point, not a
-    // silent success).
-    expect(upload[0].code).toBeNull();
+    expect(upload[0].conflictingBatchesCount).toBe(2);
+    // The conflict is still real: the terminal code stays, blocking both
+    // Retry and Confirm (hasTerminalReconciliationConflict) — this is a
+    // dead end only if no other affordance exists, which is exactly what
+    // the honest "not all could be shown" copy below fixes.
+    expect(upload[0].code).toBe("multiple_live_batches");
     expect(upload[0].status).toBe("failed");
-    // The generic, retryable message is both the function's returned error
-    // AND the message actually stored on the chunk (upload[0].error) — the
-    // latter is what ChunkUploadProgress renders next to "Retry upload".
-    // Round-18 audit: the driver used to leave upload[0].error holding the
-    // server's terminal "This file has 2 live import batches..." copy even
-    // after the code was cleared, so the panel-less, Retry-reachable state
-    // still showed conflict wording pointing at a revert affordance that
-    // wasn't on screen.
-    expect(result).toMatchObject({ ok: false, error: "Chunk 1 of 1 failed to upload — you can retry it below." });
-    expect(upload[0].error).toBe("Chunk 1 of 1 failed to upload — you can retry it below.");
-    expect(upload[0].error).not.toMatch(/live import batches/i);
+    // STORED text (upload[0].error, what ChunkUploadProgress renders next
+    // to the chunk) and RETURNED text (result.error) both carry the
+    // server's own message PLUS an honest note that one candidate could
+    // not be displayed, pointing at the recovery that still exists
+    // (Recent imports permits revert for any non-reverted status) — never
+    // the false "already resolved" wording rounds 17-19 shipped.
+    const expectedMessage =
+      "This file has 2 live import batches for the same underlying content. Not every conflicting batch for " +
+      "this file could be displayed here — revert the remaining one under Recent imports before retrying.";
+    expect(result).toMatchObject({ ok: false, error: expectedMessage });
+    expect(upload[0].error).toBe(expectedMessage);
+    expect(upload[0].error).not.toMatch(/already (been )?resolved/i);
   });
 
-  it("still blocks with the terminal multiple_live_batches code for a genuine two-candidate list (guards against over-correcting)", async () => {
+  it("still blocks with the terminal multiple_live_batches code — and pins the exact STORED message — for a genuine two-candidate list where both parse cleanly (guards against over-correcting)", async () => {
     const conflictingBatches = [
       { id: "batch-a", filename: "cellar.csv", status: "created", created_at: "2026-01-01T00:00:00Z" },
       { id: "batch-b", filename: "cellar.csv", status: "applying", created_at: "2026-01-02T00:00:00Z" },
     ];
+    const serverMessage = "This file has 2 live import batches for the same underlying content.";
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -776,8 +782,8 @@ describe("confirmChunkedSession — a conflict that parses down to one candidate
         return jsonResponse(422, {
           error: {
             code: "multiple_live_batches",
-            message: "This file has 2 live import batches for the same underlying content.",
-            details: { conflictingBatches },
+            message: serverMessage,
+            details: { conflictingBatches, conflictingBatchesCount: 2 },
           },
         });
       }),
@@ -798,9 +804,14 @@ describe("confirmChunkedSession — a conflict that parses down to one candidate
 
     expect(upload[0].code).toBe("multiple_live_batches");
     expect(upload[0].conflictingBatches).toEqual(conflictingBatches);
-    expect(result).toMatchObject({
-      ok: false,
-      error: "This file has 2 live import batches for the same underlying content.",
-    });
+    expect(upload[0].conflictingBatchesCount).toBe(2);
+    // WARN (round-20 audit): pin the STORED message, not just the returned
+    // one — the earlier version of this guard checked code/candidates/the
+    // returned error but never upload[0].error, so a regression that stored
+    // generic retry copy while still RETURNING the terminal message would
+    // have passed. Both must carry the server's own message verbatim (no
+    // undisplayed-candidate caveat here — both candidates parsed cleanly).
+    expect(upload[0].error).toBe(serverMessage);
+    expect(result).toMatchObject({ ok: false, error: serverMessage });
   });
 });

@@ -167,28 +167,57 @@ describe("isRowInSkippedChunk (round-6 audit finding 5)", () => {
 // unresolvedConflictCandidates are the client-side mirror of that
 // threshold; pinned directly, per finding 2's ask for realistic
 // (>= 2-candidate) fixtures.
-describe("isConflictSourceResolved / unresolvedConflictCandidates (round-15 audit finding 1)", () => {
+//
+// Round-21 audit correction: both functions now take an explicit `count`
+// alongside the candidate list — the server's own conflictingBatchesCount,
+// immune to whatever parseConflictingBatches drops from the array. When
+// `count` is omitted, both fall back to the array's own length (legitimate
+// only when the caller already knows the array IS the complete set — e.g.
+// the revert-driven callers, decrementing from a count they themselves
+// stored at receipt time — never when deciding fresh whether a just-
+// received payload is resolved).
+describe("isConflictSourceResolved / unresolvedConflictCandidates (round-15 audit finding 1, corrected round-21)", () => {
   const TWO: ConflictingBatchInfo[] = [
     { id: "a", filename: "cellar.csv", status: "created", created_at: "2020-01-01T00:00:00Z" },
     { id: "b", filename: "cellar.csv", status: "applying", created_at: "2021-01-01T00:00:00Z" },
   ];
   const ONE: ConflictingBatchInfo[] = [TWO[0]];
 
-  it("is NOT resolved with two or more candidates, and offers all of them", () => {
+  it("is NOT resolved with a count of two or more, and offers every displayable candidate", () => {
+    expect(isConflictSourceResolved(TWO, 2)).toBe(false);
+    expect(unresolvedConflictCandidates(TWO, 2)).toEqual(TWO);
+  });
+
+  it("IS resolved with a count of exactly one, and offers none — that survivor is the one to keep", () => {
+    expect(isConflictSourceResolved(ONE, 1)).toBe(true);
+    expect(unresolvedConflictCandidates(ONE, 1)).toEqual([]);
+  });
+
+  it("IS resolved with a count of zero or undefined, and no list (a source that never had a conflict)", () => {
+    expect(isConflictSourceResolved([], 0)).toBe(true);
+    expect(isConflictSourceResolved(undefined, undefined)).toBe(true);
+    expect(unresolvedConflictCandidates([], 0)).toEqual([]);
+    expect(unresolvedConflictCandidates(undefined, undefined)).toEqual([]);
+  });
+
+  // Round-21 audit correction — the actual crux of the fix: a DISPLAY list
+  // parsed down to one candidate must never be mistaken for a resolved
+  // conflict when the server's own count still says two are live. This is
+  // exactly the shape a malformed sibling entry produces (parseConflictingBatches
+  // drops it), and exactly what rounds 17/19 got wrong by omitting `count`
+  // and reading the array's own length instead.
+  it("is NOT resolved when the server COUNT is two even though only one candidate could be parsed and displayed", () => {
+    expect(isConflictSourceResolved(ONE, 2)).toBe(false);
+    expect(unresolvedConflictCandidates(ONE, 2)).toEqual(ONE);
+  });
+
+  // The `count` omitted (legacy/test callers only): falls back to the
+  // array's own length, since in that context the array WAS already known
+  // to be the complete set.
+  it("falls back to the array's own length when no count is given", () => {
     expect(isConflictSourceResolved(TWO)).toBe(false);
-    expect(unresolvedConflictCandidates(TWO)).toEqual(TWO);
-  });
-
-  it("IS resolved with exactly one candidate, and offers none — that survivor is the one to keep", () => {
     expect(isConflictSourceResolved(ONE)).toBe(true);
-    expect(unresolvedConflictCandidates(ONE)).toEqual([]);
-  });
-
-  it("IS resolved with zero candidates or undefined (a source that never had a conflict)", () => {
-    expect(isConflictSourceResolved([])).toBe(true);
-    expect(isConflictSourceResolved(undefined)).toBe(true);
-    expect(unresolvedConflictCandidates([])).toEqual([]);
-    expect(unresolvedConflictCandidates(undefined)).toEqual([]);
+    expect(unresolvedConflictCandidates(TWO)).toEqual(TWO);
   });
 });
 
@@ -843,19 +872,18 @@ describe("PreviewStep — multiple_live_batches and duplicate_race_retry_exhaust
   }
 });
 
-// FINDING (round-17 audit): a chunk's multiple_live_batches conflict that
-// parses down to one candidate (a malformed sibling entry dropped by
-// parseConflictingBatches, conflicting-batches.ts) used to leave the chunk
-// carrying the terminal code forever — hasTerminalReconciliationConflict
-// blocked both "Retry upload" AND "Confirm import" — even though the panel
-// already had nothing left to offer a revert on for that same lone
-// candidate (isConflictSourceResolved's own <=1 threshold). Drives the REAL
-// confirmChunkedSession mechanism (a mocked fetch response with an actual
-// malformed sibling entry, exactly like session-step.conflict.test.tsx's
-// own round-17 coverage) rather than hand-building an already-resolved
-// ChunkUploadState, then renders PreviewStep with the exact resulting state
-// to prove the deadlock is gone.
-describe("PreviewStep — a chunk conflict resolved down to one candidate by a malformed entry is not blocked (round-17 audit)", () => {
+// ROUND-21 AUDIT CORRECTION (BLOCK, round-20 audit): round-17's premise —
+// that a chunk conflict PARSED down to one candidate is "already resolved"
+// — was wrong (see session-step.conflict.test.tsx's own round-21 header for
+// the full reasoning). Drives the REAL confirmChunkedSession mechanism (a
+// mocked fetch response with an actual malformed sibling entry) rather than
+// hand-building a resolved ChunkUploadState, then renders PreviewStep with
+// the exact resulting state — including the SAME conflictingBatches/
+// conflictingBatchesTruncated props ImportClient itself would compute via
+// unresolvedConflictCandidates — to prove the conflict stays blocked, one
+// candidate is still shown, and the operator is told plainly that the
+// other could not be displayed.
+describe("PreviewStep — a chunk conflict that PARSES to one candidate stays blocked, with an honest note (round-21 audit correction)", () => {
   const mountedRoots: Root[] = [];
 
   afterEach(async () => {
@@ -866,16 +894,16 @@ describe("PreviewStep — a chunk conflict resolved down to one candidate by a m
     vi.unstubAllGlobals();
   });
 
-  it("offers Retry upload once the malformed-entry mechanism reduces the conflict to one candidate", async () => {
+  it("keeps Retry upload AND Confirm import hidden, shows the one parseable candidate, and states plainly that the other could not be displayed", async () => {
     const PLAN: ChunkedPlanState = {
       headerRecord: "producer,name,quantity",
       chunkTotal: 1,
       chunks: [{ index: 1, startRow: 1, endRow: 2, text: "producer,name,quantity\nA,B,1\n" }],
       sourceSha256: "c".repeat(64),
     };
-    // The SERVER emitted two real candidates; one entry is malformed (no
-    // created_at) — the exact response-shape-drift case
-    // isConflictingBatchInfo's own comment describes.
+    // The SERVER emitted two real candidates (conflictingBatchesCount: 2);
+    // one entry is malformed (no created_at) — the exact response-shape-drift
+    // case isConflictingBatchInfo's own comment describes.
     const wireConflictingBatches = [
       { id: "batch-a", filename: "cellar.csv", status: "created", created_at: "2026-01-01T00:00:00Z" },
       { id: "batch-b", filename: "cellar.csv", status: "applying" }, // malformed: no created_at
@@ -895,7 +923,7 @@ describe("PreviewStep — a chunk conflict resolved down to one candidate by a m
             error: {
               code: "multiple_live_batches",
               message: "This file has 2 live import batches for the same underlying content.",
-              details: { conflictingBatches: wireConflictingBatches },
+              details: { conflictingBatches: wireConflictingBatches, conflictingBatchesCount: 2 },
             },
           }),
           { status: 422, headers: { "Content-Type": "application/json" } },
@@ -916,30 +944,58 @@ describe("PreviewStep — a chunk conflict resolved down to one candidate by a m
       },
     });
 
-    // Sanity: the real mechanism actually produced a one-candidate list and
-    // a coherent (non-terminal) chunk state before we ever render anything.
+    // Sanity: the real mechanism actually produced a one-candidate DISPLAY
+    // list while the real count (2) survives, and the chunk stays terminal.
     expect(chunkUpload[0].conflictingBatches).toEqual([wireConflictingBatches[0]]);
-    expect(chunkUpload[0].code).toBeNull();
+    expect(chunkUpload[0].conflictingBatchesCount).toBe(2);
+    expect(chunkUpload[0].code).toBe("multiple_live_batches");
     expect(chunkUpload[0].status).toBe("failed");
     expect(result).toMatchObject({ ok: false });
-    // Round-18 audit: the STORED chunk error (what ChunkUploadProgress
-    // renders next to "Retry upload") must be the generic retryable copy,
-    // not the server's terminal "This file has 2 live import batches..."
-    // text — otherwise the operator reads a revert instruction for a panel
-    // that isn't shown (the lone candidate is filtered out below).
-    expect(chunkUpload[0].error).toBe("Chunk 1 of 1 failed to upload — you can retry it below.");
+    const expectedMessage =
+      "This file has 2 live import batches for the same underlying content. Not every conflicting batch for " +
+      "this file could be displayed here — revert the remaining one under Recent imports before retrying.";
+    // STORED chunk error (what ChunkUploadProgress renders) carries the
+    // honest, not-all-displayed copy — never the false "already resolved"
+    // wording rounds 17-19 shipped.
+    expect(chunkUpload[0].error).toBe(expectedMessage);
+    expect(chunkUpload[0].error).not.toMatch(/already (been )?resolved/i);
+
+    // Mirrors exactly what ImportClient itself computes from chunkUpload —
+    // unresolvedConflictCandidates decides from the count, so the one
+    // parseable candidate is still offered a revert button.
+    const conflictingBatches = unresolvedConflictCandidates(
+      chunkUpload[0].conflictingBatches,
+      chunkUpload[0].conflictingBatchesCount,
+    );
+    const conflictingBatchesTruncated =
+      typeof chunkUpload[0].conflictingBatchesCount === "number" &&
+      (chunkUpload[0].conflictingBatches?.length ?? 0) < chunkUpload[0].conflictingBatchesCount;
 
     const { container } = await mount(
-      <PreviewStep {...baseProps({ chunkUpload, chunkTotal: 1, error: result.ok ? null : result.error })} />,
+      <PreviewStep
+        {...baseProps({
+          chunkUpload,
+          chunkTotal: 1,
+          error: result.ok ? null : result.error,
+          conflictingBatches,
+          conflictingBatchesTruncated,
+        })}
+      />,
     );
 
     const buttons = [...container.querySelectorAll("button")];
-    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
+    // Genuinely terminal: never offer a doomed Retry, and never Confirm
+    // either — the conflict this chunk reported is still real.
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
     expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
-    // The rendered copy must not contain the terminal conflict wording, and
-    // must show the generic retry message that matches "Retry upload".
-    expect(container.textContent).not.toMatch(/live import batches/i);
-    expect(container.textContent).toContain("Chunk 1 of 1 failed to upload — you can retry it below.");
+    // The one parseable candidate IS shown with a revert affordance.
+    expect(container.textContent).toContain("Conflicting live imports for this file");
+    expect(container.textContent).toContain("cellar.csv");
+    expect(buttons.some((b) => /^Revert$/.test(b.textContent ?? ""))).toBe(true);
+    // RENDERED copy carries the same honest, not-all-displayed message —
+    // never the false "already resolved" wording.
+    expect(container.textContent).toContain(expectedMessage);
+    expect(container.textContent).not.toMatch(/already (been )?resolved/i);
   });
 
   async function mount(element: ReactElement) {
@@ -1189,6 +1245,10 @@ describe("ImportClient — handleRevertConflict actually recovers (round-13 audi
           { id: "conflict-1", filename: "cellar-old.csv", status: "created", created_at: "2020-01-01T00:00:00.000Z" },
           { id: "conflict-2", filename: "cellar-old.csv", status: "applying", created_at: "2021-01-01T00:00:00.000Z" },
         ],
+        // Round-21 audit correction: the real server always carries this
+        // alongside conflictingBatches now — see batch-service.ts's own
+        // conflictingBatchesCount comment.
+        conflictingBatchesCount: 2,
       },
     },
   };
@@ -1387,21 +1447,24 @@ describe("ImportClient — handleRevertConflict actually recovers (round-13 audi
     expect(container.textContent).not.toContain("Removed 4 inventory row(s)");
   });
 
-  // Round-18 audit: the plain (non-chunked) path mirrors the chunked
-  // driver's own conflictAlreadyResolved normalization in handleConfirm —
-  // it also used to leave previewError holding the server's terminal
-  // "Revert all but one of them below" copy even after confirmErrorCode was
-  // cleared to null and the panel was hidden (isConflictSourceResolved's
-  // own <=1 threshold), so the operator saw a revert instruction next to a
-  // restored "Confirm import" button with no panel to revert from. Drives
-  // the REAL handleConfirm through a mounted ImportClient, exactly like
-  // reachConflictPanel's own two-candidate coverage above, but with one
-  // entry malformed so parseConflictingBatches drops it client-side.
-  it("a conflict that parses down to one candidate via a malformed sibling entry does not block Confirm import, and drops the terminal wording", async () => {
+  // ROUND-21 AUDIT CORRECTION (BLOCK, round-20 audit): round-18 built its
+  // fix on round-17's wrong premise — that a plain-path multiple_live_batches
+  // conflict PARSED down to one candidate must be "already resolved."
+  // Dropping a malformed ENTRY (a description of a batch) never reverts the
+  // batch it described, and the server only ever emits multiple_live_batches
+  // for a genuine 2+-candidate conflict — so this state is NOT resolved.
+  // Drives the REAL handleConfirm through a mounted ImportClient, exactly
+  // like reachConflictPanel's own two-candidate coverage above, but with
+  // one entry malformed so parseConflictingBatches drops it client-side,
+  // and the server's own conflictingBatchesCount (2) carried alongside it.
+  it("a conflict that parses down to one candidate via a malformed sibling entry stays blocked, shows the one parseable candidate, and states honestly that one could not be displayed", async () => {
     const wireConflictingBatches = [
       { id: "conflict-1", filename: "cellar-old.csv", status: "created", created_at: "2020-01-01T00:00:00.000Z" },
       { id: "conflict-2", filename: "cellar-old.csv", status: "applying" }, // malformed: no created_at
     ];
+    const serverMessage =
+      "This file has 2 live import batches for the same underlying content — this can't be resolved " +
+      "automatically. Revert all but one of them below before resuming or re-uploading this file.";
     // Not the shared stubFetch helper above — that hardcodes CONFLICT_ERROR_BODY
     // (two well-formed candidates) for the confirm POST. This needs one
     // malformed entry in the response instead, so parseConflictingBatches
@@ -1431,10 +1494,8 @@ describe("ImportClient — handleRevertConflict actually recovers (round-13 audi
           return jsonResponse(422, {
             error: {
               code: "multiple_live_batches",
-              message:
-                "This file has 2 live import batches for the same underlying content — this can't be resolved " +
-                "automatically. Revert all but one of them below before resuming or re-uploading this file.",
-              details: { conflictingBatches: wireConflictingBatches },
+              message: serverMessage,
+              details: { conflictingBatches: wireConflictingBatches, conflictingBatchesCount: 2 },
             },
           });
         }
@@ -1445,16 +1506,23 @@ describe("ImportClient — handleRevertConflict actually recovers (round-13 audi
     const { container } = await mount(<ImportClient />);
     await reachConflictPanel(container);
 
-    // No orphaned block: the terminal code was cleared (isConflictSourceResolved
-    // already sees only one well-formed candidate), so Confirm import is
-    // reachable and no revert panel is shown for it.
-    expect(findButton(container, "Confirm import")).toBeTruthy();
-    expect(container.textContent).not.toContain("Conflicting live imports for this file");
-    // The rendered message must not still be the terminal "revert all but
-    // one" copy — that panel is gone — and must show the generic,
-    // actionable replacement instead.
-    expect(container.textContent).not.toMatch(/revert all but one/i);
-    expect(container.textContent).toContain("This conflict has already been resolved — you can confirm the import again below.");
+    // The conflict is still real: Confirm import stays hidden, and the
+    // panel shows the ONE candidate that could be parsed, with a revert
+    // affordance — the malformed second entry never reverted anything.
+    expect(findButton(container, "Confirm import")).toBeFalsy();
+    expect(container.textContent).toContain("Conflicting live imports for this file");
+    expect(container.textContent).toContain("cellar-old.csv");
+    const revertButtons = [...container.querySelectorAll("button")].filter((b) => /^Revert$/.test(b.textContent ?? ""));
+    expect(revertButtons).toHaveLength(1);
+    // RENDERED copy carries the server's own message plus an honest note
+    // that one candidate could not be displayed, pointing at Recent
+    // imports — never the false "already resolved" wording rounds 17-19
+    // shipped.
+    const expectedMessage =
+      `${serverMessage} Not every conflicting batch for this file could be displayed here — revert the ` +
+      "remaining one under Recent imports before retrying.";
+    expect(container.textContent).toContain(expectedMessage);
+    expect(container.textContent).not.toMatch(/already (been )?resolved/i);
   });
 
   async function mount(element: ReactElement) {
