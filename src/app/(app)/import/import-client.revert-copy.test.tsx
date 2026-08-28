@@ -127,7 +127,7 @@ describe("ImportClient revert copy", () => {
     await act(async () => revertButton.click());
   }
 
-  it("states the revert dialog's copy plainly — no absolute 'nothing else is touched' claim, names the LWIN pre-existing-pair caveat", async () => {
+  it("states the revert dialog's copy plainly — no absolute 'nothing else is touched' claim, calls out that cleanup is best-effort (Sol audit round 6, finding 2 — replaces round 5's pinned string, which itself still claimed 'deletes wines this import added that nothing else in your cellar references' unconditionally)", async () => {
     stubFetch({});
     const container = await mount(<ImportClient />);
     await openBatchWithRevertDialog(container);
@@ -135,13 +135,14 @@ describe("ImportClient revert copy", () => {
     const dialog = container.querySelector('[role="dialog"]')!;
     expect(dialog).toBeTruthy();
     expect(dialog.textContent).toContain(
-      "Removes the 1 inventory row(s) this import created. Also deletes wines this import added that nothing else in your cellar references, and clears the wine-catalog (LWIN) links this import wrote — including a link identical to one that existed before the import (re-running LWIN matching restores it).",
+      "Removes the inventory this import created. Where it can safely confirm it, it also deletes wines only this import added and clears the wine-catalog (LWIN) links it wrote — including a link identical to one that existed before the import. Cleanup is best-effort: anything it cannot confirm is left in place and reported below.",
     );
     expect(dialog.textContent).not.toContain("Nothing beyond this import's own additions is touched");
     expect(dialog.textContent).not.toContain("nothing else in your cellar is touched");
+    expect(dialog.textContent).not.toContain("nothing else in your cellar references");
   });
 
-  it("pins the success-panel copy for a fully-clean revert", async () => {
+  it("pins the success-panel copy for a fully-clean revert — mirrors the dialog's 'where it can safely confirm it' framing with the actual counts (Sol audit round 6, finding 2)", async () => {
     stubFetch({
       revertedCount: 1,
       orphanWinesDeleted: 1,
@@ -161,9 +162,9 @@ describe("ImportClient revert copy", () => {
     expect(container.querySelector("h2")?.textContent).toBe("Import reverted");
     const text = container.textContent ?? "";
     expect(text).toContain(
-      "Removed 1 inventory row(s) this import created, deleted 1 wine(s) this import added that nothing else references, and cleared 2 wine-catalog (LWIN) link(s) this import wrote",
+      "Removed 1 inventory row(s) this import created. Where it could safely confirm it, this also deleted 1 wine(s) this import added and cleared 2 wine-catalog (LWIN) link(s) it wrote",
     );
-    expect(text).not.toContain("Catalog cleanup was skipped");
+    expect(text).not.toContain("Orphan-wine cleanup was skipped");
     expect(text).not.toContain("didn't finish in time");
     expect(text).not.toContain("Some cleanup steps failed");
   });
@@ -190,6 +191,28 @@ describe("ImportClient revert copy", () => {
     // skipped too (it isn't — the unstamp path needs no service client).
     expect(text).toContain("Orphan-wine cleanup was skipped");
     expect(text).toContain("didn't finish in time and was left partial");
+  });
+
+  it("composes ALL THREE notices — skipped, truncated, AND failed — when all three flags are set (Sol audit round 6, finding 3 — the round-5 test only ever combined two of the three flags, leaving a three-flag composition unpinned)", async () => {
+    stubFetch({
+      revertedCount: 1,
+      orphanWinesDeleted: 0,
+      lwinStampsCleared: 0,
+      cleanupTruncated: true,
+      orphanCleanupSkipped: true,
+      cleanupFailures: 3,
+    });
+    const container = await mount(<ImportClient />);
+    await openBatchWithRevertDialog(container);
+    const confirmButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (b) => b.textContent?.trim() === "Revert import",
+    )!;
+    await act(async () => confirmButton.click());
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("Orphan-wine cleanup was skipped");
+    expect(text).toContain("didn't finish in time and was left partial");
+    expect(text).toContain("Some cleanup steps failed");
   });
 
   it("renders the failure notice when cleanupFailures > 0", async () => {

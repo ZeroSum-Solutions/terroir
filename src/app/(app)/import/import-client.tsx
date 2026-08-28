@@ -615,10 +615,10 @@ type RevertResult = {
  * pass or re-running LWIN matching, not repeating this action. */
 function summarizeRevertResult(result: RevertResult): string {
   const parts = [
-    `Removed ${result.revertedCount} inventory row(s) this import created, ` +
-      `deleted ${result.orphanWinesDeleted} wine(s) this import added that nothing else references, ` +
-      `and cleared ${result.lwinStampsCleared} wine-catalog (LWIN) link(s) this import wrote — including any ` +
-      `link identical to one that existed before the import (re-running LWIN matching restores it if needed).`,
+    `Removed ${result.revertedCount} inventory row(s) this import created. Where it could safely confirm it, ` +
+      `this also deleted ${result.orphanWinesDeleted} wine(s) this import added and cleared ` +
+      `${result.lwinStampsCleared} wine-catalog (LWIN) link(s) it wrote — including any link identical to one ` +
+      `that existed before the import (re-running LWIN matching restores it if needed).`,
   ];
   // Sol audit round 5, finding 3: these are independent conditions, not
   // mutually exclusive branches — an else-if here would silently drop
@@ -859,7 +859,7 @@ function BatchStep({
       <ActionDialog
         open={revertDialogOpen}
         title="Revert this import?"
-        description={`Removes the ${appliedCount} inventory row(s) this import created. Also deletes wines this import added that nothing else in your cellar references, and clears the wine-catalog (LWIN) links this import wrote — including a link identical to one that existed before the import (re-running LWIN matching restores it).`}
+        description="Removes the inventory this import created. Where it can safely confirm it, it also deletes wines only this import added and clears the wine-catalog (LWIN) links it wrote — including a link identical to one that existed before the import. Cleanup is best-effort: anything it cannot confirm is left in place and reported below."
         confirmLabel="Revert import"
         busy={reverting}
         onConfirm={() => void doRevert()}
