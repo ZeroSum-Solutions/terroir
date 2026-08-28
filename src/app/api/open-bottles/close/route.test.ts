@@ -145,6 +145,26 @@ describe("POST /api/open-bottles/close", () => {
     expect((await response.json()).error.code).toBe(code);
   });
 
+  it("gives a clear forbidden message when the RPC rejects the bottle as out of tenant", async () => {
+    const { client } = makeAuthenticatedClient({ rpcError: { message: "forbidden" } });
+    allow(client);
+
+    const response = await POST(request({
+      wine_id: WINE_ID,
+      actual_remaining_ml: 570,
+      written_off_ml: 0,
+    }));
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "forbidden",
+        message:
+          "This bottle isn't in your restaurant. Refresh the page and try again.",
+      },
+    });
+  });
+
   it("returns 422 when the write-off exceeds the actual remainder", async () => {
     const { client, rpc } = makeAuthenticatedClient({
       rpcError: { message: "invalid_writeoff_amount" },

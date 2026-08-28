@@ -267,6 +267,13 @@ describe("POST /api/pour", () => {
     });
     const res = await POST(makeRequest({ wine_id: WINE_ID, ml: 148 }));
     expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "forbidden",
+        message:
+          "This wine isn't in your restaurant. Refresh the page and try again.",
+      },
+    });
   });
 
   // ARCH-023: auto-86 revalidation

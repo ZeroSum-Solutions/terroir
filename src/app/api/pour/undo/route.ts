@@ -59,7 +59,9 @@ async function postUndo(request: NextRequest) {
       return Errors.notFound("Pour to undo");
     }
     if (error instanceof PourForbiddenError) {
-      return Errors.forbidden("Forbidden.");
+      return Errors.forbidden(
+        "This wine isn't in your restaurant. Refresh the page and try again.",
+      );
     }
     if (error instanceof PourRpcError) {
       return Errors.internal("Undo failed.");

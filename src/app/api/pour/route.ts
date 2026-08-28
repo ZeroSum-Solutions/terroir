@@ -93,7 +93,9 @@ async function postPour(request: NextRequest) {
       return Errors.conflict("no_inventory", "No inventory available.");
     }
     if (error instanceof PourForbiddenError) {
-      return Errors.forbidden("Forbidden.");
+      return Errors.forbidden(
+        "This wine isn't in your restaurant. Refresh the page and try again.",
+      );
     }
     if (error instanceof PourRpcError) {
       return Errors.internal("Pour failed.");

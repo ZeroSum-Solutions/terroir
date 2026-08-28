@@ -180,6 +180,13 @@ describe("POST /api/open-bottles/[id]/close", () => {
     const res = await POST({} as NextRequest, makeContext());
 
     expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "forbidden",
+        message:
+          "This bottle isn't in your restaurant. Refresh the page and try again.",
+      },
+    });
   });
 
   it("returns 409 when the bottle is already closed", async () => {
