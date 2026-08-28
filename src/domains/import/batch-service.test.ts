@@ -1,8 +1,11 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
   applyImportBatchChunk,
+  canonicalizeRowOverrides,
   confirmImportBatch,
   deriveBatchStatus,
+  findSiblingWithAppliedRows,
   resolveImportBatchRow,
   revertImportBatch,
   type BatchCounts,
@@ -55,17 +58,173 @@ function makeRpc(handlers: Record<string, (args: unknown) => { data: unknown; er
   });
 }
 
+type FakeBatchRow = {
+  id: string;
+  status: string;
+  session_id: string | null;
+  chunk_index: number | null;
+  content_sha256: string | null;
+  restaurant_id: string;
+  created_at: string;
+};
+
+/** A minimal, QUERY-AWARE fake for `.from("import_batches")` — unlike a
+ * fixed-shape mock, this actually applies eq/neq/or/like filters against
+ * an in-memory row list, so the same fake can back both
+ * findDuplicateBatch's exact-digest lookup and findLiveBatchByUnderlyingFile's
+ * cross-format OR lookup (Sol audit finding 2) without the tests needing
+ * to hand-tune a call-count-based mock for every new query shape. `rows`
+ * is a live reference — a caller can push into it (e.g. from inside a
+ * create_import_batch RPC handler) to simulate either a pre-existing
+ * batch or a concurrent insert landing mid-request.
+ *
+ * Sol round-3 audit (2026-08-27) finding 4: two terminal shapes now exist,
+ * mirroring real postgrest-js semantics —
+ *   - `.maybeSingle()` ERRORS (never silently returns the first row) when
+ *     more than one row matches, exactly like real PGRST116.
+ *   - awaiting the builder directly (no `.maybeSingle()`), after
+ *     `.order()`/`.limit()`, resolves a real LIST — `{data: Row[], error}`
+ *     — sorted per every `.order()` call (in registration order, primary
+ *     key first) and sliced to `.limit()`. This is the shape
+ *     findLiveBatchByUnderlyingFile now reads.
+ * `injectError`, when set, makes the LIST path resolve `{data: null,
+ * error}` instead — simulating a genuine lookup failure so the fail-closed
+ * behavior (finding 4) can be pinned directly.
+ *
+ * Round-7 audit finding 1: `appliedBatchIds`, when set, backs the
+ * `import_batch_rows` table too — reconcileLiveBatchesForFile's own
+ * `.select("batch_id").eq(...).in("batch_id", ids).eq("apply_status",
+ * "applied")` query resolves one synthetic `{ batch_id }` row per id that
+ * is BOTH in the query's own `.in()` list AND in this set. Only reached
+ * when a test's `rows` produces more than one live candidate for the same
+ * underlying file — every pre-existing single-candidate test never touches
+ * this table at all. */
+function fakeImportBatchesTable(
+  rows: FakeBatchRow[],
+  options: { injectError?: { code: string; message: string }; appliedBatchIds?: string[] } = {},
+) {
+  return vi.fn((table: string) => {
+    if (table === "import_batch_rows") {
+      let inIds: string[] = [];
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        in: (_col: string, ids: string[]) => {
+          inIds = ids;
+          return builder;
+        },
+        then: (resolve: (value: { data: unknown; error: unknown }) => void) => {
+          const applied = new Set(options.appliedBatchIds ?? []);
+          resolve({ data: inIds.filter((id) => applied.has(id)).map((id) => ({ batch_id: id })), error: null });
+        },
+      };
+      return builder;
+    }
+    if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
+    let predicate: (row: FakeBatchRow) => boolean = () => true;
+    const orderCols: { col: keyof FakeBatchRow; ascending: boolean }[] = [];
+    let limitN: number | null = null;
+    const builder = {
+      select: () => builder,
+      eq: (col: keyof FakeBatchRow, val: unknown) => {
+        const prev = predicate;
+        predicate = (row) => prev(row) && row[col] === val;
+        return builder;
+      },
+      neq: (col: keyof FakeBatchRow, val: unknown) => {
+        const prev = predicate;
+        predicate = (row) => prev(row) && row[col] !== val;
+        return builder;
+      },
+      or: (expr: string) => {
+        const prev = predicate;
+        const clauses = expr.split(",").map((clause) => {
+          const [col, op, ...valueParts] = clause.split(".");
+          return { col: col as keyof FakeBatchRow, op, value: valueParts.join(".") };
+        });
+        predicate = (row) =>
+          prev(row) &&
+          clauses.some(({ col, op, value }) => {
+            const cell = row[col];
+            if (op === "eq") return cell === value;
+            if (op === "neq") return cell !== value;
+            if (op === "is") return value === "null" ? cell === null : String(cell) === value;
+            if (op === "like") {
+              const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*");
+              return typeof cell === "string" && new RegExp(`^${escaped}$`).test(cell);
+            }
+            return false;
+          });
+        return builder;
+      },
+      order: (col: keyof FakeBatchRow, opts?: { ascending?: boolean }) => {
+        orderCols.push({ col, ascending: opts?.ascending ?? true });
+        return builder;
+      },
+      limit: (n: number) => {
+        limitN = n;
+        return builder;
+      },
+      maybeSingle: async () => {
+        const matches = rows.filter(predicate);
+        if (matches.length > 1) {
+          return { data: null, error: { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned" } };
+        }
+        return { data: matches[0] ?? null, error: null };
+      },
+      // Thenable — awaiting the builder directly (the list-read path,
+      // no terminal .maybeSingle()) resolves this.
+      then(resolve: (value: { data: FakeBatchRow[] | null; error: unknown }) => void) {
+        if (options.injectError) {
+          resolve({ data: null, error: options.injectError });
+          return;
+        }
+        let result = rows.filter(predicate);
+        // Apply sorts in REVERSE registration order — Array.prototype.sort
+        // is stable, so sorting least-significant-first and most-
+        // significant-last produces correct multi-key ordering exactly
+        // like PostgREST's own comma-separated `order=` param.
+        for (const { col, ascending } of [...orderCols].reverse()) {
+          result = [...result].sort((a, b) => {
+            const av = a[col];
+            const bv = b[col];
+            if (av === bv) return 0;
+            return (av! < bv! ? -1 : 1) * (ascending ? 1 : -1);
+          });
+        }
+        if (limitN !== null) result = result.slice(0, limitN);
+        resolve({ data: result, error: null });
+      },
+    };
+    return builder;
+  });
+}
+
 describe("confirmImportBatch", () => {
   it("persists the batch via ONE create_import_batch RPC call (C09: batch+rows insert is now one atomic function call, not two client statements)", async () => {
     let createArgs: { p_rows: unknown[]; p_content_sha256: string } | undefined;
+    // Sol round-3 audit finding 2's post-write check reads the
+    // just-created batch back by id — the fake row list here mirrors
+    // that INSERT so the read-back finds it, matching real DB behavior.
+    const rows: FakeBatchRow[] = [];
     const supabase = {
       rpc: makeRpc({
         match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
         create_import_batch: (args) => {
           createArgs = args as typeof createArgs;
+          rows.push({
+            id: BATCH_ID,
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2026-08-27T00:00:00.000Z",
+          });
           return { data: { batchId: BATCH_ID }, error: null };
         },
       }),
+      from: fakeImportBatchesTable(rows),
     };
 
     const result = await confirmImportBatch(
@@ -91,14 +250,25 @@ describe("confirmImportBatch", () => {
   // every such row at apply time.
   it("sends producer as empty string (never null) in the RPC payload for a producer-less file", async () => {
     let createArgs: { p_rows: Array<{ raw: Record<string, unknown>; row_state: string }> } | undefined;
+    const rows: FakeBatchRow[] = [];
     const supabase = {
       rpc: makeRpc({
         match_lwin_bulk: () => ({ data: [], error: null }),
         create_import_batch: (args) => {
           createArgs = args as typeof createArgs;
+          rows.push({
+            id: BATCH_ID,
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2026-08-27T00:00:00.000Z",
+          });
           return { data: { batchId: BATCH_ID }, error: null };
         },
       }),
+      from: fakeImportBatchesTable(rows),
     };
 
     const result = await confirmImportBatch(
@@ -122,6 +292,7 @@ describe("confirmImportBatch", () => {
         match_lwin_bulk: () => ({ data: [], error: null }),
         create_import_batch: () => ({ data: null, error: { code: "23514", message: "check violation" } }),
       }),
+      from: fakeImportBatchesTable([]),
     };
 
     await expect(
@@ -129,38 +300,573 @@ describe("confirmImportBatch", () => {
     ).rejects.toThrow();
   });
 
-  it("looks up and returns the pre-existing batch as a resume pointer on a 23505 content_sha256 conflict (P3 §2.2)", async () => {
+  // Sol round-2 audit (2026-08-27) finding 2 added a PROACTIVE underlying-file
+  // check before this RPC call ever runs (see the dedicated describe
+  // block below) — so the only way to still reach this exception-handler
+  // fallback is a genuine TOCTOU race: the pre-check finds nothing (rows
+  // starts empty), then a concurrent request's insert becomes visible
+  // between that check and this RPC call, which the mock models by
+  // pushing the now-conflicting row only once create_import_batch itself
+  // "fails" with 23505.
+  it("looks up and returns the pre-existing batch as a resume pointer on a 23505 content_sha256 conflict from a genuine insert race (P3 §2.2)", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const bareHash = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [];
     const supabase = {
       rpc: makeRpc({
         match_lwin_bulk: () => ({ data: [], error: null }),
-        create_import_batch: () => ({
-          data: null,
-          error: { code: "23505", message: 'duplicate key value violates unique constraint "import_batches_content_sha256_idx"' },
-        }),
+        create_import_batch: () => {
+          rows.push({
+            id: BATCH_ID,
+            status: "completed",
+            session_id: "session-x",
+            chunk_index: null,
+            content_sha256: bareHash,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2026-08-27T00:00:00.000Z",
+          });
+          return {
+            data: null,
+            error: { code: "23505", message: 'duplicate key value violates unique constraint "import_batches_content_sha256_idx"' },
+          };
+        },
         count_import_batch_rows: () => ({
           data: [{ total: 5, applied: 5, excluded: 0, pending: 0, eligible_not_applied: 0 }],
           error: null,
         }),
       }),
-      from: vi.fn((table: string) => {
-        if (table === "import_batches") {
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    // sessionId is the EXISTING batch's own session — a chunked-upload
+    // caller compares this against the session it's uploading into, so a
+    // duplicate that belongs to a DIFFERENT session is never silently
+    // adopted (see session-step.tsx's confirmChunkedSession).
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: BATCH_ID, status: "completed", sessionId: "session-x" });
+  });
+
+  // Round-7 audit finding 1: the 23505 fallback used to hand back its own
+  // exact-hash match directly, silently ignoring any OTHER live batch for
+  // the same underlying file (e.g. an orphan left by an earlier
+  // revert-failure). It now routes through the SAME reconciliation logic
+  // the pre-check uses — this pins that an orphan sitting alongside the
+  // batch the 23505 actually collided with gets swept up and reverted too,
+  // not left behind for a future resume to stumble onto.
+  // Round-10 audit (BLOCK 1's architectural fix): reconciliation no longer
+  // auto-resolves a multi-candidate race by picking one and reverting the
+  // rest — it never calls revertImportBatch at all. Two live candidates for
+  // the same underlying file is now always a non-retryable conflict.
+  it("routes the 23505 fallback through reconciliation — a second live candidate for the same underlying file is a conflict, never auto-resolved", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const bareHash = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [];
+    const supabase = {
+      // revert_import_batch is deliberately absent — reconciliation must
+      // never call it; doing so would throw "unexpected rpc" and fail this
+      // test.
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: () => {
+          // Simulates a genuine TOCTOU race landing exactly between the
+          // pre-check (which found nothing) and this insert: BOTH an
+          // unrelated pre-existing orphan (a different content_sha256
+          // FORMAT for the same underlying file) and the batch that
+          // actually collided via the exact-hash unique index become
+          // visible at this exact instant.
+          rows.push({
+            id: "orphan",
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: `overrides-v1:${"e".repeat(64)}:${bareHash}`,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2020-01-01T00:00:00.000Z",
+          });
+          rows.push({
+            id: "matched-batch",
+            status: "applying",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: bareHash,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2021-01-01T00:00:00.000Z",
+          });
           return {
-            select: () => ({
-              eq: () => ({
-                eq: () => ({
-                  neq: () => ({
-                    maybeSingle: async () => ({
-                      data: { id: BATCH_ID, status: "completed", session_id: "session-x" },
-                      error: null,
-                    }),
-                  }),
-                }),
-              }),
-            }),
+            data: null,
+            error: { code: "23505", message: 'duplicate key value violates unique constraint "import_batches_content_sha256_idx"' },
           };
-        }
-        throw new Error(`unexpected table ${table}`);
+        },
       }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "multiple_live_batches" } });
+  });
+
+  it("rejects an empty CSV without ever calling create_import_batch", async () => {
+    const rpc = vi.fn();
+    const supabase = { rpc, from: vi.fn() };
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "empty.csv", csv(""));
+    expect(result).toMatchObject({ ok: false, error: { code: "empty_file" } });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  // Inline row-fix overrides — let an operator fix a rejected row inline
+  // instead of "fix the errors above and re-upload".
+  describe("rowOverrides", () => {
+    it("applies an override before validation, flipping an error row to valid", async () => {
+      let createArgs: { p_rows: Array<{ row_number: number; row_state: string; raw: Record<string, unknown> }> } | undefined;
+      const rows: FakeBatchRow[] = [];
+      const supabase = {
+        rpc: makeRpc({
+          match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+          create_import_batch: (args) => {
+            createArgs = args as typeof createArgs;
+            rows.push({
+              id: BATCH_ID,
+              status: "created",
+              session_id: null,
+              chunk_index: null,
+              content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+              restaurant_id: RESTAURANT_ID,
+              created_at: "2026-08-27T00:00:00.000Z",
+            });
+            return { data: { batchId: BATCH_ID }, error: null };
+          },
+        }),
+        from: fakeImportBatchesTable(rows),
+      };
+
+      // Fractional quantity 0.9 is STRICTLY rejected by the validator —
+      // the inline fix here overrides it to a whole number, never adds
+      // partial-bottle logic.
+      const result = await confirmImportBatch(
+        supabase as never,
+        RESTAURANT_ID,
+        USER_ID,
+        "cellar.csv",
+        csv("Domaine A,Cuvee 1,2020,0.9,24.50\n"),
+        { rowOverrides: { "1": { quantity: "6" } } },
+      );
+
+      expect(result).toMatchObject({ ok: true, alreadyExists: false, totalRows: 1 });
+      expect(createArgs?.p_rows[0]).toMatchObject({ row_number: 1, row_state: "valid" });
+      expect(createArgs?.p_rows[0]?.raw.quantity).toBe("6");
+    });
+
+    it("leaves a still-invalid override as an error row with the normal per-row reason, never a whole-batch rejection", async () => {
+      let createArgs: {
+        p_rows: Array<{ row_number: number; row_state: string; validation_errors: Array<{ field: string }> }>;
+      } | undefined;
+      const rows: FakeBatchRow[] = [];
+      const supabase = {
+        rpc: makeRpc({
+          match_lwin_bulk: () => ({ data: [], error: null }),
+          create_import_batch: (args) => {
+            createArgs = args as typeof createArgs;
+            rows.push({
+              id: BATCH_ID,
+              status: "created",
+              session_id: null,
+              chunk_index: null,
+              content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+              restaurant_id: RESTAURANT_ID,
+              created_at: "2026-08-27T00:00:00.000Z",
+            });
+            return { data: { batchId: BATCH_ID }, error: null };
+          },
+        }),
+        from: fakeImportBatchesTable(rows),
+      };
+
+      // The override itself is still fractional — server-side validation
+      // stays the authority and rejects it exactly as it would any other
+      // fractional quantity, never silently accepting a client's claim.
+      const result = await confirmImportBatch(
+        supabase as never,
+        RESTAURANT_ID,
+        USER_ID,
+        "cellar.csv",
+        csv("Domaine A,Cuvee 1,2020,0.9,24.50\n"),
+        { rowOverrides: { "1": { quantity: "0.9" } } },
+      );
+
+      expect(result).toMatchObject({ ok: true, alreadyExists: false, totalRows: 1 });
+      expect(createArgs?.p_rows[0]?.row_state).toBe("error");
+      expect(createArgs?.p_rows[0]?.validation_errors.some((e) => e.field === "quantity")).toBe(true);
+    });
+
+    it("rejects an out-of-bounds row override index without calling create_import_batch", async () => {
+      const rpc = makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+        create_import_batch: () => ({ data: { batchId: BATCH_ID }, error: null }),
+      });
+      const supabase = { rpc };
+
+      const result = await confirmImportBatch(
+        supabase as never,
+        RESTAURANT_ID,
+        USER_ID,
+        "cellar.csv",
+        csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+        { rowOverrides: { "2": { quantity: "6" } } },
+      );
+
+      expect(result).toMatchObject({ ok: false, error: { code: "invalid_row_override" } });
+      expect(rpc).not.toHaveBeenCalledWith("create_import_batch", expect.anything());
+    });
+
+    it("folds overrides into content_sha256 so the same file + different overrides hash differently", async () => {
+      const captured: string[] = [];
+      const supabase = {
+        rpc: makeRpc({
+          match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+          create_import_batch: (args) => {
+            captured.push((args as { p_content_sha256: string }).p_content_sha256);
+            return { data: { batchId: BATCH_ID }, error: null };
+          },
+        }),
+        // Sol round-2 audit finding 2's pre-check would otherwise resume
+        // the FIRST (bare-hash) call's own batch on the second/third
+        // (overrides-bearing) calls below — this test is specifically
+        // about the DIGEST each call computes, so `rows` stays empty
+        // throughout (create_import_batch here never records what it
+        // "created", unlike the dedicated finding-2 describe block).
+        from: fakeImportBatchesTable([]),
+      };
+      const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+      const bareHash = createHash("sha256").update(file).digest("hex");
+
+      await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+      await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+        rowOverrides: { "1": { quantity: "12" } },
+      });
+      await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+        rowOverrides: { "1": { quantity: "18" } },
+      });
+
+      // No overrides -> unchanged bare-file digest, so every batch
+      // confirmed before this feature existed still resolves.
+      expect(captured[0]).toBe(bareHash);
+      // Overrides present -> different from the bare hash and from each
+      // OTHER override set (same file, different overrides = distinct
+      // batch).
+      expect(captured[1]).not.toBe(bareHash);
+      expect(captured[2]).not.toBe(bareHash);
+      expect(captured[1]).not.toBe(captured[2]);
+      expect(new Set(captured).size).toBe(3);
+    });
+
+    // Sol audit (2026-08-27) finding 2: an earlier version hashed
+    // SHA256(fileBuffer || tag || overridesJson) — one hash over a
+    // concatenation, which a crafted bare file's bytes could be made to
+    // equal, colliding with a real overridden batch's digest. The fix
+    // hashes the file and the canonical overrides JSON SEPARATELY and
+    // joins them with a namespaced, colon-bearing prefix that no bare hex
+    // digest can ever equal — this pins the resulting FORMAT, not just
+    // digest inequality (already covered by the test above).
+    it("formats an overrides-bearing digest so it can never equal ANY bare-file digest, by construction", async () => {
+      const captured: string[] = [];
+      const supabase = {
+        rpc: makeRpc({
+          match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+          create_import_batch: (args) => {
+            captured.push((args as { p_content_sha256: string }).p_content_sha256);
+            return { data: { batchId: BATCH_ID }, error: null };
+          },
+        }),
+        from: fakeImportBatchesTable([]),
+      };
+      const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+
+      await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+        rowOverrides: { "1": { quantity: "12" } },
+      });
+
+      const overridesDigest = captured[0];
+      // A bare (no-overrides) digest is ALWAYS exactly 64 lowercase hex
+      // characters — this format can never match that shape, so no bare
+      // file's bytes, however crafted, can ever produce the same digest
+      // as an overridden batch's.
+      expect(overridesDigest).toMatch(/^overrides-v1:[0-9a-f]{64}:[0-9a-f]{64}$/);
+      expect(/^[0-9a-f]{64}$/.test(overridesDigest)).toBe(false);
+      // The trailing 64 hex chars are exactly the bare file's own digest
+      // — a human/tool can still recover "which file" from the string.
+      const fileHex = createHash("sha256").update(file).digest("hex");
+      expect(overridesDigest.endsWith(`:${fileHex}`)).toBe(true);
+    });
+
+    it("hashes identically for the same overrides regardless of client-side key order (resume still works)", async () => {
+      const captured: string[] = [];
+      const supabase = {
+        rpc: makeRpc({
+          match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }, { idx: 1, lwin_id: null, score: null }], error: null }),
+          create_import_batch: (args) => {
+            captured.push((args as { p_content_sha256: string }).p_content_sha256);
+            return { data: { batchId: BATCH_ID }, error: null };
+          },
+        }),
+        // Both calls below share the same file + same overrides, so their
+        // digests SHOULD be identical (that's what this test pins) — a
+        // pre-check "resume" on the second call would never call
+        // create_import_batch at all and this test wouldn't notice, so
+        // `rows` stays empty to force both calls through the RPC path.
+        from: fakeImportBatchesTable([]),
+      };
+      const file = csv("Domaine A,Cuvee 1,2020,6,24.50\nDomaine B,Cuvee 2,2019,3,18.00\n");
+
+      await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+        rowOverrides: { "1": { quantity: "6", unit_cost: "25.00" }, "2": { name: "Cuvee 2 Fixed" } },
+      });
+      await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+        // Same override content, different key/field order both at the
+        // row level and the field level.
+        rowOverrides: { "2": { name: "Cuvee 2 Fixed" }, "1": { unit_cost: "25.00", quantity: "6" } },
+      });
+
+      expect(captured[0]).toBe(captured[1]);
+    });
+  });
+});
+
+// Sol round-2 audit (2026-08-27) finding 2: overrides (or their absence) namespace
+// a confirm's content_sha256, so the DB's (restaurant_id, content_sha256)
+// unique index can't catch "same file, different — or no — fixes" as a
+// duplicate. confirmImportBatch now checks proactively, before ever
+// calling create_import_batch, for a live batch on the same underlying
+// file regardless of override format.
+describe("confirmImportBatch — underlying-file idempotency across override formats (Sol audit finding 2)", () => {
+  function fileIdentitySupabase() {
+    const rows: FakeBatchRow[] = [];
+    let nextId = 1;
+    const createCalls: unknown[] = [];
+    const supabase = {
+      rpc: vi.fn((name: string, args: unknown) => {
+        if (name === "match_lwin_bulk") return Promise.resolve({ data: [], error: null });
+        if (name === "create_import_batch") {
+          createCalls.push(args);
+          const typedArgs = args as { p_session_id: string | null; p_chunk_index: number | null; p_content_sha256: string };
+          const seq = nextId;
+          nextId += 1;
+          const id = `batch-${seq}`;
+          rows.push({
+            id,
+            status: "created",
+            session_id: typedArgs.p_session_id,
+            chunk_index: typedArgs.p_chunk_index,
+            content_sha256: typedArgs.p_content_sha256,
+            restaurant_id: RESTAURANT_ID,
+            // Strictly increasing with insertion order — later confirms
+            // in a test always get a LATER created_at, matching real DB
+            // behavior. Round-5 audit finding 8: this file's own survivor
+            // rule is timestamp-INDEPENDENT (the round-4 SEER-YIELDS fix,
+            // pinned in the dedicated describe block below) — created_at
+            // here is just a realistic, deterministic value for the fake
+            // rows, not a "who's older wins" mechanism this test relies on.
+            created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, seq)).toISOString(),
+          });
+          return Promise.resolve({ data: { batchId: id }, error: null });
+        }
+        if (name === "count_import_batch_rows") {
+          return Promise.resolve({
+            data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+            error: null,
+          });
+        }
+        throw new Error(`unexpected rpc ${name}`);
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+    return { supabase, createCalls };
+  }
+
+  it("resumes the existing batch — no second create_import_batch call — when the same file is re-confirmed with DIFFERENT overrides", async () => {
+    const { supabase, createCalls } = fileIdentitySupabase();
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+
+    const first = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rowOverrides: { "1": { quantity: "12" } },
+    });
+    expect(first).toMatchObject({ ok: true, alreadyExists: false });
+
+    const second = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rowOverrides: { "1": { quantity: "18" } },
+    });
+
+    expect(second).toMatchObject({
+      ok: true,
+      alreadyExists: true,
+      batchId: (first as { batchId: string }).batchId,
+    });
+    expect(createCalls).toHaveLength(1);
+  });
+
+  it("resumes an existing overridden batch when the same file is later confirmed with NO overrides", async () => {
+    const { supabase, createCalls } = fileIdentitySupabase();
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+
+    const first = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rowOverrides: { "1": { quantity: "12" } },
+    });
+    expect(first).toMatchObject({ ok: true, alreadyExists: false });
+
+    const second = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(second).toMatchObject({
+      ok: true,
+      alreadyExists: true,
+      batchId: (first as { batchId: string }).batchId,
+    });
+    expect(createCalls).toHaveLength(1);
+  });
+
+  it("still creates a new batch for a genuinely different file", async () => {
+    const { supabase, createCalls } = fileIdentitySupabase();
+    const fileA = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileB = csv("Domaine B,Cuvee 2,2019,3,18.00\n");
+
+    const first = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar-a.csv", fileA);
+    const second = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar-b.csv", fileB);
+
+    expect(first).toMatchObject({ ok: true, alreadyExists: false });
+    expect(second).toMatchObject({ ok: true, alreadyExists: false });
+    expect(createCalls).toHaveLength(2);
+  });
+});
+
+// Round-4 audit finding 1: the previous version of this describe block
+// pinned a (created_at, id) total order as the survivor-election rule —
+// that rule is WRONG (created_at is transaction-START time, not commit
+// order; see batch-service.ts's own comment on confirmImportBatch for the
+// interleaving that produces two survivors under it). The fix is the
+// unconditional SEER-YIELDS rule: any confirm whose post-create check
+// observes ANY rival live batch reverts ITSELF, full stop — never a
+// timestamp comparison. These tests deliberately give the SURVIVING
+// batch in each scenario the shape the OLD (created_at, id) rule would
+// have called "the loser," to pin that timestamps no longer play any
+// role at all.
+describe("confirmImportBatch — decide-after-write TOCTOU close: SEER-YIELDS survivor election (round-4 audit finding 1)", () => {
+  function raceSupabase(options: { rivalAlsoRevertsOnOurRevert?: boolean } = {}) {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [];
+    const revertedBatchIds: string[] = [];
+    const supabase = {
+      rpc: vi.fn((name: string, args: unknown) => {
+        if (name === "match_lwin_bulk") return Promise.resolve({ data: [], error: null });
+        if (name === "create_import_batch") {
+          // Simulates the race: by the time OUR insert lands, a RIVAL
+          // confirm for the same underlying file (a different
+          // content_sha256 FORMAT — bare vs overrides-v1 — so the DB's
+          // exact-match unique index never caught it) has ALSO committed.
+          // Our own pre-check (which ran before this RPC call) never saw
+          // it — both rows only exist from this instant on. The rival is
+          // deliberately given a LATER created_at and our own batch an
+          // EARLIER one — the old (created_at, id) rule would have called
+          // OUR batch the survivor; the new rule ignores this entirely.
+          rows.push({
+            id: "rival-batch",
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: fileHex,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2099-01-01T00:00:00.000Z",
+          });
+          rows.push({
+            id: "own-batch",
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: `overrides-v1:${"a".repeat(64)}:${fileHex}`,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2000-01-01T00:00:00.000Z",
+          });
+          return Promise.resolve({ data: { batchId: "own-batch" }, error: null });
+        }
+        if (name === "count_import_batch_rows") {
+          return Promise.resolve({
+            data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+            error: null,
+          });
+        }
+        if (name === "revert_import_batch") {
+          const targetId = (args as { p_batch_id: string }).p_batch_id;
+          revertedBatchIds.push(targetId);
+          const row = rows.find((r) => r.id === targetId);
+          if (row) row.status = "reverted";
+          if (targetId === "own-batch" && options.rivalAlsoRevertsOnOurRevert) {
+            // Simulates the residual interleaving: the rival's OWN
+            // post-check also saw us (still live at the time) and
+            // self-reverted itself too, concurrently, completing before
+            // our own re-read of its status runs.
+            const rival = rows.find((r) => r.id === "rival-batch");
+            if (rival) rival.status = "reverted";
+          }
+          return Promise.resolve({ data: 0, error: null });
+        }
+        throw new Error(`unexpected rpc ${name}`);
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+    return { supabase, file, revertedBatchIds };
+  }
+
+  // Round-5 audit finding 2(a): this used to re-read the rival's CURRENT
+  // status after self-reverting and, if it was still live, return an
+  // already-exists result pointing straight at it. That is itself racy —
+  // the rival may be mid its OWN self-revert on a different connection,
+  // and even a fresh read can't prove it won't revert a moment later,
+  // before the client acts on the pointer. The fix never hands back
+  // already-exists from this path at all: both scenarios below (rival
+  // still live vs. rival ALSO reverted) now produce the IDENTICAL
+  // outcome — a retryable duplicate_race_retry — which is the whole
+  // point: the caller no longer needs to reason about which one happened.
+  it("self-reverts unconditionally on seeing a live rival — even though OUR batch has the earlier created_at, which the old rule would have called the winner — and asks for a retry, never an already-exists pointer", async () => {
+    const { supabase, file, revertedBatchIds } = raceSupabase();
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rowOverrides: { "1": { quantity: "12" } },
+    });
+
+    expect(revertedBatchIds).toEqual(["own-batch"]);
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
+  });
+
+  it("produces the SAME retryable duplicate_race_retry outcome when the rival ALSO self-reverted concurrently — this path no longer distinguishes the two cases", async () => {
+    const { supabase, file, revertedBatchIds } = raceSupabase({ rivalAlsoRevertsOnOurRevert: true });
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rowOverrides: { "1": { quantity: "12" } },
+    });
+
+    expect(revertedBatchIds).toEqual(["own-batch"]);
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
+  });
+
+  it("never self-reverts, and survives normally, when the post-check sees no rival at all", async () => {
+    const rows: FakeBatchRow[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: (args) => {
+          rows.push({
+            id: "solo-batch",
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2026-08-27T00:00:00.000Z",
+          });
+          return { data: { batchId: "solo-batch" }, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable(rows),
     };
 
     const result = await confirmImportBatch(
@@ -171,19 +877,1160 @@ describe("confirmImportBatch", () => {
       csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
     );
 
-    // sessionId is the EXISTING batch's own session — a chunked-upload
-    // caller compares this against the session it's uploading into, so a
-    // duplicate that belongs to a DIFFERENT session is never silently
-    // adopted (see session-step.tsx's confirmChunkedSession).
-    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: BATCH_ID, status: "completed", sessionId: "session-x" });
+    expect(result).toMatchObject({ ok: true, alreadyExists: false, batchId: "solo-batch" });
+  });
+});
+
+// Round-5 audit finding 1: the POST-create check is not failure-atomic — a
+// lookup ERROR there (as opposed to "no rival found") used to fall straight
+// through to a bare error return, leaving the just-created batch live and
+// UNVERIFIED. The fix: a failed post-check is treated exactly like seeing a
+// rival — self-revert, then always ask for a retry — via the same
+// selfRevertAndRetry helper the postCheck.match branch uses.
+describe("confirmImportBatch — POST-check lookup failure is fail-closed, not fail-open (round-5 audit finding 1)", () => {
+  /** PRE-check (1st list read) finds nothing live — proceeds to create.
+   * POST-check (2nd list read, after create_import_batch) then FAILS —
+   * simulating a lookup error rather than "no rival". `revertOutcome`
+   * controls what revert_import_batch does when selfRevertAndRetry calls
+   * it in response. */
+  function postCheckErrorSupabase(revertOutcome: "succeeds" | "returns-error" | "throws") {
+    let listCallCount = 0;
+    const revertedBatchIds: string[] = [];
+    const rows: FakeBatchRow[] = [];
+    const rpc = vi.fn((name: string, args: unknown) => {
+      if (name === "match_lwin_bulk") return Promise.resolve({ data: [], error: null });
+      if (name === "create_import_batch") {
+        rows.push({
+          id: "own-batch",
+          status: "created",
+          session_id: null,
+          chunk_index: null,
+          content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+          restaurant_id: RESTAURANT_ID,
+          created_at: "2026-01-01T00:00:00.000Z",
+        });
+        return Promise.resolve({ data: { batchId: "own-batch" }, error: null });
+      }
+      if (name === "revert_import_batch") {
+        const targetId = (args as { p_batch_id: string }).p_batch_id;
+        revertedBatchIds.push(targetId);
+        if (revertOutcome === "throws") {
+          return Promise.reject(new Error("network error mid-revert"));
+        }
+        if (revertOutcome === "returns-error") {
+          // An unrecognized PostgREST error code — revertImportBatch
+          // re-throws this verbatim rather than returning { ok: false }.
+          return Promise.resolve({ data: null, error: { code: "XX000", message: "connection reset by peer" } });
+        }
+        const row = rows.find((r) => r.id === targetId);
+        if (row) row.status = "reverted";
+        return Promise.resolve({ data: 0, error: null });
+      }
+      throw new Error(`unexpected rpc ${name}`);
+    });
+    const from = vi.fn((table: string) => {
+      if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
+      listCallCount += 1;
+      const thisCall = listCallCount;
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        neq: () => builder,
+        or: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        then: (resolve: (value: { data: unknown; error: unknown }) => void) => {
+          if (thisCall === 1) {
+            resolve({ data: [], error: null }); // PRE-check: nothing live yet.
+          } else {
+            resolve({ data: null, error: { code: "XX000", message: "connection reset by peer" } }); // POST-check fails.
+          }
+        },
+      };
+      return builder;
+    });
+    return { rpc, from, revertedBatchIds };
+  }
+
+  it("self-reverts the just-created batch and returns a retryable error when the POST-check lookup itself errors", async () => {
+    const { rpc, from, revertedBatchIds } = postCheckErrorSupabase("succeeds");
+    const supabase = { rpc, from };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+    );
+
+    expect(revertedBatchIds).toEqual(["own-batch"]);
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
   });
 
-  it("rejects an empty CSV without ever calling create_import_batch", async () => {
-    const rpc = vi.fn();
-    const supabase = { rpc, from: vi.fn() };
-    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "empty.csv", csv(""));
-    expect(result).toMatchObject({ ok: false, error: { code: "empty_file" } });
-    expect(rpc).not.toHaveBeenCalled();
+  // Round-6 audit finding 1: selfRevertAndRetry now retries the revert
+  // call once before giving up, so BOTH mock outcomes here fail TWICE
+  // (revertedBatchIds carries two entries) before this function returns —
+  // and, per the finding's corrected invariant (HONESTY-CORRECTED round-13
+  // audit, BLOCK 3: a revert-failure orphan is reachable by any member of
+  // this restaurant via Recent imports, never an "inert" leftover — see
+  // selfRevertAndRetry's own comment for why it's still not, by itself, a
+  // duplicate-data hazard), the result is now the SAME retryable
+  // duplicate_race_retry a successful revert produces, never the old,
+  // distinct duplicate_check_failed code.
+  it("retries the self-revert once, then returns the ordinary duplicate_race_retry (never duplicate_check_failed) when BOTH attempts return an error", async () => {
+    const { rpc, from, revertedBatchIds } = postCheckErrorSupabase("returns-error");
+    const supabase = { rpc, from };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+    );
+
+    expect(revertedBatchIds).toEqual(["own-batch", "own-batch"]);
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
+  });
+
+  it("retries the self-revert once, then returns duplicate_race_retry, never an uncaught throw, when BOTH self-revert attempts throw", async () => {
+    const { rpc, from, revertedBatchIds } = postCheckErrorSupabase("throws");
+    const supabase = { rpc, from };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+    );
+
+    expect(revertedBatchIds).toEqual(["own-batch", "own-batch"]);
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
+  });
+});
+
+// Round-6 audit finding 1: selfRevertAndRetry retries a failed revert ONCE
+// immediately, and — because a reachable-but-unapplied orphan (HONESTY-
+// CORRECTED round-13 audit, BLOCK 3: any member of this restaurant can open
+// and apply it from Recent imports — it is not "lingering" out of reach)
+// still can never cause duplicate APPLIED data, thanks to
+// findSiblingWithAppliedRows' own apply-time guard rather than any claim
+// about unreachability (see the proof on selfRevertAndRetry's own
+// comment) — converges on the SAME retryable duplicate_race_retry outcome
+// whether the revert eventually succeeds or not.
+describe("confirmImportBatch — self-revert retry-once (round-6 audit finding 1)", () => {
+  /** Revert fails on the FIRST call, succeeds on the SECOND — models a
+   * transient failure (dropped connection, momentary lock conflict) that
+   * the one built-in retry is meant to paper over. */
+  function retrySucceedsSupabase() {
+    const rows: FakeBatchRow[] = [];
+    const revertedBatchIds: string[] = [];
+    let revertCallCount = 0;
+    let listCallCount = 0;
+    const rpc = vi.fn((name: string, args: unknown) => {
+      if (name === "match_lwin_bulk") return Promise.resolve({ data: [], error: null });
+      if (name === "create_import_batch") {
+        rows.push({
+          id: "own-batch",
+          status: "created",
+          session_id: null,
+          chunk_index: null,
+          content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+          restaurant_id: RESTAURANT_ID,
+          created_at: "2026-01-01T00:00:00.000Z",
+        });
+        return Promise.resolve({ data: { batchId: "own-batch" }, error: null });
+      }
+      if (name === "revert_import_batch") {
+        revertCallCount += 1;
+        const targetId = (args as { p_batch_id: string }).p_batch_id;
+        revertedBatchIds.push(targetId);
+        if (revertCallCount === 1) {
+          // First attempt: an unrecognized PostgREST error — revertImportBatch
+          // re-throws this verbatim rather than returning { ok: false }.
+          return Promise.resolve({ data: null, error: { code: "XX000", message: "connection reset by peer" } });
+        }
+        const row = rows.find((r) => r.id === targetId);
+        if (row) row.status = "reverted";
+        return Promise.resolve({ data: 0, error: null });
+      }
+      throw new Error(`unexpected rpc ${name}`);
+    });
+    const from = vi.fn((table: string) => {
+      if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
+      listCallCount += 1;
+      const thisCall = listCallCount;
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        neq: () => builder,
+        or: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        then: (resolve: (value: { data: unknown; error: unknown }) => void) => {
+          if (thisCall === 1) {
+            resolve({ data: [], error: null }); // PRE-check: nothing live yet.
+          } else {
+            resolve({ data: null, error: { code: "XX000", message: "connection reset by peer" } }); // POST-check fails, triggering selfRevertAndRetry.
+          }
+        },
+      };
+      return builder;
+    });
+    return { rpc, from, revertedBatchIds };
+  }
+
+  it("succeeds on the retried second attempt and reports the ordinary duplicate_race_retry outcome", async () => {
+    const { rpc, from, revertedBatchIds } = retrySucceedsSupabase();
+    const supabase = { rpc, from };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+    );
+
+    // Exactly two revert attempts — the one built-in retry, no more.
+    expect(revertedBatchIds).toEqual(["own-batch", "own-batch"]);
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
+  });
+
+});
+
+// Round-10 audit (BLOCK 1's architectural fix): reconciliation used to
+// resolve a multi-candidate race by REVERTING every rival it didn't pick as
+// the resume target — round 8 made that fail-closed, but round 9 found the
+// fail-closed version was STILL a TOCTOU (a rival could acquire the apply
+// lock and create genuinely-applied rows in the gap between reconciliation's
+// own applied/unapplied snapshot and its revert call, and the revert then
+// deleted those newly-created rows). The fix removes the authority
+// entirely: reconcileLiveBatchesForFile now NEVER calls revertImportBatch,
+// under any circumstance. Two or more live candidates is always a
+// non-retryable multiple_live_batches conflict that touches nothing.
+//
+// FINDING 6 (round-15 audit, stale since round-11's own HONESTY-CORRECTED
+// comment on findSiblingWithAppliedRows, batch-service.ts:1190-1214): the
+// "at most one applied batch per underlying file" invariant is NOT
+// enforced anywhere — findSiblingWithAppliedRows only NARROWS the
+// cross-batch apply race (catches the sequential case; two applies racing
+// simultaneously can both pass its guard and both persist inventory). This
+// is the accepted, documented residual (docs/runbooks/csv-import.md's own
+// "cross-batch apply race" paragraph) — no enforcement point for that
+// invariant currently exists.
+// (batch-service.test.ts's own "findSiblingWithAppliedRows" describe,
+// below).
+describe("confirmImportBatch — reconciliation is non-destructive (round-10 audit, BLOCK 1)", () => {
+  it("returns a non-retryable multiple_live_batches conflict and calls revertImportBatch for NEITHER candidate when both are unapplied", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        id: "rival-older",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2020-01-01T00:00:00.000Z",
+      },
+      {
+        id: "orphan-newer",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:${"c".repeat(64)}:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2021-01-01T00:00:00.000Z",
+      },
+    ];
+    const supabase = {
+      // create_import_batch and revert_import_batch are deliberately
+      // absent — a conflict must never reach either; calling one throws
+      // "unexpected rpc" and fails this test.
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "multiple_live_batches" } });
+  });
+
+  it("returns a non-retryable multiple_live_batches conflict and reverts NEITHER candidate even when one of the two already has applied rows", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        // Would have been the "orphan" under the old oldest-first logic —
+        // now just an ordinary conflict participant, never touched.
+        id: "orphan-older",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2020-01-01T00:00:00.000Z",
+      },
+      {
+        // Has genuinely applied rows — under the OLD design this would have
+        // been targeted as the resume pointer and the sibling reverted.
+        // Under the new design, having applied rows grants this candidate
+        // NO special authority over its sibling — it's still just a
+        // conflict participant.
+        id: "survivor-newer",
+        status: "applying",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:${"d".repeat(64)}:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2021-01-01T00:00:00.000Z",
+      },
+    ];
+    const supabase = {
+      // create_import_batch and revert_import_batch are deliberately
+      // absent — see the sibling test's own comment above.
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "multiple_live_batches" } });
+  });
+
+  // The exact shape round-8 finding 2 named as the most dangerous case: TWO
+  // candidates each with genuinely applied rows — a duplicate that has
+  // ALREADY landed. Reconciliation still touches nothing; resolving it is
+  // an operator, not an automatic, action.
+  it("returns a non-retryable multiple_live_batches conflict and reverts NOTHING when two candidates both already have applied rows", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        id: "applied-one",
+        status: "applying",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2020-01-01T00:00:00.000Z",
+      },
+      {
+        id: "applied-two",
+        status: "applying",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:${"f".repeat(64)}:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2021-01-01T00:00:00.000Z",
+      },
+    ];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "multiple_live_batches" } });
+  });
+
+  // Three or more live candidates — the case BLOCK 3(c) names explicitly
+  // ("for three or more applied candidates, 'revert one' is insufficient —
+  // all but one must be reverted"). Pins that the conflict message names
+  // the count and that, again, nothing is ever reverted from this path.
+  it("names the count and reverts NOTHING when THREE live candidates exist for the same underlying file", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        id: "orphan-a",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2019-01-01T00:00:00.000Z",
+      },
+      {
+        id: "applied-target",
+        status: "applying",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:${"1".repeat(64)}:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2020-01-01T00:00:00.000Z",
+      },
+      {
+        id: "orphan-b",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:${"2".repeat(64)}:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2021-01-01T00:00:00.000Z",
+      },
+    ];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "multiple_live_batches" } });
+    if (!result.ok) {
+      expect(result.error.message).toMatch(/3 live import batches/);
+    }
+  });
+});
+
+// FINDING 4 (round-15 audit): the RAW read hitting LIVE_BATCH_LOOKUP_LIMIT
+// (20) is the only honest truncation signal — reconcileLiveBatchesForFile
+// used to test `candidates.length === LIVE_BATCH_LOOKUP_LIMIT` (the
+// POST-filter count) instead, which undercounts whenever a malformed row is
+// mixed into the raw read.
+describe("reconcileLiveBatchesForFile — truncation signal comes from the raw read, not the filtered count (round-15 audit finding 4)", () => {
+  it('states "at least 19" (not a bare "19") when the RAW read hits the cap even though only 19 of the 20 rows are well-formed', async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    // 19 genuinely well-formed live candidates for this file...
+    const wellFormedRows: FakeBatchRow[] = Array.from({ length: 19 }, (_, i) => ({
+      id: `live-${i}`,
+      status: "created",
+      session_id: null,
+      chunk_index: null,
+      content_sha256: i === 0 ? fileHex : `overrides-v1:${i.toString(16).padStart(64, "0")}:${fileHex}`,
+      restaurant_id: RESTAURANT_ID,
+      created_at: new Date(Date.UTC(2020, 0, 1, 0, 0, i)).toISOString(),
+    }));
+    // ...plus ONE malformed row (extra colon segment — never a shape this
+    // product writes) that satisfies the LIKE pattern but not the
+    // exact-format re-check, filling the 20th raw slot. matches.length ends
+    // up 19 (not 20), but the RAW read still hit the cap — a genuine 20th
+    // live candidate could be sitting just past row 20, unseen.
+    const malformedRow: FakeBatchRow = {
+      id: "malformed-0",
+      status: "created",
+      session_id: null,
+      chunk_index: null,
+      content_sha256: `overrides-v1:extra:garbage:${fileHex}`,
+      restaurant_id: RESTAURANT_ID,
+      created_at: new Date(Date.UTC(2020, 0, 1, 0, 0, 19)).toISOString(),
+    };
+    const rows = [...wellFormedRows, malformedRow];
+    expect(rows).toHaveLength(20); // exactly LIVE_BATCH_LOOKUP_LIMIT
+
+    const supabase = {
+      rpc: makeRpc({ match_lwin_bulk: () => ({ data: [], error: null }) }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "multiple_live_batches" } });
+    if (!result.ok) {
+      // The old (buggy) check compared candidates.length (19) against the
+      // cap (20) and reported a bare, false-precision "19" here instead.
+      expect(result.error.message).toMatch(/at least 19 live import batches/);
+    }
+  });
+
+  it('states an exact "18" (no "at least") when the raw read is BELOW the cap, even with a malformed row mixed in', async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const wellFormedRows: FakeBatchRow[] = Array.from({ length: 18 }, (_, i) => ({
+      id: `live-${i}`,
+      status: "created",
+      session_id: null,
+      chunk_index: null,
+      content_sha256: i === 0 ? fileHex : `overrides-v1:${i.toString(16).padStart(64, "0")}:${fileHex}`,
+      restaurant_id: RESTAURANT_ID,
+      created_at: new Date(Date.UTC(2020, 0, 1, 0, 0, i)).toISOString(),
+    }));
+    const malformedRow: FakeBatchRow = {
+      id: "malformed-0",
+      status: "created",
+      session_id: null,
+      chunk_index: null,
+      content_sha256: `overrides-v1:extra:garbage:${fileHex}`,
+      restaurant_id: RESTAURANT_ID,
+      created_at: new Date(Date.UTC(2020, 0, 1, 0, 0, 18)).toISOString(),
+    };
+    const rows = [...wellFormedRows, malformedRow];
+    expect(rows).toHaveLength(19); // below LIVE_BATCH_LOOKUP_LIMIT
+
+    const supabase = {
+      rpc: makeRpc({ match_lwin_bulk: () => ({ data: [], error: null }) }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "multiple_live_batches" } });
+    if (!result.ok) {
+      // Below the cap — states an exact count, even though one row was
+      // malformed and dropped by the format filter. The raw read itself
+      // never hit LIVE_BATCH_LOOKUP_LIMIT, so there is no reason to believe
+      // a 19th+ candidate exists beyond this read.
+      expect(result.error.message).toMatch(/^This file has 18 live import batches/);
+      expect(result.error.message).not.toMatch(/at least/);
+    }
+  });
+});
+
+// Round-5 audit finding 2(b): every already-exists result funnels through
+// toAlreadyExistsResult, which now re-reads the target's CURRENT status
+// immediately before returning it — closing the gap where a batch found
+// live by an earlier lookup (the PRE-check's own read, or the 23505
+// fallback's) has since been reverted (e.g. by its own concurrent
+// SEER-YIELDS self-revert) by the time this confirm is about to point the
+// caller at it.
+describe("confirmImportBatch — resume pointer re-verifies liveness before returning (round-5 audit finding 2(b))", () => {
+  it("returns duplicate_race_retry instead of already-exists when the PRE-check's match has been reverted by the time of the final re-read", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    // Round-6 audit finding 2: toAlreadyExistsResult now runs countBatchRows
+    // BEFORE the status re-read (reordered so the status read is the FINAL
+    // await before returning) — count_import_batch_rows must now be
+    // reachable in this scenario too, not just the status query.
+    const rpc = makeRpc({
+      match_lwin_bulk: () => ({ data: [], error: null }),
+      count_import_batch_rows: () => ({
+        data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+        error: null,
+      }),
+    });
+    const from = vi.fn((table: string) => {
+      if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        neq: () => builder,
+        or: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        // readBatchLiveState's terminal call — reports the SAME batch as
+        // now reverted, simulating a revert that landed in the window
+        // between the PRE-check's own list read and this re-verification.
+        maybeSingle: async () => ({
+          data: { id: "existing-batch", status: "reverted", session_id: null, chunk_index: null },
+          error: null,
+        }),
+        // The PRE-check's own ordered LIST read — reports the batch as
+        // still LIVE at the moment IT ran.
+        then: (resolve: (value: { data: unknown; error: unknown }) => void) => {
+          resolve({
+            data: [
+              {
+                id: "existing-batch",
+                status: "created",
+                session_id: null,
+                chunk_index: null,
+                content_sha256: fileHex,
+                created_at: "2026-01-01T00:00:00.000Z",
+              },
+            ],
+            error: null,
+          });
+        },
+      };
+      return builder;
+    });
+    const supabase = { rpc, from };
+
+    // create_import_batch is deliberately absent from the RPC handlers —
+    // the PRE-check finds a match, so it must never be reached.
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
+  });
+
+  // Round-6 audit finding 2: pins the reordering itself — the count RPC
+  // call succeeds (the revert has NOT landed yet when count runs), and the
+  // revert is only observed on the status re-read that immediately
+  // follows it, with no other await in between. Before the fix, the status
+  // read ran FIRST and the count ran after, so a revert landing in that
+  // later window went undetected; this test fails against that ordering
+  // (count would never even be called, since the old code returned early
+  // on the status check before ever reaching count) and passes against the
+  // reordered one.
+  it("refuses a resume pointer when the batch reverts in the window between the count read and the (now-final) status read", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const callOrder: string[] = [];
+    const rpc = vi.fn((name: string, _args: unknown) => {
+      if (name === "match_lwin_bulk") return Promise.resolve({ data: [], error: null });
+      if (name === "count_import_batch_rows") {
+        callOrder.push("count");
+        return Promise.resolve({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        });
+      }
+      throw new Error(`unexpected rpc ${name}`);
+    });
+    const from = vi.fn((table: string) => {
+      if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        neq: () => builder,
+        or: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        maybeSingle: async () => {
+          callOrder.push("status");
+          // Reverted BY THE TIME this (now-final) read runs — simulating a
+          // revert that landed after count but before this call.
+          return { data: { id: "existing-batch", status: "reverted", session_id: null, chunk_index: null }, error: null };
+        },
+        then: (resolve: (value: { data: unknown; error: unknown }) => void) => {
+          resolve({
+            data: [
+              {
+                id: "existing-batch",
+                status: "created",
+                session_id: null,
+                chunk_index: null,
+                content_sha256: fileHex,
+                created_at: "2026-01-01T00:00:00.000Z",
+              },
+            ],
+            error: null,
+          });
+        },
+      };
+      return builder;
+    });
+    const supabase = { rpc, from };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    // count ran BEFORE status — the reordered sequence this finding
+    // requires — and the (now-last) status read is what actually catches
+    // the revert.
+    expect(callOrder).toEqual(["count", "status"]);
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
+  });
+});
+
+// Sol round-3 audit (2026-08-27) finding 4: findLiveBatchByUnderlyingFile
+// used to be `.maybeSingle()`, which THROWS (not "no match") when more
+// than one row satisfies the filter — the old code discarded that error
+// and silently fell through to creating a THIRD live variant. It's now a
+// deterministic ordered LIST read: a lookup error fails the confirm
+// closed (never proceeds to create), and two-or-more live variants are a
+// non-retryable conflict (round-10 audit: never auto-resolved against the
+// oldest one, and never reverts anything — see the "reconciliation is
+// non-destructive" describe above).
+describe("confirmImportBatch — underlying-file lookup failure semantics (Sol round-3 audit finding 4)", () => {
+  it("fails CLOSED with a retryable error when the underlying-file lookup itself errors — never creates a batch", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const createCalls: unknown[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: (args) => {
+          createCalls.push(args);
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable([], { injectError: { code: "XX000", message: "connection reset by peer" } }),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_check_failed" } });
+    expect(createCalls).toHaveLength(0);
+  });
+
+  it("returns a non-retryable multiple_live_batches conflict, never creating a third, when TWO already exist for the same underlying file", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        id: "variant-newer",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:${"b".repeat(64)}:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2025-06-01T00:00:00.000Z",
+      },
+      {
+        id: "variant-older",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
+    ];
+    const createCalls: unknown[] = [];
+    const supabase = {
+      // create_import_batch and revert_import_batch are deliberately
+      // absent — a conflict must never reach either.
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rowOverrides: { "1": { quantity: "12" } },
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "multiple_live_batches" } });
+    expect(createCalls).toHaveLength(0);
+  });
+
+  // Sol round-3 audit finding 6: the LIKE pattern can also match a
+  // malformed, multi-colon content_sha256 that merely CONTAINS the file's
+  // digest as a trailing substring — never a real bare-file or
+  // overrides-v1 digest. Candidates are re-checked against the exact
+  // format before being treated as a match.
+  it("never treats a malformed multi-colon content_sha256 as a match, even though it satisfies the LIKE pattern", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        id: "malformed-batch",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        // Three colon-separated segments, not two — satisfies
+        // `content_sha256.like.overrides-v1:%:<fileHex>` (the `%` matches
+        // "extra:garbage") but is not a real digest this codebase ever
+        // writes.
+        content_sha256: `overrides-v1:extra:garbage:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
+    ];
+    const createCalls: unknown[] = [];
+    const rowsAfterCreate: FakeBatchRow[] = [...rows];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: (args) => {
+          createCalls.push(args);
+          rowsAfterCreate.push({
+            id: BATCH_ID,
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: fileHex,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2026-08-27T00:00:00.000Z",
+          });
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        }),
+      }),
+      from: fakeImportBatchesTable(rowsAfterCreate),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    // The malformed row is never treated as a rival — a fresh batch is
+    // created normally.
+    expect(result).toMatchObject({ ok: true, alreadyExists: false, batchId: BATCH_ID });
+    expect(createCalls).toHaveLength(1);
+  });
+
+  // Round-4 audit finding 4: the old `.limit(2)` read the two OLDEST rows
+  // matching the LIKE pattern BEFORE the exact-format re-check ran — so
+  // two malformed candidates that merely sort before a genuine match
+  // could fill both slots and evict it entirely. Raised to limit(20).
+  it("finds a genuine match even when TWO malformed candidates sort before it (finding 4: limit raised from 2 to 20)", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        id: "malformed-1",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:extra:garbage1:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2020-01-01T00:00:00.000Z",
+      },
+      {
+        id: "malformed-2",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:extra:garbage2:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2021-01-01T00:00:00.000Z",
+      },
+      {
+        id: "genuine-batch",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2022-01-01T00:00:00.000Z",
+      },
+    ];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        }),
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    // The pre-check (which runs before create_import_batch is ever
+    // called) must find "genuine-batch" despite the two older malformed
+    // rows sorting before it — create_import_batch is deliberately absent
+    // from the RPC handlers above so this test fails loudly if it's ever
+    // reached.
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: "genuine-batch" });
+  });
+});
+
+// Round-5 audit finding 6: limit(20) is heuristic, not a proof — if the
+// lookup returns EXACTLY the limit and every one of those candidates fails
+// the exact-format re-check, a genuine well-formed match could be sitting
+// beyond row 20, shadowed by contamination. Fail CLOSED in that saturation
+// case rather than silently reporting "no live batch" and proceeding to
+// create a genuine duplicate.
+describe("confirmImportBatch — fails closed on lookup saturation (round-5 audit finding 6)", () => {
+  it("fails closed with a retryable error, never creates, when the lookup returns exactly 20 rows and NONE are well-formed", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = Array.from({ length: 20 }, (_, i) => ({
+      id: `malformed-${i}`,
+      status: "created",
+      session_id: null,
+      chunk_index: null,
+      // Malformed: an extra colon-separated segment, never a shape this
+      // product actually writes — none of these 20 pass isWellFormedDigestForFile.
+      content_sha256: `overrides-v1:extra:garbage${i}:${fileHex}`,
+      restaurant_id: RESTAURANT_ID,
+      created_at: new Date(Date.UTC(2020, 0, 1, 0, 0, i)).toISOString(),
+    }));
+    const createCalls: unknown[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: (args) => {
+          createCalls.push(args);
+          return { data: { batchId: "should-not-be-created" }, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_check_failed" } });
+    expect(createCalls).toHaveLength(0);
+  });
+
+  it("does NOT fail closed when fewer than 20 rows come back, even if none are well-formed — genuinely no live batch", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = Array.from({ length: 5 }, (_, i) => ({
+      id: `malformed-${i}`,
+      status: "created",
+      session_id: null,
+      chunk_index: null,
+      content_sha256: `overrides-v1:extra:garbage${i}:${fileHex}`,
+      restaurant_id: RESTAURANT_ID,
+      created_at: new Date(Date.UTC(2020, 0, 1, 0, 0, i)).toISOString(),
+    }));
+    const rowsAfterCreate: FakeBatchRow[] = [...rows];
+    const createCalls: unknown[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: (args) => {
+          createCalls.push(args);
+          rowsAfterCreate.push({
+            id: BATCH_ID,
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: fileHex,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2026-08-27T00:00:00.000Z",
+          });
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        }),
+      }),
+      from: fakeImportBatchesTable(rowsAfterCreate),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: false, batchId: BATCH_ID });
+    expect(createCalls).toHaveLength(1);
+  });
+});
+
+// Sol round-3 audit (2026-08-27) finding 3: a sibling chunk of the SAME
+// session carrying identical underlying-file bytes is a legitimate
+// duplicate segment (e.g. a duplicated export range) — it must never be
+// mistaken for the OTHER chunk that happens to share those bytes.
+//
+// Two distinct real-world cases, both pinned below:
+//   (a) the sibling chunk carries its OWN row-fix overrides, so its
+//       content_sha256 is a genuinely DIFFERENT string from the other
+//       chunk's (0103's unique index is an EXACT string match — it does
+//       not collide). Before this fix, findLiveBatchByUnderlyingFile's
+//       cross-format check (finding 2) would still wrongly short-circuit
+//       this as "already exists" pointing at the OTHER chunk, even though
+//       the DB itself would have allowed a genuinely distinct insert —
+//       excluding the whole session from that check lets it actually
+//       create its own batch.
+//   (b) the sibling chunk has NO overrides of its own, so its digest is
+//       BYTE-IDENTICAL to the other chunk's — 0103's (restaurant_id,
+//       content_sha256) unique index has no session/chunk_index
+//       dimension at all, so the DB itself genuinely 23505s this insert;
+//       there is no TS-layer way around that (migrations are locked).
+//       What the TS layer CAN and must guarantee is that the resulting
+//       already-exists result carries the OTHER chunk's real chunkIndex
+//       (not the target's) so the client (session-step.tsx) can detect
+//       the mismatch and hard-stop instead of silently marking this slot
+//       "confirmed".
+describe("confirmImportBatch — sibling chunk within the same session (Sol round-3 audit finding 3)", () => {
+  it("(a) creates its own batch for a sibling chunk sharing underlying bytes but carrying its OWN row-fix overrides (a genuinely different content_sha256 string)", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const SESSION_ID = "session-siblings";
+    // Chunk 1 of this session already confirmed with these exact bytes,
+    // no overrides — its digest is the bare file hash.
+    const rows: FakeBatchRow[] = [
+      {
+        id: "chunk-1-batch",
+        status: "created",
+        session_id: SESSION_ID,
+        chunk_index: 1,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
+    ];
+    const createCalls: unknown[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+        create_import_batch: (args) => {
+          createCalls.push(args);
+          rows.push({
+            id: "chunk-2-batch",
+            status: "created",
+            session_id: SESSION_ID,
+            chunk_index: 2,
+            content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2024-01-01T00:00:01.000Z",
+          });
+          return { data: { batchId: "chunk-2-batch" }, error: null };
+        },
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        }),
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    // Chunk 2 of the SAME session, same underlying bytes as chunk 1, but
+    // this confirm carries its own (no-op-content, still non-empty)
+    // row-fix override — its content_sha256 is the overrides-v1 format,
+    // a different STRING from chunk 1's bare digest.
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.part2.csv", file, {
+      sessionId: SESSION_ID,
+      chunkIndex: 2,
+      chunkTotal: 2,
+      rowOverrides: { "1": { quantity: "6" } },
+    });
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: false, batchId: "chunk-2-batch" });
+    expect(createCalls).toHaveLength(1);
+  });
+
+  it("(b) surfaces the OTHER chunk's real chunkIndex (never the target's) when a byte-identical sibling genuinely 23505s at the DB's own unique index", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const SESSION_ID = "session-siblings";
+    const rows: FakeBatchRow[] = [
+      {
+        id: "chunk-1-batch",
+        status: "created",
+        session_id: SESSION_ID,
+        chunk_index: 1,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
+    ];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+        // Chunk 2 carries no overrides, so its digest is the exact same
+        // bare fileHex chunk 1 already holds — the real DB unique index
+        // (restaurant_id, content_sha256) genuinely rejects this insert,
+        // exactly as it would in production.
+        create_import_batch: () => ({
+          data: null,
+          error: { code: "23505", message: 'duplicate key value violates unique constraint "import_batches_content_sha256_idx"' },
+        }),
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        }),
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.part2.csv", file, {
+      sessionId: SESSION_ID,
+      chunkIndex: 2,
+      chunkTotal: 2,
+    });
+
+    // alreadyExists is technically true, but chunkIndex (1) does NOT
+    // match the confirm target (2) — session-step.tsx's own finding-3 fix
+    // requires BOTH sessionId and chunkIndex to match before treating
+    // this as "this chunk is done" (see session-step.conflict.test.tsx).
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: "chunk-1-batch", sessionId: SESSION_ID, chunkIndex: 1 });
+  });
+});
+
+// Sol audit (2026-08-27) finding 1: the (session_id, chunk_index)
+// conflict fallback used to resume whatever batch already held that
+// chunk slot without ever checking its stored content_sha256 — so a
+// retry that also carries EDITED overrides (a different effective
+// content) would silently confirm the OLD batch with the OLD values.
+describe("confirmImportBatch — session-chunk conflict path (Sol audit finding 1)", () => {
+  const SESSION_ID = "session-conflict";
+
+  /** Simulates create_import_batch raising 23505 on the (session_id,
+   * chunk_index) unique index. The chunk slot already holds a batch with
+   * `storedContentSha256` — the finding-2 proactive pre-check (in
+   * confirmImportBatch, run before this RPC) EXCLUDES a match sitting in
+   * this exact (session, chunkIndex) slot by construction, so it always
+   * defers to this 23505 exception path for THIS specific scenario,
+   * exactly as before finding 2 was added. findDuplicateBatch's own
+   * byHash lookup then genuinely misses (this confirm's digest is new
+   * whenever the overrides changed), falling through to its
+   * (session_id, chunk_index) fallback, which finds this same row. */
+  function conflictSupabase(storedContentSha256: string) {
+    const rows: FakeBatchRow[] = [
+      {
+        id: BATCH_ID,
+        status: "created",
+        session_id: SESSION_ID,
+        chunk_index: 1,
+        content_sha256: storedContentSha256,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2026-08-27T00:00:00.000Z",
+      },
+    ];
+    return {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+        create_import_batch: () => ({
+          data: null,
+          error: { code: "23505", message: 'duplicate key value violates unique constraint "import_batches_session_chunk_idx"' },
+        }),
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        }),
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+  }
+
+  it("returns a typed chunk_content_mismatch error — never a silent resume — when the same (session, chunkIndex) already holds DIFFERENT content", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,0.9,24.50\n");
+    // Whatever this chunk slot was confirmed with before — deliberately
+    // NOT this confirm's own digest, simulating a retry with edited
+    // overrides (a real content change).
+    const staleContentSha256 = "f".repeat(64);
+    const supabase = conflictSupabase(staleContentSha256);
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.part1.csv", file, {
+      sessionId: SESSION_ID,
+      chunkIndex: 1,
+      rowOverrides: { "1": { quantity: "6" } },
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "chunk_content_mismatch" } });
+  });
+
+  it("still resumes normally when the same (session, chunkIndex) holds the SAME content (an idempotent retry, not an edit)", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,0.9,24.50\n");
+    const rowOverrides = { "1": { quantity: "6" } };
+    const canonicalJson = canonicalizeRowOverrides(rowOverrides);
+    if (canonicalJson === null) throw new Error("expected a non-null canonical overrides JSON");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const overridesHex = createHash("sha256").update(canonicalJson).digest("hex");
+    // Mirrors batch-service.ts's own digest format exactly — the same
+    // digest confirmImportBatch computes internally for this file + these
+    // exact overrides.
+    const expectedContentSha256 = `overrides-v1:${overridesHex}:${fileHex}`;
+    const supabase = conflictSupabase(expectedContentSha256);
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.part1.csv", file, {
+      sessionId: SESSION_ID,
+      chunkIndex: 1,
+      rowOverrides,
+    });
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: BATCH_ID, status: "created", sessionId: SESSION_ID });
+  });
+});
+
+describe("canonicalizeRowOverrides", () => {
+  it("returns null for undefined overrides", () => {
+    expect(canonicalizeRowOverrides(undefined)).toBeNull();
+  });
+
+  it("returns null when every row's override is an empty field set", () => {
+    expect(canonicalizeRowOverrides({ "1": {}, "2": {} })).toBeNull();
+  });
+
+  it("sorts rows numerically and fields in CANONICAL_HEADERS order, regardless of input order", () => {
+    const a = canonicalizeRowOverrides({ "10": { quantity: "1" }, "2": { unit_cost: "5.00", name: "X" } });
+    const b = canonicalizeRowOverrides({ "2": { name: "X", unit_cost: "5.00" }, "10": { quantity: "1" } });
+    expect(a).toBe(b);
+    expect(a).toBe(JSON.stringify([
+      [2, [["name", "X"], ["unit_cost", "5.00"]]],
+      [10, [["quantity", "1"]]],
+    ]));
   });
 });
 
@@ -222,6 +2069,110 @@ describe("applyImportBatchChunk", () => {
     ]);
     expect(result.status).toBe("completed");
     expect(statusUpdates).toEqual(["completed"]);
+  });
+});
+
+// Round-10 audit BLOCK 1's replacement enforcement point: reconciliation no
+// longer has any destructive authority (see the "reconciliation is
+// non-destructive" describe above), so the real "at most one applied batch
+// per underlying file" invariant is enforced HERE instead — a pure READ,
+// run immediately before a chunk is allowed to apply (the apply route).
+describe("findSiblingWithAppliedRows", () => {
+  function fakeSiblingAppliedTable(
+    returnRows: { id: string; content_sha256: string | null }[],
+    opts: { injectError?: { code: string; message: string } } = {},
+  ) {
+    const calls: { method: string; args: unknown[] }[] = [];
+    const builder = {
+      select: (...args: unknown[]) => {
+        calls.push({ method: "select", args });
+        return builder;
+      },
+      eq: (...args: unknown[]) => {
+        calls.push({ method: "eq", args });
+        return builder;
+      },
+      neq: (...args: unknown[]) => {
+        calls.push({ method: "neq", args });
+        return builder;
+      },
+      or: (...args: unknown[]) => {
+        calls.push({ method: "or", args });
+        return builder;
+      },
+      limit: (...args: unknown[]) => {
+        calls.push({ method: "limit", args });
+        return builder;
+      },
+      then: (resolve: (value: { data: unknown; error: unknown }) => void) => {
+        if (opts.injectError) {
+          resolve({ data: null, error: opts.injectError });
+          return;
+        }
+        resolve({ data: returnRows, error: null });
+      },
+    };
+    const from = vi.fn((table: string) => {
+      if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
+      return builder;
+    });
+    return { from, calls };
+  }
+
+  it("returns conflictBatchId: null without ever querying the database when contentSha256 doesn't parse to a well-formed file digest", async () => {
+    const { from, calls } = fakeSiblingAppliedTable([]);
+    const result = await findSiblingWithAppliedRows({ from } as never, RESTAURANT_ID, BATCH_ID, null);
+    expect(result).toEqual({ ok: true, conflictBatchId: null });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("returns conflictBatchId: null when no sibling has an applied row", async () => {
+    const { from } = fakeSiblingAppliedTable([]);
+    const fileHex = "a".repeat(64);
+    const result = await findSiblingWithAppliedRows({ from } as never, RESTAURANT_ID, BATCH_ID, fileHex);
+    expect(result).toEqual({ ok: true, conflictBatchId: null });
+  });
+
+  it("returns the sibling's id when a bare-digest sibling has an applied row", async () => {
+    const fileHex = "a".repeat(64);
+    const { from } = fakeSiblingAppliedTable([{ id: "sibling-1", content_sha256: fileHex }]);
+    const result = await findSiblingWithAppliedRows({ from } as never, RESTAURANT_ID, BATCH_ID, fileHex);
+    expect(result).toEqual({ ok: true, conflictBatchId: "sibling-1" });
+  });
+
+  it("returns the sibling's id when a namespaced overrides-digest sibling for the SAME underlying file has an applied row", async () => {
+    const fileHex = "a".repeat(64);
+    const { from } = fakeSiblingAppliedTable([
+      { id: "sibling-overridden", content_sha256: `overrides-v1:${"b".repeat(64)}:${fileHex}` },
+    ]);
+    const result = await findSiblingWithAppliedRows({ from } as never, RESTAURANT_ID, BATCH_ID, fileHex);
+    expect(result).toEqual({ ok: true, conflictBatchId: "sibling-overridden" });
+  });
+
+  // Mirrors isWellFormedDigestForFile's own malformed-content_sha256 test —
+  // a value that merely satisfies the LIKE pattern as a substring is never
+  // treated as a real match.
+  it("never treats a malformed multi-colon content_sha256 as a match, even though it satisfies the LIKE pattern", async () => {
+    const fileHex = "a".repeat(64);
+    const { from } = fakeSiblingAppliedTable([
+      { id: "malformed-sibling", content_sha256: `overrides-v1:extra:garbage:${fileHex}` },
+    ]);
+    const result = await findSiblingWithAppliedRows({ from } as never, RESTAURANT_ID, BATCH_ID, fileHex);
+    expect(result).toEqual({ ok: true, conflictBatchId: null });
+  });
+
+  it("excludes this batch's own id from the lookup", async () => {
+    const fileHex = "a".repeat(64);
+    const { from, calls } = fakeSiblingAppliedTable([]);
+    await findSiblingWithAppliedRows({ from } as never, RESTAURANT_ID, BATCH_ID, fileHex);
+    expect(calls).toContainEqual({ method: "neq", args: ["id", BATCH_ID] });
+  });
+
+  it("fails closed with a retryable error when the lookup itself errors", async () => {
+    const fileHex = "a".repeat(64);
+    const { from } = fakeSiblingAppliedTable([], { injectError: { code: "XX000", message: "connection reset by peer" } });
+    const result = await findSiblingWithAppliedRows({ from } as never, RESTAURANT_ID, BATCH_ID, fileHex);
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_check_failed" } });
   });
 });
 

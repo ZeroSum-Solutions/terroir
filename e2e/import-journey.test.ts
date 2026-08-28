@@ -98,7 +98,7 @@ test.describe("G1-4 CSV import journey", () => {
     await previewButton.click();
 
     await expect(page.getByRole("heading", { name: /^Preview:/ })).toBeVisible();
-    await expect(page.getByText("Ready to apply")).toBeVisible();
+    await expect(page.getByText("Passing validation")).toBeVisible();
 
     const confirmButton = page.getByRole("button", { name: "Confirm import" });
     expect(await controlHeight(confirmButton)).toBeGreaterThanOrEqual(44);

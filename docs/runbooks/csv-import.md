@@ -704,6 +704,85 @@ fire that FK action while `apply_status` was still `'applied'`, violating
 `import_batch_rows_applied_has_inventory_id` on the SET NULL cascade
 itself.
 
+## Residuals — known, accepted gaps
+
+**The cross-batch apply race is narrowed, not closed (round-10/round-11
+audit).** `POST /api/import/batches/[id]/apply` runs a read-only guard
+(`findSiblingWithAppliedRows`, `src/domains/import/batch-service.ts`)
+immediately before applying a chunk: if a sibling live batch for the same
+underlying file already has applied rows, this apply is refused. That guard
+and the apply it gates are separate awaits over separate transactions, and
+`apply_import_batch_chunk` (0108) only takes `for update` on its OWN
+batch's `import_batches` row — a sibling batch locks a different row, so
+nothing serializes two sibling applies against each other. Two clients can
+therefore both pass the guard (each sees "no sibling has applied rows yet"
+because neither has committed) and both persist inventory. The guard
+reliably catches the common SEQUENTIAL case — a resumed batch applying
+after a sibling already committed applied rows — but not two applies
+racing simultaneously. Separately, `apply_import_batch_chunk` is `GRANT
+EXECUTE`d directly to `authenticated` (0108), so the route's guard is not a
+security boundary either — any client holding a batch id can call the RPC
+without it. Fully closing this needs an atomic claim, a unique constraint,
+or a shared advisory lock taken *inside* the apply transaction — i.e. a
+migration. Migrations are locked for this change, so the residual is
+accepted rather than fixed here.
+
+**Round-27 audit: the in-preview conflict-recovery panel is removed —
+`multiple_live_batches` and `duplicate_race_retry` are reported, not
+resolved, from inside the import UI.** The panel (added round-11 to make a
+live-batch conflict recoverable without leaving the flow) failed five
+consecutive audit rounds (18, 20, 22, 24, 26) for the same underlying
+reason each time: two or more sources of guidance on screen that disagreed
+with each other and with the buttons. Round 25's fix produced a new
+contradiction of its own within one round. The panel, its per-candidate
+revert affordance, its "standing instruction" text
+(`conflictStandingInstruction`), and everything that existed only to serve
+them (`visibleConflictCandidates`, `revertedConflictBatchIds`,
+`conflicting-batches.ts`, the `conflictingBatches`/`conflictingBatchesCount`/
+`conflictingBatchesTruncated` fields on both the client and the
+`multiple_live_batches` error payload) are deleted outright rather than
+patched again.
+
+What replaced it: `PreviewStep` renders exactly ONE piece of guidance for a
+conflict — the server's own `message` (built by
+`reconcileLiveBatchesForFile`, `batch-service.ts`), verbatim, with no
+competing standing text. Confirm/Retry stays available for both
+`multiple_live_batches` and `duplicate_race_retry` (neither blocks the
+button any more) — the server re-checks fresh on every confirm attempt, so
+a retry that changes nothing simply re-raises the same conflict; this was
+already proven safe (confirmation reconciles before `create_import_batch`,
+2+ live matches return immediately, and an unchanged retry creates no
+batch/rows/apply/inventory write). Recovery for `multiple_live_batches` is
+through **Recent imports**, which now lists every non-reverted batch for the
+restaurant (`import-client.tsx`'s `RecentImports` — no longer capped at the
+newest ten), and `BatchStep`'s own "Revert this import" already accepts any
+non-reverted status (round-13 audit).
+
+**BLOCK 2 (round-25/26/27 audits): `duplicate_race_retry` no longer
+escalates to an invented terminal state.** The client used to count
+consecutive `duplicate_race_retry` failures and, past a fixed limit,
+synthesize a distinct `duplicate_race_retry_exhausted` code that hard-blocked
+Confirm/Retry and asserted "still conflicts with another live import" —
+but the server defines `duplicate_race_retry` as retryable by design (a
+self-revert race that may fully resolve on the very next attempt), and can
+emit it with **zero** live batches for the file (`selfRevertAndRetry`,
+`batch-service.ts` — both self-revert attempts failed, but nothing rival is
+necessarily still live). The escalation asserted a live batch and a
+recovery location (the removed panel) that might not exist. It's deleted:
+the code, message, and retryability stay exactly as the server reported
+them, no matter how many times it recurs.
+
+**The `multiple_live_batches` candidate list itself was capped, not
+exhaustive (WARN 5, round-13 audit) — this is now purely a
+message-wording detail, not a client-visible payload.**
+`findLiveBatchesByUnderlyingFile` (`src/domains/import/batch-service.ts`)
+still reads at most `LIVE_BATCH_LOOKUP_LIMIT` (20) candidate rows before
+format-filtering, and the conflict message still states the count as "at
+least N" whenever the raw read comes back exactly at the cap, rather than
+asserting a possibly-false exact total — but the per-candidate list, count,
+and truncation flag are no longer carried on the error payload at all
+(round-27 audit), since nothing client-side renders them any more.
+
 ## added_via provenance
 
 CSV-imported `inventory_items` rows keep `added_via = 'manual'` rather than

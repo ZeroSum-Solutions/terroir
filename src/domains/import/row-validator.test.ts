@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mapHeader, validateRow } from "./row-validator";
-import { MAX_QUANTITY, MAX_UNIT_COST } from "./constants";
+import { mapHeader, validateFields, validateRow } from "./row-validator";
+import { MAX_FIELD_LENGTH, MAX_QUANTITY, MAX_UNIT_COST } from "./constants";
 
 const HEADER = ["Producer", "Wine", "Vintage", "Qty", "Unit Cost"];
 const FULL_HEADER = [
@@ -169,6 +169,116 @@ describe("validateRow", () => {
     expect(result.state).toBe("valid");
     if (result.state !== "valid") return;
     expect(result.raw.unit_cost).toBe("11.00");
+  });
+});
+
+// Inline row-fix: let users fix a rejected row inline instead of "fix the
+// errors above and re-upload" — rawText preserves the exact text a row
+// was validated against (unlike `raw`, which nulls a field the moment it
+// fails its own validation) so an edit form can prefill it, and
+// validateFields/validateRow's overrides param let the SAME validation
+// logic re-run over an operator's edit.
+describe("rawText — the exact input text an inline-edit form can prefill", () => {
+  const { columnToField } = map();
+
+  it("preserves the original invalid text for a field that failed validation, unlike `raw` which nulls it", () => {
+    const result = validateRow(["Domaine A", "Cuvee 1", "2020", "0.9", "24.50"], columnToField);
+    expect(result.state).toBe("error");
+    if (result.state !== "error") return;
+    expect(result.raw.quantity).toBeNull();
+    expect(result.rawText.quantity).toBe("0.9");
+  });
+
+  it("carries rawText through a fully valid row too", () => {
+    const result = validateRow(["Domaine A", "Cuvee 1", "2020", "6", "24.50"], columnToField);
+    expect(result.state).toBe("valid");
+    if (result.state !== "valid") return;
+    expect(result.rawText.quantity).toBe("6");
+    expect(result.rawText.producer).toBe("Domaine A");
+  });
+
+  it("is empty string, never undefined, for a field with no mapped column", () => {
+    const result = validateRow(["Domaine A", "Cuvee 1", "2020", "6", "24.50"], columnToField);
+    expect(result.rawText.bin).toBe("");
+    expect(result.rawText.section).toBe("");
+  });
+});
+
+describe("validateFields — the shared core an inline-edit UI re-validates through", () => {
+  it("validates already-extracted field text with no cells/columnToField involved", () => {
+    const result = validateFields({ producer: "Domaine A", name: "Cuvee 1", vintage: "2020", quantity: "6", unit_cost: "24.50" });
+    expect(result.state).toBe("valid");
+    if (result.state !== "valid") return;
+    expect(result.raw.quantity).toBe("6");
+  });
+
+  it("agrees with validateRow given the same effective text (no divergence between the CSV path and the UI edit path)", () => {
+    const { columnToField: full } = mapHeader([
+      "producer", "name", "vintage", "varietal", "region", "country",
+      "size_ml", "format", "currency", "quantity", "unit_cost", "bin", "section",
+    ]);
+    const cells = ["Domaine A", "Cuvee 1", "2020", "", "", "", "", "", "", "0.9", "24.50", "", ""];
+    const fromCsv = validateRow(cells, full);
+    const fromFields = validateFields({ producer: "Domaine A", name: "Cuvee 1", vintage: "2020", quantity: "0.9", unit_cost: "24.50" });
+    expect(fromCsv.state).toBe(fromFields.state);
+    if (fromCsv.state === "error" && fromFields.state === "error") {
+      expect(fromCsv.errors).toEqual(fromFields.errors);
+    }
+  });
+
+  // Requirement: fractional quantity (0.9) stays strictly rejected — an
+  // inline fix must actually change the value, never coerce it.
+  it("still strictly rejects a fractional quantity", () => {
+    const result = validateFields({ producer: "P", name: "W", quantity: "0.9", unit_cost: "10" });
+    expect(result.state).toBe("error");
+    if (result.state !== "error") return;
+    expect(result.errors.some((e) => e.field === "quantity")).toBe(true);
+  });
+
+  // Sol audit (2026-08-27) finding 4: an over-length value must be a
+  // normal per-row field error here — the SHARED gate both the CSV path
+  // and an inline row-fix override go through — never left to only the
+  // Zod request-schema boundary (which would 400 the whole request
+  // instead of just this row).
+  it("rejects a field longer than MAX_FIELD_LENGTH with a per-row field error", () => {
+    const result = validateFields({ producer: "P", name: "x".repeat(MAX_FIELD_LENGTH + 1), quantity: "1", unit_cost: "10" });
+    expect(result.state).toBe("error");
+    if (result.state !== "error") return;
+    expect(result.errors.some((e) => e.field === "name")).toBe(true);
+  });
+
+  it("accepts a field exactly at MAX_FIELD_LENGTH", () => {
+    const result = validateFields({ producer: "P", name: "x".repeat(MAX_FIELD_LENGTH), quantity: "1", unit_cost: "10" });
+    expect(result.state).toBe("valid");
+  });
+});
+
+describe("validateRow overrides — inline fix applied before validation runs", () => {
+  const { columnToField } = map();
+
+  it("overrides a single field's text and flips an error row to valid", () => {
+    const errorResult = validateRow(["Domaine A", "Cuvee 1", "2020", "0.9", "24.50"], columnToField);
+    expect(errorResult.state).toBe("error");
+
+    const fixed = validateRow(["Domaine A", "Cuvee 1", "2020", "0.9", "24.50"], columnToField, { quantity: "6" });
+    expect(fixed.state).toBe("valid");
+    if (fixed.state !== "valid") return;
+    expect(fixed.raw.quantity).toBe("6");
+  });
+
+  it("leaves fields with no override untouched", () => {
+    const result = validateRow(["Domaine A", "Cuvee 1", "2020", "6", "24.50"], columnToField, { name: "Cuvee 1 Renamed" });
+    expect(result.state).toBe("valid");
+    if (result.state !== "valid") return;
+    expect(result.raw.name).toBe("Cuvee 1 Renamed");
+    expect(result.raw.producer).toBe("Domaine A");
+  });
+
+  it("rejects a still-invalid override with the normal per-row reason — never a silent bypass", () => {
+    const result = validateRow(["Domaine A", "Cuvee 1", "2020", "0.9", "24.50"], columnToField, { quantity: "1.5" });
+    expect(result.state).toBe("error");
+    if (result.state !== "error") return;
+    expect(result.errors.some((e) => e.field === "quantity")).toBe(true);
   });
 });
 
