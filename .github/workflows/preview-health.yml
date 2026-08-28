@@ -31,6 +31,16 @@ concurrency:
 jobs:
   health:
     name: Railway preview /api/health
+    # Railway PR Environments are NOT provisioned (docs/STAGING-SETUP.md
+    # §2026-08-22 re-verification: enabling them today would clone
+    # production variables — an isolation hazard). The fail-closed poll
+    # below is correct but has nothing to detect, so every PR showed a
+    # permanently red check that trained everyone to ignore CI. Gate the
+    # job behind an explicit repo variable: set RAILWAY_PR_PREVIEWS_ENABLED
+    # to 'true' (Settings → Secrets and variables → Actions → Variables)
+    # once an isolated preview base environment exists, and the fail-closed
+    # gate arms again unchanged. Until then the check reports "skipped".
+    if: ${{ vars.RAILWAY_PR_PREVIEWS_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     permissions:

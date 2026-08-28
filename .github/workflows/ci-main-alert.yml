@@ -1,0 +1,110 @@
+# Main-CI failure alarm.
+#
+# Context: between ~2026-08-10 and 2026-08-27 every CI run on main was red
+# (PostgREST types drift, then two latent e2e breaks) and nobody noticed,
+# because nothing turned a red main into a notification. This workflow
+# makes that state impossible to miss without requiring any secret:
+# on a failed CI run for main it opens (or comments on) a pinned-by-label
+# GitHub issue, which triggers GitHub's native notifications to the owner.
+#
+# Dedup: one open issue labeled `ci-main-failure` collects repeats; a new
+# failure comments on it instead of spamming new issues. Close the issue
+# when main is green again (or let anyone close it — the next failure
+# reopens the loop by creating a fresh one).
+#
+# Deliberately NO `concurrency` group (Sol audit 2026-08-27 round 2):
+# GitHub keeps one running + one PENDING run per group and a third
+# arrival CANCELS the pending one — and every completed CI run (including
+# unrelated green PR runs) enters the group before the job-level `if` is
+# evaluated, so a queued main-failure alert could be silently cancelled
+# by a green PR run. A lost alert is strictly worse than the race it
+# prevented: two near-simultaneous main failures at worst create two
+# issues (visible, closable) instead of one issue + one comment. Alerts
+# must be lossless; dedup is best-effort.
+#
+# NOTE (workflow_run semantics): this file only triggers once it exists on
+# the default branch.
+
+name: Main CI alert
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  issues: write
+
+jobs:
+  alert:
+    # event == 'push' is load-bearing: CI also runs for pull_request, and
+    # workflow_run.head_branch is the PR's HEAD branch name there — a fork
+    # PR from a branch named "main" would otherwise satisfy this condition
+    # (Sol audit 2026-08-27 finding 2). timed_out / startup_failure are
+    # red outcomes too, not just 'failure' (finding 4).
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      contains(fromJSON('["failure","timed_out","startup_failure"]'), github.event.workflow_run.conclusion)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Open or update the ci-main-failure issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // All event fields stay inside JS values — never interpolated
+            // into a shell — so untrusted text (e.g. commit messages)
+            // cannot inject commands.
+            const run = context.payload.workflow_run;
+            const sha = run.head_sha.slice(0, 7);
+            const line = [
+              `CI concluded \`${run.conclusion}\` on \`main\` at ${sha}`,
+              `run: ${run.html_url}`,
+              `completed: ${run.updated_at}`,
+            ].join("\n");
+
+            const label = "ci-main-failure";
+
+            // Ensure the label exists before referencing it — issue
+            // creation with an unknown label is not guaranteed to
+            // auto-create it (Sol audit 2026-08-27 finding 1). A 422
+            // "already_exists" is the normal steady-state path.
+            try {
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label,
+                color: "b60205",
+                description: "CI is red on the main branch",
+              });
+            } catch (e) {
+              if (e.status !== 422) throw e;
+            }
+
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: label,
+              per_page: 1,
+            });
+
+            if (open.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: open[0].number,
+                body: line,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `CI is red on main (${sha})`,
+                body:
+                  `@wiggdevin — the \`CI\` workflow concluded \`${run.conclusion}\` on \`main\`.\n\n${line}\n\n` +
+                  `Close this issue once main is green again; the next failure opens a fresh one.`,
+                labels: [label],
+              });
+            }
