@@ -922,6 +922,12 @@ describe("PreviewStep — a chunk conflict resolved down to one candidate by a m
     expect(chunkUpload[0].code).toBeNull();
     expect(chunkUpload[0].status).toBe("failed");
     expect(result).toMatchObject({ ok: false });
+    // Round-18 audit: the STORED chunk error (what ChunkUploadProgress
+    // renders next to "Retry upload") must be the generic retryable copy,
+    // not the server's terminal "This file has 2 live import batches..."
+    // text — otherwise the operator reads a revert instruction for a panel
+    // that isn't shown (the lone candidate is filtered out below).
+    expect(chunkUpload[0].error).toBe("Chunk 1 of 1 failed to upload — you can retry it below.");
 
     const { container } = await mount(
       <PreviewStep {...baseProps({ chunkUpload, chunkTotal: 1, error: result.ok ? null : result.error })} />,
@@ -930,6 +936,10 @@ describe("PreviewStep — a chunk conflict resolved down to one candidate by a m
     const buttons = [...container.querySelectorAll("button")];
     expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
     expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
+    // The rendered copy must not contain the terminal conflict wording, and
+    // must show the generic retry message that matches "Retry upload".
+    expect(container.textContent).not.toMatch(/live import batches/i);
+    expect(container.textContent).toContain("Chunk 1 of 1 failed to upload — you can retry it below.");
   });
 
   async function mount(element: ReactElement) {
@@ -1375,6 +1385,76 @@ describe("ImportClient — handleRevertConflict actually recovers (round-13 audi
     // The NEW file's preview must not still show the PREVIOUS file's
     // cleanup result.
     expect(container.textContent).not.toContain("Removed 4 inventory row(s)");
+  });
+
+  // Round-18 audit: the plain (non-chunked) path mirrors the chunked
+  // driver's own conflictAlreadyResolved normalization in handleConfirm —
+  // it also used to leave previewError holding the server's terminal
+  // "Revert all but one of them below" copy even after confirmErrorCode was
+  // cleared to null and the panel was hidden (isConflictSourceResolved's
+  // own <=1 threshold), so the operator saw a revert instruction next to a
+  // restored "Confirm import" button with no panel to revert from. Drives
+  // the REAL handleConfirm through a mounted ImportClient, exactly like
+  // reachConflictPanel's own two-candidate coverage above, but with one
+  // entry malformed so parseConflictingBatches drops it client-side.
+  it("a conflict that parses down to one candidate via a malformed sibling entry does not block Confirm import, and drops the terminal wording", async () => {
+    const wireConflictingBatches = [
+      { id: "conflict-1", filename: "cellar-old.csv", status: "created", created_at: "2020-01-01T00:00:00.000Z" },
+      { id: "conflict-2", filename: "cellar-old.csv", status: "applying" }, // malformed: no created_at
+    ];
+    // Not the shared stubFetch helper above — that hardcodes CONFLICT_ERROR_BODY
+    // (two well-formed candidates) for the confirm POST. This needs one
+    // malformed entry in the response instead, so parseConflictingBatches
+    // drops it client-side.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        if (url === "/api/import/batches" && method === "GET") return jsonResponse(200, { batches: [] });
+        if (url === "/api/import/preview" && method === "POST") {
+          return jsonResponse(200, {
+            rows: [],
+            summary: {
+              totalRows: 1,
+              validRows: 1,
+              errorRows: 0,
+              matchedRows: 1,
+              unmatchedRows: 0,
+              missingCostRows: 0,
+              readyToApplyRows: 1,
+              pendingResolutionRows: 0,
+            },
+          });
+        }
+        if (url === "/api/import/batches" && method === "POST") {
+          return jsonResponse(422, {
+            error: {
+              code: "multiple_live_batches",
+              message:
+                "This file has 2 live import batches for the same underlying content — this can't be resolved " +
+                "automatically. Revert all but one of them below before resuming or re-uploading this file.",
+              details: { conflictingBatches: wireConflictingBatches },
+            },
+          });
+        }
+        throw new Error(`unexpected fetch ${method} ${url}`);
+      }),
+    );
+
+    const { container } = await mount(<ImportClient />);
+    await reachConflictPanel(container);
+
+    // No orphaned block: the terminal code was cleared (isConflictSourceResolved
+    // already sees only one well-formed candidate), so Confirm import is
+    // reachable and no revert panel is shown for it.
+    expect(findButton(container, "Confirm import")).toBeTruthy();
+    expect(container.textContent).not.toContain("Conflicting live imports for this file");
+    // The rendered message must not still be the terminal "revert all but
+    // one" copy — that panel is gone — and must show the generic,
+    // actionable replacement instead.
+    expect(container.textContent).not.toMatch(/revert all but one/i);
+    expect(container.textContent).toContain("This conflict has already been resolved — you can confirm the import again below.");
   });
 
   async function mount(element: ReactElement) {

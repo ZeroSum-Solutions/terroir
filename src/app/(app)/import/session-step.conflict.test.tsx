@@ -750,9 +750,17 @@ describe("confirmChunkedSession — a conflict that parses down to one candidate
     // silent success).
     expect(upload[0].code).toBeNull();
     expect(upload[0].status).toBe("failed");
-    // The generic, retryable message renders instead of the terminal
-    // multiple_live_batches wording — "Retry upload" is reachable.
+    // The generic, retryable message is both the function's returned error
+    // AND the message actually stored on the chunk (upload[0].error) — the
+    // latter is what ChunkUploadProgress renders next to "Retry upload".
+    // Round-18 audit: the driver used to leave upload[0].error holding the
+    // server's terminal "This file has 2 live import batches..." copy even
+    // after the code was cleared, so the panel-less, Retry-reachable state
+    // still showed conflict wording pointing at a revert affordance that
+    // wasn't on screen.
     expect(result).toMatchObject({ ok: false, error: "Chunk 1 of 1 failed to upload — you can retry it below." });
+    expect(upload[0].error).toBe("Chunk 1 of 1 failed to upload — you can retry it below.");
+    expect(upload[0].error).not.toMatch(/live import batches/i);
   });
 
   it("still blocks with the terminal multiple_live_batches code for a genuine two-candidate list (guards against over-correcting)", async () => {

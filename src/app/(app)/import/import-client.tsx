@@ -581,11 +581,22 @@ export function ImportClient() {
         // threshold the revert-driven clearing below uses.
         const conflictAlreadyResolved = code === "multiple_live_batches" && isConflictSourceResolved(conflictingBatches);
         const effectiveCode = exhausted ? "duplicate_race_retry_exhausted" : conflictAlreadyResolved ? null : code;
+        // Round-18 audit finding: mirrors session-step.tsx's own fix — once
+        // conflictAlreadyResolved clears effectiveCode, blocksConfirmButton
+        // (via hasTerminalReconciliationConflict) drops and "Confirm
+        // import" is reachable again, but `message` here is still the
+        // server's terminal "Revert all but one of them below" copy
+        // (batch-service.ts's multiple_live_batches text) — false now that
+        // the panel it points at is gone (unresolvedConflictCandidates
+        // filters the lone remaining candidate out). Show the generic,
+        // actionable copy instead so it matches the restored button.
         const effectiveMessage = exhausted
           ? `This upload still conflicts with another live import for this file after ${priorRaceRetryCount} ` +
             "attempts — this needs a human to resolve. Revert the conflicting batch under Recent imports before " +
             "uploading this file again."
-          : message;
+          : conflictAlreadyResolved
+            ? "This conflict has already been resolved — you can confirm the import again below."
+            : message;
 
         setConfirmDuplicateRaceRetryCount(priorRaceRetryCount);
         setConfirmErrorCode(effectiveCode);

@@ -498,11 +498,22 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
         // affordance offered either.
         const conflictAlreadyResolved = code === "multiple_live_batches" && isConflictSourceResolved(conflictingBatches);
         const effectiveCode = exhausted ? "duplicate_race_retry_exhausted" : conflictAlreadyResolved ? null : code;
+        // Round-18 audit finding: conflictAlreadyResolved clears
+        // effectiveCode above so "Retry upload" becomes reachable again —
+        // but the server's `message` here is still the terminal "Revert
+        // all but one of them below" copy (batch-service.ts's
+        // multiple_live_batches text), which is now false: the panel that
+        // copy points at is gone (isConflictSourceResolved's own <=1
+        // threshold hides a lone candidate). The stored/rendered message
+        // has to match effectiveCode's generic-retry state, same as the
+        // returned error string below already does.
         const effectiveMessage = exhausted
           ? `Chunk ${chunk.index} of ${plan.chunkTotal} still conflicts with another live import for this file ` +
             `after ${priorRaceRetryCount} attempts — this needs a human to resolve. Revert the conflicting batch ` +
             "under Recent imports before uploading this file again."
-          : message;
+          : conflictAlreadyResolved
+            ? `Chunk ${chunk.index} of ${plan.chunkTotal} failed to upload — you can retry it below.`
+            : message;
 
         results = results.map((c) =>
           c.index === chunk.index
