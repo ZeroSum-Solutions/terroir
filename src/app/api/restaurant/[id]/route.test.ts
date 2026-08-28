@@ -312,6 +312,13 @@ describe("PATCH /api/restaurant/[id]", () => {
       { params },
     );
     expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "forbidden",
+        message:
+          "This restaurant doesn't match your account. Refresh the page and try again.",
+      },
+    });
   });
 
   it("403s when caller is not owner (forwarded from requireOwner)", async () => {
@@ -372,6 +379,13 @@ describe("DELETE /api/restaurant/[id]", () => {
 
     expect(res.status).toBe(403);
     expect(db.remove).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({
+      error: {
+        code: "forbidden",
+        message:
+          "This restaurant doesn't match your account. Refresh the page and try again.",
+      },
+    });
   });
 
   it("redacts delete provider failures", async () => {

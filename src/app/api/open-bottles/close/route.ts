@@ -80,7 +80,11 @@ function rpcErrorResponse(message: string) {
     case "open_bottle_not_found":
       return apiError(404, "open_bottle_not_found", "Open bottle not found.");
     case "forbidden":
-      return apiError(403, "forbidden", "Forbidden");
+      return apiError(
+        403,
+        "forbidden",
+        "This bottle isn't in your restaurant. Refresh the page and try again.",
+      );
     case "wine_size_unknown":
       return apiError(422, "wine_size_unknown", "Wine bottle size is unknown.");
     case "invalid_actual_remaining":

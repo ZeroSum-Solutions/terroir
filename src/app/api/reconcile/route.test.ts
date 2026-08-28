@@ -167,6 +167,13 @@ describe("POST /api/reconcile", () => {
       }),
     );
     expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "forbidden",
+        message:
+          "One or more of these wines aren't in your restaurant. Refresh the page and try again.",
+      },
+    });
   });
 
   it("returns 400 EXCEEDS_SIZE when RPC raises P0002", async () => {

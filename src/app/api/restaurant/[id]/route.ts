@@ -91,7 +91,10 @@ export async function PATCH(
     const parsedParams = await parseParams(params, ParamsSchema);
     if (!parsedParams.ok) return parsedParams.response;
     const { id } = parsedParams.data;
-    if (id !== restaurantId) return Errors.forbidden("Forbidden.");
+    if (id !== restaurantId)
+      return Errors.forbidden(
+        "This restaurant doesn't match your account. Refresh the page and try again.",
+      );
 
     const parsed = await parseJson(request, PatchSchema, {
       message: "Invalid body.",
@@ -122,7 +125,10 @@ export async function DELETE(
     const parsedParams = await parseParams(params, ParamsSchema);
     if (!parsedParams.ok) return parsedParams.response;
     const { id } = parsedParams.data;
-    if (id !== restaurantId) return Errors.forbidden("Forbidden.");
+    if (id !== restaurantId)
+      return Errors.forbidden(
+        "This restaurant doesn't match your account. Refresh the page and try again.",
+      );
 
     const { error } = await supabase
       .from("restaurants")
