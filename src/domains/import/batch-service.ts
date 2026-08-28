@@ -974,102 +974,35 @@ async function findLiveBatchByUnderlyingFile(
   return { ok: true, match: result.matches[0] ?? null };
 }
 
-/** Round-7 audit finding 1: reconcile-on-resume. Whenever an "already
- * exists" pointer is about to be handed to a caller, more than one live
- * batch can exist for the same underlying file — SEER-YIELDS (confirmImportBatch's
- * own comment) guarantees at most one confirm's OWN post-check survives
- * without self-reverting, never that a FAILED self-revert can't leave an
- * orphan live too (selfRevertAndRetry's own FAILURE-ATOMICITY comment). The
- * oldest-first pick findLiveBatchByUnderlyingFile makes is safe when
- * nothing has been touched yet, but wrong once one candidate already has
- * applied rows: created_at is INSERT-transaction-START time, not commit
- * order (round-4 finding 1), so the batch that actually WON the race — and
- * whose own client already holds its batchId and may be independently
- * applying it right now — can easily be YOUNGER than an orphan that failed
- * both self-revert attempts. Blindly handing a brand-new client the oldest
- * candidate would then let TWO batches for the same file both get applied
- * — the orphan via this new resume, the true survivor via its own original
- * client — a real duplicate.
+/** Round-10 audit: THE INVARIANT AND WHERE IT IS ENFORCED.
  *
- * Fetches every live candidate for the file (the same format-validated
- * list findLiveBatchesByUnderlyingFile itself produces). Fewer than two
- * candidates: nothing to reconcile, behaves exactly like the old
- * single-match lookup. Two or more: queries which candidate(s) already
- * have an APPLIED row (the strongest signal available that a client is, or
- * was, actively applying it — i.e. the real survivor) and targets the
- * first applied one in the existing oldest-first order (the documented
- * tiebreak if, somehow, more than one candidate already has applied rows —
- * that itself means a duplicate has already landed; picking the oldest as
- * canonical here is a deliberate choice about which one to keep pointing
- * at, not a fix for the already-happened duplicate, which needs manual
- * data repair). With nothing applied anywhere yet, falls back to the
- * oldest candidate — the ordinary, nothing-touched-yet case, unchanged
- * from before. Every OTHER live candidate is then best-effort
- * self-reverted, independently try/caught per candidate so one failure
- * never blocks reverting the rest — a failure there leaves that one
- * candidate a zombie exactly like selfRevertAndRetry's own residual,
- * resolved by the NEXT resume running this same reconciliation again.
+ * "At most one applied batch per underlying file" is enforced ONLY at
+ * APPLY TIME now, by findSiblingWithAppliedRows (below, used by the apply
+ * route) — never here. Nine rounds of audits (rounds 4-9) kept finding
+ * fresh races in giving THIS function — a resume/confirm-time lookup —
+ * authority to REVERT a rival: round-8 fixed a best-effort revert that
+ * silently swallowed failures; round-9 (BLOCK 1) then found that even the
+ * fail-closed version was TOCTOU — a rival can acquire the apply lock and
+ * create genuinely-applied rows in the gap between this function's own
+ * applied/unapplied snapshot and its revert call, and the revert then
+ * deletes those newly-created rows. Every fix narrowed the window; none of
+ * them could close it, because the authority itself — destroying a live
+ * batch from a code path that runs concurrently with independent apply
+ * requests — is the bug. This function now NEVER calls revertImportBatch.
+ * It only reads and reports.
  *
- * Interleaving walk:
- *  - A live but UNAPPLIED batch that gets reconciled away here (because
- *    some OTHER candidate had applied rows, or lost the oldest-first
- *    tiebreak) simply no-ops on its OWN client's later apply call — revert
- *    deletes/settles its rows, apply only ever selects apply_status=
- *    'not_applied' rows, and 0108 already no-ops outright on a reverted
- *    batch. That client sees the round-6 reverted-banner (BatchStep,
- *    import-client.tsx) — an honest "this was withdrawn" outcome, never
- *    silent data loss.
- *  - A candidate that gets its FIRST applied row in the gap between this
- *    function's own read and its revert call: the revert simply finds
- *    fewer not_applied rows to revert (revert_import_batch's own deletion
- *    scope still removes exactly whatever inventory it already created).
- *    The NEXT resume's own reconciliation pass then sees THIS batch as the
- *    applied one and targets it — reconciliation always re-reads live+
- *    applied state fresh on every call, never caches a decision.
- *  - Two candidates BOTH reaching genuinely-applied status before ANY
- *    reconcile pass ever runs is the only way this can still produce a
- *    duplicate — it requires both clients' applies to race into the window
- *    between the last reconcile read and both applies completing, with no
- *    resume (which would have caught it) landing in between. This is
- *    narrow — apply only ever starts after an operator's own explicit
- *    click reaches a batch/session step, never automatically — and, unlike
- *    a silent duplicate, is NEVER silently repaired by a later reconcile
- *    pass (round-8 audit finding 2, below) — it stops and asks a human to
- *    pick which one to keep.
- *
- * Round-8 audit finding 1 (BLOCK), corrected: an earlier version of this
- * function reverted every rival BEST-EFFORT — a per-candidate try/catch
- * that swallowed a failed revert and returned `target` regardless. That is
- * NOT safe here the way it is in selfRevertAndRetry's own residual: this
- * function hands `target` out as a RESUME POINTER a brand-new client is
- * about to start applying, while an unresolved rival may be the batch the
- * FILE'S ORIGINAL client still holds and is independently applying right
- * now — two live, appliable batches for one file, exactly the duplicate
- * this whole file exists to prevent. Fixed to fail CLOSED: every rival
- * revert's outcome is tracked, and a rival counts as "resolved" only when
- * its own revertImportBatch call returned ok:true, OR — a failure there
- * (a thrown error, or an ok:false the revert RPC itself reported, e.g. the
- * "already reverted" P0001 a concurrent revert can produce) — a follow-up
- * status re-read (readBatchLiveState) confirms it is status='reverted' by
- * some other means. If ANY rival is still unresolved after that, this
- * returns NO match at all — the same retryable conflict shape
- * duplicate_race_retry already gives callers, so the next attempt simply
- * re-enters this function from scratch and re-reconciles.
- *
- * Round-8 audit finding 2 (BLOCK), corrected: when MULTIPLE candidates
- * already have applied rows (the documented tiebreak above — itself
- * already flagged as needing "manual data repair," not an automatic fix),
- * the old code still targeted one and swallowed the other(s) into the
- * SAME best-effort revert loop as every unapplied rival — silently
- * DELETING a second batch's already-applied inventory rows
- * (revert_import_batch's own deletion scope) during what the caller sees
- * as an ordinary confirm/resume request. This function must never revert
- * an APPLIED batch. Candidates are partitioned into applied/unapplied
- * before any revert is even considered: two or more applied candidates is
- * now a distinct, NON-retryable conflict (multiple_applied_batches) that
- * reverts nothing and tells the operator to resolve it by hand from batch
- * history; exactly one applied candidate is the target, and only the
- * UNAPPLIED rivals are ever passed to the fail-closed revert above. */
+ * Fewer than two live candidates for the file: nothing to reconcile, exact
+ * same resume-pointer behavior as always. Two or more: this is a genuine
+ * conflict — MORE than one client independently believes it owns this
+ * file's import — and there is no read-only way to know which one is
+ * "right" (see round-4's own SEER-YIELDS finding for why created_at can't
+ * decide that either). Returned as a NON-retryable error naming every live
+ * candidate; the operator resolves it by hand from Recent imports (revert
+ * all but one — see BatchStep's own revert-availability fix, round-10
+ * audit finding BLOCK 3, for why Revert now reaches every live status this
+ * conflict can produce, not just 'completed'). Retrying the SAME upload
+ * without reverting anything first reaches the exact same conflict every
+ * time, by design — this is not a transient race to wait out. */
 async function reconcileLiveBatchesForFile(
   supabase: SupabaseClient<Database>,
   restaurantId: string,
@@ -1083,89 +1016,16 @@ async function reconcileLiveBatchesForFile(
     return { ok: true, match: candidates[0] ?? null };
   }
 
-  const { data: appliedRows, error: appliedError } = await supabase
-    .from("import_batch_rows")
-    .select("batch_id")
-    .eq("restaurant_id", restaurantId)
-    .in(
-      "batch_id",
-      candidates.map((c) => c.id),
-    )
-    .eq("apply_status", "applied");
-  if (appliedError) {
-    return {
-      ok: false,
-      error: {
-        code: "duplicate_check_failed",
-        message: "Could not verify this file wasn't already imported — please try confirming again.",
-      },
-    };
-  }
-  const appliedBatchIds = new Set(((appliedRows ?? []) as { batch_id: string }[]).map((r) => r.batch_id));
-
-  // `candidates` is already ordered oldest created_at, then oldest id
-  // (findLiveBatchesByUnderlyingFile's own ordering).
-  const appliedCandidates = candidates.filter((c) => appliedBatchIds.has(c.id));
-
-  // Round-8 audit finding 2: two or more already-applied candidates is a
-  // real duplicate that has ALREADY landed — never something this function
-  // can safely resolve by picking one and reverting the other(s). Stop,
-  // touch nothing, and say so plainly.
-  if (appliedCandidates.length >= 2) {
-    return {
-      ok: false,
-      error: {
-        code: "multiple_applied_batches",
-        message:
-          "This file already has two applied imports — this can't be resolved automatically. Revert one of " +
-          "them from Recent imports before resuming or re-uploading this file.",
-      },
-    };
-  }
-
-  // Exactly one applied candidate is the target (the documented tiebreak);
-  // otherwise fall back to oldest-first, the ordinary nothing-applied-yet
-  // case. Either way `target` is never a candidate this function is about
-  // to revert.
-  const target = appliedCandidates[0] ?? candidates[0];
-  const rivals = candidates.filter((c) => c.id !== target.id);
-
-  // Round-8 audit finding 1: fail-closed revert — every rival must be
-  // CONFIRMED gone (not merely "we tried") before target is handed out.
-  const outcomes = await Promise.all(
-    rivals.map(async (rival) => ({ id: rival.id, resolved: await revertRivalAndConfirm(supabase, rival.id) })),
-  );
-  if (outcomes.some((o) => !o.resolved)) {
-    return {
-      ok: false,
-      error: {
-        code: "duplicate_race_retry",
-        message: "Another import attempt for this file is being cleaned up — please retry the upload.",
-      },
-    };
-  }
-
-  return { ok: true, match: target };
-}
-
-/** Round-8 audit finding 1: reverts one rival and reports whether it is
- * now CONFIRMED gone — never merely "the call didn't throw." A successful
- * revertImportBatch call is sufficient proof on its own. Anything else (a
- * thrown error, or an ok:false the RPC itself reported — e.g. the
- * "already reverted" P0001 a concurrent revert on the same rival can
- * produce) falls back to a direct status re-read: if some other path has
- * already put this rival at status='reverted', that is just as valid a
- * resolution as our own call succeeding. Only a rival that is neither is
- * reported unresolved. */
-async function revertRivalAndConfirm(supabase: SupabaseClient<Database>, rivalId: string): Promise<boolean> {
-  try {
-    const result = await revertImportBatch(supabase, rivalId);
-    if (result.ok) return true;
-  } catch {
-    // fall through to the re-read below
-  }
-  const current = await readBatchLiveState(supabase, rivalId);
-  return current?.status === "reverted";
+  return {
+    ok: false,
+    error: {
+      code: "multiple_live_batches",
+      message:
+        `This file has ${candidates.length} live import batches for the same underlying content — this can't ` +
+        "be resolved automatically. Revert all but one of them from Recent imports before resuming or " +
+        "re-uploading this file.",
+    },
+  };
 }
 
 export type BatchCounts = {
@@ -1241,6 +1101,67 @@ export type ApplyChunkResult = {
   status: "created" | "applying" | "completed";
   counts: BatchCounts;
 };
+
+export type SiblingAppliedConflictCheck =
+  | { ok: true; conflictBatchId: string | null }
+  | { ok: false; error: { code: string; message: string } };
+
+/** Round-10 audit: the real enforcement point for "at most one applied
+ * batch per underlying file" — see reconcileLiveBatchesForFile's own
+ * comment for why that resume-time function no longer has any destructive
+ * authority. This is a pure READ run immediately before a chunk is allowed
+ * to apply: no matter how two concurrent applies interleave around it, it
+ * can only ever REFUSE an apply, never destroy a concurrent writer's
+ * already-applied rows — worst case it refuses an apply that would
+ * actually have been fine, never the reverse. That is exactly the property
+ * the old revert-based enforcement (BLOCK 1, round-9 audit) lacked: a
+ * rival could acquire the apply lock and create genuinely-applied rows in
+ * the gap between a snapshot and a revert call built from it.
+ *
+ * A sibling counts as a conflict only once it has an ACTUAL applied row —
+ * the same "applied rows are the strongest signal a client is/was really
+ * applying this" reasoning reconciliation itself used to use.
+ * revert_import_batch (0109) flips every one of a reverted batch's rows
+ * OFF apply_status='applied' (to 'reverted') BEFORE flipping the batch
+ * itself to 'reverted', so a reverted sibling's rows can never satisfy
+ * this query — no separate status filter is needed.
+ *
+ * contentSha256 not parsing to a well-formed file digest (defensive only —
+ * every batch this product creates has one; see confirmImportBatch's own
+ * construction) means there is nothing to check against — treated as "no
+ * conflict" rather than blocking every apply. */
+export async function findSiblingWithAppliedRows(
+  supabase: SupabaseClient<Database>,
+  restaurantId: string,
+  batchId: string,
+  contentSha256: string | null,
+): Promise<SiblingAppliedConflictCheck> {
+  const fileDigestHex = contentSha256 ? extractFileDigestHex(contentSha256) : null;
+  if (!fileDigestHex) return { ok: true, conflictBatchId: null };
+
+  const { data, error } = await supabase
+    .from("import_batches")
+    .select("id, content_sha256, import_batch_rows!inner(id)")
+    .eq("restaurant_id", restaurantId)
+    .neq("id", batchId)
+    .eq("import_batch_rows.apply_status", "applied")
+    .or(`content_sha256.eq.${fileDigestHex},content_sha256.like.${OVERRIDES_DIGEST_PREFIX}%:${fileDigestHex}`)
+    .limit(5);
+
+  if (error) {
+    return {
+      ok: false,
+      error: {
+        code: "duplicate_check_failed",
+        message: "Could not verify this file wasn't already imported — please try applying again.",
+      },
+    };
+  }
+
+  const rows = (data ?? []) as { id: string; content_sha256: string | null }[];
+  const match = rows.find((r) => isWellFormedDigestForFile(r.content_sha256, fileDigestHex));
+  return { ok: true, conflictBatchId: match?.id ?? null };
+}
 
 /**
  * Apply up to APPLY_CHUNK_SIZE eligible rows. Safe to call repeatedly —

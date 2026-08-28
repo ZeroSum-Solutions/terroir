@@ -260,10 +260,14 @@ describe("confirmChunkedSessionWithResume — adopt-and-continue (round-6 audit 
   // from the revert endpoint) was silently treated as success, so the
   // batch confirmed under the abandoned session was left live, resurfacing
   // as a cross-session duplicate once its chunk was re-driven. The fix
-  // checks response.ok explicitly and ABORTS the whole adoption re-drive
-  // (never resets/re-drives any chunk) when any revert fails, surfacing a
-  // retryable error instead.
-  it("aborts the adoption re-drive — never resetting or re-driving any chunk — when a cleanup revert returns a non-OK response", async () => {
+  // checks response.ok explicitly and, when the failure is a GENUINE one
+  // (not the idempotent "already reverted" 409 — see the round-10 tests
+  // below), leaves that chunk "confirmed" rather than resetting it. With
+  // only ONE confirmed-under-abandoned-session chunk in this scenario, that
+  // is observably identical to "abort the whole adoption" — see the
+  // round-10 "per batch" test below for the case where a SIBLING's cleanup
+  // succeeds while this one keeps failing.
+  it("leaves the chunk confirmed under the abandoned session — never resetting or re-driving it — when its cleanup revert returns a genuine non-OK response", async () => {
     const revertAttempts: string[] = [];
     const batchCalls: Array<{ sessionId: string; chunkIndex: string }> = [];
     vi.stubGlobal(
@@ -337,6 +341,217 @@ describe("confirmChunkedSessionWithResume — adopt-and-continue (round-6 audit 
     // session — the adopted session-old is never reported, since the
     // adoption itself was aborted before getting that far.
     expect(sessionIds).toEqual(["session-fresh"]);
+  });
+
+  // Round-10 audit BLOCK 2: revertImportBatch's own idempotent "already
+  // reverted" outcome (P0001 -> HTTP 409, code "not_completed" via the
+  // revert route) reaches the SAME desired end state as a fresh
+  // response.ok revert — the batch is no longer live either way — so it
+  // must count as cleanup SUCCESS, not failure. Same shape as the
+  // "reconciles a chunk..." test above, but the cleanup revert 409s as
+  // already-reverted instead of returning 200.
+  it("treats an already-reverted (409 not_completed) cleanup revert as success and completes the adoption", async () => {
+    const revertedBatchIds: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) return jsonResponse(201, { sessionId: "session-fresh" });
+        if (url === "/api/import/sessions/session-old") {
+          return jsonResponse(200, { status: "in_progress", sourceSha256: SOURCE_SHA });
+        }
+        if (url.endsWith("/revert") && init?.method === "POST") {
+          const batchId = url.split("/").at(-2)!;
+          revertedBatchIds.push(batchId);
+          return jsonResponse(409, { error: { code: "not_completed", message: "Import batch is already reverted." } });
+        }
+        if (url.endsWith("/api/import/batches")) {
+          const form = init?.body as FormData;
+          const sessionId = form.get("sessionId") as string;
+          const chunkIndex = form.get("chunkIndex") as string;
+          if (chunkIndex === "1" && sessionId === "session-fresh") {
+            return jsonResponse(201, { alreadyExists: false, batchId: "b-fresh-1" });
+          }
+          if (chunkIndex === "2" && sessionId === "session-fresh") {
+            return jsonResponse(200, { alreadyExists: true, sessionId: "session-old", chunkIndex: 2, batchId: "b-old-2" });
+          }
+          if (chunkIndex === "1" && sessionId === "session-old") {
+            return jsonResponse(201, { alreadyExists: false, batchId: "b-old-1" });
+          }
+          if (chunkIndex === "2" && sessionId === "session-old") {
+            return jsonResponse(200, { alreadyExists: true, sessionId: "session-old", chunkIndex: 2, batchId: "b-old-2" });
+          }
+          throw new Error(`unexpected batch call: session=${sessionId} chunk=${chunkIndex}`);
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      }),
+    );
+
+    const sessionIds: string[] = [];
+    const result = await confirmChunkedSessionWithResume({
+      plan: PLAN,
+      initialUpload: PLAN.chunks.map((c) => ({ index: c.index, status: "pending" as const, batchId: null, error: null, code: null })),
+      existingSessionId: null,
+      fileLabel: "cellar.csv",
+      timestampsRef: { current: [] },
+      onSessionId: (id) => sessionIds.push(id),
+      onProgress: () => {},
+    });
+
+    expect(revertedBatchIds).toEqual(["b-fresh-1"]);
+    expect(result).toEqual({ ok: true });
+    expect(sessionIds.at(-1)).toBe("session-old");
+  });
+
+  // Round-10 audit BLOCK 2: per-batch, not all-or-nothing — a chunk whose
+  // cleanup succeeds is reset to "pending" right away even while a SIBLING
+  // chunk's cleanup is still genuinely outstanding, so a retry only ever
+  // re-attempts the one that's actually still live.
+  it("resets a chunk whose cleanup succeeded to pending even while a sibling chunk's cleanup is still outstanding", async () => {
+    const PLAN3: ChunkedPlanState = {
+      headerRecord: PLAN.headerRecord,
+      chunkTotal: 3,
+      chunks: [
+        { index: 1, startRow: 1, endRow: 2, text: "producer,name,quantity\nA,B,1\n" },
+        { index: 2, startRow: 3, endRow: 4, text: "producer,name,quantity\nC,D,1\n" },
+        { index: 3, startRow: 5, endRow: 6, text: "producer,name,quantity\nE,F,1\n" },
+      ],
+      sourceSha256: SOURCE_SHA,
+    };
+    const revertAttempts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) return jsonResponse(201, { sessionId: "session-fresh" });
+        if (url === "/api/import/sessions/session-old") {
+          return jsonResponse(200, { status: "in_progress", sourceSha256: SOURCE_SHA });
+        }
+        if (url.endsWith("/revert") && init?.method === "POST") {
+          const batchId = url.split("/").at(-2)!;
+          revertAttempts.push(batchId);
+          // b-fresh-1's cleanup succeeds; b-fresh-2's genuinely fails every
+          // time (never "already reverted").
+          if (batchId === "b-fresh-1") return jsonResponse(200, { revertedCount: 0 });
+          return jsonResponse(500, { error: { code: "internal_error", message: "Revert failed." } });
+        }
+        if (url.endsWith("/api/import/batches")) {
+          const form = init?.body as FormData;
+          const sessionId = form.get("sessionId") as string;
+          const chunkIndex = form.get("chunkIndex") as string;
+          if (chunkIndex === "1" && sessionId === "session-fresh") return jsonResponse(201, { alreadyExists: false, batchId: "b-fresh-1" });
+          if (chunkIndex === "2" && sessionId === "session-fresh") return jsonResponse(201, { alreadyExists: false, batchId: "b-fresh-2" });
+          if (chunkIndex === "3" && sessionId === "session-fresh") {
+            return jsonResponse(200, { alreadyExists: true, sessionId: "session-old", chunkIndex: 3, batchId: "b-old-3" });
+          }
+          throw new Error(`unexpected batch call: session=${sessionId} chunk=${chunkIndex} (adoption must never re-drive here)`);
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      }),
+    );
+
+    const progressStates: ChunkUploadState[][] = [];
+    const sessionIds: string[] = [];
+    const result = await confirmChunkedSessionWithResume({
+      plan: PLAN3,
+      initialUpload: PLAN3.chunks.map((c) => ({ index: c.index, status: "pending" as const, batchId: null, error: null, code: null })),
+      existingSessionId: null,
+      fileLabel: "cellar.csv",
+      timestampsRef: { current: [] },
+      onSessionId: (id) => sessionIds.push(id),
+      onProgress: (upload) => progressStates.push(upload),
+    });
+
+    expect(result.ok).toBe(false);
+    // Both siblings' cleanups were attempted.
+    expect(revertAttempts.sort()).toEqual(["b-fresh-1", "b-fresh-2"]);
+    // The adoption itself never completed — session-old was never reported.
+    expect(sessionIds).toEqual(["session-fresh"]);
+
+    const finalUpload = progressStates.at(-1)!;
+    // Chunk 1's cleanup succeeded — reset to pending for the next retry,
+    // never left dangling as "confirmed" under the abandoned session.
+    expect(finalUpload.find((c) => c.index === 1)).toMatchObject({ status: "pending", batchId: null });
+    // Chunk 2's cleanup is still genuinely outstanding — left exactly where
+    // it was, to be retried (and ONLY it) on the next attempt.
+    expect(finalUpload.find((c) => c.index === 2)).toMatchObject({ status: "confirmed", batchId: "b-fresh-2" });
+  });
+
+  // Round-10 audit BLOCK 2: a network-level throw during cleanup is
+  // genuinely ambiguous — the revert may or may not have committed. It must
+  // never be assumed to have failed outright; the NEXT attempt's own revert
+  // call is itself the re-read that resolves the ambiguity, either via a
+  // fresh success or the idempotent already-reverted 409.
+  it("resolves an ambiguous (network-throw) cleanup outcome cleanly on the next attempt", async () => {
+    let revertShouldThrow = true;
+    const revertAttempts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) return jsonResponse(201, { sessionId: "session-fresh" });
+        if (url === "/api/import/sessions/session-old") {
+          return jsonResponse(200, { status: "in_progress", sourceSha256: SOURCE_SHA });
+        }
+        if (url.endsWith("/revert") && init?.method === "POST") {
+          const batchId = url.split("/").at(-2)!;
+          revertAttempts.push(batchId);
+          if (revertShouldThrow) throw new TypeError("network error");
+          return jsonResponse(200, { revertedCount: 0 });
+        }
+        if (url.endsWith("/api/import/batches")) {
+          const form = init?.body as FormData;
+          const sessionId = form.get("sessionId") as string;
+          const chunkIndex = form.get("chunkIndex") as string;
+          if (chunkIndex === "1" && sessionId === "session-fresh") return jsonResponse(201, { alreadyExists: false, batchId: "b-fresh-1" });
+          if (chunkIndex === "2" && sessionId === "session-fresh") {
+            return jsonResponse(200, { alreadyExists: true, sessionId: "session-old", chunkIndex: 2, batchId: "b-old-2" });
+          }
+          if (chunkIndex === "1" && sessionId === "session-old") return jsonResponse(201, { alreadyExists: false, batchId: "b-old-1" });
+          if (chunkIndex === "2" && sessionId === "session-old") {
+            return jsonResponse(200, { alreadyExists: true, sessionId: "session-old", chunkIndex: 2, batchId: "b-old-2" });
+          }
+          throw new Error(`unexpected batch call: session=${sessionId} chunk=${chunkIndex}`);
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      }),
+    );
+
+    const progressStates: ChunkUploadState[][] = [];
+    const sessionIds: string[] = [];
+    const first = await confirmChunkedSessionWithResume({
+      plan: PLAN,
+      initialUpload: PLAN.chunks.map((c) => ({ index: c.index, status: "pending" as const, batchId: null, error: null, code: null })),
+      existingSessionId: null,
+      fileLabel: "cellar.csv",
+      timestampsRef: { current: [] },
+      onSessionId: (id) => sessionIds.push(id),
+      onProgress: (upload) => progressStates.push(upload),
+    });
+
+    // Ambiguous outcome — never silently treated as resolved.
+    expect(first.ok).toBe(false);
+    expect(progressStates.at(-1)!.find((c) => c.index === 1)).toMatchObject({ status: "confirmed", batchId: "b-fresh-1" });
+    expect(sessionIds).toEqual(["session-fresh"]);
+
+    // The operator's next "Retry upload" click re-enters fresh, passing the
+    // last reported state as initialUpload and the session id onSessionId
+    // already reported — exactly what import-client.tsx's handleConfirmChunked
+    // does. This time the revert call actually lands.
+    revertShouldThrow = false;
+    const second = await confirmChunkedSessionWithResume({
+      plan: PLAN,
+      initialUpload: progressStates.at(-1)!,
+      existingSessionId: "session-fresh",
+      fileLabel: "cellar.csv",
+      timestampsRef: { current: [] },
+      onSessionId: (id) => sessionIds.push(id),
+      onProgress: (upload) => progressStates.push(upload),
+    });
+
+    expect(second).toEqual({ ok: true });
+    expect(sessionIds.at(-1)).toBe("session-old");
+    expect(revertAttempts).toEqual(["b-fresh-1", "b-fresh-1"]);
   });
 
   it("passes through an ordinary (non-conflict) failure unchanged", async () => {

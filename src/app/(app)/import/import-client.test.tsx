@@ -640,6 +640,67 @@ describe("PreviewStep — chunk_content_mismatch is terminal (Sol round-2 audit 
   }
 });
 
+// Round-10 audit BLOCK 3(a): multiple_live_batches (reconciliation's own
+// non-destructive conflict) and duplicate_race_retry_exhausted (WARN 5's
+// bounded escalation) are the same kind of dead end as chunk_content_
+// mismatch — retrying resends the exact same request and fails the exact
+// same way every time. Neither used to be in the blocked-retry set, so
+// PreviewStep still rendered "Retry upload" as if it might work.
+describe("PreviewStep — multiple_live_batches and duplicate_race_retry_exhausted are terminal (round-10 audit BLOCK 3)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+  });
+
+  it("hides Retry upload and renders the server's own message for multiple_live_batches", async () => {
+    const serverMessage =
+      "This file has 2 live import batches for the same underlying content — this can't be resolved " +
+      "automatically. Revert all but one of them from Recent imports before resuming or re-uploading this file.";
+    const chunkUpload: ChunkUploadState[] = [
+      { index: 1, status: "failed", batchId: null, error: serverMessage, code: "multiple_live_batches" },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep {...baseProps({ chunkUpload, chunkTotal: 1, error: serverMessage })} />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
+    expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
+    expect(container.textContent).toContain(serverMessage);
+  });
+
+  it("hides Retry upload and renders the escalation message for duplicate_race_retry_exhausted", async () => {
+    const escalationMessage =
+      "Chunk 1 of 1 still conflicts with another live import for this file after 3 attempts — this needs a " +
+      "human to resolve. Revert the conflicting batch under Recent imports before uploading this file again.";
+    const chunkUpload: ChunkUploadState[] = [
+      { index: 1, status: "failed", batchId: null, error: escalationMessage, code: "duplicate_race_retry_exhausted", duplicateRaceRetryCount: 3 },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep {...baseProps({ chunkUpload, chunkTotal: 1, error: escalationMessage })} />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
+    expect(container.textContent).toContain(escalationMessage);
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+});
+
 describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end (round-4 audit finding 2)", () => {
   const mountedRoots: Root[] = [];
 
@@ -1220,6 +1281,73 @@ describe("BatchStep — a resumed batch that reads as reverted is surfaced hones
 
     expect(findButton(container, /Apply \d+ row/)).toBeTruthy();
     expect(container.textContent).not.toContain("This import batch was reverted");
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+});
+
+// Round-10 audit (BLOCK 3(b)): the revert RPC (revert_import_batch, 0109)
+// accepts any status <> 'reverted' — 'created', 'applying', AND
+// 'completed' — but this button used to only render for 'completed',
+// leaving a multiple_live_batches conflict naming a 'created' or 'applying'
+// batch with no actual way to act on the server's own guidance.
+describe("BatchStep — Revert is reachable for every live status, not only completed (round-10 audit BLOCK 3(b))", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+  });
+
+  function batchDetail(status: BatchDetail["batch"]["status"]): BatchDetail {
+    return {
+      batch: {
+        id: "batch-1",
+        filename: "cellar.csv",
+        status,
+        total_rows: 1,
+        created_at: "2026-08-27T00:00:00.000Z",
+        reverted_at: status === "reverted" ? "2026-08-27T00:00:01.000Z" : null,
+      },
+      rows: [
+        {
+          id: "row-1",
+          row_number: 1,
+          raw: { producer: "Domaine A", name: "Cuvee 1" },
+          row_state: "valid",
+          validation_errors: [],
+          lwin_status: "matched",
+          lwin_id: "lwin-1",
+          cost_status: "present",
+          resolution: "auto",
+          manual_unit_cost: null,
+          apply_status: status === "created" ? "not_applied" : "applied",
+        },
+      ],
+    };
+  }
+
+  it.each(["created", "applying", "completed"] as const)("shows Revert for a batch at status '%s'", async (status) => {
+    const { container } = await mount(
+      <BatchStep batch={batchDetail(status)} setBatch={() => {}} onDone={() => {}} />,
+    );
+    expect(findButton(container, /Revert this import/)).toBeTruthy();
+  });
+
+  it("hides Revert for an already-reverted batch", async () => {
+    const { container } = await mount(
+      <BatchStep batch={batchDetail("reverted")} setBatch={() => {}} onDone={() => {}} />,
+    );
+    expect(findButton(container, /Revert this import/)).toBeFalsy();
   });
 
   async function mount(element: ReactElement) {

@@ -9,10 +9,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireMembership } from "@/lib/api/auth";
 import { withApiHandler } from "@/lib/api/handler";
-import { Errors } from "@/lib/api/errors";
+import { Errors, apiError } from "@/lib/api/errors";
 import { parseParams } from "@/lib/api/validation";
 import { BatchIdParamsSchema } from "@/domains/import/request-schemas";
-import { applyImportBatchChunk } from "@/domains/import/batch-service";
+import { applyImportBatchChunk, findSiblingWithAppliedRows } from "@/domains/import/batch-service";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -32,35 +32,61 @@ async function postApply(params: Params) {
   if (!parsedParams.ok) return parsedParams.response;
   const { id } = parsedParams.data;
 
-  // Round-8 audit finding 3: `status` also selected here — the batch's
-  // ACTUAL current status (unlike ApplyChunkResult.status below, which
-  // recomputeBatchStatus derives purely from row counts and can never be
-  // "reverted": its own update is `.neq("status","reverted")`, so once a
-  // batch is reverted that derived status just keeps reporting a stale
-  // pseudo-status forever). A batch reverted mid-apply (e.g. by
-  // reconcileLiveBatchesForFile's own fail-closed cleanup) leaves its
-  // not-yet-applied rows exactly as they were — apply_import_batch_chunk_v2
-  // (0108) already no-ops on a reverted batch, but eligibleNotApplied never
-  // drops to 0 on its own, so `done` derived from that count alone would
-  // never flip true and a client would keep polling apply futilely.
   const { data: batch, error: batchError } = await supabase
     .from("import_batches")
-    .select("id, status")
+    .select("id, content_sha256")
     .eq("id", id)
     .eq("restaurant_id", restaurantId)
     .maybeSingle();
   if (batchError) throw batchError;
   if (!batch) return Errors.notFound("Import batch");
-  const batchStatus = (batch as { id: string; status: string }).status;
+  const contentSha256 = (batch as { id: string; content_sha256: string | null }).content_sha256;
+
+  // Round-10 audit: apply-time invariant enforcement — reconciliation
+  // (reconcileLiveBatchesForFile, batch-service.ts) no longer has any
+  // authority to revert a rival, so the "at most one applied batch per
+  // underlying file" invariant is enforced HERE instead, immediately
+  // before this chunk is allowed to apply. See findSiblingWithAppliedRows'
+  // own comment for why a read-only guard here can never destroy a
+  // concurrent writer's data, unlike the revert-based enforcement it
+  // replaces.
+  const conflict = await findSiblingWithAppliedRows(supabase, restaurantId, id, contentSha256);
+  if (!conflict.ok) return apiError(409, conflict.error.code, conflict.error.message);
+  if (conflict.conflictBatchId) {
+    return apiError(
+      409,
+      "sibling_already_applied",
+      "Another live import batch for this same file already has applied rows. Revert the duplicate under " +
+        "Recent imports before applying this one.",
+    );
+  }
 
   const result = await applyImportBatchChunk(supabase, id);
+
+  // WARN 4 (round-9/10 audit): the batch's ACTUAL current status is now
+  // read AFTER the apply attempt, not before — a revert landing mid-call
+  // (e.g. the operator's own manual "Revert this import" click racing this
+  // request) must be visible on THIS response so both drivers stop on the
+  // very next check, not one extra round trip later. (ApplyChunkResult's
+  // own `status` is a DIFFERENT thing — recomputeBatchStatus derives it
+  // purely from row counts and can never report "reverted": its own update
+  // is `.neq("status","reverted")`, so once a batch is reverted that
+  // derived status just keeps reporting a stale pseudo-status forever.)
+  const { data: postApplyBatch, error: postApplyError } = await supabase
+    .from("import_batches")
+    .select("status")
+    .eq("id", id)
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+  if (postApplyError) throw postApplyError;
+  const batchStatus = (postApplyBatch as { status: string } | null)?.status ?? result.status;
 
   return NextResponse.json({
     processed: result.processed,
     status: result.status,
-    // Round-8 audit finding 3: the real batch status (see above) —
-    // distinct from `status`, which is only ever "created" | "applying" |
-    // "completed". Both apply drivers stop on this being "reverted".
+    // The real batch status (see above) — distinct from `status`, which is
+    // only ever "created" | "applying" | "completed". Both apply drivers
+    // stop on this being "reverted".
     batchStatus,
     counts: result.counts,
     // "Nothing left for apply to do right now" — distinct from

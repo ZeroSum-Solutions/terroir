@@ -935,6 +935,17 @@ export function PreviewStep({
   // server's own message (surfaced via `error` above) already explains
   // the revert path.
   const hasChunkContentMismatch = chunkUpload?.some((c) => c.status === "failed" && c.code === "chunk_content_mismatch") ?? false;
+  // Round-10 audit (BLOCK 3(a)): multiple_live_batches (reconciliation's
+  // own non-destructive conflict — see reconcileLiveBatchesForFile's own
+  // comment) and duplicate_race_retry_exhausted (WARN 5's bounded
+  // escalation, session-step.tsx) are the SAME kind of dead end as
+  // chunk_content_mismatch — retrying re-sends the exact same request and
+  // fails the exact same way every time, with no fix reachable from inside
+  // this UI. Genuinely terminal: never offer "Retry upload" for either.
+  const hasTerminalReconciliationConflict =
+    chunkUpload?.some(
+      (c) => c.status === "failed" && (c.code === "multiple_live_batches" || c.code === "duplicate_race_retry_exhausted"),
+    ) ?? false;
   // Round-4 audit finding 2: duplicate_chunk_content is also terminal by
   // default — no "Retry upload" — since a blind retry re-sends the exact
   // same bytes and 23505s the same way every time. UNLIKE
@@ -984,7 +995,7 @@ export function PreviewStep({
       .map((c) => c.index),
   );
   const hasUnresolvedDuplicateChunkContent = unresolvedDuplicateChunkContentIndexes.size > 0;
-  const blocksConfirmButton = hasChunkContentMismatch || hasUnresolvedDuplicateChunkContent;
+  const blocksConfirmButton = hasChunkContentMismatch || hasUnresolvedDuplicateChunkContent || hasTerminalReconciliationConflict;
 
   return (
     <div className="rounded-card card-surface p-lg">
@@ -1527,7 +1538,16 @@ export function BatchStep({
           </button>
         )}
 
-        {batch.batch.status === "completed" && (
+        {/* Round-10 audit (BLOCK 3(b)): the revert RPC (revert_import_batch,
+            0109) accepts any status <> 'reverted' — 'created', 'applying',
+            AND 'completed' — specifically so a batch that's merely confirmed
+            or partially applied can be reverted too (0109's own comment).
+            This button used to only appear once status === "completed",
+            which meant a multiple_live_batches conflict naming a batch still
+            sitting at 'created' or 'applying' pointed the operator at a
+            Revert control that didn't exist yet — a dead end. Matched to
+            what the endpoint actually accepts. */}
+        {batch.batch.status !== "reverted" && (
           <button
             type="button"
             onClick={() => setRevertDialogOpen(true)}

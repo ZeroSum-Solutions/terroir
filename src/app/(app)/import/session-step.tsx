@@ -106,6 +106,18 @@ export type ChunkUploadState = {
    * — or, once the operator skips it, the same value carried onto
    * "skipped" so the session summary can name it. undefined otherwise. */
   duplicateOfChunkIndex?: number;
+  /** WARN 5 (round-9/10 audit): consecutive `duplicate_race_retry` failures
+   * THIS chunk has hit in a row, across manual retries — `duplicate_race_
+   * retry` is retryable by design (a genuinely transient race the next
+   * attempt normally resolves), but nothing used to bound how many times in
+   * a row it could recur for the same chunk. Incremented each time this
+   * chunk fails with that code again immediately after the last one;
+   * cleared to 0 whenever it fails with a DIFFERENT code, or succeeds.
+   * Once it reaches DUPLICATE_RACE_RETRY_LIMIT the driver escalates to the
+   * distinct terminal `duplicate_race_retry_exhausted` code instead of
+   * leaving "Retry upload" as an endlessly-failing affordance. undefined
+   * (treated as 0) for a chunk that has never failed on this code. */
+  duplicateRaceRetryCount?: number;
 };
 
 export const ZERO_SUMMARY: PreviewSummary = {
@@ -156,6 +168,13 @@ export function writeStoredSession(value: StoredSession | null) {
 // so a same-tab retry never itself trips the server's limiter.
 const CONFIRM_RATE_LIMIT_MARGIN = 9;
 const CONFIRM_RATE_WINDOW_MS = 60 * 1000;
+
+// WARN 5 (round-9/10 audit): how many CONSECUTIVE duplicate_race_retry
+// failures a single chunk tolerates before the driver escalates to a
+// terminal, actionable state instead of leaving "Retry upload" as an
+// endless, always-retryable prompt — see ChunkUploadState.
+// duplicateRaceRetryCount's own comment.
+const DUPLICATE_RACE_RETRY_LIMIT = 3;
 
 // /api/import/preview's own PREVIEW_RATE_WINDOW_MS (src/app/api/import/
 // preview/route.ts) — used as the wait fallback on a 429 that arrives
@@ -424,7 +443,32 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
       if (!response.ok) {
         const code: string | null = body?.error?.code ?? null;
         const message: string = body?.error?.message ?? "Upload failed.";
-        results = results.map((c) => (c.index === chunk.index ? { ...c, status: "failed", error: message, code } : c));
+
+        // WARN 5 (round-9/10 audit): duplicate_race_retry is retryable BY
+        // DESIGN — a genuinely transient race the next attempt normally
+        // resolves — but nothing used to bound how many times in a row it
+        // can recur for the SAME chunk. Count consecutive occurrences
+        // (persisted on the chunk itself, so it survives across manual
+        // retries via `initialUpload`); once it reaches
+        // DUPLICATE_RACE_RETRY_LIMIT, treat it as durably unresolvable and
+        // escalate to a distinct TERMINAL code naming the chunk and the
+        // attempt count, instead of leaving "Retry upload" as the only,
+        // endlessly-failing affordance. Any OTHER code resets the count —
+        // it only ever tracks a run of the SAME code in a row.
+        const priorRaceRetryCount = code === "duplicate_race_retry" ? (current?.duplicateRaceRetryCount ?? 0) + 1 : 0;
+        const exhausted = code === "duplicate_race_retry" && priorRaceRetryCount >= DUPLICATE_RACE_RETRY_LIMIT;
+        const effectiveCode = exhausted ? "duplicate_race_retry_exhausted" : code;
+        const effectiveMessage = exhausted
+          ? `Chunk ${chunk.index} of ${plan.chunkTotal} still conflicts with another live import for this file ` +
+            `after ${priorRaceRetryCount} attempts — this needs a human to resolve. Revert the conflicting batch ` +
+            "under Recent imports before uploading this file again."
+          : message;
+
+        results = results.map((c) =>
+          c.index === chunk.index
+            ? { ...c, status: "failed", error: effectiveMessage, code: effectiveCode, duplicateRaceRetryCount: priorRaceRetryCount }
+            : c,
+        );
         onProgress(results);
         // Sol round-2 audit (2026-08-27) finding 3: chunk_content_mismatch is
         // TERMINAL — retrying re-sends this exact chunk's content and
@@ -434,18 +478,23 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
         // code, so it's used only for every other (genuinely retryable)
         // failure.
         //
-        // Round-8 audit finding 2: multiple_applied_batches is the same
-        // kind of dead end — reconcileLiveBatchesForFile refuses to touch
-        // either applied batch, so retrying this upload hits the identical
-        // conflict every time until an operator manually reverts one of
-        // them from Recent imports. The server's own message already says
-        // so; showing it verbatim here instead of "you can retry it below"
-        // matters for the same reason it does for chunk_content_mismatch.
+        // Round-10 audit (BLOCK 3): multiple_live_batches is the same kind
+        // of dead end — reconciliation never resolves it automatically (it
+        // touches nothing — see reconcileLiveBatchesForFile's own comment),
+        // so retrying this upload hits the identical conflict every time
+        // until an operator manually reverts all but one of the live
+        // batches from Recent imports. duplicate_race_retry_exhausted
+        // (above) is the same shape once WARN 5's bound trips. The server's
+        // own message already says so for the first two; showing it
+        // verbatim here instead of "you can retry it below" matters for the
+        // same reason it does for chunk_content_mismatch.
         return {
           ok: false,
           error:
-            code === "chunk_content_mismatch" || code === "multiple_applied_batches"
-              ? message
+            effectiveCode === "chunk_content_mismatch" ||
+            effectiveCode === "multiple_live_batches" ||
+            effectiveCode === "duplicate_race_retry_exhausted"
+              ? effectiveMessage
               : `Chunk ${chunk.index} of ${plan.chunkTotal} failed to upload — you can retry it below.`,
         };
       }
@@ -685,13 +734,35 @@ export type ConfirmChunkedSessionWithResumeResult = { ok: true } | { ok: false; 
  * chunk is re-driven, bouncing adoption toward another hop instead of the
  * one reconcile pass the old comment promised — worst case, riding the
  * MAX_SESSION_ADOPTION_HOPS ceiling to a hard stop with no clear reason
- * why. Fixed: every revert's `response.ok` is checked explicitly. If ANY
- * fails, this ABORTS the adoption re-drive entirely — chunks are never
- * reset/re-driven — and surfaces a retryable error instead, so the
- * operator's next attempt starts clean rather than compounding a partial
- * cleanup. A revert that resolves with response.ok is still exactly as
- * safe as before (this function's own apply-timing verification above);
- * only an unconfirmed one now stops the whole adoption. */
+ * why. Fixed: every revert's `response.ok` is checked explicitly.
+ *
+ * Round-10 audit BLOCK 2, corrected again: the round-8 fix above then
+ * ABORTED THE WHOLE ADOPTION the instant ANY revert failed — every
+ * confirmed chunk stayed "confirmed" (reset happened only on UNANIMOUS
+ * success), and a revert that had already succeeded (this attempt, or an
+ * earlier one) counted the SAME as a genuine failure whenever the batch
+ * was already reverted: revertImportBatch's own idempotent "already
+ * reverted" outcome (P0001, surfaced as HTTP 409 code "not_completed" by
+ * the revert route) was treated as failure rather than as the desired end
+ * state already being reached. On retry, that already-cleaned batch would
+ * 409 again, forever, and because reset was all-or-nothing, a SINGLE
+ * durably-failing sibling batch could permanently poison every other
+ * chunk's cleanup too, even ones that succeeded on the very first attempt.
+ * Fixed to be idempotent and PER-BATCH: a revert response of either
+ * response.ok OR the "not_completed"/already-reverted 409 counts as this
+ * chunk's cleanup succeeding — both reach the same desired end state, the
+ * batch no longer live. Each chunk's OWN outcome decides whether IT resets
+ * to "pending" — a chunk whose cleanup already succeeded is NEVER
+ * re-attempted again, even while a sibling's cleanup is still outstanding,
+ * and that partial progress is reported via onProgress immediately (not
+ * only once every chunk clears) so the operator's NEXT retry only ever
+ * re-attempts what is genuinely still outstanding. A network-level
+ * failure (the `fetch` itself throwing — genuinely ambiguous whether the
+ * revert committed) is never assumed to have failed OR succeeded: it's
+ * simply left "confirmed" for a later attempt, whose own revert call is
+ * itself the re-read — a commit that landed resolves as the idempotent
+ * already-reverted success above, and one that didn't simply reverts for
+ * real. */
 export async function confirmChunkedSessionWithResume(
   params: ConfirmChunkedSessionParams,
   depth = 0,
@@ -718,27 +789,56 @@ export async function confirmChunkedSessionWithResume(
         progress.sourceSha256 != null &&
         progress.sourceSha256 === params.plan.sourceSha256
       ) {
-        // Round-7 audit finding 3: reconcile-before-adopt. Best-effort
-        // revert every chunk confirmed under the session about to be
-        // abandoned — see this function's own comment above for the
-        // apply-timing verification that makes this always safe.
+        // Round-7 audit finding 3: reconcile-before-adopt. Revert every
+        // chunk confirmed under the session about to be abandoned — see
+        // this function's own comment above for the apply-timing
+        // verification that makes this always safe.
         const confirmedUnderAbandonedSession = latestUpload.filter(
           (c) => c.status === "confirmed" && c.batchId,
         );
-        // Round-8 audit finding 4: check response.ok on every revert — see
-        // this function's own comment above for why an unconfirmed revert
-        // must abort the adoption rather than being treated as success.
-        const revertOutcomes = await Promise.all(
+        // Round-10 audit BLOCK 2: idempotent, PER-BATCH cleanup — see this
+        // function's own comment above for the full reasoning. `cleaned`
+        // is true for either a genuine response.ok revert OR the revert
+        // route's own idempotent "already reverted" 409 (code
+        // "not_completed") — both reach the SAME desired end state, this
+        // batch no longer live. A network-level throw is genuinely
+        // ambiguous (may or may not have committed) and is never assumed
+        // to have succeeded OR failed — reported not-cleaned so this
+        // attempt leaves the chunk "confirmed" for a later attempt's own
+        // revert call to resolve, one way or the other.
+        const cleanupOutcomes = await Promise.all(
           confirmedUnderAbandonedSession.map(async (c) => {
             try {
               const response = await fetch(`/api/import/batches/${c.batchId}/revert`, { method: "POST" });
-              return response.ok;
+              if (response.ok) return { index: c.index, cleaned: true };
+              const failureBody = await response.json().catch(() => null);
+              return { index: c.index, cleaned: failureBody?.error?.code === "not_completed" };
             } catch {
-              return false;
+              return { index: c.index, cleaned: false };
             }
           }),
         );
-        if (revertOutcomes.some((ok) => !ok)) {
+        const cleanedIndexes = new Set(cleanupOutcomes.filter((o) => o.cleaned).map((o) => o.index));
+
+        // Every chunk whose cleanup succeeded (this attempt or a previous
+        // one it already resolved) is reset to "pending" right away, never
+        // re-attempted again — regardless of whether OTHER chunks are
+        // still outstanding. Everything else (already "skipped", never
+        // confirmed at all, or still outstanding) is carried forward as-is.
+        const reconciledUpload: ChunkUploadState[] = latestUpload.map((c) =>
+          cleanedIndexes.has(c.index)
+            ? { index: c.index, status: "pending", batchId: null, error: null, code: null }
+            : c,
+        );
+
+        const stillOutstanding = confirmedUnderAbandonedSession.filter((c) => !cleanedIndexes.has(c.index));
+        if (stillOutstanding.length > 0) {
+          // Surface the partial progress immediately, BEFORE returning the
+          // error — the operator's next "Retry upload" click re-enters this
+          // function from scratch with THIS state as initialUpload, so it
+          // only ever re-attempts what is genuinely still outstanding,
+          // never the chunks this pass already put away.
+          params.onProgress(reconciledUpload);
           return {
             ok: false,
             error: "Couldn't clean up a previous attempt at this import — please retry the upload.",
@@ -751,16 +851,6 @@ export async function confirmChunkedSessionWithResume(
           label: params.fileLabel,
         });
         params.onSessionId(result.conflictingSessionId);
-
-        // Re-drive EVERY chunk that was confirmed under the abandoned
-        // session — reset to "pending" so confirmChunkedSession's own skip
-        // condition doesn't treat it as done. Everything else (already
-        // "skipped", or never confirmed at all) is carried forward as-is.
-        const reconciledUpload: ChunkUploadState[] = latestUpload.map((c) =>
-          c.status === "confirmed"
-            ? { index: c.index, status: "pending", batchId: null, error: null, code: null }
-            : c,
-        );
 
         // Retry every reconciled chunk under the now-verified session —
         // never just the "remaining" ones (round-7 finding 3's own fix).
