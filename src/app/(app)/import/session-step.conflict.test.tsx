@@ -515,4 +515,130 @@ describe("confirmChunkedSession — bounded escalation for duplicate_race_retry 
 
     expect(upload[0]).toMatchObject({ code: "duplicate_race_retry", duplicateRaceRetryCount: 1 });
   });
+
+  // FINDING 4 (round-11 audit): the network-error catch block used to spread
+  // the prior chunk unchanged, carrying duplicateRaceRetryCount forward
+  // through a network error as if it were another duplicate_race_retry —
+  // so `duplicate_race_retry, duplicate_race_retry, network error,
+  // duplicate_race_retry` wrongly counted as three consecutive failures
+  // (reaching DUPLICATE_RACE_RETRY_LIMIT) instead of resetting after the
+  // network error, like any other non-matching outcome does.
+  it("does NOT escalate when a network error interrupts the streak — the count resets exactly like a different code would", async () => {
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) return jsonResponse(201, { sessionId: "session-new" });
+        call += 1;
+        if (call === 3) throw new Error("network down");
+        return duplicateRaceRetryResponse();
+      }),
+    );
+
+    let upload: ChunkUploadState[] = [{ index: 1, status: "pending", batchId: null, error: null, code: null }];
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      await confirmChunkedSession({
+        plan: PLAN,
+        initialUpload: upload,
+        existingSessionId: "session-new",
+        fileLabel: "cellar.csv",
+        timestampsRef: { current: [] },
+        onSessionId: () => {},
+        onProgress: (u) => {
+          upload = u;
+        },
+      });
+    }
+
+    // duplicate_race_retry (1), duplicate_race_retry (2), network error
+    // (reset to 0), duplicate_race_retry (1) — never escalates to
+    // duplicate_race_retry_exhausted, and the 4th attempt's count is 1, not 3.
+    expect(upload[0]).toMatchObject({ code: "duplicate_race_retry", duplicateRaceRetryCount: 1 });
+  });
+
+  // FINDING 4 (round-11 audit): the SUCCESS transition used to leave
+  // whatever duplicateRaceRetryCount a prior failed attempt had set — the
+  // field's own contract ("cleared to 0 whenever it... succeeds") went
+  // unfulfilled.
+  it("clears duplicateRaceRetryCount on success, not just on a different failing code", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) return jsonResponse(201, { sessionId: "session-new" });
+        return jsonResponse(201, { alreadyExists: false, batchId: "b-succeeded" });
+      }),
+    );
+
+    // Carries a stale duplicateRaceRetryCount from a prior failed run,
+    // exactly as `initialUpload` would across a manual retry.
+    let upload: ChunkUploadState[] = [
+      {
+        index: 1,
+        status: "failed",
+        batchId: null,
+        error: "prior failure",
+        code: "duplicate_race_retry",
+        duplicateRaceRetryCount: 2,
+      },
+    ];
+    await confirmChunkedSession({
+      plan: PLAN,
+      initialUpload: upload,
+      existingSessionId: "session-new",
+      fileLabel: "cellar.csv",
+      timestampsRef: { current: [] },
+      onSessionId: () => {},
+      onProgress: (u) => {
+        upload = u;
+      },
+    });
+
+    expect(upload[0]).toMatchObject({ status: "confirmed", batchId: "b-succeeded", duplicateRaceRetryCount: 0 });
+  });
+});
+
+// FINDING 2 (round-11 audit): a multiple_live_batches conflict used to name
+// only a candidate COUNT. The server now carries every conflicting batch's
+// id/filename/status/created_at on the error's `details.conflictingBatches`
+// — this pins that confirmChunkedSession captures it onto the failed
+// chunk (import-client.tsx renders it into the conflict panel from there).
+describe("confirmChunkedSession — captures conflictingBatches from a multiple_live_batches response (round-11 audit finding 2)", () => {
+  it("carries the server's conflictingBatches detail onto the failed chunk", async () => {
+    const conflictingBatches = [
+      { id: "batch-a", filename: "cellar.csv", status: "created", created_at: "2026-01-01T00:00:00Z" },
+      { id: "batch-b", filename: "cellar.csv", status: "applying", created_at: "2026-01-02T00:00:00Z" },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) return jsonResponse(201, { sessionId: "session-new" });
+        return jsonResponse(422, {
+          error: {
+            code: "multiple_live_batches",
+            message: "This file has 2 live import batches for the same underlying content.",
+            details: { conflictingBatches },
+          },
+        });
+      }),
+    );
+
+    let upload: ChunkUploadState[] = [{ index: 1, status: "pending", batchId: null, error: null, code: null }];
+    await confirmChunkedSession({
+      plan: PLAN,
+      initialUpload: upload,
+      existingSessionId: "session-new",
+      fileLabel: "cellar.csv",
+      timestampsRef: { current: [] },
+      onSessionId: () => {},
+      onProgress: (u) => {
+        upload = u;
+      },
+    });
+
+    expect(upload[0].code).toBe("multiple_live_batches");
+    expect(upload[0].conflictingBatches).toEqual(conflictingBatches);
+  });
 });

@@ -88,7 +88,17 @@ async function postBatches(request: NextRequest) {
   });
 
   if (!result.ok) {
-    const details = result.error.missingHeaders ? { missingHeaders: result.error.missingHeaders } : undefined;
+    // FINDING 2 (round-11 audit): conflictingBatches (present only on
+    // multiple_live_batches) lets the client render a revert affordance
+    // per conflicting batch directly, rather than relying on the batch
+    // still being in the ten-newest Recent imports list.
+    const details =
+      result.error.missingHeaders || result.error.conflictingBatches
+        ? {
+            ...(result.error.missingHeaders ? { missingHeaders: result.error.missingHeaders } : {}),
+            ...(result.error.conflictingBatches ? { conflictingBatches: result.error.conflictingBatches } : {}),
+          }
+        : undefined;
     return apiError(422, result.error.code, result.error.message, details);
   }
 

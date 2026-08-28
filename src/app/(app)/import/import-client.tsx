@@ -28,6 +28,7 @@ import {
   readStoredSession,
   writeStoredSession,
   ZERO_SUMMARY,
+  DUPLICATE_RACE_RETRY_LIMIT,
   type ChunkedPlanState,
   type ChunkedPreviewState,
   type ChunkUploadState,
@@ -165,6 +166,13 @@ export type BatchRow = {
 };
 
 export type BatchDetail = { batch: BatchSummary; rows: BatchRow[] };
+
+/** FINDING 2 (round-11 audit): mirrors batch-service.ts's own
+ * ConflictingBatchInfo — carried on a multiple_live_batches error's
+ * `details.conflictingBatches` so the conflict UI can render a revert
+ * affordance per candidate directly, rather than relying on the batch
+ * still being in the ten-newest Recent imports list. */
+export type ConflictingBatchInfo = { id: string; filename: string; status: string; created_at: string };
 
 type Step = "upload" | "preview" | "batch" | "session";
 
@@ -312,6 +320,15 @@ export function ImportClient() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ rows: PreviewRow[]; summary: PreviewSummary } | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // FINDING 3 (round-11 audit): the plain (non-chunked) confirm path used
+  // to discard the server error CODE and keep only the message — a
+  // terminal conflict (multiple_live_batches) or a duplicate_race_retry
+  // race therefore rendered "Confirm import" forever, retryable with no
+  // bound, unlike the chunked path's own ChunkUploadState.code /
+  // duplicateRaceRetryCount. Mirrors that same shape for the plain path.
+  const [confirmErrorCode, setConfirmErrorCode] = useState<string | null>(null);
+  const [confirmDuplicateRaceRetryCount, setConfirmDuplicateRaceRetryCount] = useState(0);
+  const [confirmConflictingBatches, setConfirmConflictingBatches] = useState<ConflictingBatchInfo[]>([]);
   // Inline row-fix: rowNumber is GLOBAL (the number shown in the preview
   // UI) for both the plain and chunked paths — handleConfirmChunked
   // translates it back to each chunk's own local row numbers.
@@ -446,6 +463,9 @@ export function ImportClient() {
     if (!file) return;
     setPreviewing(true);
     setPreviewError(null);
+    setConfirmErrorCode(null);
+    setConfirmDuplicateRaceRetryCount(0);
+    setConfirmConflictingBatches([]);
     setRowOverrides({});
     try {
       const buffer = await file.arrayBuffer();
@@ -500,18 +520,46 @@ export function ImportClient() {
       const response = await fetch("/api/import/batches", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) {
-        setPreviewError(body?.error?.message ?? "Import could not be created.");
+        const code: string | null = body?.error?.code ?? null;
+        const message: string = body?.error?.message ?? "Import could not be created.";
+        const conflictingBatches: ConflictingBatchInfo[] = body?.error?.details?.conflictingBatches ?? [];
+
+        // FINDING 3/4 (round-11 audit): the same bounded-escalation shape
+        // ChunkUploadState's own duplicateRaceRetryCount uses (session-
+        // step.tsx) — counts ONLY consecutive duplicate_race_retry
+        // failures; any other code resets it to 0.
+        const priorRaceRetryCount = code === "duplicate_race_retry" ? confirmDuplicateRaceRetryCount + 1 : 0;
+        const exhausted = code === "duplicate_race_retry" && priorRaceRetryCount >= DUPLICATE_RACE_RETRY_LIMIT;
+        const effectiveCode = exhausted ? "duplicate_race_retry_exhausted" : code;
+        const effectiveMessage = exhausted
+          ? `This upload still conflicts with another live import for this file after ${priorRaceRetryCount} ` +
+            "attempts — this needs a human to resolve. Revert the conflicting batch under Recent imports before " +
+            "uploading this file again."
+          : message;
+
+        setConfirmDuplicateRaceRetryCount(priorRaceRetryCount);
+        setConfirmErrorCode(effectiveCode);
+        setConfirmConflictingBatches(conflictingBatches);
+        setPreviewError(effectiveMessage);
         return;
       }
+      setConfirmErrorCode(null);
+      setConfirmDuplicateRaceRetryCount(0);
+      setConfirmConflictingBatches([]);
       await loadBatchDetail(body.batchId, setBatch);
       setStep("batch");
       void loadRecent();
     } catch {
+      // A network error is not a duplicate_race_retry failure — resets the
+      // count exactly like any other non-matching code would (see the
+      // bounded-escalation comment above).
+      setConfirmDuplicateRaceRetryCount(0);
+      setConfirmErrorCode(null);
       setPreviewError("Import could not be created. Check your connection and try again.");
     } finally {
       setConfirming(false);
     }
-  }, [file, rowOverrides, loadRecent]);
+  }, [file, rowOverrides, loadRecent, confirmDuplicateRaceRetryCount]);
 
   /** Skips any chunk `chunkUpload` already marks "confirmed" — the
    * retry-after-failure path reruns confirmChunkedSession (via
@@ -623,6 +671,9 @@ export function ImportClient() {
     setFile(null);
     setPreview(null);
     setPreviewError(null);
+    setConfirmErrorCode(null);
+    setConfirmDuplicateRaceRetryCount(0);
+    setConfirmConflictingBatches([]);
     setBatch(null);
     setChunkedPlan(null);
     setChunkedPreview(null);
@@ -632,6 +683,48 @@ export function ImportClient() {
     setRowOverrides({});
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
+
+  // FINDING 2 (round-11 audit): a multiple_live_batches conflict can be
+  // reported by the plain confirm path (confirmConflictingBatches) or by
+  // any chunk of a chunked upload (ChunkUploadState.conflictingBatches) —
+  // merged and de-duplicated by id so the conflict panel below always
+  // shows every distinct candidate exactly once, regardless of which path
+  // reported it.
+  const [revertingConflictId, setRevertingConflictId] = useState<string | null>(null);
+  const chunkConflictingBatches = (chunkUpload ?? []).flatMap((c) => c.conflictingBatches ?? []);
+  const conflictingBatches = [...confirmConflictingBatches, ...chunkConflictingBatches].filter(
+    (b, index, all) => all.findIndex((other) => other.id === b.id) === index,
+  );
+
+  const handleRevertConflict = useCallback(
+    async (batchId: string) => {
+      setRevertingConflictId(batchId);
+      try {
+        const response = await fetch(`/api/import/batches/${batchId}/revert`, { method: "POST" });
+        const body = await response.json();
+        if (!response.ok) {
+          setPreviewError(body?.error?.message ?? "Revert failed.");
+          return;
+        }
+        // Drop the now-reverted batch from wherever it's tracked so the
+        // affordance disappears the instant the revert succeeds — the
+        // operator can then retry the confirm/upload.
+        setConfirmConflictingBatches((prev) => prev.filter((b) => b.id !== batchId));
+        setChunkUpload(
+          (prev) =>
+            prev?.map((c) =>
+              c.conflictingBatches ? { ...c, conflictingBatches: c.conflictingBatches.filter((b) => b.id !== batchId) } : c,
+            ) ?? prev,
+        );
+        void loadRecent();
+      } catch {
+        setPreviewError("Revert failed. Check your connection and try again.");
+      } finally {
+        setRevertingConflictId(null);
+      }
+    },
+    [loadRecent],
+  );
 
   return (
     <div className="mx-auto max-w-[640px] px-md py-lg">
@@ -677,6 +770,10 @@ export function ImportClient() {
           confirming={chunkedPreview ? confirmingChunked : confirming}
           onBack={reset}
           error={previewError}
+          plainConfirmErrorCode={chunkedPreview ? null : confirmErrorCode}
+          conflictingBatches={conflictingBatches}
+          onRevertConflict={handleRevertConflict}
+          revertingConflictId={revertingConflictId}
         />
       )}
 
@@ -807,6 +904,10 @@ export function PreviewStep({
   confirming,
   onBack,
   error,
+  plainConfirmErrorCode,
+  conflictingBatches,
+  onRevertConflict,
+  revertingConflictId,
 }: {
   filename: string;
   summary: PreviewSummary;
@@ -841,6 +942,21 @@ export function PreviewStep({
   confirming: boolean;
   onBack: () => void;
   error: string | null;
+  /** FINDING 3 (round-11 audit): the plain (non-chunked) confirm path's own
+   * error code — mirrors ChunkUploadState.code for the chunked path, so a
+   * terminal conflict (multiple_live_batches, or duplicate_race_retry_
+   * exhausted once WARN 5's bound trips) blocks "Confirm import" here the
+   * same way it already does for a chunked upload. null/undefined for the
+   * chunked path, which tracks its own code per-chunk instead. */
+  plainConfirmErrorCode?: string | null;
+  /** FINDING 2 (round-11 audit): every live batch a multiple_live_batches
+   * conflict named, from either path, merged and de-duplicated by id — see
+   * ConflictingBatchInfo's own comment. Rendered with a revert affordance
+   * per batch so recovery never depends on the batch still being in the
+   * ten-newest Recent imports list. */
+  conflictingBatches?: ConflictingBatchInfo[];
+  onRevertConflict?: (batchId: string) => void;
+  revertingConflictId?: string | null;
 }) {
   // Sol round-2 audit (2026-08-27) finding 4: incremental disclosure
   // instead of a hard cap — starts at MAX_SHOWN_ERROR_ROWS and grows by
@@ -943,9 +1059,13 @@ export function PreviewStep({
   // fails the exact same way every time, with no fix reachable from inside
   // this UI. Genuinely terminal: never offer "Retry upload" for either.
   const hasTerminalReconciliationConflict =
-    chunkUpload?.some(
+    (chunkUpload?.some(
       (c) => c.status === "failed" && (c.code === "multiple_live_batches" || c.code === "duplicate_race_retry_exhausted"),
-    ) ?? false;
+    ) ?? false) ||
+    // FINDING 3 (round-11 audit): the plain (non-chunked) path's own
+    // terminal codes — see plainConfirmErrorCode's own comment.
+    plainConfirmErrorCode === "multiple_live_batches" ||
+    plainConfirmErrorCode === "duplicate_race_retry_exhausted";
   // Round-4 audit finding 2: duplicate_chunk_content is also terminal by
   // default — no "Retry upload" — since a blind retry re-sends the exact
   // same bytes and 23505s the same way every time. UNLIKE
@@ -1113,6 +1233,34 @@ export function PreviewStep({
           <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
           {error}
         </p>
+      )}
+
+      {/* FINDING 2 (round-11 audit): a revert affordance per conflicting
+          batch, rendered directly in the conflict — never dependent on
+          the batch still being in the ten-newest Recent imports list.
+          Reuses the same revert endpoint BatchStep's own "Revert this
+          import" button calls. */}
+      {conflictingBatches && conflictingBatches.length > 0 && (
+        <div className="mt-md rounded-lg border border-accent/30 bg-blush-wash/30 p-sm">
+          <p className="text-[13px] font-medium text-ink">Conflicting live imports for this file</p>
+          <ul className="mt-xs space-y-2xs">
+            {conflictingBatches.map((b) => (
+              <li key={b.id} className="flex items-center justify-between gap-sm rounded-md bg-surface px-sm py-2xs text-[13px] text-ink">
+                <span className="min-w-0 truncate">
+                  {b.filename} <span className="text-caption text-grey">({b.status})</span>
+                </span>
+                <button
+                  type="button"
+                  disabled={revertingConflictId === b.id}
+                  onClick={() => onRevertConflict?.(b.id)}
+                  className="min-h-11 shrink-0 rounded-pill border border-ink/25 bg-surface px-sm text-caption font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {revertingConflictId === b.id ? "Reverting…" : "Revert"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <div className="mt-lg flex flex-col-reverse gap-sm sm:flex-row">

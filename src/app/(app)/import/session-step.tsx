@@ -18,7 +18,7 @@ import { ActionDialog } from "@/components/action-dialog";
 import { CLIENT_CHUNK_TARGET_ROWS, type CanonicalHeader } from "@/domains/import/constants";
 import { buildChunkPlan, serializeChunk, sha256HexOfBytes } from "@/domains/import/csv-splitter";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
-import type { BatchRow, ErrorRowEntry, RowOverrides } from "./import-client";
+import type { BatchRow, ConflictingBatchInfo, ErrorRowEntry, RowOverrides } from "./import-client";
 
 // ---------------------------------------------------------------------------
 // Chunk plan / upload state, and the pure functions that drive the two
@@ -106,18 +106,29 @@ export type ChunkUploadState = {
    * — or, once the operator skips it, the same value carried onto
    * "skipped" so the session summary can name it. undefined otherwise. */
   duplicateOfChunkIndex?: number;
-  /** WARN 5 (round-9/10 audit): consecutive `duplicate_race_retry` failures
-   * THIS chunk has hit in a row, across manual retries — `duplicate_race_
-   * retry` is retryable by design (a genuinely transient race the next
-   * attempt normally resolves), but nothing used to bound how many times in
-   * a row it could recur for the same chunk. Incremented each time this
-   * chunk fails with that code again immediately after the last one;
-   * cleared to 0 whenever it fails with a DIFFERENT code, or succeeds.
-   * Once it reaches DUPLICATE_RACE_RETRY_LIMIT the driver escalates to the
-   * distinct terminal `duplicate_race_retry_exhausted` code instead of
-   * leaving "Retry upload" as an endlessly-failing affordance. undefined
-   * (treated as 0) for a chunk that has never failed on this code. */
+  /** WARN 5 (round-9/10 audit), corrected round-11: consecutive
+   * `duplicate_race_retry` failures THIS chunk has hit IN A ROW, across
+   * manual retries — `duplicate_race_retry` is retryable by design (a
+   * genuinely transient race the next attempt normally resolves), but
+   * nothing used to bound how many times in a row it could recur for the
+   * same chunk. Incremented each time this chunk fails with that code
+   * again immediately after the last one; means EXACTLY "consecutive
+   * duplicate_race_retry failures" — reset to 0 on ANY other outcome: a
+   * different error code, a network error (no code at all), or a success.
+   * Round-11 fixed two places that broke this: the network-error catch
+   * block used to spread the prior chunk unchanged, carrying the count
+   * forward through a network error as if it were another
+   * duplicate_race_retry; the success transition used to leave the stale
+   * count in place instead of clearing it. Once it reaches
+   * DUPLICATE_RACE_RETRY_LIMIT the driver escalates to the distinct
+   * terminal `duplicate_race_retry_exhausted` code instead of leaving
+   * "Retry upload" as an endlessly-failing affordance. undefined (treated
+   * as 0) for a chunk that has never failed on this code. */
   duplicateRaceRetryCount?: number;
+  /** FINDING 2 (round-11 audit): every live candidate this chunk's confirm
+   * collided with, when status is "failed" with code "multiple_live_batches"
+   * — see ConflictingBatchInfo's own comment. undefined otherwise. */
+  conflictingBatches?: ConflictingBatchInfo[];
 };
 
 export const ZERO_SUMMARY: PreviewSummary = {
@@ -174,7 +185,7 @@ const CONFIRM_RATE_WINDOW_MS = 60 * 1000;
 // terminal, actionable state instead of leaving "Retry upload" as an
 // endless, always-retryable prompt — see ChunkUploadState.
 // duplicateRaceRetryCount's own comment.
-const DUPLICATE_RACE_RETRY_LIMIT = 3;
+export const DUPLICATE_RACE_RETRY_LIMIT = 3;
 
 // /api/import/preview's own PREVIEW_RATE_WINDOW_MS (src/app/api/import/
 // preview/route.ts) — used as the wait fallback on a 429 that arrives
@@ -443,6 +454,9 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
       if (!response.ok) {
         const code: string | null = body?.error?.code ?? null;
         const message: string = body?.error?.message ?? "Upload failed.";
+        // FINDING 2 (round-11 audit): present only on multiple_live_batches
+        // — see ConflictingBatchInfo's own comment.
+        const conflictingBatches: ConflictingBatchInfo[] | undefined = body?.error?.details?.conflictingBatches;
 
         // WARN 5 (round-9/10 audit): duplicate_race_retry is retryable BY
         // DESIGN — a genuinely transient race the next attempt normally
@@ -466,7 +480,14 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
 
         results = results.map((c) =>
           c.index === chunk.index
-            ? { ...c, status: "failed", error: effectiveMessage, code: effectiveCode, duplicateRaceRetryCount: priorRaceRetryCount }
+            ? {
+                ...c,
+                status: "failed",
+                error: effectiveMessage,
+                code: effectiveCode,
+                duplicateRaceRetryCount: priorRaceRetryCount,
+                conflictingBatches,
+              }
             : c,
         );
         onProgress(results);
@@ -616,6 +637,13 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
       // now-irrelevant conflict snapshot survive into the confirmed state,
       // for no purpose (both fields are read only while status is
       // "failed"/"skipped").
+      //
+      // FINDING 4 (round-11 audit): duplicateRaceRetryCount/conflictingBatches
+      // are reset here too — the field's own contract (see its comment) is
+      // "cleared to 0 whenever it... succeeds," which this used to leave
+      // unfulfilled: a success left the stale count in place, so a LATER
+      // unrelated duplicate_race_retry run on this chunk would start from
+      // whatever count survived the last success instead of 1.
       results = results.map((c) =>
         c.index === chunk.index
           ? {
@@ -626,13 +654,25 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
               code: null,
               sentOverridesSnapshot: undefined,
               duplicateOfChunkIndex: undefined,
+              duplicateRaceRetryCount: 0,
+              conflictingBatches: undefined,
             }
           : c,
       );
       onProgress(results);
     } catch {
+      // FINDING 4 (round-11 audit): a network error is not a
+      // duplicate_race_retry failure — it must reset the counter exactly
+      // like any other non-matching code does (see the priorRaceRetryCount
+      // computation above). This used to spread `...c` unchanged, silently
+      // carrying forward whatever count the LAST duplicate_race_retry run
+      // left behind, so `duplicate_race_retry, duplicate_race_retry,
+      // network error, duplicate_race_retry` wrongly counted as three
+      // consecutive failures instead of resetting after the network error.
       results = results.map((c) =>
-        c.index === chunk.index ? { ...c, status: "failed", error: "Network error.", code: null } : c,
+        c.index === chunk.index
+          ? { ...c, status: "failed", error: "Network error.", code: null, duplicateRaceRetryCount: 0 }
+          : c,
       );
       onProgress(results);
       return {
@@ -752,16 +792,29 @@ export type ConfirmChunkedSessionWithResumeResult = { ok: true } | { ok: false; 
  * response.ok OR the "not_completed"/already-reverted 409 counts as this
  * chunk's cleanup succeeding — both reach the same desired end state, the
  * batch no longer live. Each chunk's OWN outcome decides whether IT resets
- * to "pending" — a chunk whose cleanup already succeeded is NEVER
- * re-attempted again, even while a sibling's cleanup is still outstanding,
- * and that partial progress is reported via onProgress immediately (not
- * only once every chunk clears) so the operator's NEXT retry only ever
- * re-attempts what is genuinely still outstanding. A network-level
- * failure (the `fetch` itself throwing — genuinely ambiguous whether the
- * revert committed) is never assumed to have failed OR succeeded: it's
- * simply left "confirmed" for a later attempt, whose own revert call is
- * itself the re-read — a commit that landed resolves as the idempotent
- * already-reverted success above, and one that didn't simply reverts for
+ * to "pending", independent of whether any OTHER chunk's cleanup succeeded
+ * or failed — a single durably-failing sibling can no longer poison every
+ * other chunk's already-successful cleanup the way the round-8 all-or-
+ * nothing reset did.
+ *
+ * NIT, corrected round-11: an earlier version of this comment claimed a
+ * chunk resets "even while a sibling's cleanup is still outstanding" —
+ * that overstates the concurrency. All per-chunk revert calls are issued
+ * together (`Promise.all`, below), but `cleanedIndexes`/`reconciledUpload`
+ * are built, and onProgress is called, only AFTER every one of them has
+ * settled — so by the time any chunk is actually reset to "pending" and
+ * reported, no sibling's cleanup call is still in flight; every sibling's
+ * outcome (success, idempotent-already-reverted, genuine failure, or
+ * network-ambiguous) is already known. The sequencing is data-safe either
+ * way — this only corrects what the comment claimed about ordering, not
+ * the fix's actual behavior, which was always PER-BATCH independent
+ * outcomes reported together, once, after the batch of cleanup calls
+ * settles. A network-level failure (the `fetch` itself throwing —
+ * genuinely ambiguous whether the revert committed) is never assumed to
+ * have failed OR succeeded: it's simply left "confirmed" for a later
+ * attempt, whose own revert call is itself the re-read — a commit that
+ * landed resolves as the idempotent already-reverted success above, and
+ * one that didn't simply reverts for
  * real. */
 export async function confirmChunkedSessionWithResume(
   params: ConfirmChunkedSessionParams,

@@ -704,6 +704,36 @@ fire that FK action while `apply_status` was still `'applied'`, violating
 `import_batch_rows_applied_has_inventory_id` on the SET NULL cascade
 itself.
 
+## Residuals — known, accepted gaps
+
+**The cross-batch apply race is narrowed, not closed (round-10/round-11
+audit).** `POST /api/import/batches/[id]/apply` runs a read-only guard
+(`findSiblingWithAppliedRows`, `src/domains/import/batch-service.ts`)
+immediately before applying a chunk: if a sibling live batch for the same
+underlying file already has applied rows, this apply is refused. That guard
+and the apply it gates are separate awaits over separate transactions, and
+`apply_import_batch_chunk` (0108) only takes `for update` on its OWN
+batch's `import_batches` row — a sibling batch locks a different row, so
+nothing serializes two sibling applies against each other. Two clients can
+therefore both pass the guard (each sees "no sibling has applied rows yet"
+because neither has committed) and both persist inventory. The guard
+reliably catches the common SEQUENTIAL case — a resumed batch applying
+after a sibling already committed applied rows — but not two applies
+racing simultaneously. Separately, `apply_import_batch_chunk` is `GRANT
+EXECUTE`d directly to `authenticated` (0108), so the route's guard is not a
+security boundary either — any client holding a batch id can call the RPC
+without it. Fully closing this needs an atomic claim, a unique constraint,
+or a shared advisory lock taken *inside* the apply transaction — i.e. a
+migration. Migrations are locked for this change, so the residual is
+accepted rather than fixed here.
+
+**`multiple_live_batches` conflicts are recoverable from the conflict UI**,
+not only from the ten-newest "Recent imports" list — the error payload
+returns every conflicting batch's id, filename, `created_at`, and status,
+and the import client renders a revert affordance per batch directly in
+the conflict state, so a conflict whose batches have aged out of the
+ten-newest window is still fully recoverable.
+
 ## added_via provenance
 
 CSV-imported `inventory_items` rows keep `added_via = 'manual'` rather than

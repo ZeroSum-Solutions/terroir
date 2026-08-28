@@ -42,14 +42,20 @@ async function postApply(params: Params) {
   if (!batch) return Errors.notFound("Import batch");
   const contentSha256 = (batch as { id: string; content_sha256: string | null }).content_sha256;
 
-  // Round-10 audit: apply-time invariant enforcement — reconciliation
-  // (reconcileLiveBatchesForFile, batch-service.ts) no longer has any
-  // authority to revert a rival, so the "at most one applied batch per
-  // underlying file" invariant is enforced HERE instead, immediately
-  // before this chunk is allowed to apply. See findSiblingWithAppliedRows'
-  // own comment for why a read-only guard here can never destroy a
-  // concurrent writer's data, unlike the revert-based enforcement it
-  // replaces.
+  // Round-10 audit, HONESTY-CORRECTED round-11: apply-time guard, NOT
+  // enforcement — reconciliation (reconcileLiveBatchesForFile,
+  // batch-service.ts) no longer has any authority to revert a rival, so
+  // this read-only check runs HERE, immediately before this chunk is
+  // allowed to apply, as the best available narrowing of the "at most one
+  // applied batch per underlying file" invariant. It is NOT a closure of
+  // that invariant: this guard and applyImportBatchChunk below are
+  // separate awaits over separate transactions, so two concurrent applies
+  // to sibling batches can both pass this check and both persist
+  // inventory — see findSiblingWithAppliedRows' own comment for the full
+  // proof and for why closing it needs a migration (locked for this
+  // change). What this DOES guarantee, because it is read-only: it can
+  // only ever REFUSE an apply, never destroy a concurrent writer's data,
+  // unlike the revert-based enforcement it replaces.
   const conflict = await findSiblingWithAppliedRows(supabase, restaurantId, id, contentSha256);
   if (!conflict.ok) return apiError(409, conflict.error.code, conflict.error.message);
   if (conflict.conflictBatchId) {

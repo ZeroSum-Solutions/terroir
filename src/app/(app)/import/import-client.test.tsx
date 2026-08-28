@@ -701,6 +701,136 @@ describe("PreviewStep — multiple_live_batches and duplicate_race_retry_exhaust
   }
 });
 
+// FINDING 3 (round-11 audit): the plain (non-chunked) confirm path used to
+// discard the server error CODE entirely (only the message survived), so
+// hasTerminalReconciliationConflict — derived only from chunkUpload — could
+// never see a plain-path multiple_live_batches or duplicate_race_retry_
+// exhausted failure. "Confirm import" rendered forever, retryable with no
+// bound. plainConfirmErrorCode carries that code through for chunkUpload ===
+// null exactly the way ChunkUploadState.code already does per-chunk.
+describe("PreviewStep — plain (non-chunked) path terminal conflicts are blocked too (round-11 audit finding 3)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+  });
+
+  it("hides Confirm import for a plain-path multiple_live_batches conflict", async () => {
+    const serverMessage = "This file has 2 live import batches for the same underlying content.";
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({ chunkUpload: null, error: serverMessage, plainConfirmErrorCode: "multiple_live_batches" })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
+    expect(container.textContent).toContain(serverMessage);
+  });
+
+  it("hides Confirm import for a plain-path duplicate_race_retry_exhausted conflict", async () => {
+    const escalationMessage =
+      "This upload still conflicts with another live import for this file after 3 attempts — this needs a " +
+      "human to resolve. Revert the conflicting batch under Recent imports before uploading this file again.";
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          chunkUpload: null,
+          error: escalationMessage,
+          plainConfirmErrorCode: "duplicate_race_retry_exhausted",
+        })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
+    expect(container.textContent).toContain(escalationMessage);
+  });
+
+  it("still shows Confirm import for an ordinary retryable plain-path failure (e.g. duplicate_race_retry itself)", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({ chunkUpload: null, error: "Another import attempt is being cleaned up.", plainConfirmErrorCode: "duplicate_race_retry" })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(true);
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+});
+
+// FINDING 2 (round-11 audit): a multiple_live_batches conflict used to name
+// only a candidate COUNT, so the operator's only recourse was finding both
+// conflicting batches by hand in Recent imports — which shows only the ten
+// newest. If both had aged out of that window, the conflict was permanent.
+// The conflict panel renders directly from the `conflictingBatches` prop,
+// entirely independent of any Recent-imports list, so a batch that has aged
+// out of the ten-newest is still fully recoverable here.
+describe("PreviewStep — multiple_live_batches conflict panel offers a revert affordance per batch, not tied to Recent imports (round-11 audit finding 2)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+  });
+
+  it("renders a Revert button per conflicting batch and calls onRevertConflict with the right id", async () => {
+    const conflictingBatches = [
+      { id: "batch-aged-out", filename: "cellar-old.csv", status: "created", created_at: "2020-01-01T00:00:00Z" },
+      { id: "batch-recent", filename: "cellar-old.csv", status: "applying", created_at: "2026-01-01T00:00:00Z" },
+    ];
+    const onRevertConflict = vi.fn();
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          error: "This file has 2 live import batches for the same underlying content.",
+          plainConfirmErrorCode: "multiple_live_batches",
+          conflictingBatches,
+          onRevertConflict,
+        })}
+      />,
+    );
+
+    // Neither batch needs to appear in any "recent" list for this panel to
+    // render them — it is built entirely from the conflictingBatches prop.
+    expect(container.textContent).toContain("cellar-old.csv");
+    const revertButtons = [...container.querySelectorAll("button")].filter((b) => b.textContent?.includes("Revert"));
+    expect(revertButtons).toHaveLength(2);
+
+    await act(async () => revertButtons[0].click());
+    expect(onRevertConflict).toHaveBeenCalledWith("batch-aged-out");
+  });
+
+  it("renders nothing when there is no conflict", async () => {
+    const { container } = await mount(<PreviewStep {...baseProps({ conflictingBatches: [] })} />);
+    expect(container.textContent).not.toContain("Conflicting live imports");
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+});
+
 describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end (round-4 audit finding 2)", () => {
   const mountedRoots: Root[] = [];
 

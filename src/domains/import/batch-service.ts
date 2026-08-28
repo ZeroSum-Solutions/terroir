@@ -100,6 +100,16 @@ export type ConfirmBatchOptions = {
   rowOverrides?: RowOverrides;
 };
 
+/** FINDING 2 (round-11 audit): a multiple_live_batches conflict used to
+ * report only a candidate COUNT — the operator's only way to act on it was
+ * finding every conflicting batch by hand in "Recent imports," which shows
+ * just the ten newest. If both conflicting batches had aged out of that
+ * window, the conflict was permanent and unrecoverable. Carried on the
+ * error itself so the UI can render a revert affordance directly per
+ * conflicting batch, regardless of how far it's aged out of Recent
+ * imports. */
+export type ConflictingBatchInfo = { id: string; filename: string; status: string; created_at: string };
+
 export type ConfirmBatchResult =
   | { ok: true; alreadyExists: false; batchId: string; totalRows: number; summary: ReturnType<typeof summarize> }
   /** P3 §2.2 (C09): the exact bytes (or the same session+chunk_index)
@@ -118,7 +128,7 @@ export type ConfirmBatchResult =
    * identical bytes are a legitimate duplicate segment, never each
    * other's confirmation). */
   | { ok: true; alreadyExists: true; batchId: string; status: string; sessionId: string | null; chunkIndex: number | null; counts: BatchCounts }
-  | { ok: false; error: { code: string; message: string; missingHeaders?: string[] } };
+  | { ok: false; error: { code: string; message: string; missingHeaders?: string[]; conflictingBatches?: ConflictingBatchInfo[] } };
 
 type RowPayload = {
   row_number: number;
@@ -438,18 +448,29 @@ export async function confirmImportBatch(
  * does, never the old, distinct duplicate_check_failed code — see the
  * proof below for why that convergence is correct, not merely convenient.
  *
- * FAILURE-ATOMICITY, corrected (round-6 finding 1, then round-7 finding 1):
- * an earlier version of this comment (and confirmImportBatch's own) claimed
- * the invariant this file maintains is "at most one live batch [for a given
- * underlying file] at any time." That claim is FALSE once a revert can
- * itself fail — a double revert-failure here leaves BOTH our own
- * just-created batch (B) and the rival it lost to (A) live simultaneously,
- * and there is no further retry budget past the one above to close that
- * gap. The TRUE invariant this file actually guarantees — the only one
- * that ever mattered — is narrower: at most one live batch is ever APPLIED
- * per underlying file. A revert-failure can orphan an unapplied live
- * batch, but that orphan is inert garbage, not a correctness hazard, and
- * it is resumable only after its survivor is reverted. Proof:
+ * FAILURE-ATOMICITY, corrected again (round-6 finding 1, round-7 finding 1,
+ * then HONESTY-CORRECTED round-10/round-11): earlier versions of this
+ * comment claimed the invariant this file maintains is "at most one live
+ * batch [for a given underlying file] at any time," then narrowed that
+ * (round-7) to "at most one live batch is ever APPLIED per underlying
+ * file," with points 3-4 below describing reconciliation as actively
+ * choosing a survivor and reverting every other live candidate to make
+ * that hold. Round 10 deleted that authority entirely — see
+ * reconcileLiveBatchesForFile's own comment: it now NEVER calls
+ * revertImportBatch, only reads and reports. With 0 or 1 live candidates
+ * it resumes the match; with 2 or more it returns a terminal
+ * multiple_live_batches error naming every candidate and leaves ALL of
+ * them live — recovery is an operator reverting by hand from Recent
+ * imports (FINDING 2 makes every conflicting batch id reachable there,
+ * not just the ten newest). So neither older claim holds any more: this
+ * file does not guarantee at most one live batch, and does not guarantee
+ * at most one applied batch either — that would-be guarantee is what
+ * findSiblingWithAppliedRows' own comment now documents as a NARROWED
+ * race, not a closed one (0108 locks only its own batch's row; two
+ * sibling applies can still both pass that guard and both persist
+ * inventory).
+ *
+ * What THIS function's own failure mode actually leaves behind:
  *   1. Applying a batch requires a CLIENT holding that batch's own id (the
  *      apply endpoint is called with a specific batchId) — apply is never
  *      driven by a server-side scan that could stumble onto B on its own.
@@ -458,57 +479,29 @@ export async function confirmImportBatch(
  *      `{ ok: true, batchId: B }`), so no client anywhere holds a pointer
  *      to B. B can only ever be reached later via a DIFFERENT confirm's
  *      own pre-check (point 3, below) — never by the request that created it.
- *   3. CORRECTED (round-7 finding 1): an earlier version of this point
- *      claimed any future upload of the SAME underlying file "resumes the
- *      OLDEST live batch for it... A — already committed by the time B's
- *      post-check ran and lost — is essentially always the older of the
- *      two, so an ordinary resume keeps landing on A." That is FALSE:
- *      created_at is INSERT-transaction-START time, not commit order (the
- *      same round-4 finding that motivated SEER-YIELDS in the first
- *      place), so the batch that actually LOST the race (and orphaned
- *      itself here) can easily have an OLDER created_at than the rival it
- *      lost to — a plain oldest-first resume would then hand a brand-new
- *      client the orphan while the rival's own original client, holding
- *      the rival's batchId directly from its own successful confirm
- *      response, independently applies it: two applied batches for one
- *      file. Any future upload of the SAME underlying file now instead
- *      RECONCILES among every live candidate (reconcileLiveBatchesForFile)
- *      rather than blindly resuming the oldest: it targets whichever
- *      candidate already has an applied row — direct evidence a client is,
- *      or was, actively applying it, i.e. the real survivor — and only
- *      falls back to oldest-first when NOTHING has been applied to any
- *      candidate yet (the ordinary case this point originally described,
- *      where oldest-vs-newest is moot since neither has an original client
- *      mid-apply). Every other live candidate is best-effort self-reverted
- *      as part of that same reconciliation pass.
- *   4. CORRECTED (round-7 finding 1): B is therefore reached not only when
- *      A is later reverted directly, but whenever ANY future resume for
- *      this file runs reconciliation — which best-effort reverts every
- *      live candidate except its chosen target. If A (unapplied) is the
- *      one reconciliation targets, B gets reverted by that same pass and
- *      stays gone. If B ends up targeted instead (e.g. A had no applied
- *      rows and lost the oldest-first tiebreak), A gets reverted by that
- *      pass, and a client that subsequently applies B is importing data
- *      that exists nowhere else — B's own, never-previously-applied rows
- *      landing exactly once, after their only live competitor was
- *      explicitly withdrawn by the SAME reconciliation call that chose B —
- *      never a duplicate, and never split across two separate operator
- *      actions the way the old "wait for someone to revert A by hand"
- *      story required.
- * A revert-failure orphan can therefore, at worst, sit inert until the next
- * resume's own reconciliation pass reaches it; it can never cause the same
- * underlying content to be APPLIED twice, because reconciliation only ever
- * leaves ONE live candidate standing before handing out a resume pointer
- * (see reconcileLiveBatchesForFile's own comment for the narrow, honestly-
- * stated residual: two candidates BOTH reaching genuinely-applied status
- * before any reconcile pass ever runs). That is what makes "retry once,
- * then report the same retryable outcome either way" the correct fix
- * rather than a compromise: unlike the old duplicate_check_failed branch
+ *   3. A revert-failure here leaves B live alongside whatever rival (A)
+ *      it lost to. The NEXT confirm attempt for the SAME underlying file,
+ *      by any client, re-enters reconcileLiveBatchesForFile's pre-check,
+ *      which now sees 2 (or more) live candidates for the file and
+ *      returns the terminal multiple_live_batches conflict — it does NOT
+ *      pick a survivor or revert anything automatically. B does not
+ *      resolve itself; an operator has to revert it (or A) by hand.
+ * A revert-failure orphan is still not, by itself, a data hazard: no
+ * client anywhere holds a pointer to B (points 1-2), and reconciliation
+ * only ever hands out a resume pointer when a single live candidate
+ * remains, so a revert-failure alone cannot cause the same underlying
+ * content to be applied twice. (The distinct hazard that CAN do that —
+ * two sibling batches both applying concurrently — is the narrower race
+ * findSiblingWithAppliedRows' own comment documents; it is unrelated to
+ * whether a self-revert here succeeded.) That is what makes "retry once,
+ * then report the same retryable outcome either way" still the right
+ * shape for THIS function: unlike the old duplicate_check_failed branch
  * (which existed only because a live-but-unverified batch felt unsafe to
  * treat like an ordinary duplicate), there is no unsafe state left to
- * signal separately — a failed revert produces exactly the same class of
- * outcome (an inert, resumable orphan) as a successful one, so the caller
- * gets exactly the same instruction either way: retry the upload. */
+ * signal separately here — a failed revert produces an inert orphan
+ * needing manual cleanup, same as a successful one produces nothing to
+ * clean up; the caller gets the same instruction either way: retry the
+ * upload (and, if that now reports a conflict, revert the duplicate). */
 async function selfRevertAndRetry(
   supabase: SupabaseClient<Database>,
   batchId: string,
@@ -543,7 +536,8 @@ async function selfRevertAndRetry(
       message: reverted
         ? "This upload raced with a duplicate confirm of the same file, and both attempts were withdrawn to avoid a conflict. Please retry the upload."
         : "This upload raced with a duplicate confirm of the same file and could not be fully withdrawn on this " +
-          "attempt — it is safely inert and will be resumed automatically on your next retry. Please retry the upload.",
+          "attempt. It is safely inert, but will not resolve itself — retrying may report a conflict with the " +
+          "other duplicate, which you can then revert from Recent imports. Please retry the upload.",
     },
   };
 }
@@ -737,11 +731,12 @@ type LiveBatchMatch = {
   chunk_index: number | null;
   content_sha256: string | null;
   created_at: string;
+  filename: string;
 };
 
 type FindLiveBatchResult =
   | { ok: true; match: LiveBatchMatch | null }
-  | { ok: false; error: { code: string; message: string } };
+  | { ok: false; error: { code: string; message: string; conflictingBatches?: ConflictingBatchInfo[] } };
 
 /** Sol round-3 audit (2026-08-27) finding 6: the DB query below can only
  * express "contains fileDigestHex as a LIKE match," which also matches a
@@ -820,7 +815,7 @@ function extractFileDigestHex(contentSha256: string): string | null {
  * was wrong). */
 type FindLiveBatchesResult =
   | { ok: true; matches: LiveBatchMatch[] }
-  | { ok: false; error: { code: string; message: string } };
+  | { ok: false; error: { code: string; message: string; conflictingBatches?: ConflictingBatchInfo[] } };
 
 /** Round-7 audit finding 1: the plural form — every well-formed live
  * candidate for the file, oldest-first, not just the first one. Split out
@@ -852,7 +847,7 @@ async function findLiveBatchesByUnderlyingFile(
 
   let query = supabase
     .from("import_batches")
-    .select("id, status, session_id, chunk_index, content_sha256, created_at")
+    .select("id, status, session_id, chunk_index, content_sha256, created_at, filename")
     .eq("restaurant_id", restaurantId)
     .neq("status", "reverted")
     .or(`content_sha256.eq.${fileDigestHex},content_sha256.like.${OVERRIDES_DIGEST_PREFIX}%:${fileDigestHex}`);
@@ -974,14 +969,19 @@ async function findLiveBatchByUnderlyingFile(
   return { ok: true, match: result.matches[0] ?? null };
 }
 
-/** Round-10 audit: THE INVARIANT AND WHERE IT IS ENFORCED.
+/** Round-10 audit, HONESTY-CORRECTED round-11: THE INVARIANT AND WHERE IT
+ * IS (NOT FULLY) ENFORCED.
  *
- * "At most one applied batch per underlying file" is enforced ONLY at
- * APPLY TIME now, by findSiblingWithAppliedRows (below, used by the apply
- * route) — never here. Nine rounds of audits (rounds 4-9) kept finding
- * fresh races in giving THIS function — a resume/confirm-time lookup —
- * authority to REVERT a rival: round-8 fixed a best-effort revert that
- * silently swallowed failures; round-9 (BLOCK 1) then found that even the
+ * "At most one applied batch per underlying file" is NOT enforced anywhere
+ * in this codebase — see findSiblingWithAppliedRows' own comment for the
+ * proof that its apply-time guard only narrows the window and cannot close
+ * it (0108 locks only its own batch's row; two sibling applies can still
+ * both pass the guard and both persist inventory). This function
+ * (reconcileLiveBatchesForFile) never enforced it either, before or after
+ * round 10 — it is a resume/confirm-time lookup. Nine rounds of audits
+ * (rounds 4-9) kept finding fresh races in giving THIS function authority
+ * to REVERT a rival: round-8 fixed a best-effort revert that silently
+ * swallowed failures; round-9 (BLOCK 1) then found that even the
  * fail-closed version was TOCTOU — a rival can acquire the apply lock and
  * create genuinely-applied rows in the gap between this function's own
  * applied/unapplied snapshot and its revert call, and the revert then
@@ -1022,8 +1022,17 @@ async function reconcileLiveBatchesForFile(
       code: "multiple_live_batches",
       message:
         `This file has ${candidates.length} live import batches for the same underlying content — this can't ` +
-        "be resolved automatically. Revert all but one of them from Recent imports before resuming or " +
-        "re-uploading this file.",
+        "be resolved automatically. Revert all but one of them below before resuming or re-uploading this file.",
+      // FINDING 2 (round-11 audit): every candidate's id/filename/status/
+      // created_at, not just the count — see ConflictingBatchInfo's own
+      // comment for why this makes the conflict recoverable regardless of
+      // whether either batch is still in the ten-newest Recent imports list.
+      conflictingBatches: candidates.map((c) => ({
+        id: c.id,
+        filename: c.filename,
+        status: c.status,
+        created_at: c.created_at,
+      })),
     },
   };
 }
@@ -1106,17 +1115,43 @@ export type SiblingAppliedConflictCheck =
   | { ok: true; conflictBatchId: string | null }
   | { ok: false; error: { code: string; message: string } };
 
-/** Round-10 audit: the real enforcement point for "at most one applied
- * batch per underlying file" — see reconcileLiveBatchesForFile's own
+/** Round-10 audit, HONESTY-CORRECTED round-11: this NARROWS the cross-
+ * batch apply race — it does NOT close it, and it is not "the real
+ * enforcement point" for "at most one applied batch per underlying file."
+ * No enforcement point for that invariant currently exists.
+ *
+ * This is a pure READ, in its own transaction, run immediately before a
+ * chunk is allowed to apply — see reconcileLiveBatchesForFile's own
  * comment for why that resume-time function no longer has any destructive
- * authority. This is a pure READ run immediately before a chunk is allowed
- * to apply: no matter how two concurrent applies interleave around it, it
- * can only ever REFUSE an apply, never destroy a concurrent writer's
- * already-applied rows — worst case it refuses an apply that would
- * actually have been fine, never the reverse. That is exactly the property
- * the old revert-based enforcement (BLOCK 1, round-9 audit) lacked: a
- * rival could acquire the apply lock and create genuinely-applied rows in
- * the gap between a snapshot and a revert call built from it.
+ * authority. Because it is read-only, it has the one property the old
+ * revert-based enforcement (BLOCK 1, round-9 audit) lacked: no matter how
+ * two concurrent applies interleave around it, it can only ever REFUSE an
+ * apply, never destroy a concurrent writer's already-applied rows.
+ *
+ * But this guard and the apply it gates (applyImportBatchChunk, via the
+ * apply route) are separate awaits over separate transactions — there is
+ * no lock spanning both. apply_import_batch_chunk (0108) only takes
+ * `for update` on ITS OWN batch's import_batches row before inserting
+ * inventory and marking rows applied; a sibling batch locks a DIFFERENT
+ * row, so nothing serializes two sibling applies against each other. Two
+ * clients can therefore both run this guard, both see "no sibling has
+ * applied rows yet" (because neither has committed), and both proceed to
+ * apply — both persist inventory. This function catches the common
+ * SEQUENTIAL case (a resumed batch applying after a sibling already
+ * committed applied rows); it does not catch two applies racing
+ * simultaneously.
+ *
+ * Separately, apply_import_batch_chunk is GRANTed EXECUTE to `authenticated`
+ * directly (0108, bottom) — any client holding a batch id can call the RPC
+ * without ever going through this route, so this guard is not a security
+ * boundary either, only a best-effort check the route happens to run.
+ *
+ * Fully closing this requires an atomic claim, unique constraint, or
+ * shared advisory lock taken INSIDE the apply transaction (0108) — i.e. a
+ * migration. Migrations were locked for this change, so that fix is not
+ * made here; this guard is kept because it is a pure read that can only
+ * ever refuse, and it is a real improvement for the realistic sequential
+ * case even though it leaves the simultaneous race open.
  *
  * A sibling counts as a conflict only once it has an ACTUAL applied row —
  * the same "applied rows are the strongest signal a client is/was really
