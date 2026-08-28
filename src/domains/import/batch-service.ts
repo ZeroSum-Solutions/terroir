@@ -594,10 +594,18 @@ async function selfRevertAndRetry(
       code: "duplicate_race_retry",
       message: reverted
         ? "This upload raced with a duplicate confirm of the same file, and both attempts were withdrawn to avoid a conflict. Please retry the upload."
+        // FINDING 5 (round-15 audit): the old wording claimed any member of
+        // this restaurant can "already open" the orphan from Recent
+        // imports — but that list is a client-cached ten-newest window
+        // (import-client.tsx's RecentImports) that is NOT refreshed on
+        // this confirm-error path, so the orphan may not be showing there
+        // at all yet, or ever, if it's aged out. What's actually true and
+        // reachable: retrying surfaces the conflict panel directly (round-
+        // 11 audit finding 2), which offers a Revert button for the named
+        // batch regardless of Recent imports.
         : "This upload raced with a duplicate confirm of the same file and could not be fully withdrawn on this " +
-          "attempt. It will not resolve itself, and any member of this restaurant can already open it from Recent " +
-          "imports — retrying may report a conflict with the other duplicate, which you can then revert from " +
-          "Recent imports. Please retry the upload.",
+          "attempt. It will not resolve itself — retrying will report a conflict with the other duplicate, and the " +
+          "conflict panel that appears offers a Revert button for it directly. Please retry the upload.",
     },
   };
 }
@@ -874,7 +882,7 @@ function extractFileDigestHex(contentSha256: string): string | null {
  * the round-4 SEER-YIELDS fix for why timestamp-based survivor election
  * was wrong). */
 type FindLiveBatchesResult =
-  | { ok: true; matches: LiveBatchMatch[] }
+  | { ok: true; matches: LiveBatchMatch[]; rawReadHitCap: boolean }
   | { ok: false; error: { code: string; message: string; conflictingBatches?: ConflictingBatchInfo[] } };
 
 /** Round-7 audit finding 1: the plural form — every well-formed live
@@ -962,7 +970,16 @@ async function findLiveBatchesByUnderlyingFile(
     };
   }
 
-  return { ok: true, matches };
+  // FINDING 4 (round-15 audit): whether the RAW read (before the
+  // well-formed-digest filter above) came back at the cap — the only
+  // honest signal for "more candidates may exist beyond what this lookup
+  // saw." reconcileLiveBatchesForFile used to test `matches.length ===
+  // LIVE_BATCH_LOOKUP_LIMIT` instead, which is wrong: 20 raw rows with 19
+  // well-formed and 1 malformed produces matches.length === 19, silently
+  // hiding the "more may exist beyond the cap" signal even though the READ
+  // itself hit the limit and a genuine 21st candidate could be sitting
+  // just past it, unseen.
+  return { ok: true, matches, rawReadHitCap: rows.length === LIVE_BATCH_LOOKUP_LIMIT };
 }
 
 /** Sol round-2/3 audit (2026-08-27) findings 2/3/4/6: finds the OLDEST live
@@ -1081,8 +1098,16 @@ async function reconcileLiveBatchesForFile(
   // exactly at that cap, there is no way to tell "exactly this many exist"
   // from "more exist beyond the cap," so the count is stated as a lower
   // bound rather than an exact, possibly-false "every conflicting batch"
-  // claim.
-  const candidateCountMayBeTruncated = candidates.length === LIVE_BATCH_LOOKUP_LIMIT;
+  // claim. FINDING 4 (round-15 audit): the signal is `listed.rawReadHitCap`
+  // — whether the RAW read hit the cap, before format-filtering — not
+  // `candidates.length === LIVE_BATCH_LOOKUP_LIMIT`. The two diverge
+  // whenever malformed rows are mixed into the raw read: 20 raw rows with
+  // 19 well-formed and 1 malformed reads exactly at the cap (a 21st,
+  // well-formed candidate could be sitting just past it, unseen) but
+  // candidates.length is 19, which the old check treated as "definitely not
+  // truncated" — reporting an exact "19 live import batches" that
+  // contradicts this function's own runbook-documented cap paragraph.
+  const candidateCountMayBeTruncated = listed.rawReadHitCap;
 
   return {
     ok: false,

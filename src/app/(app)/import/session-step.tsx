@@ -9,8 +9,15 @@
 //
 // Deliberately duplicates import-client.tsx's tiny SummaryStat/status-chip
 // markup (identical classes — see DESIGN.md's "one StatusChip pattern"
-// contract) rather than importing them, so this file and import-client.tsx
-// never import from each other in both directions.
+// contract) rather than importing them, so this file never has a RUNTIME
+// import edge back to import-client.tsx. FINDING 7 (round-15 audit):
+// ConflictingBatchInfo and parseConflictingBatches — needed by both files —
+// live in ./conflicting-batches, a neutral module neither owns; importing
+// parseConflictingBatches back from import-client.tsx (as this file used to)
+// was a genuine cycle, not merely a stylistic one, since import-client.tsx
+// itself imports several values from here. The BatchRow/ErrorRowEntry/
+// RowOverrides imports below are `import type` only — erased before either
+// file's module graph exists at runtime — so they create no cycle.
 
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
@@ -18,8 +25,8 @@ import { ActionDialog } from "@/components/action-dialog";
 import { CLIENT_CHUNK_TARGET_ROWS, type CanonicalHeader } from "@/domains/import/constants";
 import { buildChunkPlan, serializeChunk, sha256HexOfBytes } from "@/domains/import/csv-splitter";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
-import { parseConflictingBatches } from "./import-client";
-import type { BatchRow, ConflictingBatchInfo, ErrorRowEntry, RowOverrides } from "./import-client";
+import { parseConflictingBatches, type ConflictingBatchInfo } from "./conflicting-batches";
+import type { BatchRow, ErrorRowEntry, RowOverrides } from "./import-client";
 
 // ---------------------------------------------------------------------------
 // Chunk plan / upload state, and the pure functions that drive the two

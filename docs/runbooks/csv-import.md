@@ -729,14 +729,19 @@ accepted rather than fixed here.
 
 **`multiple_live_batches` conflicts are recoverable from the conflict UI**,
 not only from the ten-newest "Recent imports" list — the error payload
-returns every conflicting batch's id, filename, `created_at`, and status,
-and the import client renders a revert affordance per batch directly in
-the conflict state, so a conflict whose batches have aged out of the
-ten-newest window is still fully recoverable. Reverting the LAST named
-candidate now also clears the terminal `multiple_live_batches` code on
-both the plain and chunked paths (round-13 audit, BLOCK 1) — the panel
-used to remove the batch from the list but leave Confirm/Retry hidden and
-the stale error on screen, which was not a working recovery path.
+returns each conflicting batch's id, filename, `created_at`, and status (up
+to the cap described below), and the import client renders a revert
+affordance per batch directly in the conflict state, so a conflict whose
+batches have aged out of the ten-newest window is still recoverable, up to
+that cap. Reverting down to ONE remaining candidate clears the terminal
+`multiple_live_batches` code on both the plain and chunked paths (round-15
+audit, finding 1) — mirroring `reconcileLiveBatchesForFile`'s own resolved
+threshold (`candidates.length <= 1`, not `=== 0`): with two real
+candidates, reverting one already resolves the server-side conflict, so the
+panel stops offering a revert button for the last-standing candidate — it's
+the batch the operator is meant to keep. Before this fix, the panel
+required the list to be fully empty before restoring Confirm/Retry, which
+pushed the operator to needlessly revert the survivor too.
 
 **The conflicting-batches list is capped, not exhaustive (WARN 5,
 round-13 audit).** `findLiveBatchesByUnderlyingFile`

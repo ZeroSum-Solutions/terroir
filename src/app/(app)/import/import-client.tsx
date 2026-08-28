@@ -33,6 +33,7 @@ import {
   type ChunkedPreviewState,
   type ChunkUploadState,
 } from "./session-step";
+import { parseConflictingBatches, type ConflictingBatchInfo } from "./conflicting-batches";
 
 /** One error row's worth of prefill text for the inline row-fix form —
  * the exact text the row was validated against, for every canonical
@@ -126,6 +127,56 @@ export function undoSkipChunk(upload: ChunkUploadState[], index: number): ChunkU
   return upload.map((c) => (c.index === index && c.status === "skipped" ? { ...c, status: "failed" } : c));
 }
 
+/** FINDING 1 (round-15 audit): the server's own resolved threshold —
+ * reconcileLiveBatchesForFile (batch-service.ts) treats `candidates.length
+ * <= 1` as nothing left to reconcile, not `=== 0`. With two real
+ * candidates, reverting ONE already resolves the conflict server-side. A
+ * single source (one chunk's own conflictingBatches, or the plain path's
+ * confirmConflictingBatches) is "resolved" the moment it's down to at most
+ * one candidate — mirrored here exactly, including for a list that somehow
+ * arrives already at length <= 1 (the server never emits multiple_live_batches
+ * for that case, but if it ever did, this stays coherent rather than
+ * blocking on a conflict that has nothing left to resolve). */
+export function isConflictSourceResolved(conflictingBatches: ConflictingBatchInfo[] | undefined | null): boolean {
+  return (conflictingBatches?.length ?? 0) <= 1;
+}
+
+/** FINDING 1 (round-15 audit): the candidates from ONE source (a chunk's own
+ * conflictingBatches, or the plain path's) actually worth offering a revert
+ * button for — empty once that source is resolved (isConflictSourceResolved
+ * above). Once a source is down to one candidate, that lone survivor is the
+ * batch the operator is meant to KEEP: offering it a Revert button too is
+ * exactly how an operator following the UI ends up reverting BOTH
+ * candidates of a two-candidate conflict, needlessly destroying an
+ * `applying`/`completed` survivor's inventory. A batch that's the resolved
+ * survivor of ONE source but still an active (>1) candidate of a DIFFERENT
+ * source is still offered via that other source — reverting it from there
+ * is a legitimate, still-live conflict, untouched by the first source's own
+ * resolution. */
+export function unresolvedConflictCandidates(list: ConflictingBatchInfo[] | undefined): ConflictingBatchInfo[] {
+  return isConflictSourceResolved(list) ? [] : (list as ConflictingBatchInfo[]);
+}
+
+/** FINDING 1 (round-15 audit): applies one conflict-panel revert's result to
+ * a chunked upload's per-chunk conflict state — mirrors the transform
+ * handleRevertConflict runs on chunkUpload, extracted as a pure function so
+ * the CHUNK path's boundary (the resolved threshold is ONE remaining, not
+ * zero — isConflictSourceResolved above) can be pinned directly against
+ * mixed sources, without driving a full chunked upload through the
+ * network. Only a chunk whose OWN conflictingBatches list is now resolved
+ * has its terminal multiple_live_batches code cleared; a chunk that still
+ * has two or more remaining candidates is left exactly as failed as it was,
+ * even though the reverted batch may also have appeared in its list. */
+export function applyRevertToChunkUpload(chunkUpload: ChunkUploadState[], revertedBatchId: string): ChunkUploadState[] {
+  return chunkUpload.map((c) => {
+    if (!c.conflictingBatches) return c;
+    const remaining = c.conflictingBatches.filter((b) => b.id !== revertedBatchId);
+    return c.code === "multiple_live_batches" && isConflictSourceResolved(remaining)
+      ? { ...c, conflictingBatches: remaining, code: null, error: null }
+      : { ...c, conflictingBatches: remaining };
+  });
+}
+
 const FIELD_LABELS: Record<CanonicalHeader, string> = {
   producer: "Producer",
   name: "Name",
@@ -167,44 +218,13 @@ export type BatchRow = {
 
 export type BatchDetail = { batch: BatchSummary; rows: BatchRow[] };
 
-/** FINDING 2 (round-11 audit): mirrors batch-service.ts's own
- * ConflictingBatchInfo — carried on a multiple_live_batches error's
- * `details.conflictingBatches` so the conflict UI can render a revert
- * affordance per candidate directly, rather than relying on the batch
- * still being in the ten-newest Recent imports list. */
-export type ConflictingBatchInfo = { id: string; filename: string; status: string; created_at: string };
-
-/** NIT 7 (round-13 audit): conflictingBatches arrives over the wire inside
- * a 422 error body's `details` and used to be trusted through a bare `as`/
- * type-annotation assertion — a malformed entry (any external response
- * shape drift, a proxy/CDN rewriting the body, etc.) could crash the
- * merge/dedup logic in ImportClient (the `.filter`/`.findIndex` calls
- * building `conflictingBatches`) or the revert list's `key` prop. Validated
- * at the boundary the same way this codebase validates other external
- * input — a small hand-written type guard, matching batch-service.ts's own
- * style (e.g. isWellFormedDigestForFile) rather than pulling a schema
- * library into this client bundle for one shape. Malformed entries are
- * dropped, never allowed to crash the UI. */
-function isConflictingBatchInfo(value: unknown): value is ConflictingBatchInfo {
-  if (!value || typeof value !== "object") return false;
-  const v = value as Record<string, unknown>;
-  return (
-    typeof v.id === "string" &&
-    typeof v.filename === "string" &&
-    typeof v.status === "string" &&
-    typeof v.created_at === "string"
-  );
-}
-
-/** Returns `undefined` when `value` isn't an array at all (the field was
- * simply absent — every non-multiple_live_batches error), matching the
- * shape callers already expect for "no conflicting batches were reported."
- * When it IS an array, malformed entries are filtered out rather than
- * propagated. */
-export function parseConflictingBatches(value: unknown): ConflictingBatchInfo[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  return value.filter(isConflictingBatchInfo);
-}
+// FINDING 7 (round-15 audit): ConflictingBatchInfo and parseConflictingBatches
+// now live in ./conflicting-batches, a neutral module — session-step.tsx
+// needs parseConflictingBatches as a runtime value too, and importing it
+// back from here (as it used to) was a real import cycle. Re-exported so
+// every existing caller of "./import-client" keeps working unchanged.
+export type { ConflictingBatchInfo } from "./conflicting-batches";
+export { parseConflictingBatches } from "./conflicting-batches";
 
 type Step = "upload" | "preview" | "batch" | "session";
 
@@ -562,7 +582,14 @@ export function ImportClient() {
         // failures; any other code resets it to 0.
         const priorRaceRetryCount = code === "duplicate_race_retry" ? confirmDuplicateRaceRetryCount + 1 : 0;
         const exhausted = code === "duplicate_race_retry" && priorRaceRetryCount >= DUPLICATE_RACE_RETRY_LIMIT;
-        const effectiveCode = exhausted ? "duplicate_race_retry_exhausted" : code;
+        // FINDING 1 (round-15 audit): defensive coherence — the server
+        // never emits multiple_live_batches with at most one candidate
+        // (reconcileLiveBatchesForFile's own threshold), but if a response
+        // ever arrived that way, treating it as an unresolved terminal
+        // block would be wrong: isConflictSourceResolved is the same
+        // threshold the revert-driven clearing below uses.
+        const conflictAlreadyResolved = code === "multiple_live_batches" && isConflictSourceResolved(conflictingBatches);
+        const effectiveCode = exhausted ? "duplicate_race_retry_exhausted" : conflictAlreadyResolved ? null : code;
         const effectiveMessage = exhausted
           ? `This upload still conflicts with another live import for this file after ${priorRaceRetryCount} ` +
             "attempts — this needs a human to resolve. Revert the conflicting batch under Recent imports before " +
@@ -698,6 +725,19 @@ export function ImportClient() {
     [chunkedPreview],
   );
 
+  // BLOCK 2 (round-13 audit): the cleanup counts/warning flags a successful
+  // conflict-panel revert reports — discarded entirely before that fix.
+  // Keyed by insertion order (not just batch id) so reverting more than one
+  // conflicting batch in the same preview session shows every outcome, not
+  // just the latest; rendered with the SAME summarizeRevertResult copy
+  // BatchStep's own success panel uses. Declared here (ahead of reset,
+  // which clears it — FINDING 3, round-15 audit) rather than down with the
+  // rest of the conflict-revert state below, purely so reset's own
+  // useCallback can reference its setter without a forward reference.
+  const [conflictRevertOutcomes, setConflictRevertOutcomes] = useState<
+    { id: string; filename: string; result: RevertResult }[]
+  >([]);
+
   const reset = useCallback(() => {
     setStep("upload");
     setFile(null);
@@ -713,6 +753,13 @@ export function ImportClient() {
     setSessionId(null);
     setSessionLabel("cellar.csv");
     setRowOverrides({});
+    // FINDING 3 (round-15 audit): reset() cleared every other piece of
+    // conflict state (confirmConflictingBatches above) but never this one
+    // — a successful conflict-panel revert's cleanup outcome would survive
+    // into the NEXT file's preview, rendering the PREVIOUS file's cleanup
+    // result (conflictRevertOutcomes renders independently of an active
+    // conflict, so nothing else was clearing it).
+    setConflictRevertOutcomes([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
@@ -722,9 +769,17 @@ export function ImportClient() {
   // merged and de-duplicated by id so the conflict panel below always
   // shows every distinct candidate exactly once, regardless of which path
   // reported it.
+  //
+  // FINDING 1 (round-15 audit): only UNRESOLVED sources contribute
+  // (unresolvedConflictCandidates — empty once a source is down to at most
+  // one candidate), so a source's lone surviving candidate — the batch the
+  // operator is meant to keep — is never offered a revert button, even
+  // though a DIFFERENT, still-unresolved source naming that same batch id
+  // would still offer it (mixed-source case: each source's own list
+  // decides its own resolution independently).
   const [revertingConflictId, setRevertingConflictId] = useState<string | null>(null);
-  const chunkConflictingBatches = (chunkUpload ?? []).flatMap((c) => c.conflictingBatches ?? []);
-  const conflictingBatches = [...confirmConflictingBatches, ...chunkConflictingBatches].filter(
+  const chunkConflictingBatches = (chunkUpload ?? []).flatMap((c) => unresolvedConflictCandidates(c.conflictingBatches));
+  const conflictingBatches = [...unresolvedConflictCandidates(confirmConflictingBatches), ...chunkConflictingBatches].filter(
     (b, index, all) => all.findIndex((other) => other.id === b.id) === index,
   );
 
@@ -738,14 +793,6 @@ export function ImportClient() {
   // already uses — the actual network call is handleRevertConflict below,
   // wired to the dialog's onConfirm.
   const [conflictRevertTarget, setConflictRevertTarget] = useState<ConflictingBatchInfo | null>(null);
-  // BLOCK 2: the cleanup counts/warning flags a successful revert reports —
-  // discarded entirely before this fix. Keyed by insertion order (not just
-  // batch id) so reverting more than one conflicting batch in the same
-  // preview session shows every outcome, not just the latest; rendered with
-  // the SAME summarizeRevertResult copy BatchStep's own success panel uses.
-  const [conflictRevertOutcomes, setConflictRevertOutcomes] = useState<
-    { id: string; filename: string; result: RevertResult }[]
-  >([]);
 
   const requestRevertConflict = useCallback((batch: ConflictingBatchInfo) => {
     setConflictRevertTarget(batch);
@@ -785,42 +832,38 @@ export function ImportClient() {
       // Drop the now-resolved batch from wherever it's tracked so the
       // affordance disappears the instant the desired end state is
       // confirmed — the operator can then retry the confirm/upload.
+      //
+      // FINDING 1 (round-15 audit): a SOURCE is resolved once its own list
+      // is down to at most one candidate (isConflictSourceResolved), not
+      // once it's fully empty — matching the server's own
+      // reconcileLiveBatchesForFile threshold. applyRevertToChunkUpload
+      // applies that exact threshold per chunk.
       const nextConfirmConflicts = confirmConflictingBatches.filter((b) => b.id !== batchId);
-      const nextChunkUpload =
-        chunkUpload?.map((c) => {
-          if (!c.conflictingBatches) return c;
-          const remaining = c.conflictingBatches.filter((b) => b.id !== batchId);
-          // BLOCK 1: once THIS chunk's own conflict list is exhausted,
-          // clear its terminal multiple_live_batches code too — the chunk
-          // stays "failed" (so "Retry upload" is still the right label)
-          // but is no longer TERMINALLY failed, restoring Confirm/Retry.
-          // Only clears once this chunk's own candidate list is fully
-          // empty — a remaining candidate means this chunk's confirm would
-          // still hit the identical conflict.
-          return c.code === "multiple_live_batches" && remaining.length === 0
-            ? { ...c, conflictingBatches: remaining, code: null, error: null }
-            : { ...c, conflictingBatches: remaining };
-        }) ?? chunkUpload;
+      const nextChunkUpload = chunkUpload ? applyRevertToChunkUpload(chunkUpload, batchId) : chunkUpload;
 
       setConfirmConflictingBatches(nextConfirmConflicts);
       setChunkUpload(nextChunkUpload);
       // BLOCK 1: same clearing for the plain (non-chunked) path's own
-      // terminal code.
-      if (nextConfirmConflicts.length === 0 && confirmErrorCode === "multiple_live_batches") {
+      // terminal code. FINDING 1 (round-15 audit): threshold is "at most
+      // one remaining", not "zero remaining".
+      if (isConflictSourceResolved(nextConfirmConflicts) && confirmErrorCode === "multiple_live_batches") {
         setConfirmErrorCode(null);
         setConfirmDuplicateRaceRetryCount(0);
       }
       // BLOCK 1: dismiss the stale error message once every known conflict
-      // source is clear — leaving it on screen after Confirm/Retry has
+      // source is resolved — leaving it on screen after Confirm/Retry has
       // already come back would tell the operator they're still stuck when
       // they aren't. Safe to clear unconditionally here: conflictingBatches
       // is populated ONLY by a multiple_live_batches failure (see
       // ConflictingBatchInfo's own comment), so previewError can only be
       // holding THAT failure's own message while this panel is even
-      // rendered — never an unrelated error.
+      // rendered — never an unrelated error. FINDING 1 (round-15 audit):
+      // "resolved" is the same at-most-one-remaining threshold as above,
+      // per source — a source that never had a conflict (conflictingBatches
+      // undefined) counts as resolved too.
       const stillBlocked =
-        nextConfirmConflicts.length > 0 ||
-        (nextChunkUpload?.some((c) => (c.conflictingBatches?.length ?? 0) > 0) ?? false);
+        !isConflictSourceResolved(nextConfirmConflicts) ||
+        (nextChunkUpload?.some((c) => !isConflictSourceResolved(c.conflictingBatches)) ?? false);
       if (!stillBlocked) {
         setPreviewError(null);
       }
@@ -1072,11 +1115,16 @@ export function PreviewStep({
    * same way it already does for a chunked upload. null/undefined for the
    * chunked path, which tracks its own code per-chunk instead. */
   plainConfirmErrorCode?: string | null;
-  /** FINDING 2 (round-11 audit): every live batch a multiple_live_batches
-   * conflict named, from either path, merged and de-duplicated by id — see
-   * ConflictingBatchInfo's own comment. Rendered with a revert affordance
-   * per batch so recovery never depends on the batch still being in the
-   * ten-newest Recent imports list. */
+  /** FINDING 2 (round-11 audit): each STILL-UNRESOLVED live batch a
+   * multiple_live_batches conflict named, from either path, merged and
+   * de-duplicated by id — see ConflictingBatchInfo's own comment. Bounded
+   * by the server's own lookup cap (WARN 5, round-13 audit), never a
+   * literal "every" beyond it. FINDING 1 (round-15 audit): a source's lone
+   * remaining candidate — the batch the operator is meant to keep — is
+   * excluded once that source is resolved (unresolvedConflictCandidates),
+   * so this is not the raw candidate list either. Rendered with a revert
+   * affordance per batch so recovery never depends on the batch still
+   * being in the ten-newest Recent imports list. */
   conflictingBatches?: ConflictingBatchInfo[];
   /** BLOCK 2 (round-13 audit): takes the whole candidate, not just its id —
    * clicking Revert no longer fires the request directly; it hands the

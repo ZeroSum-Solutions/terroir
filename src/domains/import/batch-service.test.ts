@@ -1110,9 +1110,17 @@ describe("confirmImportBatch — self-revert retry-once (round-6 audit finding 1
 // deleted those newly-created rows). The fix removes the authority
 // entirely: reconcileLiveBatchesForFile now NEVER calls revertImportBatch,
 // under any circumstance. Two or more live candidates is always a
-// non-retryable multiple_live_batches conflict that touches nothing — the
-// real "at most one applied batch per underlying file" invariant is
-// enforced separately, at apply time, by findSiblingWithAppliedRows
+// non-retryable multiple_live_batches conflict that touches nothing.
+//
+// FINDING 6 (round-15 audit, stale since round-11's own HONESTY-CORRECTED
+// comment on findSiblingWithAppliedRows, batch-service.ts:1190-1214): the
+// "at most one applied batch per underlying file" invariant is NOT
+// enforced anywhere — findSiblingWithAppliedRows only NARROWS the
+// cross-batch apply race (catches the sequential case; two applies racing
+// simultaneously can both pass its guard and both persist inventory). This
+// is the accepted, documented residual (docs/runbooks/csv-import.md's own
+// "cross-batch apply race" paragraph) — no enforcement point for that
+// invariant currently exists.
 // (batch-service.test.ts's own "findSiblingWithAppliedRows" describe,
 // below).
 describe("confirmImportBatch — reconciliation is non-destructive (round-10 audit, BLOCK 1)", () => {
@@ -1285,6 +1293,97 @@ describe("confirmImportBatch — reconciliation is non-destructive (round-10 aud
     expect(result).toMatchObject({ ok: false, error: { code: "multiple_live_batches" } });
     if (!result.ok) {
       expect(result.error.message).toMatch(/3 live import batches/);
+    }
+  });
+});
+
+// FINDING 4 (round-15 audit): the RAW read hitting LIVE_BATCH_LOOKUP_LIMIT
+// (20) is the only honest truncation signal — reconcileLiveBatchesForFile
+// used to test `candidates.length === LIVE_BATCH_LOOKUP_LIMIT` (the
+// POST-filter count) instead, which undercounts whenever a malformed row is
+// mixed into the raw read.
+describe("reconcileLiveBatchesForFile — truncation signal comes from the raw read, not the filtered count (round-15 audit finding 4)", () => {
+  it('states "at least 19" (not a bare "19") when the RAW read hits the cap even though only 19 of the 20 rows are well-formed', async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    // 19 genuinely well-formed live candidates for this file...
+    const wellFormedRows: FakeBatchRow[] = Array.from({ length: 19 }, (_, i) => ({
+      id: `live-${i}`,
+      status: "created",
+      session_id: null,
+      chunk_index: null,
+      content_sha256: i === 0 ? fileHex : `overrides-v1:${i.toString(16).padStart(64, "0")}:${fileHex}`,
+      restaurant_id: RESTAURANT_ID,
+      created_at: new Date(Date.UTC(2020, 0, 1, 0, 0, i)).toISOString(),
+    }));
+    // ...plus ONE malformed row (extra colon segment — never a shape this
+    // product writes) that satisfies the LIKE pattern but not the
+    // exact-format re-check, filling the 20th raw slot. matches.length ends
+    // up 19 (not 20), but the RAW read still hit the cap — a genuine 20th
+    // live candidate could be sitting just past row 20, unseen.
+    const malformedRow: FakeBatchRow = {
+      id: "malformed-0",
+      status: "created",
+      session_id: null,
+      chunk_index: null,
+      content_sha256: `overrides-v1:extra:garbage:${fileHex}`,
+      restaurant_id: RESTAURANT_ID,
+      created_at: new Date(Date.UTC(2020, 0, 1, 0, 0, 19)).toISOString(),
+    };
+    const rows = [...wellFormedRows, malformedRow];
+    expect(rows).toHaveLength(20); // exactly LIVE_BATCH_LOOKUP_LIMIT
+
+    const supabase = {
+      rpc: makeRpc({ match_lwin_bulk: () => ({ data: [], error: null }) }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "multiple_live_batches" } });
+    if (!result.ok) {
+      // The old (buggy) check compared candidates.length (19) against the
+      // cap (20) and reported a bare, false-precision "19" here instead.
+      expect(result.error.message).toMatch(/at least 19 live import batches/);
+      expect(result.error.conflictingBatches).toHaveLength(19);
+    }
+  });
+
+  it('states an exact "18" (no "at least") when the raw read is BELOW the cap, even with a malformed row mixed in', async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const wellFormedRows: FakeBatchRow[] = Array.from({ length: 18 }, (_, i) => ({
+      id: `live-${i}`,
+      status: "created",
+      session_id: null,
+      chunk_index: null,
+      content_sha256: i === 0 ? fileHex : `overrides-v1:${i.toString(16).padStart(64, "0")}:${fileHex}`,
+      restaurant_id: RESTAURANT_ID,
+      created_at: new Date(Date.UTC(2020, 0, 1, 0, 0, i)).toISOString(),
+    }));
+    const malformedRow: FakeBatchRow = {
+      id: "malformed-0",
+      status: "created",
+      session_id: null,
+      chunk_index: null,
+      content_sha256: `overrides-v1:extra:garbage:${fileHex}`,
+      restaurant_id: RESTAURANT_ID,
+      created_at: new Date(Date.UTC(2020, 0, 1, 0, 0, 18)).toISOString(),
+    };
+    const rows = [...wellFormedRows, malformedRow];
+    expect(rows).toHaveLength(19); // below LIVE_BATCH_LOOKUP_LIMIT
+
+    const supabase = {
+      rpc: makeRpc({ match_lwin_bulk: () => ({ data: [], error: null }) }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "multiple_live_batches" } });
+    if (!result.ok) {
+      expect(result.error.message).toMatch(/^This file has 18 live import batches/);
+      expect(result.error.message).not.toMatch(/at least/);
     }
   });
 });
