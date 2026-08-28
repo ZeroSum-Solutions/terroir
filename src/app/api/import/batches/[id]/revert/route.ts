@@ -45,5 +45,9 @@ async function postRevert(params: Params) {
     return apiError(409, result.error.code, result.error.message);
   }
 
-  return NextResponse.json({ revertedCount: result.revertedCount, orphanWinesDeleted: result.orphanWinesDeleted });
+  return NextResponse.json({
+    revertedCount: result.revertedCount,
+    orphanWinesDeleted: result.orphanWinesDeleted,
+    lwinStampsCleared: result.lwinStampsCleared,
+  });
 }

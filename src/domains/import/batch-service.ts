@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/types/database";
 import { buildImportPreview, type PreviewRow } from "./preview-service";
-import { APPLY_CHUNK_SIZE } from "./constants";
+import { APPLY_CHUNK_SIZE, LWIN_APPLY_MIN_SCORE } from "./constants";
 
 function summarize(rows: PreviewRow[]) {
   return {
@@ -439,7 +439,7 @@ export async function bulkResolveImportBatchRows(
 }
 
 export type RevertBatchResult =
-  | { ok: true; revertedCount: number; orphanWinesDeleted: number }
+  | { ok: true; revertedCount: number; orphanWinesDeleted: number; lwinStampsCleared: number }
   | { ok: false; error: { code: string; message: string } };
 
 /** Revert a batch. C-new-1 (db audit 2026-08-23): revert_import_batch_v2
@@ -484,7 +484,14 @@ export async function revertImportBatch(
     console.error(`revertImportBatch: orphan wine cleanup failed for batch ${batchId}`, cleanupError);
   }
 
-  return { ok: true, revertedCount: (data as number | null) ?? 0, orphanWinesDeleted };
+  let lwinStampsCleared = 0;
+  try {
+    lwinStampsCleared = await clearBatchLwinStamps(supabase, restaurantId, batchId);
+  } catch (unstampError) {
+    console.error(`revertImportBatch: lwin unstamp failed for batch ${batchId}`, unstampError);
+  }
+
+  return { ok: true, revertedCount: (data as number | null) ?? 0, orphanWinesDeleted, lwinStampsCleared };
 }
 
 /** Every table (besides import_batch_rows itself) with a wines(id) FK.
@@ -587,4 +594,136 @@ async function cleanupOrphanWines(
   if (deleteError) throw deleteError;
 
   return (deleted ?? []).length;
+}
+
+/** Clears wines.lwin_id/lwin_match_score stamps this batch wrote, for
+ * wines that SURVIVE the revert (orphan-deleted wines need no unstamp).
+ * Sol audit 2026-08-27 (variant-matching review, finding 3): apply's
+ * upsert can stamp a pre-existing wine's lwin at score >= 0.6, and
+ * revert_import_batch never touches wines — so a wrong match survived
+ * revert with no UI to undo it. A wine is unstamped only when ALL hold:
+ *   1. one of THIS batch's rows applied it with lwin_score >=
+ *      LWIN_APPLY_MIN_SCORE (only such rows can have stamped);
+ *   2. the wine's CURRENT lwin_id equals that row's lwin_id AND its
+ *      current lwin_match_score equals that row's lwin_score — apply
+ *      only overwrites when the incoming score is strictly higher, so an
+ *      exact (id, score) match means this batch's write is what's in
+ *      place; a score of null means some other path (match_lwin_batch)
+ *      stamped it, and any other value means another writer won — both
+ *      left untouched;
+ *   3. no OTHER non-reverted batch row applied the same wine with the
+ *      same lwin_id at >= LWIN_APPLY_MIN_SCORE (it independently
+ *      justifies the stamp);
+ *   4. restaurant-scoped, and the DB-side update re-checks lwin_id so a
+ *      concurrent change can't be clobbered.
+ * Returns the count cleared; throws on query errors (caller logs and
+ * swallows, same contract as cleanupOrphanWines). */
+async function clearBatchLwinStamps(
+  supabase: SupabaseClient<Database>,
+  restaurantId: string,
+  batchId: string,
+): Promise<number> {
+  const { data: stampedRows, error: stampedError } = await supabase
+    .from("import_batch_rows")
+    .select("applied_wine_id, lwin_id, lwin_score")
+    .eq("batch_id", batchId)
+    .not("applied_wine_id", "is", null)
+    .not("lwin_id", "is", null)
+    .gte("lwin_score", LWIN_APPLY_MIN_SCORE);
+  if (stampedError) throw stampedError;
+
+  const stamps = new Map<string, { lwinId: string; score: number }>();
+  for (const row of (stampedRows ?? []) as Array<{
+    applied_wine_id: string | null;
+    lwin_id: string | null;
+    lwin_score: number | null;
+  }>) {
+    if (row.applied_wine_id && row.lwin_id && row.lwin_score !== null) {
+      stamps.set(row.applied_wine_id, { lwinId: row.lwin_id, score: row.lwin_score });
+    }
+  }
+  if (stamps.size === 0) return 0;
+
+  const wineIds = Array.from(stamps.keys());
+  const { data: wines, error: winesError } = await supabase
+    .from("wines")
+    .select("id, lwin_id, lwin_match_score")
+    .in("id", wineIds)
+    .eq("restaurant_id", restaurantId);
+  if (winesError) throw winesError;
+
+  // Condition 2: the wine's current stamp is exactly what this batch
+  // wrote. Both values round-trip through the same PostgREST float4
+  // serialization, so === is a faithful comparison.
+  const clearCandidates = ((wines ?? []) as Array<{
+    id: string;
+    lwin_id: string | null;
+    lwin_match_score: number | null;
+  }>).filter((wine) => {
+    const stamp = stamps.get(wine.id);
+    return (
+      stamp !== undefined &&
+      wine.lwin_id === stamp.lwinId &&
+      wine.lwin_match_score !== null &&
+      wine.lwin_match_score === stamp.score
+    );
+  });
+  if (clearCandidates.length === 0) return 0;
+
+  // Condition 3: another live batch's row justifying the same stamp.
+  const candidateIds = clearCandidates.map((wine) => wine.id);
+  const { data: otherRows, error: otherRowsError } = await supabase
+    .from("import_batch_rows")
+    .select("applied_wine_id, lwin_id, batch_id")
+    .in("applied_wine_id", candidateIds)
+    .neq("batch_id", batchId)
+    .not("lwin_id", "is", null)
+    .gte("lwin_score", LWIN_APPLY_MIN_SCORE);
+  if (otherRowsError) throw otherRowsError;
+
+  const otherBatchIds = Array.from(
+    new Set(((otherRows ?? []) as Array<{ batch_id: string }>).map((row) => row.batch_id)),
+  );
+  const liveBatchIds = new Set<string>();
+  if (otherBatchIds.length > 0) {
+    const { data: otherBatches, error: otherBatchesError } = await supabase
+      .from("import_batches")
+      .select("id, status")
+      .in("id", otherBatchIds);
+    if (otherBatchesError) throw otherBatchesError;
+    for (const other of (otherBatches ?? []) as Array<{ id: string; status: string }>) {
+      if (other.status !== "reverted") liveBatchIds.add(other.id);
+    }
+  }
+  const justified = new Set<string>();
+  for (const row of (otherRows ?? []) as Array<{
+    applied_wine_id: string | null;
+    lwin_id: string | null;
+    batch_id: string;
+  }>) {
+    if (
+      row.applied_wine_id &&
+      liveBatchIds.has(row.batch_id) &&
+      row.lwin_id === stamps.get(row.applied_wine_id)?.lwinId
+    ) {
+      justified.add(row.applied_wine_id);
+    }
+  }
+
+  let cleared = 0;
+  for (const wine of clearCandidates) {
+    if (justified.has(wine.id)) continue;
+    const stamp = stamps.get(wine.id);
+    if (!stamp) continue;
+    const { data: updated, error: updateError } = await supabase
+      .from("wines")
+      .update({ lwin_id: null, lwin_match_score: null })
+      .eq("id", wine.id)
+      .eq("restaurant_id", restaurantId)
+      .eq("lwin_id", stamp.lwinId)
+      .select("id");
+    if (updateError) throw updateError;
+    cleared += (updated ?? []).length;
+  }
+  return cleared;
 }

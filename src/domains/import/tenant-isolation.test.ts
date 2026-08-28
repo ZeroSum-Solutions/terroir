@@ -188,7 +188,7 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
     // below, which relies on that (it inserts its own pre-existing wine
     // fixture rather than reusing this one for exactly that reason).
     const revertAsA = await revertImportBatch(userAClient, restaurantA, batchId);
-    expect(revertAsA).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 1 });
+    expect(revertAsA).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 1, lwinStampsCleared: 0 });
 
     const { data: inventoryAfterRevert } = await admin
       .from("inventory_items")
@@ -268,8 +268,20 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
 
     const reverted = await revertImportBatch(userAClient, restaurantA, confirmed.batchId);
     // The wine is spared twice over: the pre-existing inventory row still
-    // references it, AND it predates this batch (created_at guard).
-    expect(reverted).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0 });
+    // references it, AND it predates this batch (created_at guard). Its
+    // LWIN stamp, however, IS cleared: the local seed's G14-TENANT-TEST
+    // catalog entry exact-matches this fixture (score 1.0), so the
+    // batch's apply stamped the pre-existing wine (its lwin was null),
+    // and revert must undo exactly that write — live proof of
+    // clearBatchLwinStamps against real Postgres.
+    expect(reverted).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1 });
+
+    const { data: wineAfterRevert } = await admin
+      .from("wines")
+      .select("lwin_id, lwin_match_score")
+      .eq("id", (existingWine as { id: string }).id)
+      .maybeSingle();
+    expect(wineAfterRevert).toEqual({ lwin_id: null, lwin_match_score: null });
 
     const { data: preExistingAfter } = await admin
       .from("inventory_items")

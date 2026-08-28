@@ -324,7 +324,7 @@ describe("revertImportBatch", () => {
   it("returns the reverted row count on success", async () => {
     const supabase = { rpc: vi.fn().mockResolvedValue({ data: 4, error: null }), from: noopCleanupFrom() };
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
-    expect(result).toEqual({ ok: true, revertedCount: 4, orphanWinesDeleted: 0 });
+    expect(result).toEqual({ ok: true, revertedCount: 4, orphanWinesDeleted: 0, lwinStampsCleared: 0 });
   });
 
   it("translates a not-found error", async () => {
@@ -410,7 +410,7 @@ describe("revertImportBatch orphan wine cleanup", () => {
       wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, created_at: "2026-01-01T00:00:01Z" }],
     });
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 1 });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 1, lwinStampsCleared: 0 });
   });
 
   it("spares a wine still referenced by another table (e.g. inventory_items)", async () => {
@@ -421,7 +421,7 @@ describe("revertImportBatch orphan wine cleanup", () => {
       wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, created_at: "2026-01-01T00:00:01Z" }],
     });
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0 });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0 });
   });
 
   it("spares a wine another (non-reverting) batch's import_batch_rows still names", async () => {
@@ -432,7 +432,7 @@ describe("revertImportBatch orphan wine cleanup", () => {
       wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, created_at: "2026-01-01T00:00:01Z" }],
     });
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0 });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0 });
     expect(supabase.from).toHaveBeenCalledWith("import_batch_rows");
   });
 
@@ -446,7 +446,7 @@ describe("revertImportBatch orphan wine cleanup", () => {
       wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, created_at: "2025-06-01T00:00:00Z" }],
     });
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0 });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0 });
   });
 
   it("never fails the revert when cleanup itself errors", async () => {
@@ -458,8 +458,140 @@ describe("revertImportBatch orphan wine cleanup", () => {
     };
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
-    expect(result).toEqual({ ok: true, revertedCount: 3, orphanWinesDeleted: 0 });
+    expect(result).toEqual({ ok: true, revertedCount: 3, orphanWinesDeleted: 0, lwinStampsCleared: 0 });
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
+  });
+});
+
+describe("revertImportBatch lwin unstamping", () => {
+  const WINE_ID = "66666666-6666-4666-8666-666666666666";
+  const STAMP = { lwinId: "LWIN-1234567", score: 0.85 };
+
+  /** Cleanup is neutralized (no applied rows), so from-call order is:
+   * import_batches#1 (created_at) → import_batch_rows#1 (cleanup, empty)
+   * → import_batch_rows#2 (stamped rows) → wines#1 (current stamps) →
+   * import_batch_rows#3 (other batches' rows) → import_batches#2
+   * (statuses, only when other rows exist) → wines#2+ (conditional
+   * updates, real filter semantics). */
+  function makeUnstampSupabase(opts: {
+    stampedRows: Array<{ applied_wine_id: string; lwin_id: string; lwin_score: number }>;
+    wineRows: Array<{ id: string; restaurant_id: string; lwin_id: string | null; lwin_match_score: number | null }>;
+    otherRows?: Array<{ applied_wine_id: string; lwin_id: string; batch_id: string }>;
+    otherBatches?: Array<{ id: string; status: string }>;
+  }) {
+    let batchesCalls = 0;
+    let rowsCalls = 0;
+    let winesCalls = 0;
+    const updates: Array<Record<string, unknown>> = [];
+    const from = vi.fn((table: string) => {
+      if (table === "import_batches") {
+        batchesCalls += 1;
+        if (batchesCalls === 1) return chain({ data: { created_at: "2026-01-01T00:00:00Z" }, error: null });
+        return chain({ data: opts.otherBatches ?? [], error: null });
+      }
+      if (table === "import_batch_rows") {
+        rowsCalls += 1;
+        if (rowsCalls === 1) return chain({ data: [], error: null });
+        if (rowsCalls === 2) return chain({ data: opts.stampedRows, error: null });
+        return chain({ data: opts.otherRows ?? [], error: null });
+      }
+      if (table === "wines") {
+        winesCalls += 1;
+        if (winesCalls === 1) return chain({ data: opts.wineRows, error: null });
+        return {
+          update: (payload: Record<string, unknown>) => {
+            let filtered = opts.wineRows;
+            const filters: Record<string, unknown> = {};
+            const builder = {
+              eq: (column: string, value: unknown) => {
+                filters[column] = value;
+                filtered = filtered.filter(
+                  (row) => (row as Record<string, unknown>)[column] === value,
+                );
+                return builder;
+              },
+              select: async () => {
+                updates.push({ payload, ...filters });
+                return { data: filtered.map((row) => ({ id: row.id })), error: null };
+              },
+            };
+            return builder;
+          },
+        };
+      }
+      throw new Error(`unexpected table ${table}`);
+    });
+    return { rpc: vi.fn().mockResolvedValue({ data: 1, error: null }), from, updates };
+  }
+
+  it("clears a stamp this batch wrote when nothing else justifies it", async () => {
+    const supabase = makeUnstampSupabase({
+      stampedRows: [{ applied_wine_id: WINE_ID, lwin_id: STAMP.lwinId, lwin_score: STAMP.score }],
+      wineRows: [
+        { id: WINE_ID, restaurant_id: RESTAURANT_ID, lwin_id: STAMP.lwinId, lwin_match_score: STAMP.score },
+      ],
+    });
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1 });
+    expect(supabase.updates).toHaveLength(1);
+    expect(supabase.updates[0]).toMatchObject({
+      payload: { lwin_id: null, lwin_match_score: null },
+      id: WINE_ID,
+      restaurant_id: RESTAURANT_ID,
+      lwin_id: STAMP.lwinId,
+    });
+  });
+
+  it("leaves a wine whose current lwin differs from this batch's stamp (another writer won)", async () => {
+    const supabase = makeUnstampSupabase({
+      stampedRows: [{ applied_wine_id: WINE_ID, lwin_id: STAMP.lwinId, lwin_score: STAMP.score }],
+      wineRows: [
+        { id: WINE_ID, restaurant_id: RESTAURANT_ID, lwin_id: "LWIN-OTHER", lwin_match_score: 0.95 },
+      ],
+    });
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0 });
+    expect(supabase.updates).toHaveLength(0);
+  });
+
+  it("leaves a score-null stamp (written by another path, e.g. match_lwin_batch)", async () => {
+    const supabase = makeUnstampSupabase({
+      stampedRows: [{ applied_wine_id: WINE_ID, lwin_id: STAMP.lwinId, lwin_score: STAMP.score }],
+      wineRows: [
+        { id: WINE_ID, restaurant_id: RESTAURANT_ID, lwin_id: STAMP.lwinId, lwin_match_score: null },
+      ],
+    });
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0 });
+    expect(supabase.updates).toHaveLength(0);
+  });
+
+  it("keeps a stamp another LIVE batch's row independently justifies", async () => {
+    const supabase = makeUnstampSupabase({
+      stampedRows: [{ applied_wine_id: WINE_ID, lwin_id: STAMP.lwinId, lwin_score: STAMP.score }],
+      wineRows: [
+        { id: WINE_ID, restaurant_id: RESTAURANT_ID, lwin_id: STAMP.lwinId, lwin_match_score: STAMP.score },
+      ],
+      otherRows: [{ applied_wine_id: WINE_ID, lwin_id: STAMP.lwinId, batch_id: "other-batch" }],
+      otherBatches: [{ id: "other-batch", status: "completed" }],
+    });
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0 });
+    expect(supabase.updates).toHaveLength(0);
+  });
+
+  it("clears the stamp when the only other justifying batch is itself reverted", async () => {
+    const supabase = makeUnstampSupabase({
+      stampedRows: [{ applied_wine_id: WINE_ID, lwin_id: STAMP.lwinId, lwin_score: STAMP.score }],
+      wineRows: [
+        { id: WINE_ID, restaurant_id: RESTAURANT_ID, lwin_id: STAMP.lwinId, lwin_match_score: STAMP.score },
+      ],
+      otherRows: [{ applied_wine_id: WINE_ID, lwin_id: STAMP.lwinId, batch_id: "other-batch" }],
+      otherBatches: [{ id: "other-batch", status: "reverted" }],
+    });
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1 });
+    expect(supabase.updates).toHaveLength(1);
   });
 });

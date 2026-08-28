@@ -62,10 +62,10 @@ describe("POST /api/import/batches/[id]/revert", () => {
 
   it("returns the reverted count and orphan-wine cleanup count on success", async () => {
     allow(makeSupabase({ id: BATCH_ID }));
-    mockRevertImportBatch.mockResolvedValue({ ok: true, revertedCount: 7, orphanWinesDeleted: 2 });
+    mockRevertImportBatch.mockResolvedValue({ ok: true, revertedCount: 7, orphanWinesDeleted: 2, lwinStampsCleared: 1 });
     const response = await POST(request(), { params: params() });
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ revertedCount: 7, orphanWinesDeleted: 2 });
+    expect(await response.json()).toEqual({ revertedCount: 7, orphanWinesDeleted: 2, lwinStampsCleared: 1 });
     expect(mockRevertImportBatch).toHaveBeenCalledWith(expect.anything(), "restaurant-a", BATCH_ID);
   });
 });
