@@ -169,9 +169,23 @@ sub-chunks via repeated `POST /apply` calls, unchanged by chunking.
   stated as an estimate from measured matching performance, not a
   guaranteed cap (`LWIN_MATCH_PER_CALL_SECONDS`' own comment, constants.ts,
   documents it as an INHERITED figure, and `matchLwinBulk` has no
-  elapsed-time deadline of its own), and it's scoped to LWIN matching only
-  — the catalogue display-name lookup that runs after matching
-  (`preview-service.ts`) is not included.**
+  elapsed-time deadline of its own). At the time of this fix it was also
+  scoped to LWIN matching only, since a separate catalogue display-name
+  lookup ran after matching and wasn't included — **round-13 fix: that
+  lookup is now deleted (see "Preview is a pure function" below), so the
+  estimate covers the entirety of what preview/confirm actually do over
+  the network; there is no longer anything left to scope it away from.**
+
+  **BLOCK 1 (round-13 fix) — the estimate could still be READ against the
+  wrong file.** `countPreviewUnits` resolves asynchronously (it reads the
+  whole file), so an operator could click Preview in the window before it
+  resolved for the just-selected file, or — worse — read the PREVIOUS
+  file's estimate while a newly-selected, larger file's own count was still
+  in flight, then commit to it. `import-client.tsx` now tracks an explicit
+  `previewUnitsStatus` ("idle" / "pending" / "ready" / "unavailable") that
+  is set to "pending" — clearing the stale value — the instant a new file
+  is selected, before the async count even starts; the Preview button stays
+  disabled for the whole "pending" window on either path.**
 
   **WARN 5 (round-29 audit) — corrected, not merely noted: "a file can
   never pass preview and then fail confirm on this budget" (stated above)
@@ -272,6 +286,29 @@ network call it makes is the read-only `match_lwin_bulk` RPC (0076). Both
 (persists the same computation as a batch) call it — the confirm endpoint
 always re-derives from the uploaded file itself, never trusts a
 client-supplied preview payload.
+
+**NIT 4 (round-13 fix) — this "only network call" claim used to be false.**
+Item 2 (per-row LWIN match visibility) had added a SECOND network call
+here: `match_lwin_bulk` already returns `display_name` with each winning
+candidate (0076's own `match_lwin_bulk` SELECTs it straight from
+`lwin_catalog`), but `matchLwinBulk` (`lwin-matching.ts`) was discarding
+that field, so a later round bolted on a separate, independently-paginated
+`lwin_catalog` lookup to re-fetch a name the RPC had already returned —
+paginated because `MAX_ROWS` (5,000) can exceed PostgREST's 1,000-row
+`db.max_rows` cap, which meant a `.in(distinctLwinIds)` filter that could
+run to roughly 70,000 URL characters at `MAX_ROWS` fully matched, and a
+failure mode where a below-the-fold display name silently degraded to
+"Catalog entry (name unavailable)" while the row was **still** auto-
+approved for application — visibility and approval had quietly drifted
+apart. Deleted outright rather than patched: `display_name` now flows
+straight through `matchLwinBulk`'s own `LwinMatch` and the best-of-variants
+reduction in `buildImportPreview`, so there is nothing left to
+re-fetch, and the claim above is now literally true rather than
+approximately true. An apply-eligible match with no display identity
+(the residual this leaves — `match_lwin_bulk` returning a real `lwin_id`
+but a null `display_name`) is now excluded from `buildApprovedLwinRows`
+(`import-client.tsx`) and its own `linkingMatchedRows` band, rather than
+being shown with a placeholder and auto-approved regardless.
 
 ## Reversibility
 

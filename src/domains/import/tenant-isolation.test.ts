@@ -17,6 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { confirmImportBatch, applyImportBatchChunk, resolveImportBatchRow, revertImportBatch } from "./batch-service";
+import { buildImportPreview } from "./preview-service";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -135,6 +136,28 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
     await admin.from("restaurants").delete().in("id", [restaurantA, restaurantB]);
     if (userAId) await admin.auth.admin.deleteUser(userAId);
     if (userBId) await admin.auth.admin.deleteUser(userBId);
+  });
+
+  // BLOCK 2 (round-13 fix) — match_lwin_bulk (0076_csv_import_batches.sql)
+  // already SELECTs lwin_catalog.display_name as part of its own join;
+  // matchLwinBulk (lwin-matching.ts) used to discard it, so preview-
+  // service.ts ran a SECOND, separately-paginated lwin_catalog lookup to
+  // re-fetch a name the RPC had already returned. That lookup is deleted
+  // outright — this proves against the REAL RPC (not a mock) that the
+  // display_name it already returns survives matchLwinBulk and the
+  // best-of-variants reduction all the way into buildImportPreview's own
+  // PreviewRow.lwinDisplayName, using the exact lwin_catalog fixture row
+  // (`G14-TENANT-TEST` / "Cross Tenant Wine") beforeAll seeded above.
+  it("match_lwin_bulk's own display_name survives through matchLwinBulk into the preview row — no separate catalogue lookup (BLOCK 2 round-13 fix)", async () => {
+    const result = await buildImportPreview(userAClient, csvBuffer());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({
+      lwinStatus: "matched",
+      lwinId: "G14-TENANT-TEST",
+      lwinDisplayName: "Cross Tenant Wine",
+    });
   });
 
   it("blocks reading, applying, and reverting another tenant's import batch", async () => {

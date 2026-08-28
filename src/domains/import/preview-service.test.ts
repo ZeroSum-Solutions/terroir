@@ -7,85 +7,52 @@ function csv(rows: string) {
 }
 
 function makeSupabase(
-  matchRows: Array<{ idx: number; lwin_id: string | null; score: number | null }> = [],
-  catalogRows: Array<{ lwin_id: string; display_name: string }> = [],
+  matchRows: Array<{ idx: number; lwin_id: string | null; score: number | null; display_name?: string | null }> = [],
 ) {
   const from = vi.fn();
   const insert = vi.fn();
   const update = vi.fn();
   const rpc = vi.fn().mockResolvedValue({ data: matchRows, error: null });
-  // Sol audit round 3, finding 1: every page request this test's own
-  // catalog lookup issues — asserted by the pagination test below to
-  // prove the lookup pages to exhaustion instead of a single unpaged
-  // read (which PostgREST would silently cap at db.max_rows, 1000).
-  const catalogRanges: Array<[number, number]> = [];
   return {
+    // BLOCK 2 (round-13 fix) — buildImportPreview no longer reads any
+    // table directly: match_lwin_bulk already returns display_name
+    // (0076_csv_import_batches.sql), so the second, separately-paginated
+    // lwin_catalog lookup this mock used to also stub is gone outright.
+    // `from` is kept only so a stray `.from()` call (a regression) fails
+    // loudly instead of throwing "not a function".
     from: (table: string, ...args: unknown[]) => {
       from(table, ...args);
-      // Item 2: the display-name lookup's own table — a plain
-      // select().in().order().range() read, distinct from the
-      // insert/update-shaped stub every other table gets (this preview
-      // endpoint never writes). Sol audit round 3, finding 1: sorted by
-      // lwin_id (the real query's own tiebreaker) and sliced by [from,
-      // to] — mirrors PostgREST's own page-based pagination, so a
-      // catalogRows list beyond one page genuinely proves the fetchAll
-      // loop, rather than just returning everything from a single call
-      // regardless of range.
-      if (table === "lwin_catalog") {
-        const sorted = [...catalogRows].sort((a, b) => a.lwin_id.localeCompare(b.lwin_id));
-        return {
-          select: () => ({
-            in: () => ({
-              order: () => ({
-                range: (from2: number, to2: number) => {
-                  catalogRanges.push([from2, to2]);
-                  return Promise.resolve({ data: sorted.slice(from2, to2 + 1), error: null });
-                },
-              }),
-            }),
-          }),
-        };
-      }
       return { insert, update, select: () => ({ insert, update }) };
     },
     rpc,
     _from: from,
     _insert: insert,
     _update: update,
-    _catalogRanges: catalogRanges,
   } as unknown as Parameters<typeof buildImportPreview>[0] & {
     _from: typeof from;
     _insert: typeof insert;
     _update: typeof update;
-    _catalogRanges: typeof catalogRanges;
   };
 }
 
 describe("buildImportPreview", () => {
-  it("performs zero database writes — only the read-only match RPC and a read-only display-name lookup", async () => {
-    const supabase = makeSupabase([{ idx: 0, lwin_id: "LWIN001", score: 0.9 }]);
+  // BLOCK 2 (round-13 fix) — buildImportPreview used to also read
+  // lwin_catalog directly (a second, separately-paginated display-name
+  // lookup) for any row that matched. That lookup is deleted outright:
+  // match_lwin_bulk already returns display_name in its own result, so
+  // there is nothing left to look up. This now holds regardless of
+  // whether anything matched — `.from()` is never called at all.
+  it("performs zero database writes and zero table reads — only the read-only match RPC", async () => {
+    const supabase = makeSupabase([{ idx: 0, lwin_id: "LWIN001", score: 0.9, display_name: "Domaine A Cuvee 1" }]);
     await buildImportPreview(supabase, csv("Domaine A,Cuvee 1,2020,6,24.50\n"));
 
-    // Item 2: buildImportPreview now also reads lwin_catalog (a
-    // display-name lookup, for the one row that actually matched) — a
-    // second read-only call, never a write. Both writer spies below are
-    // this test's real guarantee.
-    expect(supabase._from).toHaveBeenCalledWith("lwin_catalog");
+    expect(supabase._from).not.toHaveBeenCalled();
     expect(supabase._insert).not.toHaveBeenCalled();
     expect(supabase._update).not.toHaveBeenCalled();
     expect(supabase.rpc).toHaveBeenCalledWith(
       "match_lwin_bulk",
       expect.objectContaining({ p_queries: expect.any(Array) }),
     );
-  });
-
-  it("performs zero table reads when nothing matched — the display-name lookup is skipped entirely", async () => {
-    const supabase = makeSupabase([{ idx: 0, lwin_id: null, score: null }]);
-    await buildImportPreview(supabase, csv("Domaine A,Cuvee 1,2020,6,24.50\n"));
-
-    expect(supabase._from).not.toHaveBeenCalled();
-    expect(supabase._insert).not.toHaveBeenCalled();
-    expect(supabase._update).not.toHaveBeenCalled();
   });
 
   it("returns a per-row preview with row numbers, LWIN status, and cost status", async () => {
@@ -267,20 +234,32 @@ describe("buildImportPreview", () => {
     expect(result.rows[1].rawText.quantity).toBe("0.9");
   });
 
+  // BLOCK 2 (round-13 fix) — match_lwin_bulk (0076_csv_import_batches.sql)
+  // already returns display_name with each winning candidate; these pin
+  // that matchLwinBulk (lwin-matching.ts) and the best-of-variants
+  // reduction above carry it straight through, rather than buildImportPreview
+  // re-fetching it with a second, separately-paginated lwin_catalog lookup
+  // (deleted outright — see that lookup's own former comment history in
+  // docs/runbooks/csv-import.md). Because the name now arrives on the SAME
+  // RPC row as lwinId/score, there is no separate page-cap/pagination
+  // residual left to prove here at all — the two "past 1,000 distinct
+  // matched ids" / "a later page errors" tests this block used to carry
+  // are gone with the lookup they existed to exercise.
   describe("lwinDisplayName — item 2 per-row match visibility", () => {
-    it("surfaces the catalog display_name for a matched row", async () => {
-      const supabase = makeSupabase(
-        [{ idx: 0, lwin_id: "LWIN001", score: 0.95 }],
-        [{ lwin_id: "LWIN001", display_name: "Domaine A Cuvee One 2020" }],
-      );
+    it("surfaces the display_name match_lwin_bulk already returned for a matched row", async () => {
+      const supabase = makeSupabase([
+        { idx: 0, lwin_id: "LWIN001", score: 0.95, display_name: "Domaine A Cuvee One 2020" },
+      ]);
       const result = await buildImportPreview(supabase, csv("Domaine A,Cuvee 1,2020,6,24.50\n"));
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.rows[0]).toMatchObject({ lwinId: "LWIN001", lwinDisplayName: "Domaine A Cuvee One 2020" });
+      // No separate table read — the name came straight off the RPC row.
+      expect(supabase._from).not.toHaveBeenCalled();
     });
 
-    it("degrades to null when the matched lwin_id has no catalog row (never fails the preview)", async () => {
-      const supabase = makeSupabase([{ idx: 0, lwin_id: "LWIN001", score: 0.95 }], []);
+    it("degrades to null when match_lwin_bulk itself returns a null display_name (never fails the preview)", async () => {
+      const supabase = makeSupabase([{ idx: 0, lwin_id: "LWIN001", score: 0.95, display_name: null }]);
       const result = await buildImportPreview(supabase, csv("Domaine A,Cuvee 1,2020,6,24.50\n"));
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -293,109 +272,6 @@ describe("buildImportPreview", () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.rows[0]).toMatchObject({ lwinStatus: "unmatched", lwinDisplayName: null });
-    });
-
-    // Sol audit round 3, finding 1: MAX_ROWS allows 5,000 matched rows,
-    // but PostgREST caps a single response at db.max_rows (1,000 —
-    // supabase/config.toml). The catalog display-name lookup used to be
-    // one unpaged .in() query, so beyond 1,000 distinct matched lwin_ids,
-    // every later row's lwinDisplayName silently degraded to "Catalog
-    // entry (name unavailable)" — defeating the per-row visibility
-    // feature at exactly the scale it's supposed to hold up at. This
-    // proves the lookup now pages to exhaustion: 1,200 distinct matched
-    // ids, every one of them still resolving its real display_name, and
-    // the mock's own range calls showing more than one page was issued.
-    it("resolves every matched row's display name past the 1,000-row PostgREST page cap", async () => {
-      const rowCount = 1200;
-      const csvBody = Array.from({ length: rowCount }, (_, i) => `Domaine ${i},Wine ${i},2020,1,10.00`).join("\n");
-      const matchRows = Array.from({ length: rowCount }, (_, i) => ({
-        idx: i,
-        lwin_id: `LWIN${String(i).padStart(5, "0")}`,
-        score: 0.95,
-      }));
-      const catalogRows = Array.from({ length: rowCount }, (_, i) => ({
-        lwin_id: `LWIN${String(i).padStart(5, "0")}`,
-        display_name: `Domaine ${i} Wine ${i} 2020`,
-      }));
-      const supabase = makeSupabase(matchRows, catalogRows);
-
-      const result = await buildImportPreview(supabase, csv(`${csvBody}\n`));
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-
-      expect(result.rows).toHaveLength(rowCount);
-      for (let i = 0; i < rowCount; i++) {
-        expect(result.rows[i]).toMatchObject({
-          lwinId: `LWIN${String(i).padStart(5, "0")}`,
-          lwinDisplayName: `Domaine ${i} Wine ${i} 2020`,
-        });
-      }
-      // More than one page was genuinely requested — proves this isn't
-      // just a single unpaged call happening to return everything.
-      expect(supabase._catalogRanges.length).toBeGreaterThan(1);
-    });
-
-    // WARN (round 5 fix) — fetchAll's own "degrades rather than throws on a
-    // page error" contract (preview-service.ts), specifically for a page
-    // AFTER the first: proves the rows already read from earlier pages
-    // survive a later page's failure, rather than the whole lookup
-    // discarding everything it already had. This is what makes the
-    // documented offset-pagination residual (fetchAll's own comment) safe
-    // in practice — a skipped/failed page degrades exactly the rows on
-    // that page to lwinDisplayName: null, never the ones already read.
-    it("keeps the display names already read from earlier pages when a LATER page errors, rather than losing them all", async () => {
-      const rowCount = 1200; // two pages: [0,999] then [1000,1199]
-      const csvBody = Array.from({ length: rowCount }, (_, i) => `Domaine ${i},Wine ${i},2020,1,10.00`).join("\n");
-      const matchRows = Array.from({ length: rowCount }, (_, i) => ({
-        idx: i,
-        lwin_id: `LWIN${String(i).padStart(5, "0")}`,
-        score: 0.95,
-      }));
-      const catalogRows = Array.from({ length: rowCount }, (_, i) => ({
-        lwin_id: `LWIN${String(i).padStart(5, "0")}`,
-        display_name: `Domaine ${i} Wine ${i} 2020`,
-      }));
-      const sorted = [...catalogRows].sort((a, b) => a.lwin_id.localeCompare(b.lwin_id));
-      const rpc = vi.fn().mockResolvedValue({ data: matchRows, error: null });
-      const supabase = {
-        from: (table: string) => {
-          if (table === "lwin_catalog") {
-            return {
-              select: () => ({
-                in: () => ({
-                  order: () => ({
-                    range: (from2: number, to2: number) => {
-                      // The first page (offset 0) succeeds; every later
-                      // page fails — simulating a transient failure that
-                      // hits partway through a multi-page read.
-                      if (from2 > 0) return Promise.resolve({ data: null, error: { message: "connection reset" } });
-                      return Promise.resolve({ data: sorted.slice(from2, to2 + 1), error: null });
-                    },
-                  }),
-                }),
-              }),
-            };
-          }
-          return { insert: vi.fn(), update: vi.fn() };
-        },
-        rpc,
-      } as unknown as Parameters<typeof buildImportPreview>[0];
-
-      const result = await buildImportPreview(supabase, csv(`${csvBody}\n`));
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-
-      // First page's 1,000 rows still resolved their real display names.
-      expect(result.rows[0].lwinDisplayName).toBe("Domaine 0 Wine 0 2020");
-      expect(result.rows[999].lwinDisplayName).toBe("Domaine 999 Wine 999 2020");
-      // The second (failed) page's rows degrade to null — never a wrong
-      // name, and never fails the whole preview.
-      expect(result.rows[1000].lwinDisplayName).toBeNull();
-      expect(result.rows[1199].lwinDisplayName).toBeNull();
-      // Every row's own lwinId/lwinScore (the values actually written) are
-      // completely unaffected by the display-name lookup's own failure.
-      expect(result.rows[1199].lwinId).toBe("LWIN01199");
-      expect(result.rows[1199].lwinScore).toBe(0.95);
     });
   });
 

@@ -16,57 +16,6 @@ import { matchLwinBulk, buildLwinQueryVariants, type LwinMatch } from "./lwin-ma
 import { mergeIntraBatchDuplicates, type IntraBatchDuplicateReason } from "./dedup-key";
 import { LWIN_MATCH_MAX_QUERIES, type CanonicalHeader } from "./constants";
 
-const CATALOG_LOOKUP_PAGE_SIZE = 1000;
-
-/** Sol audit round 3, finding 1: PostgREST caps a single response at
- * db.max_rows (1,000 — supabase/config.toml), but MAX_ROWS (constants.ts)
- * allows up to 5,000 matched rows per import, so the lwin_catalog display
- * name lookup below can't be a single unpaged query. Same fetchAll shape
- * as src/lib/cellar-health/recompute.ts and
- * src/app/api/member-analytics/route.ts, except this one degrades rather
- * than throws on a page error — preserving the lookup's existing
- * "a display-name lookup failure never fails the whole preview" contract
- * (see the call site below) while still reading every page it can.
- *
- * WARN (round 5 fix) — this is OFFSET pagination, not keyset/seek
- * pagination, ordered uniquely by lwin_id (the call site's own
- * `.order("lwin_id")`) so it can never MIS-associate a row with the wrong
- * id. It is NOT snapshot-stable across the multiple requests one call
- * makes, though: `scripts/seed-lwin.ts` upserts live against this same
- * table, so if a row matching this call's own `.in(distinctLwinIds)`
- * filter is inserted or deleted between two page reads, later offsets can
- * shift — skipping a row that was never read, or (far less likely, since
- * `.in()` is a closed, fixed id list computed once before this call
- * starts) re-reading one already seen. Documented here rather than fixed
- * with keyset pagination because the failure mode this can ever produce is
- * strictly bounded and already-handled: a SKIPPED row degrades to
- * `lwinDisplayName: null` for that one row (see the "no catalog row" case
- * this function's caller already handles identically), never a WRONG name
- * — the raw `lwinId`/`lwinScore` this product actually writes are
- * computed entirely independently of this lookup and are never affected.
- * A theoretical re-read (a row reappearing in a later page after already
- * being read) is harmless too: the caller folds results into a `Map`
- * keyed by `lwin_id`, so a duplicate entry is just an overwrite with the
- * same value. If this residual is ever worth closing outright, keyset
- * pagination (seek on `lwin_id > <last id read>` instead of a numeric
- * offset) would remove it; not done here since the accepted failure mode
- * is "an occasional missing display name," never a correctness bug. */
-async function fetchAll<T>(
-  makeQuery: (from: number, to: number) => PromiseLike<{
-    data: T[] | null;
-    error: { message: string } | null;
-  }>,
-): Promise<T[]> {
-  const rows: T[] = [];
-  for (let from = 0; ; from += CATALOG_LOOKUP_PAGE_SIZE) {
-    const { data, error } = await makeQuery(from, from + CATALOG_LOOKUP_PAGE_SIZE - 1);
-    if (error) return rows;
-    const page = data ?? [];
-    rows.push(...page);
-    if (page.length < CATALOG_LOOKUP_PAGE_SIZE) return rows;
-  }
-}
-
 /** Inline row-fix overrides (see ConfirmBatchOptions.rowOverrides in
  * batch-service.ts), keyed by the 1-indexed data row number a caller
  * would have seen in this exact file's own preview — the same numbering
@@ -91,9 +40,17 @@ export type PreviewRow = {
    * for lwinId, so the operator can SEE what a match actually claims this
    * wine is, not just an opaque id + a score — the gap a Sol audit BLOCKed
    * PR #133 (variant matching) over: at a 77% match rate, a silent wrong
-   * match is the bigger risk than a low match rate ever was. null for an
-   * unmatched row, or a matched row whose lwin_catalog row has since
-   * disappeared (see the lookup below — degrades, never fails preview). */
+   * match is the bigger risk than a low match rate ever was.
+   *
+   * BLOCK 2 (round-13 fix) — this is match_lwin_bulk's OWN display_name
+   * (0076_csv_import_batches.sql), carried straight through matchLwinBulk
+   * (lwin-matching.ts) and the best-of-variants reduction below. There used
+   * to be a SECOND, separately-paginated lwin_catalog lookup here that
+   * re-fetched a name match_lwin_bulk had already returned — deleted
+   * outright (see docs/runbooks/csv-import.md) rather than patched, since
+   * the RPC's own result already carries everything this field needs. null
+   * for an unmatched row, or the rare case where match_lwin_bulk's own join
+   * returns a null display_name (never fails preview either way). */
   lwinDisplayName: string | null;
   costStatus: "present" | "missing";
   resolution: "auto" | "pending" | "include" | "exclude";
@@ -248,39 +205,6 @@ export async function buildImportPreview(
     if (!current || match.score > current.score) matches.set(rowIdx, match);
   }
 
-  // Item 2 (per-row LWIN match visibility): one lookup for every distinct
-  // matched lwin_id, rather than one per row — lwin_catalog is RLS-readable
-  // by any authenticated user (schema.snapshot.sql), and this is the FIRST
-  // time application code queries it outside match_lwin_bulk's own SQL. A
-  // catalog row that has since disappeared (or the lookup itself failing)
-  // degrades that row's display name to null — the raw lwinId/lwinScore
-  // this product actually writes are unaffected either way, so a lookup
-  // failure never fails the whole preview.
-  //
-  // Sol audit round 3, finding 1: MAX_ROWS (constants.ts) allows 5,000
-  // matched rows, so distinctLwinIds can exceed PostgREST's db.max_rows
-  // cap (1,000 — supabase/config.toml). Paginates to exhaustion via the
-  // same fetchAll pattern already used in src/lib/cellar-health/
-  // recompute.ts, src/app/api/member-analytics/route.ts, and the cellar
-  // page (src/app/(app)/cellar/page.tsx) for the identical PostgREST cap.
-  // `.order("lwin_id")` is the tiebreaker so offset-based pagination can't
-  // skip/duplicate rows on a tied sort key.
-  const distinctLwinIds = Array.from(new Set(Array.from(matches.values(), (m) => m.lwinId)));
-  const displayNames = new Map<string, string>();
-  if (distinctLwinIds.length > 0) {
-    const catalogRows = await fetchAll<{ lwin_id: string; display_name: string }>((from, to) =>
-      supabase
-        .from("lwin_catalog")
-        .select("lwin_id, display_name")
-        .in("lwin_id", distinctLwinIds)
-        .order("lwin_id")
-        .range(from, to),
-    );
-    for (const row of catalogRows) {
-      displayNames.set(row.lwin_id, row.display_name);
-    }
-  }
-
   const rows: PreviewRow[] = validated.map((row, idx) => {
     const rowNumber = idx + 1;
 
@@ -316,7 +240,7 @@ export async function buildImportPreview(
       lwinStatus,
       lwinId: match?.lwinId ?? null,
       lwinScore: match?.score ?? null,
-      lwinDisplayName: match ? (displayNames.get(match.lwinId) ?? null) : null,
+      lwinDisplayName: match?.displayName ?? null,
       costStatus,
       resolution: needsResolution ? "pending" : "auto",
       mergedFromRowNumbers: [],

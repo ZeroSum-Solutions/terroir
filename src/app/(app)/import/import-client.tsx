@@ -68,6 +68,24 @@ async function countPreviewUnits(file: File): Promise<number | null> {
   }
 }
 
+/** BLOCK 1 (round-13 fix) — countPreviewUnits (above) resolves
+ * asynchronously (it reads the whole file), so the wait estimate it
+ * produces is NOT available the instant a file is selected. Without
+ * tracking that gap explicitly, two races were possible: (1) an operator
+ * could click Preview in the window before the estimate ever resolves,
+ * seeing no disclosure at all; (2) switching from a small file to a large
+ * one kept showing the SMALL file's stale estimate/unit count until the
+ * new one resolved, so a click in that window committed to the wrong
+ * file's wait. "pending" is set SYNCHRONOUSLY, DURING RENDER, the instant
+ * `file` changes (see the ImportClient state declared with this type, below —
+ * a render-phase state adjustment, not an effect), clearing whatever the
+ * previous file's status was — Preview stays disabled for the whole
+ * "pending" window on either race. "unavailable" (the file couldn't even
+ * be decoded/split) still allows a click: handlePreview's own real
+ * decode/split surfaces the actual error, there is nothing more honest to
+ * gate on here. */
+type PreviewUnitsStatus = "idle" | "pending" | "ready" | "unavailable";
+
 /** One error row's worth of prefill text for the inline row-fix form —
  * the exact text the row was validated against, for every canonical
  * field (see row-validator.ts's ValidatedRow.rawText). rowNumber is the
@@ -132,11 +150,26 @@ export type ApprovedLwinRows = Record<number, string>;
  * nothing for the veto to ever protect there. Included even for a row the
  * operator has separately rejected (rejectedLwinRows) — applyLwinApprovalVeto
  * runs AFTER rejections are applied server-side, so an approved entry for
- * an already-rejected row is a harmless no-op, never double-processed. */
+ * an already-rejected row is a harmless no-op, never double-processed.
+ *
+ * BLOCK 2 (round-13 fix) — an apply-eligible row is ALSO excluded when it
+ * has no display identity (lwinDisplayName === null): the operator was
+ * never actually shown what this match claims to be (see
+ * MatchedLwinRowItem/its `linkingMatchedRows` filter below, which apply
+ * the identical condition so a no-identity row is never rendered as
+ * "linking" in the first place), so there is nothing here for them to have
+ * approved. Excluding it here is what makes that failure mode fail
+ * CLOSED: applyLwinApprovalVeto (batch-service.ts) treats any apply-
+ * eligible row absent from this payload exactly like an explicit
+ * rejection, so a match match_lwin_bulk itself returned with no name can
+ * never be auto-stamped — this residual should be all but impossible now
+ * that display_name comes straight off the same RPC row as lwinId/score
+ * (lwin-matching.ts), but the gate stays defensive rather than assuming
+ * that invariant forever. */
 export function buildApprovedLwinRows(matchedRows: MatchedLwinRowEntry[]): ApprovedLwinRows {
   const approved: ApprovedLwinRows = {};
   for (const row of matchedRows) {
-    if (row.lwinScore >= LWIN_APPLY_MIN_SCORE) approved[row.rowNumber] = row.lwinId;
+    if (row.lwinScore >= LWIN_APPLY_MIN_SCORE && row.lwinDisplayName !== null) approved[row.rowNumber] = row.lwinId;
   }
   return approved;
 }
@@ -493,11 +526,42 @@ export function ImportClient() {
   // call inside it — so a plain (<= MAX_ROWS) file gets the same advance
   // disclosure a chunked one already did, and neither path's warning
   // depends on the operator having already committed to the wait.
+  //
+  // BLOCK 1 (round-13 fix) — previewUnits alone can't distinguish "not
+  // known yet for THIS file" from "known to be unavailable," and nothing
+  // used to stop the operator from clicking Preview during that gap, or
+  // from reading the PREVIOUS file's estimate while a new one was still
+  // resolving (see countPreviewUnits' own comment and PreviewUnitsStatus
+  // above). previewUnitsStatus tracks that explicitly.
+  //
+  // The stale value is cleared SYNCHRONOUSLY, DURING RENDER, the instant
+  // `file` changes — React's own "adjusting state when a prop changes"
+  // pattern (comparing against a ref-like previewUnitsFile state and
+  // calling setState in the render body, not inside an effect): this is
+  // what actually closes both races, since it happens before the browser
+  // ever paints the old value, not merely "before the next effect flush."
+  // Doing this inside a useEffect body instead (the more obvious spot)
+  // trips `react-hooks/set-state-in-effect` — an unconditional setState
+  // call in an effect causes an extra cascading render for no benefit
+  // when the render-phase pattern achieves the same synchronous clear.
+  // The actual async count still lives in its own effect below, which
+  // only ever calls setState from its `.then()` callback (not the effect
+  // body itself), which the same lint rule allows.
   const [previewUnits, setPreviewUnits] = useState<number | null>(null);
+  const [previewUnitsStatus, setPreviewUnitsStatus] = useState<PreviewUnitsStatus>("idle");
+  const [previewUnitsFile, setPreviewUnitsFile] = useState<File | null>(file);
+  if (file !== previewUnitsFile) {
+    setPreviewUnitsFile(file);
+    setPreviewUnits(null);
+    setPreviewUnitsStatus(file ? "pending" : "idle");
+  }
   useEffect(() => {
+    if (!file) return;
     let cancelled = false;
-    void (file ? countPreviewUnits(file) : Promise.resolve(null)).then((units) => {
-      if (!cancelled) setPreviewUnits(units);
+    void countPreviewUnits(file).then((units) => {
+      if (cancelled) return;
+      setPreviewUnits(units);
+      setPreviewUnitsStatus(units === null ? "unavailable" : "ready");
     });
     return () => {
       cancelled = true;
@@ -865,6 +929,7 @@ export function ImportClient() {
           onPreview={handlePreview}
           previewing={previewing}
           previewUnits={previewUnits}
+          previewUnitsStatus={previewUnitsStatus}
           error={previewError}
         />
       )}
@@ -934,11 +999,17 @@ async function loadBatchDetail(id: string, setBatch: (b: BatchDetail) => void) {
   setBatch(await response.json());
 }
 
-/** WARN 4 (round-29 audit) — plain-language rendering of a worst-case
- * seconds estimate (estimateChunkedPhaseWaitSeconds, session-step.tsx) for
+/** WARN 4 (round-29 audit) — plain-language rendering of an ESTIMATED
+ * seconds figure (estimateChunkedPhaseWaitSeconds, session-step.tsx) for
  * the operator-facing cost messages below. Minutes past 90s, otherwise
- * seconds — never false precision (this is a worst-case bound, not a
- * measured duration). */
+ * seconds — never false precision.
+ *
+ * NIT 4 (round-13 fix) — CORRECTED wording: this used to call the input "a
+ * worst-case bound." It isn't one — see estimateChunkedPhaseWaitSeconds'
+ * own comment (session-step.tsx) for why nothing actually enforces it as a
+ * cap. This is a measured duration ONLY in the sense that it's derived
+ * from a real (if inherited) benchmark, never a guarantee about any one
+ * run. */
 function formatRoughDuration(seconds: number): string {
   if (seconds < 90) return `${seconds}s`;
   const minutes = Math.ceil(seconds / 60);
@@ -949,16 +1020,21 @@ function formatRoughDuration(seconds: number): string {
  * The old copy ("up to Xs in the worst case") stated more certainty than
  * the numbers behind it actually have: LWIN_MATCH_PER_CALL_SECONDS
  * (constants.ts) is an INHERITED estimate from a different measurement run,
- * not a reproduced one; matchLwinBulk (lwin-matching.ts) awaits its RPC
+ * not a reproduced one, and matchLwinBulk (lwin-matching.ts) awaits its RPC
  * calls with no elapsed-time deadline of its own, so nothing actually
- * enforces this number as a cap; and the estimate covers LWIN catalog
- * MATCHING only — the catalogue display-name lookup buildImportPreview
- * runs AFTER matching (preview-service.ts) is not included in it. Worded
- * here as the approximation it is, and scoped to what it actually covers. */
+ * enforces this number as a cap. Worded here as the approximation it is.
+ *
+ * BLOCK 2 / NIT 4 (round-13 fix) — this used to also carve out "it doesn't
+ * include the brief catalog name lookup that runs afterward": preview used
+ * to make a SECOND network call (a separate lwin_catalog display-name
+ * lookup) after matching, uncounted by this estimate. That lookup is
+ * deleted outright — match_lwin_bulk already returns display_name, so
+ * matching is genuinely the only network call this estimate needs to
+ * cover, and the carve-out is gone with it. */
 function describeWaitEstimate(seconds: number): string {
   return (
     `approximately ${formatRoughDuration(seconds)} for wine-catalog matching — an estimate from measured ` +
-    `matching performance, not a guaranteed cap, and it doesn't include the brief catalog name lookup that runs afterward`
+    `matching performance, not a guaranteed cap`
   );
 }
 
@@ -969,6 +1045,7 @@ function UploadStep({
   onPreview,
   previewing,
   previewUnits,
+  previewUnitsStatus,
   error,
 }: {
   file: File | null;
@@ -984,6 +1061,12 @@ function UploadStep({
    * known — before the operator ever clicks Preview, not only once
    * "previewing" is already true. */
   previewUnits: number | null;
+  /** BLOCK 1 (round-13 fix): whether previewUnits (above) reflects the
+   * CURRENTLY selected file yet — see PreviewUnitsStatus's own comment.
+   * Gates the Preview button below so a click can't land in the window
+   * before the estimate resolves, or while a stale previous-file estimate
+   * is still on screen mid-swap. */
+  previewUnitsStatus: PreviewUnitsStatus;
   error: string | null;
 }) {
   return (
@@ -1036,7 +1119,13 @@ function UploadStep({
 
       <button
         type="button"
-        disabled={!file || previewing}
+        // BLOCK 1 (round-13 fix): disabled while previewUnitsStatus is
+        // "pending" — the window where this file's own estimate hasn't
+        // resolved yet (either it was just selected, or a different file
+        // was just swapped in and this one's async count is still in
+        // flight). "unavailable" still allows a click: handlePreview's own
+        // real decode/split will surface the actual error.
+        disabled={!file || previewing || previewUnitsStatus === "pending"}
         onClick={onPreview}
         className="mt-lg flex min-h-11 w-full items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
       >
@@ -1150,7 +1239,20 @@ export function PreviewStep({
   // here so "Matched wines" only ever claims rows that will actually
   // link, and a sub-threshold candidate gets its own honestly-labeled band
   // instead of a reject control that would do nothing.
-  const linkingMatchedRows = effectiveMatchedRows.filter((r) => r.lwinScore >= LWIN_APPLY_MIN_SCORE);
+  //
+  // BLOCK 2 (round-13 fix) — an apply-eligible row (score >=
+  // LWIN_APPLY_MIN_SCORE) with no display identity (lwinDisplayName ===
+  // null) is EXCLUDED from linkingMatchedRows too, not just from
+  // buildApprovedLwinRows' own payload: the operator can't verify a match
+  // they're never shown, so it's treated as not-shown entirely — it never
+  // renders under "Matched wines" (would wrongly imply it links) and never
+  // renders under "Below match threshold" either (its score genuinely
+  // clears that bar, so that band's own copy — "will import with no
+  // catalog link" — would be a lie). Same condition buildApprovedLwinRows
+  // gates on, so a row that isn't shown here is never approved either.
+  const linkingMatchedRows = effectiveMatchedRows.filter(
+    (r) => r.lwinScore >= LWIN_APPLY_MIN_SCORE && r.lwinDisplayName !== null,
+  );
   const belowThresholdMatchedRows = effectiveMatchedRows.filter((r) => r.lwinScore < LWIN_APPLY_MIN_SCORE);
   const [shownMatchedCount, setShownMatchedCount] = useState(MAX_SHOWN_MATCHED_ROWS);
   const shownMatchedRows = linkingMatchedRows.slice(0, shownMatchedCount);
@@ -1313,7 +1415,14 @@ export function PreviewStep({
           }
           for (const row of effectiveMatchedRows) {
             if (row.rowNumber < bounds.startRow || row.rowNumber > bounds.endRow) continue;
-            if (row.lwinScore >= LWIN_APPLY_MIN_SCORE) currentApprovedSlice[row.rowNumber] = row.lwinId;
+            // BLOCK 2 (round-13 fix): same fail-closed condition as
+            // buildApprovedLwinRows — this slice must match what was
+            // actually SENT with the failed attempt (sentApprovedLwinRowsSnapshot),
+            // and buildApprovedLwinRows never sends an entry for a row with
+            // no display identity.
+            if (row.lwinScore >= LWIN_APPLY_MIN_SCORE && row.lwinDisplayName !== null) {
+              currentApprovedSlice[row.rowNumber] = row.lwinId;
+            }
           }
         }
         return (

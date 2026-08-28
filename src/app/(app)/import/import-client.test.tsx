@@ -19,11 +19,13 @@ import {
   isRowInConfirmedChunk,
   isRowInSkippedChunk,
   buildImportAnywayOverride,
+  buildApprovedLwinRows,
   skipChunk,
   undoSkipChunk,
   MAX_SHOWN_ERROR_ROWS,
   type ErrorRowEntry,
   type BatchDetail,
+  type MatchedLwinRowEntry,
 } from "./import-client";
 import { ZERO_SUMMARY, type ChunkUploadState, type ChunkedPlanState } from "./session-step";
 import {
@@ -1548,23 +1550,27 @@ describe("PreviewStep — matched-row visibility and rejection (item 2)", () => 
     expect(findButton(item, "Reject match")).toBeTruthy();
   });
 
-  // BLOCK 3 (Sol audit round 3, finding 3): this used to use lwinScore: 0.5
-  // — BELOW LWIN_APPLY_MIN_SCORE (0.6), so apply would never have stamped
-  // it regardless of operator action. Rendering it under "Matched wines"
-  // with a live "Reject match" control was exactly the misleading
-  // presentation the finding flagged. Bumped to 0.65 (still >=
-  // LWIN_APPLY_MIN_SCORE) so this test keeps pinning what it actually
-  // means to pin — the honest-placeholder fallback — inside the band
-  // where a reject control is coherent. The below-threshold band's own
-  // honest presentation is pinned separately below.
-  it("falls back to an honest placeholder when the catalog row has since disappeared (lwinDisplayName null)", async () => {
+  // BLOCK 2 (round-13 fix) — this used to render an apply-eligible,
+  // no-identity match under "Matched wines" with a "Catalog entry (name
+  // unavailable)" placeholder AND a live "Reject match" control, while
+  // the row was STILL auto-included in approvedLwinRows regardless of
+  // what the operator did with that control — a wrong match could apply
+  // with no identity ever shown. Now it's treated as not-shown entirely:
+  // it renders under NEITHER band (not "Matched wines" — nothing to
+  // verify; not "Below match threshold" — its score genuinely clears that
+  // bar, so that band's "will import with no catalog link" copy would be
+  // a lie), and buildApprovedLwinRows' own fail-closed test (below) pins
+  // that it's never auto-approved either.
+  it("treats an apply-eligible match with no display identity as not-shown — never under Matched wines, never under Below match threshold", async () => {
     const { container } = await mount(
       <PreviewStep
         {...baseProps({ matchedRows: [{ rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: null, lwinScore: 0.65 }] })}
       />,
     );
 
-    expect(rowItem(container, "Row 1").textContent).toContain("Catalog entry (name unavailable)");
+    expect(container.textContent).not.toContain("Matched wines");
+    expect(container.textContent).not.toContain("Below match threshold");
+    expect(container.textContent).not.toContain("Catalog entry (name unavailable)");
   });
 
   it("calls onToggleLwinReject with the row number when Reject match is clicked", async () => {
@@ -1698,6 +1704,49 @@ describe("PreviewStep — matched-row visibility and rejection (item 2)", () => 
   async function click(element: HTMLElement) {
     await act(async () => element.click());
   }
+});
+
+function matchedRow(overrides: Partial<MatchedLwinRowEntry> = {}): MatchedLwinRowEntry {
+  return { rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A", lwinScore: 0.9, ...overrides };
+}
+
+// BLOCK 2 (round-13 fix) — buildApprovedLwinRows is the actual gate that
+// decides which matches get auto-stamped at confirm (via
+// applyLwinApprovalVeto, batch-service.ts): a row absent from its output
+// is treated exactly like an explicit rejection server-side. These pin the
+// fail-closed residual this round's fix adds: an apply-eligible match with
+// no display identity must never be approved, even though its score alone
+// would otherwise qualify it.
+describe("buildApprovedLwinRows (BLOCK 2, round-13 fix)", () => {
+  it("approves an apply-eligible row with a display identity", () => {
+    expect(buildApprovedLwinRows([matchedRow({ rowNumber: 1, lwinScore: 0.9, lwinDisplayName: "Domaine A" })])).toEqual({
+      1: "LWIN001",
+    });
+  });
+
+  it("fails CLOSED on an apply-eligible row with no display identity — never approved, even though its score alone qualifies", () => {
+    expect(
+      buildApprovedLwinRows([
+        matchedRow({ rowNumber: 1, lwinId: "LWIN001", lwinScore: 0.65, lwinDisplayName: null }),
+      ]),
+    ).toEqual({});
+  });
+
+  it("excludes a below-apply-threshold row regardless of display identity", () => {
+    expect(
+      buildApprovedLwinRows([matchedRow({ rowNumber: 1, lwinScore: 0.45, lwinDisplayName: "Domaine A" })]),
+    ).toEqual({});
+  });
+
+  it("mixes eligible, no-identity, and below-threshold rows correctly in one payload", () => {
+    expect(
+      buildApprovedLwinRows([
+        matchedRow({ rowNumber: 1, lwinId: "LWIN001", lwinScore: 0.9, lwinDisplayName: "Domaine A" }),
+        matchedRow({ rowNumber: 2, lwinId: "LWIN002", lwinScore: 0.65, lwinDisplayName: null }),
+        matchedRow({ rowNumber: 3, lwinId: "LWIN003", lwinScore: 0.4, lwinDisplayName: "Domaine C" }),
+      ]),
+    ).toEqual({ 1: "LWIN001" });
+  });
 });
 
 // Round-5 audit finding 2: even with the server-side hardening (2a/2b),
@@ -2045,6 +2094,14 @@ describe("wait-estimate disclosure (justifies LWIN_MATCH_UX_CEILING_SECONDS, rou
     return { container };
   }
 
+  function previewButtonOf(container: HTMLElement): HTMLButtonElement {
+    const button = [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+      b.textContent?.includes("Preview import"),
+    );
+    if (!button) throw new Error("no Preview import button found");
+    return button;
+  }
+
   it("single-file path: shows the estimate in UploadStep before Preview is clicked", async () => {
     const { container } = await mountImportClient();
     await selectFile(container, csvFile("small.csv", 10));
@@ -2054,27 +2111,35 @@ describe("wait-estimate disclosure (justifies LWIN_MATCH_UX_CEILING_SECONDS, rou
 
     // Not yet clicked: the button still reads "Preview import", never
     // "Reading file…" (previewing=true) — proves the estimate showed up
-    // BEFORE the operator committed to the wait.
-    const previewButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
-      b.textContent?.includes("Preview import"),
-    );
-    expect(previewButton).toBeTruthy();
+    // BEFORE the operator committed to the wait. And now that the
+    // estimate has settled, the button is enabled (BLOCK 1, round-13 fix).
+    const previewButton = previewButtonOf(container);
+    expect(previewButton.textContent).toContain("Preview import");
+    expect(previewButton.disabled).toBe(false);
   });
 
-  it("chunked path: shows the estimate AND the chunk count in UploadStep before Preview is clicked", async () => {
-    const { container } = await mountImportClient();
-    const dataRows = MAX_ROWS + 1;
-    const expectedChunks = Math.ceil(dataRows / CLIENT_CHUNK_TARGET_ROWS);
-    await selectFile(container, csvFile("big.csv", dataRows));
+  // WARN 3 (round-13 fix) — this used to only ever exercise MAX_ROWS + 1
+  // rows, which always yields exactly 2 chunks (ceil(5001 / 4000)) — a
+  // production hardcoded to `estimateChunkedPhaseWaitSeconds(2)` would have
+  // passed this unchanged. Parametrized over two DISTINCT chunk counts (2
+  // and 3) so a hardcoded chunk count fails.
+  it.each([
+    { dataRows: MAX_ROWS + 1 },
+    { dataRows: 2 * CLIENT_CHUNK_TARGET_ROWS + 1 },
+  ])(
+    "chunked path: shows the estimate AND the chunk count in UploadStep before Preview is clicked ($dataRows rows)",
+    async ({ dataRows }) => {
+      const { container } = await mountImportClient();
+      const expectedChunks = Math.ceil(dataRows / CLIENT_CHUNK_TARGET_ROWS);
+      await selectFile(container, csvFile("big.csv", dataRows));
 
-    expect(container.textContent).toContain(`This file needs ${expectedChunks} chunks`);
-    expect(container.textContent).toContain(expectedDuration(expectedChunks));
+      expect(container.textContent).toContain(`This file needs ${expectedChunks} chunks`);
+      expect(container.textContent).toContain(expectedDuration(expectedChunks));
 
-    const previewButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
-      b.textContent?.includes("Preview import"),
-    );
-    expect(previewButton).toBeTruthy();
-  });
+      const previewButton = previewButtonOf(container);
+      expect(previewButton.disabled).toBe(false);
+    },
+  );
 
   it("plain path: shows the estimate again in PreviewStep before Confirm is clicked", async () => {
     const { container } = await mountPreviewStep({});
@@ -2088,30 +2153,141 @@ describe("wait-estimate disclosure (justifies LWIN_MATCH_UX_CEILING_SECONDS, rou
     expect(confirmButton).toBeTruthy();
   });
 
-  it("chunked path: shows the estimate again in PreviewStep before Confirm is clicked, naming the chunk count", async () => {
-    const { container } = await mountPreviewStep({ chunkTotal: 3 });
+  // WARN 3 (round-13 fix) — the confirm-side fixture used to only ever use
+  // chunkTotal: 3. Parametrized over two DISTINCT chunk totals (3 and 5)
+  // so a hardcoded `estimateChunkedPhaseWaitSeconds(3)` (or a hardcoded "3
+  // chunks" copy check) fails.
+  it.each([{ chunkTotal: 3 }, { chunkTotal: 5 }])(
+    "chunked path: shows the estimate again in PreviewStep before Confirm is clicked, naming the chunk count (chunkTotal=$chunkTotal)",
+    async ({ chunkTotal }) => {
+      const { container } = await mountPreviewStep({ chunkTotal });
 
-    expect(container.textContent).toContain("split into 3 chunks");
-    expect(container.textContent).toContain("Confirming it is estimated to take up to");
-    expect(container.textContent).toContain(expectedDuration(3));
-  });
+      expect(container.textContent).toContain(`split into ${chunkTotal} chunks`);
+      expect(container.textContent).toContain("Confirming it is estimated to take up to");
+      expect(container.textContent).toContain(expectedDuration(chunkTotal));
+    },
+  );
 
   // Round-29 audit's old copy ("up to about Xs in the worst case") stated
   // more certainty than the numbers behind it have — corrected in d6813cb.
   // Asserts the honest replacement, not just its presence: an explicit
   // "not a guaranteed cap" disclaimer, and none of the old bound-implying
   // phrasing ("worst case", "maximum").
+  //
+  // WARN 3 (round-13 fix) — this used to inspect ONLY PreviewStep's own
+  // rendering. UploadStep renders the identical estimate copy
+  // (describeWaitEstimate) through a completely separate code path
+  // (UploadStep's own wait-estimate paragraph, gated on previewUnits/
+  // previewUnitsStatus rather than PreviewStep's props) — a regression
+  // there (e.g. a stray "worst case" reintroduced only in UploadStep's own
+  // JSX) would have shipped green. Now runs the same assertions against
+  // both UploadStep renderings (single-file and chunked) too.
   it("the wording is honest — an estimate, never a guaranteed/worst-case bound", async () => {
     const single = await mountPreviewStep({});
     const chunked = await mountPreviewStep({ chunkTotal: 2 });
+    const uploadSingle = await mountImportClient();
+    await selectFile(uploadSingle.container, csvFile("small.csv", 10));
+    const uploadChunked = await mountImportClient();
+    await selectFile(uploadChunked.container, csvFile("big.csv", MAX_ROWS + 1));
 
-    for (const { container } of [single, chunked]) {
+    for (const { container } of [single, chunked, uploadSingle, uploadChunked]) {
       const text = (container.textContent ?? "").toLowerCase();
       expect(text).toContain("not a guaranteed cap");
       expect(text).toContain("estimate");
       expect(text).not.toContain("worst case");
       expect(text).not.toMatch(/\bmaximum\b/);
     }
+  });
+
+  // BLOCK 1 (round-13 fix) — countPreviewUnits resolves asynchronously
+  // (file.arrayBuffer(), then decode/split), so previewUnits/
+  // previewUnitsStatus for the just-selected file is NOT available the
+  // instant `file` changes. Round-12's tests all waited six microtasks
+  // before ever inspecting the button, so neither race below could have
+  // been caught: an operator clicking Preview in that window used to reach
+  // handlePreview with no disclosure ever having been shown.
+  //
+  // Both races below hold a file's own `arrayBuffer()` read open with a
+  // manually-controlled promise (rather than relying on how many
+  // unrelated microtasks `act()` happens to drain on its own) — this makes
+  // the "still pending" window deterministic to observe and settle,
+  // instead of racing the test against React's own internal scheduling.
+  function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  }
+
+  it("clicking immediately after selection can't race ahead of the estimate — Preview is disabled until it settles", async () => {
+    const { container } = await mountImportClient();
+    const file = csvFile("small.csv", 10);
+    const realBytes = await file.arrayBuffer();
+    const gate = deferred<ArrayBuffer>();
+    vi.spyOn(file, "arrayBuffer").mockReturnValue(gate.promise);
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    Object.defineProperty(input, "files", { value: transfer.files, configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    // countPreviewUnits' own file.arrayBuffer() read is deliberately held
+    // open — Preview stays disabled and no estimate is shown for however
+    // long that read takes, proving the gate isn't a fixed number of
+    // microtask ticks that happened to be enough in round-12's own tests.
+    const previewButton = previewButtonOf(container);
+    expect(previewButton.disabled).toBe(true);
+    expect(container.textContent).not.toContain("Previewing this file is estimated to take");
+
+    await act(async () => {
+      gate.resolve(realBytes);
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    });
+    expect(previewButton.disabled).toBe(false);
+    expect(container.textContent).toContain(expectedDuration(1));
+  });
+
+  it("switching from a small file to a large one clears the stale estimate immediately and disables Preview until the NEW file settles", async () => {
+    const { container } = await mountImportClient();
+    await selectFile(container, csvFile("small.csv", 10));
+    expect(container.textContent).toContain(expectedDuration(1));
+    const previewButton = previewButtonOf(container);
+    expect(previewButton.disabled).toBe(false);
+
+    // Swap in a much bigger file whose own arrayBuffer() read is held
+    // open — its estimate deliberately never resolves during this test.
+    const dataRows = 2 * CLIENT_CHUNK_TARGET_ROWS + 1;
+    const expectedChunks = Math.ceil(dataRows / CLIENT_CHUNK_TARGET_ROWS);
+    const bigFile = csvFile("big.csv", dataRows);
+    const bigFileRealBytes = await bigFile.arrayBuffer();
+    const gate = deferred<ArrayBuffer>();
+    vi.spyOn(bigFile, "arrayBuffer").mockReturnValue(gate.promise);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const transfer = new DataTransfer();
+    transfer.items.add(bigFile);
+    Object.defineProperty(input, "files", { value: transfer.files, configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    // The small file's estimate is gone immediately — an operator reading
+    // the screen right now never sees a number that belongs to the file
+    // they just moved away from — and Preview is disabled again for as
+    // long as the NEW file's own read is still open.
+    expect(container.textContent).not.toContain(expectedDuration(1));
+    expect(previewButton.disabled).toBe(true);
+
+    await act(async () => {
+      gate.resolve(bigFileRealBytes);
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    });
+    expect(container.textContent).toContain(`This file needs ${expectedChunks} chunks`);
+    expect(container.textContent).toContain(expectedDuration(expectedChunks));
+    expect(previewButton.disabled).toBe(false);
   });
 });
 

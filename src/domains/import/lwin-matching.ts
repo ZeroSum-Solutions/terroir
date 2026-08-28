@@ -42,6 +42,14 @@ export function buildLwinQueryVariants(
 export type LwinMatch = {
   lwinId: string;
   score: number;
+  /** BLOCK 2 (round-13 fix) — match_lwin_bulk (0076) already SELECTs
+   * lwin_catalog.display_name as part of its own join (see the migration's
+   * comment); this just carries that value through instead of preview-
+   * service.ts re-fetching it with a second, separately-paginated query.
+   * null on the rare row where the catalog's own display_name is null —
+   * degrades the same way a missing lookup result used to (never fails
+   * matching, never guesses a name). */
+  displayName: string | null;
 };
 
 /**
@@ -79,9 +87,14 @@ export async function matchLwinBulk(
       } as never);
       if (error) throw error;
 
-      for (const row of (data ?? []) as Array<{ idx: number; lwin_id: string | null; score: number | null }>) {
+      for (const row of (data ?? []) as Array<{
+        idx: number;
+        lwin_id: string | null;
+        score: number | null;
+        display_name: string | null;
+      }>) {
         if (row.lwin_id) {
-          results.set(row.idx, { lwinId: row.lwin_id, score: row.score ?? 0 });
+          results.set(row.idx, { lwinId: row.lwin_id, score: row.score ?? 0, displayName: row.display_name ?? null });
         }
       }
     }

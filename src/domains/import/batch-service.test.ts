@@ -127,19 +127,13 @@ function fakeImportBatchesTable(
       };
       return builder;
     }
-    // Item 2: buildImportPreview's display-name lookup — every confirm
-    // whose match_lwin_bulk mock returns a real (non-null) lwin_id reaches
-    // this table. No test in this file asserts on display names (that's
-    // preview-service.test.ts's job); an empty catalog is enough to let
-    // the lookup degrade to null and move on. Sol audit round 3, finding
-    // 1: preview-service.ts's lookup now pages via .order().range() (see
-    // preview-service.test.ts's own makeSupabase for the full pagination
-    // fake) — this table stays a fixed empty-page stub since no test here
-    // exercises pagination itself, but the CHAIN SHAPE must still match or
-    // every confirm with a real lwin_id match throws.
-    if (table === "lwin_catalog") {
-      return { select: () => ({ in: () => ({ order: () => ({ range: () => Promise.resolve({ data: [], error: null }) }) }) }) };
-    }
+    // BLOCK 2 (round-13 fix) — buildImportPreview's display-name lookup
+    // used to reach lwin_catalog directly for every confirm whose
+    // match_lwin_bulk mock returned a real (non-null) lwin_id; that
+    // separate lookup is deleted outright (match_lwin_bulk's own result
+    // already carries display_name — see lwin-matching.test.ts/
+    // preview-service.test.ts), so `.from("lwin_catalog")` is never called
+    // here anymore.
     if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
     let predicate: (row: FakeBatchRow) => boolean = () => true;
     const orderCols: { col: keyof FakeBatchRow; ascending: boolean }[] = [];

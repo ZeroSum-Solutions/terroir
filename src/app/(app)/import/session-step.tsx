@@ -194,23 +194,33 @@ const CONFIRM_RATE_WINDOW_MS = 60 * 1000;
 const PREVIEW_RATE_WINDOW_MS = 60 * 1000;
 const PREVIEW_MAX_RETRIES_PER_CHUNK = 5;
 
-/** WARN 4 (round-29 audit) — LWIN_MATCH_MAX_QUERIES (constants.ts) bounds
- * each INDIVIDUAL chunk's own LWIN-matching wall clock to
- * LWIN_MATCH_UX_CEILING_SECONDS (round-10 fix: 120s), but a multi-chunk
- * file is previewed — and later confirmed — one chunk at a time,
- * sequentially (the loops in planChunkedPreview and confirmChunkedSession
- * above), never in parallel. Every chunk passing its own per-chunk budget
- * says nothing about the TOTAL wait for the whole operation: a 5-chunk
- * file can cost up to 5 x 120s = 600s of preview, then up to another 600s
- * to confirm — with no per-chunk check ever failing. This is the honest
- * worst-case total for ONE phase (preview OR confirm) of a
- * `chunkTotal`-chunk operation, reusing
- * the exact same per-chunk ceiling every chunk is already individually
- * bounded by — never a new, separately-tunable number that could drift
- * from it. Surfaced to the operator BEFORE each phase's own wait begins
- * (import-client.tsx's UploadStep/PreviewStep, and SessionStep below) so
- * "every chunk passes" is never silently read as "the whole operation is
- * fast." */
+/** WARN 4 (round-29 audit) — LWIN_MATCH_MAX_QUERIES (constants.ts) is
+ * SOLVED so each INDIVIDUAL chunk's own LWIN-matching is TARGETED to
+ * complete within LWIN_MATCH_UX_CEILING_SECONDS (round-10 fix: 120s), but
+ * a multi-chunk file is previewed — and later confirmed — one chunk at a
+ * time, sequentially (the loops in planChunkedPreview and
+ * confirmChunkedSession above), never in parallel. Every chunk passing its
+ * own per-chunk budget says nothing about the TOTAL wait for the whole
+ * operation: a 5-chunk file can cost up to roughly 5 x 120s = 600s of
+ * preview, then roughly another 600s to confirm.
+ *
+ * NIT 4 (round-13 fix) — CORRECTED wording: this used to call itself a
+ * "wall-clock bound" and "the honest worst-case total," which overstates
+ * what LWIN_MATCH_UX_CEILING_SECONDS actually is. It's an INHERITED
+ * estimate the query budget is solved against (see
+ * LWIN_MATCH_PER_CALL_SECONDS' own comment, constants.ts, for the
+ * provenance), and matchLwinBulk (lwin-matching.ts) awaits its RPC calls
+ * with no elapsed-time deadline of its own — nothing actually enforces
+ * LWIN_MATCH_UX_CEILING_SECONDS as a cap on any one chunk, so multiplying
+ * it by chunkTotal can't be a bound either. This is an ESTIMATE of the
+ * total for ONE phase (preview OR confirm) of a `chunkTotal`-chunk
+ * operation, reusing the exact same per-chunk figure every chunk's own
+ * budget is already solved against — never a new, separately-tunable
+ * number that could drift from it. Surfaced to the operator BEFORE each
+ * phase's own wait begins (import-client.tsx's UploadStep/PreviewStep, and
+ * SessionStep below) so "every chunk passes" is never silently read as
+ * "the whole operation is fast," and describeWaitEstimate (import-
+ * client.tsx) states it as the estimate it is, not a guaranteed cap. */
 export function estimateChunkedPhaseWaitSeconds(chunkTotal: number): number {
   return chunkTotal * LWIN_MATCH_UX_CEILING_SECONDS;
 }
