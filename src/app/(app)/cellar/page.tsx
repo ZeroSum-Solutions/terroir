@@ -26,6 +26,29 @@ type BinData = {
 
 type GridData = Record<string, BinData>;
 
+const FETCH_PAGE_SIZE = 1000;
+
+// PostgREST caps a single response at db.max_rows (1000 — see
+// supabase/config.toml); unpaginated reads silently truncate on large
+// cellars (the OPP-3 lesson — see src/lib/cellar-health/recompute.ts,
+// which paginates the same wines/inventory_items tables for this exact
+// reason). Every potentially-large cellar read pages to exhaustion.
+async function fetchAll<T>(
+  makeQuery: (from: number, to: number) => PromiseLike<{
+    data: T[] | null;
+    error: { message: string } | null;
+  }>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += FETCH_PAGE_SIZE) {
+    const { data, error } = await makeQuery(from, from + FETCH_PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < FETCH_PAGE_SIZE) return rows;
+  }
+}
+
 /**
  * Cellar single-screen surface (Phase 2 IA redesign — see
  * `.council/specs/2026-04-24-ux-ia-redesign.md` §4).
@@ -51,8 +74,8 @@ export default async function CellarPage() {
   const { supabase, restaurantId, restaurantName, userRole } = auth;
 
   const [
-    { data: wineRows },
-    { data: inventoryRows, error: inventoryError },
+    wineRows,
+    inventoryRows,
     { data: binRows, error: binError },
     { data: openBottleRows },
     { data: directOpenBottleRows, error: directOpenError },
@@ -61,18 +84,26 @@ export default async function CellarPage() {
     { data: configRow },
     { data: restaurantRow },
   ] = await Promise.all([
-    supabase
-      .from("wines")
-      .select(
-        "id, name, producer, vintage, varietal, region, country, lineage_id, size_ml, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, serving_temp_min, serving_temp_max, serving_temp_label, decant_minutes, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until, tasting_notes, hero_image_url, manual_overrides, colour",
-      )
-      .eq("restaurant_id", restaurantId)
-      .order("name", { ascending: true }),
-    supabase
-      .from("inventory_items")
-      .select("wine_id, bin_id, bin_location, quantity, unit_cost, added_at, section")
-      .eq("restaurant_id", restaurantId)
-      .order("added_at", { ascending: false }),
+    fetchAll((from, to) =>
+      supabase
+        .from("wines")
+        .select(
+          "id, name, producer, vintage, varietal, region, country, lineage_id, size_ml, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, serving_temp_min, serving_temp_max, serving_temp_label, decant_minutes, retail_min, retail_max, retail_median, retail_retailer_count, retail_refreshed_at, pricing_target_pour_cost_pct, pricing_target_markup_ratio, pricing_dismissed_until, tasting_notes, hero_image_url, manual_overrides, colour",
+        )
+        .eq("restaurant_id", restaurantId)
+        .order("name", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
+    fetchAll((from, to) =>
+      supabase
+        .from("inventory_items")
+        .select("wine_id, bin_id, bin_location, quantity, unit_cost, added_at, section")
+        .eq("restaurant_id", restaurantId)
+        .order("added_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
     supabase
       .from("bins")
       .select("id, code, zone, capacity, retired_at")
@@ -111,8 +142,8 @@ export default async function CellarPage() {
       .single(),
   ]);
 
-  if (inventoryError || binError || directOpenError || reasonCodeError || healthError) {
-    throw inventoryError ?? binError ?? directOpenError ?? reasonCodeError ?? healthError;
+  if (binError || directOpenError || reasonCodeError || healthError) {
+    throw binError ?? directOpenError ?? reasonCodeError ?? healthError;
   }
 
   const activeBottleIds = (directOpenBottleRows ?? []).map((bottle) => bottle.id);

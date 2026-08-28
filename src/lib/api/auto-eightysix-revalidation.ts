@@ -63,14 +63,24 @@ export async function revalidateAutoEightysixedWines(params: {
     new Set((events ?? []).map((r) => r.wine_id)),
   );
 
-  for (const wineId of newlyAutoEightysixed) {
-    // Same RPC the manual-86 flow uses (migration 0019). SECURITY
-    // DEFINER + internal is_member check, so RLS doesn't filter it.
-    const { data: slugs, error: slugsError } = await supabase.rpc(
-      "wine_published_list_slugs",
-      { p_wine_id: wineId, p_restaurant_id: restaurantId },
-    );
+  // PERF: issue every slug lookup concurrently instead of one-at-a-time.
+  // wine_published_list_slugs has no batched (array-of-ids) variant to
+  // call in a single round trip, so this stays N requests — but they now
+  // overlap instead of serializing N round-trip latencies.
+  const slugLookups = await Promise.all(
+    newlyAutoEightysixed.map((wineId) =>
+      // Same RPC the manual-86 flow uses (migration 0019). SECURITY
+      // DEFINER + internal is_member check, so RLS doesn't filter it.
+      supabase
+        .rpc("wine_published_list_slugs", {
+          p_wine_id: wineId,
+          p_restaurant_id: restaurantId,
+        })
+        .then((result) => ({ wineId, ...result })),
+    ),
+  );
 
+  for (const { wineId, data: slugs, error: slugsError } of slugLookups) {
     if (slugsError) {
       console.error(
         "auto-86 revalidation: wine_published_list_slugs failed:",
