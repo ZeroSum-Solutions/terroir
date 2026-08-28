@@ -247,6 +247,27 @@ describe("POST /api/open-bottles", () => {
     });
   });
 
+  it("403s with a clear message when the wine belongs to a different restaurant", async () => {
+    const supabase = makeSupabase({
+      wine: {
+        data: { id: WINE_ID, restaurant_id: "restaurant-b", size_ml: 750 },
+        error: null,
+      },
+    });
+    allow(supabase);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "forbidden",
+        message:
+          "This wine isn't in your restaurant. Refresh the page and try again.",
+      },
+    });
+  });
+
   it("redacts a real wine-query failure", async () => {
     const supabase = makeSupabase({
       wine: {

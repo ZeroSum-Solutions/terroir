@@ -68,7 +68,9 @@ async function postReconcile(request: NextRequest) {
     return NextResponse.json({ updated });
   } catch (error) {
     if (error instanceof ReconcileForbiddenError) {
-      return Errors.forbidden("Forbidden.");
+      return Errors.forbidden(
+        "One or more of these wines aren't in your restaurant. Refresh the page and try again.",
+      );
     }
     if (error instanceof ReconcileExceedsSizeError) {
       // "new_remaining_ml exceeds bottle size" — caller sent a bad

@@ -61,7 +61,9 @@ async function postCloseBottle(params: Promise<{ id: string }>) {
       return Errors.notFound("Bottle");
     }
     if (error instanceof PourForbiddenError) {
-      return Errors.forbidden("Forbidden.");
+      return Errors.forbidden(
+        "This bottle isn't in your restaurant. Refresh the page and try again.",
+      );
     }
     if (error instanceof PourAlreadyClosedError) {
       return Errors.conflict("already_closed", "Bottle is already closed.");
