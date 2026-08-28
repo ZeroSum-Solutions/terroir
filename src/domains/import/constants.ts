@@ -276,6 +276,41 @@ export const LWIN_MATCH_UX_CEILING_SECONDS = 120;
 const LWIN_MATCH_MAX_WAVES = Math.floor(LWIN_MATCH_UX_CEILING_SECONDS / LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY);
 export const LWIN_MATCH_MAX_QUERIES = LWIN_MATCH_MAX_WAVES * LWIN_MATCH_CONCURRENCY * LWIN_MATCH_BATCH_SIZE;
 
+/** Round-11 fix (WARN 2, round-11 audit) — the multiple of MAX_ROWS
+ * LWIN_MATCH_UX_CEILING_SECONDS' own derivation above already solves for
+ * ("a query capacity of at least 2 x MAX_ROWS"). Until now that "2x" was
+ * only prose: MAX_ROWS is assigned independently near the top of this file,
+ * LWIN_MATCH_UX_CEILING_SECONDS is assigned independently above, and
+ * nothing actually related the two at runtime — raising MAX_ROWS later (or
+ * changing any input the query budget is solved from) could silently
+ * recreate exactly the "the product's own documented capability gets
+ * rejected before any LWIN RPC call runs" contradiction round-10 fixed, and
+ * the "MAX_ROWS regression test" (preview-service.test.ts) wouldn't catch
+ * it, since it hardcoded 5,000/10,000 rather than reading these constants.
+ * Pulled into its own named constant, and CHECKED below, so the
+ * relationship is enforced rather than merely described. */
+export const LWIN_MATCH_MAX_QUERIES_MAX_ROWS_MULTIPLE = 2;
+
+/** Fails loudly at module load — not silently at some later request — if
+ * the query budget ever stops covering LWIN_MATCH_MAX_QUERIES_MAX_ROWS_MULTIPLE
+ * x MAX_ROWS. This is the actual guarantee the round-10 fix exists to
+ * provide (a plain, all-producer-bearing MAX_ROWS file passes with real
+ * headroom, not right at the boundary); enforcing it here means a future
+ * change to any of MAX_ROWS, LWIN_MATCH_UX_CEILING_SECONDS,
+ * LWIN_MATCH_PER_CALL_SECONDS(_AT_CONCURRENCY), LWIN_MATCH_CONCURRENCY, or
+ * LWIN_MATCH_BATCH_SIZE that breaks the relationship is caught at build/test
+ * time (every test importing this module fails), not discovered later as a
+ * silently-reintroduced capability regression. */
+if (LWIN_MATCH_MAX_QUERIES < LWIN_MATCH_MAX_QUERIES_MAX_ROWS_MULTIPLE * MAX_ROWS) {
+  throw new Error(
+    `LWIN_MATCH_MAX_QUERIES (${LWIN_MATCH_MAX_QUERIES}) no longer covers ` +
+      `${LWIN_MATCH_MAX_QUERIES_MAX_ROWS_MULTIPLE} x MAX_ROWS (${MAX_ROWS} -> ` +
+      `${LWIN_MATCH_MAX_QUERIES_MAX_ROWS_MULTIPLE * MAX_ROWS}). Raise LWIN_MATCH_UX_CEILING_SECONDS (or ` +
+      `another query-budget input) so a plain, all-producer-bearing MAX_ROWS file keeps passing with headroom — ` +
+      `see this constant's own comment and docs/runbooks/csv-import.md.`,
+  );
+}
+
 /** Canonical CSV column names, in the order the downloadable template uses. */
 export const CANONICAL_HEADERS = [
   "producer",

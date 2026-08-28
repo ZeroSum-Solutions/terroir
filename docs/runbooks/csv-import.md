@@ -85,15 +85,21 @@ sub-chunks via repeated `POST /apply` calls, unchanged by chunking.
   same chain this section documents: queries -> RPC calls at
   `LWIN_MATCH_BATCH_SIZE` (100) -> waves at `LWIN_MATCH_CONCURRENCY` (4) ->
   seconds at `LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY`, solved for a 60s
-  UX ceiling (`LWIN_MATCH_UX_CEILING_SECONDS`). Both `buildImportPreview`
-  call sites (the preview route, and confirm's own re-derivation) share
-  this exact function and constant, so a file can never pass preview and
-  then fail confirm (or the reverse) on this budget. A file/chunk whose
-  real query count would exceed the cap fails fast, before any LWIN RPC
-  call is issued, with a message stating the actual generated query count
-  and the remedy (add producer data to more rows, or split the file into
-  smaller chunks) — not a producer-less-only row count that, on a mixed
-  file, no longer describes what actually needs to shrink.
+  UX ceiling (`LWIN_MATCH_UX_CEILING_SECONDS`) — **superseded by the
+  round-10 fix further below: the ceiling is 120s now, not 60s: see its own
+  section for the current number and the derivation that replaced this
+  one.** Both `buildImportPreview` call sites (the preview route, and
+  confirm's own re-derivation) share this exact function and constant, so a
+  file can never pass preview and then fail confirm (or the reverse) on
+  this budget — **corrected by WARN 5 below: this is FALSE whenever row
+  overrides are involved (a fix applied between preview and confirm can add
+  queries preview's own count never saw) — see that section for the actual,
+  narrower guarantee.** A file/chunk whose real query count would exceed
+  the cap fails fast, before any LWIN RPC call is issued, with a message
+  stating the actual generated query count and the remedy (add producer
+  data to more rows, or split the file into smaller chunks) — not a
+  producer-less-only row count that, on a mixed file, no longer describes
+  what actually needs to shrink.
 
   **Corrected a third time (round-29 audit, BLOCK 3) — the round-7
   arithmetic above was internally inconsistent with `LWIN_MATCH_CONCURRENCY`'s
@@ -152,7 +158,63 @@ sub-chunks via repeated `POST /apply` calls, unchanged by chunking.
   (`estimateChunkedPhaseWaitSeconds`, `session-step.tsx`), which derives
   from this same `LWIN_MATCH_UX_CEILING_SECONDS` — so a longer, honestly
   estimated bounded wait is the trade for not silently rejecting a normal
-  file.
+  file. **Round-11 fix — until then, that estimate only actually reached
+  the operator for a chunked (> MAX_ROWS) file, and only once "previewing"
+  was already true: a plain file at or under MAX_ROWS got no estimate at
+  all, on either phase. `import-client.tsx`'s `countPreviewUnits` now
+  computes it for every file (chunked or not) as soon as one is selected —
+  before the operator clicks Preview — and `PreviewStep` shows the confirm
+  estimate on the plain path too, not only the chunked one. The wording
+  also no longer claims more certainty than the numbers support: it's
+  stated as an estimate from measured matching performance, not a
+  guaranteed cap (`LWIN_MATCH_PER_CALL_SECONDS`' own comment, constants.ts,
+  documents it as an INHERITED figure, and `matchLwinBulk` has no
+  elapsed-time deadline of its own), and it's scoped to LWIN matching only
+  — the catalogue display-name lookup that runs after matching
+  (`preview-service.ts`) is not included.**
+
+  **WARN 5 (round-29 audit) — corrected, not merely noted: "a file can
+  never pass preview and then fail confirm on this budget" (stated above)
+  is FALSE whenever row overrides are involved.** The preview route calls
+  `buildImportPreview` with no `rowOverrides` (there's nothing to override
+  yet); confirm calls it with the operator's fixes applied. A row this
+  function counts as an error (missing/invalid required field) contributes
+  ZERO queries toward the budget — it's filtered out before `lwinQueries`
+  is built. If an override fixes exactly the field that was failing, the
+  same row counts as valid at confirm and contributes up to 3 queries
+  (producer-less) or 1 (producer-bearing) that preview's own count never
+  saw. A file sitting just under the cap at preview, with enough
+  producer-less error rows fixed by overrides, can therefore legitimately
+  EXCEED the cap only at confirm — preview and confirm share one cap, but
+  not always one input, so they are not guaranteed to share one verdict
+  (`preview-service.test.ts`'s "a row fixed by an override can push a file
+  that passed preview over the budget at confirm" proves exactly this: a
+  file passing preview just under the cap, then failing confirm once an
+  override fixes its one invalid row). Confirm's own error message states
+  this explicitly (the row-fix count and the resulting total) rather than
+  leaving the operator to wonder why an already-previewed file suddenly
+  failed — see `buildImportPreview`'s own budget-check comment
+  (`preview-service.ts`).
+
+  **Round-11 fix (WARN 2) — the "2× MAX_ROWS" headroom above was, until
+  now, documentation, not an enforced relationship.** `MAX_ROWS` is
+  assigned independently near the top of `constants.ts`;
+  `LWIN_MATCH_UX_CEILING_SECONDS` is assigned independently further down;
+  only `LWIN_MATCH_MAX_QUERIES` was ever derived from the two. Nothing
+  stopped a later change to `MAX_ROWS` (or to any of the budget's other
+  inputs) from silently recreating the exact contradiction this round-10
+  fix reconciles, and the "MAX_ROWS regression test"
+  (`preview-service.test.ts`) wouldn't have caught it — it hardcoded
+  5,000/10,000 rather than reading these constants. `constants.ts` now
+  exports `LWIN_MATCH_MAX_QUERIES_MAX_ROWS_MULTIPLE` (2) and throws at
+  module load if `LWIN_MATCH_MAX_QUERIES` ever drops below
+  `LWIN_MATCH_MAX_QUERIES_MAX_ROWS_MULTIPLE × MAX_ROWS` — a change that
+  breaks the relationship now fails loudly (every test importing the module
+  fails) instead of shipping silently. `preview-service.test.ts`'s
+  boundary fixtures (the "exactly at the cap," "one over," and "plain
+  MAX_ROWS all-producer-bearing" tests) now compute their row/query counts
+  from `MAX_ROWS` and `LWIN_MATCH_MAX_QUERIES` directly, rather than
+  hardcoding the numbers those constants currently happen to equal.
 
 **What chunking actually needed, that a single-batch design didn't:**
 inventory-level duplicate prevention (§1 — effectively unimplemented
