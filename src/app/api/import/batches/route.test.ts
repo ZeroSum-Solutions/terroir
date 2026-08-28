@@ -98,7 +98,18 @@ describe("POST /api/import/batches", () => {
       "user-a",
       "cellar.csv",
       expect.any(Buffer),
-      { sessionId: undefined, chunkIndex: undefined, chunkTotal: undefined, sourceSha256: undefined, rowOverrides: undefined },
+      {
+        sessionId: undefined,
+        chunkIndex: undefined,
+        chunkTotal: undefined,
+        sourceSha256: undefined,
+        rowOverrides: undefined,
+        // createServiceRoleClient() reads env vars unset in this route-level
+        // test (confirmImportBatch itself is mocked), so it resolves to
+        // null here — the same "misconfigured environment, skip cleanup,
+        // never fail the confirm" path the /revert route already exercises.
+        serviceClient: null,
+      },
     );
   });
 

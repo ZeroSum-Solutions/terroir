@@ -98,6 +98,23 @@ export type ConfirmBatchOptions = {
    * folded into content_sha256 below — see the hash computation's own
    * comment for why. */
   rowOverrides?: RowOverrides;
+  /** Merge-integration note (item 5, PR #135): revertImportBatch now takes
+   * a service-role client to run its orphan-wine/LWIN cleanup, and
+   * confirmImportBatch's own selfRevertAndRetry (below) calls
+   * revertImportBatch too, when a create-time race forces this confirm to
+   * undo its own just-created batch. Threaded through here, from the route,
+   * exactly like the /revert route's own createServiceRoleClient() —
+   * null/undefined (misconfigured environment) is passed straight through
+   * and treated as "skip cleanup for this call," never as a reason to fail
+   * the confirm. In practice selfRevertAndRetry's own target batch has
+   * always applied zero rows (see that function's header — apply only ever
+   * starts after confirm returns), so cleanupOrphanWines/
+   * clearBatchLwinStamps' applied-rows snapshot is always empty there and
+   * this is a no-op today regardless of whether a client is supplied — it's
+   * wired anyway so the two call sites stay consistent with revertImportBatch's
+   * real contract, and so a future change to what selfRevertAndRetry targets
+   * doesn't silently reopen the orphan-wine gap item 5 closed. */
+  serviceClient?: SupabaseClient<Database> | null;
 };
 
 /** FINDING 2 (round-11 audit): a multiple_live_batches conflict used to
@@ -388,7 +405,7 @@ export async function confirmImportBatch(
     // concurrent confirm that also can't see it (findLiveBatchByUnderlyingFile
     // is symmetric — the SAME lookup backs both this batch's and the
     // rival's own post-check). Fail exactly like seeing a rival: self-revert.
-    return selfRevertAndRetry(supabase, batchId);
+    return selfRevertAndRetry(supabase, restaurantId, batchId, options.serviceClient ?? null);
   }
 
   if (postCheck.match) {
@@ -407,7 +424,7 @@ export async function confirmImportBatch(
     // already-exists path (toAlreadyExistsResult) is itself hardened
     // (finding 2(b)) to re-verify a target's live status immediately
     // before ever handing it out as a resume pointer.
-    return selfRevertAndRetry(supabase, batchId);
+    return selfRevertAndRetry(supabase, restaurantId, batchId, options.serviceClient ?? null);
   }
 
   return {
@@ -501,10 +518,28 @@ export async function confirmImportBatch(
  * signal separately here — a failed revert produces an inert orphan
  * needing manual cleanup, same as a successful one produces nothing to
  * clean up; the caller gets the same instruction either way: retry the
- * upload (and, if that now reports a conflict, revert the duplicate). */
+ * upload (and, if that now reports a conflict, revert the duplicate).
+ *
+ * Merge-integration note (item 5, PR #135): revertImportBatch grew a
+ * required serviceClient parameter and its own orphan-wine/LWIN-stamp
+ * cleanup phase after this function was written. This self-revert IS the
+ * kind of debris item 5 targets in spirit — an operator never sees or acts
+ * on batch B, so nothing else will ever clean up whatever it created — so
+ * confirmImportBatch's own serviceClient (threaded from the route, exactly
+ * like the /revert route's own createServiceRoleClient()) is passed through
+ * here rather than hardcoding null. In practice this is a no-op today: per
+ * this function's header above, nothing has applied yet when it runs, so
+ * revertImportBatch's applied-rows snapshot is always empty and
+ * cleanupOrphanWines/clearBatchLwinStamps both return zero regardless of
+ * whether a client is supplied. It's wired anyway on the theory that "the
+ * cleanup path receives a real client whenever the caller has one" should
+ * hold uniformly across every revertImportBatch call site, not just the
+ * ones where it currently matters. */
 async function selfRevertAndRetry(
   supabase: SupabaseClient<Database>,
+  restaurantId: string,
   batchId: string,
+  serviceClient: SupabaseClient<Database> | null,
 ): Promise<ConfirmBatchResult> {
   // revertImportBatch only returns { ok: false } for the two named PostgREST
   // error codes it recognizes (P0002/P0001) — anything else it re-throws
@@ -514,7 +549,7 @@ async function selfRevertAndRetry(
   // where a stray throw would be a regression, not an improvement.
   const tryRevertOnce = async (): Promise<boolean> => {
     try {
-      return (await revertImportBatch(supabase, batchId)).ok;
+      return (await revertImportBatch(supabase, restaurantId, batchId, serviceClient)).ok;
     } catch {
       return false;
     }
