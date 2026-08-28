@@ -592,7 +592,7 @@ describe("revertImportBatch orphan wine cleanup", () => {
     expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false, cleanupFailures: 0 });
   });
 
-  it("re-checks the four FORGEABLE tables immediately before deleting a wine, not just in the bulk sweep (Sol audit 2026-08-27 round 5, finding 1, extended round 6, finding 1 — the six non-forgeable WINE_REFERENCING_TABLES are now trusted from the bulk sweep alone; a race there is instead caught by the DELETE's own FK RESTRICT/CASCADE behavior, not re-checked here)", async () => {
+  it("re-checks every non-RESTRICT WINE_REFERENCING_TABLES table immediately before deleting a wine, not just in the bulk sweep (Sol audit 2026-08-27 round 5, finding 1, extended round 6, finding 1, generalized round 7, finding 1 — only the three RESTRICT WINE_REFERENCING_TABLES are trusted from the bulk sweep alone; a race there is instead caught by the DELETE's own RESTRICT-FK failure, not re-checked here)", async () => {
     // A stock_adjustments reference that only shows up on the FRESH,
     // concurrent final re-check (not the bulk sweep) must still spare the
     // wine — proves findForgeableReferencesForWine actually runs and is
@@ -677,12 +677,60 @@ describe("revertImportBatch orphan wine cleanup", () => {
     expect(availabilityEventsCall).toBe(2);
   });
 
-  it("issues all FOUR forgeable-table re-checks CONCURRENTLY — holds every request pending and proves all four are ISSUED before any one of them is allowed to resolve (Sol audit round 6, finding 3 — the previous version of this test only recorded .from() call ORDER via a synchronous log, which three (now four) plain SEQUENTIAL awaits would satisfy just as well as a real Promise.all; this version can only pass if the implementation actually calls all four before awaiting any)", async () => {
+  it("spares a wine when a SERVICE-ROLE open_bottles insert (POST /api/open-bottles) lands after the bulk sweep and is caught ONLY by the fresh concurrent re-check — there is no CAS backstop for this one, unlike availability_events (Sol audit round 7, finding 1 — the BLOCK finding: open_bottles, cellar_health, and pricing_recommendations were previously missing from findForgeableReferencesForWine entirely, even though a member being policy-denied from writing them directly does not stop these service-role writers)", async () => {
+    let openBottlesCall = 0;
+    let importBatchRowsCalls = 0;
+    const from = vi.fn((table: string) => {
+      if (table === "import_batch_rows") {
+        importBatchRowsCalls += 1;
+        if (importBatchRowsCalls === 1) {
+          return chain({ data: [{ applied_wine_id: WINE_ID, updated_at: APPLY_TS, lwin_id: null, lwin_score: null }], error: null });
+        }
+        return chain({ data: [], error: null });
+      }
+      if (table === "wines") {
+        return {
+          select: (columns: string) => {
+            if (columns.includes("lwin")) return chain({ data: [], error: null });
+            return chain({ data: [{ id: WINE_ID, created_at: APPLY_TS }], error: null });
+          },
+          delete: () => {
+            throw new Error("wines must never be deleted — the fresh concurrent re-check finds a service-role open_bottles row");
+          },
+        };
+      }
+      if (table === "open_bottles") {
+        openBottlesCall += 1;
+        // Bulk sweep (call 1): no open bottle yet. Final concurrent
+        // re-check (call 2): POST /api/open-bottles' service-role insert
+        // landed in the gap — it never touches the wines row, so nothing
+        // but this concurrent re-check can catch it.
+        if (openBottlesCall === 1) return chain({ data: [], error: null });
+        return chain({ data: [{ wine_id: WINE_ID }], error: null });
+      }
+      return chain({ data: [], error: null });
+    });
+    const supabase = { rpc: vi.fn().mockResolvedValue({ data: 1, error: null }), from };
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false, cleanupFailures: 0 });
+    expect(openBottlesCall).toBe(2);
+  });
+
+  it("issues all SEVEN non-RESTRICT-table re-checks CONCURRENTLY — holds every request pending and proves all seven are ISSUED before any one of them is allowed to resolve (Sol audit round 6, finding 3, extended round 7, finding 1 — the previous version of this test only recorded .from() call ORDER via a synchronous log, which sequential awaits would satisfy just as well as a real Promise.all; this version can only pass if the implementation actually calls all seven before awaiting any. Round 7 extends the set from four to seven: open_bottles, cellar_health, and pricing_recommendations join the group as the FULL set of non-RESTRICT WINE_REFERENCING_TABLES tables, not just the RLS-gap-forgeable ones)", async () => {
     // Every table that participates in the final re-check gets a
     // "deferred" mock on its SECOND call (the first call is the bulk
     // sweep, which must resolve immediately so the sequential bulk-sweep
     // loop can finish and reach the final concurrent re-check at all) —
     // its promise is held open until this test explicitly resolves it.
+    const FINAL_RECHECK_TABLES = [
+      "import_batch_rows",
+      "stock_adjustments",
+      "bottle_closeouts",
+      "availability_events",
+      "open_bottles",
+      "cellar_health",
+      "pricing_recommendations",
+    ] as const;
     const issued: string[] = [];
     const resolvers: Partial<Record<string, (result: { data: unknown; error: unknown }) => void>> = {};
     function deferredChain(table: string) {
@@ -702,9 +750,7 @@ describe("revertImportBatch orphan wine cleanup", () => {
     }
 
     let importBatchRowsCalls = 0;
-    let stockAdjustmentsCalls = 0;
-    let bottleCloseoutsCalls = 0;
-    let availabilityEventsCalls = 0;
+    const bulkSweepCallCounts: Partial<Record<string, number>> = {};
     const from = vi.fn((table: string) => {
       if (table === "import_batch_rows") {
         importBatchRowsCalls += 1;
@@ -735,40 +781,30 @@ describe("revertImportBatch orphan wine cleanup", () => {
           },
         };
       }
-      if (table === "stock_adjustments") {
-        stockAdjustmentsCalls += 1;
-        return stockAdjustmentsCalls === 1 ? chain({ data: [], error: null }) : deferredChain(table);
+      if ((FINAL_RECHECK_TABLES as readonly string[]).includes(table)) {
+        bulkSweepCallCounts[table] = (bulkSweepCallCounts[table] ?? 0) + 1;
+        return bulkSweepCallCounts[table] === 1 ? chain({ data: [], error: null }) : deferredChain(table);
       }
-      if (table === "bottle_closeouts") {
-        bottleCloseoutsCalls += 1;
-        return bottleCloseoutsCalls === 1 ? chain({ data: [], error: null }) : deferredChain(table);
-      }
-      if (table === "availability_events") {
-        availabilityEventsCalls += 1;
-        return availabilityEventsCalls === 1 ? chain({ data: [], error: null }) : deferredChain(table);
-      }
-      // The other five bulk-sweep-only WINE_REFERENCING_TABLES tables.
+      // The remaining bulk-sweep-only RESTRICT WINE_REFERENCING_TABLES
+      // tables (inventory_items, wine_list_items, pour_events).
       return chain({ data: [], error: null });
     });
     const supabase = { rpc: vi.fn().mockResolvedValue({ data: 1, error: null }), from };
 
     const revertPromise = revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
 
-    // Wait until the implementation has actually issued all four final
+    // Wait until the implementation has actually issued all seven final
     // re-check requests — proving they were all STARTED (Promise.all)
     // rather than one being awaited before the next is even issued.
     await vi.waitFor(() => {
-      if (issued.length < 4) throw new Error(`only ${issued.length}/4 issued so far`);
+      if (issued.length < 7) throw new Error(`only ${issued.length}/7 issued so far`);
     });
-    expect(new Set(issued)).toEqual(
-      new Set(["import_batch_rows", "stock_adjustments", "bottle_closeouts", "availability_events"]),
-    );
+    expect(new Set(issued)).toEqual(new Set(FINAL_RECHECK_TABLES));
 
     // Only now let them resolve — none referenced, so the wine qualifies.
-    resolvers.import_batch_rows!({ data: [], error: null });
-    resolvers.stock_adjustments!({ data: [], error: null });
-    resolvers.bottle_closeouts!({ data: [], error: null });
-    resolvers.availability_events!({ data: [], error: null });
+    for (const table of FINAL_RECHECK_TABLES) {
+      resolvers[table]!({ data: [], error: null });
+    }
 
     const result = await revertPromise;
     expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 1, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false, cleanupFailures: 0 });

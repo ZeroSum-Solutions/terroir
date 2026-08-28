@@ -127,7 +127,7 @@ describe("ImportClient revert copy", () => {
     await act(async () => revertButton.click());
   }
 
-  it("states the revert dialog's copy plainly — no absolute 'nothing else is touched' claim, calls out that cleanup is best-effort (Sol audit round 6, finding 2 — replaces round 5's pinned string, which itself still claimed 'deletes wines this import added that nothing else in your cellar references' unconditionally)", async () => {
+  it("states the revert dialog's copy plainly — no absolute 'nothing else is touched' claim, no 'cannot confirm' completeness guarantee either (Sol audit round 7, finding 2 — replaces round 6's pinned string, which still claimed 'anything it cannot confirm is left in place and reported below,' overpromising completeness the child-insert race (import-client.tsx:862) does not keep: a same-moment reference can be deleted with no flag at all)", async () => {
     stubFetch({});
     const container = await mount(<ImportClient />);
     await openBatchWithRevertDialog(container);
@@ -135,11 +135,12 @@ describe("ImportClient revert copy", () => {
     const dialog = container.querySelector('[role="dialog"]')!;
     expect(dialog).toBeTruthy();
     expect(dialog.textContent).toContain(
-      "Removes the inventory this import created. Where it can safely confirm it, it also deletes wines only this import added and clears the wine-catalog (LWIN) links it wrote — including a link identical to one that existed before the import. Cleanup is best-effort: anything it cannot confirm is left in place and reported below.",
+      "Removes the inventory this import created. Where it can safely confirm it, it also deletes wines only this import added and clears the wine-catalog (LWIN) links it wrote — including a link identical to one that existed before the import. Cleanup is best-effort: it deletes only wines it can confirm are unreferenced at that moment, and reports what it did below.",
     );
     expect(dialog.textContent).not.toContain("Nothing beyond this import's own additions is touched");
     expect(dialog.textContent).not.toContain("nothing else in your cellar is touched");
     expect(dialog.textContent).not.toContain("nothing else in your cellar references");
+    expect(dialog.textContent).not.toContain("anything it cannot confirm is left in place");
   });
 
   it("pins the success-panel copy for a fully-clean revert — mirrors the dialog's 'where it can safely confirm it' framing with the actual counts (Sol audit round 6, finding 2)", async () => {

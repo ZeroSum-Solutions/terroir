@@ -859,7 +859,7 @@ function BatchStep({
       <ActionDialog
         open={revertDialogOpen}
         title="Revert this import?"
-        description="Removes the inventory this import created. Where it can safely confirm it, it also deletes wines only this import added and clears the wine-catalog (LWIN) links it wrote — including a link identical to one that existed before the import. Cleanup is best-effort: anything it cannot confirm is left in place and reported below."
+        description="Removes the inventory this import created. Where it can safely confirm it, it also deletes wines only this import added and clears the wine-catalog (LWIN) links it wrote — including a link identical to one that existed before the import. Cleanup is best-effort: it deletes only wines it can confirm are unreferenced at that moment, and reports what it did below."
         confirmLabel="Revert import"
         busy={reverting}
         onConfirm={() => void doRevert()}

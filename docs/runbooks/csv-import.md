@@ -130,30 +130,37 @@ on the service-role client" below), and `cleanupFailures` (round 5,
 finding 3 — see "Cleanup failures get their own counter" below).
 
 **Round 4, finding 3, corrected round 5, finding 2, corrected again round
-6, finding 2:** the revert confirmation dialog
-(`src/app/(app)/import/import-client.tsx`) states plainly that revert also
-deletes wines and clears LWIN links this import wrote. Round 4's fix still
-overclaimed in two places the round-5 audit caught: it framed the
-wine-catalog (LWIN) clear as "this import's apply set," a phrase that
-reads as freshly-written authorship even for the documented
-re-affirmed-pre-existing-pair case (see "The unstamp contract" below), and
-the round-4 copy included NO mention of that pre-existing-pair corner at
-all. Round 5's fix, in turn, still stated the wine deletion itself
-unconditionally — "deletes wines this import added that nothing else in
-your cellar references" reads as a guarantee, not as the best-effort,
-deadline-bounded, skip-on-doubt operation it actually is (round 6, finding
-2 — a test titled "no absolute authorship" was pinning exactly that
-absolute wording). The dialog now says: "Removes the inventory this
-import created. Where it can safely confirm it, it also deletes wines
-only this import added and clears the wine-catalog (LWIN) links it wrote
-— including a link identical to one that existed before the import.
-Cleanup is best-effort: anything it cannot confirm is left in place and
-reported below." The success panel mirrors this in the past tense with
-the actual counts: "Removed N inventory row(s) this import created. Where
-it could safely confirm it, this also deleted M wine(s) this import added
-and cleared K wine-catalog (LWIN) link(s) it wrote — including any link
-identical to one that existed before the import (re-running LWIN matching
-restores it if needed)," plus every applicable notice
+6, finding 2, corrected again round 7, finding 2:** the revert
+confirmation dialog (`src/app/(app)/import/import-client.tsx`) states
+plainly that revert also deletes wines and clears LWIN links this import
+wrote. Round 4's fix still overclaimed in two places the round-5 audit
+caught: it framed the wine-catalog (LWIN) clear as "this import's apply
+set," a phrase that reads as freshly-written authorship even for the
+documented re-affirmed-pre-existing-pair case (see "The unstamp contract"
+below), and the round-4 copy included NO mention of that pre-existing-pair
+corner at all. Round 5's fix, in turn, still stated the wine deletion
+itself unconditionally — "deletes wines this import added that nothing
+else in your cellar references" reads as a guarantee, not as the
+best-effort, deadline-bounded, skip-on-doubt operation it actually is
+(round 6, finding 2 — a test titled "no absolute authorship" was pinning
+exactly that absolute wording). Round 6's fix, in turn, still overclaimed:
+"anything it cannot confirm is left in place and reported below" is a
+completeness guarantee the code doesn't keep — the child-insert race
+(`import-client.tsx:862`) can delete a same-moment reference with no flag
+at all, since the wine simply looked unreferenced at the moment of the
+check (round 7, finding 2). The dialog now says: "Removes the inventory
+this import created. Where it can safely confirm it, it also deletes
+wines only this import added and clears the wine-catalog (LWIN) links it
+wrote — including a link identical to one that existed before the import.
+Cleanup is best-effort: it deletes only wines it can confirm are
+unreferenced at that moment, and reports what it did below." — a claim
+about what the check confirms AT THAT MOMENT, not a promise that nothing
+missed gets flagged. The success panel mirrors this in the past tense
+with the actual counts: "Removed N inventory row(s) this import created.
+Where it could safely confirm it, this also deleted M wine(s) this import
+added and cleared K wine-catalog (LWIN) link(s) it wrote — including any
+link identical to one that existed before the import (re-running LWIN
+matching restores it if needed)," plus every applicable notice
 (`orphanCleanupSkipped`, `cleanupTruncated`, `cleanupFailures` — round 5,
 finding 3: these now COMPOSE, never an else-if silently dropping one when
 more than one flag is set; round 6, finding 3 added a test pinning all
@@ -370,6 +377,45 @@ row at all (`stock_adjustments`, `bottle_closeouts`, and
 still depend entirely on the concurrent `Promise.all` re-check, unchanged
 by the CAS. See "Cleanup is bounded" below for the residual this leaves.
 
+**Round 7, finding 1 — the GENERAL rule, not a fifth special case
+(BLOCK):** round 6's fix still framed the re-check as a growing list of
+individually-discovered "forgeable tables," which is exactly how it
+missed three more `ON DELETE CASCADE` children with the same shape as
+`availability_events`: `open_bottles` (inserted by `POST
+/api/open-bottles`, `src/app/api/open-bottles/route.ts`, on the
+SERVICE-ROLE client, straight after reading inventory — no `wines` write
+anywhere in that path) and `cellar_health` / `pricing_recommendations`
+(written the same way by their own service-role recompute jobs,
+`src/lib/cellar-health/recompute.ts` and
+`src/lib/pricing-recommendations/recompute.ts`). None of the three is an
+RLS-policy exploit, same as `availability_events` — but a member being
+policy-denied from writing them directly does NOT stop these writers,
+since all three run on the service role, outside any member RLS check
+entirely. **The fix is general, not per-table:** every direct FK onto
+`wines(id)` was re-derived from `supabase/schema.snapshot.sql` and
+classified by its `ON DELETE` action —
+- RESTRICT (self-protecting, bulk-swept only): `inventory_items.wine_id`,
+  `wine_list_items.wine_id`, `pour_events.wine_id`.
+- CASCADE or SET NULL (re-checked in the final parallel read):
+  `availability_events.wine_id`, `open_bottles.wine_id`,
+  `cellar_health.wine_id`, `bottle_closeouts.wine_id`,
+  `stock_adjustments.wine_id`, `pricing_recommendations.wine_id` (all
+  CASCADE), and `import_batch_rows.applied_wine_id` (SET NULL).
+
+`findForgeableReferencesForWine` now re-checks EVERY non-RESTRICT
+`WINE_REFERENCING_TABLES` table — seven total — concurrently via one
+`Promise.all`, still one parallel page-read in the common case. **The two
+layers catch different writers:** the final parallel read catches every
+non-RESTRICT child's writer, including a service-role/job path that never
+touches the wine row at all (`open_bottles`, `cellar_health`,
+`pricing_recommendations`, plus the three original RLS-gap tables); the
+`DELETE`'s own CAS guard catches only a writer that DOES touch the wine
+row first, which today is exclusively `set_wine_availability`. `open_
+bottles`, `cellar_health`, and `pricing_recommendations` therefore depend
+entirely on the concurrent re-check, exactly as `stock_adjustments`,
+`bottle_closeouts`, and the cross-batch `import_batch_rows` claim already
+did. See "Cleanup is bounded" below for the residual this leaves.
+
 ### The unstamp contract
 
 (Sol audit 2026-08-27 round 3, finding 2.) `clearBatchLwinStamps` clears
@@ -454,9 +500,11 @@ Two bounds keep cleanup's own latency reasonable:
   checking — a bulk reference sweep alone issues ~10 sequential requests
   (9 `WINE_REFERENCING_TABLES` + 1 cross-batch `import_batch_rows`
   check), so at scale that's the dominant cost (the final, per-candidate
-  re-check is now 4 requests, run concurrently — see "Cross-tenant
-  reference checks run on the service-role client" above). **Round 6,
-  finding 5 — this is a per-table REQUEST count, not a page count:** each
+  re-check is 7 requests — every non-RESTRICT `WINE_REFERENCING_TABLES`
+  table plus the cross-batch `import_batch_rows` claim, round 7, finding
+  1 — run concurrently, see "Cross-tenant reference checks run on the
+  service-role client" above). **Round 6, finding 5 — this is a per-table
+  REQUEST count, not a page count:** each
   of those requests is itself the first page of a `fetchAllRows` loop, so
   "1 parallel round-trip" (or "~10 sequential requests") describes the
   common case only. A table with more than 1,000 rows referencing the
@@ -481,35 +529,40 @@ wines.
 microsecond timestamp would be indistinguishable — negligible, accepted;
 (b) the reference re-check and the `DELETE` are still separate steps, so
 in principle ANY referencing table could receive a fresh, cascade-linked
-insert in the gap between them. For six of the nine
-`WINE_REFERENCING_TABLES` — the ones the final, per-candidate re-check
-does NOT cover (see "Cross-tenant reference checks run on the
-service-role client" above) — this gap is harmless by construction, not
+insert in the gap between them. **The general rule (round 7, finding
+1):** EVERY non-RESTRICT `WINE_REFERENCING_TABLES` table — seven of the
+nine — is covered by the final, per-candidate re-check
+(`findForgeableReferencesForWine`); only the three RESTRICT tables are
+NOT covered, and for them alone this gap is harmless by construction, not
 merely unlikely: `inventory_items`, `wine_list_items`, and `pour_events`
 are `ON DELETE RESTRICT`, not CASCADE, so a concurrent insert there makes
 the `DELETE` fail outright instead of losing data, caught per-wine and
-skipped, never silently pretended to have succeeded; `open_bottles`,
-`pricing_recommendations`, and `cellar_health` have no direct-member-
-insert RLS policy that can name an arbitrary `wine_id` outside its own
-tenant. `stock_adjustments` (`src/app/api/stock-adjustments/route.ts`),
+skipped, never silently pretended to have succeeded.
+
+Two different reasons land a table in the seven that ARE re-checked.
+`stock_adjustments` (`src/app/api/stock-adjustments/route.ts`),
 `bottle_closeouts` (RLS-insertable directly, even though the app's own
 `close_open_bottle` RPC path, `src/app/api/open-bottles/close/route.ts`,
 IS tenant-safe and requires a live open bottle), and `import_batch_rows`'
-own cross-batch `applied_wine_id` claim are the three where that gap is
+own cross-batch `applied_wine_id` claim are three where the gap is
 genuinely forgeable in the RLS-exploit sense — the first two cross-tenant
 (neither requires live inventory to write via a direct RLS insert, and
 neither's INSERT policy checks that `wine_id` belongs to the inserting
 tenant), the third same-tenant-or-cross-tenant (any member can insert or
 update an `import_batch_rows` row with an arbitrary `applied_wine_id` —
 see "Round 4, finding 1, corrected round 5, finding 1" above).
-`availability_events` is a FOURTH member of this group (round 6, finding
-1 — see that section above) for an unrelated reason: its own INSERT path
-has no RLS gap at all, but it IS `ON DELETE CASCADE`, and the writer that
-can land in this gap (`set_wine_availability`) is a genuinely legitimate
-same-tenant manager action, not an attacker.
-`findForgeableReferencesForWine` (`batch-service.ts`) checks all four
+`availability_events` (round 6, finding 1) and `open_bottles`,
+`cellar_health`, `pricing_recommendations` (round 7, finding 1) are the
+other four — none has a member-insertable RLS gap (`open_bottles` is
+inserted by `POST /api/open-bottles` on the SERVICE-ROLE client;
+`cellar_health`/`pricing_recommendations` are written by their own
+service-role recompute jobs; `availability_events` only by the SECURITY
+DEFINER `set_wine_availability` RPC) — but each IS `ON DELETE CASCADE`,
+and the writer that can land in this gap is, in every case, a genuinely
+legitimate same-tenant action or background job, not an attacker.
+`findForgeableReferencesForWine` (`batch-service.ts`) checks all seven
 CONCURRENTLY, immediately before the `DELETE` that follows a re-check,
-shrinking this residual to ONE PARALLEL PAGE-READ for all four in the
+shrinking this residual to ONE PARALLEL PAGE-READ for all seven in the
 common case (round 6, finding 5 — see "Cleanup is bounded" above for why
 this is a page-read, not an unqualified round-trip: pathological
 reference volumes for a single wine add further sequential pages, still
@@ -535,9 +588,15 @@ its actual writer (`set_wine_availability`, since it always touches
 `wines` before inserting its event) — the residual there is narrower
 still: a `set_wine_availability` call landing specifically inside the
 `Promise.all` itself resolving and the DELETE request going out, the
-same order of residual as (a) above. The two fixes that would close the
-window outright for the three RLS-gap tables — an ownership `WITH CHECK`
-on all three tables' write policies (closing the underlying gaps
+same order of residual as (a) above. For `open_bottles`, `cellar_health`,
+and `pricing_recommendations` there is no CAS backstop — none of their
+writers touches the `wines` row — so the residual for those three stays
+the full single-page-read window, accepted for the same reason as
+`availability_events`'s pre-CAS residual: each writer is a legitimate,
+same-tenant, non-malicious product code path, not an attacker. The two
+fixes that would close the window outright for the three RLS-gap tables —
+an ownership `WITH CHECK` on all three tables' write policies (closing
+the underlying gaps
 directly), or moving the re-check and the `DELETE` into one `SECURITY
 INVOKER` RPC transaction (closing the window itself) — are both
 migration-gated and out of reach for this TS-layer-only pass; tracked
@@ -611,6 +670,18 @@ events` is CASCADE but RPC-gated as described above. `wine_list_items`,
 `inventory_items`, and `pour_events` are `ON DELETE RESTRICT`, not
 CASCADE, so a concurrent insert there makes the `DELETE` fail loudly
 instead of silently losing data.
+
+**Round 7, finding 1 — "blocked by policy absence" only ever meant a
+DIRECT MEMBER insert, never the app's own writers:** round 4's correction
+above was about whether a member could write these three tables through
+the REST API — it was never a claim that nothing writes them. `open_
+bottles`, `cellar_health`, and `pricing_recommendations` all have
+legitimate, service-role writers that bypass RLS entirely (`POST
+/api/open-bottles`, and the `cellar-health`/`pricing-recommendations`
+recompute jobs, respectively — see the round 7 note above). None of
+those writers is stopped by the policy-absence protection described
+above, and none was covered by the final per-candidate re-check before
+this round. They are now.
 
 **Known gap — session-level reverts get NEITHER step:**
 `revert_import_session` (0110) loops batches entirely inside Postgres,
