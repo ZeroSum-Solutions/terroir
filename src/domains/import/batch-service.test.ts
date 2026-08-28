@@ -297,6 +297,7 @@ function chain(result: { data: unknown; error: unknown }) {
     in: () => node,
     not: () => node,
     gte: () => node,
+    range: () => node,
     maybeSingle: async () => result,
     single: async () => result,
     then: (resolve: (v: typeof result) => unknown, reject?: (e: unknown) => unknown) =>
@@ -540,7 +541,28 @@ describe("revertImportBatch lwin unstamping", () => {
       id: WINE_ID,
       restaurant_id: RESTAURANT_ID,
       lwin_id: STAMP.lwinId,
+      // Guard 4: the UPDATE re-checks the exact pair, not just the id —
+      // a concurrent higher-score writer is never clobbered.
+      lwin_match_score: STAMP.score,
     });
+  });
+
+  it("compares against the HIGHEST-scoring stamp when several rows applied the same wine", async () => {
+    // Apply's strictly-higher rule means the 0.95 stamp is the one on the
+    // wine; a map that kept the last-encountered 0.70 row would fail the
+    // exact-match test and wrongly leave the stamp behind (Sol round-1
+    // finding 6).
+    const supabase = makeUnstampSupabase({
+      stampedRows: [
+        { applied_wine_id: WINE_ID, lwin_id: STAMP.lwinId, lwin_score: 0.95 },
+        { applied_wine_id: WINE_ID, lwin_id: STAMP.lwinId, lwin_score: 0.7 },
+      ],
+      wineRows: [
+        { id: WINE_ID, restaurant_id: RESTAURANT_ID, lwin_id: STAMP.lwinId, lwin_match_score: 0.95 },
+      ],
+    });
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1 });
   });
 
   it("leaves a wine whose current lwin differs from this batch's stamp (another writer won)", async () => {
@@ -579,6 +601,45 @@ describe("revertImportBatch lwin unstamping", () => {
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
     expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0 });
     expect(supabase.updates).toHaveLength(0);
+  });
+
+  it("spares a wine whose only reference hides past PostgREST's 1,000-row page (pagination fail-safe)", async () => {
+    // Sol round-1 finding 2: max_rows truncation on a reference query
+    // fails UNSAFE — wine B's single reference hidden behind 1,000 rows
+    // of wine A's references made B look orphaned. fetchAllRows pages
+    // until a short page; this mock serves B's reference only on page 2.
+    const WINE_A = "77777777-7777-4777-8777-777777777777";
+    const WINE_B = "88888888-8888-4888-8888-888888888888";
+    let invPage = 0;
+    let rowsCalls = 0;
+    const from = vi.fn((table: string) => {
+      if (table === "import_batches") return chain({ data: { created_at: "2026-01-01T00:00:00Z" }, error: null });
+      if (table === "import_batch_rows") {
+        rowsCalls += 1;
+        if (rowsCalls === 1) {
+          return chain({
+            data: [{ applied_wine_id: WINE_A }, { applied_wine_id: WINE_B }],
+            error: null,
+          });
+        }
+        return chain({ data: [], error: null });
+      }
+      if (table === "inventory_items") {
+        invPage += 1;
+        if (invPage === 1) {
+          return chain({ data: Array.from({ length: 1000 }, () => ({ wine_id: WINE_A })), error: null });
+        }
+        return chain({ data: [{ wine_id: WINE_B }], error: null });
+      }
+      if (table === "wines") {
+        throw new Error("wines must never be touched — both candidates are referenced");
+      }
+      return chain({ data: [], error: null });
+    });
+    const supabase = { rpc: vi.fn().mockResolvedValue({ data: 1, error: null }), from };
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID);
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0 });
+    expect(invPage).toBe(2);
   });
 
   it("clears the stamp when the only other justifying batch is itself reverted", async () => {

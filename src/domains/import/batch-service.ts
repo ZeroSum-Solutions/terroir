@@ -494,6 +494,26 @@ export async function revertImportBatch(
   return { ok: true, revertedCount: (data as number | null) ?? 0, orphanWinesDeleted, lwinStampsCleared };
 }
 
+/** PostgREST silently caps any un-ranged select at max_rows (1000,
+ * supabase/config.toml). For the orphan/unstamp safety checks below that
+ * truncation FAILS UNSAFE: a hidden 1,001st reference row could make a
+ * still-referenced wine look orphaned (Sol audit 2026-08-27, finding 2).
+ * Every reference read therefore pages with .range() until a short page
+ * proves exhaustion. */
+const POSTGREST_PAGE = 1000;
+async function fetchAllRows<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> {
+  const all: T[] = [];
+  for (let from = 0; ; from += POSTGREST_PAGE) {
+    const { data, error } = await page(from, from + POSTGREST_PAGE - 1);
+    if (error) throw error;
+    const rows = data ?? [];
+    all.push(...rows);
+    if (rows.length < POSTGREST_PAGE) return all;
+  }
+}
+
 /** Every table (besides import_batch_rows itself) with a wines(id) FK.
  * Verified against supabase/schema.snapshot.sql — keep in sync if a
  * migration adds another one. */
@@ -523,11 +543,32 @@ const WINE_REFERENCING_TABLES = [
  *      candidate set was built;
  *   3. it belongs to the reverting restaurant (explicit filter, matching
  *      this file's belt-and-suspenders pattern — never rely on RLS alone);
- *   4. wines.created_at >= this batch's created_at — the conservative
- *      stand-in for real creation provenance: a wine this batch matched
- *      onto (rather than created) necessarily already existed before the
- *      batch was confirmed, so this guard cannot exclude any wine the
- *      batch actually created, and it excludes anything provably older.
+ *   4. wines.created_at >= this batch's created_at — a conservative
+ *      stand-in for real creation provenance, NOT a proof of authorship
+ *      (Sol audit 2026-08-27, finding 1): a wine created by another flow
+ *      in the confirm→apply window also passes it. The residual exposure
+ *      is deliberately accepted and narrow — every product write path
+ *      that creates a wine (manual add, scan save, another batch's
+ *      apply) also creates a referencing row in the same operation
+ *      (inventory_items at minimum), so any such wine is spared by
+ *      guard 2 as long as that reference lives; only a bare wine row
+ *      created through the raw API with NO accompanying reference, in
+ *      that window, matching this batch's exact dedup key, could be
+ *      wrongly deleted. Airtight authorship needs a provenance column or
+ *      a transactional SQL function — both are DB-layer changes the
+ *      locked migration manifest currently forbids.
+ *
+ * Known non-transactional residual (Sol finding 3, accepted): the
+ * reference checks and the DELETE are separate PostgREST requests, so a
+ * cascade-FK child row (availability_events, open_bottles, …) inserted
+ * in the sub-second window between check and delete would be destroyed
+ * by the cascade. Writers of those tables act on wines with live
+ * inventory; a wine that reached this point has zero inventory and zero
+ * references anywhere moments earlier, so a concurrent insert requires
+ * an out-of-product writer racing a revert. inventory_items is ON
+ * DELETE RESTRICT, so the one realistic concurrent writer — another
+ * batch's apply — makes the DELETE itself fail safely.
+ *
  * Returns the count deleted; throws on any query/delete error so the
  * caller can log-and-swallow without silently pretending cleanup ran. */
 async function cleanupOrphanWines(
@@ -544,16 +585,18 @@ async function cleanupOrphanWines(
   if (batchError) throw batchError;
   if (!batch) return 0;
 
-  const { data: appliedRows, error: appliedRowsError } = await supabase
-    .from("import_batch_rows")
-    .select("applied_wine_id")
-    .eq("batch_id", batchId)
-    .not("applied_wine_id", "is", null);
-  if (appliedRowsError) throw appliedRowsError;
+  const appliedRows = await fetchAllRows<{ applied_wine_id: string | null }>((from, to) =>
+    supabase
+      .from("import_batch_rows")
+      .select("applied_wine_id")
+      .eq("batch_id", batchId)
+      .not("applied_wine_id", "is", null)
+      .range(from, to),
+  );
 
   const candidateWineIds = Array.from(
     new Set(
-      ((appliedRows ?? []) as { applied_wine_id: string | null }[])
+      appliedRows
         .map((row) => row.applied_wine_id)
         .filter((id): id is string => id !== null),
     ),
@@ -563,21 +606,25 @@ async function cleanupOrphanWines(
   const referencedIds = new Set<string>();
 
   for (const table of WINE_REFERENCING_TABLES) {
-    const { data: refs, error: refsError } = await supabase
-      .from(table)
-      .select("wine_id")
-      .in("wine_id", candidateWineIds);
-    if (refsError) throw refsError;
-    for (const row of (refs ?? []) as { wine_id: string }[]) referencedIds.add(row.wine_id);
+    const refs = await fetchAllRows<{ wine_id: string }>((from, to) =>
+      supabase
+        .from(table)
+        .select("wine_id")
+        .in("wine_id", candidateWineIds)
+        .range(from, to),
+    );
+    for (const row of refs) referencedIds.add(row.wine_id);
   }
 
-  const { data: otherBatchRows, error: otherBatchRowsError } = await supabase
-    .from("import_batch_rows")
-    .select("applied_wine_id")
-    .in("applied_wine_id", candidateWineIds)
-    .neq("batch_id", batchId);
-  if (otherBatchRowsError) throw otherBatchRowsError;
-  for (const row of (otherBatchRows ?? []) as { applied_wine_id: string | null }[]) {
+  const otherBatchRows = await fetchAllRows<{ applied_wine_id: string | null }>((from, to) =>
+    supabase
+      .from("import_batch_rows")
+      .select("applied_wine_id")
+      .in("applied_wine_id", candidateWineIds)
+      .neq("batch_id", batchId)
+      .range(from, to),
+  );
+  for (const row of otherBatchRows) {
     if (row.applied_wine_id) referencedIds.add(row.applied_wine_id);
   }
 
@@ -603,63 +650,87 @@ async function cleanupOrphanWines(
  * revert_import_batch never touches wines — so a wrong match survived
  * revert with no UI to undo it. A wine is unstamped only when ALL hold:
  *   1. one of THIS batch's rows applied it with lwin_score >=
- *      LWIN_APPLY_MIN_SCORE (only such rows can have stamped);
- *   2. the wine's CURRENT lwin_id equals that row's lwin_id AND its
- *      current lwin_match_score equals that row's lwin_score — apply
- *      only overwrites when the incoming score is strictly higher, so an
- *      exact (id, score) match means this batch's write is what's in
- *      place; a score of null means some other path (match_lwin_batch)
- *      stamped it, and any other value means another writer won — both
- *      left untouched;
+ *      LWIN_APPLY_MIN_SCORE (only such rows can have stamped). When
+ *      several of this batch's rows applied the same wine, the
+ *      HIGHEST-scoring stamp is the comparison value — apply's
+ *      strictly-higher rule means that is the one that can be in place
+ *      (Sol round-1 finding 6);
+ *   2. the wine's CURRENT (lwin_id, lwin_match_score) exactly equals
+ *      that stamp. Authorship invariant (round-1 finding 4): a NON-NULL
+ *      lwin_match_score is only ever written by a batch apply —
+ *      match_lwin_batch (0007) sets lwin_id but never the score, so a
+ *      score-null stamp is left untouched, and an exact non-null match
+ *      with no live justifier (guard 3) means every possible author is
+ *      this batch or an already-REVERTED batch, whose surviving stamp
+ *      is precisely what this feature exists to remove. Any other
+ *      current value means another writer won — left untouched;
  *   3. no OTHER non-reverted batch row applied the same wine with the
  *      same lwin_id at >= LWIN_APPLY_MIN_SCORE (it independently
  *      justifies the stamp);
- *   4. restaurant-scoped, and the DB-side update re-checks lwin_id so a
- *      concurrent change can't be clobbered.
- * Returns the count cleared; throws on query errors (caller logs and
- * swallows, same contract as cleanupOrphanWines). */
+ *   4. restaurant-scoped, and the DB-side UPDATE re-checks the exact
+ *      (lwin_id, lwin_match_score) pair so a concurrent higher-score
+ *      writer in the read→write window is never clobbered (round-1
+ *      finding 5). Both values round-trip through the same PostgREST
+ *      float4 serialization, so equality is faithful. The one residual
+ *      race — an EQUAL-score justifier batch applying between the
+ *      justification scan and the UPDATE — clears a stamp that batch
+ *      re-establishes on its next apply of the same row; accepted as
+ *      narrow and self-healing.
+ * All reads page via fetchAllRows (max_rows truncation fails unsafe
+ * here too). Returns the count cleared; throws on query errors (caller
+ * logs and swallows, same contract as cleanupOrphanWines). */
 async function clearBatchLwinStamps(
   supabase: SupabaseClient<Database>,
   restaurantId: string,
   batchId: string,
 ): Promise<number> {
-  const { data: stampedRows, error: stampedError } = await supabase
-    .from("import_batch_rows")
-    .select("applied_wine_id, lwin_id, lwin_score")
-    .eq("batch_id", batchId)
-    .not("applied_wine_id", "is", null)
-    .not("lwin_id", "is", null)
-    .gte("lwin_score", LWIN_APPLY_MIN_SCORE);
-  if (stampedError) throw stampedError;
-
-  const stamps = new Map<string, { lwinId: string; score: number }>();
-  for (const row of (stampedRows ?? []) as Array<{
+  const stampedRows = await fetchAllRows<{
     applied_wine_id: string | null;
     lwin_id: string | null;
     lwin_score: number | null;
-  }>) {
+  }>((from, to) =>
+    supabase
+      .from("import_batch_rows")
+      .select("applied_wine_id, lwin_id, lwin_score")
+      .eq("batch_id", batchId)
+      .not("applied_wine_id", "is", null)
+      .not("lwin_id", "is", null)
+      .gte("lwin_score", LWIN_APPLY_MIN_SCORE)
+      .range(from, to),
+  );
+
+  // Highest score per wine: with several rows applying the same wine,
+  // apply's strictly-higher rule means the max-score stamp is the one
+  // that can actually be in place on the wine.
+  const stamps = new Map<string, { lwinId: string; score: number }>();
+  for (const row of stampedRows) {
     if (row.applied_wine_id && row.lwin_id && row.lwin_score !== null) {
-      stamps.set(row.applied_wine_id, { lwinId: row.lwin_id, score: row.lwin_score });
+      const current = stamps.get(row.applied_wine_id);
+      if (!current || row.lwin_score > current.score) {
+        stamps.set(row.applied_wine_id, { lwinId: row.lwin_id, score: row.lwin_score });
+      }
     }
   }
   if (stamps.size === 0) return 0;
 
   const wineIds = Array.from(stamps.keys());
-  const { data: wines, error: winesError } = await supabase
-    .from("wines")
-    .select("id, lwin_id, lwin_match_score")
-    .in("id", wineIds)
-    .eq("restaurant_id", restaurantId);
-  if (winesError) throw winesError;
+  const wines = await fetchAllRows<{
+    id: string;
+    lwin_id: string | null;
+    lwin_match_score: number | null;
+  }>((from, to) =>
+    supabase
+      .from("wines")
+      .select("id, lwin_id, lwin_match_score")
+      .in("id", wineIds)
+      .eq("restaurant_id", restaurantId)
+      .range(from, to),
+  );
 
   // Condition 2: the wine's current stamp is exactly what this batch
   // wrote. Both values round-trip through the same PostgREST float4
   // serialization, so === is a faithful comparison.
-  const clearCandidates = ((wines ?? []) as Array<{
-    id: string;
-    lwin_id: string | null;
-    lwin_match_score: number | null;
-  }>).filter((wine) => {
+  const clearCandidates = wines.filter((wine) => {
     const stamp = stamps.get(wine.id);
     return (
       stamp !== undefined &&
@@ -672,18 +743,22 @@ async function clearBatchLwinStamps(
 
   // Condition 3: another live batch's row justifying the same stamp.
   const candidateIds = clearCandidates.map((wine) => wine.id);
-  const { data: otherRows, error: otherRowsError } = await supabase
-    .from("import_batch_rows")
-    .select("applied_wine_id, lwin_id, batch_id")
-    .in("applied_wine_id", candidateIds)
-    .neq("batch_id", batchId)
-    .not("lwin_id", "is", null)
-    .gte("lwin_score", LWIN_APPLY_MIN_SCORE);
-  if (otherRowsError) throw otherRowsError;
-
-  const otherBatchIds = Array.from(
-    new Set(((otherRows ?? []) as Array<{ batch_id: string }>).map((row) => row.batch_id)),
+  const otherRows = await fetchAllRows<{
+    applied_wine_id: string | null;
+    lwin_id: string | null;
+    batch_id: string;
+  }>((from, to) =>
+    supabase
+      .from("import_batch_rows")
+      .select("applied_wine_id, lwin_id, batch_id")
+      .in("applied_wine_id", candidateIds)
+      .neq("batch_id", batchId)
+      .not("lwin_id", "is", null)
+      .gte("lwin_score", LWIN_APPLY_MIN_SCORE)
+      .range(from, to),
   );
+
+  const otherBatchIds = Array.from(new Set(otherRows.map((row) => row.batch_id)));
   const liveBatchIds = new Set<string>();
   if (otherBatchIds.length > 0) {
     const { data: otherBatches, error: otherBatchesError } = await supabase
@@ -696,11 +771,7 @@ async function clearBatchLwinStamps(
     }
   }
   const justified = new Set<string>();
-  for (const row of (otherRows ?? []) as Array<{
-    applied_wine_id: string | null;
-    lwin_id: string | null;
-    batch_id: string;
-  }>) {
+  for (const row of otherRows) {
     if (
       row.applied_wine_id &&
       liveBatchIds.has(row.batch_id) &&
@@ -715,12 +786,16 @@ async function clearBatchLwinStamps(
     if (justified.has(wine.id)) continue;
     const stamp = stamps.get(wine.id);
     if (!stamp) continue;
+    // Guard 4: re-check the EXACT pair server-side — a concurrent
+    // higher-score write between our read and this UPDATE makes the
+    // match fail and the stamp survives untouched.
     const { data: updated, error: updateError } = await supabase
       .from("wines")
       .update({ lwin_id: null, lwin_match_score: null })
       .eq("id", wine.id)
       .eq("restaurant_id", restaurantId)
       .eq("lwin_id", stamp.lwinId)
+      .eq("lwin_match_score", stamp.score)
       .select("id");
     if (updateError) throw updateError;
     cleared += (updated ?? []).length;

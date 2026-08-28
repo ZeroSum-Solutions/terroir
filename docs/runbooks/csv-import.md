@@ -109,13 +109,29 @@ exactly the `inventory_items` rows recorded in
 `import_batch_rows.applied_inventory_item_id` for one batch's applied
 rows, callable on any batch not already `reverted` (originally
 `completed`-only; a partially-applied, abandoned batch can be reverted
-too as of P3). It never touches wines, never touches another batch's
-rows, and never touches inventory that predates the import — see
+too as of P3). The RPC itself never touches wines, never touches another
+batch's rows, and never touches inventory that predates the import — see
 `src/domains/import/tenant-isolation.test.ts` and
 `src/domains/import/p3-live.test.ts` for live-Postgres proofs, including
 against a restaurant with pre-existing inventory for the same wine.
-`revert_import_session` (0110) reverts every batch in a session the same
-way, in reverse chunk order, with per-batch exception isolation.
+
+**Single-batch reverts get two TypeScript-layer follow-up steps**
+(2026-08-27, `revertImportBatch` in `src/domains/import/batch-service.ts`),
+both best-effort (a failure is logged and never fails the revert):
+`cleanupOrphanWines` deletes wines this batch's apply provably created
+that nothing else references, and `clearBatchLwinStamps` clears
+`wines.lwin_id`/`lwin_match_score` stamps this batch's apply wrote onto
+surviving wines (conditional on exact stamp match and no other live
+batch justifying it). The route response reports both counts.
+
+**Known gap — session-level reverts get NEITHER step:**
+`revert_import_session` (0110) loops batches entirely inside Postgres,
+in reverse chunk order with per-batch exception isolation, bypassing the
+TypeScript layer — so a session revert can leave orphan wines AND stale
+batch-written LWIN stamps behind that a per-batch revert would have
+cleaned. Closing this needs either a migration (currently locked) or
+restructuring `revertImportSession` to loop per-batch through the TS
+layer.
 
 Order-of-operations note (a real bug this migration's own rehearsal
 caught): the function flips `apply_status` to `reverted` **before**
