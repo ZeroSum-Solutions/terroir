@@ -65,10 +65,14 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
 
       <div className="mb-lg grid grid-cols-2 gap-md">
         <div>
-          <label className="text-caption block font-medium uppercase text-grey">
+          <label
+            htmlFor="cellar-setup-rows"
+            className="text-caption block font-medium uppercase text-grey"
+          >
             Rows
           </label>
           <input
+            id="cellar-setup-rows"
             type="number"
             min={1}
             max={26}
@@ -80,10 +84,14 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
           />
         </div>
         <div>
-          <label className="text-caption block font-medium uppercase text-grey">
+          <label
+            htmlFor="cellar-setup-cols"
+            className="text-caption block font-medium uppercase text-grey"
+          >
             Columns
           </label>
           <input
+            id="cellar-setup-cols"
             type="number"
             min={1}
             max={30}

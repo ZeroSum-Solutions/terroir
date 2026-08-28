@@ -121,6 +121,39 @@ describe("Manage Cellar Sections mobile layout", () => {
     expect(deleteButton.className).toContain("min-h-11");
   });
 
+  it("traps focus inside the delete dialog and closes it on Escape, returning focus to the trigger", async () => {
+    // Regression coverage for wiring useFocusTrap into the delete dialog:
+    // without the trap, Escape does nothing (dialog stays mounted) and the
+    // trigger button never regains focus.
+    stubConfigFetch({ id: "a", name: "Reds" });
+    const { container } = await mount(<CellarConfigPage />);
+    await flushLoad();
+
+    const del = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Delete Reds"]',
+    )!;
+    del.focus();
+    await act(async () => del.click());
+    await flushFocusFrame();
+
+    const dialog = container.querySelector('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+    const cancelButton = dialog!.querySelector<HTMLButtonElement>("button")!;
+    expect(cancelButton.textContent).toBe("Cancel");
+    // The trap auto-focuses the dialog's first control on open.
+    expect(document.activeElement).toBe(cancelButton);
+
+    await act(async () => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    // The trap restores focus to whatever triggered it (the Delete button).
+    expect(document.activeElement).toBe(del);
+  });
+
   it("gives the row-level delete button a distinct rest-state color from rename, not just adjacency", async () => {
     stubConfigFetch({ id: "a", name: "Reds" });
     const { container } = await mount(<CellarConfigPage />);
@@ -301,5 +334,11 @@ async function mount(element: ReactElement) {
 async function flushLoad() {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+async function flushFocusFrame() {
+  await act(async () => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   });
 }

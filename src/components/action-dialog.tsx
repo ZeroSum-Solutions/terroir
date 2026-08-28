@@ -82,6 +82,7 @@ export function ActionDialog({
   }
 
   return (
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; this dialog already has full keyboard access via useFocusTrap (Escape + explicit action buttons).
     <div
       data-action-dialog-backdrop="true"
       className="fixed inset-0 z-[60] flex items-end justify-center bg-scrim p-md sm:items-center"

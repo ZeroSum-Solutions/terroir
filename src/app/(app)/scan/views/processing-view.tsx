@@ -52,7 +52,7 @@ export function ProcessingView({ progress, stage, mode, onCancel, previewUrl }: 
           // eslint-disable-next-line @next/next/no-img-element -- Browser-local blob preview must render directly without image optimization or generated attributes.
           <img
             src={previewUrl}
-            alt="Captured photo"
+            alt="What you captured"
             className="mx-auto mb-md h-20 w-20 rounded-lg border border-hairline object-cover"
           />
         ) : (

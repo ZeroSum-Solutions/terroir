@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { assertNoSeriousA11yViolations } from "./a11y";
 
 /**
  * BND-038 E2E — full oz-native-inventory cycle.
@@ -264,11 +265,13 @@ test.describe("BND-038 pour → reconcile", () => {
       .filter({ hasText: nameLabel })
       .first();
     await expect(row).toBeVisible();
+    await assertNoSeriousA11yViolations(page, "/cellar wine list");
 
     // --- Step 2: open the drawer, read the glass count, pour ---------
     await row.click();
     const drawer = page.getByRole("dialog", { name: /./ }); // any dialog
     await expect(drawer).toBeVisible();
+    await assertNoSeriousA11yViolations(page, "/cellar wine-detail drawer");
     const glassCount = drawer.getByText(/~\d+ glasses? left/);
     await expect(glassCount).toBeVisible();
     const startText = (await glassCount.textContent()) ?? "";
@@ -298,6 +301,7 @@ test.describe("BND-038 pour → reconcile", () => {
       name: /Reconcile open bottles/i,
     });
     await expect(reconcileDialog).toBeVisible();
+    await assertNoSeriousA11yViolations(page, "/cellar reconcile dialog");
 
     const reconcileRow = reconcileDialog
       .locator("li")

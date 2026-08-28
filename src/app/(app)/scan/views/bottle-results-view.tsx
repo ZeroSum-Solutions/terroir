@@ -179,7 +179,7 @@ export function BottleResultsView({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={previewUrl}
-            alt="Label photo you captured"
+            alt="Label you captured"
             className="max-h-[38vh] w-full rounded-lg bg-bridge-surface object-contain"
           />
         </div>
@@ -271,6 +271,13 @@ export function BottleResultsView({
             </button>
           </div>
         ) : (
+          /* eslint-disable jsx-a11y/label-has-associated-control --
+             Each <label> below sits beside a TextInput/VintageInput/
+             MoneyInput/QtyStepper, not a bare <input>; those components
+             already carry a matching aria-label (or, for QtyStepper, two
+             self-describing "Increase/Decrease quantity" buttons) on their
+             actual form controls, so the accessible name exists even
+             though the visible label lacks a `for`/`id` pairing to it. */
           <div className="flex flex-col gap-md">
             <div>
               <label className="mb-xs block text-caption font-medium uppercase tracking-[0.18em] text-grey">
@@ -349,6 +356,7 @@ export function BottleResultsView({
             <MoneyInput value={unitCost} onCommit={setUnitCost} />
           </div>
         </div>
+        {/* eslint-enable jsx-a11y/label-has-associated-control */}
       </div>
 
       {/* Actions */}
