@@ -280,46 +280,67 @@ export async function confirmImportBatch(
 
   const batchId = (data as { batchId: string }).batchId;
 
-  // Sol round-3 audit (2026-08-27) finding 2: decide-AFTER-write TOCTOU
-  // close. The pre-check above ran BEFORE this insert — two concurrent
-  // confirms for the same underlying file but different content_sha256
-  // FORMATS (one bare, one overrides-v1-namespaced; the unique index from
-  // 0103 is an exact content_sha256 match and can't catch this) can both
-  // pass their own pre-check and both reach create_import_batch. Re-run
-  // the identical lookup now, excluding our own just-created batch (and
-  // our own session, for the same reason as the pre-check), and apply a
-  // deterministic total order over (created_at, id) so at most one of the
-  // two racing confirms survives as a live batch.
+  // Sol round-3 audit (2026-08-27) finding 2, corrected by round-4 audit
+  // finding 1: decide-AFTER-write TOCTOU close. The pre-check above ran
+  // BEFORE this insert — two concurrent confirms for the same underlying
+  // file but different content_sha256 FORMATS (one bare, one
+  // overrides-v1-namespaced; the unique index from 0103 is an exact
+  // content_sha256 match and can't catch this) can both pass their own
+  // pre-check and both reach create_import_batch. Re-run the identical
+  // lookup now, excluding our own just-created batch (and our own
+  // session, for the same reason as the pre-check).
   //
-  // Why this always converges to exactly one survivor, never two and
-  // never zero: each request's post-check runs strictly AFTER its own
-  // insert has committed (this is the very next thing this function does,
-  // in the same request). For two racing confirms A and B, suppose (for
-  // contradiction) that NEITHER sees the other on its post-check — i.e.
-  // A's post-check ran before B's insert committed, AND B's post-check
-  // ran before A's insert committed. Then: A's own commit precedes A's
-  // post-check (by construction) precedes B's commit (by assumption) —
-  // so A's commit precedes B's commit. Symmetrically, B's commit precedes
-  // B's post-check precedes A's commit — so B's commit precedes A's
-  // commit. Both can't be true, so at least one of A/B necessarily sees
-  // the other's already-committed row on its own post-check ("whichever
-  // inserts second always sees the first"). When BOTH see each other
-  // (both post-checks run after both commits), the SAME deterministic
-  // comparator applied on both sides agrees on which is "later" — so
-  // exactly one self-reverts, never both, never neither. This holds
-  // recursively for any N-way race: a loser only ever reverts ITSELF, so
-  // the live set only shrinks, converging on the single oldest survivor.
-  const ownBatch = await readBatchTimestamp(supabase, batchId);
-  if (!ownBatch) {
-    // Can't happen in practice (RLS-visible, same restaurant, just
-    // created by this exact request) — fail closed rather than silently
-    // skip the race check.
-    return {
-      ok: false,
-      error: { code: "duplicate_check_failed", message: "Could not verify this import — please try confirming again." },
-    };
-  }
-
+  // Round-4 audit finding 1: the previous version of this comment claimed
+  // a deterministic (created_at, id) total order picks a single survivor.
+  // That is WRONG — created_at is the row's INSERT-TRANSACTION-START time
+  // (effectively `now()`), not commit order, and under read-committed a
+  // transaction that starts first can still commit last. Concretely: A
+  // starts first (earlier created_at) but commits slowly; B starts later,
+  // commits first, runs its post-check, sees nothing committed yet (A
+  // hasn't committed), and survives; A then commits, runs its post-check,
+  // sees B — but the (created_at, id) rule said A was "older", so A
+  // ALSO survived. Two live batches, precisely the bug this function
+  // exists to prevent.
+  //
+  // The fix is the unconditional SEER-YIELDS rule: any confirm whose
+  // post-create check observes ANY rival live batch over the same
+  // underlying file reverts ITSELF, full stop — no timestamp comparison,
+  // no "who is older" logic at all.
+  //
+  // Why this can never leave two survivors, under every interleaving:
+  // each request's post-check runs strictly AFTER its own insert has
+  // committed (the very next thing this function does, in the same
+  // request, using the same connection). Consider two racing confirms A
+  // and B. A batch survives ONLY if its own post-check sees no rival —
+  // i.e. the rival's insert had not yet committed when this batch's
+  // post-check ran. Suppose (for contradiction) BOTH A and B survive:
+  // then A's post-check ran before B's commit, AND B's post-check ran
+  // before A's commit. But A's own commit precedes A's post-check
+  // (same request, sequential) precedes B's commit (assumed) — so A's
+  // commit precedes B's commit. Symmetrically B's commit precedes A's
+  // commit. Both can't hold at once, so at most one of A/B can have seen
+  // no rival — at most one survivor, for any two-way race, and by the
+  // same pairwise argument for any N-way race (a batch only survives if
+  // NO other rival was already committed when its own post-check ran,
+  // and the earliest committer is the only batch that can possibly
+  // satisfy that for every other rival).
+  //
+  // The residual: it is possible for BOTH post-checks to see each other
+  // (A's post-check happens to run after B's commit, and vice versa —
+  // e.g. both inserts commit before either post-check starts). Then BOTH
+  // self-revert unconditionally, under this rule — zero survivors, never
+  // two. That residual is handled explicitly below: after self-reverting,
+  // this confirm re-reads the rival's CURRENT status (not the stale
+  // snapshot from its own post-check query) — if the rival is still live,
+  // return the already-exists result pointing at it (the normal case: we
+  // lost, cleanly, to a real survivor). If the rival has ALSO been
+  // reverted by then (its own symmetric self-revert), or the re-read
+  // itself fails, there is no live batch left to point at — returning an
+  // already-exists for a reverted batch would be a lie, so this returns a
+  // distinct, explicitly retryable error instead. A retry from the
+  // client then either lands cleanly (both sides already reverted, no
+  // rival left to race) or hits the ordinary pre-check against whichever
+  // batch is now the sole survivor.
   const postCheck = await findLiveBatchByUnderlyingFile(supabase, restaurantId, fileDigestHex, {
     excludeSessionId: options.sessionId,
     excludeBatchId: batchId,
@@ -328,17 +349,21 @@ export async function confirmImportBatch(
     return { ok: false, error: postCheck.error };
   }
 
-  if (postCheck.match && batchIsLaterThan(ownBatch, postCheck.match)) {
-    // We lose the race. Nothing has applied yet — apply only ever starts
-    // after this confirm call returns — so undoing our own batch is
-    // always safe. import_batches/import_batch_rows both have DELETE
-    // REVOKEd from `authenticated` (0076) and migrations are locked for
-    // this fix, so a literal DELETE is out of reach; revert_import_batch
-    // (already TS-layer-reachable) is the equivalent move here — it flips
-    // our batch to status='reverted' (0 rows to revert, since nothing was
-    // ever applied), which every live-batch lookup in this file already
-    // treats as gone via .neq("status","reverted"): functionally
-    // indistinguishable from deleted to every future confirm.
+  if (postCheck.match) {
+    // We saw a rival that was already committed — yield unconditionally.
+    // Nothing has applied yet — apply only ever starts after this confirm
+    // call returns — so undoing our own batch is always safe.
+    // import_batches/import_batch_rows both have DELETE REVOKEd from
+    // `authenticated` (0076) and migrations are locked for this fix, so a
+    // literal DELETE is out of reach; revert_import_batch (already
+    // TS-layer-reachable, and — per the auditor — migration 0109 permits
+    // reverting a batch that was only just created, since its guard is
+    // "status <> reverted", not "status = completed") is the equivalent
+    // move here — it flips our batch to status='reverted' (0 rows to
+    // revert, since nothing was ever applied), which every live-batch
+    // lookup in this file already treats as gone via
+    // .neq("status","reverted"): functionally indistinguishable from
+    // deleted to every future confirm.
     const revertResult = await revertImportBatch(supabase, batchId);
     if (!revertResult.ok) {
       return {
@@ -350,7 +375,23 @@ export async function confirmImportBatch(
         },
       };
     }
-    return toAlreadyExistsResult(supabase, postCheck.match);
+
+    // Re-read the rival's CURRENT status rather than trusting the
+    // (possibly now-stale) snapshot the post-check query captured — the
+    // residual case above is exactly a rival that has, in the interim,
+    // also reverted itself.
+    const rival = await readBatchLiveState(supabase, postCheck.match.id);
+    if (!rival || rival.status === "reverted") {
+      return {
+        ok: false,
+        error: {
+          code: "duplicate_race_retry",
+          message:
+            "This upload raced with a duplicate confirm of the same file, and both attempts were withdrawn to avoid a conflict. Please retry the upload.",
+        },
+      };
+    }
+    return toAlreadyExistsResult(supabase, rival);
   }
 
   return {
@@ -362,27 +403,25 @@ export async function confirmImportBatch(
   };
 }
 
-/** Reads back the created_at this confirm's own just-inserted batch got —
- * create_import_batch's RPC return value is `{batchId}` only (see 0107),
- * so the total-order comparison finding 2's post-check needs has to be
- * read back explicitly, by primary key (at most one row, ever). */
-async function readBatchTimestamp(
+/** Reads back a batch's CURRENT (post-any-revert) status, session and
+ * chunk slot by primary key — used by the residual-race handling above to
+ * decide whether a rival we're about to point the caller at is still
+ * actually live, rather than trusting a snapshot read before we (or it)
+ * may have reverted. Returns null on a missing row OR a lookup error —
+ * both are treated identically by the caller (fail toward the safe,
+ * explicitly-retryable outcome, never toward an already-exists pointing
+ * at a batch that may no longer be live). */
+async function readBatchLiveState(
   supabase: SupabaseClient<Database>,
   batchId: string,
-): Promise<{ id: string; created_at: string } | null> {
-  const { data } = await supabase.from("import_batches").select("id, created_at").eq("id", batchId).maybeSingle();
-  return (data as { id: string; created_at: string } | null) ?? null;
-}
-
-/** Total order over (created_at, id): true when `a` is strictly LATER
- * than `b`, meaning `a` is the one that must yield. Deterministic for any
- * two rows both sides of a race read — see confirmImportBatch's own
- * comment for why both sides necessarily agree. */
-function batchIsLaterThan(a: { created_at: string; id: string }, b: { created_at: string; id: string }): boolean {
-  const ta = Date.parse(a.created_at);
-  const tb = Date.parse(b.created_at);
-  if (ta !== tb) return ta > tb;
-  return a.id > b.id;
+): Promise<{ id: string; status: string; session_id: string | null; chunk_index: number | null } | null> {
+  const { data, error } = await supabase
+    .from("import_batches")
+    .select("id, status, session_id, chunk_index")
+    .eq("id", batchId)
+    .maybeSingle();
+  if (error) return null;
+  return (data as { id: string; status: string; session_id: string | null; chunk_index: number | null } | null) ?? null;
 }
 
 /** Looks up the pre-existing live batch a 23505 from create_import_batch
@@ -513,23 +552,53 @@ function isWellFormedDigestForFile(contentSha256: string | null, fileDigestHex: 
  * check to exclude the confirm's own just-created row, which obviously
  * matches its own content_sha256.
  *
- * Finding 4: this used to be `.maybeSingle()`, which THROWS a PostgREST
- * error (not "no match") when more than one row satisfies the filter —
- * the old code discarded that error (destructured only `data`) and fell
- * through to creating a THIRD live variant. Replaced with a deterministic
- * ordered LIST read (oldest created_at, then oldest id, first) — errors
- * are now propagated as a typed, retryable confirm error (fail CLOSED,
- * never silently proceed to create on a lookup failure) rather than
- * discarded. limit(2) is enough to distinguish "zero live matches" from
- * "at least one," and per the oldest-survives rule finding 2's post-check
- * applies, the first (oldest) row after the finding-6 format re-check is
- * always the correct resume/comparison target. */
+ * Finding 4 (round-3): this used to be `.maybeSingle()`, which THROWS a
+ * PostgREST error (not "no match") when more than one row satisfies the
+ * filter — the old code discarded that error (destructured only `data`)
+ * and fell through to creating a THIRD live variant. Replaced with a
+ * deterministic ordered LIST read (oldest created_at, then oldest id,
+ * first) — errors are now propagated as a typed, retryable confirm error
+ * (fail CLOSED, never silently proceed to create on a lookup failure)
+ * rather than discarded.
+ *
+ * Round-4 audit finding 4: `.limit(2)` read the two OLDEST rows matching
+ * the LIKE pattern BEFORE the finding-6 exact-format re-check below ran —
+ * so two malformed (never-written-by-this-product) content_sha256 values
+ * that merely happen to sort before a genuine match can fill both slots
+ * and evict it, leaving `rows.find(isWellFormedDigestForFile)` with
+ * nothing to find even though a real match exists further down the
+ * result set. A malformed value can only exist from a direct DB write —
+ * this product only ever writes the two well-formed shapes
+ * (isWellFormedDigestForFile's own comment) — so any realistic amount of
+ * contamination is vanishingly unlikely to reach double digits; raised to
+ * limit(20), which is far beyond that, then format-filtered in TS below.
+ * The ordering (oldest created_at, then oldest id) is kept for
+ * deterministic MATCH SELECTION among multiple well-formed rows (a list
+ * read ordering which row is picked first is fine) — it no longer has
+ * any role in surviving a race (see confirmImportBatch's own comment on
+ * the round-4 SEER-YIELDS fix for why timestamp-based survivor election
+ * was wrong). */
 async function findLiveBatchByUnderlyingFile(
   supabase: SupabaseClient<Database>,
   restaurantId: string,
   fileDigestHex: string,
   options: { excludeSessionId?: string; excludeBatchId?: string } = {},
 ): Promise<FindLiveBatchResult> {
+  // Round-4 audit finding 5 (defense-in-depth): fileDigestHex is provably
+  // server-computed hex today (createHash("sha256").update(...).digest
+  // ("hex") a few lines up in confirmImportBatch), so the .or() filter
+  // string built from it below is provably safe from PostgREST
+  // filter-syntax injection — but "provably safe today, given the current
+  // call site" is a property of the CALLER, not of this function. Asserting
+  // the shape here makes the injection-safety property LOCAL to this
+  // function, independent of what any future caller passes in.
+  if (!/^[0-9a-f]{64}$/.test(fileDigestHex)) {
+    return {
+      ok: false,
+      error: { code: "internal_error", message: "Invalid file digest — expected 64 lowercase hex characters." },
+    };
+  }
+
   let query = supabase
     .from("import_batches")
     .select("id, status, session_id, chunk_index, content_sha256, created_at")
@@ -552,7 +621,7 @@ async function findLiveBatchByUnderlyingFile(
   const { data, error } = await query
     .order("created_at", { ascending: true })
     .order("id", { ascending: true })
-    .limit(2);
+    .limit(20);
 
   if (error) {
     return {

@@ -631,14 +631,56 @@ export function PreviewStep({
   // RowFixItem already runs, not a claim that the server has re-checked
   // anything yet — confirm always re-validates every row server-side
   // regardless of what's shown here.
+  //
+  // Round-4 audit finding 3: "Ready to apply" overstated what this number
+  // means — a row that passes client-side validateFields can still land
+  // in the server's pending bucket (unmatched LWIN, missing cost) or
+  // merge into a duplicate at confirm time, so it was never actually
+  // guaranteed to "apply." Relabeled to "Passing validation" (see the
+  // stat tile below) with an always-visible caption stating plainly that
+  // the server decides the final ready/needs-resolution split at import.
   const effectiveReadyToApplyRows = summary.readyToApplyRows + fixedCount;
   const effectiveErrorRows = summary.errorRows - fixedCount;
   const hasFailedChunk = chunkUpload?.some((c) => c.status === "failed") ?? false;
   // Sol round-2 audit finding 3: chunk_content_mismatch is TERMINAL —
   // retrying re-sends this exact chunk's content and fails the same way
-  // every time. Never offer "Retry upload" for it; the server's own
-  // message (surfaced via `error` above) already explains the revert path.
+  // every time, and there is no fix reachable from inside this UI (the
+  // conflict is with a DIFFERENT already-confirmed chunk, resolved only by
+  // reverting it elsewhere). Never offer "Retry upload" for it; the
+  // server's own message (surfaced via `error` above) already explains
+  // the revert path.
   const hasChunkContentMismatch = chunkUpload?.some((c) => c.status === "failed" && c.code === "chunk_content_mismatch") ?? false;
+  // Round-4 audit finding 2: duplicate_chunk_content is also terminal by
+  // default — no "Retry upload" — since a blind retry re-sends the exact
+  // same bytes and 23505s the same way every time. UNLIKE
+  // chunk_content_mismatch, though, it has a real fix reachable from
+  // inside this same UI: this chunk's rows are still editable (isRowLocked
+  // only locks a CONFIRMED chunk's rows, and this one is 'failed'), and
+  // any rowOverride namespaces the chunk's content_sha256 so it no longer
+  // collides with its sibling (the same-session exclusion in
+  // findLiveBatchByUnderlyingFile then keeps the sibling from
+  // short-circuiting the retry as a false duplicate). So the block below
+  // only stays "unresolved" — hiding the button — until the operator has
+  // actually entered an override for at least one of this chunk's own
+  // (visible, editable) error rows; the moment they do, the button
+  // reappears and a normal confirm/retry sends the now-distinct content.
+  // A duplicate chunk with NO error rows of its own (fully valid,
+  // byte-identical bytes) has no row for the operator to edit at all —
+  // correctly stays permanently hidden, matching the server's own
+  // guidance that "leave it" is the only available resolution then.
+  const unresolvedDuplicateChunkContentIndexes = new Set(
+    (chunkUpload ?? [])
+      .filter((c) => c.status === "failed" && c.code === "duplicate_chunk_content")
+      .map((c) => c.index)
+      .filter(
+        (chunkIndex) =>
+          !errorRows.some(
+            (row) => row.chunkIndex === chunkIndex && Object.keys(rowOverrides[row.rowNumber] ?? {}).length > 0,
+          ),
+      ),
+  );
+  const hasUnresolvedDuplicateChunkContent = unresolvedDuplicateChunkContentIndexes.size > 0;
+  const blocksConfirmButton = hasChunkContentMismatch || hasUnresolvedDuplicateChunkContent;
 
   return (
     <div className="rounded-card card-surface p-lg">
@@ -652,12 +694,16 @@ export function PreviewStep({
 
       <dl className="mt-md grid grid-cols-2 gap-sm text-[13px]">
         <SummaryStat label="Total rows" value={summary.totalRows} />
-        <SummaryStat label="Ready to apply" value={effectiveReadyToApplyRows} />
+        <SummaryStat label="Passing validation" value={effectiveReadyToApplyRows} />
         <SummaryStat label="Needs resolution" value={summary.pendingResolutionRows} />
         <SummaryStat label="Errors (excluded)" value={effectiveErrorRows} />
         <SummaryStat label="LWIN matched" value={summary.matchedRows} />
         <SummaryStat label="Missing cost" value={summary.missingCostRows} />
       </dl>
+      <p className="mt-2xs text-caption text-grey">
+        The server decides the final ready/needs-resolution split at import — missing costs and
+        unmatched wines may still need resolution, and duplicate rows may merge.
+      </p>
       {fixedCount > 0 && (
         <p className="mt-2xs text-caption text-grey">
           Includes {fixedCount} row{fixedCount === 1 ? "" : "s"} fixed above — re-checked when you confirm.
@@ -748,7 +794,7 @@ export function PreviewStep({
         >
           Choose a different file
         </button>
-        {!hasChunkContentMismatch && (
+        {!blocksConfirmButton && (
           <button
             type="button"
             disabled={!canConfirm || confirming}
@@ -760,7 +806,7 @@ export function PreviewStep({
           </button>
         )}
       </div>
-      {!hasChunkContentMismatch && !canConfirm && (
+      {!blocksConfirmButton && !canConfirm && (
         <p className="mt-sm text-caption text-grey">No valid rows to import yet — fix a row below, or choose a different file.</p>
       )}
     </div>

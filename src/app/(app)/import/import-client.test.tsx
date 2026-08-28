@@ -219,7 +219,12 @@ describe("PreviewStep — revalidated summary counts (Sol round-3 audit finding 
     document.body.innerHTML = "";
   });
 
-  it("moves a fixed row from Errors (excluded) into Ready to apply, and notes the projection", async () => {
+  // Round-4 audit finding 3: "Ready to apply" overstated what a
+  // client-side-passing row is actually guaranteed — the server can still
+  // land it in the pending bucket or merge it as a duplicate at confirm
+  // time. Relabeled to "Passing validation", with a permanent caption
+  // saying so.
+  it("moves a fixed row from Errors (excluded) into Passing validation, and notes the projection", async () => {
     const { container } = await mount(
       <PreviewStep
         {...baseProps({
@@ -233,9 +238,10 @@ describe("PreviewStep — revalidated summary counts (Sol round-3 audit finding 
     const stats = new Map(
       [...container.querySelectorAll("dt")].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]),
     );
-    expect(stats.get("Ready to apply")).toBe("1");
+    expect(stats.get("Passing validation")).toBe("1");
     expect(stats.get("Errors (excluded)")).toBe("0");
     expect(container.textContent).toContain("Includes 1 row fixed above — re-checked when you confirm.");
+    expect(container.textContent).toContain("The server decides the final ready/needs-resolution split at import");
   });
 
   it("leaves the counts untouched when nothing has been fixed yet", async () => {
@@ -251,7 +257,7 @@ describe("PreviewStep — revalidated summary counts (Sol round-3 audit finding 
     const stats = new Map(
       [...container.querySelectorAll("dt")].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]),
     );
-    expect(stats.get("Ready to apply")).toBe("0");
+    expect(stats.get("Passing validation")).toBe("0");
     expect(stats.get("Errors (excluded)")).toBe("1");
     expect(container.textContent).not.toContain("re-checked when you confirm");
   });
@@ -342,6 +348,108 @@ describe("PreviewStep — chunk_content_mismatch is terminal (Sol round-2 audit 
 
     const buttons = [...container.querySelectorAll("button")];
     expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+});
+
+describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end (round-4 audit finding 2)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+  });
+
+  it("hides the Confirm/Retry button and renders honest guidance naming the other chunk, before anything is fixed", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      {
+        index: 1,
+        status: "failed",
+        batchId: null,
+        error:
+          "Chunk 1's content is identical to chunk 2, already imported in this session — the database can't hold " +
+          "two imports with identical content, so this can't be resolved by retrying. If this is a genuine " +
+          "repeated segment that needs to import again, edit any row below (even re-entering the same value) so " +
+          "this upload is tracked as distinct, then confirm again. If it was an accidental duplicate, no action " +
+          "is needed — chunk 2 already imported these rows.",
+        code: "duplicate_chunk_content",
+      },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          chunkUpload,
+          chunkTotal: 2,
+          error: chunkUpload[0].error,
+          errorRows: [errorRow(1, { chunkIndex: 1, chunkRowNumber: 1 })],
+        })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
+    expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
+    expect(container.textContent).toContain("identical to chunk 2");
+    expect(container.textContent).toContain("edit any row below");
+  });
+
+  it("shows the Retry button again once an override exists for one of the failed chunk's own rows", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      { index: 1, status: "failed", batchId: null, error: "Chunk 1's content is identical to chunk 2.", code: "duplicate_chunk_content" },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          chunkUpload,
+          chunkTotal: 2,
+          error: chunkUpload[0].error,
+          errorRows: [errorRow(1, { chunkIndex: 1, chunkRowNumber: 1 })],
+          // The operator edited row 1 (which belongs to the failed chunk) —
+          // even re-entering the same-shaped value counts, per the
+          // server's own guidance.
+          rowOverrides: { 1: { quantity: "6" } },
+        })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
+  });
+
+  it("does NOT re-enable the button for an override on a DIFFERENT row than the failed chunk's own", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      { index: 1, status: "failed", batchId: null, error: "Chunk 1's content is identical to chunk 2.", code: "duplicate_chunk_content" },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          chunkUpload,
+          chunkTotal: 2,
+          error: chunkUpload[0].error,
+          // Row 5 belongs to a DIFFERENT chunk (chunkIndex 3) — fixing it
+          // says nothing about chunk 1's own content.
+          errorRows: [errorRow(5, { chunkIndex: 3, chunkRowNumber: 1 })],
+          rowOverrides: { 5: { quantity: "6" } },
+        })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
+    expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
   });
 
   async function mount(element: ReactElement) {

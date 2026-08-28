@@ -646,15 +646,19 @@ describe("confirmImportBatch — underlying-file idempotency across override for
   });
 });
 
-// Sol round-3 audit (2026-08-27) finding 2: the pre-check above runs
-// BEFORE create_import_batch's own insert — two concurrent confirms for
-// the same underlying file but different content_sha256 FORMATS (one
-// bare, one overrides-v1-namespaced) can both pass their own pre-check
-// and both reach the RPC. confirmImportBatch now re-checks AFTER its own
-// insert commits and applies a deterministic (created_at, id) total order
-// so at most one of the two racing confirms survives as a live batch.
-describe("confirmImportBatch — decide-after-write TOCTOU close (Sol round-3 audit finding 2)", () => {
-  function raceSupabase(rivalCreatedAt: string, ownCreatedAt: string) {
+// Round-4 audit finding 1: the previous version of this describe block
+// pinned a (created_at, id) total order as the survivor-election rule —
+// that rule is WRONG (created_at is transaction-START time, not commit
+// order; see batch-service.ts's own comment on confirmImportBatch for the
+// interleaving that produces two survivors under it). The fix is the
+// unconditional SEER-YIELDS rule: any confirm whose post-create check
+// observes ANY rival live batch reverts ITSELF, full stop — never a
+// timestamp comparison. These tests deliberately give the SURVIVING
+// batch in each scenario the shape the OLD (created_at, id) rule would
+// have called "the loser," to pin that timestamps no longer play any
+// role at all.
+describe("confirmImportBatch — decide-after-write TOCTOU close: SEER-YIELDS survivor election (round-4 audit finding 1)", () => {
+  function raceSupabase(options: { rivalAlsoRevertsOnOurRevert?: boolean } = {}) {
     const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
     const fileHex = createHash("sha256").update(file).digest("hex");
     const rows: FakeBatchRow[] = [];
@@ -668,7 +672,10 @@ describe("confirmImportBatch — decide-after-write TOCTOU close (Sol round-3 au
           // content_sha256 FORMAT — bare vs overrides-v1 — so the DB's
           // exact-match unique index never caught it) has ALSO committed.
           // Our own pre-check (which ran before this RPC call) never saw
-          // it — both rows only exist from this instant on.
+          // it — both rows only exist from this instant on. The rival is
+          // deliberately given a LATER created_at and our own batch an
+          // EARLIER one — the old (created_at, id) rule would have called
+          // OUR batch the survivor; the new rule ignores this entirely.
           rows.push({
             id: "rival-batch",
             status: "created",
@@ -676,7 +683,7 @@ describe("confirmImportBatch — decide-after-write TOCTOU close (Sol round-3 au
             chunk_index: null,
             content_sha256: fileHex,
             restaurant_id: RESTAURANT_ID,
-            created_at: rivalCreatedAt,
+            created_at: "2099-01-01T00:00:00.000Z",
           });
           rows.push({
             id: "own-batch",
@@ -685,7 +692,7 @@ describe("confirmImportBatch — decide-after-write TOCTOU close (Sol round-3 au
             chunk_index: null,
             content_sha256: `overrides-v1:${"a".repeat(64)}:${fileHex}`,
             restaurant_id: RESTAURANT_ID,
-            created_at: ownCreatedAt,
+            created_at: "2000-01-01T00:00:00.000Z",
           });
           return Promise.resolve({ data: { batchId: "own-batch" }, error: null });
         }
@@ -696,7 +703,18 @@ describe("confirmImportBatch — decide-after-write TOCTOU close (Sol round-3 au
           });
         }
         if (name === "revert_import_batch") {
-          revertedBatchIds.push((args as { p_batch_id: string }).p_batch_id);
+          const targetId = (args as { p_batch_id: string }).p_batch_id;
+          revertedBatchIds.push(targetId);
+          const row = rows.find((r) => r.id === targetId);
+          if (row) row.status = "reverted";
+          if (targetId === "own-batch" && options.rivalAlsoRevertsOnOurRevert) {
+            // Simulates the residual interleaving: the rival's OWN
+            // post-check also saw us (still live at the time) and
+            // self-reverted itself too, concurrently, completing before
+            // our own re-read of its status runs.
+            const rival = rows.find((r) => r.id === "rival-batch");
+            if (rival) rival.status = "reverted";
+          }
           return Promise.resolve({ data: 0, error: null });
         }
         throw new Error(`unexpected rpc ${name}`);
@@ -706,11 +724,8 @@ describe("confirmImportBatch — decide-after-write TOCTOU close (Sol round-3 au
     return { supabase, file, revertedBatchIds };
   }
 
-  it("reverts our own batch and returns the OLDER rival's already-exists result when we lose the race", async () => {
-    const { supabase, file, revertedBatchIds } = raceSupabase(
-      "2020-01-01T00:00:00.000Z", // rival: older
-      "2030-01-01T00:00:00.000Z", // ours: later — we lose
-    );
+  it("self-reverts unconditionally on seeing a live rival — even though OUR batch has the earlier created_at, which the old rule would have called the winner", async () => {
+    const { supabase, file, revertedBatchIds } = raceSupabase();
 
     const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
       rowOverrides: { "1": { quantity: "12" } },
@@ -720,18 +735,47 @@ describe("confirmImportBatch — decide-after-write TOCTOU close (Sol round-3 au
     expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: "rival-batch" });
   });
 
-  it("proceeds and never reverts anything when we win the race (our own batch is OLDER)", async () => {
-    const { supabase, file, revertedBatchIds } = raceSupabase(
-      "2030-01-01T00:00:00.000Z", // rival: later
-      "2020-01-01T00:00:00.000Z", // ours: older — we win
-    );
+  it("returns a typed duplicate_race_retry error — never an already-exists pointing at a reverted batch — when the rival ALSO self-reverted before our re-read", async () => {
+    const { supabase, file, revertedBatchIds } = raceSupabase({ rivalAlsoRevertsOnOurRevert: true });
 
     const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
       rowOverrides: { "1": { quantity: "12" } },
     });
 
-    expect(revertedBatchIds).toEqual([]);
-    expect(result).toMatchObject({ ok: true, alreadyExists: false, batchId: "own-batch" });
+    expect(revertedBatchIds).toEqual(["own-batch"]);
+    expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
+  });
+
+  it("never self-reverts, and survives normally, when the post-check sees no rival at all", async () => {
+    const rows: FakeBatchRow[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: (args) => {
+          rows.push({
+            id: "solo-batch",
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2026-08-27T00:00:00.000Z",
+          });
+          return { data: { batchId: "solo-batch" }, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+    );
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: false, batchId: "solo-batch" });
   });
 });
 
@@ -865,6 +909,63 @@ describe("confirmImportBatch — underlying-file lookup failure semantics (Sol r
     // created normally.
     expect(result).toMatchObject({ ok: true, alreadyExists: false, batchId: BATCH_ID });
     expect(createCalls).toHaveLength(1);
+  });
+
+  // Round-4 audit finding 4: the old `.limit(2)` read the two OLDEST rows
+  // matching the LIKE pattern BEFORE the exact-format re-check ran — so
+  // two malformed candidates that merely sort before a genuine match
+  // could fill both slots and evict it entirely. Raised to limit(20).
+  it("finds a genuine match even when TWO malformed candidates sort before it (finding 4: limit raised from 2 to 20)", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        id: "malformed-1",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:extra:garbage1:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2020-01-01T00:00:00.000Z",
+      },
+      {
+        id: "malformed-2",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:extra:garbage2:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2021-01-01T00:00:00.000Z",
+      },
+      {
+        id: "genuine-batch",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2022-01-01T00:00:00.000Z",
+      },
+    ];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        }),
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    // The pre-check (which runs before create_import_batch is ever
+    // called) must find "genuine-batch" despite the two older malformed
+    // rows sorting before it — create_import_batch is deliberately absent
+    // from the RPC handlers above so this test fails loudly if it's ever
+    // reached.
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: "genuine-batch" });
   });
 });
 

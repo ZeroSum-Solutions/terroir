@@ -387,19 +387,49 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
       // batch actually claims it, silently dropping this chunk's rows.
       if (body.alreadyExists && (body.sessionId !== activeSessionId || body.chunkIndex !== chunk.index)) {
         const sameSession = body.sessionId === activeSessionId;
-        // Either conflict path stops the upload — reflect that on the
-        // chunk itself so it never sits frozen at "uploading".
+        // Round-4 audit finding 2: the sameSession branch used to be a
+        // dead end — marked "failed" with code null, so PreviewStep
+        // offered "Retry upload," which deterministically re-hits the
+        // exact same (restaurant_id, content_sha256) unique index and
+        // fails the same way every time (migrations are locked — the DB
+        // genuinely cannot hold two live batches with identical content
+        // for this restaurant), while the conflicting sibling batch sits
+        // at status 'created' — not eligible for the "completed"-only
+        // batch-revert action, and the session isn't revertable either
+        // until its rows settle. There was no way forward.
+        //
+        // The fix uses the existing overrides mechanism, which already
+        // provides exactly the distinguishing signal this needs: ANY
+        // rowOverride on this chunk namespaces its content_sha256
+        // (confirmImportBatch's own overrides-v1:<h(overrides)>:<h(file)>
+        // format), so it no longer collides with the sibling's bare-file
+        // digest. Tagged with a distinct TERMINAL code — duplicate_chunk_
+        // content — so PreviewStep never offers a "Retry upload" that
+        // would just fail identically again, and the guidance below tells
+        // the operator the actual way forward: edit a row (even
+        // re-entering the same value) to make this upload distinct, or
+        // leave it alone if the duplication was accidental. This chunk's
+        // rows are NOT locked by this — isRowInConfirmedChunk only locks
+        // rows belonging to a chunk whose status is 'confirmed', and this
+        // one is 'failed' — so the operator can act on that guidance
+        // immediately, and a subsequent confirm carrying the override
+        // reaches the create path normally (the same-session exclusion in
+        // findLiveBatchByUnderlyingFile already keeps this sibling from
+        // short-circuiting that retry as a false duplicate).
         const conflictError = !body.sessionId
           ? `Chunk ${chunk.index} was already imported as a standalone batch. Revert that batch under ` +
             "Recent imports before re-uploading this file."
           : sameSession
-            ? `Chunk ${chunk.index}'s content matches a DIFFERENT chunk already confirmed in this same session — ` +
-              "duplicate segments must be imported separately, and can't be resolved automatically. Revert the " +
-              "conflicting chunk before re-uploading this one."
+            ? `Chunk ${chunk.index}'s content is identical to chunk ${body.chunkIndex}, already imported in this ` +
+              `session — the database can't hold two imports with identical content, so this can't be resolved by ` +
+              "retrying. If this is a genuine repeated segment that needs to import again, edit any row below " +
+              "(even re-entering the same value) so this upload is tracked as distinct, then confirm again. If it " +
+              `was an accidental duplicate, no action is needed — chunk ${body.chunkIndex} already imported these rows.`
             : "This file was already partially uploaded as a different, unfinished import — resuming that import " +
               "instead of starting a second one.";
+        const conflictCode = sameSession ? "duplicate_chunk_content" : null;
         results = results.map((c) =>
-          c.index === chunk.index ? { ...c, status: "failed", error: conflictError, code: null } : c,
+          c.index === chunk.index ? { ...c, status: "failed", error: conflictError, code: conflictCode } : c,
         );
         onProgress(results);
         // sessionId null = the identical bytes were confirmed earlier as a
