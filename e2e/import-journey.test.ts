@@ -165,6 +165,20 @@ test.describe("G1-4 CSV import journey", () => {
       .getByRole("button", { name: "Revert import" })
       .click();
 
+    // Sol audit 2026-08-27 round 5, finding 5: the "Import cellar" heading
+    // is the page's own outer <h1>, always rendered regardless of step —
+    // asserting it alone (as this test used to, right after clicking
+    // revert) proves nothing about the revert's actual outcome. Assert the
+    // success panel's own reported counts instead: this wine was freshly
+    // created by this batch's own apply (an unmatched-LWIN "Include
+    // anyway" row) with no other reference once its inventory is gone, so
+    // orphan-wine cleanup deletes it too — one inventory row removed, one
+    // wine deleted.
+    await expect(page.getByRole("heading", { name: "Import reverted" })).toBeVisible();
+    await expect(page.getByText(/Removed 1 inventory row\(s\)/)).toBeVisible();
+    await expect(page.getByText(/deleted 1 wine\(s\)/)).toBeVisible();
+
+    await page.getByRole("button", { name: "Done" }).click();
     await expect(page.getByRole("heading", { name: "Import cellar" })).toBeVisible();
 
     await expect

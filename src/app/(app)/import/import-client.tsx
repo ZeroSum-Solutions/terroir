@@ -586,6 +586,55 @@ function SummaryStat({ label, value }: { label: string; value: number }) {
   );
 }
 
+/** The revert route's response body (src/app/api/import/batches/[id]/revert/
+ * route.ts) — consumed by BatchStep's success panel instead of being
+ * discarded (Sol audit 2026-08-27 round 4, finding 3). */
+type RevertResult = {
+  revertedCount: number;
+  orphanWinesDeleted: number;
+  lwinStampsCleared: number;
+  cleanupTruncated: boolean;
+  orphanCleanupSkipped: boolean;
+  /** Sol audit 2026-08-27 round 5, finding 3 — count of every caught
+   * cleanup-phase error the revert swallowed (snapshot-read failure,
+   * either cleanup step's own top-level catch, or a per-candidate
+   * delete/update failure). Independent of `cleanupTruncated`
+   * (deadline, not an error) and `orphanCleanupSkipped` (no service
+   * client at all, not a request failing). */
+  cleanupFailures: number;
+};
+
+/** Plain-language summary of a revert's actual outcome, including every
+ * way catalog cleanup can come back incomplete (Sol audit 2026-08-27
+ * round 4, finding 3 — the response used to be parsed and discarded
+ * entirely; round 5, finding 3 — the notices below now COMPOSE instead of
+ * an else-if silently dropping one when more than one applies, and
+ * `cleanupFailures` gets its own notice). Never suggests reverting again:
+ * the batch is already reverted, so — matching docs/runbooks/csv-import.md's
+ * own recovery path — the follow-up for a partial cleanup is a manual
+ * pass or re-running LWIN matching, not repeating this action. */
+function summarizeRevertResult(result: RevertResult): string {
+  const parts = [
+    `Removed ${result.revertedCount} inventory row(s) this import created. Where it could safely confirm it, ` +
+      `this also deleted ${result.orphanWinesDeleted} wine(s) this import added and cleared ` +
+      `${result.lwinStampsCleared} wine-catalog (LWIN) link(s) it wrote — including any link identical to one ` +
+      `that existed before the import (re-running LWIN matching restores it if needed).`,
+  ];
+  // Sol audit round 5, finding 3: these are independent conditions, not
+  // mutually exclusive branches — an else-if here would silently drop
+  // whichever notice came second when more than one flag is set.
+  if (result.orphanCleanupSkipped) {
+    parts.push("Orphan-wine cleanup was skipped — service configuration missing. See the CSV import runbook.");
+  }
+  if (result.cleanupTruncated) {
+    parts.push("Catalog cleanup didn't finish in time and was left partial. See the CSV import runbook for the manual follow-up.");
+  }
+  if (result.cleanupFailures > 0) {
+    parts.push("Some cleanup steps failed — see the CSV import runbook.");
+  }
+  return parts.join(" ");
+}
+
 function BatchStep({
   batch,
   setBatch,
@@ -598,6 +647,7 @@ function BatchStep({
   const [applying, setApplying] = useState(false);
   const [reverting, setReverting] = useState(false);
   const [revertDialogOpen, setRevertDialogOpen] = useState(false);
+  const [revertResult, setRevertResult] = useState<RevertResult | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [manualCostDrafts, setManualCostDrafts] = useState<Record<string, string>>({});
 
@@ -667,14 +717,37 @@ function BatchStep({
         setActionError(body?.error?.message ?? "Revert failed.");
         return;
       }
+      // Sol audit 2026-08-27 round 4, finding 3: the response is consumed,
+      // not discarded — show a success panel with the actual counts
+      // (revertedCount/orphanWinesDeleted/lwinStampsCleared) and any
+      // partial-cleanup warning, instead of silently navigating away.
+      setRevertResult(body as RevertResult);
       setRevertDialogOpen(false);
-      onDone();
     } catch {
       setActionError("Revert failed. Check your connection and try again.");
     } finally {
       setReverting(false);
     }
-  }, [batch.batch.id, onDone]);
+  }, [batch.batch.id]);
+
+  if (revertResult) {
+    return (
+      <div className="rounded-card card-surface p-lg">
+        <div className="flex items-center gap-xs">
+          <CheckCircle2 className="h-5 w-5 text-primary" aria-hidden="true" />
+          <h2 className="font-serif text-[20px] text-ink">Import reverted</h2>
+        </div>
+        <p className="mt-sm text-[14px] text-ink">{summarizeRevertResult(revertResult)}</p>
+        <button
+          type="button"
+          onClick={onDone}
+          className="mt-lg flex min-h-11 w-full items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+        >
+          Done
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-card card-surface p-lg">
@@ -786,7 +859,7 @@ function BatchStep({
       <ActionDialog
         open={revertDialogOpen}
         title="Revert this import?"
-        description={`This removes exactly the ${appliedCount} inventory row(s) this import created. Nothing else in your cellar is touched.`}
+        description="Removes the inventory this import created. Where it can safely confirm it, it also deletes wines only this import added and clears the wine-catalog (LWIN) links it wrote — including a link identical to one that existed before the import. Cleanup is best-effort: it deletes only wines it can confirm are unreferenced at that moment, and reports what it did below."
         confirmLabel="Revert import"
         busy={reverting}
         onConfirm={() => void doRevert()}

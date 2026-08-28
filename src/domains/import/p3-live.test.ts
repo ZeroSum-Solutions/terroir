@@ -196,7 +196,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
       const applied = await applyAll(batchId);
       expect(applied.status).toBe("completed");
 
-      const reverted = await revertImportBatch(userClient, batchId);
+      const reverted = await revertImportBatch(userClient, restaurantId, batchId, admin);
       expect(reverted).toMatchObject({ ok: true, revertedCount: 5 });
 
       // Calling apply again on the now-REVERTED batch must be a hard
@@ -507,6 +507,93 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
     });
   });
 
+  // ── Sol audit 2026-08-27 round 3, finding 2 ─────────────────────────
+  describe("clearBatchLwinStamps contract: clears a stamp apply's conflict UPDATE left live, whether it wrote it fresh or re-affirmed an identical pre-existing value", () => {
+    it("a wine that already carried the exact (lwin_id, score) pair BEFORE apply ran still has its stamp cleared on revert, once apply's own conflict UPDATE re-affirms that pair in its own transaction", async () => {
+      // Pre-existing wine, stamped with the SAME pair the new batch's row
+      // will also carry — models a re-imported file, or a coincidental
+      // earlier stamp. wines_dedup_idx: (restaurant_id, lower(producer),
+      // lower(name), coalesce(vintage,0), size_ml).
+      const { data: existingWine, error: wineError } = await admin
+        .from("wines")
+        .insert({
+          restaurant_id: restaurantId,
+          producer: "C2Contract Producer",
+          name: "C2Contract Wine",
+          vintage: 2022,
+          size_ml: 750,
+          lwin_id: "C2CONTRACT-LWIN",
+          lwin_match_score: 0.9,
+        } as never)
+        .select("id, updated_at")
+        .single();
+      if (wineError || !existingWine) throw wineError ?? new Error("failed to insert pre-existing wine fixture");
+      const wineId = (existingWine as { id: string }).id;
+      const preApplyUpdatedAt = (existingWine as { updated_at: string }).updated_at;
+
+      const { data: batch, error: batchError } = await admin
+        .from("import_batches")
+        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c2contract.csv", total_rows: 1 } as never)
+        .select("id")
+        .single();
+      if (batchError || !batch) throw batchError ?? new Error("failed to insert batch");
+      const batchId = (batch as { id: string }).id;
+
+      // This row's own LWIN match is the IDENTICAL pair the wine already
+      // carries — apply's dedup upsert hits the pre-existing wine (same
+      // producer/name/vintage/size), and its ON CONFLICT DO UPDATE CASE
+      // leaves lwin_id/lwin_match_score unchanged (this row's score does
+      // not beat the existing one) — but the UPDATE statement still runs,
+      // so wines_set_updated_at still bumps updated_at in THIS row's own
+      // apply-chunk transaction.
+      const { error: rowError } = await admin.from("import_batch_rows").insert({
+        batch_id: batchId,
+        restaurant_id: restaurantId,
+        row_number: 1,
+        raw: {
+          producer: "C2Contract Producer", name: "C2Contract Wine", quantity: "1", unit_cost: "10.00",
+          vintage: "2022", size_ml: "750", varietal: null, region: null, country: null, format: null,
+          currency: null, bin: null, section: null,
+        },
+        row_state: "valid",
+        validation_errors: [],
+        lwin_status: "matched",
+        lwin_id: "C2CONTRACT-LWIN",
+        lwin_score: 0.9,
+        resolution: "auto",
+        cost_status: "present",
+      } as never);
+      if (rowError) throw rowError;
+
+      await applyImportBatchChunk(userClient, batchId);
+
+      const { data: wineAfterApply } = await admin
+        .from("wines")
+        .select("lwin_id, lwin_match_score, updated_at")
+        .eq("id", wineId)
+        .single();
+      const afterApply = wineAfterApply as { lwin_id: string | null; lwin_match_score: number | null; updated_at: string };
+      // The pair itself is unchanged (it was already this exact pair) —
+      // but apply's own transaction DID touch this wine: updated_at moved.
+      expect(afterApply).toMatchObject({ lwin_id: "C2CONTRACT-LWIN", lwin_match_score: 0.9 });
+      expect(afterApply.updated_at).not.toBe(preApplyUpdatedAt);
+
+      const reverted = await revertImportBatch(userClient, restaurantId, batchId, admin);
+      expect(reverted).toMatchObject({ ok: true, lwinStampsCleared: 1 });
+
+      const { data: wineAfterRevert } = await admin
+        .from("wines")
+        .select("lwin_id, lwin_match_score")
+        .eq("id", wineId)
+        .single();
+      // Cleared per the documented contract — NOT because this batch
+      // "authored" the pair (it was already there), but because apply's
+      // own conflict UPDATE genuinely re-asserted exactly these values in
+      // its own transaction, and that's what revert undoes.
+      expect(wineAfterRevert).toEqual({ lwin_id: null, lwin_match_score: null });
+    });
+  });
+
   // ── C-new-1 ──────────────────────────────────────────────────────────
   describe("C-new-1: a partially-applied, abandoned batch can now be reverted", () => {
     it("60% applied, never resolved further, still reverts cleanly", async () => {
@@ -536,7 +623,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
       expect(applied.status).toBe("applying"); // 3 applied, 2 still pending — never reaches 'completed'
 
       // Pre-fix (0076's original guard), this would fail with P0001.
-      const reverted = await revertImportBatch(userClient, batchId);
+      const reverted = await revertImportBatch(userClient, restaurantId, batchId, admin);
       expect(reverted).toMatchObject({ ok: true, revertedCount: 3 });
 
       const { data: batchRow } = await admin.from("import_batches").select("status").eq("id", batchId).single();

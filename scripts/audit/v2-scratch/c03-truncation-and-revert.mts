@@ -127,7 +127,14 @@ async function main() {
   }
 
   log("\n=== Part 2: revert, then call applyImportBatchChunk again on the (reverted) batch ===");
-  const revertResult = await revertImportBatch(tenantA, batchId);
+  // revertImportBatch's signature grew a restaurantId (belt-and-suspenders
+  // tenant filter) and a service-role client (Sol audit 2026-08-27 round 3,
+  // finding 3 — orphan-wine cleanup's cross-tenant reference checks) after
+  // this script was first written. Reusing `admin` (already constructed
+  // above for the psql-adjacent ground-truth reads) gives this script the
+  // same cleanup fidelity the real revert route has, rather than silently
+  // reporting orphanCleanupSkipped for every run.
+  const revertResult = await revertImportBatch(tenantA, restaurantId, batchId, admin);
   log({ revertResult });
   const statusAfterRevert = psql(`select status from public.import_batches where id = '${batchId}';`);
   log({ statusAfterRevert });
