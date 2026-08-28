@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { makeScan } from "../src/test/fixtures/invoices/scans";
 import { extractAuthEmailLink, waitForMailpitEmail } from "./auth-e2e-config";
+import { assertNoSeriousA11yViolations } from "./a11y";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -55,6 +56,7 @@ test.describe("mobile demo critical journeys", () => {
       "Burgundy Pinot Noir Lot 001",
     );
     await expect(page.getByText("14 bottles", { exact: true })).toBeVisible();
+    await assertNoSeriousA11yViolations(page, "/scan/[id] review scan");
     await page.goto("/scan");
     await page.evaluate(() => localStorage.removeItem("terroir:current-scan"));
     await page.reload();
@@ -74,6 +76,7 @@ test.describe("mobile demo critical journeys", () => {
     await expect(page.getByRole("heading", { name: "Invoice scan results" })).toBeVisible();
     await expect(page.getByLabel("Supplier")).toHaveValue("Test Distributor");
     await expect(page.getByLabel("Producer").first()).toHaveValue("Domaine Drouhin");
+    await assertNoSeriousA11yViolations(page, "/scan invoice results");
     const save = page.getByRole("button", { name: "Save to Inventory" });
     expect(await controlHeight(save)).toBeGreaterThanOrEqual(44);
     await save.click();
@@ -104,6 +107,7 @@ test.describe("mobile demo critical journeys", () => {
       await page.goto(`/lists/${list.id}`);
       await page.getByRole("button", { name: "Publish", exact: true }).click();
       const publishDialog = page.getByRole("dialog", { name: "Publish wine list" });
+      await assertNoSeriousA11yViolations(page, "/lists/[id] publish dialog");
       await publishDialog.getByLabel("Public URL slug").fill(slug);
       await publishDialog.getByRole("button", { name: "Publish", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Your wine list is live" })).toBeVisible();
@@ -114,6 +118,7 @@ test.describe("mobile demo critical journeys", () => {
       await page.goto(`/list/${slug}`);
       await expect(page.getByRole("heading", { name: listName })).toBeVisible();
       await expectNoDocumentOverflow(page);
+      await assertNoSeriousA11yViolations(page, "/list/[slug] public menu");
 
       await page.goto(`/lists/${list.id}`);
       await page.getByRole("button", { name: "Publish", exact: true }).click();
@@ -171,6 +176,7 @@ test.describe("mobile demo critical journeys", () => {
       await page.waitForURL("**/cellar", { timeout: 20_000 });
       await expect(page.getByRole("heading", { name: /cellar beyond/i })).toBeVisible();
       await expectNoDocumentOverflow(page);
+      await assertNoSeriousA11yViolations(page, "/cellar (staff)");
 
       const { data: membership, error: membershipError } = await admin
         .from("memberships")
@@ -216,6 +222,7 @@ test.describe("mobile demo critical journeys", () => {
     try {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("http://127.0.0.1:3000/login?forgot=1");
+      await assertNoSeriousA11yViolations(page, "/login forgot-password");
       await page.getByLabel("Work email").fill(email);
       await page.getByRole("button", { name: "Send reset link" }).click();
       await expect(page.getByText(/If that email is registered/i)).toBeVisible();
@@ -238,6 +245,7 @@ test.describe("mobile demo critical journeys", () => {
       await page.goto(extractAuthEmailLink(resetMail));
       await expect(page).toHaveURL("http://127.0.0.1:3000/auth/reset-password");
       await expectNoDocumentOverflow(page);
+      await assertNoSeriousA11yViolations(page, "/auth/reset-password");
       await page.getByLabel("New password").fill(replacementPassword);
       await page.getByLabel("Confirm password").fill(replacementPassword);
       await page.getByRole("button", { name: "Save password" }).click();
@@ -265,6 +273,7 @@ test.describe("mobile demo critical journeys", () => {
       expect(signOutResponse.status()).toBe(303);
       await page.goto("http://127.0.0.1:3000/login");
       await expect(page.getByRole("heading", { name: /Sign in/i })).toBeVisible();
+      await assertNoSeriousA11yViolations(page, "/login sign-in");
       expect(
         (await page.context().cookies()).filter((cookie) => cookie.name.includes("auth-token")),
       ).toEqual([]);

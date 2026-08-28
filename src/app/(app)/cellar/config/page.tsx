@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Pencil, Trash2, Check, X, GripVertical } from "lucide-react";
 import {
@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
+import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 
 type Section = { id: string; name: string };
 
@@ -58,6 +59,12 @@ export default function CellarConfigPage() {
   const [editName, setEditName] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<Section | null>(null);
+  const deleteDialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap({
+    containerRef: deleteDialogRef,
+    onEscape: () => setDeleteTarget(null),
+    enabled: deleteTarget !== null,
+  });
 
   const [newName, setNewName] = useState("");
 
@@ -277,11 +284,14 @@ export default function CellarConfigPage() {
       </div>
 
       {deleteTarget && (
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; the dialog below has full keyboard access via useFocusTrap (Escape + a Cancel button).
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-scrim"
           onClick={() => setDeleteTarget(null)}
         >
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- onClick here only stops the backdrop's dismiss-click from bubbling; no independent interaction to reach by keyboard. */}
           <div
+            ref={deleteDialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="delete-section-heading"

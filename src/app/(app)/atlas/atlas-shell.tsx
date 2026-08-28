@@ -186,6 +186,7 @@ function AtlasRegionSheet({
   const countryParam = country.rawLabels[0];
 
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; the dialog below already has full keyboard access via useFocusTrap (Escape + a visible Close button).
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-scrim md:items-center"
       onClick={(event) => {

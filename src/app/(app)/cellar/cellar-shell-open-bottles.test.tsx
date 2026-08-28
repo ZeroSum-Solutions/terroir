@@ -149,6 +149,7 @@ describe("CellarShell open bottles route", () => {
             eightysixStrategy="hide"
             defaultTargetPourCostPct={null}
             defaultTargetMarkupRatio={null}
+            // eslint-disable-next-line jsx-a11y/aria-role -- `role` here is CellarShell's own RBAC prop ("owner"/"staff"/"admin"), not a DOM ARIA role.
             role="owner"
             cellarSections={[{ id: "section-1", name: "Main cellar" }]}
           />
@@ -238,6 +239,7 @@ describe("CellarShell open bottles route", () => {
             eightysixStrategy="hide"
             defaultTargetPourCostPct={null}
             defaultTargetMarkupRatio={null}
+            // eslint-disable-next-line jsx-a11y/aria-role -- `role` here is CellarShell's own RBAC prop ("owner"/"staff"/"admin"), not a DOM ARIA role.
             role="staff"
           />
         </ToastProvider>,
@@ -279,6 +281,7 @@ describe("CellarShell open bottles route", () => {
             eightysixStrategy="hide"
             defaultTargetPourCostPct={null}
             defaultTargetMarkupRatio={null}
+            // eslint-disable-next-line jsx-a11y/aria-role -- `role` here is CellarShell's own RBAC prop ("owner"/"staff"/"admin"), not a DOM ARIA role.
             role="staff"
             cellarSections={[{ id: "section-1", name: "Main cellar" }]}
           />

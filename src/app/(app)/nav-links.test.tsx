@@ -15,6 +15,7 @@ describe("primary navigation", () => {
     "preserves the five primary destinations, Atlas center",
     (Navigation) => {
       document.body.innerHTML = renderToStaticMarkup(
+        // eslint-disable-next-line jsx-a11y/aria-role -- `role` here is this component's own RBAC prop ("staff"/"owner"/"admin"), not a DOM ARIA role.
         <Navigation role="staff" />,
       );
       const links = [...document.querySelectorAll("a")];
@@ -40,6 +41,7 @@ describe("primary navigation", () => {
 
   it("keeps desktop links touch-sized for phone landscape", () => {
     document.body.innerHTML = renderToStaticMarkup(
+      // eslint-disable-next-line jsx-a11y/aria-role -- `role` here is this component's own RBAC prop ("staff"/"owner"/"admin"), not a DOM ARIA role.
       <DesktopNavLinks role="staff" />,
     );
 

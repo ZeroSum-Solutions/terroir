@@ -570,6 +570,7 @@ function InviteModal({
   useFocusTrap({ containerRef: trapRef, onEscape: onClose });
 
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; this dialog already has full keyboard access via useFocusTrap (Escape + a visible Close button).
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-scrim backdrop-blur-sm"
       role="dialog"
