@@ -397,3 +397,122 @@ describe("confirmChunkedSession — Retry only reaches create when the override 
     expect(new Set(digestsRecorded).size).toBe(2);
   });
 });
+
+// WARN 5 (round-9/10 audit): duplicate_race_retry is retryable BY DESIGN,
+// but nothing used to bound how many times in a row it could recur for the
+// SAME chunk — a durably unresolvable rival produced an endless human
+// "retry upload" loop with no better affordance. confirmChunkedSession now
+// counts consecutive duplicate_race_retry failures per chunk (persisted on
+// ChunkUploadState.duplicateRaceRetryCount, carried across manual retries
+// via `initialUpload` exactly like every other per-chunk field) and
+// escalates to the distinct terminal duplicate_race_retry_exhausted code
+// once DUPLICATE_RACE_RETRY_LIMIT is reached.
+describe("confirmChunkedSession — bounded escalation for duplicate_race_retry (round-9/10 audit, WARN 5)", () => {
+  function duplicateRaceRetryResponse() {
+    return jsonResponse(422, {
+      error: {
+        code: "duplicate_race_retry",
+        message: "Another import attempt for this file is being cleaned up — please retry the upload.",
+      },
+    });
+  }
+
+  it("stays on the retryable duplicate_race_retry code and generic message for the first two consecutive attempts", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) return jsonResponse(201, { sessionId: "session-new" });
+        return duplicateRaceRetryResponse();
+      }),
+    );
+
+    let upload: ChunkUploadState[] = [{ index: 1, status: "pending", batchId: null, error: null, code: null }];
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const result = await confirmChunkedSession({
+        plan: PLAN,
+        initialUpload: upload,
+        existingSessionId: "session-new",
+        fileLabel: "cellar.csv",
+        timestampsRef: { current: [] },
+        onSessionId: () => {},
+        onProgress: (u) => {
+          upload = u;
+        },
+      });
+      expect(result).toMatchObject({ ok: false, error: "Chunk 1 of 1 failed to upload — you can retry it below." });
+      expect(upload[0]).toMatchObject({ code: "duplicate_race_retry", duplicateRaceRetryCount: attempt });
+    }
+  });
+
+  it("escalates to the terminal duplicate_race_retry_exhausted code once DUPLICATE_RACE_RETRY_LIMIT consecutive attempts are reached", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) return jsonResponse(201, { sessionId: "session-new" });
+        return duplicateRaceRetryResponse();
+      }),
+    );
+
+    let upload: ChunkUploadState[] = [{ index: 1, status: "pending", batchId: null, error: null, code: null }];
+    let lastResult: Awaited<ReturnType<typeof confirmChunkedSession>> | undefined;
+    // Three manual retries in a row — DUPLICATE_RACE_RETRY_LIMIT.
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      lastResult = await confirmChunkedSession({
+        plan: PLAN,
+        initialUpload: upload,
+        existingSessionId: "session-new",
+        fileLabel: "cellar.csv",
+        timestampsRef: { current: [] },
+        onSessionId: () => {},
+        onProgress: (u) => {
+          upload = u;
+        },
+      });
+    }
+
+    expect(upload[0]).toMatchObject({ code: "duplicate_race_retry_exhausted", duplicateRaceRetryCount: 3 });
+    expect(lastResult).toMatchObject({ ok: false });
+    if (lastResult && !lastResult.ok) {
+      expect(lastResult.error).toMatch(/still conflicts with another live import.*after 3 attempts/i);
+      // Terminal — the server's own escalation message is shown verbatim,
+      // never the generic "you can retry it below."
+      expect(lastResult.error).not.toMatch(/you can retry it below/i);
+    }
+  });
+
+  it("resets the count when a DIFFERENT code interrupts the streak", async () => {
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) return jsonResponse(201, { sessionId: "session-new" });
+        call += 1;
+        // First attempt: duplicate_race_retry. Second: a DIFFERENT,
+        // unrelated retryable failure (no typed code). Third: duplicate_
+        // race_retry again — count must have reset to 1, not continued to 2.
+        if (call === 2) return jsonResponse(500, { error: { message: "Temporary server error." } });
+        return duplicateRaceRetryResponse();
+      }),
+    );
+
+    let upload: ChunkUploadState[] = [{ index: 1, status: "pending", batchId: null, error: null, code: null }];
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      await confirmChunkedSession({
+        plan: PLAN,
+        initialUpload: upload,
+        existingSessionId: "session-new",
+        fileLabel: "cellar.csv",
+        timestampsRef: { current: [] },
+        onSessionId: () => {},
+        onProgress: (u) => {
+          upload = u;
+        },
+      });
+    }
+
+    expect(upload[0]).toMatchObject({ code: "duplicate_race_retry", duplicateRaceRetryCount: 1 });
+  });
+});
