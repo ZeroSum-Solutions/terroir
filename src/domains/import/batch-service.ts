@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/types/database";
 import { buildImportPreview, type PreviewRow } from "./preview-service";
-import { APPLY_CHUNK_SIZE, CLEANUP_SOFT_BUDGET_MS, LWIN_APPLY_MIN_SCORE } from "./constants";
+import { APPLY_CHUNK_SIZE, CLEANUP_BUDGET_FROM_ENTRY_MS, LWIN_APPLY_MIN_SCORE } from "./constants";
 
 function summarize(rows: PreviewRow[]) {
   return {
@@ -444,16 +444,33 @@ export type RevertBatchResult =
       revertedCount: number;
       orphanWinesDeleted: number;
       lwinStampsCleared: number;
-      /** Sol audit 2026-08-27 round 3, finding 5 — true when the TS-layer
-       * cleanup phase (cleanupOrphanWines / clearBatchLwinStamps) hit
-       * CLEANUP_SOFT_BUDGET_MS and stopped starting new per-candidate work
-       * before finishing every candidate. The counts above are still
-       * accurate for whatever DID get processed — never reset or
-       * estimated — this flag only says more candidates were left
-       * untouched. Re-running revert is not meaningful (the batch is
+      /** Sol audit 2026-08-27 round 3, finding 5 (deadline arithmetic
+       * corrected round 4 — see CLEANUP_BUDGET_FROM_ENTRY_MS) — true when
+       * the TS-layer cleanup phase (cleanupOrphanWines /
+       * clearBatchLwinStamps) hit the deadline and stopped issuing new
+       * cleanup requests before finishing every candidate. The counts
+       * above are still accurate for whatever DID get processed — never
+       * reset or estimated — this flag only says more candidates were
+       * left untouched. Re-running revert is not meaningful (the batch is
        * already reverted), so the recovery path is the same as any other
        * cleanup shortfall: re-run LWIN matching / a manual cleanup pass. */
       cleanupTruncated: boolean;
+      /** Sol audit 2026-08-27 round 4, finding 6 — true when
+       * `serviceClient` was unavailable (SUPABASE_SERVICE_ROLE_KEY missing
+       * or misconfigured), so `cleanupOrphanWines` skipped orphan-wine
+       * deletion ENTIRELY for this revert rather than running its
+       * cross-tenant reference checks on the wrong client (see
+       * `cleanupOrphanWines`'s own header). This is independent of
+       * `cleanupTruncated`: it names a config problem, not a time budget
+       * one, and it says nothing about `clearBatchLwinStamps`, which needs
+       * no service-role client and still ran normally. `orphanWinesDeleted`
+       * is 0 whenever this is true, but the reverse isn't implied — a
+       * batch can legitimately have zero orphan wines to delete with this
+       * flag false. See docs/runbooks/csv-import.md for the required env
+       * var and the recovery path (re-run cleanup once the service-role
+       * client is configured; the inventory revert itself already
+       * succeeded and is not affected). */
+      orphanCleanupSkipped: boolean;
     }
   | { ok: false; error: { code: string; message: string } };
 
@@ -509,15 +526,57 @@ type AppliedRowSnapshot = {
  * gap. `bottle_closeouts` has the identical shape (member insert,
  * `restaurant_id`-only check, nullable `open_bottle_id`, `wine_id` cascade
  * — see WINE_REFERENCING_TABLES). If `serviceClient` is unavailable
- * (misconfigured environment), cleanupOrphanWines skips deletion entirely
+ * (misconfigured environment — SUPABASE_SERVICE_ROLE_KEY missing, Sol
+ * audit round 4, finding 6), cleanupOrphanWines skips deletion entirely
  * rather than falling back to the RLS client — falling back would silently
- * reintroduce this exact cross-tenant risk.
+ * reintroduce this exact cross-tenant risk — and the result's
+ * `orphanCleanupSkipped` flag says so explicitly rather than leaving the
+ * caller to infer it from a zero count.
+ *
+ * TOCTOU WINDOW (Sol audit 2026-08-27 round 4, finding 1 — narrowed, not
+ * closed): the fresh, single-wine re-check immediately before each
+ * DELETE still runs as several separate requests (findReferencedWineIds
+ * checks WINE_REFERENCING_TABLES plus the cross-batch import_batch_rows
+ * claim), so a forged row could in principle land in the gap between any
+ * one of those checks and the DELETE. `stock_adjustments` and
+ * `bottle_closeouts` are the only two tables in that list a cross-tenant
+ * write can target (see WINE_REFERENCING_TABLES' own comment) — every
+ * other check in the list is same-tenant-only even if raced, which is
+ * the pre-existing residual named in cleanupOrphanWines' own header, not
+ * a cross-tenant one. findReferencedWineIds therefore checks both of
+ * those two tables LAST, immediately before returning to the caller's
+ * DELETE call — shrinking the cross-tenant-forgeable window from
+ * ~10 round-trips (every other check in the list, run first) to a single
+ * round-trip (the DELETE, run immediately after). It does NOT close the
+ * window: a cross-tenant insert into one of those two tables landing in
+ * that final round-trip is still possible in principle. What makes the
+ * residual acceptable rather than merely small: the ONLY way a
+ * cross-tenant row can exist there at all is by exploiting the
+ * pre-existing gap in those two tables' own INSERT policies (neither
+ * checks that `wine_id` belongs to the inserting tenant's own
+ * `restaurant_id` — see WINE_REFERENCING_TABLES' comment) — no product
+ * code path this app ships ever writes a cross-tenant `wine_id`, so any
+ * row that shows up there naming another tenant's wine is necessarily a
+ * deliberate, malicious insert exploiting that gap, not innocent
+ * concurrent activity. The forger is the only party who could lose that
+ * row, and only by choosing to exploit a vulnerability that already lets
+ * them attach arbitrary rows to a wine they don't own. The airtight
+ * fixes are both migration-gated and out of reach for this TS-layer-only
+ * pass: an ownership `WITH CHECK` on those two tables' INSERT policies
+ * (closing the underlying gap directly), or moving the re-check and the
+ * DELETE into one `SECURITY INVOKER` RPC transaction (closing the window
+ * itself, not just narrowing it). See "Cross-tenant reference checks run
+ * on the service-role client" in docs/runbooks/csv-import.md for the
+ * live-tested proof and the tracked status of both fixes.
  *
  * CRITICAL ORDERING (Sol audit 2026-08-27, round 2): the snapshot read
  * below MUST happen BEFORE the revert_import_batch RPC call, not after.
  * revert_import_batch (0109) itself sets `updated_at = now()` on every
  * row it reverts — reading the snapshot afterward would destroy the exact
  * apply-time evidence cleanupOrphanWines/clearBatchLwinStamps depend on.
+ * Neither the snapshot read nor the RPC call is ever subject to
+ * `cleanupDeadline` below — the deadline governs only the best-effort
+ * cleanup phase that runs after both have already completed.
  *
  * The snapshot read is itself wrapped in try/catch (Sol audit 2026-08-27
  * round 3, finding 4): it supports best-effort cleanup ONLY, so a failure
@@ -532,6 +591,16 @@ export async function revertImportBatch(
   batchId: string,
   serviceClient: SupabaseClient<Database> | null,
 ): Promise<RevertBatchResult> {
+  // Captured at ENTRY (Sol audit 2026-08-27 round 4, finding 2) — NOT
+  // after the snapshot read/RPC, which round 3's version did. A slow
+  // snapshot read (paginated, unbounded page count) or a slow RPC call
+  // could otherwise eat most of the route's 30s maxDuration before
+  // cleanup's own clock even started, leaving cleanup a deadline that
+  // looked like 20s of real budget but was actually much less. See
+  // CLEANUP_BUDGET_FROM_ENTRY_MS's own comment for the arithmetic.
+  const cleanupDeadline = Date.now() + CLEANUP_BUDGET_FROM_ENTRY_MS;
+  const orphanCleanupSkipped = serviceClient === null;
+
   let snapshotRows: AppliedRowSnapshot[] | null = null;
   try {
     snapshotRows = await fetchAllRows<AppliedRowSnapshot>((from, to) =>
@@ -572,10 +641,6 @@ export async function revertImportBatch(
   let cleanupTruncated = false;
 
   if (snapshotRows) {
-    // One shared soft deadline for the whole cleanup phase (both steps) —
-    // see CLEANUP_SOFT_BUDGET_MS's comment for the budget arithmetic.
-    const cleanupDeadline = Date.now() + CLEANUP_SOFT_BUDGET_MS;
-
     try {
       const result = await cleanupOrphanWines(supabase, serviceClient, restaurantId, batchId, snapshotRows, cleanupDeadline);
       orphanWinesDeleted = result.deleted;
@@ -587,7 +652,7 @@ export async function revertImportBatch(
       }
       if (result.truncated) {
         console.error(
-          `revertImportBatch: cleanupOrphanWines hit CLEANUP_SOFT_BUDGET_MS for batch ${batchId}; stopped early with ${result.deleted} confirmed delete(s), cleanupTruncated=true`,
+          `revertImportBatch: cleanupOrphanWines hit CLEANUP_BUDGET_FROM_ENTRY_MS for batch ${batchId}; stopped early with ${result.deleted} confirmed delete(s), cleanupTruncated=true`,
         );
       }
     } catch (cleanupError) {
@@ -605,7 +670,7 @@ export async function revertImportBatch(
       }
       if (result.truncated) {
         console.error(
-          `revertImportBatch: clearBatchLwinStamps hit CLEANUP_SOFT_BUDGET_MS for batch ${batchId}; stopped early with ${result.cleared} confirmed clear(s), cleanupTruncated=true`,
+          `revertImportBatch: clearBatchLwinStamps hit CLEANUP_BUDGET_FROM_ENTRY_MS for batch ${batchId}; stopped early with ${result.cleared} confirmed clear(s), cleanupTruncated=true`,
         );
       }
     } catch (unstampError) {
@@ -619,7 +684,24 @@ export async function revertImportBatch(
     orphanWinesDeleted,
     lwinStampsCleared,
     cleanupTruncated,
+    orphanCleanupSkipped,
   };
+}
+
+/** Sol audit 2026-08-27 round 4, finding 2 — thrown by fetchAllRows/
+ * fetchAllRowsForIds/findReferencedWineIds when a `deadline` they were
+ * given has already passed, checked BEFORE issuing the next request
+ * rather than after. Every caller in the cleanup path (cleanupOrphanWines,
+ * clearBatchLwinStamps) catches this specifically and stops — never
+ * counts it as a per-candidate failure — and sets `truncated: true`. It
+ * is never thrown by the snapshot read or the revert RPC call, neither of
+ * which is ever given a deadline (see revertImportBatch's header). */
+class CleanupDeadlineExceededError extends Error {}
+
+function assertBeforeDeadline(deadline: number | undefined): void {
+  if (deadline !== undefined && Date.now() > deadline) {
+    throw new CleanupDeadlineExceededError();
+  }
 }
 
 /** PostgREST silently caps any un-ranged select at max_rows (1000,
@@ -631,13 +713,21 @@ export async function revertImportBatch(
  * stable row order across calls, so two pages without an explicit order
  * can overlap or skip rows entirely (Sol audit 2026-08-27 round 2,
  * finding 4). Callers supply the order clause themselves (the column
- * differs per table) — this helper only owns the paging loop. */
+ * differs per table) — this helper only owns the paging loop.
+ *
+ * `deadline` (Sol audit 2026-08-27 round 4, finding 2) is OPTIONAL and,
+ * when given, is checked before EVERY page request this loop issues —
+ * not just once per caller. The snapshot read in revertImportBatch calls
+ * this with no deadline at all (it must never be truncated); every
+ * cleanup-path caller passes one. */
 const POSTGREST_PAGE = 1000;
 async function fetchAllRows<T>(
   page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  deadline?: number,
 ): Promise<T[]> {
   const all: T[] = [];
   for (let from = 0; ; from += POSTGREST_PAGE) {
+    assertBeforeDeadline(deadline);
     const { data, error } = await page(from, from + POSTGREST_PAGE - 1);
     if (error) throw error;
     const rows = data ?? [];
@@ -664,14 +754,21 @@ function chunkIds(ids: string[]): string[][] {
  * above composed with fetchAllRows' own 1,000-row page cap, since a
  * single 100-id chunk can still legitimately match more than 1,000 rows
  * in a busy referencing table (e.g. many stock_adjustments rows for one
- * wine). */
+ * wine). `deadline` (Sol audit 2026-08-27 round 4, finding 2), when
+ * given, is checked before EVERY id-chunk's request boundary in addition
+ * to fetchAllRows' own per-page check — so a candidate lookup or
+ * reference sweep built from many id chunks (up to 50 for a 5,000-row
+ * batch at IN_CLAUSE_CHUNK_SIZE) can never issue chunk 2 once the
+ * deadline has already passed while chunk 1 was in flight. */
 async function fetchAllRowsForIds<T>(
   ids: string[],
   page: (idsChunk: string[], from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  deadline?: number,
 ): Promise<T[]> {
   const all: T[] = [];
   for (const chunk of chunkIds(ids)) {
-    const rows = await fetchAllRows<T>((from, to) => page(chunk, from, to));
+    assertBeforeDeadline(deadline);
+    const rows = await fetchAllRows<T>((from, to) => page(chunk, from, to), deadline);
     all.push(...rows);
   }
   return all;
@@ -687,9 +784,20 @@ async function fetchAllRowsForIds<T>(
  * only `is_member(restaurant_id)` — so either can carry a caller-chosen
  * `wine_id` from ANY tenant, and `wine_id` is `ON DELETE CASCADE` on
  * both. See findReferencedWineIds' `serviceClient` requirement below for
- * why that combination matters. */
+ * why that combination matters.
+ *
+ * ORDER IS LOAD-BEARING (Sol audit 2026-08-27 round 4, finding 1):
+ * `stock_adjustments` and `bottle_closeouts` — the only two tables here a
+ * cross-tenant write can target — are listed LAST, deliberately. Every
+ * table in this array is checked as a separate sequential request inside
+ * findReferencedWineIds, and the LAST one checked is the one whose result
+ * is freshest relative to the DELETE that follows a re-check. Putting the
+ * two cross-tenant-forgeable tables last (instead of stock_adjustments
+ * FIRST, as an earlier revision had it) shrinks the cross-tenant TOCTOU
+ * window from ~10 round-trips down to the single round-trip immediately
+ * before the DELETE — see cleanupOrphanWines' header for what that
+ * residual window still allows and why it's accepted rather than closed. */
 const WINE_REFERENCING_TABLES = [
-  "stock_adjustments",
   "wine_list_items",
   "inventory_items",
   "availability_events",
@@ -697,6 +805,7 @@ const WINE_REFERENCING_TABLES = [
   "pour_events",
   "pricing_recommendations",
   "cellar_health",
+  "stock_adjustments",
   "bottle_closeouts",
 ] as const;
 
@@ -719,44 +828,72 @@ const WINE_REFERENCING_TABLES = [
  * feeds) is correct regardless of which tenant wrote the referencing row.
  * The wine DELETE itself still runs on the caller's own RLS-scoped
  * client (see revertImportBatch's header) — only this existence check
- * needs service-role visibility. */
+ * needs service-role visibility.
+ *
+ * REQUEST ORDER (Sol audit 2026-08-27 round 4, finding 1): the cross-batch
+ * `import_batch_rows` check runs FIRST — it is never cross-tenant
+ * forgeable (rows there are written only by apply_import_batch_chunk and
+ * revert_import_batch, never by a direct member insert) — then every
+ * WINE_REFERENCING_TABLES table IN THE ARRAY'S OWN ORDER, which ends with
+ * `stock_adjustments` and `bottle_closeouts`. That makes those two the
+ * LAST requests this function issues before returning, so the caller's
+ * next request (the DELETE, for the single-wine re-check call) follows
+ * immediately — a single round-trip's worth of window, not ~10. `deadline`
+ * (Sol audit round 4, finding 2) is threaded into every paged request
+ * below via fetchAllRowsForIds, so a slow reference table also gets this
+ * function to stop (throwing CleanupDeadlineExceededError) before issuing
+ * its next chunk request rather than running unboundedly. */
 async function findReferencedWineIds(
   serviceClient: SupabaseClient<Database>,
   wineIds: string[],
   excludeBatchId: string,
+  deadline: number,
 ): Promise<Set<string>> {
   const referenced = new Set<string>();
   if (wineIds.length === 0) return referenced;
 
-  for (const table of WINE_REFERENCING_TABLES) {
-    const refs = await fetchAllRowsForIds<{ wine_id: string }>(wineIds, (idsChunk, from, to) =>
+  const otherBatchRows = await fetchAllRowsForIds<{ applied_wine_id: string | null }>(
+    wineIds,
+    (idsChunk, from, to) =>
       serviceClient
-        .from(table)
-        .select("wine_id")
-        .in("wine_id", idsChunk)
-        .order("wine_id", { ascending: true })
+        .from("import_batch_rows")
+        .select("applied_wine_id")
+        .in("applied_wine_id", idsChunk)
+        .neq("batch_id", excludeBatchId)
+        .order("id", { ascending: true })
         .range(from, to),
-    );
-    for (const row of refs) referenced.add(row.wine_id);
-  }
-
-  const otherBatchRows = await fetchAllRowsForIds<{ applied_wine_id: string | null }>(wineIds, (idsChunk, from, to) =>
-    serviceClient
-      .from("import_batch_rows")
-      .select("applied_wine_id")
-      .in("applied_wine_id", idsChunk)
-      .neq("batch_id", excludeBatchId)
-      .order("id", { ascending: true })
-      .range(from, to),
+    deadline,
   );
   for (const row of otherBatchRows) {
     if (row.applied_wine_id) referenced.add(row.applied_wine_id);
   }
 
+  for (const table of WINE_REFERENCING_TABLES) {
+    const refs = await fetchAllRowsForIds<{ wine_id: string }>(
+      wineIds,
+      (idsChunk, from, to) =>
+        serviceClient
+          .from(table)
+          .select("wine_id")
+          .in("wine_id", idsChunk)
+          .order("wine_id", { ascending: true })
+          .range(from, to),
+      deadline,
+    );
+    for (const row of refs) referenced.add(row.wine_id);
+  }
+
   return referenced;
 }
 
-/** Deletes wines this batch's apply step created, and ONLY those.
+/** Deletes wines that qualify under the guards below — this batch's own
+ * apply step created them (guard 1, proof against non-malicious writers
+ * only — see its own note) AND nothing else currently references them
+ * (guard 2). Not "and only those" in an absolute sense: see guard 1's own
+ * scope note for the named, accepted non-malicious residual, and guard
+ * 2's for the named cross-tenant residual the re-check narrows but does
+ * not close (Sol audit 2026-08-27 round 4, finding 5 — this header
+ * previously overclaimed "and ONLY those").
  * Redesigned in the Sol audit 2026-08-27 round-2 pass: round 1's
  * `wines.created_at >= batch.created_at` guard was justified by the FALSE
  * claim that every product write path creating a wine also creates a
@@ -799,58 +936,83 @@ async function findReferencedWineIds(
  *      table (WINE_REFERENCING_TABLES) AND zero references from another
  *      batch's import_batch_rows.applied_wine_id, checked once in bulk
  *      and then RE-CHECKED, single-wine, immediately before that wine's
- *      own DELETE — closing most of the window between the bulk sweep
- *      and the delete itself, and (Sol audit 2026-08-27 round 3, finding
- *      3) run on `serviceClient` rather than the caller's RLS-scoped
- *      client so a cross-tenant reference in stock_adjustments or
- *      bottle_closeouts is never invisible to the check that's about to
- *      authorize a DELETE (see findReferencedWineIds' own comment for
- *      the full cascade-destruction mechanics this closes). If
- *      `serviceClient` is unavailable, this entire function no-ops
- *      (logs and returns zero) rather than falling back to the
- *      RLS-scoped client — falling back would silently reintroduce that
- *      cross-tenant risk. The residual that remains even with the
- *      re-check (Sol round-1 finding 3, re-confirmed round 2 finding 2,
- *      round 3 finding 7): stock_adjustments (src/app/api/
- *      stock-adjustments/route.ts) and bottle_closeouts do NOT require
- *      live inventory to write via their RLS INSERT policies — RLS, not
- *      app code, is the real boundary a malicious authenticated client
- *      can hit directly, same as this file's SECURITY INVOKER RPC
- *      comments elsewhere. bottle_closeouts' own app route
- *      (src/app/api/open-bottles/close/route.ts) actually goes through
- *      the SECURITY DEFINER close_open_bottle RPC (0061), which DOES
- *      require a live open_bottles row for that wine and derives its
- *      restaurant_id from the wine itself — that RPC path is tenant-safe
- *      and inventory-gated — but bottle_closeouts' OWN "members can
- *      insert bottle_closeouts" RLS policy (check: is_member(
- *      restaurant_id) only, wine_id unchecked, open_bottle_id nullable)
- *      still permits a direct REST insert bypassing that RPC entirely,
- *      so the residual applies regardless. Either table can insert a
- *      fresh, ON DELETE CASCADE-linked row in the seconds-wide gap
- *      between this re-check and the DELETE statement actually
- *      committing, and that row would be destroyed by the cascade.
- *      `availability_events` writes only go through the SECURITY
- *      DEFINER `set_wine_availability` RPC (no direct-insert RLS policy
- *      exists for it), which derives the row's own `restaurant_id` from
- *      the wine itself and requires the caller to be an owner/manager of
- *      THAT restaurant — so this residual is same-tenant-only for that
- *      table, not a cross-tenant one. inventory_items is ON DELETE
- *      RESTRICT, so a concurrent inventory insert in that same window
- *      makes the DELETE fail outright instead — caught per-wine (see
- *      below) and simply skipped, never silently pretended to have
- *      succeeded;
+ *      own DELETE, and (Sol audit 2026-08-27 round 3, finding 3) run on
+ *      `serviceClient` rather than the caller's RLS-scoped client so a
+ *      cross-tenant reference in stock_adjustments or bottle_closeouts is
+ *      never invisible to the check that's about to authorize a DELETE
+ *      (see findReferencedWineIds' own comment for the full
+ *      cascade-destruction mechanics this closes). If `serviceClient` is
+ *      unavailable, this entire function no-ops (logs, returns zero, and
+ *      the caller reports `orphanCleanupSkipped: true` — Sol round 4,
+ *      finding 6) rather than falling back to the RLS-scoped client —
+ *      falling back would silently reintroduce that cross-tenant risk.
+ *
+ *      WHAT THE RE-CHECK NARROWS, NOT CLOSES (Sol audit 2026-08-27 round
+ *      4, finding 1 — replaces an earlier "closing most of the window"
+ *      framing this same guard used to carry): the re-check and the
+ *      DELETE are still two separate requests, so ANY referencing table
+ *      can in principle receive a fresh, cascade-linked insert in the gap
+ *      between them. For the seven tables in WINE_REFERENCING_TABLES
+ *      besides the two named below, that gap is same-tenant-only —
+ *      either the table has no direct-insert RLS policy at all
+ *      (`availability_events` only writes through the SECURITY DEFINER
+ *      `set_wine_availability` RPC, which derives its own `restaurant_id`
+ *      from the wine and requires an owner/manager of THAT restaurant),
+ *      or the FK is `ON DELETE RESTRICT` rather than CASCADE
+ *      (`inventory_items`, `wine_list_items`, `pour_events`), which makes
+ *      a concurrent insert there fail the DELETE outright instead of
+ *      losing data — caught per-wine (see below) and simply skipped,
+ *      never silently pretended to have succeeded. `stock_adjustments`
+ *      (src/app/api/stock-adjustments/route.ts) and `bottle_closeouts`
+ *      are the only two where the gap is CROSS-tenant reachable: neither
+ *      requires live inventory to write, and neither RLS INSERT policy
+ *      checks that `wine_id` belongs to the inserting tenant (see
+ *      WINE_REFERENCING_TABLES' own comment) — bottle_closeouts' own app
+ *      route (src/app/api/open-bottles/close/route.ts) actually goes
+ *      through the tenant-safe, inventory-gated SECURITY DEFINER
+ *      `close_open_bottle` RPC (0061), but its table's OWN "members can
+ *      insert bottle_closeouts" RLS policy still permits a direct REST
+ *      insert bypassing that RPC entirely, so the residual applies
+ *      regardless of the app's own route. `findReferencedWineIds` checks
+ *      both of these two LAST (see WINE_REFERENCING_TABLES' own comment)
+ *      specifically to shrink this residual from ~10 round-trips down to
+ *      the single round-trip immediately before the DELETE that follows
+ *      — narrowed, not eliminated.
+ *
+ *      Why the narrowed residual is accepted rather than requiring an
+ *      airtight close here: the ONLY way a row can occupy that final
+ *      cross-tenant gap at all is by exploiting the pre-existing gap in
+ *      `stock_adjustments`'/`bottle_closeouts`' own INSERT policies — no
+ *      product code path this app ships ever writes a `wine_id` outside
+ *      its own tenant, so any row that shows up there naming another
+ *      tenant's wine is necessarily a deliberate malicious insert
+ *      exploiting that policy gap, never innocent concurrent activity.
+ *      Whoever wrote that row is the only party who can lose it, and only
+ *      by choosing to exploit a vulnerability that already lets them
+ *      attach arbitrary rows to a wine they don't own — the TOCTOU window
+ *      here buys them nothing they didn't already have access to abuse.
+ *      Airtight closure needs either an ownership `WITH CHECK` on those
+ *      two INSERT policies (closing the underlying gap directly, not just
+ *      this window) or moving the re-check and the DELETE into one
+ *      `SECURITY INVOKER` RPC transaction (closing the window itself) —
+ *      both are migration-gated and out of reach for this TS-layer-only
+ *      pass; see docs/runbooks/csv-import.md, "Cross-tenant reference
+ *      checks run on the service-role client," for the tracked status;
  *   3. it belongs to the reverting restaurant (explicit filter, matching
  *      this file's belt-and-suspenders pattern — never rely on RLS
  *      alone).
  *
  * Per-wine delete errors are caught individually (Sol round-2 finding 7)
  * so one bad delete never discards the count already earned by wines
- * deleted earlier in the same call; `failures` is for logging only.
- * `deadline` (Sol round-3 finding 5) is a shared Date.now()-comparable
- * timestamp for the whole cleanup phase (this function + clearBatchLwin
- * Stamps combined) — once passed, no NEW per-wine work starts; `truncated`
- * tells the caller whether that happened, so counts stay accurate for
- * whatever DID run rather than being padded or estimated. */
+ * deleted earlier in the same call; `failures` is for logging only. A
+ * `CleanupDeadlineExceededError` (Sol round 4, finding 2) is caught
+ * separately from an ordinary per-wine error: it means `deadline` (see
+ * CLEANUP_BUDGET_FROM_ENTRY_MS) passed WHILE a request was about to be
+ * issued, not that any one wine's own work failed, so it sets `truncated`
+ * and stops the whole loop rather than counting a `failures` entry and
+ * moving on to the next candidate. `truncated` tells the caller whether
+ * that happened, so counts stay accurate for whatever DID run rather than
+ * being padded or estimated. */
 async function cleanupOrphanWines(
   supabase: SupabaseClient<Database>,
   serviceClient: SupabaseClient<Database> | null,
@@ -876,15 +1038,29 @@ async function cleanupOrphanWines(
     return { deleted: 0, failures: 0, truncated: false };
   }
 
-  const wines = await fetchAllRowsForIds<{ id: string; created_at: string }>(candidateWineIds, (idsChunk, from, to) =>
-    supabase
-      .from("wines")
-      .select("id, created_at")
-      .in("id", idsChunk)
-      .eq("restaurant_id", restaurantId)
-      .order("id", { ascending: true })
-      .range(from, to),
-  );
+  let wines: Array<{ id: string; created_at: string }>;
+  try {
+    wines = await fetchAllRowsForIds<{ id: string; created_at: string }>(
+      candidateWineIds,
+      (idsChunk, from, to) =>
+        supabase
+          .from("wines")
+          .select("id, created_at")
+          .in("id", idsChunk)
+          .eq("restaurant_id", restaurantId)
+          .order("id", { ascending: true })
+          .range(from, to),
+      deadline,
+    );
+  } catch (err) {
+    if (err instanceof CleanupDeadlineExceededError) {
+      console.error(
+        `cleanupOrphanWines: soft deadline hit during the candidate wine lookup for batch ${batchId}; skipping ${candidateWineIds.length} candidate(s)`,
+      );
+      return { deleted: 0, failures: 0, truncated: true };
+    }
+    throw err;
+  }
 
   // Guard 1: the wine's created_at exactly matches one of THIS wine's own
   // snapshot rows' updated_at (same apply-chunk transaction) — see the
@@ -894,13 +1070,21 @@ async function cleanupOrphanWines(
     .map((wine) => wine.id);
   if (batchCreatedWineIds.length === 0) return { deleted: 0, failures: 0, truncated: false };
 
-  if (Date.now() > deadline) {
-    console.error(`cleanupOrphanWines: soft deadline already passed before the reference sweep for batch ${batchId}; skipping ${batchCreatedWineIds.length} candidate(s)`);
-    return { deleted: 0, failures: 0, truncated: true };
+  // Guard 2 (bulk pass). findReferencedWineIds itself checks `deadline`
+  // before every request it issues (Sol round 4, finding 2) — no separate
+  // gate needed here beyond catching what it throws.
+  let referenced: Set<string>;
+  try {
+    referenced = await findReferencedWineIds(serviceClient, batchCreatedWineIds, batchId, deadline);
+  } catch (err) {
+    if (err instanceof CleanupDeadlineExceededError) {
+      console.error(
+        `cleanupOrphanWines: soft deadline hit during the bulk reference sweep for batch ${batchId}; skipping ${batchCreatedWineIds.length} candidate(s)`,
+      );
+      return { deleted: 0, failures: 0, truncated: true };
+    }
+    throw err;
   }
-
-  // Guard 2 (bulk pass).
-  const referenced = await findReferencedWineIds(serviceClient, batchCreatedWineIds, batchId);
   const orphanCandidates = batchCreatedWineIds.filter((id) => !referenced.has(id));
 
   let deleted = 0;
@@ -912,9 +1096,17 @@ async function cleanupOrphanWines(
       break;
     }
     try {
-      // Guard 2 (fresh, single-wine re-check immediately before delete).
-      const stillReferenced = await findReferencedWineIds(serviceClient, [wineId], batchId);
+      // Guard 2 (fresh, single-wine re-check immediately before delete —
+      // see findReferencedWineIds/WINE_REFERENCING_TABLES for why
+      // stock_adjustments/bottle_closeouts are checked last within it).
+      const stillReferenced = await findReferencedWineIds(serviceClient, [wineId], batchId, deadline);
       if (stillReferenced.has(wineId)) continue;
+
+      // One more check immediately before the DELETE itself (Sol round 4,
+      // finding 2) — the re-check above can legitimately take long enough
+      // on its own to cross the deadline mid-flight; this is the request
+      // right after it, and every cleanup-path request gets a check.
+      assertBeforeDeadline(deadline);
 
       const { data: deletedRows, error: deleteError } = await supabase
         .from("wines")
@@ -925,6 +1117,10 @@ async function cleanupOrphanWines(
       if (deleteError) throw deleteError;
       deleted += (deletedRows ?? []).length;
     } catch (err) {
+      if (err instanceof CleanupDeadlineExceededError) {
+        truncated = true;
+        break;
+      }
       failures += 1;
       console.error(`cleanupOrphanWines: delete failed for wine ${wineId} (batch ${batchId})`, err);
     }
@@ -1032,11 +1228,14 @@ async function cleanupOrphanWines(
  * Per-wine errors are caught individually so one failing UPDATE never
  * discards counts already earned earlier in the same call (Sol round-2
  * finding 7), same contract as cleanupOrphanWines. `deadline` / `truncated`
- * (Sol round-3 finding 5): same shared soft-deadline contract as
- * cleanupOrphanWines — see that function's header. This function does
- * NOT need a service-role client (unlike cleanupOrphanWines): it only
- * ever reads/writes wines already scoped to `restaurantId`, never checks
- * another tenant's rows in another table. */
+ * (Sol round-3 finding 5, arithmetic corrected round 4 — see
+ * CLEANUP_BUDGET_FROM_ENTRY_MS): same shared soft-deadline contract as
+ * cleanupOrphanWines, checked before the candidate wine lookup's own
+ * request(s) and before every per-wine UPDATE, not just once — see that
+ * function's header. This function does NOT need a service-role client
+ * (unlike cleanupOrphanWines): it only ever reads/writes wines already
+ * scoped to `restaurantId`, never checks another tenant's rows in another
+ * table. */
 async function clearBatchLwinStamps(
   supabase: SupabaseClient<Database>,
   restaurantId: string,
@@ -1061,25 +1260,39 @@ async function clearBatchLwinStamps(
   }
   const wineIds = Array.from(rowsByWine.keys());
 
-  if (Date.now() > deadline) {
-    console.error(`clearBatchLwinStamps: soft deadline already passed before the wine read for batch ${batchId}; skipping ${wineIds.length} candidate(s)`);
-    return { cleared: 0, failures: 0, truncated: true };
-  }
-
-  const wines = await fetchAllRowsForIds<{
+  let wines: Array<{
     id: string;
     lwin_id: string | null;
     lwin_match_score: number | null;
     updated_at: string;
-  }>(wineIds, (idsChunk, from, to) =>
-    supabase
-      .from("wines")
-      .select("id, lwin_id, lwin_match_score, updated_at")
-      .in("id", idsChunk)
-      .eq("restaurant_id", restaurantId)
-      .order("id", { ascending: true })
-      .range(from, to),
-  );
+  }>;
+  try {
+    wines = await fetchAllRowsForIds<{
+      id: string;
+      lwin_id: string | null;
+      lwin_match_score: number | null;
+      updated_at: string;
+    }>(
+      wineIds,
+      (idsChunk, from, to) =>
+        supabase
+          .from("wines")
+          .select("id, lwin_id, lwin_match_score, updated_at")
+          .in("id", idsChunk)
+          .eq("restaurant_id", restaurantId)
+          .order("id", { ascending: true })
+          .range(from, to),
+      deadline,
+    );
+  } catch (err) {
+    if (err instanceof CleanupDeadlineExceededError) {
+      console.error(
+        `clearBatchLwinStamps: soft deadline hit during the candidate wine lookup for batch ${batchId}; skipping ${wineIds.length} candidate(s)`,
+      );
+      return { cleared: 0, failures: 0, truncated: true };
+    }
+    throw err;
+  }
 
   let cleared = 0;
   let failures = 0;

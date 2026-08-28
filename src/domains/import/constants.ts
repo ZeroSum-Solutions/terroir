@@ -203,22 +203,33 @@ export const ALLOWED_CURRENCIES = new Set([
  * Hardcoded identically in apply_import_batch_chunk_v2's SQL (0108). */
 export const MAX_ROW_APPLY_ATTEMPTS = 3;
 
-/** Sol audit 2026-08-27 round 3, finding 5 — a soft wall-clock deadline for
+/** Sol audit 2026-08-27 round 4 — a soft wall-clock deadline for
  * revertImportBatch's TS-layer cleanup phase (cleanupOrphanWines +
- * clearBatchLwinStamps combined), checked before starting each new
- * per-candidate iteration. At MAX_ROWS = 5,000 applied rows, a fresh
- * per-wine re-check alone issues ~10 sequential requests (9
- * WINE_REFERENCING_TABLES + 1 cross-batch import_batch_rows check) — with
- * no bound, that scales unboundedly against the revert route's 30s
- * `maxDuration`.
+ * clearBatchLwinStamps combined), measured from `revertImportBatch`'s own
+ * ENTRY (before the applied-rows snapshot read, before the
+ * `revert_import_batch` RPC call — see revertImportBatch's header for why
+ * those two steps are never subject to this deadline at all), not from
+ * after the RPC returns. Round 3's version started the clock post-RPC,
+ * which left the snapshot read (paginated, unbounded per-page count) and
+ * the RPC itself completely outside the budget's accounting — a slow
+ * snapshot read alone could already have consumed most of the route's 30s
+ * before cleanup's own clock even started. Checked before every network
+ * request the cleanup phase issues — each `.in()` chunk of a candidate
+ * lookup, each table×chunk request of the reference sweep, each query of
+ * the per-candidate re-check, and immediately before each DELETE/UPDATE —
+ * not merely once per per-candidate iteration.
  *
- * Arithmetic behind 15,000ms: the route budget is 30,000ms;
- * revert_import_batch itself (the RPC the cleanup phase's deadline starts
- * AFTER) can take a few seconds on a large batch; leaving cleanup a 15s
- * budget still leaves ~10s of headroom for the RPC, request/response
- * overhead, and PostgREST/network latency before the route's own timeout
- * would fire. Exceeding it never fails the revert — it stops starting new
- * per-candidate work, reports the accurate partial counts already earned,
+ * Arithmetic behind 20,000ms (measured from entry): the route budget is
+ * 30,000ms. Snapshot read + RPC worst case ≈ 7,000ms (the snapshot read
+ * pages at 1,000 rows/request, so a 5,000-row batch, MAX_ROWS, is up to 5
+ * sequential requests; `revert_import_batch` itself is one more
+ * transaction on top of that). Response margin ≈ 3,000ms (the last
+ * in-flight request finishing after the deadline fires, JSON marshaling,
+ * network/PostgREST overhead) is reserved at the OTHER end, between the
+ * deadline and the route's own 30,000ms timeout. 30,000 − 7,000 − 3,000 =
+ * 20,000 — the deadline this constant sets, measured from entry.
+ * Exceeding it never fails the revert — it stops issuing any further
+ * cleanup request, reports the accurate partial counts already earned,
  * and flags `cleanupTruncated: true` so the operator knows to re-run
  * cleanup later (see docs/runbooks/csv-import.md). */
-export const CLEANUP_SOFT_BUDGET_MS = 15_000;
+export const CLEANUP_BUDGET_FROM_ENTRY_MS = 20_000;

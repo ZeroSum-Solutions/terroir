@@ -64,5 +64,6 @@ async function postRevert(params: Params) {
     orphanWinesDeleted: result.orphanWinesDeleted,
     lwinStampsCleared: result.lwinStampsCleared,
     cleanupTruncated: result.cleanupTruncated,
+    orphanCleanupSkipped: result.orphanCleanupSkipped,
   });
 }

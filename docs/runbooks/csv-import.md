@@ -122,8 +122,18 @@ per-wine failure never discards counts already earned by wines processed
 earlier in the same call): `cleanupOrphanWines` deletes wines this
 batch's apply created, and `clearBatchLwinStamps` clears
 `wines.lwin_id`/`lwin_match_score` stamps this batch's apply left live.
-The route response reports both counts, plus a `cleanupTruncated` flag
-(see "Cleanup is bounded" below).
+The route response reports both counts, plus `cleanupTruncated` (see
+"Cleanup is bounded" below) and `orphanCleanupSkipped` (round 4, finding
+6 — set when `cleanupOrphanWines` specifically couldn't run because no
+service-role client was available; see "Cross-tenant reference checks run
+on the service-role client" below). **Round 4, finding 3:** the revert
+confirmation dialog (`src/app/(app)/import/import-client.tsx`) states
+plainly that revert also deletes wines and clears LWIN links this import's
+apply set — it used to promise "nothing else in your cellar is touched,"
+which was false given these two steps — and the success view after a
+revert reports the actual `revertedCount`/`orphanWinesDeleted`/
+`lwinStampsCleared`, plus a partial-cleanup notice when `cleanupTruncated`
+or `orphanCleanupSkipped` is set, instead of discarding the response body.
 
 The snapshot read that both steps depend on (`import_batch_rows`, this
 batch's applied rows, taken **before** `revert_import_batch` runs) is
@@ -229,14 +239,38 @@ shape (member insert, `restaurant_id`-only check, `wine_id` cascade —
 see the next section). A service-role client sees every tenant's rows,
 closing this regardless of which tenant wrote the referencing row.
 
-If the service-role client is unavailable (misconfigured environment),
-`cleanupOrphanWines` skips deletion entirely for that revert (logs and
-returns zero) rather than falling back to the RLS-scoped client —
-falling back would silently reintroduce the exact risk above. Live proof:
+If the service-role client is unavailable (misconfigured environment —
+`SUPABASE_SERVICE_ROLE_KEY` missing or invalid; see
+`src/lib/supabase/service-role.ts`), `cleanupOrphanWines` skips deletion
+entirely for that revert (logs and returns zero) rather than falling back
+to the RLS-scoped client — falling back would silently reintroduce the
+exact risk above. **Round 4, finding 6:** this used to be silent past a
+server log — `RevertBatchResult.orphanCleanupSkipped` now says so
+explicitly in the revert route's own response, and the client surfaces it
+in the revert success message ("Catalog cleanup was skipped — service
+configuration missing"). This flag is about `cleanupOrphanWines`
+specifically, not `clearBatchLwinStamps` — the LWIN unstamp needs no
+service-role client and still runs normally even when this flag is true.
+The required env var is documented in `docs/LOCAL-SUPABASE.md`'s
+Environment section (`SUPABASE_SERVICE_ROLE_KEY`) for local dev;
+`docs/STAGING-SETUP.md` does not enumerate a per-service env-var
+checklist, so there is nothing to add there. Live proof:
 `src/domains/import/tenant-isolation.test.ts`, "bar 5" — a tenant-B
 `stock_adjustments` row naming tenant A's applied wine, seeded through
 tenant B's own RLS-scoped client exactly as a real attacker would, must
 survive tenant A's revert, and the wine must survive too.
+
+**Round 4, finding 1 — checked LAST, immediately before the DELETE:**
+`findReferencedWineIds` runs the cross-batch `import_batch_rows` check
+first, then every `WINE_REFERENCING_TABLES` table in the array's own
+order — which now ends with `stock_adjustments` and `bottle_closeouts`
+(moved from `stock_adjustments` FIRST in an earlier revision). Those two
+are the only tables in the list a cross-tenant write can target, so
+putting them last makes them the final requests issued before the
+caller's next request — the `DELETE`, for the single-wine re-check call —
+shrinking that specific TOCTOU window from ~10 round-trips to one. See
+"Cleanup is bounded" below for what that narrowed window still allows and
+why it's accepted rather than closed outright.
 
 ### The unstamp contract
 
@@ -273,25 +307,42 @@ re-affirmed an identical pre-existing value."
 
 ### Cleanup is bounded
 
-(Sol audit 2026-08-27 round 3, finding 5.) Batches support up to 5,000
-applied rows (`MAX_ROWS`, `src/domains/import/constants.ts`). Two bounds
-keep cleanup from blowing the revert route's 30s `maxDuration`:
+(Sol audit 2026-08-27 round 3, finding 5; deadline arithmetic corrected
+round 4, finding 2.) Batches support up to 5,000 applied rows (`MAX_ROWS`,
+`src/domains/import/constants.ts`). Two bounds keep cleanup from blowing
+the revert route's 30s `maxDuration`:
 
 - **Chunked `.in()` queries.** Every reference-existence or wine-lookup
   query built from a candidate-id array chunks the ids to at most 100 per
   request (`IN_CLAUSE_CHUNK_SIZE`, `batch-service.ts`) — at 5,000
   candidates, one unchunked `.in()` could carry ~156,000 characters in a
   single request URL.
-- **A soft wall-clock deadline** (`CLEANUP_SOFT_BUDGET_MS`, 15,000ms —
-  see its own comment in `src/domains/import/constants.ts` for the exact
-  arithmetic against the 30s route budget) shared across BOTH cleanup
-  steps combined. Once elapsed exceeds it, neither step starts any NEW
-  per-candidate work — a fresh per-wine reference re-check alone issues
-  ~10 sequential requests (9 `WINE_REFERENCING_TABLES` + 1 cross-batch
-  `import_batch_rows` check), so at scale that's the dominant cost. The
-  counts returned are always exactly what genuinely ran — never padded
-  or estimated — and the response carries `cleanupTruncated: true` plus a
-  log line so the operator knows more candidates were left untouched.
+- **A soft wall-clock deadline** (`CLEANUP_BUDGET_FROM_ENTRY_MS`,
+  20,000ms — renamed round 4 from `CLEANUP_SOFT_BUDGET_MS`; see its own
+  comment in `src/domains/import/constants.ts` for the exact arithmetic
+  against the 30s route budget) shared across BOTH cleanup steps
+  combined, and — this is the round-4 fix — measured from
+  `revertImportBatch`'s own ENTRY, before the applied-rows snapshot read
+  and the `revert_import_batch` RPC call, neither of which is ever
+  subject to it. Round 3's version started the clock only after both had
+  already completed, which left a slow snapshot read (paginated,
+  unbounded page count) or a slow RPC call able to consume most of the
+  route's 30s before cleanup's own budget even began counting. The
+  deadline is checked before EVERY request the cleanup phase issues —
+  each `.in()` chunk of a candidate lookup, each table×chunk request of
+  the reference sweep, each query of the per-candidate re-check, and
+  immediately before each `DELETE`/`UPDATE` — not merely once per
+  per-candidate loop iteration, which is what let round 3's version start
+  a candidate lookup of up to 50 sequential requests, or a bulk sweep of
+  up to ~500, with no check anywhere inside either. Once the deadline
+  passes, cleanup stops before issuing its next request rather than
+  finishing the one already in flight and then checking — a fresh
+  per-wine reference re-check alone issues ~10 sequential requests (9
+  `WINE_REFERENCING_TABLES` + 1 cross-batch `import_batch_rows` check),
+  so at scale that's the dominant cost. The counts returned are always
+  exactly what genuinely ran — never padded or estimated — and the
+  response carries `cleanupTruncated: true` plus a log line so the
+  operator knows more candidates were left untouched.
 
 **Re-run path when cleanup is truncated:** re-running revert itself is
 not meaningful (the batch is already reverted) — the recovery is the
@@ -303,22 +354,47 @@ wines.
 (a) two distinct apply-chunk transactions landing on the exact same
 microsecond timestamp would be indistinguishable — negligible, accepted;
 (b) the reference re-check and the `DELETE` are still separate requests,
-so `stock_adjustments` (`src/app/api/stock-adjustments/route.ts`) or
-`bottle_closeouts` (RLS-insertable directly, even though the app's own
-`close_open_bottle` RPC path, `src/app/api/open-bottles/close/route.ts`,
-IS tenant-safe and requires a live open bottle) — neither of which
-requires live inventory to write via a direct RLS insert — can insert a
-fresh, cascade-linked row in the gap between this re-check and the
-`DELETE` statement actually committing, and that row would be destroyed
-by the cascade; `availability_events` writes only go through the
-SECURITY DEFINER `set_wine_availability` RPC, which derives its own
-`restaurant_id` from the wine and requires an owner/manager of THAT
-restaurant, so its residual is same-tenant-only, not cross-tenant.
-`inventory_items.wine_id` is `ON DELETE RESTRICT`, so a concurrent
-inventory insert in that same gap makes the `DELETE` fail outright
-instead, caught per-wine and skipped, never silently pretended to have
-succeeded; (c) for the LWIN unstamp, a third party writing the exact
-`(lwin_id, lwin_match_score)` pair a row's own LWIN match would
+so ANY referencing table can in principle receive a fresh, cascade-linked
+insert in the gap between them. For seven of the nine
+`WINE_REFERENCING_TABLES` this gap is same-tenant-only:
+`availability_events` writes only go through the SECURITY DEFINER
+`set_wine_availability` RPC, which derives its own `restaurant_id` from
+the wine and requires an owner/manager of THAT restaurant; `inventory_
+items`, `wine_list_items`, and `pour_events` are `ON DELETE RESTRICT`, not
+CASCADE, so a concurrent insert there makes the `DELETE` fail outright
+instead of losing data, caught per-wine and skipped, never silently
+pretended to have succeeded. `stock_adjustments`
+(`src/app/api/stock-adjustments/route.ts`) and `bottle_closeouts`
+(RLS-insertable directly, even though the app's own `close_open_bottle`
+RPC path, `src/app/api/open-bottles/close/route.ts`, IS tenant-safe and
+requires a live open bottle) are the only two where the gap is
+cross-tenant reachable — neither requires live inventory to write via a
+direct RLS insert, and neither's INSERT policy checks that `wine_id`
+belongs to the inserting tenant. **Round 4, finding 1 (shrink, not
+close):** `findReferencedWineIds` (`batch-service.ts`) checks both of
+these two tables LAST — after every other table and the cross-batch
+check — so they're the last requests issued before the `DELETE` that
+follows a re-check, shrinking this specific cross-tenant window from
+~10 round-trips down to a single one. It is a narrowing, not a closure: a
+cross-tenant insert into one of those two tables landing in that final
+round-trip is still possible in principle. What makes the narrowed
+residual acceptable: the ONLY way a cross-tenant row can occupy that
+window at all is by exploiting the pre-existing gap in
+`stock_adjustments`'/`bottle_closeouts`' own INSERT policies (see the
+next section) — no product code path this app ships ever writes a
+`wine_id` outside its own tenant, so any row that shows up there naming
+another tenant's wine is necessarily a deliberate malicious insert
+exploiting that policy gap, never innocent concurrent activity; the
+forger is the only party who can lose that row, and only by choosing to
+exploit a vulnerability that already lets them attach arbitrary rows to a
+wine they don't own. The two fixes that would close the window outright —
+an ownership `WITH CHECK` on those two tables' INSERT policies (closing
+the underlying policy gap directly), or moving the re-check and the
+`DELETE` into one `SECURITY INVOKER` RPC transaction (closing the window
+itself) — are both migration-gated and out of reach for this TS-layer-
+only pass; tracked here until the migration lock lifts, same as the
+"Known gap" below; (c) for the LWIN unstamp, a third party writing the
+exact `(lwin_id, lwin_match_score)` pair a row's own LWIN match would
 independently compute, before apply ran, on a wine that row also
 dedup-matches, passes both checks by coincidence — this requires guessing
 a specific trigram-similarity float to exact precision ahead of time,
@@ -334,9 +410,24 @@ Every `wines(id) ON DELETE CASCADE` table was re-checked against
 `supabase/schema.snapshot.sql` for this audit round. Besides
 `stock_adjustments` and `bottle_closeouts` (both member-insertable
 without live inventory, both named above), the only other CASCADE tables
-are `open_bottles`, `cellar_health`, and `pricing_recommendations` — all
-three `revoke insert, update, delete ... from authenticated`, so no
-member can write to them at all (service-role/job-only). `availability_
+are `open_bottles`, `cellar_health`, and `pricing_recommendations`.
+**Correction (round 4, finding 4):** these three do carry a migration-time
+`revoke insert, update, delete ... from authenticated` statement, but
+migration 0074 (`supabase/schema.snapshot.sql`, "Restore the table
+privileges required by Supabase's Data API roles") later
+`grant select, insert, update, delete on all tables in schema public to
+authenticated, service_role` — a blanket re-grant that runs after every
+earlier per-table revoke in migration order, superseding it at the
+table-privilege level. The revoke statements are therefore inert today,
+not the operative protection; citing them as "no member can write to
+them at all" overstated what's actually stopping a write. The ACTUAL
+protection verified against the current snapshot: all three tables carry
+only a `for select` RLS policy each ("members can read open_bottles" /
+"members can read cellar_health" / "members can read pricing_
+recommendations") and no INSERT/UPDATE/DELETE policy at all — RLS
+defaults to deny for any statement type with no permissive policy of its
+own, regardless of the table-level grant, so writes to these three are
+blocked by policy absence, not by privilege revocation. `availability_
 events` is CASCADE but RPC-gated as described above. `wine_list_items`,
 `inventory_items`, and `pour_events` are `ON DELETE RESTRICT`, not
 CASCADE, so a concurrent insert there makes the `DELETE` fail loudly

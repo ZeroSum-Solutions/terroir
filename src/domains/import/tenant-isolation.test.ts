@@ -188,7 +188,7 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
     // below, which relies on that (it inserts its own pre-existing wine
     // fixture rather than reusing this one for exactly that reason).
     const revertAsA = await revertImportBatch(userAClient, restaurantA, batchId, admin);
-    expect(revertAsA).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 1, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(revertAsA).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 1, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
 
     const { data: inventoryAfterRevert } = await admin
       .from("inventory_items")
@@ -274,7 +274,7 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
     // batch's apply stamped the pre-existing wine (its lwin was null),
     // and revert must undo exactly that write — live proof of
     // clearBatchLwinStamps against real Postgres.
-    expect(reverted).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1, cleanupTruncated: false });
+    expect(reverted).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1, cleanupTruncated: false, orphanCleanupSkipped: false });
 
     const { data: wineAfterRevert } = await admin
       .from("wines")

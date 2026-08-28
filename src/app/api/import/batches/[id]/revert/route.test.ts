@@ -73,7 +73,7 @@ describe("POST /api/import/batches/[id]/revert", () => {
     expect(response.status).toBe(409);
   });
 
-  it("returns the reverted count, orphan-wine cleanup count, and cleanupTruncated flag on success", async () => {
+  it("returns the reverted count, orphan-wine cleanup count, cleanupTruncated, and orphanCleanupSkipped on success", async () => {
     allow(makeSupabase({ id: BATCH_ID }));
     mockRevertImportBatch.mockResolvedValue({
       ok: true,
@@ -81,6 +81,7 @@ describe("POST /api/import/batches/[id]/revert", () => {
       orphanWinesDeleted: 2,
       lwinStampsCleared: 1,
       cleanupTruncated: false,
+      orphanCleanupSkipped: false,
     });
     const response = await POST(request(), { params: params() });
     expect(response.status).toBe(200);
@@ -89,6 +90,7 @@ describe("POST /api/import/batches/[id]/revert", () => {
       orphanWinesDeleted: 2,
       lwinStampsCleared: 1,
       cleanupTruncated: false,
+      orphanCleanupSkipped: false,
     });
     // The 4th argument is the service-role client (Sol audit 2026-08-27
     // round 3, finding 3) — used only for cross-tenant-safe reference
@@ -96,7 +98,7 @@ describe("POST /api/import/batches/[id]/revert", () => {
     expect(mockRevertImportBatch).toHaveBeenCalledWith(expect.anything(), "restaurant-a", BATCH_ID, SERVICE_CLIENT);
   });
 
-  it("still reverts when the service-role client is unavailable — passes null through rather than failing the route", async () => {
+  it("still reverts when the service-role client is unavailable — passes null through rather than failing the route, and the response says orphan cleanup was skipped (Sol audit round 4, finding 6)", async () => {
     mockCreateServiceRoleClient.mockReturnValue(null);
     allow(makeSupabase({ id: BATCH_ID }));
     mockRevertImportBatch.mockResolvedValue({
@@ -105,9 +107,11 @@ describe("POST /api/import/batches/[id]/revert", () => {
       orphanWinesDeleted: 0,
       lwinStampsCleared: 0,
       cleanupTruncated: false,
+      orphanCleanupSkipped: true,
     });
     const response = await POST(request(), { params: params() });
     expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ orphanCleanupSkipped: true });
     expect(mockRevertImportBatch).toHaveBeenCalledWith(expect.anything(), "restaurant-a", BATCH_ID, null);
   });
 });

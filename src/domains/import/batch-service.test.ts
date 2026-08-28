@@ -360,7 +360,7 @@ describe("revertImportBatch", () => {
   it("returns the reverted row count on success", async () => {
     const supabase = { rpc: vi.fn().mockResolvedValue({ data: 4, error: null }), from: noopCleanupFrom() };
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
-    expect(result).toEqual({ ok: true, revertedCount: 4, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 4, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
   });
 
   it("translates a not-found error", async () => {
@@ -400,7 +400,7 @@ describe("revertImportBatch", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
     expect(rpcCalled).toBe(true);
-    expect(result).toEqual({ ok: true, revertedCount: 9, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 9, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
   });
@@ -475,12 +475,13 @@ describe("revertImportBatch orphan wine cleanup", () => {
   /** Builds the full `from` dispatcher for a revert cleanup call. All
    * timestamp-equality evidence (`snapshotRows`, `wineRows.created_at`)
    * is supplied explicitly by each test — nothing here infers it — so a
-   * test that means to prove authorship must say so with matching
-   * timestamps, and a test that means NOT to must say so with
-   * mismatched ones. `referencedByTable` lists, per wine-referencing
-   * table, which wine ids that table has a row for. `crossBatchWineIds`
-   * lists wine ids some OTHER batch's import_batch_rows.applied_wine_id
-   * still names. */
+   * test that means guard 1 (the timestamp-equality check, proof against
+   * non-malicious writers only — see cleanupOrphanWines' own header) to
+   * MATCH must say so with matching timestamps, and a test that means it
+   * NOT to match must say so with mismatched ones. `referencedByTable`
+   * lists, per wine-referencing table, which wine ids that table has a
+   * row for. `crossBatchWineIds` lists wine ids some OTHER batch's
+   * import_batch_rows.applied_wine_id still names. */
   function makeCleanupSupabase(opts: {
     snapshotRows: Array<{ applied_wine_id: string; updated_at: string }>;
     wineRows: Array<{ id: string; restaurant_id: string; created_at: string }>;
@@ -543,7 +544,7 @@ describe("revertImportBatch orphan wine cleanup", () => {
       wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, created_at: APPLY_TS }],
     });
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 1, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 1, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
   });
 
   it("spares a wine still referenced by another table (e.g. inventory_items)", async () => {
@@ -553,7 +554,7 @@ describe("revertImportBatch orphan wine cleanup", () => {
       wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, created_at: APPLY_TS }],
     });
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
   });
 
   it("spares a wine another (non-reverting) batch's import_batch_rows still names", async () => {
@@ -563,17 +564,17 @@ describe("revertImportBatch orphan wine cleanup", () => {
       wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, created_at: APPLY_TS }],
     });
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(supabase.from).toHaveBeenCalledWith("import_batch_rows");
   });
 
-  it("spares a wine whose created_at does NOT match this batch's own apply-time snapshot (provable-authorship guard — Sol audit 2026-08-27 round 2, finding 1 — replaces the old `created_at >= batch.created_at` heuristic a bare-wine write path like src/app/api/wines/create-from-lwin/route.ts could pass without ever being this batch's own wine)", async () => {
+  it("spares a wine whose created_at does NOT match this batch's own apply-time snapshot (timestamp-equality guard, proof against non-malicious writers only — Sol audit 2026-08-27 round 2, finding 1 — replaces the old `created_at >= batch.created_at` heuristic a bare-wine write path like src/app/api/wines/create-from-lwin/route.ts could pass without ever being this batch's own wine)", async () => {
     const supabase = makeCleanupSupabase({
       snapshotRows: [{ applied_wine_id: WINE_ID, updated_at: APPLY_TS }],
       wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, created_at: "2025-06-01T00:00:00.000000Z" }],
     });
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
   });
 
   it("re-checks references for a single wine immediately before deleting it, not just in the bulk sweep", async () => {
@@ -617,7 +618,7 @@ describe("revertImportBatch orphan wine cleanup", () => {
     });
     const supabase = { rpc: vi.fn().mockResolvedValue({ data: 1, error: null }), from };
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(inventoryCall).toBe(2);
   });
 
@@ -674,7 +675,7 @@ describe("revertImportBatch orphan wine cleanup", () => {
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
     // WINE_OK's delete succeeded and its count must survive WINE_BAD's
     // failure, not get reset to 0 — that's the whole point of finding 7.
-    expect(result).toEqual({ ok: true, revertedCount: 2, orphanWinesDeleted: 1, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 2, orphanWinesDeleted: 1, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
   });
@@ -698,12 +699,12 @@ describe("revertImportBatch orphan wine cleanup", () => {
     };
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
-    expect(result).toEqual({ ok: true, revertedCount: 3, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 3, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
   });
 
-  it("spares a wine whose only reference hides past PostgREST's 1,000-row page (pagination fail-safe), recording the actual .range()/.order() calls the reference sweep used (Sol audit 2026-08-27 round 3, finding 8(a) — not just a canned page-by-invocation-count double-check)", async () => {
+  it("spares a wine whose only reference hides past PostgREST's 1,000-row page (pagination fail-safe), and every paged read the cleanup path issues — every reference table in the sweep, the cross-batch check, and the candidate wine lookup, not just the one table that happened to paginate — carries BOTH .range() and .order() (Sol audit 2026-08-27 round 3, finding 8(a); loop broadened round 4, finding 7 — a hand-picked single-table check could miss a paged read elsewhere in the same sweep that silently dropped its own .order())", async () => {
     // Sol audit 2026-08-27 round 1, finding 2: max_rows truncation on a
     // reference query fails UNSAFE — wine B's single reference hidden
     // behind 1,000 rows of wine A's references made B look orphaned.
@@ -718,6 +719,10 @@ describe("revertImportBatch orphan wine cleanup", () => {
       if (table === "import_batch_rows") {
         importBatchRowsCalls += 1;
         if (importBatchRowsCalls === 1) {
+          // The snapshot read — not part of the cleanup path proper (never
+          // deadline-gated, and its own pagination is separately pinned by
+          // "pages the applied-rows snapshot..." above), so intentionally
+          // left off the tracked call log this test asserts over.
           return chain({
             data: [
               { applied_wine_id: WINE_A, updated_at: APPLY_TS, lwin_id: null, lwin_score: null },
@@ -732,7 +737,7 @@ describe("revertImportBatch orphan wine cleanup", () => {
         return {
           select: (columns: string) => {
             if (columns.includes("lwin")) return chain({ data: [], error: null });
-            return chain({
+            return trackedChain(calls, table, {
               data: [
                 { id: WINE_A, created_at: APPLY_TS },
                 { id: WINE_B, created_at: APPLY_TS },
@@ -756,7 +761,7 @@ describe("revertImportBatch orphan wine cleanup", () => {
     });
     const supabase = { rpc: vi.fn().mockResolvedValue({ data: 1, error: null }), from };
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(invPage).toBe(2);
 
     const inventoryReads = calls.filter((c) => c.table === "inventory_items" && c.range);
@@ -764,7 +769,20 @@ describe("revertImportBatch orphan wine cleanup", () => {
       [0, 999],
       [1000, 1999],
     ]);
-    expect(inventoryReads.every((c) => c.order?.[0] === "wine_id")).toBe(true);
+
+    // Broadened assertion (finding 7): loop over EVERY recorded call —
+    // every WINE_REFERENCING_TABLES table the bulk sweep + the per-wine
+    // re-check touched, the cross-batch import_batch_rows check, AND the
+    // candidate wine lookup — rather than hand-picking inventory_items
+    // alone. Every one of them must carry both .range() and a deterministic
+    // .order() naming a real column, with no exceptions.
+    expect(calls.length).toBeGreaterThan(1);
+    for (const call of calls) {
+      expect(call.range, `expected ${call.table} to call .range()`).toBeDefined();
+      expect(call.order, `expected ${call.table} to call .order()`).toBeDefined();
+      expect(typeof call.order?.[0]).toBe("string");
+      expect((call.order?.[0] as string).length).toBeGreaterThan(0);
+    }
   });
 
   it("runs reference checks against the service-role client, not the caller's RLS-scoped client (Sol audit 2026-08-27 round 3, finding 3) — a reference invisible to the RLS client but visible to the service client still spares the wine", async () => {
@@ -809,7 +827,7 @@ describe("revertImportBatch orphan wine cleanup", () => {
     const serviceClient = { from: serviceFrom };
 
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, serviceClient as never);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(serviceFrom).toHaveBeenCalledWith("stock_adjustments");
   });
 
@@ -834,63 +852,89 @@ describe("revertImportBatch orphan wine cleanup", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const supabase = { rpc: vi.fn().mockResolvedValue({ data: 1, error: null }), from };
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, null);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: true });
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
   });
 
-  it("stops starting new per-wine cleanup work once CLEANUP_SOFT_BUDGET_MS elapses, reporting accurate partial counts and cleanupTruncated: true (Sol audit 2026-08-27 round 3, finding 5)", async () => {
+  it("halts the bulk reference sweep BEFORE issuing its next chunk request once CLEANUP_BUDGET_FROM_ENTRY_MS elapses MID-sweep — proved via the recorded call log, not just the truncated flag after the fact (Sol audit 2026-08-27 round 4, finding 2 — deadline now measured from revertImportBatch's own entry and checked before EVERY cleanup-path request)", async () => {
     const wineIds = [
       "11111111-1111-4aaa-8aaa-111111111111",
       "22222222-2222-4aaa-8aaa-222222222222",
       "33333333-3333-4aaa-8aaa-333333333333",
     ];
 
-    // A monotonically-advancing fake clock: revertImportBatch captures
-    // `deadline = Date.now() + CLEANUP_SOFT_BUDGET_MS` once, before the
-    // per-wine loop starts. Every reference-table read below advances the
-    // clock, simulating the bulk sweep alone taking long enough to blow
-    // the soft budget — by the time the per-wine loop's first deadline
-    // check runs, it must already be truncated. No real 15s wait needed.
+    // A monotonically-advancing fake clock, captured at revertImportBatch's
+    // own ENTRY (t0 = 1,000,000). Every cleanup-path request below advances
+    // the clock by STEP_MS=4,000 AFTER the deadline check that gates it has
+    // already passed — modeling real per-request latency. With
+    // CLEANUP_BUDGET_FROM_ENTRY_MS=20,000, the deadline (1,020,000) falls
+    // strictly BETWEEN two of the bulk sweep's own chunk requests (the 5th,
+    // open_bottles, still checks in at exactly 1,020,000 — not-greater-than
+    // still passes; the 6th, pour_events, checks in at 1,024,000 and must
+    // never fire) — not before the sweep starts and not only after it
+    // finishes over budget. The snapshot read (never deadline-gated) does
+    // not advance the clock at all, matching revertImportBatch's own
+    // contract that it's exempt.
     let now = 1_000_000;
     const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const STEP_MS = 4_000;
 
+    const calls: TrackedCall[] = [];
     let importBatchRowsCalls = 0;
     const from = vi.fn((table: string) => {
       if (table === "import_batch_rows") {
         importBatchRowsCalls += 1;
         if (importBatchRowsCalls === 1) {
+          // The snapshot read — exempt from the deadline; no clock advance.
           return chain({
             data: wineIds.map((id) => ({ applied_wine_id: id, updated_at: APPLY_TS, lwin_id: null, lwin_score: null })),
             error: null,
           });
         }
-        return chain({ data: [], error: null });
+        // The bulk sweep's cross-batch check.
+        now += STEP_MS;
+        return trackedChain(calls, table, { data: [], error: null });
       }
       if (table === "wines") {
         return {
           select: (columns: string) => {
             if (columns.includes("lwin")) return chain({ data: [], error: null });
-            return chain({ data: wineIds.map((id) => ({ id, created_at: APPLY_TS })), error: null });
+            now += STEP_MS;
+            return trackedChain(calls, table, { data: wineIds.map((id) => ({ id, created_at: APPLY_TS })), error: null });
           },
           delete: () => {
-            throw new Error("the soft deadline was already blown during the bulk reference sweep — no delete should ever be attempted");
+            throw new Error("the deadline was already blown mid-sweep — no delete should ever be attempted");
           },
         };
       }
-      // Every WINE_REFERENCING_TABLES read inside the bulk sweep — each
-      // one is real work, so advance the fake clock past
-      // CLEANUP_SOFT_BUDGET_MS (15s) well before the sweep finishes.
-      now += 20_000;
-      return chain({ data: [], error: null });
+      now += STEP_MS;
+      return trackedChain(calls, table, { data: [], error: null });
     });
 
     const supabase = { rpc: vi.fn().mockResolvedValue({ data: 3, error: null }), from };
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
 
-    expect(result).toEqual({ ok: true, revertedCount: 3, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: true });
+    expect(result).toEqual({ ok: true, revertedCount: 3, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: true, orphanCleanupSkipped: false });
     expect(errorSpy).toHaveBeenCalled();
+
+    // The call log is the actual proof: the candidate wine lookup, then
+    // the cross-batch check, then the sweep's own reordered table list
+    // (WINE_REFERENCING_TABLES) up through open_bottles (the 5th table) —
+    // and NOTHING after it. pour_events (6th) and every table after it,
+    // including the cross-tenant-forgeable stock_adjustments/
+    // bottle_closeouts checked LAST (finding 1), must never appear —
+    // proving the halt happened BEFORE that next request was issued, not
+    // merely that the sweep was later flagged as having run over budget.
+    expect(calls.map((c) => c.table)).toEqual([
+      "wines",
+      "import_batch_rows",
+      "wine_list_items",
+      "inventory_items",
+      "availability_events",
+      "open_bottles",
+    ]);
 
     errorSpy.mockRestore();
     nowSpy.mockRestore();
@@ -958,7 +1002,7 @@ describe("revertImportBatch lwin unstamping", () => {
       wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, lwin_id: STAMP.lwinId, lwin_match_score: STAMP.score, updated_at: APPLY_TS }],
     });
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(supabase.updates).toHaveLength(1);
     expect(supabase.updates[0]).toMatchObject({
       payload: { lwin_id: null, lwin_match_score: null },
@@ -991,7 +1035,7 @@ describe("revertImportBatch lwin unstamping", () => {
     // pair fresh" from "apply re-affirmed an identical pre-existing
     // pair" — both are "the linkage apply's own transaction left live,"
     // and clearing it on revert is intended behavior either way.
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(supabase.updates).toHaveLength(1);
   });
 
@@ -1004,7 +1048,7 @@ describe("revertImportBatch lwin unstamping", () => {
       wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, lwin_id: STAMP.lwinId, lwin_match_score: 0.95, updated_at: APPLY_TS }],
     });
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(supabase.updates).toHaveLength(1);
     expect(supabase.updates[0]).toMatchObject({ lwin_id: STAMP.lwinId, lwin_match_score: 0.95 });
   });
@@ -1015,7 +1059,7 @@ describe("revertImportBatch lwin unstamping", () => {
       wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, lwin_id: "LWIN-OTHER", lwin_match_score: 0.95, updated_at: APPLY_TS }],
     });
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(supabase.updates).toHaveLength(0);
   });
 
@@ -1025,7 +1069,7 @@ describe("revertImportBatch lwin unstamping", () => {
       wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, lwin_id: STAMP.lwinId, lwin_match_score: null, updated_at: APPLY_TS }],
     });
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(supabase.updates).toHaveLength(0);
   });
 
@@ -1036,7 +1080,7 @@ describe("revertImportBatch lwin unstamping", () => {
       wineRows: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, lwin_id: STAMP.lwinId, lwin_match_score: STAMP.score, updated_at: LATER_TS }],
     });
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(supabase.updates).toHaveLength(0);
   });
 
@@ -1053,7 +1097,7 @@ describe("revertImportBatch lwin unstamping", () => {
     // gate is clearBatchLwinStamps' own, and it never reaches the wines
     // table AT ALL for its own (lwin-columns) read, since the row is
     // filtered out of qualifyingRows before any wine id is looked up.
-    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 0, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(supabase.updates).toHaveLength(0);
   });
 
@@ -1110,8 +1154,64 @@ describe("revertImportBatch lwin unstamping", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const supabase = { rpc: vi.fn().mockResolvedValue({ data: 2, error: null }), from };
     const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
-    expect(result).toEqual({ ok: true, revertedCount: 2, orphanWinesDeleted: 0, lwinStampsCleared: 1, cleanupTruncated: false });
+    expect(result).toEqual({ ok: true, revertedCount: 2, orphanWinesDeleted: 0, lwinStampsCleared: 1, cleanupTruncated: false, orphanCleanupSkipped: false });
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
+  });
+
+  it("pages clearBatchLwinStamps' own wine lookup with .range()/.order() too, not just cleanupOrphanWines' (Sol audit 2026-08-27 round 4, finding 7 — the earlier pagination test only ever exercised the orphan-cleanup wine lookup)", async () => {
+    const calls: TrackedCall[] = [];
+    let importBatchRowsCalls = 0;
+    const from = vi.fn((table: string) => {
+      if (table === "import_batch_rows") {
+        importBatchRowsCalls += 1;
+        if (importBatchRowsCalls === 1) {
+          return chain({
+            data: [{ applied_wine_id: WINE_ID, updated_at: APPLY_TS, lwin_id: STAMP.lwinId, lwin_score: STAMP.score }],
+            error: null,
+          });
+        }
+        return trackedChain(calls, table, { data: [], error: null });
+      }
+      if (table === "wines") {
+        return {
+          select: (columns: string) => {
+            if (columns.includes("lwin")) {
+              return trackedChain(calls, table, {
+                data: [{ id: WINE_ID, restaurant_id: RESTAURANT_ID, lwin_id: STAMP.lwinId, lwin_match_score: STAMP.score, updated_at: APPLY_TS }],
+                error: null,
+              });
+            }
+            return trackedChain(calls, table, { data: [], error: null });
+          },
+          update: (payload: Record<string, unknown>) => {
+            const filters: Record<string, unknown> = {};
+            const builder = {
+              eq: (column: string, value: unknown) => {
+                filters[column] = value;
+                return builder;
+              },
+              select: async () => ({ data: [{ id: filters.id }], error: null }),
+            };
+            void payload;
+            return builder;
+          },
+        };
+      }
+      return trackedChain(calls, table, { data: [], error: null });
+    });
+    const supabase = { rpc: vi.fn().mockResolvedValue({ data: 1, error: null }), from };
+    const result = await revertImportBatch(supabase as never, RESTAURANT_ID, BATCH_ID, supabase as never);
+    expect(result).toEqual({ ok: true, revertedCount: 1, orphanWinesDeleted: 0, lwinStampsCleared: 1, cleanupTruncated: false, orphanCleanupSkipped: false });
+
+    // Every recorded call (cleanupOrphanWines' own candidate lookup, the
+    // reference sweep it runs, AND clearBatchLwinStamps' lwin-columns wine
+    // lookup) must carry both .range() and .order() — looped, not
+    // hand-picked (finding 7).
+    expect(calls.length).toBeGreaterThan(1);
+    for (const call of calls) {
+      expect(call.range, `expected ${call.table} to call .range()`).toBeDefined();
+      expect(call.order, `expected ${call.table} to call .order()`).toBeDefined();
+    }
   });
 });
