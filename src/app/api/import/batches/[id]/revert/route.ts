@@ -14,6 +14,12 @@ import { revertImportBatch } from "@/domains/import/batch-service";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 export const runtime = "nodejs";
+// Vercel/Next.js serverless metadata; inert on Railway (railway.toml runs
+// this app as a plain long-running `pnpm start` process, not a per-
+// invocation serverless function with its own timeout). Kept for
+// portability, not relied on as a real ceiling — see
+// CLEANUP_BUDGET_FROM_ENTRY_MS's own comment (src/domains/import/
+// constants.ts) for what actually bounds this route's cleanup phase.
 export const maxDuration = 30;
 
 type Params = Promise<{ id: string }>;
@@ -65,5 +71,6 @@ async function postRevert(params: Params) {
     lwinStampsCleared: result.lwinStampsCleared,
     cleanupTruncated: result.cleanupTruncated,
     orphanCleanupSkipped: result.orphanCleanupSkipped,
+    cleanupFailures: result.cleanupFailures,
   });
 }

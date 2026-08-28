@@ -73,7 +73,7 @@ describe("POST /api/import/batches/[id]/revert", () => {
     expect(response.status).toBe(409);
   });
 
-  it("returns the reverted count, orphan-wine cleanup count, cleanupTruncated, and orphanCleanupSkipped on success", async () => {
+  it("returns the reverted count, orphan-wine cleanup count, cleanupTruncated, orphanCleanupSkipped, and cleanupFailures on success", async () => {
     allow(makeSupabase({ id: BATCH_ID }));
     mockRevertImportBatch.mockResolvedValue({
       ok: true,
@@ -82,6 +82,7 @@ describe("POST /api/import/batches/[id]/revert", () => {
       lwinStampsCleared: 1,
       cleanupTruncated: false,
       orphanCleanupSkipped: false,
+      cleanupFailures: 0,
     });
     const response = await POST(request(), { params: params() });
     expect(response.status).toBe(200);
@@ -91,6 +92,7 @@ describe("POST /api/import/batches/[id]/revert", () => {
       lwinStampsCleared: 1,
       cleanupTruncated: false,
       orphanCleanupSkipped: false,
+      cleanupFailures: 0,
     });
     // The 4th argument is the service-role client (Sol audit 2026-08-27
     // round 3, finding 3) — used only for cross-tenant-safe reference
@@ -108,6 +110,7 @@ describe("POST /api/import/batches/[id]/revert", () => {
       lwinStampsCleared: 0,
       cleanupTruncated: false,
       orphanCleanupSkipped: true,
+      cleanupFailures: 0,
     });
     const response = await POST(request(), { params: params() });
     expect(response.status).toBe(200);

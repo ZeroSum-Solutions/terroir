@@ -595,25 +595,42 @@ type RevertResult = {
   lwinStampsCleared: number;
   cleanupTruncated: boolean;
   orphanCleanupSkipped: boolean;
+  /** Sol audit 2026-08-27 round 5, finding 3 — count of every caught
+   * cleanup-phase error the revert swallowed (snapshot-read failure,
+   * either cleanup step's own top-level catch, or a per-candidate
+   * delete/update failure). Independent of `cleanupTruncated`
+   * (deadline, not an error) and `orphanCleanupSkipped` (no service
+   * client at all, not a request failing). */
+  cleanupFailures: number;
 };
 
-/** Plain-language summary of a revert's actual outcome, including the two
- * ways catalog cleanup can come back incomplete (Sol audit 2026-08-27
+/** Plain-language summary of a revert's actual outcome, including every
+ * way catalog cleanup can come back incomplete (Sol audit 2026-08-27
  * round 4, finding 3 — the response used to be parsed and discarded
- * entirely). Never suggests reverting again: the batch is already
- * reverted, so — matching docs/runbooks/csv-import.md's own recovery
- * path — the follow-up for a partial cleanup is a manual pass or
- * re-running LWIN matching, not repeating this action. */
+ * entirely; round 5, finding 3 — the notices below now COMPOSE instead of
+ * an else-if silently dropping one when more than one applies, and
+ * `cleanupFailures` gets its own notice). Never suggests reverting again:
+ * the batch is already reverted, so — matching docs/runbooks/csv-import.md's
+ * own recovery path — the follow-up for a partial cleanup is a manual
+ * pass or re-running LWIN matching, not repeating this action. */
 function summarizeRevertResult(result: RevertResult): string {
   const parts = [
     `Removed ${result.revertedCount} inventory row(s) this import created, ` +
-      `deleted ${result.orphanWinesDeleted} wine(s) this import created that nothing else references, ` +
-      `and cleared ${result.lwinStampsCleared} wine-catalog (LWIN) link(s) this import's apply set.`,
+      `deleted ${result.orphanWinesDeleted} wine(s) this import added that nothing else references, ` +
+      `and cleared ${result.lwinStampsCleared} wine-catalog (LWIN) link(s) this import wrote — including any ` +
+      `link identical to one that existed before the import (re-running LWIN matching restores it if needed).`,
   ];
+  // Sol audit round 5, finding 3: these are independent conditions, not
+  // mutually exclusive branches — an else-if here would silently drop
+  // whichever notice came second when more than one flag is set.
   if (result.orphanCleanupSkipped) {
-    parts.push("Catalog cleanup was skipped — service configuration missing. See the CSV import runbook.");
-  } else if (result.cleanupTruncated) {
+    parts.push("Orphan-wine cleanup was skipped — service configuration missing. See the CSV import runbook.");
+  }
+  if (result.cleanupTruncated) {
     parts.push("Catalog cleanup didn't finish in time and was left partial. See the CSV import runbook for the manual follow-up.");
+  }
+  if (result.cleanupFailures > 0) {
+    parts.push("Some cleanup steps failed — see the CSV import runbook.");
   }
   return parts.join(" ");
 }
@@ -842,7 +859,7 @@ function BatchStep({
       <ActionDialog
         open={revertDialogOpen}
         title="Revert this import?"
-        description={`This removes the ${appliedCount} inventory row(s) this import created. It also deletes wines this import itself created, if nothing else in your cellar references them, and clears the wine-catalog (LWIN) links this import's apply set. Nothing beyond this import's own additions is touched.`}
+        description={`Removes the ${appliedCount} inventory row(s) this import created. Also deletes wines this import added that nothing else in your cellar references, and clears the wine-catalog (LWIN) links this import wrote — including a link identical to one that existed before the import (re-running LWIN matching restores it).`}
         confirmLabel="Revert import"
         busy={reverting}
         onConfirm={() => void doRevert()}

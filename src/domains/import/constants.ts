@@ -219,15 +219,41 @@ export const MAX_ROW_APPLY_ATTEMPTS = 3;
  * the per-candidate re-check, and immediately before each DELETE/UPDATE —
  * not merely once per per-candidate iteration.
  *
- * Arithmetic behind 20,000ms (measured from entry): the route budget is
- * 30,000ms. Snapshot read + RPC worst case ≈ 7,000ms (the snapshot read
- * pages at 1,000 rows/request, so a 5,000-row batch, MAX_ROWS, is up to 5
- * sequential requests; `revert_import_batch` itself is one more
- * transaction on top of that). Response margin ≈ 3,000ms (the last
- * in-flight request finishing after the deadline fires, JSON marshaling,
- * network/PostgREST overhead) is reserved at the OTHER end, between the
- * deadline and the route's own 30,000ms timeout. 30,000 − 7,000 − 3,000 =
- * 20,000 — the deadline this constant sets, measured from entry.
+ * WHAT 20,000ms IS ACTUALLY BOUNDING (Sol audit 2026-08-27 round 5,
+ * finding 4 — re-justified; the number is unchanged, the reasoning was
+ * wrong): this budget is NOT primarily defending against the revert
+ * route's `maxDuration = 30` hard-failing mid-request. That export is
+ * Next.js/Vercel-serverless metadata; this app deploys on Railway
+ * (`railway.toml`, plain `pnpm start` — a long-running Node process, not
+ * a per-invocation serverless function), where `maxDuration` is inert —
+ * Railway's own HTTP proxy timeout is measured in minutes, not seconds,
+ * so a revert route that ran for, say, 90s would not be killed by the
+ * platform at all. The real thing this budget prevents is a UX failure:
+ * an operator who clicked "Revert this import" staring at a spinner for
+ * however long best-effort cleanup takes on a 5,000-row batch, with
+ * nothing to show for it if the browser or an intermediate proxy times
+ * the request out first. 20,000ms is chosen as a reasonable UX-latency
+ * ceiling for a background cleanup step riding along on a user-initiated
+ * action — comparable in shape to the reasoning behind
+ * `revert_import_batch` itself being a synchronous RPC rather than a
+ * queued job — not derived from `maxDuration`'s 30,000ms at all anymore.
+ * The arithmetic below is kept as a sanity check against a THEORETICAL
+ * 30s ceiling (the number this repo would need if it ever did deploy
+ * behind a real serverless timeout), not as this budget's actual
+ * justification: snapshot read + RPC worst case ≈ 7,000ms (the snapshot
+ * read pages at 1,000 rows/request; a 5,000-row batch, MAX_ROWS, needs up
+ * to SIX sequential requests, not five — PostgREST's page-based
+ * pagination only knows a page is the last one when it comes back SHORT
+ * of the 1,000-row cap, so a batch whose row count is an exact multiple
+ * of 1,000 always needs one extra, empty request to discover the end;
+ * `revert_import_batch` itself is one more transaction on top of that).
+ * Response margin ≈ 3,000ms (the last in-flight request finishing after
+ * the deadline fires, JSON marshaling, network/PostgREST overhead) is
+ * reserved at the other end. 30,000 − 7,000 − 3,000 = 20,000 — the same
+ * number this constant already used, kept as-is because nothing about
+ * correcting the select count or the platform story argues for a
+ * different one; it remains a reasonable UX ceiling regardless of which
+ * platform enforces (or doesn't enforce) a hard cutoff around it.
  * Exceeding it never fails the revert — it stops issuing any further
  * cleanup request, reports the accurate partial counts already earned,
  * and flags `cleanupTruncated: true` so the operator knows to re-run
